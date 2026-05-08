@@ -16,6 +16,7 @@ interface Props {
   onOpenFile: (name: string) => void;
   onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
   onDeleteFile: (name: string) => void;
+  onDeleteFiles: (names: string[]) => Promise<void> | void;
   onUpload: () => void;
   onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
@@ -50,6 +51,7 @@ export function DesignFilesPanel({
   onOpenFile,
   onOpenLiveArtifact,
   onDeleteFile,
+  onDeleteFiles,
   onUpload,
   onUploadFiles,
   onPaste,
@@ -67,6 +69,7 @@ export function DesignFilesPanel({
   const [sectionLimits, setSectionLimits] = useState<Partial<Record<Section, number>>>({});
   const [isSectionExpansionPending, startSectionExpansion] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const grouped = useMemo(() => {
     const groups: Record<Section, ProjectFile[]> = {
@@ -160,6 +163,22 @@ export function DesignFilesPanel({
     });
   }
 
+  async function handleBatchDelete() {
+    if (deleting) return;
+    const fileList = [...selected];
+    if (fileList.length === 0) return;
+    setDeleting(true);
+    try {
+      await onDeleteFiles(fileList);
+      // Don't clear `selected` here: confirm-cancel and all-fail paths
+      // should leave the user's selection intact for retry. The
+      // `useEffect` above prunes successfully-deleted names automatically
+      // once `files` refreshes.
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function handleBatchDownload() {
     const fileList = [...selected];
     if (fileList.length === 0) return;
@@ -239,6 +258,16 @@ export function DesignFilesPanel({
                 <Icon name="download" size={13} />
                 <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
               </button>
+              <button
+                type="button"
+                className="danger"
+                data-testid="design-files-batch-delete"
+                disabled={deleting}
+                onClick={() => void handleBatchDelete()}
+                title={t('designFiles.deleteSelected', { n: selected.size })}
+              >
+                <span>{t('designFiles.deleteSelected', { n: selected.size })}</span>
+              </button>
             </div>
           ) : (
             <div className="df-actions">
@@ -275,7 +304,7 @@ export function DesignFilesPanel({
                       key={artifact.artifactId}
                       type="button"
                       data-testid={`design-file-row-${artifact.tabId}`}
-                      className="df-row"
+                      className="df-row df-row-live-artifact"
                       onDoubleClick={() => onOpenLiveArtifact(artifact.tabId)}
                       onClick={() => onOpenLiveArtifact(artifact.tabId)}
                     >
@@ -388,11 +417,11 @@ export function DesignFilesPanel({
                               .closest('.df-row-menu')
                               ?.getBoundingClientRect();
                             if (!rect) return;
-                            
+
                             const viewportHeight = window.innerHeight;
                             const spaceBelow = viewportHeight - rect.bottom;
                             const spaceAbove = rect.top;
-                            
+
                             let top: number;
                             if (spaceBelow >= MENU_ESTIMATED_HEIGHT + MENU_SAFE_PADDING) {
                               top = rect.bottom + 4;
@@ -404,9 +433,9 @@ export function DesignFilesPanel({
                                 viewportHeight - MENU_ESTIMATED_HEIGHT - MENU_SAFE_PADDING,
                               );
                             }
-                            
+
                             const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
-                            
+
                             setMenuPos({
                               name: f.name,
                               top,

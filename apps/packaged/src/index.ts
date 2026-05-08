@@ -80,7 +80,10 @@ async function main(): Promise<void> {
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
     appVersion: config.appVersion,
+    daemonCliEntry: config.daemonCliEntry,
+    daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    webSidecarEntry: config.webSidecarEntry,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,
   });

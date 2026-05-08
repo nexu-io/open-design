@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      openExternal?: (url: string) => Promise<boolean>;
+      pickFolder?: () => Promise<string | null>;
+    };
+  }
+}
+
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
@@ -57,6 +67,7 @@ interface Props {
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -105,6 +116,7 @@ export function NewProjectPanel({
   promptTemplates,
   onCreate,
   onImportClaudeDesign,
+  onImportFolder,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -114,6 +126,8 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [baseDir, setBaseDir] = useState('');
+  const [importingFolder, setImportingFolder] = useState(false);
   const [tab, setTab] = useState<CreateTab>('prototype');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
@@ -169,11 +183,12 @@ export function NewProjectPanel({
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
-  // Some skills (e.g. the Orbit briefings) ship their own complete visual
-  // language baked into example.html and explicitly opt out of DESIGN.md
-  // injection via `od.design_system.requires: false`. When such a skill is
-  // the active default for the current tab, hide the picker entirely so
-  // the user isn't asked to attach a brand we'll then ignore.
+  // Orbit briefings ship their own complete visual language baked into
+  // example.html and explicitly opt out of DESIGN.md injection via
+  // `od.design_system.requires: false`. Hide the picker only for those
+  // Orbit scenario skills; the general prototype creation surface should
+  // still honor the user's configured default design system even when a
+  // non-Orbit default skill does not require one.
   const tabDefaultSkillForcesNoDs = useMemo(() => {
     const tabSkillId = ((): string | null => {
       if (tab === 'prototype' || tab === 'live-artifact') {
@@ -190,7 +205,9 @@ export function NewProjectPanel({
     })();
     if (!tabSkillId) return false;
     const s = skills.find((x) => x.id === tabSkillId);
-    return s ? s.designSystemRequired === false : false;
+    return s
+      ? s.scenario === 'orbit' && s.designSystemRequired === false
+      : false;
   }, [tab, skills]);
   const showDesignSystemPicker =
     tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
@@ -353,6 +370,29 @@ export function NewProjectPanel({
       await onImportClaudeDesign(file);
     } finally {
       setImporting(false);
+    }
+  }
+
+  const hasElectronPicker =
+    typeof window !== 'undefined' && typeof window.electronAPI?.pickFolder === 'function';
+
+  async function handleOpenFolder() {
+    if (!onImportFolder) return;
+    let pathToOpen: string;
+    if (hasElectronPicker) {
+      const picked = await window.electronAPI!.pickFolder!();
+      if (!picked) return;
+      pathToOpen = picked;
+    } else {
+      const trimmed = baseDir.trim();
+      if (!trimmed) return;
+      pathToOpen = trimmed;
+    }
+    setImportingFolder(true);
+    try {
+      await onImportFolder(pathToOpen);
+    } finally {
+      setImportingFolder(false);
     }
   }
 
@@ -567,6 +607,30 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
+        {onImportFolder ? (
+          <div className="newproj-open-folder">
+            {!hasElectronPicker ? (
+              <input
+                type="text"
+                className="newproj-folder-input"
+                placeholder="/path/to/project"
+                value={baseDir}
+                onChange={(e) => setBaseDir(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
+                disabled={importingFolder}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="ghost newproj-import"
+              disabled={(!hasElectronPicker && !baseDir.trim()) || importingFolder}
+              onClick={() => void handleOpenFolder()}
+            >
+              <Icon name="folder" size={13} />
+              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
     </div>
@@ -607,8 +671,8 @@ function FidelityPicker({
    - Lists configured connectors as compact chips so the user can
      see at a glance what data sources this artifact can pull from.
    - When no connector is configured (or the list hasn't loaded yet
-     and ended up empty), shows a guidance card that, on click, pops
-     the entry-tab-connectors tab in the main view.
+     and ended up empty), shows a guidance card that, on click, opens
+     the Settings → Connectors surface (the new home of the catalog).
    ============================================================ */
 function ConnectorsSection({
   connectors,

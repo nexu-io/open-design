@@ -25,10 +25,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  packaged_changes:
+    name: Detect packaged smoke changes
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.detect.outputs.required }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Detect desktop/sidecar/packaging changes
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=false
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/changed-files.txt"
+            patterns=(
+              "apps/desktop/"
+              "apps/packaged/"
+              "apps/daemon/src/sidecar/"
+              "apps/web/sidecar/"
+              "packages/platform/"
+              "packages/sidecar/"
+              "packages/sidecar-proto/"
+              "tools/pack/"
+              "e2e/lib/desktop/"
+            )
+            while IFS= read -r file; do
+              for pattern in "${patterns[@]}"; do
+                if [[ "$file" == "$pattern"* ]]; then
+                  required=true
+                fi
+              done
+              if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" ]]; then
+                required=true
+              fi
+              if [ "$required" = "true" ]; then
+                break
+              fi
+            done < "$RUNNER_TEMP/changed-files.txt"
+          else
+            required=true
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
   validate:
     name: Validate workspace
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -102,3 +151,309 @@ jobs:
       # races outweigh the lost parallelism; revisit if the package count grows.
       - name: Build workspaces
         run: pnpm -r --workspace-concurrency=1 --if-present run build
+
+  packaged_smoke_mac:
+    name: Packaged mac smoke
+    needs: [validate, packaged_changes]
+    if: ${{ needs.packaged_changes.outputs.required == 'true' }}
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify mac Electron framework symlinks
+        run: |
+          set -euo pipefail
+          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
+          for link in \
+            "$framework/Electron Framework" \
+            "$framework/Helpers" \
+            "$framework/Libraries" \
+            "$framework/Resources" \
+            "$framework/Versions/Current"; do
+            if [ ! -L "$link" ]; then
+              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
+              ls -la "$framework" >&2 || true
+              ls -la "$framework/Versions" >&2 || true
+              exit 1
+            fi
+          done
+
+      - name: Build PR mac artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace ci-pr-mac \
+            --mac-compression normal \
+            --to all \
+            --json
+
+      - name: Smoke PR mac packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: ci-pr-mac
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: pnpm test specs/mac.spec.ts
+
+  packaged_smoke_win:
+    name: Packaged windows smoke
+    needs: [validate, packaged_changes]
+    if: ${{ needs.packaged_changes.outputs.required == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Compute Windows tools-pack cache key
+        id: win_tools_pack_cache_key
+        shell: pwsh
+        run: |
+          $epoch = (Get-Date).ToUniversalTime().ToString("yyyy-MM")
+          "epoch=$epoch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore Windows tools-pack cache
+        id: win_tools_pack_cache_restore
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}
+          restore-keys: |
+            tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            exit 0
+          }
+          choco install nsis -y --no-progress
+
+      - name: Build PR windows artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toolsPackDir = "${{ runner.temp }}/tools-pack"
+          $cacheDir = "${{ runner.temp }}/tools-pack-cache"
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json"
+          $buildArgs = @(
+            "exec", "tools-pack", "win", "build",
+            "--dir", $toolsPackDir,
+            "--cache-dir", $cacheDir,
+            "--namespace", "ci-pr-win",
+            "--portable",
+            "--to", "nsis",
+            "--json"
+          )
+          try {
+            $buildOutput = pnpm @buildArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows tools-pack cached build exited with code $LASTEXITCODE"
+            }
+          } catch {
+            Write-Warning "Windows tools-pack cached build failed; removing restored cache and retrying with a clean cache. Failure: $_"
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
+            $buildOutput = pnpm exec tools-pack win build `
+              --dir $toolsPackDir `
+              --cache-dir $cacheDir `
+              --namespace ci-pr-win `
+              --portable `
+              --to nsis `
+              --json
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows tools-pack clean-cache fallback build exited with code $LASTEXITCODE"
+            }
+          }
+          $buildOutput | Set-Content -Path $buildJsonPath
+          $buildOutput
+
+      - name: Smoke PR windows packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_NAMESPACE: ci-pr-win
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/open-design-win-smoke.png
+        run: pnpm test specs/win.spec.ts
+
+      - name: Prune Windows tools-pack cache
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $cacheRoot = Join-Path $env:RUNNER_TEMP "tools-pack-cache"
+          if (!(Test-Path $cacheRoot)) {
+            "tools-pack cache root does not exist; nothing to prune"
+            exit 0
+          }
+
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $cacheRoot "locks")
+
+          $maxBytes = 6GB
+          $entryRoot = Join-Path $cacheRoot "entries"
+          if (!(Test-Path $entryRoot)) {
+            "tools-pack cache entries root does not exist; nothing to prune"
+            exit 0
+          }
+
+          $discardedBytes = 0L
+          $discardedCount = 0
+          $packagedAppRoot = Join-Path $entryRoot "win.packaged-app"
+          if (Test-Path $packagedAppRoot) {
+            $packagedAppEntries = Get-ChildItem -Path $packagedAppRoot -Directory -ErrorAction SilentlyContinue |
+              Where-Object { Test-Path (Join-Path $_.FullName "manifest.json") }
+            foreach ($entry in $packagedAppEntries) {
+              $size = (Get-ChildItem -Path $entry.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum).Sum
+              Remove-Item -Recurse -Force -LiteralPath $entry.FullName
+              $discardedBytes += [int64]($size ?? 0)
+              $discardedCount += 1
+            }
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $packagedAppRoot
+          }
+
+          $priorityByNode = @{
+            "win.electron-builder-dir" = 0
+            "win.workspace-build" = 1
+            "win.resource-tree" = 2
+            "win.workspace-tarballs" = 3
+          }
+
+          $entries = Get-ChildItem -Path $entryRoot -Directory -Recurse |
+            Where-Object { Test-Path (Join-Path $_.FullName "manifest.json") } |
+            ForEach-Object {
+              $size = (Get-ChildItem -Path $_.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum).Sum
+              $node = Split-Path (Split-Path $_.FullName -Parent) -Leaf
+              [pscustomobject]@{
+                Path = $_.FullName
+                Node = $node
+                Priority = [int]($priorityByNode[$node] ?? 100)
+                Size = [int64]($size ?? 0)
+                LastWriteTimeUtc = $_.LastWriteTimeUtc
+              }
+            } |
+            Sort-Object Priority, @{ Expression = "LastWriteTimeUtc"; Descending = $true }
+
+          $keptBytes = 0L
+          $removedBytes = 0L
+          $removedCount = 0
+          foreach ($entry in $entries) {
+            if (($keptBytes + $entry.Size) -le $maxBytes) {
+              $keptBytes += $entry.Size
+              continue
+            }
+            Remove-Item -Recurse -Force -LiteralPath $entry.Path
+            $removedBytes += $entry.Size
+            $removedCount += 1
+          }
+
+          "keptBytes=$keptBytes removedBytes=$removedBytes removedCount=$removedCount discardedBytes=$discardedBytes discardedCount=$discardedCount maxBytes=$maxBytes"
+
+      - name: Summarize Windows tools-pack build
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $summaryPath = $env:GITHUB_STEP_SUMMARY
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json"
+          if (!(Test-Path $buildJsonPath)) {
+            "### Windows tools-pack build" | Add-Content -Path $summaryPath
+            "" | Add-Content -Path $summaryPath
+            "Build JSON was not found at `$buildJsonPath`." | Add-Content -Path $summaryPath
+            exit 0
+          }
+
+          $build = Get-Content -Raw -Path $buildJsonPath | ConvertFrom-Json
+          "### Windows tools-pack build" | Add-Content -Path $summaryPath
+          "" | Add-Content -Path $summaryPath
+          "| Phase | Duration |" | Add-Content -Path $summaryPath
+          "| --- | ---: |" | Add-Content -Path $summaryPath
+          foreach ($timing in $build.timings) {
+            $seconds = [math]::Round(([double]$timing.durationMs) / 1000, 1)
+            "| `$($timing.phase)` | ${seconds}s |" | Add-Content -Path $summaryPath
+          }
+
+          "" | Add-Content -Path $summaryPath
+          "| Cache node | Status | Reason | Duration |" | Add-Content -Path $summaryPath
+          "| --- | --- | --- | ---: |" | Add-Content -Path $summaryPath
+          foreach ($entry in $build.cacheReport.entries) {
+            $seconds = [math]::Round(([double]$entry.durationMs) / 1000, 1)
+            $reason = if ($null -eq $entry.reason) { "" } else { [string]$entry.reason }
+            "| `$($entry.nodeId)` | `$($entry.status)` | $reason | ${seconds}s |" | Add-Content -Path $summaryPath
+          }
+
+          $cacheRoot = Join-Path $env:RUNNER_TEMP "tools-pack-cache"
+          $entryRoot = Join-Path $cacheRoot "entries"
+          if (Test-Path $entryRoot) {
+            $entries = Get-ChildItem -Path $entryRoot -Directory -Recurse |
+              Where-Object { Test-Path (Join-Path $_.FullName "manifest.json") } |
+              ForEach-Object {
+                $size = (Get-ChildItem -Path $_.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
+                  Measure-Object -Property Length -Sum).Sum
+                [pscustomobject]@{
+                  Node = Split-Path (Split-Path $_.FullName -Parent) -Leaf
+                  Size = [int64]($size ?? 0)
+                }
+              } |
+              Group-Object Node |
+              ForEach-Object {
+                [pscustomobject]@{
+                  Node = $_.Name
+                  Count = $_.Count
+                  Size = [int64](($_.Group | Measure-Object -Property Size -Sum).Sum ?? 0)
+                }
+              } |
+              Sort-Object Size -Descending
+
+            "" | Add-Content -Path $summaryPath
+            "| Saved cache node | Entries | Size |" | Add-Content -Path $summaryPath
+            "| --- | ---: | ---: |" | Add-Content -Path $summaryPath
+            foreach ($entry in $entries) {
+              $mb = [math]::Round(([double]$entry.Size) / 1MB, 1)
+              "| `$($entry.Node)` | $($entry.Count) | ${mb} MB |" | Add-Content -Path $summaryPath
+            }
+          }
+
+      - name: Save Windows tools-pack cache
+        if: ${{ success() && steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}

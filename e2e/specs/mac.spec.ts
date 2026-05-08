@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { access } from 'node:fs/promises';
+import { access, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -16,6 +16,9 @@ const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
 const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta';
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
+const screenshotPath = resolveFromWorkspace(
+  process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
+);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -75,6 +78,9 @@ type MacInspectResult = {
     ok: boolean;
     value?: unknown;
   };
+  screenshot?: {
+    path: string;
+  };
   status: DesktopStatus | null;
 };
 
@@ -121,8 +127,15 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(start.source).toBe('installed');
       expect(start.appPath).toBe(install.installedAppPath);
       expectPathInside(start.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
-      expect(start.status).not.toBeNull();
-      expect(start.status?.state).toBe('running');
+      expect(start.pid).toBeGreaterThan(0);
+      // `tools-pack mac start` performs a best-effort status probe before
+      // returning, but GitHub's macOS runners can take longer than that probe
+      // window to make the packaged desktop IPC-ready. Keep validating a
+      // non-null immediate status when available, then use the longer health
+      // polling below as the authoritative startup check.
+      if (start.status != null) {
+        expect(start.status.state).toBe('running');
+      }
 
       const inspect = await waitForHealthyDesktop();
       expect(inspect.status?.state).toBe('running');
@@ -133,6 +146,10 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
+
+      const screenshot = await runToolsPackJson<MacInspectResult>('inspect', ['--path', screenshotPath]);
+      expect(screenshot.screenshot?.path).toBe(screenshotPath);
+      expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
 
       assertLogPathsAndContent(await runToolsPackJson<LogsResult>('logs'));
 
@@ -551,6 +568,10 @@ async function pathExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function fileSizeBytes(filePath: string): Promise<number> {
+  return (await stat(filePath)).size;
 }
 
 function resolveFromWorkspace(filePath: string): string {

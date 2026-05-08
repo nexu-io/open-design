@@ -30,3 +30,10 @@ export function expandHomePrefix(raw: string): string {
   if (match) return path.join(home, match[2] ?? '');
   return raw;
 }
+
+export function resolveProjectRelativePath(raw: string, projectRoot: string): string {
+  const expanded = expandHomePrefix(raw);
+  return path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(projectRoot, expanded);
+}

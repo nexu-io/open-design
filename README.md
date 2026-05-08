@@ -28,7 +28,7 @@
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><b>English</b> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -44,7 +44,7 @@ That's not "AI tries to design something". That's an AI that has been trained, b
 
 OD stands on four open-source shoulders:
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts).
+- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts).
 - [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — the deck mode. Bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved; magazine-style layouts, WebGL hero, P0/P1/P2 checklists.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — the UX north star and our closest peer. The first open-source Claude-Design alternative. We borrow its streaming-artifact loop, its sandboxed-iframe preview pattern (vendored React 18 + Babel), its live agent panel (todos + tool calls + interruptible generation), and its five-format export list (HTML / PDF / PPTX / ZIP / Markdown). We deliberately diverge on form factor — they are a desktop Electron app bundling [`pi-ai`][piai]; we are a web app + local daemon that delegates to your existing CLI.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — the daemon-and-runtime architecture. PATH-scan agent detection, the local daemon as the only privileged process, the agent-as-teammate worldview.
@@ -58,7 +58,7 @@ OD stands on four open-source shoulders:
 | **Design systems built-in** | **129** — 2 hand-authored starters + 70 product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) from [`awesome-design-md`][acd2], plus 57 design skills from [`awesome-design-skills`][ads] added directly under `design-systems/` |
 | **Skills built-in** | **31** — 27 in `prototype` mode (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 in `deck` mode (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Grouped in the picker by `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Media generation** | Image · video · audio surfaces ship alongside the design loop. **gpt-image-2** (Azure / OpenAI) for posters, avatars, infographics, illustrated maps · **Seedance 2.0** (ByteDance) for cinematic 15s text-to-video and image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) for HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). **93** ready-to-replicate prompts gallery — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — under [`prompt-templates/`](prompt-templates/), with preview thumbnails and source attribution. Same chat surface as code; outputs a real `.mp4` / `.png` chip into the project workspace. |
-| **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — each ships a deterministic OKLch palette + font stack ([`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)) |
+| **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — each ships a deterministic OKLch palette + font stack ([`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts)) |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across skills under [`assets/frames/`](assets/frames/) |
 | **Agent runtime** | Local daemon spawns the CLI in your project folder — agent gets real `Read`, `Write`, `Bash`, `WebFetch` against a real on-disk environment, with Windows `ENAMETOOLONG` fallbacks (stdin / prompt-file) on every adapter |
 | **Imports** | Drop a [Claude Design][cd] export ZIP onto the welcome dialog — `POST /api/import/claude-design` parses it into a real project so your agent can keep editing where Anthropic left off |
@@ -221,7 +221,7 @@ Adding a skill takes one folder. Read [`docs/skills-protocol.md`](docs/skills-pr
 
 ### 1 · We don't ship an agent. Yours is good enough.
 
-The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev), `kilo`, [`vibe-acp`](https://github.com/mistralai/mistral-vibe), and `deepseek` on startup. Whichever ones it finds become candidate design engines — driven over stdio with one adapter per CLI, swappable from the model picker. Inspired by [`multica`](https://github.com/multica-ai/multica) and [`cc-switch`](https://github.com/farion1231/cc-switch). No CLI installed? The API mode is the same pipeline minus the spawn — choose Anthropic, OpenAI-compatible, Azure OpenAI, or Google Gemini and the daemon forwards normalized SSE chunks back, with loopback / link-local / RFC1918 destinations rejected at the edge.
+The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), `devin`, [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [`kiro-cli`](https://kiro.dev), `kilo`, [`vibe-acp`](https://github.com/mistralai/mistral-vibe), and `deepseek` on startup. Whichever ones it finds become candidate design engines — driven over stdio with one adapter per CLI, swappable from the model picker. Inspired by [`multica`](https://github.com/multica-ai/multica) and [`cc-switch`](https://github.com/farion1231/cc-switch). No CLI installed? The API mode is the same pipeline minus the spawn — choose Anthropic, OpenAI-compatible, Azure OpenAI, or Google Gemini and the daemon forwards normalized SSE chunks back. Loopback is allowed for local LLM providers such as Ollama and LM Studio; non-loopback private, link-local, CGNAT, multicast, reserved, and redirect targets are rejected at the daemon edge.
 
 ### 2 · Skills are files, not plugins.
 
@@ -255,7 +255,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
 ```
 
-Every layer is composable. Every layer is a file you can edit. Read [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) and [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) to see the actual contract.
+Every layer is composable. Every layer is a file you can edit. Read [`packages/contracts/src/prompts/system.ts`](packages/contracts/src/prompts/system.ts) and [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) to see the actual contract.
 
 ## Architecture
 
@@ -293,7 +293,7 @@ Every layer is composable. Every layer is a file you can edit. Read [`apps/web/s
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, Vercel-deployable |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3`; tables: `projects` · `conversations` · `messages` · `tabs` · `templates` |
 | Agent transport | `child_process.spawn`; typed-event parsers for `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), `json-event-stream` per-CLI parsers (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe via Agent Client Protocol), `pi-rpc` (Pi via stdio JSON-RPC), `plain` (Qwen Code / DeepSeek TUI) |
-| BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → provider-specific upstream APIs, normalized `delta/end/error` SSE; rejects loopback / link-local / RFC1918 hosts at the daemon edge |
+| BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → provider-specific upstream APIs, normalized `delta/end/error` SSE; allows loopback local LLM providers, rejects non-loopback private/link-local/CGNAT/multicast/reserved hosts, and disables upstream redirects at the daemon edge |
 | Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/app.sqlite` + credentials at `.od/media-config.json` (gitignored, auto-created). `OD_DATA_DIR=<dir>` relocates all daemon data (used for test isolation and read-only-install setups); `OD_MEDIA_CONFIG_DIR=<dir>` further narrows the override to just `media-config.json` for setups that want to keep API keys outside the data dir |
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
 | Export | HTML (inline assets) · PDF (browser print, deck-aware) · PPTX (agent-driven via skill) · ZIP (archiver) · Markdown |
@@ -309,6 +309,57 @@ The fastest way to try Open Design is the prebuilt desktop app — no Node, no p
 - **[open-design.ai](https://open-design.ai/)** — official download page
 - **[GitHub releases](https://github.com/nexu-io/open-design/releases)**
 
+
+### Run with Docker
+
+Run Open Design without installing Node.js or pnpm locally.
+
+#### Requirements
+
+* Docker Desktop
+* Docker Compose v2
+
+Verify Docker:
+
+```bash id="70jv9o"
+docker compose version
+```
+
+#### Start Open Design
+
+```bash id="m9w43w"
+git clone https://github.com/nexu-io/open-design.git
+cd open-design/deploy
+docker compose up -d
+```
+
+Open in your browser:
+
+```text id="4s4xeh"
+http://localhost:7456
+```
+
+#### Common Commands
+
+```bash id="gl95kp"
+# View logs
+docker compose logs -f
+
+# Restart containers
+docker compose restart
+
+# Stop containers
+docker compose down
+
+# Pull latest image
+docker compose pull
+docker compose up -d
+```
+
+For advanced Docker configuration and environment variables, see [`QUICKSTART.md`](QUICKSTART.md).
+
+
+
 ### Run from source
 
 ```bash
@@ -320,8 +371,6 @@ pnpm install
 pnpm tools-dev run web
 # open the web URL printed by tools-dev
 ```
-
-Windows launcher: build `OpenDesign.exe` yourself with the instructions in `tools/launcher/README.md`, or download it from GitHub Releases. Then place it in the repo root and double-click it to run `pnpm install` if needed and start Open Design with `pnpm tools-dev`.
 
 Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optional helpers only; if you use one, run `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` before `pnpm install`.
 
@@ -375,26 +424,75 @@ If you ran the repo first and only later installed the packaged Desktop app, the
 
 > **⚠️ Do this in a clean state.** Migration replaces (not merges) the Desktop app's data dir with your repo `.od/`. Both writers must be fully stopped before copying — quit the Desktop app **and** stop the repo dev-server. SQLite-WAL needs to flush cleanly on both sides; if either daemon is still running it can write SQLite/WAL pages or project/artifact files mid-snapshot, leaving the staged copy inconsistent. If the Desktop app already has projects you care about, decide which side is authoritative before continuing — the steps below back up the Desktop's current `data/` to a sibling but do not merge.
 
-To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app:
+##### Option A: one-shot auto-migration via `OD_LEGACY_DATA_DIR`
+
+Use this when the Desktop app's `data/` is still empty, which is the typical state right after the upgrade that surfaced [#710](https://github.com/nexu-io/open-design/issues/710). Quit the Desktop app first (so its daemon is not holding `app.sqlite`), then re-launch with `OD_LEGACY_DATA_DIR` pointed at your old repo `.od/`. The daemon stages your payload into a sibling tmp directory and only promotes it into `data/` on success; on any failure the staging directory is removed so the next boot retries cleanly.
+
+The daemon refuses, with a visible startup error, when:
+
+- the path in `OD_LEGACY_DATA_DIR` does not contain `app.sqlite` (typo, deleted source, wrong path), or
+- the Desktop's `data/` already contains any of `app.sqlite`, `projects/`, `artifacts/`, `media-config.json`, etc. SQLite/WAL pairs and project trees cannot be safely interleaved, so the daemon refuses to merge instead of silently corrupting either side. If the Desktop has already booted and seeded its own `data/`, use Option B and decide explicitly which side wins.
+
+A `.migrated-from` marker is written on success so subsequent boots no-op.
+
+Quit the Desktop app first, then re-launch with this env set. The launcher must put the variable into the *app process* environment, not just the shell that runs `open` / `xdg-open`.
+
+**macOS** (LaunchServices does not inherit shell env, so use the direct binary):
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" \
+  "/Applications/Open Design.app/Contents/MacOS/Open Design"
+```
+
+If you prefer the Dock launcher, set the variable in `launchctl` first, open the app, then unset it:
+
+```bash
+launchctl setenv OD_LEGACY_DATA_DIR "/path/to/old/repo/.od"
+open "/Applications/Open Design.app"
+# After the migration log line appears:
+launchctl unsetenv OD_LEGACY_DATA_DIR
+```
+
+**Linux** (run the binary directly so the env var actually reaches it):
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" /path/to/open-design
+# (e.g. the AppImage you launched, or the unpacked binary under /opt)
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:OD_LEGACY_DATA_DIR="C:\path\to\old\repo\.od"
+& "$env:LOCALAPPDATA\Programs\Open Design\Open Design.exe"
+```
+
+The daemon log records `[od-migrate] migration complete: copied N entries (...)`. After the first launch you can clear the env variable; the marker prevents re-migration even on subsequent runs.
+
+##### Option B: manual copy
+
+To carry your existing projects, SQLite, artifacts, and `media-config.json` over to the Desktop app, when Option A is not viable (Desktop already has its own data and you want to replace it explicitly).
+
+**macOS / Linux (bash):**
 
 ```bash
 set -euo pipefail
 # 1. Stop both writers so the source and target are quiescent.
-#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Windows/Linux).
+#    - Quit the Desktop app (Cmd+Q on macOS, File → Exit on Linux).
 #    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
 # 2. Set REPO and APP_DATA to your actual paths; the example below is macOS + beta.
 REPO="/path/to/open-design"
 APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
 
 # 3. Preflight: see what (if anything) the Desktop app already has.
-ls "$APP_DATA/projects" 2>/dev/null && echo "↑ Desktop already has projects — confirm this is a replace, not a merge."
+ls "$APP_DATA/projects" 2>/dev/null && echo "Desktop already has projects, confirm this is a replace, not a merge."
 
 # 4. Stage into a sibling first, then atomically swap into place. `set -e` plus
 #    the explicit rsync exit check guarantee a non-zero copy aborts before any
 #    `mv` runs, so the Desktop data dir cannot end up half-populated.
 STAGE="${APP_DATA}.staged-$(date +%F-%H%M)"
 mkdir -p "$STAGE"
-rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed — aborting before swap"; exit 1; }
+rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync failed, aborting before swap"; exit 1; }
 
 # 5. Backup the Desktop's current data, then promote the staged copy.
 mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F-%H%M)"
@@ -403,7 +501,38 @@ mv "$STAGE" "$APP_DATA"
 # 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
 ```
 
-If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` and renaming the `.fresh-baseline-*` directory back into place.
+**Windows (PowerShell):**
+
+```powershell
+$ErrorActionPreference = 'Stop'
+# 1. Stop both writers so the source and target are quiescent.
+#    - Quit the Desktop app (File > Exit).
+#    - Stop the repo dev-server: `pnpm tools-dev stop` from the repo root.
+# 2. Set $Repo and $AppData to your actual paths; the example below is stable channel.
+$Repo    = 'C:\path\to\open-design'
+$AppData = Join-Path $env:APPDATA 'Open Design\namespaces\release-stable-win\data'
+
+# 3. Preflight: see what (if anything) the Desktop app already has.
+if (Test-Path (Join-Path $AppData 'projects')) {
+  Write-Host 'Desktop already has projects, confirm this is a replace, not a merge.'
+}
+
+# 4. Stage into a sibling first. Robocopy /MIR mirrors source to staging, and
+#    its exit codes >= 8 are real errors (0..7 are success/info), so we guard
+#    explicitly before promoting.
+$Stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
+$Stage = "$AppData.staged-$Stamp"
+robocopy "$Repo\.od" $Stage /MIR /XD 'backup-*' | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed (exit $LASTEXITCODE), aborting before swap" }
+
+# 5. Backup the Desktop's current data, then promote the staged copy.
+if (Test-Path $AppData) { Rename-Item $AppData "$AppData.fresh-baseline-$Stamp" }
+Rename-Item $Stage $AppData
+
+# 6. Relaunch the Desktop app. The daemon applies forward schema changes on boot.
+```
+
+If anything looks wrong after relaunch, restore the original Desktop data by deleting `$APP_DATA` (or `$AppData` on Windows) and renaming the `.fresh-baseline-*` directory back into place.
 
 > **⚠️ Schema migrations are forward-only.** The daemon applies `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` changes on boot; there is no version guard. After migrating, **do not** open the same data dir with an older repo checkout — unsupported columns or behavior mismatches can leave the workspace inconsistent. Back up `app.sqlite*` before the first launch with the new app.
 
@@ -628,7 +757,7 @@ When the user has no brand spec, the agent emits a second form with five curated
 | Brutalist | Raw, oversized type, no shadows, harsh accents | Bloomberg Businessweek · Achtung |
 | Soft warm | Generous, low contrast, peachy neutrals | Notion marketing · Apple Health |
 
-Full spec → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts).
+Full spec → [`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts).
 
 ## Media generation
 
@@ -708,7 +837,7 @@ Pattern is the same as the rest: pick a template, edit the brief, send. The agen
 The chat / artifact loop gets the spotlight, but a handful of less-visible capabilities are already wired and worth knowing before you compare OD to anything else:
 
 - **Claude Design ZIP import.** Drop an export from claude.ai onto the welcome dialog. `POST /api/import/claude-design` extracts it into a real `.od/projects/<id>/`, opens the entry file as a tab, and stages a continue-where-Anthropic-left-off prompt for your local agent. No re-prompting, no "ask the model to re-create what we just had". ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
-- **Multi-provider BYOK proxy.** `POST /api/proxy/{anthropic,openai,azure,google}/stream` takes `{ baseUrl, apiKey, model, messages }`, builds the provider-specific upstream request, normalizes SSE chunks into `delta/end/error`, and rejects loopback / link-local / RFC1918 destinations to head off SSRF. OpenAI-compatible covers OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter, and self-hosted vLLM; Azure OpenAI adds deployment URL + `api-version`; Google uses Gemini `:streamGenerateContent`.
+- **Multi-provider BYOK proxy.** `POST /api/proxy/{anthropic,openai,azure,google}/stream` takes `{ baseUrl, apiKey, model, messages }`, builds the provider-specific upstream request, normalizes SSE chunks into `delta/end/error`, and allows loopback local LLM providers while rejecting non-loopback private, link-local, CGNAT, multicast, reserved, and redirect targets to head off SSRF. OpenAI-compatible covers OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter, Ollama, LM Studio, and self-hosted vLLM; Azure OpenAI adds deployment URL + `api-version`; Google uses Gemini `:streamGenerateContent`.
 - **User-saved templates.** Once you like a render, `POST /api/templates` snapshots the HTML + metadata into the SQLite `templates` table. The next project picks it from a "your templates" row in the picker — same surface as the shipped 31, but yours.
 - **Tab persistence.** Every project remembers its open files and active tab in the `tabs` table. Reopen the project tomorrow and the workspace looks exactly the way you left it.
 - **Artifact lint API.** `POST /api/artifacts/lint` runs structural checks on a generated artifact (broken `<artifact>` framing, missing required side files, stale palette tokens) and returns findings the agent can read back into its next turn. The five-dim self-critique uses this to ground its score in real evidence, not vibes.
@@ -718,7 +847,7 @@ The chat / artifact loop gets the spotlight, but a handful of less-visible capab
 
 ## Anti-AI-slop machinery
 
-The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf/huashu-design) playbook, ported into OD's prompt-stack and made enforceable per-skill via the side-file pre-flight. Read [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) for the live wording:
+The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf/huashu-design) playbook, ported into OD's prompt-stack and made enforceable per-skill via the side-file pre-flight. Read [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) for the live wording:
 
 - **Question form first.** Turn 1 is `<question-form>` only — no thinking, no tools, no narration. The user chooses defaults at radio speed.
 - **Brand-spec extraction.** When the user attaches a screenshot or URL, the agent runs a five-step protocol (locate · download · grep hex · codify `brand-spec.md` · vocalise) before writing CSS. **Never guesses brand colors from memory.**
@@ -782,7 +911,7 @@ Auto-detected from `PATH` on daemon boot. No config required. Streaming dispatch
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
 | DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` (prompt as positional arg) |
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (prompt sent as RPC `prompt` command) |
-| **Multi-provider BYOK** | n/a | SSE normalization | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini; SSRF-guarded against loopback / link-local / RFC1918 |
+| **Multi-provider BYOK** | n/a | SSE normalization | `POST /api/proxy/{provider}/stream` → Anthropic / OpenAI-compatible / Azure OpenAI / Gemini; SSRF-guarded with loopback local providers allowed, non-loopback internal ranges blocked, and upstream redirects disabled |
 
 Adding a new CLI is one entry in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Streaming format is one of `claude-stream-json`, `qoder-stream-json`, `copilot-stream-json`, `json-event-stream` (with a per-CLI `eventParser`), `acp-json-rpc`, `pi-rpc`, or `plain`.
 
@@ -793,7 +922,7 @@ Every external project this repo borrows from. Each link goes to the source so y
 | Project | Role here |
 |---|---|
 | [`Claude Design`][cd] | The closed-source product this repo is the open-source alternative to. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) and [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts). |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) and [`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Magazine-web-PPT skill bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved. Default for deck mode. P0/P1/P2 checklist culture borrowed for every other skill. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection, and the first pass of comment-mode preview annotations. UX patterns still on our roadmap: full surgical-edit reliability and AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
@@ -854,7 +983,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-07" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -871,9 +1000,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-07" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
   </picture>
 </a>
 

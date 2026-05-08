@@ -11,13 +11,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   composeLiveInstructionPrompt,
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
+  resolveResearchCommandContract,
   startServer,
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
@@ -162,51 +163,43 @@ process.exit(0);
   });
 
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'od-qoder-bin-'));
-    tempDirs.push(binDir);
-    const qoderBin = join(binDir, 'qodercli');
     const qoderErrorLine = JSON.stringify({
       type: 'assistant',
       message: { content: [] },
       error: { message: 'Qoder authentication expired' },
     });
-    writeFileSync(
-      qoderBin,
-      `#!/bin/sh\nprintf '%s\\n' '${qoderErrorLine}'\nexit 0\n`,
-      'utf8',
+    await withFakeAgent(
+      'qodercli',
+      `console.log(${JSON.stringify(qoderErrorLine)});\nprocess.exit(0);\n`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'qoder',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('Qoder authentication expired');
+        expect(eventsBody).not.toContain('event: agent\\ndata: {"type":"error"');
+        expect(statusBody.status).toBe('failed');
+      },
     );
-    chmodSync(qoderBin, 0o755);
-    process.env.PATH = binDir;
-
-    const createResponse = await fetch(`${baseUrl}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agentId: 'qoder',
-        message: 'hello',
-      }),
-    });
-    expect(createResponse.status).toBe(202);
-    const { runId } = await createResponse.json() as { runId: string };
-
-    const eventsController = new AbortController();
-    const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-      signal: eventsController.signal,
-    });
-    const eventsBody = await readSseUntil(eventsResponse, 'event: error');
-    eventsController.abort();
-    const statusBody = await waitForRunStatus(baseUrl, runId);
-
-    expect(eventsBody).toContain('event: error');
-    expect(eventsBody).toContain('Qoder authentication expired');
-    expect(eventsBody).not.toContain('event: agent\\ndata: {"type":"error"');
-    expect(statusBody.status).toBe('failed');
   });
 
   it('fails Qoder runs when the result reports is_error with exit code 0', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'od-qoder-bin-'));
-    tempDirs.push(binDir);
-    const qoderBin = join(binDir, 'qodercli');
     const qoderResultLine = JSON.stringify({
       type: 'result',
       subtype: 'error',
@@ -219,39 +212,233 @@ process.exit(0);
         output_tokens: 1,
       },
     });
-    writeFileSync(
-      qoderBin,
-      `#!/bin/sh\nprintf '%s\\n' '${qoderResultLine}'\nexit 0\n`,
-      'utf8',
+    await withFakeAgent(
+      'qodercli',
+      `console.log(${JSON.stringify(qoderResultLine)});\nprocess.exit(0);\n`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'qoder',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('"type":"usage"');
+        expect(eventsBody).toContain('"isError":true');
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('Qoder run failed: tool_use_failed');
+        expect(statusBody.status).toBe('failed');
+      },
     );
-    chmodSync(qoderBin, 0o755);
-    process.env.PATH = binDir;
+  });
 
-    const createResponse = await fetch(`${baseUrl}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agentId: 'qoder',
-        message: 'hello',
-      }),
-    });
-    expect(createResponse.status).toBe(202);
-    const { runId } = await createResponse.json() as { runId: string };
+  it('fails stalled json-stream runs after the inactivity timeout elapses', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'step_start' }));
+process.on('SIGTERM', () => process.exit(143));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
 
-    const eventsController = new AbortController();
-    const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-      signal: eventsController.signal,
-    });
-    const eventsBody = await readSseUntil(eventsResponse, 'event: error');
-    eventsController.abort();
-    const statusBody = await waitForRunStatus(baseUrl, runId);
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
 
-    expect(eventsBody).toContain('event: agent');
-    expect(eventsBody).toContain('"type":"usage"');
-    expect(eventsBody).toContain('"isError":true');
-    expect(eventsBody).toContain('event: error');
-    expect(eventsBody).toContain('Qoder run failed: tool_use_failed');
-    expect(statusBody.status).toBe('failed');
+          expect(eventsBody).toContain('event: agent');
+          expect(eventsBody).toContain('"type":"status"');
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('keeps Claude stream runs alive while structured output is still flowing', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '900';
+    try {
+      await withFakeAgent(
+        'claude',
+        `
+const lines = [
+  JSON.stringify({ type: 'stream_event', event: { type: 'message_start', message: { id: 'msg-1' }, ttft_ms: 10 } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello ' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'world' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_stop', index: 0 } }),
+  JSON.stringify({ type: 'result', usage: { input_tokens: 1, output_tokens: 2 }, duration_ms: 700, stop_reason: 'end_turn' }),
+];
+let index = 0;
+const timer = setInterval(() => {
+  if (index >= lines.length) {
+    clearInterval(timer);
+    process.exit(0);
+    return;
+  }
+  console.log(lines[index++]);
+}, 200);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'claude',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('marks stalled runs failed even when the child ignores SIGTERM', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'step_start' }));
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+});
+
+describe('daemon run creation during shutdown', () => {
+  it('rejects new run creation while shutdown cleanup is still in flight', async () => {
+    const previousGrace = process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+    process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = '100';
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+      shutdown: () => Promise<void>;
+    };
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const activeResponse = await fetch(`${started.url}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'hello' }),
+          });
+          expect(activeResponse.status).toBe(202);
+          const { runId } = await activeResponse.json() as { runId: string };
+          await waitForRunStatus(started.url, runId, (status) => status === 'running');
+
+          const shutdownPromise = started.shutdown();
+
+          const runResponse = await fetch(`${started.url}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'late run' }),
+          });
+          const chatResponse = await fetch(`${started.url}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'late chat' }),
+          });
+
+          expect(runResponse.status).toBe(503);
+          expect(chatResponse.status).toBe(503);
+          await shutdownPromise;
+        },
+      );
+    } finally {
+      if (previousGrace == null) {
+        delete process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+      } else {
+        process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = previousGrace;
+      }
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
   });
 });
 
@@ -268,14 +455,18 @@ async function readSseUntil(response: Response, marker: string): Promise<string>
   return body;
 }
 
-async function waitForRunStatus(baseUrl: string, runId: string): Promise<{ status: string }> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+async function waitForRunStatus(
+  baseUrl: string,
+  runId: string,
+  done: (status: string) => boolean = (status) => status !== 'queued' && status !== 'running',
+): Promise<{ status: string }> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
     const statusBody = await statusResponse.json() as { status: string };
-    if (statusBody.status !== 'queued' && statusBody.status !== 'running') return statusBody;
+    if (done(statusBody.status)) return statusBody;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('run did not finish');
+  throw new Error('run did not reach expected status');
 }
 
 describe('chat prompt helpers', () => {
@@ -302,6 +493,17 @@ describe('chat prompt helpers', () => {
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
   });
 
+  it('defaults enabled research without an explicit query to the current message', () => {
+    const prompt = resolveResearchCommandContract(
+      { enabled: true },
+      'EV market 2025 trends',
+    );
+
+    expect(prompt).toContain('Canonical query for this run:');
+    expect(prompt).toContain('EV market 2025 trends');
+    expect(prompt).toContain('the first tool action must be the research command');
+  });
+
   it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {
     expect(
       resolveCodexGeneratedImagesDir(
@@ -310,7 +512,7 @@ describe('chat prompt helpers', () => {
         { CODEX_HOME: '/tmp/custom-codex-home' },
         '/home/tester',
       ),
-    ).toBe('/tmp/custom-codex-home/generated_images');
+    ).toBe(resolve('/tmp/custom-codex-home/generated_images'));
 
     expect(
       resolveCodexGeneratedImagesDir(

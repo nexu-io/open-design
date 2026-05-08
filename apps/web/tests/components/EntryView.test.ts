@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ConnectorDetail, ConnectorToolDetail } from '@open-design/contracts';
-
 import {
-  getConnectorBadgeToolCount,
   isTrustedConnectorCallbackOrigin,
   sortConnectorsForDisplay,
   sortConnectorsForSearch,
 } from '../../src/components/EntryView';
+import {
+  clearConnectorAuthorizationPending,
+  getConnectorDisplayToolCount,
+  mergeConnectorActionResult,
+  mergeConnectorToolPreview,
+  pruneConnectorAuthorizationPending,
+  updateConnectorAuthorizationPendingFromConnectResponse,
+  updateConnectorAuthorizationPendingFromStatuses,
+} from '../../src/components/ConnectorsBrowser';
 
 describe('connector OAuth callback origin', () => {
   it('accepts the app origin', () => {
@@ -26,13 +32,106 @@ describe('connector OAuth callback origin', () => {
 });
 
 describe('connector display sorting', () => {
+  it('preserves discovered tools when a fast action response only changes status', () => {
+    const merged = mergeConnectorActionResult(
+      {
+        id: 'twitter',
+        name: 'Twitter',
+        provider: 'Composio',
+        category: 'Social',
+        description: 'Read Twitter/X timelines, tweets, users, and searches.',
+        status: 'connected',
+        accountLabel: 'ca_twitter',
+        toolCount: 72,
+        tools: [
+          {
+            title: 'Search posts',
+            name: 'twitter.search_posts',
+            safety: { sideEffect: 'read', approval: 'auto', reason: 'Read-only search.' },
+            refreshEligible: true,
+          },
+        ],
+      },
+      {
+        id: 'twitter',
+        name: 'Twitter',
+        provider: 'Composio',
+        category: 'Social',
+        description: 'Read Twitter/X timelines, tweets, users, and searches.',
+        status: 'available',
+        tools: [],
+      },
+    );
+
+    expect(merged).toMatchObject({
+      id: 'twitter',
+      status: 'available',
+      toolCount: 72,
+      tools: [expect.objectContaining({ name: 'twitter.search_posts' })],
+    });
+  });
+
+  it('uses display tool counts without treating them as hydrated tools', () => {
+    const connector = {
+      id: 'airtable',
+      name: 'Airtable',
+      provider: 'Composio',
+      category: 'Database',
+      status: 'available' as const,
+      toolCount: 25,
+      tools: [],
+    };
+
+    expect(getConnectorDisplayToolCount(connector)).toBe(25);
+    expect(connector.tools).toEqual([]);
+  });
+
+  it('appends paginated preview tools without duplicating rows', () => {
+    const current = {
+      id: 'canvas',
+      name: 'Canvas',
+      provider: 'Composio',
+      category: 'Education',
+      status: 'available' as const,
+      toolCount: 574,
+      toolsNextCursor: 'cursor_2',
+      toolsHasMore: true,
+      tools: [
+        {
+          title: 'List courses',
+          name: 'canvas.list_courses',
+          safety: { sideEffect: 'read' as const, approval: 'auto' as const, reason: 'Read-only list.' },
+          refreshEligible: true,
+        },
+      ],
+    };
+    const next = {
+      ...current,
+      toolsHasMore: false,
+      tools: [
+        current.tools[0]!,
+        {
+          title: 'Get course',
+          name: 'canvas.get_course',
+          safety: { sideEffect: 'read' as const, approval: 'auto' as const, reason: 'Read-only get.' },
+          refreshEligible: true,
+        },
+      ],
+    };
+
+    const merged = mergeConnectorToolPreview(current, next, true);
+
+    expect(merged.tools.map((tool) => tool.name)).toEqual(['canvas.list_courses', 'canvas.get_course']);
+    expect(merged.toolsHasMore).toBe(false);
+  });
+
   it('places connected connectors first and sorts the rest alphabetically', () => {
     const sorted = sortConnectorsForDisplay([
-      { id: 'zapi', name: 'Zapier', provider: 'Composio', category: 'Automation', status: 'available', tools: [], allowedToolNames: [], curatedToolNames: [] },
-      { id: 'gmail', name: 'Gmail', provider: 'Composio', category: 'Email', status: 'connected', tools: [], allowedToolNames: [], curatedToolNames: [] },
-      { id: 'airtable', name: 'Airtable', provider: 'Composio', category: 'Data', status: 'available', tools: [], allowedToolNames: [], curatedToolNames: [] },
-      { id: 'github', name: 'GitHub', provider: 'Composio', category: 'Code', status: 'connected', tools: [], allowedToolNames: [], curatedToolNames: [] },
-      { id: 'calendar', name: 'Calendar', provider: 'Composio', category: 'Calendar', status: 'available', tools: [], allowedToolNames: [], curatedToolNames: [] },
+      { id: 'zapi', name: 'Zapier', provider: 'Composio', category: 'Automation', status: 'available', tools: [] },
+      { id: 'gmail', name: 'Gmail', provider: 'Composio', category: 'Email', status: 'connected', tools: [] },
+      { id: 'airtable', name: 'Airtable', provider: 'Composio', category: 'Data', status: 'available', tools: [] },
+      { id: 'github', name: 'GitHub', provider: 'Composio', category: 'Code', status: 'connected', tools: [] },
+      { id: 'calendar', name: 'Calendar', provider: 'Composio', category: 'Calendar', status: 'available', tools: [] },
     ]);
 
     expect(sorted.map((connector) => connector.id)).toEqual([
@@ -54,8 +153,6 @@ describe('connector display sorting', () => {
         status: 'connected',
         description: 'Sync issues from GitHub repositories.',
         tools: [],
-        allowedToolNames: [],
-        curatedToolNames: [],
       },
       {
         id: 'github-enterprise',
@@ -64,8 +161,6 @@ describe('connector display sorting', () => {
         category: 'Code',
         status: 'available',
         tools: [],
-        allowedToolNames: [],
-        curatedToolNames: [],
       },
       {
         id: 'github',
@@ -74,8 +169,6 @@ describe('connector display sorting', () => {
         category: 'Code',
         status: 'available',
         tools: [],
-        allowedToolNames: [],
-        curatedToolNames: [],
       },
       {
         id: 'slack',
@@ -91,8 +184,6 @@ describe('connector display sorting', () => {
             refreshEligible: false,
           },
         ],
-        allowedToolNames: [],
-        curatedToolNames: [],
       },
     ], 'github');
 
@@ -105,108 +196,84 @@ describe('connector display sorting', () => {
   });
 });
 
-// Issues #748 + #767 reviews: the connector card / drawer header
-// badge must track the curated catalog size — stable across Composio
-// hydration, never extended by provider discovery. Crucially, this
-// curated count must NOT be reused for drawer empty-state / loading-
-// gate decisions, because the drawer renders the full inventory; a
-// connector with an empty allowlist but a non-empty inventory must
-// still show the list.
-describe('getConnectorBadgeToolCount (issues #748, #767)', () => {
-  function makeRawTool(overrides: Partial<ConnectorToolDetail> = {}): ConnectorToolDetail {
-    return {
-      name: 'docs.bulk_op',
-      title: 'Bulk op',
-      safety: { sideEffect: 'write', approval: 'confirm', reason: 'Write op.' },
-      refreshEligible: false,
-      ...overrides,
-    };
-  }
-  function makeConnector(overrides: Partial<ConnectorDetail> = {}): ConnectorDetail {
-    return {
-      id: 'docs',
-      name: 'Docs',
-      provider: 'composio',
-      category: 'docs',
-      status: 'available',
-      tools: [],
-      allowedToolNames: [],
-      curatedToolNames: [],
-      ...overrides,
-    };
-  }
+describe('connector authorization pending state', () => {
+  const future = '2026-05-08T10:10:00.000Z';
+  const nowMs = Date.parse('2026-05-08T10:00:00.000Z');
 
-  it('uses curatedToolNames length as the badge source', () => {
-    const connector = makeConnector({
-      tools: [makeRawTool({ name: 'docs.search' }), makeRawTool({ name: 'docs.fetch' })],
-      allowedToolNames: ['docs.search', 'docs.fetch'],
-      curatedToolNames: ['docs.search', 'docs.fetch'],
-    });
-    expect(getConnectorBadgeToolCount(connector)).toBe(2);
+  it('marks redirect_required connect responses as pending', () => {
+    const pending = updateConnectorAuthorizationPendingFromConnectResponse({}, {
+      connector: {
+        id: 'exist',
+        name: 'Exist',
+        provider: 'Composio',
+        category: 'Personal',
+        status: 'available',
+        tools: [],
+      },
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: future,
+      },
+    }, nowMs);
+
+    expect(pending).toEqual({ exist: { expiresAt: future } });
   });
 
-  it('stays at the curated size after hydration grows allowedToolNames with read-only auto-discovered tools (#748 / #767 stability guarantee)', () => {
-    // The scenario @lefarcen called out in the #767 review: a
-    // hydrated connector where Composio discovery added ~50 read +
-    // auto-approval tools to the execution allowlist. `tools` is
-    // huge, `allowedToolNames` is moderately bigger than the catalog,
-    // but `curatedToolNames` is locked to the catalog. The badge must
-    // report the catalog size; the previous fix that read from
-    // `allowedToolNames` would have shown 52 here, the buggy
-    // pre-fix code would have shown 800.
-    const inventory = Array.from({ length: 800 }, (_, index) =>
-      makeRawTool({ name: `docs.bulk_op_${index}` }),
+  it('keeps pending state while status polling still reports available', () => {
+    const pending = updateConnectorAuthorizationPendingFromStatuses(
+      { exist: { expiresAt: future } },
+      { exist: { status: 'available' } },
+      nowMs,
     );
-    const autoAllowed = Array.from({ length: 50 }, (_, index) => `docs.read_op_${index}`);
-    const connector = makeConnector({
-      tools: inventory,
-      allowedToolNames: ['docs.search', 'docs.fetch', ...autoAllowed],
-      curatedToolNames: ['docs.search', 'docs.fetch'],
-    });
-    expect(getConnectorBadgeToolCount(connector)).toBe(2);
-    // Sanity: the other two counts are intentionally different.
-    expect(connector.allowedToolNames.length).toBe(52);
-    expect(connector.tools.length).toBe(800);
+
+    expect(pending).toEqual({ exist: { expiresAt: future } });
   });
 
-  it('falls back through allowedToolNames then tools.length when curatedToolNames is missing (older daemon, defensive)', () => {
-    // Half-deployed: daemon has shipped allowedToolNames (post-#748)
-    // but not curatedToolNames (pre-#767-review fix). Falls back to
-    // allowedToolNames so the badge still renders something close to
-    // "tools the agent can invoke" instead of regressing to the raw
-    // inventory.
-    const partial = makeConnector({
-      tools: [makeRawTool({ name: 'docs.search' }), makeRawTool({ name: 'docs.fetch' })],
-      allowedToolNames: ['docs.search', 'docs.fetch'],
-    });
-    delete (partial as Partial<ConnectorDetail>).curatedToolNames;
-    expect(getConnectorBadgeToolCount(partial)).toBe(2);
-
-    // Fully old daemon: neither field present, last-resort fallback
-    // is the raw inventory length so the badge never crashes.
-    const ancient = makeConnector({
-      tools: [makeRawTool({ name: 'docs.search' })],
-    });
-    delete (ancient as Partial<ConnectorDetail>).curatedToolNames;
-    delete (ancient as Partial<ConnectorDetail>).allowedToolNames;
-    expect(getConnectorBadgeToolCount(ancient)).toBe(1);
-  });
-
-  it('returns 0 when curatedToolNames is empty even if the inventory is huge — drawer empty-state is the inventory caller\'s job', () => {
-    // The #767-review drawer regression: a hydrated connector with
-    // 800 raw provider tools but no curated catalog entries. The
-    // badge correctly reports 0, but the drawer still has 800 tools
-    // to enumerate, so the empty-state branch must use the inventory
-    // count, never the badge count.
-    const inventory = Array.from({ length: 800 }, (_, index) =>
-      makeRawTool({ name: `docs.bulk_op_${index}` }),
+  it('clears pending state when status polling reports connected', () => {
+    const pending = updateConnectorAuthorizationPendingFromStatuses(
+      { exist: { expiresAt: future } },
+      { exist: { status: 'connected', accountLabel: 'me@example.com' } },
+      nowMs,
     );
-    const connector = makeConnector({ tools: inventory });
-    expect(getConnectorBadgeToolCount(connector)).toBe(0);
-    expect(connector.tools.length).toBe(800);
+
+    expect(pending).toEqual({});
   });
 
-  it('treats an empty inventory + empty curated as a real "0 tools" badge (not loading)', () => {
-    expect(getConnectorBadgeToolCount(makeConnector())).toBe(0);
+  it('expires pending state after the auth response expiry time', () => {
+    const pending = pruneConnectorAuthorizationPending(
+      { exist: { expiresAt: '2026-05-08T09:59:59.000Z' } },
+      nowMs,
+    );
+
+    expect(pending).toEqual({});
+  });
+
+  it('clears pending state for immediately connected responses', () => {
+    const pending = updateConnectorAuthorizationPendingFromConnectResponse({ exist: { expiresAt: future } }, {
+      connector: {
+        id: 'exist',
+        name: 'Exist',
+        provider: 'Composio',
+        category: 'Personal',
+        status: 'connected',
+        tools: [],
+      },
+      auth: { kind: 'connected' },
+    }, nowMs);
+
+    expect(pending).toEqual({});
+  });
+
+  it('cancels pending authorization without changing other pending connectors', () => {
+    const pending = clearConnectorAuthorizationPending(
+      {
+        exist: { expiresAt: future },
+        airtable: { expiresAt: future },
+      },
+      'exist',
+    );
+
+    expect(pending).toEqual({ airtable: { expiresAt: future } });
   });
 });

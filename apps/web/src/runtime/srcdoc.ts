@@ -26,6 +26,7 @@ export type SrcdocOptions = {
   baseHref?: string;
   initialSlideIndex?: number;
   commentBridge?: boolean;
+  inspectBridge?: boolean;
   editBridge?: boolean;
 };
 
@@ -49,8 +50,21 @@ export function buildSrcdoc(
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
-  const withComment = options.commentBridge ? injectCommentBridge(withDeck) : withDeck;
-  return options.editBridge ? injectManualEditBridge(withComment) : withComment;
+  // Comment + Inspect share an element-selection bridge: both pick a
+  // [data-od-id] / [data-screen-label] node and route the host's reply
+  // to either the comment popover (annotate) or the inspect panel
+  // (live-style overrides). Inject once when either mode is on. Pass the
+  // requested modes through so the bridge boots with picking already
+  // active — without that initial seed there is a window after each
+  // srcdoc rebuild where the host's `od:*-mode` postMessage races the
+  // bridge's own listener install and the iframe ignores clicks.
+  const withSelection = options.commentBridge || options.inspectBridge
+    ? injectSelectionBridge(withDeck, {
+        initialCommentMode: !!options.commentBridge,
+        initialInspectMode: !!options.inspectBridge,
+      })
+    : withDeck;
+  return options.editBridge ? injectManualEditBridge(withSelection) : withSelection;
 }
 
 function annotateManualEditSourcePaths(doc: string): string {
@@ -161,118 +175,250 @@ function injectSandboxShim(doc: string): string {
   return shim + doc;
 }
 
-function injectCommentBridge(doc: string): string {
-  const script = `<script data-od-comment-bridge>(function(){
-  var enabled = true;
+// Selection bridge: shared substrate for Comment mode and Inspect mode.
+// Both modes pick a [data-od-id] / [data-screen-label] element on click;
+// the difference is what the host does with the selection — annotate
+// (Comment) or live-tune basic styles (Inspect).
+//
+// Inspect adds four messages on top of the comment protocol:
+//   in:  { type: 'od:inspect-set', elementId, selector, prop, value }
+//        Apply (or unset, when value === '') a per-element CSS override.
+//   in:  { type: 'od:inspect-reset', elementId? } Clear overrides for one
+//        element, or all if elementId is omitted.
+//   in:  { type: 'od:inspect-extract' } Reply with the cumulative
+//        override map so the host can persist to source.
+//   in:  { type: 'od:inspect-replay', overrides } Replace the in-memory
+//        override map with the host's authoritative set so the iframe
+//        preview matches host state after every srcdoc rebuild. Without
+//        this the bridge re-hydrates only the persisted <style> block on
+//        load, so any unsaved edit the host still holds disappears from
+//        the preview while saveInspectToSource() can later commit CSS the
+//        user is no longer seeing. Re-validates every entry under the
+//        same allow-list / value sanitizer applied to od:inspect-set.
+//   out: { type: 'od:inspect-overrides', overrides } The current snapshot,
+//        sent in reply to extract and after every set/reset/replay. The
+//        host re-derives the persisted CSS body from the structured map
+//        under its own allow-list — the bridge's own stylesheet text is
+//        NOT included in this message because artifact JS can forge a
+//        same-source od:inspect-overrides containing a hostile `css`.
+//
+// Overrides are written into a single <style data-od-inspect-overrides>
+// block in <head>, with `!important` on every property so the bridge
+// can defeat author inline styles (common in agent-generated HTML).
+//
+// Security: this bridge runs inside a sandboxed iframe but still shares the
+// host page context for the override <style> element. The message listener
+// does NOT validate ev.origin — the web app runs on configurable ports and
+// preview domains, so the host origin is not stable. The bridge therefore
+// trusts any parent that can postMessage to it and relies on iframe
+// sandboxing + the prop allow-list / value sanitization below to contain
+// damage. Any parent able to postMessage here can already mount the iframe.
+function injectSelectionBridge(
+  doc: string,
+  options: { initialCommentMode?: boolean; initialInspectMode?: boolean } = {},
+): string {
+  const initialComment = options.initialCommentMode ? 'true' : 'false';
+  const initialInspect = options.initialInspectMode ? 'true' : 'false';
+  const script = `<script data-od-selection-bridge>(function(){
+  var commentEnabled = ${initialComment};
+  var inspectEnabled = ${initialInspect};
+  // Comment mode has two sub-tools (kept on the host side as boardTool):
+  //   'picker' — click-to-select an element for annotation.
+  //   'pod'    — pointer-drag a freeform stroke that the host turns into a
+  //              pod selection covering whatever the stroke encloses.
+  // Inspect mode always uses 'picker'-style click selection regardless of
+  // this value.
   var mode = 'picker';
   var hoveredId = null;
-  var selectableCache = null;
   var drawing = false;
   var stroke = [];
   var postTargetsTimer = null;
-  var MAX_TARGETS = 400;
+  // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
+  var overrides = Object.create(null);
+  var styleEl = null;
+  // Allow-list of CSS properties the host may override. A malicious parent
+  // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
+  // through od:inspect-set. Keep this in sync with the InspectPanel UI.
+  var ALLOWED_PROPS = {
+    'color': true,
+    'background-color': true,
+    'font-size': true,
+    'font-weight': true,
+    'font-family': true,
+    'line-height': true,
+    'text-align': true,
+    'padding': true,
+    'padding-top': true,
+    'padding-right': true,
+    'padding-bottom': true,
+    'padding-left': true,
+    'border-radius': true
+  };
+  // Reject any value that could break out of a 'prop: value' declaration:
+  // semicolons (extra declarations), braces (close the rule), angle
+  // brackets (close the <style> tag), and newlines (defense in depth).
+  var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
+  function active(){ return commentEnabled || inspectEnabled; }
   function esc(value){ try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); } catch (_) { return String(value); } }
-  function isSelectableElement(el){
-    if (!el || !el.tagName) return false;
-    var tag = el.tagName.toLowerCase();
-    if (tag === 'html' || tag === 'body' || tag === 'head' || tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'link' || tag === 'title') return false;
-    var rect = el.getBoundingClientRect();
-    if (!rect || rect.width < 2 || rect.height < 2) return false;
-    var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
-    if (style && (style.display === 'none' || style.visibility === 'hidden' || style.pointerEvents === 'none')) return false;
-    return true;
-  }
-  function meaningfulText(el){
-    return (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160);
-  }
-  function shortLabel(el){
-    var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
-    var id = typeof el.id === 'string' && el.id.trim() ? '#' + el.id.trim() : '';
-    var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
-    return tag + id + cls;
-  }
-  function cssPath(el){
-    if (el.hasAttribute && el.hasAttribute('data-od-id')) {
-      return '[data-od-id="' + esc(el.getAttribute('data-od-id')) + '"]';
+  // Recompute the selector from elementId rather than trusting the one in
+  // the inbound message — a forged selector like
+  // '} </style><script>...' would otherwise be concatenated into the
+  // override <style> sheet verbatim. The hint string is only inspected to
+  // decide which attribute kind (data-od-id vs data-screen-label) was the
+  // user's pick at click time, so we tune the same node the host
+  // serializer keys off; the hint itself is never written into CSS.
+  function safeSelectorFor(elementId, hint){
+    var id = String(elementId);
+    var kind = null;
+    if (typeof hint === 'string') {
+      if (hint.indexOf('[data-od-id=') === 0) kind = 'data-od-id';
+      else if (hint.indexOf('[data-screen-label=') === 0) kind = 'data-screen-label';
     }
-    if (el.id) return '#' + esc(el.id);
-    var parts = [];
-    var node = el;
-    while (node && node.nodeType === 1 && node !== document.body && parts.length < 6) {
-      var part = node.tagName.toLowerCase();
-      var cls = typeof node.className === 'string' && node.className.trim()
-        ? node.className
-            .trim()
-            .split(/\\s+/)
-            .slice(0, 2)
-            .map(function(token){ return esc(token); })
-            .join('.')
-        : '';
-      if (cls) part += '.' + cls;
-      var index = 1;
-      var sib = node;
-      while ((sib = sib.previousElementSibling)) {
-        if (sib.tagName === node.tagName) index++;
+    if (kind === 'data-screen-label' && document.querySelector('[data-screen-label="' + esc(id) + '"]')) {
+      return '[data-screen-label="' + esc(id) + '"]';
+    }
+    if (kind === 'data-od-id' && document.querySelector('[data-od-id="' + esc(id) + '"]')) {
+      return '[data-od-id="' + esc(id) + '"]';
+    }
+    if (document.querySelector('[data-od-id="' + esc(id) + '"]')) {
+      return '[data-od-id="' + esc(id) + '"]';
+    }
+    if (document.querySelector('[data-screen-label="' + esc(id) + '"]')) {
+      return '[data-screen-label="' + esc(id) + '"]';
+    }
+    return null;
+  }
+  function ensureStyleEl(){
+    if (styleEl && styleEl.isConnected) return styleEl;
+    styleEl = document.querySelector('style[data-od-inspect-overrides]');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.setAttribute('data-od-inspect-overrides', '');
+      (document.head || document.documentElement).appendChild(styleEl);
+    }
+    return styleEl;
+  }
+  // Hydrate the in-memory override map from any persisted
+  // <style data-od-inspect-overrides> block already in the document.
+  // Without this, the first od:inspect-set rebuilds the sheet from an
+  // empty map and silently drops every previously saved rule for other
+  // elements — a subsequent Save-to-source would then erase them from
+  // the artifact too.
+  function hydrateOverridesFromDom(){
+    var existing = document.querySelector('style[data-od-inspect-overrides]');
+    if (!existing) return;
+    var text = existing.textContent || '';
+    var ruleRe = /(\\[data-(?:od-id|screen-label)="[^"]*"\\])\\s*\\{\\s*([^}]*)\\}/g;
+    var match;
+    while ((match = ruleRe.exec(text)) !== null) {
+      var selector = match[1];
+      var declBody = match[2];
+      var idMatch = selector.match(/="([^"]*)"/);
+      if (!idMatch) continue;
+      var elementId = idMatch[1];
+      var props = Object.create(null);
+      var decls = declBody.split(';');
+      for (var d = 0; d < decls.length; d++) {
+        var raw = decls[d];
+        if (!raw) continue;
+        var colon = raw.indexOf(':');
+        if (colon <= 0) continue;
+        var name = raw.slice(0, colon).trim().toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)) continue;
+        var value = raw.slice(colon + 1).replace(/!important/i, '').trim();
+        if (!value || UNSAFE_VALUE.test(value)) continue;
+        props[name] = value;
       }
-      part += ':nth-of-type(' + index + ')';
-      parts.unshift(part);
-      node = node.parentElement;
-      if (node && node.id) {
-        parts.unshift('#' + esc(node.id));
-        break;
+      if (Object.keys(props).length) {
+        overrides[elementId] = { selector: selector, props: props };
       }
     }
-    return parts.join(' > ') || shortLabel(el);
+    styleEl = existing;
   }
-  function stableElementId(el){
-    if (el.hasAttribute && el.hasAttribute('data-od-id')) {
-      return el.getAttribute('data-od-id');
-    }
-    if (el.id) return el.id;
-    return cssPath(el);
+  function rebuildStyleSheet(){
+    var el = ensureStyleEl();
+    var lines = [];
+    Object.keys(overrides).forEach(function(id){
+      var entry = overrides[id];
+      if (!entry) return;
+      var props = entry.props || {};
+      var keys = Object.keys(props);
+      if (!keys.length) return;
+      var body = keys.map(function(k){ return k + ': ' + props[k] + ' !important'; }).join('; ');
+      lines.push(entry.selector + ' { ' + body + ' }');
+    });
+    el.textContent = lines.join('\\n');
+  }
+  function postOverrides(){
+    var clean = {};
+    Object.keys(overrides).forEach(function(id){
+      var entry = overrides[id];
+      if (entry && entry.props && Object.keys(entry.props).length) {
+        clean[id] = { selector: entry.selector, props: Object.assign({}, entry.props) };
+      }
+    });
+    // Intentionally do NOT include a css string here. Artifact code
+    // running inside this iframe shares window.parent and could forge
+    // od:inspect-overrides with a hostile css (e.g. </style><script>...).
+    // The host re-derives CSS from the structured overrides map under
+    // its own allow-list, so any stray css field on the wire would only
+    // be a false-trust trap.
+    try { window.parent.postMessage({ type: 'od:inspect-overrides', overrides: clean }, '*'); } catch (_) {}
+  }
+  function styleSnapshot(el){
+    try {
+      var cs = window.getComputedStyle(el);
+      return {
+        color: cs.color,
+        backgroundColor: cs.backgroundColor,
+        fontSize: cs.fontSize,
+        fontWeight: cs.fontWeight,
+        lineHeight: cs.lineHeight,
+        paddingTop: cs.paddingTop,
+        paddingRight: cs.paddingRight,
+        paddingBottom: cs.paddingBottom,
+        paddingLeft: cs.paddingLeft,
+        borderRadius: cs.borderTopLeftRadius,
+        textAlign: cs.textAlign,
+        fontFamily: cs.fontFamily
+      };
+    } catch (_) { return null; }
   }
   function targetFrom(el){
-    if (!isSelectableElement(el)) return null;
-    var id = stableElementId(el);
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (!id) return null;
     var rect = el.getBoundingClientRect();
+    var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
+    var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
     return {
       type: 'od:comment-target',
       elementId: id,
-      selector: cssPath(el),
-      label: shortLabel(el),
-      text: meaningfulText(el),
+      selector: el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]',
+      label: tag + cls,
+      text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
-      htmlHint: html.slice(0, 180)
+      htmlHint: html.slice(0, 180),
+      style: styleSnapshot(el)
     };
   }
-  function relativePoint(ev){
-    return { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
-  }
-  function postStroke(type){
-    window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
-  }
   function allTargets(){
-    if (selectableCache) return selectableCache;
-    var nodes = document.body ? document.body.querySelectorAll('*') : [];
+    var nodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
     var items = [];
     for (var i = 0; i < nodes.length; i++) {
       var item = targetFrom(nodes[i]);
       if (item) items.push(item);
-      if (items.length >= MAX_TARGETS) break;
     }
-    selectableCache = items;
-    return selectableCache;
+    return items;
   }
   var postTargetsPending = false;
   function postTargets(){
-    if (!enabled) return;
-    selectableCache = null;
+    if (!active()) return;
     window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
   }
   function schedulePostTargets(){
-    if (!enabled || postTargetsPending) return;
+    if (!active() || postTargetsPending) return;
     postTargetsPending = true;
     if (postTargetsTimer) window.clearTimeout(postTargetsTimer);
     postTargetsTimer = window.setTimeout(function(){
@@ -283,30 +429,126 @@ function injectCommentBridge(doc: string): string {
       });
     }, 120);
   }
+  function relativePoint(ev){
+    return { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
+  }
+  function postStroke(type){
+    window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
+  }
   function closestTarget(event){
-    var el = event.target && event.target.nodeType === 3 ? event.target.parentElement : event.target;
+    var el = event.target;
     while (el && el !== document.documentElement) {
-      if (isSelectableElement(el)) return el;
+      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
       el = el.parentElement;
     }
     return null;
   }
+  function selectorFor(el){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (!id) return null;
+    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+  }
+  function applyOverride(elementId, selector, prop, value){
+    if (!elementId || !prop) return;
+    if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, prop)) return;
+    var safeSelector = safeSelectorFor(elementId, selector);
+    if (!safeSelector) return;
+    var v = (value == null) ? '' : String(value).trim();
+    if (v && UNSAFE_VALUE.test(v)) return;
+    var entry = overrides[elementId];
+    if (!entry) {
+      entry = { selector: safeSelector, props: Object.create(null) };
+      overrides[elementId] = entry;
+    } else {
+      entry.selector = safeSelector;
+    }
+    if (!v) delete entry.props[prop];
+    else entry.props[prop] = v;
+    if (Object.keys(entry.props).length === 0) delete overrides[elementId];
+    rebuildStyleSheet();
+    postOverrides();
+  }
+  function resetOverrides(elementId){
+    if (elementId) delete overrides[elementId];
+    else overrides = Object.create(null);
+    rebuildStyleSheet();
+    postOverrides();
+  }
   window.addEventListener('message', function(ev){
-    if (!ev.data || ev.data.type !== 'od:comment-mode') return;
-    enabled = !!ev.data.enabled;
-    mode = ev.data.mode === 'pod' ? 'pod' : 'picker';
-    document.documentElement.toggleAttribute('data-od-comment-mode', enabled);
-    document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-    if (enabled) setTimeout(postTargets, 0);
-    else hoveredId = null;
-    if (!enabled || mode !== 'pod') {
-      drawing = false;
-      stroke = [];
-      window.parent.postMessage({ type: 'od:pod-clear' }, '*');
+    var data = ev && ev.data;
+    if (!data || !data.type) return;
+    if (data.type === 'od:comment-mode') {
+      commentEnabled = !!data.enabled;
+      mode = data.mode === 'pod' ? 'pod' : 'picker';
+      document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
+      document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      if (active()) setTimeout(postTargets, 0);
+      else hoveredId = null;
+      if (!commentEnabled || mode !== 'pod') {
+        drawing = false;
+        stroke = [];
+        try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
+      }
+      return;
+    }
+    if (data.type === 'od:inspect-mode') {
+      inspectEnabled = !!data.enabled;
+      document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      if (active()) setTimeout(postTargets, 0);
+      else hoveredId = null;
+      return;
+    }
+    if (data.type === 'od:inspect-set') {
+      applyOverride(data.elementId, data.selector, data.prop, data.value);
+      return;
+    }
+    if (data.type === 'od:inspect-reset') {
+      resetOverrides(data.elementId);
+      return;
+    }
+    if (data.type === 'od:inspect-extract') {
+      postOverrides();
+      return;
+    }
+    if (data.type === 'od:inspect-replay') {
+      // Replace the in-memory map with the host's authoritative set so
+      // unsaved edits survive a srcdoc rebuild (toggling inspect off/on,
+      // switching to comment, any other reload reloads the iframe from
+      // previewSource without the unsaved style block). Re-validate every
+      // entry: a parent able to postMessage to this bridge is otherwise
+      // trusted, but applying its payload through the same allow-list /
+      // value sanitizer keeps the override sheet under the bridge's own
+      // contract instead of whatever the parent sent.
+      var raw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
+      overrides = Object.create(null);
+      var ids = Object.keys(raw);
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i];
+        var entry = raw[id];
+        if (!entry || typeof entry.props !== 'object' || !entry.props) continue;
+        var safeSelector = safeSelectorFor(id, entry.selector);
+        if (!safeSelector) continue;
+        var clean = Object.create(null);
+        var pkeys = Object.keys(entry.props);
+        for (var p = 0; p < pkeys.length; p++) {
+          var name = String(pkeys[p]).toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)) continue;
+          var rawValue = entry.props[pkeys[p]];
+          if (rawValue == null) continue;
+          var v = String(rawValue).trim();
+          if (!v || UNSAFE_VALUE.test(v)) continue;
+          clean[name] = v;
+        }
+        if (Object.keys(clean).length) overrides[id] = { selector: safeSelector, props: clean };
+      }
+      rebuildStyleSheet();
+      postOverrides();
+      return;
     }
   });
+  function pickerActive(){ return inspectEnabled || (commentEnabled && mode === 'picker'); }
   document.addEventListener('mouseover', function(ev){
-    if (!enabled || mode !== 'picker') return;
+    if (!pickerActive()) return;
     var el = closestTarget(ev);
     if (!el) return;
     var payload = targetFrom(el);
@@ -315,7 +557,7 @@ function injectCommentBridge(doc: string): string {
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
   }, true);
   document.addEventListener('mouseout', function(ev){
-    if (!enabled || mode !== 'picker') return;
+    if (!pickerActive()) return;
     var el = closestTarget(ev);
     if (!el) return;
     var next = ev.relatedTarget;
@@ -327,7 +569,7 @@ function injectCommentBridge(doc: string): string {
     window.parent.postMessage({ type: 'od:comment-leave' }, '*');
   }, true);
   document.addEventListener('click', function(ev){
-    if (!enabled || mode !== 'picker') return;
+    if (!pickerActive()) return;
     var el = closestTarget(ev);
     if (!el) return;
     ev.preventDefault();
@@ -335,8 +577,9 @@ function injectCommentBridge(doc: string): string {
     var payload = targetFrom(el);
     if (payload) window.parent.postMessage(payload, '*');
   }, true);
+  // Pod drawing — only active in comment mode with the 'pod' tool.
   document.addEventListener('pointerdown', function(ev){
-    if (!enabled || mode !== 'pod' || ev.button !== 0) return;
+    if (!commentEnabled || mode !== 'pod' || ev.button !== 0) return;
     drawing = true;
     stroke = [relativePoint(ev)];
     ev.preventDefault();
@@ -368,11 +611,24 @@ function injectCommentBridge(doc: string): string {
   document.addEventListener('scroll', schedulePostTargets, true);
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+  // Reflect the host-requested initial modes on the documentElement so
+  // the cursor/hover styles match what the bridge picks up on click.
+  if (commentEnabled) document.documentElement.toggleAttribute('data-od-comment-mode', true);
+  if (inspectEnabled) document.documentElement.toggleAttribute('data-od-inspect-mode', true);
+  document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+  hydrateOverridesFromDom();
+  // Acknowledge the hydrated overrides to the host as a preview signal so
+  // diagnostic listeners (and tests) can observe that the bridge is in sync
+  // with the persisted style sheet. The host no longer treats this message
+  // as save input — it parses the artifact source itself — but emitting it
+  // keeps the iframe → host channel symmetric across set/reset/extract.
+  if (Object.keys(overrides).length) setTimeout(postOverrides, 0);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
   else setTimeout(postTargets, 0);
 })();</script>`;
-  const style = `<style data-od-comment-bridge-style>
+  const style = `<style data-od-selection-bridge-style>
 html[data-od-comment-mode] body * { cursor: crosshair !important; }
+html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
 </style>`;
   const withStyle = /<\/head>/i.test(doc)

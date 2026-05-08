@@ -6,7 +6,7 @@ out/
 .tmp/
 .DS_Store
 *.log
-*.exe
+/OpenDesign.exe
 .vite
 .astro/
 .vscode
@@ -51,3 +51,6 @@ tsconfig.tsbuildinfo
 task.md
 specs/change/active
 .ralph/
+
+# Local design assistant context
+.impeccable.md

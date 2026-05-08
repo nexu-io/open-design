@@ -54,10 +54,13 @@ function resolveHeadlessConfig(): PackagedConfig {
 
   return {
     appVersion: null,
+    daemonCliEntry: null,
+    daemonSidecarEntry: null,
     namespace,
     namespaceBaseRoot,
     nodeCommand: null,
     resourceRoot,
+    webSidecarEntry: null,
     webStandaloneRoot: null,
     webOutputMode: "server",
   };
@@ -101,7 +104,10 @@ async function main(): Promise<void> {
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
     appVersion: config.appVersion,
+    daemonCliEntry: config.daemonCliEntry,
+    daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    webSidecarEntry: config.webSidecarEntry,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,
   });

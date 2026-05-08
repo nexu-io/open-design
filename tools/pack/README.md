@@ -50,7 +50,7 @@ namespace paths, and the packaged sidecar launcher passes daemon managed paths v
 own default fallback for non-packaged launches, but packaged runtime must not rely on fallback inference from Electron
 `userData`, app bundle names, or ports.
 
-The current release slice is mac beta publication. Runtime updater integration and Windows packaging remain later phases.
+Runtime updater integration remains a later phase.
 
 Electron-builder resources live under `tools/pack/resources/mac/`. The current logo is staged there as the mac icon/DMG
 placeholder so future design-provided assets can replace the resource files without changing packaging code.
@@ -58,6 +58,27 @@ placeholder so future design-provided assets can replace the resource files with
 Local developer artifacts bake the tools-pack namespace runtime root so `tools-pack mac start/stop/logs/cleanup` can manage
 them from the repo. Release artifacts use `--portable` so the installed app resolves namespace data/log/runtime/user-data
 from the user's Electron `userData` root instead of the build machine's `.tmp` path.
+
+## Windows
+
+Local lifecycle commands:
+
+- `tools-pack win build --to dir` for fast unpacked smoke builds.
+- `tools-pack win build --to nsis` for installer builds.
+- `tools-pack win build --to all` for both outputs.
+- `tools-pack win install`
+- `tools-pack win start`
+- `tools-pack win inspect --expr "document.title"`
+- `tools-pack win logs`
+- `tools-pack win stop`
+- `tools-pack win cleanup`
+- `tools-pack win list`
+- `tools-pack win reset`
+
+Build artifacts are namespace-scoped under `.tmp/tools-pack/out/win/namespaces/<namespace>/`.
+Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/win/namespaces/<namespace>/`.
+`--to dir` may point `built-app.json` at an immutable cached `win-unpacked` executable while keeping
+namespace-local config and runtime paths outside that cache entry.
 
 ## Linux
 
