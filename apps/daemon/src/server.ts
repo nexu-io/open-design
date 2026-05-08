@@ -1555,7 +1555,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // skips preflight), which would allow CSRF from a page on the default
   // port (80).
   const _PORTLESS_SAFE_POST_RE =
-    /^\/(test\/connection|projects|chat|runs|artifacts\/(save|lint)|templates|codex-pets\/sync|tools\/live-artifacts\/(create|update|refresh)|projects\/[^/]+\/(conversations|deploy|archive|media)|live-artifacts\/[^/]+\/refresh)$/;
+    /^\/(test\/connection|projects|chat|runs|artifacts\/(save|lint)|templates|codex-pets\/sync|tools\/live-artifacts\/(create|update|refresh)|projects\/[^/]+\/(conversations|deploy|archive(\/batch)?|media)|live-artifacts\/[^/]+\/refresh)$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
