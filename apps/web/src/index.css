@@ -14752,6 +14752,11 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: color-mix(in srgb, var(--warning, #d97706) 14%, transparent);
   color: var(--warning, #d97706);
 }
+.project-actions-disabled-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
 
 /* ----- Toast (#451) ---------------------------------------------------- */
 /* Single transient bottom-center toast for project-scoped actions. */

@@ -14,11 +14,18 @@ const STATE_FRESH = { exists: true, isStale: false };
 const STATE_STALE = { exists: true, isStale: true };
 
 describe('ContinueInCliButton', () => {
-  it('renders disabled with the prerequisite tooltip when DESIGN.md is missing', () => {
+  it('renders disabled with a visible inline hint when DESIGN.md is missing', () => {
     render(<ContinueInCliButton designMdState={STATE_MISSING} onClick={() => {}} />);
     const btn = screen.getByRole('button', { name: /Continue in CLI/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
-    expect(btn.getAttribute('title')).toBe('Finalize the design package first.');
+    // Native disabled buttons don't fire hover/focus, so the
+    // guidance must render visibly in the DOM rather than as a
+    // tooltip (mrcfps's PR #974 review). Hint links to button via
+    // aria-describedby so assistive tech still announces it.
+    const hint = screen.getByRole('note');
+    expect(hint.textContent).toBe('Finalize the design package first.');
+    expect(btn.getAttribute('aria-describedby')).toBe(hint.id);
+    expect(btn.getAttribute('title')).toBeNull();
   });
 
   it('renders enabled and chip-less when DESIGN.md is fresh', () => {

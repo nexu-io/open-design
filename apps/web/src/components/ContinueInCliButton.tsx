@@ -28,16 +28,31 @@ export interface ContinueInCliButtonProps {
 
 export function ContinueInCliButton({ designMdState, onClick }: ContinueInCliButtonProps) {
   if (!designMdState.exists) {
+    // Native `<button disabled>` does not fire hover or focus events
+    // in the browsers we ship against, so a `title` tooltip on the
+    // disabled button never surfaces — that hides the prerequisite
+    // guidance that the spec explicitly wanted discoverable. Render
+    // the help text as a visible sibling instead, plus an
+    // aria-describedby link so assistive tech announces the same
+    // explanation when the disabled button gets focused.
     return (
-      <button
-        type="button"
-        className="project-actions-button project-actions-button-secondary"
-        disabled
-        title={DISABLED_TOOLTIP}
-        aria-label={`Continue in CLI — ${DISABLED_TOOLTIP}`}
-      >
-        Continue in CLI
-      </button>
+      <span className="project-actions-button-group">
+        <button
+          type="button"
+          className="project-actions-button project-actions-button-secondary"
+          disabled
+          aria-describedby="continue-in-cli-disabled-hint"
+        >
+          Continue in CLI
+        </button>
+        <span
+          id="continue-in-cli-disabled-hint"
+          className="project-actions-disabled-hint"
+          role="note"
+        >
+          {DISABLED_TOOLTIP}
+        </span>
+      </span>
     );
   }
 
