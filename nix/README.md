@@ -84,17 +84,28 @@ configuration prefer the Home Manager module.
 
 ## (3) `webFrontend` — when to use it, when to bring your own server
 
-Open Design's frontend is a static SPA that calls the daemon's `/api/*`.
-Three serving options:
+Open Design's frontend is a static SPA that issues relative `/api/*`,
+`/artifacts/*`, and `/frames/*` requests. Three serving options:
 
-| Option                                 | When                                                                                                                                                                                               |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `webFrontend.enable = true`            | You want one-line setup. The module spawns a tiny Caddy file server on `webFrontend.port` (default `5174`) pointing at the built export.                                                           |
-| `webFrontend.enable = false` (default) | You're running nginx / Caddy / Apache / Traefik yourself. Point your server's document root at `${pkgs.open-design.web}` (or the `packages.<system>.web` output) and proxy `/api/*` to the daemon. |
-| Skip the frontend entirely             | You only need the daemon's API for headless agent dispatch.                                                                                                                                        |
+| Option                                 | When                                                                                                                                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webFrontend.enable = true`            | You want one-line setup. The module spawns a tiny Caddy file server on `webFrontend.port` (default `5174`) that serves the SPA and reverse-proxies the three path prefixes to the daemon.                         |
+| `webFrontend.enable = false` (default) | You're running nginx / Caddy / Apache / Traefik yourself. Point your server's document root at `${pkgs.open-design.web}` (or the `packages.<system>.web` output) and replicate the proxy contract in section (4). |
+| Skip the frontend entirely             | You only need the daemon's API for headless agent dispatch.                                                                                                                                                       |
 
 The two services are independent. `autoStart` controls the daemon;
 `webFrontend.enable` controls the static server. Mix freely.
+
+> **Bring-your-own-server gotcha:** if your proxy listens on any
+> origin that differs from the daemon's bind (different host _or_
+> different port — even loopback split-port like
+> `http://127.0.0.1:8080` while the daemon stays on `:7457`), the
+> daemon's same-origin gate will 403 the SPA's writes until you tell
+> it about that origin. Either set
+> `services.open-design.webFrontend.allowedOrigins = [ "<your-proxy-origin>" ]`
+> (which feeds `OD_ALLOWED_ORIGINS`) or, for the loopback-only
+> split-port case, set `extraEnv.OD_WEB_PORT = "<proxy-port>"`. See
+> section (4) for the full decision tree.
 
 ### Exposing the bundled frontend on a non-loopback host
 
@@ -164,11 +175,25 @@ If you serve the static bundle yourself, replicate that shape:
   response compression.
 - SPA fallback for unmatched paths → `index.html`.
 
-If your reverse proxy lives on a non-loopback origin (e.g.
-`http://laptop.local:5174`), set `OD_ALLOWED_ORIGINS` on the **daemon**
-to that origin so its same-origin gate accepts the proxied writes —
-see section (3). The static-server's environment does not need any
-Open Design env vars.
+The static-server's environment does not need any Open Design env
+vars — but **the daemon's environment usually does**, because its
+same-origin gate is built from `OD_BIND_HOST:port` (loopback hosts
+included). The browser's `Origin` and `Host` are whatever your proxy
+exposes, so unless that matches `127.0.0.1:<daemon-port>` exactly,
+the daemon will 403 every PUT/POST until told otherwise:
+
+| Your custom-server setup                                                                                                                    | What to set on the daemon                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Proxy at `http://127.0.0.1:<daemon-port>` (same host, same port — unusual)                                                                  | Nothing.                                                                                                                                          |
+| Proxy at a loopback host but different port (e.g. `http://127.0.0.1:8080` while daemon is on `:7457`)                                       | Either `extraEnv.OD_WEB_PORT = "8080"` (whitelists `8080` on every loopback host) or `services.open-design.webFrontend.allowedOrigins`.           |
+| Proxy on any non-loopback host (LAN IP, mDNS name, Tailscale name, public domain — `https://od.example.com`, `http://laptop.local:5174`, …) | `services.open-design.webFrontend.allowedOrigins = [ "<full origin>" ]`. List every scheme + host[:port] combo a browser might load the SPA from. |
+
+`webFrontend.allowedOrigins` is forwarded to the daemon as
+`OD_ALLOWED_ORIGINS`; if you run the daemon outside the modules,
+export `OD_ALLOWED_ORIGINS` directly with the same shape (see
+section (3)). The variable widens only the general `/api/*` gate —
+connector-credential and live-artifact preview/refresh routes stay
+strictly loopback-only by design.
 
 ## (5) Secrets — DO NOT put them in your Nix config
 

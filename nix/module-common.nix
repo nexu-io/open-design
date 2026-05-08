@@ -201,11 +201,22 @@ in {
       description = ''
         Full HTTP(S) origins (`scheme://host[:port]`, no path) the
         daemon should accept as same-site for `/api/*` requests in
-        addition to its built-in loopback set. Required whenever
-        `webFrontend.host` is non-loopback so the SPA loaded from
-        `http://<lan-host>:''${toString cfg.webFrontend.port}` can
-        actually issue PUT/POST through the bundled caddy proxy
-        without being 403'd by the daemon's CSRF-style gate.
+        addition to its built-in loopback set. Honored regardless of
+        `webFrontend.enable` — set this whenever the browser-facing
+        origin differs from the daemon's bind address, including the
+        following cases:
+
+          * Bundled caddy on a non-loopback host: SPA loaded from
+            `http://<lan-host>:''${toString cfg.webFrontend.port}` cannot
+            issue PUT/POST through the bundled proxy without this set.
+          * Custom nginx/Caddy out front (`webFrontend.enable = false`)
+            on a non-loopback host or any port other than
+            `''${toString cfg.port}` — including loopback split-port
+            setups like `http://127.0.0.1:8080`.
+
+        For the loopback split-port case specifically, an alternative is
+        to set `extraEnv.OD_WEB_PORT = "<proxy-port>"`, which whitelists
+        that port on every loopback host without enumerating origins.
 
         Each entry is forwarded to the daemon via the `OD_ALLOWED_ORIGINS`
         env var. The daemon both compares it verbatim against the
@@ -215,8 +226,8 @@ in {
         check would still 403 same-site GETs at the Host check). List
         every hostname/scheme combo a user might access (LAN IP, mDNS
         name, Tailscale name, http and https separately if both are
-        reachable). Loopback origins are already accepted
-        unconditionally — do not bother listing them here.
+        reachable). Loopback origins on the daemon's own port are
+        already accepted unconditionally — do not bother listing those.
       '';
       example = ["http://laptop.local:5174" "https://laptop.local:5174"];
     };
