@@ -2882,6 +2882,8 @@ function HtmlViewer({
   const [boardMode, setBoardMode] = useState(false);
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
   const [inspectMode, setInspectMode] = useState(false);
+  // for hint managing hint box state
+  const [openHintBox, setOpenHintBox] = useState(false);
   const [manualEditMode, setManualEditMode] = useState(false);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
@@ -4232,6 +4234,7 @@ function HtmlViewer({
                   setBoardMode(false);
                   clearBoardComposer();
                   setManualEditMode(false);
+                  setOpenHintBox(true);
                 }
                 return next;
               });
@@ -4617,9 +4620,17 @@ function HtmlViewer({
                 error={inspectError}
               />
             ) : null}
-            {inspectMode && !activeInspectTarget ? (
-              <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
+            {inspectMode && openHintBox && !activeInspectTarget ? (
+              <div className="inspect-empty-hint-container">
+                <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
                 Click any element with <code>data-od-id</code> to tune its style.
+              </div>
+               <button
+                type="button"
+                onClick={() => setOpenHintBox(false)}
+                className="orbit-artifact-ghost">
+                 <Icon className='' name='close' size={12} />
+               </button>
               </div>
             ) : null}
           </div>
