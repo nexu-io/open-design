@@ -83,6 +83,7 @@ const orbitTemplates = [
 describe('SettingsDialog Orbit connector gate refresh', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
     vi.mocked(fetchConnectors).mockReset();
@@ -207,13 +208,16 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
   });
 
   it('preserves legacy unscoped Last run only for the initially selected template', async () => {
+    vi.useFakeTimers();
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
     vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    let statusRequestCount = 0;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
+        statusRequestCount += 1;
         return new Response(JSON.stringify({
-          running: false,
+          running: true,
           nextRunAt: null,
           lastRun: {
             completedAt: '2026-05-06T10:00:00.000Z',
@@ -244,16 +248,18 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('Legacy unscoped summary')).toBeTruthy();
-    });
+    await vi.runOnlyPendingTimersAsync();
+    expect(screen.getByText('Legacy unscoped summary')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Orbit prompt template'), {
       target: { value: 'orbit-editorial' },
     });
 
-    await waitFor(() => {
-      expect(screen.queryByText('Legacy unscoped summary')).toBeNull();
-    });
+    await vi.runOnlyPendingTimersAsync();
+    expect(screen.queryByText('Legacy unscoped summary')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(statusRequestCount).toBeGreaterThan(1);
+    expect(screen.queryByText('Legacy unscoped summary')).toBeNull();
   });
 });
