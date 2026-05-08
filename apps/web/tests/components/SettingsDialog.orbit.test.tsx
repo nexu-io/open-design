@@ -102,6 +102,7 @@ const orbitSkills: SkillSummary[] = [
     featured: 10,
     hasBody: true,
     examplePrompt: 'Summarize connector activity.',
+    aggregatesExamples: false,
   },
   {
     id: 'orbit-github',
@@ -117,6 +118,7 @@ const orbitSkills: SkillSummary[] = [
     featured: 5,
     hasBody: true,
     examplePrompt: 'Summarize GitHub activity.',
+    aggregatesExamples: false,
   },
 ];
 

@@ -35,7 +35,8 @@ class IdleIntersectionObserver {
 }
 
 beforeEach(() => {
-  globalThis.IntersectionObserver = IdleIntersectionObserver as typeof IntersectionObserver;
+  globalThis.IntersectionObserver =
+    IdleIntersectionObserver as unknown as typeof IntersectionObserver;
 });
 
 afterEach(() => {
@@ -65,6 +66,7 @@ function skill(overrides: Partial<SkillSummary> & Pick<SkillSummary, 'id' | 'nam
     craftRequires: overrides.craftRequires ?? [],
     hasBody: overrides.hasBody ?? true,
     examplePrompt: overrides.examplePrompt ?? `Build ${overrides.name}.`,
+    aggregatesExamples: overrides.aggregatesExamples ?? false,
   };
 }
 
