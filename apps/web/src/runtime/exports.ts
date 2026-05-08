@@ -259,13 +259,10 @@ export async function exportAsPdf(
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
 
-  if (sandboxedPreview) {
-    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-  }
-
   // Desktop native print bridge — uses Electron's webContents.print() API
-  // instead of window.open + window.print(). The bridge receives the complete
-  // sandboxed document and shows the native print dialog in the main process.
+  // instead of window.open + window.print(). The bridge receives the raw
+  // compiled document directly (no iframe wrapper) because the print window
+  // is already secured with navigation/popup guards in the main process.
   const desktopApi =
     typeof window !== 'undefined'
       ? (window as unknown as Record<string, unknown>).__odDesktop as
@@ -283,9 +280,12 @@ export async function exportAsPdf(
     return;
   }
 
-  // Browser fallback: inject the self-printing script into the document before
-  // navigating the popup. The desktop bridge path above intentionally omits
-  // the print script because Electron calls webContents.print() natively.
+  // Browser fallback: wrap in sandboxed iframe, then inject the self-printing
+  // script before navigating the popup. The desktop path omits both because
+  // Electron calls webContents.print() natively.
+  if (sandboxedPreview) {
+    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+  }
   doc = injectPrintScript(doc, title);
 
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
