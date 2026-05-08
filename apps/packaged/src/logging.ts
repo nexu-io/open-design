@@ -26,6 +26,41 @@ function normalizeError(error: unknown): unknown {
   return error;
 }
 
+/**
+ * Recognise known-harmless socket option errors so the packaged main
+ * process can swallow them instead of surfacing Electron's "JavaScript
+ * error in main process" dialog (issue #895).
+ *
+ * The flagship case is undici throwing `setTypeOfService EINVAL` from
+ * its socket setup path: certain macOS / VPN configurations refuse to
+ * let the kernel set the IP_TOS byte on outbound sockets. The QoS
+ * marking failing has no functional impact on the request — the socket
+ * still connects and serves traffic — so the right behaviour is to
+ * log + ignore, not to crash.
+ *
+ * Match strategy is intentionally narrow: name the syscall (the
+ * `setTypeOfService` literal), and verify the error code is the
+ * expected `EINVAL`. We avoid swallowing every `EINVAL` because that
+ * code is also raised by genuine bugs (bad config values, malformed
+ * arguments to other syscalls). Exported so a unit test can pin the
+ * exact shape this branch matches.
+ */
+export function isHarmlessSocketOptionError(value: unknown): boolean {
+  if (!(value instanceof Error)) return false;
+  const message = typeof value.message === "string" ? value.message : "";
+  if (!message) return false;
+  const code =
+    typeof (value as NodeJS.ErrnoException).code === "string"
+      ? (value as NodeJS.ErrnoException).code
+      : "";
+  // Primary shape: undici / Node socket initialiser. The error message
+  // string is constructed by libuv as `<syscall> <errcode>`.
+  if (message.includes("setTypeOfService") && (code === "EINVAL" || message.includes("EINVAL"))) {
+    return true;
+  }
+  return false;
+}
+
 function normalizeMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (meta == null) return undefined;
   return Object.fromEntries(
@@ -123,7 +158,35 @@ export function attachPackagedDesktopProcessLogging(options: {
   process.on("uncaughtExceptionMonitor", (error) => {
     logger.error("packaged desktop uncaught exception", { error });
   });
+  // Defensive filter for known-harmless network errors. undici can throw
+  // `setTypeOfService EINVAL` from socket internals on certain macOS /
+  // VPN configurations (issue #895): the kernel rejects setting the
+  // IP_TOS byte on the outbound socket, but the connection itself is
+  // healthy — we just don't get the QoS / DSCP marking, which the app
+  // doesn't depend on. Without this filter the rejection bubbles to
+  // Electron's default handler and surfaces as a native "JavaScript
+  // error in main process" dialog the next time anything in the
+  // renderer does a fetch (e.g. opening Settings → Pets → Community).
+  //
+  // For unknown errors we re-throw via `setImmediate` so Node's
+  // default uncaughtException behaviour (process death + crash dialog)
+  // is preserved end-to-end. Adding the handler at all does not
+  // suppress that path — it only short-circuits the specific harmless
+  // shapes we recognise.
+  process.on("uncaughtException", (error) => {
+    if (isHarmlessSocketOptionError(error)) {
+      logger.warn("packaged desktop swallowed harmless socket option error", { error });
+      return;
+    }
+    setImmediate(() => {
+      throw error;
+    });
+  });
   process.on("unhandledRejection", (reason) => {
+    if (isHarmlessSocketOptionError(reason)) {
+      logger.warn("packaged desktop swallowed harmless socket option rejection", { reason });
+      return;
+    }
     logger.error("packaged desktop unhandled rejection", { reason });
   });
   process.on("beforeExit", (code) => {
