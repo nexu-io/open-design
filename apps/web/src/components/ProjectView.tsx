@@ -1508,6 +1508,7 @@ export function ProjectView({
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
+    if (messages.length === 0) return;
     setConversationLoadError(null);
     try {
       const fresh = await createConversation(project.id);
@@ -1520,7 +1521,7 @@ export function ProjectView({
       setConversationLoadError(message);
       setError(message);
     }
-  }, [project.id]);
+  }, [project.id, messages.length]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
