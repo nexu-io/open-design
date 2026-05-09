@@ -1,27 +1,20 @@
 import type Database from 'better-sqlite3';
-import type { ShipStatus } from '@open-design/contracts/critique';
+import {
+  CRITIQUE_RUN_STATUSES,
+  type CritiqueRoundSummary,
+  type CritiqueRunStatus,
+} from '@open-design/contracts/critique';
 
 /**
- * Final critique status persisted with each run. Mirrors the spec's CHECK
- * constraint on critique_status. 'failed' covers orchestrator-level errors,
- * 'legacy' marks rows produced before the feature shipped (reserved for the
- * artifacts-on-disk backfill in Phase 15).
+ * Re-export the public contract types and enumeration so existing
+ * daemon-side imports (`./persistence.js`) keep working unchanged. The
+ * canonical definitions live in `@open-design/contracts/critique` so the
+ * web layer can consume the same shapes and the same display order
+ * through the rerun / history endpoints (AGENTS.md requirement that
+ * shared API DTOs live in packages/contracts).
  */
-export type CritiqueRunStatus =
-  | ShipStatus
-  | 'degraded'
-  | 'failed'
-  | 'legacy';
-
-export const CRITIQUE_RUN_STATUSES: readonly CritiqueRunStatus[] = [
-  'shipped',
-  'below_threshold',
-  'timed_out',
-  'interrupted',
-  'degraded',
-  'failed',
-  'legacy',
-];
+export { CRITIQUE_RUN_STATUSES };
+export type { CritiqueRoundSummary, CritiqueRunStatus };
 
 // All values accepted by the DB CHECK constraint, including the in-flight value
 // that the public type union deliberately omits.
@@ -29,13 +22,6 @@ const ALL_VALID_STATUSES: ReadonlySet<string> = new Set([
   ...CRITIQUE_RUN_STATUSES,
   'running',
 ]);
-
-export interface CritiqueRoundSummary {
-  n: number;
-  composite: number;
-  mustFix: number;
-  decision: 'continue' | 'ship';
-}
 
 export interface CritiqueRunRow {
   id: string;
