@@ -250,12 +250,10 @@ export function composeSystemPrompt({
   if (mcpDirective) parts.push(mcpDirective);
 
   // Suppress tool_calls in API/BYOK mode (streamFormat === 'plain').
-  // The external provider receives the full text of this prompt and will
-  // include tool_calls descriptions if left unconstrained, but the IPC
-  // transport does not execute them — they are simply echoed back as plain
-  // text and render as raw model output. Blocking tool_calls ensures
-  // API-mode models only emit <artifact> blocks.
-  if ((streamFormat ?? 'plain') === 'plain') {
+  // Only fires when the caller explicitly passes streamFormat='plain';
+  // does NOT fire when streamFormat is omitted, so non-plain (tool-using)
+  // adapters are unaffected and normal chat runs can still use tools.
+  if (streamFormat === 'plain') {
     parts.push(
       '\n\n## API mode rule\n\nDo not emit tool_calls. Output only <artifact> HTML blocks. Any tool description in your internal reasoning must not appear in the response.',
     );

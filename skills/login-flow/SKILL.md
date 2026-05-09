@@ -28,7 +28,6 @@ A skill for generating mobile-first login and authentication screens. Use this w
 
 ## Side Files
 
-- `assets/template.html` — optional seed with class system
 - `references/checklist.md` — P0/P1 acceptance criteria
 
 ## Output
