@@ -17,7 +17,7 @@ A **combat pilot's glass cockpit** — everything readable in a split second, in
 | Warning | `#FFB800` | Caution, system advisories |
 | Text Primary | `#00FF41` | All data readouts |
 | Text Secondary | `#7FFF00` | Dimmed readouts, inactive fields |
-| Text Tertiary | `#2D5A2D` | Grid lines, reference marks |
+| Text Tertiary | `#4A7A4A` | Grid lines, reference marks |
 
 *Readings must be unambiguous at 200 knots in Instrument Meteorological Conditions.*
 
@@ -60,7 +60,7 @@ All data colors on `#0A0A0A` pass WCAG AA (minimum 4.5:1).
 |-------|-----|-------|
 | Primary | `#00FF41` | Active readouts |
 | Secondary | `#7FFF00` | Standby / dimmed values |
-| Tertiary | `#2D5A2D` | Grid lines, tick marks, reference arcs |
+| Tertiary | `#4A7A4A` | Grid lines, tick marks, reference arcs |
 
 ### Dark Mode
 
@@ -77,7 +77,7 @@ Dark mode is the native and only mode. A HUD is projected in low-light or high-g
   --data-alert-warning: #FFB800;
   --fg-primary: #00FF41;
   --fg-secondary: #7FFF00;
-  --fg-tertiary: #2D5A2D;
+  --fg-tertiary: #4A7A4A;
 }
 ```
 
@@ -108,6 +108,8 @@ Dark mode is the native and only mode. A HUD is projected in low-light or high-g
 ```
 Display: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 Body: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
+Heading: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+Label: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
 Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 ```
 
@@ -480,5 +482,5 @@ Color is the only signal carrier. Green = nominal. Cyan = navigation. Amber = ca
 - Do not animate elements that do not signal operational state
 - Do not provide a light mode — a HUD only exists in low-light or high-glare conditions
 - Do not use rounded corners greater than 50% (circle reticles only)
-- Do not use low-contrast text — tertiary `#2D5A2D` is only for reference grid lines
+- Do not use low-contrast text — tertiary `#4A7A4A` is only for reference grid lines
 - Do not use gradients — flat color fills only
