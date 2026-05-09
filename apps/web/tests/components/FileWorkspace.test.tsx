@@ -98,6 +98,12 @@ function stubTabRect(tab: HTMLElement, left = 0, width = 100) {
   }));
 }
 
+function changeInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 describe('FileWorkspace upload input', () => {
   it('keeps the Design Files picker aligned with drag-and-drop file support', () => {
     const markup = renderToStaticMarkup(
@@ -212,10 +218,11 @@ describe('FileWorkspace design file rename', () => {
     );
 
     const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
-    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
-    if (!designFilesTab || !menuButton) throw new Error('Could not find design file controls');
+    if (!designFilesTab) throw new Error('Could not find design files tab');
 
     act(() => designFilesTab.click());
+    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
+    if (!menuButton) throw new Error('Could not find design file menu');
     act(() => menuButton.click());
     const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
       .find((button) => button.textContent === 'Rename');
@@ -225,8 +232,7 @@ describe('FileWorkspace design file rename', () => {
     const input = container.querySelector<HTMLInputElement>('.df-rename-input');
     if (!input) throw new Error('Could not find rename input');
     act(() => {
-      input.value = 'resume-notes.txt';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      changeInputValue(input, 'resume-notes.txt');
     });
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -300,8 +306,7 @@ describe('FileWorkspace design file rename', () => {
     const input = container.querySelector<HTMLInputElement>('.df-rename-input');
     if (!input) throw new Error('Could not find rename input');
     act(() => {
-      input.value = pendingSketchName;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      changeInputValue(input, pendingSketchName);
     });
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
