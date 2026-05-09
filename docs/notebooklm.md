@@ -44,7 +44,7 @@ pnpm exec tsx scripts/notebooklm-export-github.ts \
 - `--repo owner/name` (required)
 - `--out <path>` (optional)
 - `--issues open|closed|all` (default: `open`)
-- `--prs open|closed|all` (default: `open`)
+- `--prs open|closed|merged|all` (default: `open`)
 - `--limit <n>` (default: `50`)
 
 ## Upload to NotebookLM

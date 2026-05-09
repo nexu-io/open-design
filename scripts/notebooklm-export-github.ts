@@ -24,7 +24,8 @@ type GhItem = {
   body?: string;
 };
 
-type StateFlag = "open" | "closed";
+type IssueStateFlag = "open" | "closed";
+type PrStateFlag = "open" | "closed" | "merged";
 
 type Mode = "open" | "closed" | "all";
 
@@ -77,8 +78,8 @@ function ensureGh() {
   }
 }
 
-function runGhJson(cmd: "issue" | "pr", repo: string, state: StateFlag, limit: number): GhItem[] {
-  const baseArgs = [cmd, "list", "-R", repo, "--limit", String(limit), "--state", state];
+function runGhIssueJson(repo: string, state: IssueStateFlag, limit: number): GhItem[] {
+  const baseArgs = ["issue", "list", "-R", repo, "--limit", String(limit), "--state", state];
   const jsonFields = [
     "number",
     "title",
@@ -98,8 +99,34 @@ function runGhJson(cmd: "issue" | "pr", repo: string, state: StateFlag, limit: n
   return parsed as GhItem[];
 }
 
-function getStates(mode: Mode): StateFlag[] {
+function runGhPrJson(repo: string, state: PrStateFlag, limit: number): GhItem[] {
+  const baseArgs = ["pr", "list", "-R", repo, "--limit", String(limit), "--state", state];
+  const jsonFields = [
+    "number",
+    "title",
+    "url",
+    "labels",
+    "author",
+    "createdAt",
+    "updatedAt",
+    "body"
+  ];
+
+  const out = execFileSync("gh", [...baseArgs, "--json", jsonFields.join(",")], {
+    encoding: "utf8"
+  });
+  const parsed = JSON.parse(out) as unknown;
+  if (!Array.isArray(parsed)) return [];
+  return parsed as GhItem[];
+}
+
+function getIssueStates(mode: Mode): IssueStateFlag[] {
   if (mode === "all") return ["open", "closed"];
+  return [mode];
+}
+
+function getPrStates(mode: Mode): PrStateFlag[] {
+  if (mode === "all") return ["open", "closed", "merged"];
   return [mode];
 }
 
@@ -155,7 +182,7 @@ function anchorFor(prefix: string, n: number, title: string): string {
   return base || `${prefix}-${n}`;
 }
 
-function renderItems(section: "Issue" | "PR", state: StateFlag, items: GhItem[]): string {
+function renderItems(section: "Issue" | "PR", state: string, items: GhItem[]): string {
   const lines: string[] = [];
   for (const it of items) {
     const t = mdEscape(it.title ?? "(no title)");
@@ -204,17 +231,17 @@ function main() {
 
   const generatedAt = new Date().toISOString();
 
-  const issueStates = getStates(issuesMode);
-  const prStates = getStates(prsMode);
+  const issueStates = getIssueStates(issuesMode);
+  const prStates = getPrStates(prsMode);
 
-  const issuesByState: Record<StateFlag, GhItem[]> = { open: [], closed: [] };
+  const issuesByState: Record<IssueStateFlag, GhItem[]> = { open: [], closed: [] };
   for (const st of issueStates) {
-    issuesByState[st] = runGhJson("issue", repo, st, limit);
+    issuesByState[st] = runGhIssueJson(repo, st, limit);
   }
 
-  const prsByState: Record<StateFlag, GhItem[]> = { open: [], closed: [] };
+  const prsByState: Record<PrStateFlag, GhItem[]> = { open: [], closed: [], merged: [] };
   for (const st of prStates) {
-    prsByState[st] = runGhJson("pr", repo, st, limit);
+    prsByState[st] = runGhPrJson(repo, st, limit);
   }
 
   // Build TOC anchors.
