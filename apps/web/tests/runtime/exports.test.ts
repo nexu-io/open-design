@@ -365,8 +365,8 @@ describe('sandboxed preview Blob exports', () => {
     // In the sandboxed wrapper the srcdoc attribute is HTML-escaped, so the
     // handshake script content is present as unescaped JS fragments.
     expect(htmlArg).toContain('document.images');
-    expect(htmlArg).toContain('img.onload');
-    expect(htmlArg).toContain('img.onerror');
+    expect(htmlArg).toContain("img.addEventListener('load'");
+    expect(htmlArg).toContain("img.addEventListener('error'");
     expect(htmlArg).toContain('img.complete');
     // The original font- and load-waiting logic must still be present.
     expect(htmlArg).toContain('document.fonts');
