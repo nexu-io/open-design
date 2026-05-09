@@ -4480,7 +4480,14 @@ code {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
   padding-top: 16px;
+}
+.entry-side-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .entry-side-foot .foot-pill {
   display: inline-flex;
@@ -4495,6 +4502,19 @@ code {
   align-self: flex-start;
   cursor: pointer;
   text-decoration: none;
+}
+.entry-side-foot-row .foot-pill {
+  min-width: 0;
+}
+.entry-side-foot-row .foot-pill-follow {
+  flex: 0 1 auto;
+}
+.entry-side-foot-row .foot-pill-follow-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .entry-side-foot .foot-pill:hover { background: var(--bg-panel); border-color: var(--border-strong); color: var(--text); }
 .entry-side-foot .foot-pill .ico { font-size: 12px; opacity: 0.7; }
