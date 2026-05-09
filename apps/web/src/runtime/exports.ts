@@ -323,6 +323,8 @@ const DECK_PRINT_CSS = `
     transform: none !important;
   }
   .slide, [data-screen-label], section.slide, .deck-slide, .ppt-slide {
+    display: block !important;
+    visibility: visible !important;
     flex: none !important;
     width: 1920px !important;
     height: 1080px !important;
@@ -334,6 +336,10 @@ const DECK_PRINT_CSS = `
     transform: none !important;
     position: relative !important;
     overflow: hidden !important;
+  }
+  .slide[hidden], [data-screen-label][hidden],
+  section.slide[hidden], .deck-slide[hidden], .ppt-slide[hidden] {
+    display: block !important;
   }
   .slide:last-child, [data-screen-label]:last-child { page-break-after: auto; break-after: auto; }
   .deck-counter, .deck-hint, .deck-nav,
