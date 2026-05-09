@@ -608,6 +608,7 @@ jobs:
       GITHUB_RELEASE_ENABLED: "false"
       LINUX_ASSET_SUFFIX: .unsigned
       MAC_ARTIFACT_MODE: dmg-only
+      MAC_INTEL_ASSET_SUFFIX: .unsigned
       RELEASE_CHANNEL: beta
       RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
       RELEASE_SIGNED: "true"

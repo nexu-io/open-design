@@ -9,6 +9,7 @@ for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BASE_VERSION BRANCH_NAME CLO
 done
 
 asset_version_suffix="${ASSET_VERSION_SUFFIX:-}"
+mac_intel_asset_suffix="${MAC_INTEL_ASSET_SUFFIX:-$asset_version_suffix}"
 win_asset_suffix="${WIN_ASSET_SUFFIX:-$asset_version_suffix}"
 linux_asset_suffix="${LINUX_ASSET_SUFFIX:-$asset_version_suffix}"
 mac_artifact_mode="${MAC_ARTIFACT_MODE:-dmg-and-zip}"
@@ -105,8 +106,8 @@ upload_report_zip() {
 
 mac_dmg="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.dmg"
 mac_zip="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.zip"
-mac_intel_dmg="open-design-$RELEASE_VERSION$asset_version_suffix-mac-x64.dmg"
-mac_intel_zip="open-design-$RELEASE_VERSION$asset_version_suffix-mac-x64.zip"
+mac_intel_dmg="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.dmg"
+mac_intel_zip="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.zip"
 win_installer="open-design-$RELEASE_VERSION$win_asset_suffix-win-x64-setup.exe"
 linux_appimage="open-design-$RELEASE_VERSION$linux_asset_suffix-linux-x64.AppImage"
 metadata_path="$release_root/metadata.json"
