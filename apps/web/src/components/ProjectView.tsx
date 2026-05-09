@@ -304,6 +304,9 @@ export function ProjectView({
   // the agent's Write actually completes, without the previous synthetic
   // "live" tab that was causing flicker against manual opens.
   const pendingWritesRef = useRef<Map<string, string>>(new Map());
+  // Track which conversation the current messages belong to, so we can
+  // correctly gate new-conversation creation even during async loads.
+  const messagesConversationIdRef = useRef<string | null>(null);
 
   // Load conversations on project switch. If none exist (older projects
   // pre-conversations, or a freshly created one whose default seed got
@@ -354,6 +357,7 @@ export function ProjectView({
       setMessages([]);
       setPreviewComments([]);
       setAttachedComments([]);
+      messagesConversationIdRef.current = null;
       return;
     }
     let cancelled = false;
@@ -370,6 +374,7 @@ export function ProjectView({
       setError(null);
       savedArtifactRef.current = null;
       pendingWritesRef.current.clear();
+      messagesConversationIdRef.current = activeConversationId;
     })();
     return () => {
       cancelled = true;
@@ -1508,7 +1513,14 @@ export function ProjectView({
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
-    if (messages.length === 0) return;
+    // Only block if we're sure the current conversation is empty:
+    // messages must be loaded AND match the active conversation.
+    if (
+      messagesConversationIdRef.current === activeConversationId &&
+      messages.length === 0
+    ) {
+      return;
+    }
     setConversationLoadError(null);
     try {
       const fresh = await createConversation(project.id);
@@ -1521,7 +1533,7 @@ export function ProjectView({
       setConversationLoadError(message);
       setError(message);
     }
-  }, [project.id, messages.length]);
+  }, [project.id, activeConversationId, messages.length]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
