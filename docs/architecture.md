@@ -296,7 +296,7 @@ Request / response types: `ImportFolderRequest`, `ImportFolderResponse`
 in `@open-design/contracts`.
 
 
-Full schema in [`schemas/protocol.md`](schemas/protocol.md) (TODO: write).
+Shared API contract types live in [`packages/contracts/src`](../packages/contracts/src).
 
 ## 8. Deployment
 

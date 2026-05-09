@@ -55,8 +55,22 @@ function configFile(dataDir: string): string {
 const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
 
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ['claude', new Set(['CLAUDE_CONFIG_DIR'])],
+  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN'])],
   ['codex', new Set(['CODEX_HOME', 'CODEX_BIN'])],
+  ['copilot', new Set(['COPILOT_BIN'])],
+  ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
+  ['deepseek', new Set(['DEEPSEEK_BIN'])],
+  ['devin', new Set(['DEVIN_BIN'])],
+  ['gemini', new Set(['GEMINI_BIN'])],
+  ['hermes', new Set(['HERMES_BIN'])],
+  ['kimi', new Set(['KIMI_BIN'])],
+  ['kiro', new Set(['KIRO_BIN'])],
+  ['kilo', new Set(['KILO_BIN'])],
+  ['opencode', new Set(['OPENCODE_BIN'])],
+  ['pi', new Set(['PI_BIN'])],
+  ['qoder', new Set(['QODER_BIN'])],
+  ['qwen', new Set(['QWEN_BIN'])],
+  ['vibe', new Set(['VIBE_BIN'])],
 ]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {

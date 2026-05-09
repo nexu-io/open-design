@@ -1,10 +1,11 @@
-// @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { parsePiModels, mapPiRpcEvent, attachPiRpcSession } from '../src/pi-rpc.js';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import type { ChildProcess } from 'node:child_process';
+import type { Writable } from 'node:stream';
 
 // ─── parsePiModels ─────────────────────────────────────────────────────────
 
@@ -19,8 +20,8 @@ test('parsePiModels parses TSV table with default option prepended', () => {
   assert.ok(result);
   assert.equal(result.length, 3);
   assert.deepEqual(result[0], { id: 'default', label: 'Default (CLI config)' });
-  assert.equal(result[1].id, 'anthropic/claude-sonnet-4-5');
-  assert.equal(result[2].id, 'openai/gpt-5');
+  assert.equal(result[1]?.id, 'anthropic/claude-sonnet-4-5');
+  assert.equal(result[2]?.id, 'openai/gpt-5');
 });
 
 test('parsePiModels deduplicates identical provider/model pairs', () => {
@@ -33,7 +34,7 @@ test('parsePiModels deduplicates identical provider/model pairs', () => {
 
   assert.ok(result);
   assert.equal(result.length, 2); // default + 1 unique
-  assert.equal(result[1].id, 'openrouter/claude-sonnet-4-5');
+  assert.equal(result[1]?.id, 'openrouter/claude-sonnet-4-5');
 });
 
 test('parsePiModels returns null for empty input', () => {
@@ -58,7 +59,7 @@ test('parsePiModels skips lines with fewer than 2 columns', () => {
 
   assert.ok(result);
   assert.equal(result.length, 2); // default + 1 valid
-  assert.equal(result[1].id, 'anthropic/claude-sonnet-4-5');
+  assert.equal(result[1]?.id, 'anthropic/claude-sonnet-4-5');
 });
 
 test('parsePiModels handles comment lines', () => {
@@ -71,7 +72,7 @@ test('parsePiModels handles comment lines', () => {
 
   assert.ok(result);
   assert.equal(result.length, 2);
-  assert.equal(result[1].id, 'anthropic/claude-sonnet-4-5');
+  assert.equal(result[1]?.id, 'anthropic/claude-sonnet-4-5');
 });
 
 test('parsePiModels handles large model lists', () => {
@@ -84,7 +85,7 @@ test('parsePiModels handles large model lists', () => {
   const result = parsePiModels(input);
 
   assert.ok(result);
-  assert.equal(result[0].id, 'default');
+  assert.equal(result[0]?.id, 'default');
   assert.equal(result.length, 601); // default + 600
 });
 
@@ -98,8 +99,8 @@ test('parsePiModels skips duplicate default id', () => {
 
   assert.ok(result);
   assert.equal(result.length, 3); // synthetic default + default/some-model + anthropic/claude-sonnet-4-5
-  assert.equal(result[0].id, 'default');
-  assert.equal(result[1].id, 'default/some-model');
+  assert.equal(result[0]?.id, 'default');
+  assert.equal(result[1]?.id, 'default/some-model');
 });
 
 // ─── RPC event translation (mapPiRpcEvent) ────────────────────────────────
@@ -109,19 +110,57 @@ test('parsePiModels skips duplicate default id', () => {
 
 import { createJsonLineStream } from '../src/acp.js';
 
-function simulateRpcSession(rpcLines, options = {}) {
-  const events = [];
-  const send = (_channel, payload) => {
+type JsonRecord = Record<string, unknown>;
+type TestAgentEvent = JsonRecord & { type?: string; label?: string; message?: string; delta?: string };
+type TestSentEvent = TestAgentEvent & { channel?: string };
+type MockWritable = Pick<Writable, 'write'>;
+type MockChildProcess = EventEmitter & {
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  killed: boolean;
+  kill: (signal?: NodeJS.Signals | number) => boolean;
+};
+
+function asRecord(value: unknown): JsonRecord {
+  assert.ok(value && typeof value === 'object');
+  return value as JsonRecord;
+}
+
+function parseJsonRecord(line: string): JsonRecord {
+  return asRecord(JSON.parse(line) as unknown);
+}
+
+function eventAt(events: TestAgentEvent[], index: number): TestAgentEvent {
+  const event = events[index];
+  assert.ok(event, `expected event at index ${index}`);
+  return event;
+}
+
+function usageOf(event: TestAgentEvent): JsonRecord {
+  return asRecord(event.usage);
+}
+
+function imagesOf(parsed: JsonRecord): JsonRecord[] {
+  assert.ok(Array.isArray(parsed.images));
+  return parsed.images.map((image) => asRecord(image));
+}
+
+function simulateRpcSession(rpcLines: JsonRecord[]): TestAgentEvent[] {
+  const events: TestAgentEvent[] = [];
+  const send = (_channel: string, payload: JsonRecord) => {
     events.push(payload);
   };
   const ctx = { runStartedAt: Date.now(), sentFirstToken: { value: false } };
 
-  const parser = createJsonLineStream((raw) => {
+  const parser = createJsonLineStream((raw: unknown) => {
+    if (!raw || typeof raw !== 'object') return;
+    const event = raw as JsonRecord;
     // Skip non-agent events that mapPiRpcEvent doesn't handle.
-    if (raw.type === 'extension_ui_request') return;
-    if (raw.type === 'response') return;
+    if (event.type === 'extension_ui_request') return;
+    if (event.type === 'response') return;
 
-    mapPiRpcEvent(raw, send, ctx);
+    mapPiRpcEvent(event, send, ctx);
   });
 
   const input = rpcLines.map((l) => JSON.stringify(l)).join('\n') + '\n';
@@ -147,7 +186,7 @@ test('pi RPC: text streaming from message_update events', () => {
   assert.deepEqual(events, [
     { type: 'status', label: 'working' },
     { type: 'status', label: 'thinking' },
-    { type: 'status', label: 'streaming', ttftMs: events[2].ttftMs },
+    { type: 'status', label: 'streaming', ttftMs: eventAt(events, 2).ttftMs },
     { type: 'text_delta', delta: 'Hello ' },
     { type: 'text_delta', delta: 'world' },
   ]);
@@ -194,8 +233,8 @@ test('pi RPC: usage extracted from turn_end', () => {
   ]);
 
   assert.equal(events.length, 3);
-  assert.equal(events[2].type, 'usage');
-  assert.deepEqual(events[2].usage, {
+  assert.equal(eventAt(events, 2).type, 'usage');
+  assert.deepEqual(eventAt(events, 2).usage, {
     input_tokens: 100,
     output_tokens: 50,
     cached_read_tokens: 20,
@@ -234,7 +273,7 @@ test('pi RPC: tool error results flagged correctly', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].isError, true);
+  assert.equal(eventAt(events, 0).isError, true);
 });
 
 test('pi RPC: compaction and retry status events', () => {
@@ -258,8 +297,8 @@ test('pi RPC: extension UI fire-and-forget events are silently consumed', () => 
 
   // Only agent_start should produce an event; the UI requests are consumed.
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'status');
-  assert.equal(events[0].label, 'working');
+  assert.equal(eventAt(events, 0).type, 'status');
+  assert.equal(eventAt(events, 0).label, 'working');
 });
 
 test('pi RPC: response events are silently consumed', () => {
@@ -269,7 +308,7 @@ test('pi RPC: response events are silently consumed', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].label, 'working');
+  assert.equal(eventAt(events, 0).label, 'working');
 });
 
 test('pi RPC: full multi-turn session with tools and usage', () => {
@@ -317,8 +356,8 @@ test('pi RPC: full multi-turn session with tools and usage', () => {
   // Usage from both turns
   const usageEvents = events.filter((e) => e.type === 'usage');
   assert.equal(usageEvents.length, 2);
-  assert.equal(usageEvents[0].usage.input_tokens, 200);
-  assert.equal(usageEvents[1].usage.cached_read_tokens, 100);
+  assert.equal(usageOf(eventAt(usageEvents, 0)).input_tokens, 200);
+  assert.equal(usageOf(eventAt(usageEvents, 1)).cached_read_tokens, 100);
 });
 
 test('pi RPC: tool_use arrives before tool_result in event order', () => {
@@ -342,16 +381,17 @@ test('pi RPC: tool_use arrives before tool_result in event order', () => {
 
 test('pi RPC: sendCommand writes well-formed pi command JSON', async () => {
   // We test the wire format by capturing what gets written to a mock writable.
-  const written = [];
+  const written: string[] = [];
   const mockWritable = {
-    write(data) {
+    write(data: string) {
       written.push(data);
+      return true;
     },
   };
 
   // Inline the sendCommand logic (same as in pi-rpc.js)
   let nextId = 1;
-  function sendCommand(writable, type, params = {}) {
+  function sendCommand(writable: MockWritable, type: string, params: JsonRecord = {}) {
     const id = nextId++;
     writable.write(`${JSON.stringify({ id, type, ...params })}\n`);
     return id;
@@ -361,18 +401,18 @@ test('pi RPC: sendCommand writes well-formed pi command JSON', async () => {
 
   assert.equal(id, 1);
   assert.equal(written.length, 1);
-  const parsed = JSON.parse(written[0].trim());
+  const parsed = parseJsonRecord(written[0] ?? '');
   assert.equal(parsed.type, 'prompt');
   assert.equal(parsed.id, 1);
   assert.equal(parsed.message, 'hello');
 });
 
 test('pi RPC: sendCommand increments ids across calls', () => {
-  const written = [];
-  const mockWritable = { write(data) { written.push(data); } };
+  const written: string[] = [];
+  const mockWritable = { write(data: string) { written.push(data); return true; } };
 
   let nextId = 1;
-  function sendCommand(writable, type, params = {}) {
+  function sendCommand(writable: MockWritable, type: string, params: JsonRecord = {}) {
     const id = nextId++;
     writable.write(`${JSON.stringify({ id, type, ...params })}\n`);
     return id;
@@ -383,8 +423,8 @@ test('pi RPC: sendCommand increments ids across calls', () => {
 
   assert.equal(id1, 1);
   assert.equal(id2, 2);
-  const p1 = JSON.parse(written[0].trim());
-  const p2 = JSON.parse(written[1].trim());
+  const p1 = parseJsonRecord(written[0] ?? '');
+  const p2 = parseJsonRecord(written[1] ?? '');
   assert.equal(p1.type, 'prompt');
   assert.equal(p2.type, 'steer');
 });
@@ -392,21 +432,21 @@ test('pi RPC: sendCommand increments ids across calls', () => {
 test('pi RPC: concurrent sessions get independent id sequences', () => {
   // Each session has its own nextRpcId counter, so two sessions
   // spawned at the same time get non-colliding ids.
-  const written1 = [];
-  const written2 = [];
-  const mock1 = { write(data) { written1.push(data); } };
-  const mock2 = { write(data) { written2.push(data); } };
+  const written1: string[] = [];
+  const written2: string[] = [];
+  const mock1 = { write(data: string) { written1.push(data); return true; } };
+  const mock2 = { write(data: string) { written2.push(data); return true; } };
 
   // Session 1
   let nextId1 = 1;
-  function send1(w, type, params = {}) {
+  function send1(w: MockWritable, type: string, params: JsonRecord = {}) {
     const id = nextId1++;
     w.write(`${JSON.stringify({ id, type, ...params })}\n`);
     return id;
   }
   // Session 2
   let nextId2 = 1;
-  function send2(w, type, params = {}) {
+  function send2(w: MockWritable, type: string, params: JsonRecord = {}) {
     const id = nextId2++;
     w.write(`${JSON.stringify({ id, type, ...params })}\n`);
     return id;
@@ -417,8 +457,8 @@ test('pi RPC: concurrent sessions get independent id sequences', () => {
 
   assert.equal(id1, 1);
   assert.equal(id2, 1); // independent counter
-  const p1 = JSON.parse(written1[0].trim());
-  const p2 = JSON.parse(written2[0].trim());
+  const p1 = parseJsonRecord(written1[0] ?? '');
+  const p2 = parseJsonRecord(written2[0] ?? '');
   assert.equal(p1.id, 1);
   assert.equal(p2.id, 1);
 });
@@ -448,7 +488,7 @@ test('pi RPC: no duplicate usage when both message_end and turn_end carry usage'
 
   const usageEvents = events.filter((e) => e.type === 'usage');
   assert.equal(usageEvents.length, 1, 'should emit exactly one usage event per turn');
-  assert.equal(usageEvents[0].usage.input_tokens, 100);
+  assert.equal(usageOf(eventAt(usageEvents, 0)).input_tokens, 100);
 });
 
 // ─── attachPiRpcSession integration tests ──────────────────────────────────
@@ -457,27 +497,28 @@ test('pi RPC: no duplicate usage when both message_end and turn_end carry usage'
 // so regressions in the actual function (wrong events, missing model
 // normalization, abort not writing to stdin, etc.) are caught.
 
-function createMockChild() {
-  const child = new EventEmitter();
+function createMockChild(): MockChildProcess {
+  const child = new EventEmitter() as MockChildProcess;
   child.stdin = new PassThrough();
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.killed = false;
-  child.kill = (signal) => {
+  child.kill = (signal?: NodeJS.Signals | number) => {
     child.killed = true;
     child.emit('close', null, signal);
+    return true;
   };
   return child;
 }
 
-function createSession(childOpts = {}) {
-  const events = [];
-  const send = (channel, payload) => events.push({ channel, ...payload });
+function createSession(childOpts: { model?: string | null } = {}) {
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const model = childOpts.model ?? null;
   const child = createMockChild();
 
   const session = attachPiRpcSession({
-    child,
+    child: child as unknown as ChildProcess,
     prompt: 'test prompt',
     cwd: '/tmp',
     model,
@@ -487,12 +528,12 @@ function createSession(childOpts = {}) {
   return { child, session, events, send };
 }
 
-function feedStdoutLines(child, lines) {
+function feedStdoutLines(child: MockChildProcess, lines: JsonRecord[]) {
   const input = lines.map((l) => JSON.stringify(l)).join('\n') + '\n';
   child.stdout.write(input);
 }
 
-function closeStdout(child) {
+function closeStdout(child: MockChildProcess) {
   child.stdout.end();
   child.stdin.end();
 }
@@ -521,18 +562,18 @@ test('attachPiRpcSession sends prompt command on stdin', () => {
   const { child } = createSession();
 
   // Read what was written to stdin — the first line should be a prompt command.
-  const chunks = [];
-  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const chunks: string[] = [];
+  child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
   // stdin already received the prompt write; PassThrough buffers it.
   const buffered = child.stdin.read();
   if (buffered) chunks.push(buffered.toString());
 
   const lines = chunks.join('').trim().split('\n');
   const promptLine = lines.find((l) => {
-    try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
   });
   assert.ok(promptLine, 'should send a prompt command on stdin');
-  const parsed = JSON.parse(promptLine);
+  const parsed = parseJsonRecord(promptLine);
   assert.equal(parsed.type, 'prompt');
   assert.equal(parsed.message, 'test prompt');
 });
@@ -543,8 +584,8 @@ test('attachPiRpcSession abort() writes well-formed abort command to stdin', () 
   // Drain any buffered stdin data (the prompt command) before abort.
   child.stdin.read();
 
-  const chunks = [];
-  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const chunks: string[] = [];
+  child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
 
   session.abort();
 
@@ -554,10 +595,10 @@ test('attachPiRpcSession abort() writes well-formed abort command to stdin', () 
 
   const lines = chunks.join('').trim().split('\n');
   const abortLine = lines.find((l) => {
-    try { return JSON.parse(l).type === 'abort'; } catch { return false; }
+    try { return parseJsonRecord(l).type === 'abort'; } catch { return false; }
   });
   assert.ok(abortLine, 'should send an abort command on stdin');
-  const parsed = JSON.parse(abortLine);
+  const parsed = parseJsonRecord(abortLine);
   assert.equal(parsed.type, 'abort');
   assert.equal(typeof parsed.id, 'number');
 });
@@ -572,8 +613,8 @@ test('attachPiRpcSession abort() is idempotent and no-op after stdin close', () 
   child.stdin.end();
   child.stdin.emit('close');
 
-  const chunks = [];
-  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const chunks: string[] = [];
+  child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
 
   // abort() should be a no-op because finished is already true or stdin is closed.
   session.abort();
@@ -591,8 +632,8 @@ test('pi RPC: extension_error maps to error event', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'Something broke');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'Something broke');
 });
 
 test('pi RPC: extension_error with non-string error uses fallback', () => {
@@ -601,8 +642,8 @@ test('pi RPC: extension_error with non-string error uses fallback', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'Extension error');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'Extension error');
 });
 
 test('pi RPC: extension_error with missing error uses fallback', () => {
@@ -611,8 +652,8 @@ test('pi RPC: extension_error with missing error uses fallback', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'Extension error');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'Extension error');
 });
 
 // ─── message_update error delta handling ────────────────────────────────────
@@ -626,8 +667,8 @@ test('pi RPC: message_update with error delta maps to error event', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'aborted');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'aborted');
 });
 
 test('pi RPC: message_update error delta falls back to delta text', () => {
@@ -639,8 +680,8 @@ test('pi RPC: message_update error delta falls back to delta text', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'Connection reset');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'Connection reset');
 });
 
 test('pi RPC: message_update error delta with no reason or delta uses fallback', () => {
@@ -652,8 +693,8 @@ test('pi RPC: message_update error delta with no reason or delta uses fallback',
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'Agent error');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'Agent error');
 });
 
 test('pi RPC: message_update error after partial output still emits error', () => {
@@ -691,10 +732,10 @@ test('pi RPC: auto_retry_end with success=false maps to error event', () => {
 
   // auto_retry_start → status:retrying, auto_retry_end → error
   assert.equal(events.length, 2);
-  assert.equal(events[0].type, 'status');
-  assert.equal(events[0].label, 'retrying');
-  assert.equal(events[1].type, 'error');
-  assert.equal(events[1].message, '529 overloaded_error: Overloaded');
+  assert.equal(eventAt(events, 0).type, 'status');
+  assert.equal(eventAt(events, 0).label, 'retrying');
+  assert.equal(eventAt(events, 1).type, 'error');
+  assert.equal(eventAt(events, 1).message, '529 overloaded_error: Overloaded');
 });
 
 test('pi RPC: auto_retry_end with success=true does not emit error', () => {
@@ -704,8 +745,8 @@ test('pi RPC: auto_retry_end with success=true does not emit error', () => {
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'status');
-  assert.equal(events[0].label, 'retrying');
+  assert.equal(eventAt(events, 0).type, 'status');
+  assert.equal(eventAt(events, 0).label, 'retrying');
 });
 
 test('pi RPC: auto_retry_end failure with missing finalError uses fallback', () => {
@@ -714,8 +755,8 @@ test('pi RPC: auto_retry_end failure with missing finalError uses fallback', () 
   ]);
 
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'error');
-  assert.equal(events[0].message, 'Auto-retry exhausted');
+  assert.equal(eventAt(events, 0).type, 'error');
+  assert.equal(eventAt(events, 0).message, 'Auto-retry exhausted');
 });
 
 // ─── imagePaths forwarding in attachPiRpcSession ─────────────────────────────
@@ -731,12 +772,12 @@ test('attachPiRpcSession sends prompt with images when imagePaths provided', asy
   );
 
   try {
-    const events2 = [];
-    const send2 = (channel, payload) => events2.push({ channel, ...payload });
+    const events2: TestSentEvent[] = [];
+    const send2 = (channel: string, payload: JsonRecord) => events2.push({ channel, ...payload });
     const child2 = createMockChild();
 
     attachPiRpcSession({
-      child: child2,
+      child: child2 as unknown as ChildProcess,
       prompt: 'describe this image',
       cwd: '/tmp',
       model: null,
@@ -745,34 +786,34 @@ test('attachPiRpcSession sends prompt with images when imagePaths provided', asy
     });
 
     // Read the stdin data to find the prompt command.
-    const chunks = [];
-    child2.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const chunks: string[] = [];
+    child2.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
     const buffered = child2.stdin.read();
     if (buffered) chunks.push(buffered.toString());
 
     const lines = chunks.join('').trim().split('\n');
     const promptLine = lines.find((l) => {
-      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+      try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
     });
     assert.ok(promptLine, 'should send a prompt command');
-    const parsed = JSON.parse(promptLine);
-    assert.ok(parsed.images, 'prompt should include images array');
-    assert.equal(parsed.images.length, 1);
-    assert.equal(parsed.images[0].type, 'image');
-    assert.equal(parsed.images[0].mimeType, 'image/png');
-    assert.ok(typeof parsed.images[0].data === 'string' && parsed.images[0].data.length > 0);
+    const parsed = parseJsonRecord(promptLine);
+    const images = imagesOf(parsed);
+    assert.equal(images.length, 1);
+    assert.equal(images[0]?.type, 'image');
+    assert.equal(images[0]?.mimeType, 'image/png');
+    assert.ok(typeof images[0]?.data === 'string' && images[0].data.length > 0);
   } finally {
     await import('node:fs/promises').then((fsp) => fsp.unlink(tmpFile).catch(() => {}));
   }
 });
 
 test('attachPiRpcSession sends prompt without images when imagePaths is empty', () => {
-  const events = [];
-  const send = (channel, payload) => events.push({ channel, ...payload });
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
 
   attachPiRpcSession({
-    child,
+    child: child as unknown as ChildProcess,
     prompt: 'hello',
     cwd: '/tmp',
     model: null,
@@ -780,27 +821,27 @@ test('attachPiRpcSession sends prompt without images when imagePaths is empty', 
     imagePaths: [],
   });
 
-  const chunks = [];
-  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const chunks: string[] = [];
+  child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
   const buffered = child.stdin.read();
   if (buffered) chunks.push(buffered.toString());
 
   const lines = chunks.join('').trim().split('\n');
   const promptLine = lines.find((l) => {
-    try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
   });
   assert.ok(promptLine, 'should send a prompt command');
-  const parsed = JSON.parse(promptLine);
+  const parsed = parseJsonRecord(promptLine);
   assert.equal(parsed.images, undefined, 'prompt should not include images when none provided');
 });
 
 test('attachPiRpcSession skips unreadable image paths gracefully', () => {
-  const events = [];
-  const send = (channel, payload) => events.push({ channel, ...payload });
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
 
   attachPiRpcSession({
-    child,
+    child: child as unknown as ChildProcess,
     prompt: 'check this',
     cwd: '/tmp',
     model: null,
@@ -808,17 +849,17 @@ test('attachPiRpcSession skips unreadable image paths gracefully', () => {
     imagePaths: ['/nonexistent/path/fake-image.png'],
   });
 
-  const chunks = [];
-  child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+  const chunks: string[] = [];
+  child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
   const buffered = child.stdin.read();
   if (buffered) chunks.push(buffered.toString());
 
   const lines = chunks.join('').trim().split('\n');
   const promptLine = lines.find((l) => {
-    try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+    try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
   });
   assert.ok(promptLine, 'should send a prompt command');
-  const parsed = JSON.parse(promptLine);
+  const parsed = parseJsonRecord(promptLine);
   assert.equal(parsed.images, undefined, 'prompt should not include images for unreadable paths');
 });
 
@@ -828,12 +869,12 @@ test('attachPiRpcSession rejects non-file image paths (directories)', async () =
   const dirPath = path.join(tmpDir, `pi-rpc-test-dir-${Date.now()}`);
   await fsp.mkdir(dirPath);
   try {
-    const events = [];
-    const send = (channel, payload) => events.push({ channel, ...payload });
+    const events: TestSentEvent[] = [];
+    const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
     const child = createMockChild();
 
     attachPiRpcSession({
-      child,
+      child: child as unknown as ChildProcess,
       prompt: 'check this dir',
       cwd: '/tmp',
       model: null,
@@ -841,17 +882,17 @@ test('attachPiRpcSession rejects non-file image paths (directories)', async () =
       imagePaths: [dirPath],
     });
 
-    const chunks = [];
-    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const chunks: string[] = [];
+    child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
     const buffered = child.stdin.read();
     if (buffered) chunks.push(buffered.toString());
 
     const lines = chunks.join('').trim().split('\n');
     const promptLine = lines.find((l) => {
-      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+      try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
     });
     assert.ok(promptLine);
-    const parsed = JSON.parse(promptLine);
+    const parsed = parseJsonRecord(promptLine);
     assert.equal(parsed.images, undefined, 'directories should not be forwarded as images');
   } finally {
     await fsp.rmdir(dirPath);
@@ -864,12 +905,12 @@ test('attachPiRpcSession rejects disallowed image extensions', async () => {
   const tmpFile = path.join(tmpDir, `pi-rpc-test-${Date.now()}.txt`);
   await fsp.writeFile(tmpFile, 'not an image');
   try {
-    const events = [];
-    const send = (channel, payload) => events.push({ channel, ...payload });
+    const events: TestSentEvent[] = [];
+    const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
     const child = createMockChild();
 
     attachPiRpcSession({
-      child,
+      child: child as unknown as ChildProcess,
       prompt: 'what is this',
       cwd: '/tmp',
       model: null,
@@ -877,17 +918,17 @@ test('attachPiRpcSession rejects disallowed image extensions', async () => {
       imagePaths: [tmpFile],
     });
 
-    const chunks = [];
-    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const chunks: string[] = [];
+    child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
     const buffered = child.stdin.read();
     if (buffered) chunks.push(buffered.toString());
 
     const lines = chunks.join('').trim().split('\n');
     const promptLine = lines.find((l) => {
-      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+      try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
     });
     assert.ok(promptLine);
-    const parsed = JSON.parse(promptLine);
+    const parsed = parseJsonRecord(promptLine);
     assert.equal(parsed.images, undefined, '.txt files should not be forwarded as images');
   } finally {
     await fsp.unlink(tmpFile);
@@ -908,12 +949,12 @@ test('attachPiRpcSession rejects symlink escape outside uploadRoot', async () =>
   const symlinkPath = path.join(uploadRoot, 'escape.jpg');
   await fsp.symlink(outsideFile, symlinkPath);
   try {
-    const events = [];
-    const send = (channel, payload) => events.push({ channel, ...payload });
+    const events: TestSentEvent[] = [];
+    const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
     const child = createMockChild();
 
     attachPiRpcSession({
-      child,
+      child: child as unknown as ChildProcess,
       prompt: 'check this',
       cwd: '/tmp',
       model: null,
@@ -922,17 +963,17 @@ test('attachPiRpcSession rejects symlink escape outside uploadRoot', async () =>
       uploadRoot,
     });
 
-    const chunks = [];
-    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const chunks: string[] = [];
+    child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
     const buffered = child.stdin.read();
     if (buffered) chunks.push(buffered.toString());
 
     const lines = chunks.join('').trim().split('\n');
     const promptLine = lines.find((l) => {
-      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+      try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
     });
     assert.ok(promptLine);
-    const parsed = JSON.parse(promptLine);
+    const parsed = parseJsonRecord(promptLine);
     assert.equal(parsed.images, undefined, 'symlinks resolving outside uploadRoot should not be forwarded as images');
   } finally {
     await fsp.unlink(symlinkPath);
@@ -955,12 +996,12 @@ test('attachPiRpcSession allows symlink inside uploadRoot', async () => {
   const symlinkPath = path.join(uploadRoot, 'link.png');
   await fsp.symlink(realFile, symlinkPath);
   try {
-    const events = [];
-    const send = (channel, payload) => events.push({ channel, ...payload });
+    const events: TestSentEvent[] = [];
+    const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
     const child = createMockChild();
 
     attachPiRpcSession({
-      child,
+      child: child as unknown as ChildProcess,
       prompt: 'check this',
       cwd: '/tmp',
       model: null,
@@ -969,17 +1010,17 @@ test('attachPiRpcSession allows symlink inside uploadRoot', async () => {
       uploadRoot,
     });
 
-    const chunks = [];
-    child.stdin.on('data', (chunk) => chunks.push(chunk.toString()));
+    const chunks: string[] = [];
+    child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
     const buffered = child.stdin.read();
     if (buffered) chunks.push(buffered.toString());
 
     const lines = chunks.join('').trim().split('\n');
     const promptLine = lines.find((l) => {
-      try { return JSON.parse(l).type === 'prompt'; } catch { return false; }
+      try { return parseJsonRecord(l).type === 'prompt'; } catch { return false; }
     });
     assert.ok(promptLine);
-    const parsed = JSON.parse(promptLine);
+    const parsed = parseJsonRecord(promptLine);
     assert.ok(Array.isArray(parsed.images), 'symlink inside uploadRoot should be forwarded as image');
     assert.equal(parsed.images.length, 1);
     assert.equal(parsed.images[0].type, 'image');

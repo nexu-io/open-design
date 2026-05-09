@@ -210,7 +210,7 @@ The 9-section DESIGN.md format is **not invented by OD**; it's the [awesome-clau
 ## Agent Prompt Guide
 ```
 
-Full schema and examples: [`schemas/design-system.md`](schemas/design-system.md) and [`examples/DESIGN.sample.md`](examples/DESIGN.sample.md) (TODO).
+Example: [`docs/examples/DESIGN.sample.md`](examples/DESIGN.sample.md).
 
 ## 5.5 Craft references (`craft/`)
 

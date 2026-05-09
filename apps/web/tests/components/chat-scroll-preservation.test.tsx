@@ -191,6 +191,36 @@ describe('chat scroll preservation across tab switches', () => {
     expect(screen.getByRole('button', { name: /jump to latest/i })).toBeTruthy();
   });
 
+  it('does not auto-scroll a short scrollback (~90px above bottom) when new content streams in', async () => {
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    const { rerender } = render(chatPaneEl(sampleMessages, null));
+    // Drain the initial-bottom-scroll rAF queued during the first render,
+    // otherwise it fires after our setUserScroll calls and re-pins the
+    // ref to true behind the test's back.
+    await flushFrame();
+
+    // User intentionally scrolls 90px up: distance = 1000 - 510 - 400 = 90.
+    // That's between the 80px auto-follow cutoff and the 120px jump-button
+    // threshold, so the user is deliberately reading slightly earlier
+    // output and should not be yanked to the latest message.
+    setUserScroll(510);
+
+    // A new assistant message streams in; scrollHeight grows.
+    const streamed: ChatMessage[] = [
+      ...sampleMessages,
+      { id: 'a3', role: 'assistant', content: 'streaming chunk', createdAt: Date.now() },
+    ];
+    setGeom({ scrollHeight: 1100 });
+    await act(async () => {
+      rerender(chatPaneEl(streamed, null));
+    });
+    await flushFrame();
+
+    // Auto-scroll must respect the user's pause: scrollTop stays where
+    // they put it instead of snapping to the new scrollHeight.
+    expect(geom.scrollTop).toBe(510);
+  });
+
   it('lands new conversation at its own bottom when switching conversations off-tab', async () => {
     const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
     setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });

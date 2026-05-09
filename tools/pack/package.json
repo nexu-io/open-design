@@ -17,7 +17,7 @@
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "@electron/notarize": "3.1.0",
+    "@electron/notarize": "3.1.1",
     "cac": "6.7.14",
     "electron-builder": "26.8.1"
   },

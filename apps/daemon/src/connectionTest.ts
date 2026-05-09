@@ -13,10 +13,8 @@
 // discover that the API key, model, base URL, or CLI is broken.
 //
 // The streaming counterpart for chat lives in `server.ts` under the
-// `/api/proxy/*/stream` routes; this module deliberately duplicates the
-// small URL/redaction helpers rather than restructure those routes (the
-// chat path is the hot path and keeping changes here local protects it
-// from accidental regressions).
+// `/api/proxy/*/stream` routes; both paths share the base URL policy from
+// contracts so Settings and daemon-side checks reject the same hosts.
 
 import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
@@ -34,13 +32,18 @@ import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
-import type {
-  AgentTestRequest,
-  ConnectionTestKind,
-  ConnectionTestProtocol,
-  ConnectionTestResponse,
-  ProviderTestRequest,
+import {
+  isLoopbackApiHost,
+  validateBaseUrl,
+  type AgentTestRequest,
+  type ConnectionTestKind,
+  type ConnectionTestProtocol,
+  type ConnectionTestResponse,
+  type ParsedBaseUrl,
+  type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
+
+export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 const PROVIDER_TIMEOUT_MS = 12_000;
@@ -85,105 +88,6 @@ export function redactSecrets(
 
 type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
 type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
-
-function normalizeBracketedIpv6(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1).toLowerCase()
-    : hostname.toLowerCase();
-}
-
-function parseIpv4(hostname: string): [number, number, number, number] | null {
-  const parts = hostname.split('.');
-  if (parts.length !== 4) return null;
-  const parsed = parts.map((part) => {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const value = Number(part);
-    return value >= 0 && value <= 255 ? value : null;
-  });
-  if (parsed.some((part) => part === null)) return null;
-  return parsed as [number, number, number, number];
-}
-
-function isLoopbackIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  return Boolean(parts && parts[0] === 127);
-}
-
-function isPrivateIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  if (!parts) return false;
-  const [a, b] = parts;
-  return (
-    (a === 169 && b === 254) ||
-    a === 10 ||
-    (a === 192 && b === 168) ||
-    (a === 172 && b >= 16 && b <= 31)
-  );
-}
-
-function ipv4MappedToDotted(hostname: string): string | null {
-  const host = normalizeBracketedIpv6(hostname);
-  const mapped = /^::ffff:(.+)$/i.exec(host)?.[1];
-  if (!mapped) return null;
-  if (parseIpv4(mapped.toLowerCase())) return mapped.toLowerCase();
-  const hexParts = mapped.split(':');
-  if (
-    hexParts.length !== 2 ||
-    !hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
-  ) {
-    return null;
-  }
-  const hi = hexParts[0];
-  const lo = hexParts[1];
-  if (!hi || !lo) return null;
-  const value =
-    (Number.parseInt(hi, 16) << 16) |
-    Number.parseInt(lo, 16);
-  return [
-    (value >>> 24) & 255,
-    (value >>> 16) & 255,
-    (value >>> 8) & 255,
-    value & 255,
-  ].join('.');
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (host === 'localhost' || host === '::1') return true;
-  if (isLoopbackIpv4(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isLoopbackIpv4(mapped));
-}
-
-function isBlockedInternalHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (isPrivateIpv4(host)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
-  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isPrivateIpv4(mapped));
-}
-
-export function validateBaseUrl(baseUrl: string): {
-  parsed?: URL;
-  error?: string;
-  forbidden?: boolean;
-} {
-  let parsed: URL;
-  try {
-    parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
-  } catch {
-    return { error: 'Invalid baseUrl' };
-  }
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    return { error: 'Only http/https allowed' };
-  }
-  const hostname = parsed.hostname.toLowerCase();
-  if (!isLoopbackHost(hostname) && isBlockedInternalHost(hostname)) {
-    return { error: 'Internal IPs blocked', forbidden: true };
-  }
-  return { parsed };
-}
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
@@ -336,11 +240,11 @@ function networkErrorToKind(err: unknown): ConnectionTestKind {
 
 async function validateLocalOpenAiModel(
   input: ProviderTestRequest,
-  parsed: URL,
+  parsed: ParsedBaseUrl,
   signal: AbortSignal,
   start: number,
 ): Promise<ConnectionTestResponse | null> {
-  if (input.protocol !== 'openai' || !isLoopbackHost(parsed.hostname)) {
+  if (input.protocol !== 'openai' || !isLoopbackApiHost(parsed.hostname)) {
     return null;
   }
 
@@ -351,6 +255,7 @@ async function validateLocalOpenAiModel(
       method: 'GET',
       headers: { authorization: `Bearer ${String(input.apiKey)}` },
       signal,
+      redirect: 'error',
     });
   } catch {
     // Local OpenAI-compatible servers vary; if model listing is unavailable,
@@ -437,18 +342,32 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         extractText: extractOpenAIMessageText,
       };
     case 'azure': {
+      const url = new URL(baseUrl);
+      const basePath = url.pathname.replace(/\/+$/, '');
+      const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
       const apiVersion =
         typeof input.apiVersion === 'string' && input.apiVersion.trim()
           ? input.apiVersion.trim()
-          : '2024-10-21';
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
+          : usesVersionedOpenAIPath
+            ? ''
+            : '2024-10-21';
+      url.pathname = usesVersionedOpenAIPath
+        ? `${basePath}/chat/completions`
+        : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+      if (usesVersionedOpenAIPath && !apiVersion) {
+        url.searchParams.delete('api-version');
+      }
+      if (apiVersion) {
+        url.searchParams.set('api-version', apiVersion);
+      }
       return {
-        url: `${trimmedBase}/openai/deployments/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`,
+        url: url.toString(),
         headers: {
           'content-type': 'application/json',
           'api-key': apiKey,
         },
         body: {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
           max_tokens: PROVIDER_MAX_TOKENS,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
@@ -560,6 +479,7 @@ export async function testProviderConnection(
       headers: call.headers,
       body: JSON.stringify(call.body),
       signal: controller.signal,
+      redirect: 'error',
     });
     const latencyMs = Date.now() - start;
     if (response.ok) {
@@ -588,7 +508,7 @@ export async function testProviderConnection(
         input.protocol,
         data,
         model,
-        isLoopbackHost(validated.parsed.hostname),
+        isLoopbackApiHost(validated.parsed.hostname),
       );
       if (completion.kind) {
         const detail = redactSecrets(completion.detail ?? '', [input.apiKey]);
@@ -865,7 +785,6 @@ function attachAgentStreamHandlers(
       model: model ?? null,
       send,
       imagePaths: [],
-      uploadRoot: undefined,
     });
   } else if (def.streamFormat === 'acp-json-rpc') {
     acpSession = attachAcpSession({

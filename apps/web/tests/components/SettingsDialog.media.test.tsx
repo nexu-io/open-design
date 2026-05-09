@@ -157,6 +157,7 @@ describe('SettingsDialog media providers', () => {
 
   it('clears saved media keys only through the explicit Clear action', async () => {
     const onPersist = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderDialog(
       {
         ...saveableConfig(),
@@ -182,6 +183,9 @@ describe('SettingsDialog media providers', () => {
         expect.objectContaining({ forceMediaProviderSync: true }),
       );
     });
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    confirmSpy.mockRestore();
   });
 });
 

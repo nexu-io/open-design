@@ -22,7 +22,7 @@ od:
     requires: true
     sections: [color, typography, layout, components]
   craft:
-    requires: [rtl-and-bidi]
+    requires: [typography, typography-hierarchy, typography-hierarchy-editorial, rtl-and-bidi]
 ---
 
 # Docs Page Skill

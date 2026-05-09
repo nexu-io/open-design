@@ -1,18 +1,28 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ToolCard } from './ToolCard';
-import { renderMarkdown } from '../runtime/markdown';
-import { projectFileUrl } from '../providers/registry';
-import { splitOnQuestionForms, type QuestionForm } from '../artifacts/question-form';
-import { QuestionFormView, parseSubmittedAnswers } from './QuestionForm';
-import { Icon } from './Icon';
-import { useT } from '../i18n';
-import { unfinishedTodosFromEvents, type TodoItem } from '../runtime/todos';
-import type { Dict } from '../i18n/types';
-import { agentDisplayName, exactAgentDisplayName } from '../utils/agentLabels';
-import { exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
-import type { AgentEvent, ChatMessage, ProjectFile } from '../types';
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { ToolCard } from "./ToolCard";
+import { renderMarkdown } from "../runtime/markdown";
+import { projectFileUrl } from "../providers/registry";
+import {
+  splitOnQuestionForms,
+  type QuestionForm,
+} from "../artifacts/question-form";
+import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
+import { Icon } from "./Icon";
+import { useT } from "../i18n";
+import { unfinishedTodosFromEvents, type TodoItem } from "../runtime/todos";
+import type { Dict } from "../i18n/types";
+import { agentDisplayName, exactAgentDisplayName } from "../utils/agentLabels";
+import {
+  exactDateTime,
+  messageTime,
+  relativeTimeLong,
+} from "../utils/chatTime";
+import type { AgentEvent, ChatMessage, ProjectFile } from "../types";
 
-type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+type TranslateFn = (
+  key: keyof Dict,
+  vars?: Record<string, string | number>
+) => string;
 
 interface Props {
   message: ChatMessage;
@@ -57,17 +67,22 @@ export function AssistantMessage({
   const t = useT();
   const events = message.events ?? [];
   const blocks = buildBlocks(events);
-  const usage = events.find((e) => e.kind === 'usage') as
-    | Extract<AgentEvent, { kind: 'usage' }>
+  const usage = events.find((e) => e.kind === "usage") as
+    | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
   const produced = message.producedFiles ?? [];
   const roleLabel = assistantRoleLabel(message, t);
   const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
   const canContinueTodos =
-    !streaming && !!isLast && unfinishedTodos.length > 0 && !!onContinueRemainingTasks;
+    !streaming &&
+    !!isLast &&
+    unfinishedTodos.length > 0 &&
+    !!onContinueRemainingTasks;
   // Track which forms the user submitted in this session so we lock them
   // immediately on click (without waiting for the parent to re-render).
-  const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(() => new Set());
+  const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
+    () => new Set()
+  );
 
   return (
     <div className="msg assistant">
@@ -77,10 +92,13 @@ export function AssistantMessage({
       </div>
       <div className="assistant-flow">
         {blocks.length === 0 && streaming ? (
-          <WaitingPill startedAt={message.startedAt} latestStatus={latestStatusLabel(events)} />
+          <WaitingPill
+            startedAt={message.startedAt}
+            latestStatus={latestStatusLabel(events)}
+          />
         ) : null}
         {blocks.map((b, i) => {
-          if (b.kind === 'text')
+          if (b.kind === "text")
             return (
               <ProseBlock
                 key={i}
@@ -99,8 +117,9 @@ export function AssistantMessage({
                 }}
               />
             );
-          if (b.kind === 'thinking') return <ThinkingBlock key={i} text={b.text} />;
-          if (b.kind === 'tool-group') {
+          if (b.kind === "thinking")
+            return <ThinkingBlock key={i} text={b.text} />;
+          if (b.kind === "tool-group") {
             return (
               <ToolGroupCard
                 key={i}
@@ -111,7 +130,8 @@ export function AssistantMessage({
               />
             );
           }
-          if (b.kind === 'status') return <StatusPill key={i} label={b.label} detail={b.detail} />;
+          if (b.kind === "status")
+            return <StatusPill key={i} label={b.label} detail={b.detail} />;
           return null;
         })}
         {!streaming && produced.length > 0 && projectId ? (
@@ -140,39 +160,56 @@ export function AssistantMessage({
   );
 }
 
-function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
+function MessageTimestamp({
+  message,
+  t,
+}: {
+  message: ChatMessage;
+  t: TranslateFn;
+}) {
   const ts = messageTime(message);
   if (!ts) return null;
   return (
-    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
+    <time
+      className="msg-time"
+      dateTime={new Date(ts).toISOString()}
+      title={exactDateTime(ts)}
+    >
       {relativeTimeLong(ts, t)}
     </time>
   );
 }
 
-export function assistantRoleLabel(message: ChatMessage, t: TranslateFn): string {
+export function assistantRoleLabel(
+  message: ChatMessage,
+  t: TranslateFn
+): string {
   const model = assistantModelDetail(message);
   const fromName = message.agentName?.trim();
-  if (fromName) return appendRoleModel(exactAgentDisplayName(fromName) ?? fromName, model);
+  if (fromName)
+    return appendRoleModel(exactAgentDisplayName(fromName) ?? fromName, model);
   const fromId = agentDisplayName(message.agentId);
   if (fromId) return appendRoleModel(fromId, model);
   const starting = message.events?.find(
-    (e) => e.kind === 'status' && e.label === 'starting' && e.detail,
-  ) as Extract<AgentEvent, { kind: 'status' }> | undefined;
-  return appendRoleModel(agentDisplayName(starting?.detail) ?? t('assistant.role'), model);
+    (e) => e.kind === "status" && e.label === "starting" && e.detail
+  ) as Extract<AgentEvent, { kind: "status" }> | undefined;
+  return appendRoleModel(
+    agentDisplayName(starting?.detail) ?? t("assistant.role"),
+    model
+  );
 }
 
 function assistantModelDetail(message: ChatMessage): string | null {
   const initializing = message.events?.find(
-    (e) => e.kind === 'status' && e.label === 'initializing' && e.detail,
-  ) as Extract<AgentEvent, { kind: 'status' }> | undefined;
+    (e) => e.kind === "status" && e.label === "initializing" && e.detail
+  ) as Extract<AgentEvent, { kind: "status" }> | undefined;
   const detail = initializing?.detail?.trim();
-  if (!detail || detail === 'default') return null;
+  if (!detail || detail === "default") return null;
   return detail;
 }
 
 function appendRoleModel(label: string, model: string | null): string {
-  if (!model || label.includes(' · ')) return label;
+  if (!model || label.includes(" · ")) return label;
   return `${label} · ${model}`;
 }
 
@@ -186,30 +223,33 @@ function AssistantFooter({
   streaming: boolean;
   startedAt: number | undefined;
   endedAt: number | undefined;
-  usage: Extract<AgentEvent, { kind: 'usage' }> | undefined;
+  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
   hasUnfinishedTodos: boolean;
 }) {
   const t = useT();
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt);
   if (!streaming && !elapsed && !usage && !hasUnfinishedTodos) return null;
   return (
-    <div className="assistant-footer" data-unfinished={hasUnfinishedTodos ? 'true' : 'false'}>
-      <span className="dot" data-active={streaming ? 'true' : 'false'} />
+    <div
+      className="assistant-footer"
+      data-unfinished={hasUnfinishedTodos ? "true" : "false"}
+    >
+      <span className="dot" data-active={streaming ? "true" : "false"} />
       <span className="assistant-label">
         {streaming
-          ? t('assistant.workingLabel')
+          ? t("assistant.workingLabel")
           : hasUnfinishedTodos
-            ? t('assistant.unfinishedLabel')
-            : t('assistant.doneLabel')}
+          ? t("assistant.unfinishedLabel")
+          : t("assistant.doneLabel")}
       </span>
       <span className="assistant-stats">
         {elapsed}
         {usage?.outputTokens != null
-          ? ` · ${t('assistant.outTokens', { n: usage.outputTokens })}`
-          : ''}
-        {typeof usage?.costUsd === 'number'
+          ? ` · ${t("assistant.outTokens", { n: usage.outputTokens })}`
+          : ""}
+        {typeof usage?.costUsd === "number"
           ? ` · $${usage.costUsd.toFixed(4)}`
-          : ''}
+          : ""}
       </span>
     </div>
   );
@@ -231,24 +271,30 @@ function UnfinishedTodosPanel({
     <div className="unfinished-todos">
       <div className="unfinished-todos-head">
         <span className="unfinished-todos-title">
-          {t('assistant.unfinishedSummary', { n: todos.length })}
+          {t("assistant.unfinishedSummary", { n: todos.length })}
         </span>
         {canContinue ? (
-          <button type="button" className="unfinished-todos-continue" onClick={onContinue}>
-            {t('assistant.continueRemaining')}
+          <button
+            type="button"
+            className="unfinished-todos-continue"
+            onClick={onContinue}
+          >
+            {t("assistant.continueRemaining")}
           </button>
         ) : null}
       </div>
       <ul className="unfinished-todos-list">
         {visible.map((todo, i) => (
           <li key={`${todo.status}-${todo.content}-${i}`}>
-            {todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content}
+            {todo.status === "in_progress" && todo.activeForm
+              ? todo.activeForm
+              : todo.content}
           </li>
         ))}
       </ul>
       {hiddenCount > 0 ? (
         <div className="unfinished-todos-more">
-          {t('assistant.unfinishedMore', { n: hiddenCount })}
+          {t("assistant.unfinishedMore", { n: hiddenCount })}
         </div>
       ) : null}
     </div>
@@ -267,14 +313,16 @@ function ProducedFiles({
   const t = useT();
   return (
     <div className="produced-files">
-      <div className="produced-files-label">{t('assistant.producedFiles')}</div>
+      <div className="produced-files-label">{t("assistant.producedFiles")}</div>
       <div className="produced-files-list">
         {files.map((f) => (
           <div key={f.name} className="produced-file">
             <span className="produced-file-icon" aria-hidden>
               <Icon name={kindIconName(f.kind)} size={14} />
             </span>
-            <span className="produced-file-name" title={f.name}>{f.name}</span>
+            <span className="produced-file-name" title={f.name}>
+              {f.name}
+            </span>
             <span className="produced-file-size">{humanBytes(f.size)}</span>
             <div className="produced-file-actions">
               {onRequestOpenFile ? (
@@ -283,7 +331,7 @@ function ProducedFiles({
                   className="ghost"
                   onClick={() => onRequestOpenFile(f.name)}
                 >
-                  {t('assistant.openFile')}
+                  {t("assistant.openFile")}
                 </button>
               ) : null}
               <a
@@ -291,7 +339,7 @@ function ProducedFiles({
                 href={projectFileUrl(projectId, f.name)}
                 download={f.name}
               >
-                {t('assistant.downloadFile')}
+                {t("assistant.downloadFile")}
               </a>
             </div>
           </div>
@@ -302,13 +350,13 @@ function ProducedFiles({
 }
 
 function kindIconName(
-  kind: ProjectFile['kind'],
-): 'file-code' | 'image' | 'pencil' | 'file' {
-  if (kind === 'html') return 'file-code';
-  if (kind === 'image') return 'image';
-  if (kind === 'sketch') return 'pencil';
-  if (kind === 'code') return 'file-code';
-  return 'file';
+  kind: ProjectFile["kind"]
+): "file-code" | "image" | "pencil" | "file" {
+  if (kind === "html") return "file-code";
+  if (kind === "image") return "image";
+  if (kind === "sketch") return "pencil";
+  if (kind === "code") return "file-code";
+  return "file";
 }
 
 function humanBytes(n: number): string {
@@ -336,11 +384,13 @@ function WaitingPill({
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
-  const elapsedSec = startedAt ? Math.max(0, Math.round((now - startedAt) / 1000)) : 0;
+  const elapsedSec = startedAt
+    ? Math.max(0, Math.round((now - startedAt) / 1000))
+    : 0;
   const slow = elapsedSec >= 12;
   const label = latestStatus?.label
     ? humanizeStatus(latestStatus.label, t)
-    : t('assistant.waitingFirstOutput');
+    : t("assistant.waitingFirstOutput");
   return (
     <div className="op-waiting">
       <span className="op-waiting-dot" aria-hidden />
@@ -349,27 +399,27 @@ function WaitingPill({
         <code className="op-waiting-detail">{latestStatus.detail}</code>
       ) : null}
       {slow ? (
-        <span className="op-waiting-hint">{t('assistant.slowHint')}</span>
+        <span className="op-waiting-hint">{t("assistant.slowHint")}</span>
       ) : null}
     </div>
   );
 }
 
 function humanizeStatus(label: string, t: (k: keyof Dict) => string): string {
-  if (label === 'initializing') return t('assistant.statusBootingAgent');
-  if (label === 'starting') return t('assistant.statusStarting');
-  if (label === 'requesting') return t('assistant.statusRequesting');
-  if (label === 'thinking') return t('assistant.statusThinking');
-  if (label === 'streaming') return t('assistant.statusStreaming');
+  if (label === "initializing") return t("assistant.statusBootingAgent");
+  if (label === "starting") return t("assistant.statusStarting");
+  if (label === "requesting") return t("assistant.statusRequesting");
+  if (label === "thinking") return t("assistant.statusThinking");
+  if (label === "streaming") return t("assistant.statusStreaming");
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function latestStatusLabel(
-  events: AgentEvent[],
+  events: AgentEvent[]
 ): { label: string; detail?: string | undefined } | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i]!;
-    if (ev.kind === 'status') return { label: ev.label, detail: ev.detail };
+    if (ev.kind === "status") return { label: ev.label, detail: ev.detail };
   }
   return undefined;
 }
@@ -393,26 +443,35 @@ function ProseBlock({
   const segments = useMemo(() => splitOnQuestionForms(cleaned), [cleaned]);
   // Each text segment is further split on `<system-reminder>` blocks so
   // those render as their own collapsible chip instead of raw markup.
-  const renderable = segments.flatMap((seg, idx): Array<
-    | { key: string; kind: 'text'; text: string }
-    | { key: string; kind: 'reminder'; text: string }
-    | { key: string; kind: 'form'; form: QuestionForm }
-  > => {
-    if (seg.kind === 'form') {
-      return [{ key: `f-${idx}`, kind: 'form', form: seg.form }];
+  const renderable = segments.flatMap(
+    (
+      seg,
+      idx
+    ): Array<
+      | { key: string; kind: "text"; text: string }
+      | { key: string; kind: "reminder"; text: string }
+      | { key: string; kind: "form"; form: QuestionForm }
+    > => {
+      if (seg.kind === "form") {
+        return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+      }
+      if (seg.text.trim().length === 0) return [];
+      const sub = splitSystemReminders(seg.text);
+      return sub.map((s, j) => ({
+        key: `t-${idx}-${j}`,
+        kind: s.kind,
+        text: s.text,
+      }));
     }
-    if (seg.text.trim().length === 0) return [];
-    const sub = splitSystemReminders(seg.text);
-    return sub.map((s, j) => ({ key: `t-${idx}-${j}`, kind: s.kind, text: s.text }));
-  });
+  );
   if (renderable.length === 0) return null;
   return (
     <div className="prose-block">
       {renderable.map((seg) => {
-        if (seg.kind === 'reminder') {
+        if (seg.kind === "reminder") {
           return <SystemReminderBlock key={seg.key} text={seg.text} />;
         }
-        if (seg.kind === 'text') {
+        if (seg.kind === "text") {
           return <Fragment key={seg.key}>{renderMarkdown(seg.text)}</Fragment>;
         }
         return (
@@ -454,7 +513,10 @@ function FormBlock({
   }, [form, nextUserContent]);
   const wasSubmittedLocally = locallySubmitted.has(form.id);
   const interactive =
-    isLastAssistant && !streaming && !submittedFromHistory && !wasSubmittedLocally;
+    isLastAssistant &&
+    !streaming &&
+    !submittedFromHistory &&
+    !wasSubmittedLocally;
   return (
     <QuestionFormView
       form={form}
@@ -469,7 +531,7 @@ function SystemReminderBlock({ text }: { text: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const trimmed = text.trim();
-  const preview = trimmed.split('\n')[0]?.slice(0, 120) ?? '';
+  const preview = trimmed.split("\n")[0]?.slice(0, 120) ?? "";
   return (
     <div className="system-reminder-block">
       <button
@@ -480,13 +542,15 @@ function SystemReminderBlock({ text }: { text: string }) {
         <span className="system-reminder-icon" aria-hidden>
           <Icon name="settings" size={12} />
         </span>
-        <span className="system-reminder-label">{t('assistant.systemReminder')}</span>
+        <span className="system-reminder-label">
+          {t("assistant.systemReminder")}
+        </span>
         <span className="system-reminder-preview">
-          {open ? '' : preview}
-          {!open && trimmed.length > preview.length ? '…' : ''}
+          {open ? "" : preview}
+          {!open && trimmed.length > preview.length ? "…" : ""}
         </span>
         <span className="system-reminder-chev">
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
         </span>
       </button>
       {open ? <pre className="system-reminder-body">{trimmed}</pre> : null}
@@ -504,10 +568,13 @@ function ThinkingBlock({ text }: { text: string }) {
         <span className="thinking-icon" aria-hidden>
           <Icon name="sparkles" size={12} />
         </span>
-        <span className="thinking-label">{t('assistant.thinking')}</span>
-        <span className="thinking-preview">{open ? '' : preview}{!open && text.length > 140 ? '…' : ''}</span>
+        <span className="thinking-label">{t("assistant.thinking")}</span>
+        <span className="thinking-preview">
+          {open ? "" : preview}
+          {!open && text.length > 140 ? "…" : ""}
+        </span>
         <span className="thinking-chev">
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
         </span>
       </button>
       {open ? <pre className="thinking-body">{text}</pre> : null}
@@ -515,7 +582,13 @@ function ThinkingBlock({ text }: { text: string }) {
   );
 }
 
-function StatusPill({ label, detail }: { label: string; detail?: string | undefined }) {
+function StatusPill({
+  label,
+  detail,
+}: {
+  label: string;
+  detail?: string | undefined;
+}) {
   return (
     <div className="status-pill">
       <span className="status-label">{label}</span>
@@ -525,8 +598,8 @@ function StatusPill({ label, detail }: { label: string; detail?: string | undefi
 }
 
 interface ToolItem {
-  use: Extract<AgentEvent, { kind: 'tool_use' }>;
-  result?: Extract<AgentEvent, { kind: 'tool_result' }>;
+  use: Extract<AgentEvent, { kind: "tool_use" }>;
+  result?: Extract<AgentEvent, { kind: "tool_result" }>;
 }
 
 function ToolGroupCard({
@@ -563,14 +636,18 @@ function ToolGroupCard({
     <div className="action-card">
       <button
         type="button"
-        className={`action-card-toggle ${running ? 'running' : ''}`}
+        className={`action-card-toggle ${running ? "running" : ""}`}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className="ico" aria-hidden>{summary.icon}</span>
-        <span className="summary"><strong>{summary.label}</strong></span>
+        <span className="ico" aria-hidden>
+          {summary.icon}
+        </span>
+        <span className="summary">
+          <strong>{summary.label}</strong>
+        </span>
         <span className="chev" aria-hidden>
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
         </span>
       </button>
       {open ? (
@@ -593,10 +670,10 @@ function ToolGroupCard({
 
 function summarizeGroup(
   items: ToolItem[],
-  t: (k: keyof Dict, vars?: Record<string, string | number>) => string,
+  t: (k: keyof Dict, vars?: Record<string, string | number>) => string
 ): { label: string; icon: string } {
   // All items share a tool family because the grouper only merges by name.
-  const name = items[0]?.use.name ?? '';
+  const name = items[0]?.use.name ?? "";
   const family = toolFamily(name);
   const icon = familyIcon(family);
   const verbs = items.map((it) => verbForState(it, t));
@@ -609,79 +686,73 @@ function summarizeGroup(
 }
 
 function toolFamily(name: string): string {
-  if (name === 'Edit' || name === 'str_replace_edit') return 'edit';
-  if (name === 'Write' || name === 'create_file') return 'write';
-  if (name === 'Read' || name === 'read_file') return 'read';
-  if (name === 'Glob' || name === 'list_files') return 'glob';
-  if (name === 'Grep') return 'grep';
-  if (name === 'Bash') return 'bash';
-  if (name === 'TodoWrite') return 'todo';
-  if (name === 'WebFetch' || name === 'web_fetch') return 'fetch';
-  if (name === 'WebSearch' || name === 'web_search') return 'search';
+  if (name === "Edit" || name === "str_replace_edit") return "edit";
+  if (name === "Write" || name === "create_file") return "write";
+  if (name === "Read" || name === "read_file") return "read";
+  if (name === "Glob" || name === "list_files") return "glob";
+  if (name === "Grep") return "grep";
+  if (name === "Bash") return "bash";
+  if (name === "TodoWrite") return "todo";
+  if (name === "WebFetch" || name === "web_fetch") return "fetch";
+  if (name === "WebSearch" || name === "web_search") return "search";
   return name.toLowerCase();
 }
 
 function familyIcon(family: string): string {
-  if (family === 'edit') return '✎';
-  if (family === 'write') return '+';
-  if (family === 'read') return '↗';
-  if (family === 'glob' || family === 'grep' || family === 'search') return '⌕';
-  if (family === 'bash') return '$';
-  if (family === 'todo') return '☐';
-  if (family === 'fetch') return '↬';
-  return '·';
+  if (family === "edit") return "✎";
+  if (family === "write") return "+";
+  if (family === "read") return "↗";
+  if (family === "glob" || family === "grep" || family === "search") return "⌕";
+  if (family === "bash") return "$";
+  if (family === "todo") return "☐";
+  if (family === "fetch") return "↬";
+  return "·";
 }
 
 function countLabel(
   family: string,
   n: number,
-  t: (k: keyof Dict) => string,
+  t: (k: keyof Dict) => string
 ): string {
   const verb =
-    family === 'edit'
-      ? t('assistant.verbEditing')
-      : family === 'write'
-        ? t('assistant.verbWriting')
-        : family === 'read'
-          ? t('assistant.verbReading')
-          : family === 'glob' || family === 'grep' || family === 'search'
-            ? t('assistant.verbSearching')
-            : family === 'bash'
-              ? t('assistant.verbRunning')
-              : family === 'todo'
-                ? t('assistant.verbTodos')
-                : family === 'fetch'
-                  ? t('assistant.verbFetching')
-                  : t('assistant.verbCalling');
+    family === "edit"
+      ? t("assistant.verbEditing")
+      : family === "write"
+      ? t("assistant.verbWriting")
+      : family === "read"
+      ? t("assistant.verbReading")
+      : family === "glob" || family === "grep" || family === "search"
+      ? t("assistant.verbSearching")
+      : family === "bash"
+      ? t("assistant.verbRunning")
+      : family === "todo"
+      ? t("assistant.verbTodos")
+      : family === "fetch"
+      ? t("assistant.verbFetching")
+      : t("assistant.verbCalling");
   return n > 1 ? `${verb} ×${n}` : verb;
 }
 
-function verbForState(
-  it: ToolItem,
-  t: (k: keyof Dict) => string,
-): string {
-  if (!it.result) return t('assistant.verbRunning');
-  if (it.result.isError) return t('tool.error');
-  return t('tool.done');
+function verbForState(it: ToolItem, t: (k: keyof Dict) => string): string {
+  if (!it.result) return t("assistant.verbRunning");
+  if (it.result.isError) return t("tool.error");
+  return t("tool.done");
 }
 
-function lastStateLabel(
-  verbs: string[],
-  t: (k: keyof Dict) => string,
-): string {
+function lastStateLabel(verbs: string[], t: (k: keyof Dict) => string): string {
   const set = new Set(verbs);
-  if (set.size === 1) return verbs[verbs.length - 1] ?? '';
+  if (set.size === 1) return verbs[verbs.length - 1] ?? "";
   // Mixed states: surface error first, else running, else any.
-  if (set.has(t('tool.error'))) return t('tool.error');
-  if (set.has(t('assistant.verbRunning'))) return t('assistant.verbRunning');
-  return verbs[verbs.length - 1] ?? '';
+  if (set.has(t("tool.error"))) return t("tool.error");
+  if (set.has(t("assistant.verbRunning"))) return t("assistant.verbRunning");
+  return verbs[verbs.length - 1] ?? "";
 }
 
 type Block =
-  | { kind: 'text'; text: string }
-  | { kind: 'thinking'; text: string }
-  | { kind: 'tool-group'; items: ToolItem[] }
-  | { kind: 'status'; label: string; detail?: string | undefined };
+  | { kind: "text"; text: string }
+  | { kind: "thinking"; text: string }
+  | { kind: "tool-group"; items: ToolItem[] }
+  | { kind: "status"; label: string; detail?: string | undefined };
 
 /**
  * Walk the event stream and build the rendering layout list. We additionally
@@ -691,45 +762,54 @@ type Block =
  */
 function buildBlocks(events: AgentEvent[]): Block[] {
   const out: Block[] = [];
-  const resultByToolId = new Map<string, Extract<AgentEvent, { kind: 'tool_result' }>>();
+  const resultByToolId = new Map<
+    string,
+    Extract<AgentEvent, { kind: "tool_result" }>
+  >();
   for (const ev of events) {
-    if (ev.kind === 'tool_result') resultByToolId.set(ev.toolUseId, ev);
+    if (ev.kind === "tool_result") resultByToolId.set(ev.toolUseId, ev);
   }
   for (const ev of events) {
-    if (ev.kind === 'text') {
+    if (ev.kind === "text") {
       const last = out[out.length - 1];
-      if (last && last.kind === 'text') last.text += ev.text;
-      else out.push({ kind: 'text', text: ev.text });
+      if (last && last.kind === "text") last.text += ev.text;
+      else out.push({ kind: "text", text: ev.text });
       continue;
     }
-    if (ev.kind === 'thinking') {
+    if (ev.kind === "thinking") {
       const last = out[out.length - 1];
-      if (last && last.kind === 'thinking') last.text += ev.text;
-      else out.push({ kind: 'thinking', text: ev.text });
+      if (last && last.kind === "thinking") last.text += ev.text;
+      else out.push({ kind: "thinking", text: ev.text });
       continue;
     }
-    if (ev.kind === 'tool_use') {
+    if (ev.kind === "tool_use") {
       const result = resultByToolId.get(ev.id);
       const item: ToolItem = result ? { use: ev, result } : { use: ev };
       const last = out[out.length - 1];
       const fam = toolFamily(ev.name);
       if (
         last &&
-        last.kind === 'tool-group' &&
+        last.kind === "tool-group" &&
         toolFamily(last.items[last.items.length - 1]!.use.name) === fam
       ) {
         last.items.push(item);
       } else {
-        out.push({ kind: 'tool-group', items: [item] });
+        out.push({ kind: "tool-group", items: [item] });
       }
       continue;
     }
-    if (ev.kind === 'tool_result') continue;
-    if (ev.kind === 'status') {
-      if (ev.label === 'streaming' || ev.label === 'starting' || ev.label === 'requesting' || ev.label === 'thinking') continue;
+    if (ev.kind === "tool_result") continue;
+    if (ev.kind === "status") {
+      if (
+        ev.label === "streaming" ||
+        ev.label === "starting" ||
+        ev.label === "requesting" ||
+        ev.label === "thinking"
+      )
+        continue;
       const last = out[out.length - 1];
-      if (last && last.kind === 'status' && last.label === ev.label) continue;
-      out.push({ kind: 'status', label: ev.label, detail: ev.detail });
+      if (last && last.kind === "status" && last.label === ev.label) continue;
+      out.push({ kind: "status", label: ev.label, detail: ev.detail });
       continue;
     }
   }
@@ -737,12 +817,13 @@ function buildBlocks(events: AgentEvent[]): Block[] {
 }
 
 function stripArtifact(content: string): string {
-  const open = content.indexOf('<artifact');
+  const open = content.indexOf("<artifact");
   if (open === -1) return content;
-  const closeTag = content.indexOf('>', open);
-  const end = content.indexOf('</artifact>', closeTag);
+  const closeTag = content.indexOf(">", open);
+  const end = content.indexOf("</artifact>", closeTag);
   return (
-    content.slice(0, open) + content.slice(end === -1 ? content.length : end + 11)
+    content.slice(0, open) +
+    content.slice(end === -1 ? content.length : end + 11)
   ).trim();
 }
 
@@ -752,7 +833,7 @@ function stripArtifact(content: string): string {
 // echoes those tags into its response. Rendering the raw markup as prose
 // looks broken — surface them as their own collapsible block, and strip stray
 // orphan open/close tags from the surrounding text.
-type ProseSegment = { kind: 'text' | 'reminder'; text: string };
+type ProseSegment = { kind: "text" | "reminder"; text: string };
 
 function splitSystemReminders(input: string): ProseSegment[] {
   const re = /<system-reminder>([\s\S]*?)<\/system-reminder>/g;
@@ -761,29 +842,29 @@ function splitSystemReminders(input: string): ProseSegment[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(input))) {
     if (m.index > lastIndex) {
-      out.push({ kind: 'text', text: input.slice(lastIndex, m.index) });
+      out.push({ kind: "text", text: input.slice(lastIndex, m.index) });
     }
-    out.push({ kind: 'reminder', text: m[1] ?? '' });
+    out.push({ kind: "reminder", text: m[1] ?? "" });
     lastIndex = re.lastIndex;
   }
   if (lastIndex < input.length) {
-    out.push({ kind: 'text', text: input.slice(lastIndex) });
+    out.push({ kind: "text", text: input.slice(lastIndex) });
   }
   // Drop any orphan tags that survived (open without close, or vice versa)
   // and discard text segments that became empty after stripping.
   return out
     .map((seg) =>
-      seg.kind === 'text'
-        ? { ...seg, text: seg.text.replace(/<\/?system-reminder>/g, '') }
-        : seg,
+      seg.kind === "text"
+        ? { ...seg, text: seg.text.replace(/<\/?system-reminder>/g, "") }
+        : seg
     )
-    .filter((seg) => seg.kind === 'reminder' || seg.text.trim().length > 0);
+    .filter((seg) => seg.kind === "reminder" || seg.text.trim().length > 0);
 }
 
 function useLiveElapsed(
   streaming: boolean,
   startedAt: number | undefined,
-  endedAt: number | undefined,
+  endedAt: number | undefined
 ): string {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -791,12 +872,12 @@ function useLiveElapsed(
     const id = window.setInterval(() => setNow(Date.now()), 200);
     return () => window.clearInterval(id);
   }, [streaming]);
-  if (!startedAt) return '';
-  const end = streaming ? now : (endedAt ?? now);
+  if (!startedAt) return "";
+  const end = streaming ? now : endedAt ?? now;
   const ms = Math.max(0, end - startedAt);
   const s = ms / 1000;
   if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
   const m = Math.floor(s / 60);
   const rem = Math.floor(s - m * 60);
-  return `${m}m ${rem.toString().padStart(2, '0')}s`;
+  return `${m}m ${rem.toString().padStart(2, "0")}s`;
 }

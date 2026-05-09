@@ -54,4 +54,54 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Prefer the `live-artifact` skill workflow when available');
     expect(prompt).toContain('The first output should be a live artifact/dashboard/report');
   });
+
+  describe('connectedExternalMcp directive', () => {
+    it('omits the directive when no servers are passed', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).not.toContain('External MCP servers — already authenticated');
+      expect(prompt).not.toContain('mcp__<server>__authenticate');
+    });
+
+    it('omits the directive when an empty array is passed', () => {
+      const prompt = composeSystemPrompt({ connectedExternalMcp: [] });
+      expect(prompt).not.toContain('External MCP servers — already authenticated');
+    });
+
+    it('lists each connected server and forbids the synthetic auth tools', () => {
+      const prompt = composeSystemPrompt({
+        connectedExternalMcp: [
+          { id: 'higgsfield-openclaw', label: 'Higgsfield (OpenClaw)' },
+          { id: 'github' },
+        ],
+      });
+
+      expect(prompt).toContain('## External MCP servers — already authenticated');
+      expect(prompt).toContain('`higgsfield-openclaw`');
+      expect(prompt).toContain('Higgsfield (OpenClaw)');
+      expect(prompt).toContain('`github`');
+      expect(prompt).toContain(
+        '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
+      );
+      expect(prompt).toContain('localhost:<random>/callback');
+      expect(prompt).toContain('Settings → External MCP');
+    });
+
+    it('skips entries with blank ids and emits no directive when nothing usable remains', () => {
+      const prompt = composeSystemPrompt({
+        connectedExternalMcp: [
+          { id: '   ', label: 'blank' },
+          { id: '', label: 'empty' },
+        ] as any,
+      });
+      expect(prompt).not.toContain('External MCP servers — already authenticated');
+    });
+
+    it('does not duplicate the label when it equals the id', () => {
+      const prompt = composeSystemPrompt({
+        connectedExternalMcp: [{ id: 'github', label: 'github' }],
+      });
+      expect(prompt).toContain('- `github`\n');
+      expect(prompt).not.toContain('- `github` (github)');
+    });
+  });
 });

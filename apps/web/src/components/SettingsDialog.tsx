@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -44,6 +45,7 @@ import { fetchConnectors, fetchSkills } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
+import { McpClientSection } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
@@ -65,6 +67,7 @@ export type SettingsSection =
   | 'composio'
   | 'orbit'
   | 'integrations'
+  | 'mcpClient'
   | 'language'
   | 'appearance'
   | 'notifications'
@@ -348,95 +351,8 @@ function applyApiProtocolConfig(
 export function isValidApiBaseUrl(value: string): boolean {
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return false;
-  try {
-    const url = new URL(trimmed);
-    const hostname = url.hostname.toLowerCase();
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') &&
-      Boolean(url.hostname) &&
-      (isLoopbackApiHost(hostname) || !isBlockedInternalApiHost(hostname))
-    );
-  } catch {
-    return false;
-  }
-}
-
-function normalizeBracketedIpv6(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1).toLowerCase()
-    : hostname.toLowerCase();
-}
-
-function parseIpv4(hostname: string): [number, number, number, number] | null {
-  const parts = hostname.split('.');
-  if (parts.length !== 4) return null;
-  const parsed = parts.map((part) => {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const value = Number(part);
-    return value >= 0 && value <= 255 ? value : null;
-  });
-  if (parsed.some((part) => part === null)) return null;
-  return parsed as [number, number, number, number];
-}
-
-function isLoopbackIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  return Boolean(parts && parts[0] === 127);
-}
-
-function isPrivateIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  if (!parts) return false;
-  const [a, b] = parts;
-  return (
-    (a === 169 && b === 254) ||
-    a === 10 ||
-    (a === 192 && b === 168) ||
-    (a === 172 && b >= 16 && b <= 31)
-  );
-}
-
-function ipv4MappedToDotted(hostname: string): string | null {
-  const host = normalizeBracketedIpv6(hostname);
-  const mapped = /^::ffff:(.+)$/i.exec(host)?.[1];
-  if (!mapped) return null;
-  if (parseIpv4(mapped.toLowerCase())) return mapped.toLowerCase();
-  const hexParts = mapped.split(':');
-  if (
-    hexParts.length !== 2 ||
-    !hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
-  ) {
-    return null;
-  }
-  const hi = hexParts[0];
-  const lo = hexParts[1];
-  if (!hi || !lo) return null;
-  const value =
-    (Number.parseInt(hi, 16) << 16) |
-    Number.parseInt(lo, 16);
-  return [
-    (value >>> 24) & 255,
-    (value >>> 16) & 255,
-    (value >>> 8) & 255,
-    value & 255,
-  ].join('.');
-}
-
-function isLoopbackApiHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (host === 'localhost' || host === '::1') return true;
-  if (isLoopbackIpv4(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isLoopbackIpv4(mapped));
-}
-
-function isBlockedInternalApiHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (isPrivateIpv4(host)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
-  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isPrivateIpv4(mapped));
+  const result = validateBaseUrl(trimmed);
+  return Boolean(result.parsed && !result.error);
 }
 
 export function updateCurrentApiProtocolConfig(
@@ -645,7 +561,9 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const languageRef = useRef<HTMLDivElement | null>(null);
-
+  // Imperative handle for the External MCP section. The dialog footer Save
+  // routes through this when the MCP tab is active so the user can press the
+  // single Save button at the bottom instead of hunting for the inner one.
   useEffect(() => {
     setActiveSection(initialSection);
   }, [initialSection]);
@@ -1082,6 +1000,26 @@ export function SettingsDialog({
     ? CUSTOM_MODEL_SENTINEL
     : cfg.model;
 
+  // Header title/subtitle follow the active sidebar section so the dialog
+  // header always reflects what the user is looking at, instead of being
+  // pinned to "Execution & model" copy that only described one of the
+  // 11 sections this dialog now hosts.
+  const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
+    execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
+    media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
+    composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
+    orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
+    integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
+    mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
+    language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
+    appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
+    notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
+    pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
+    library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
+    about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
+  };
+  const activeHeader = sectionHeader[activeSection];
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -1169,8 +1107,8 @@ export function SettingsDialog({
           ) : (
             <>
               <span className="kicker">{t('settings.kicker')}</span>
-              <h2>{t('settings.title')}</h2>
-              <p className="subtitle">{t('settings.subtitle')}</p>
+              <h2>{activeHeader.title}</h2>
+              <p className="subtitle">{activeHeader.subtitle}</p>
             </>
           )}
         </header>
@@ -1228,8 +1166,19 @@ export function SettingsDialog({
             >
               <Icon name="link" size={18} />
               <span>
-                <strong>MCP server</strong>
-                <small>Connect your coding agent</small>
+                <strong>{t('settings.mcpServerTitle')}</strong>
+                <small>{t('settings.mcpServerHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
+              onClick={() => setActiveSection('mcpClient')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('settings.externalMcpTitle')}</strong>
+                <small>{t('settings.externalMcpHint')}</small>
               </span>
             </button>
             <button
@@ -1860,6 +1809,8 @@ export function SettingsDialog({
             />
           ) : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
+
+          {activeSection === 'mcpClient' ? <McpClientSection /> : null}
 
           {activeSection === 'composio' ? (
             <ConnectorSection
@@ -3468,13 +3419,29 @@ function MediaProvidersSection({
                   type="button"
                   className="ghost"
                   disabled={!clearable}
-                  onClick={() => updateProvider(provider, {
-                    apiKey: '',
-                    baseUrl: '',
-                    model: '',
-                    apiKeyConfigured: false,
-                    apiKeyTail: '',
-                  })}
+                  onClick={() => {
+                    // Match the existing window.confirm guard the rest of
+                    // the app uses for destructive actions (conversation
+                    // delete, design delete, file delete in FileWorkspace).
+                    // Without this a stray click on the row's Clear button
+                    // wipes the saved key with no recovery. Issue #737.
+                    if (
+                      !confirm(
+                        t('settings.mediaProviderClearConfirm', {
+                          name: provider.label,
+                        }),
+                      )
+                    ) {
+                      return;
+                    }
+                    updateProvider(provider, {
+                      apiKey: '',
+                      baseUrl: '',
+                      model: '',
+                      apiKeyConfigured: false,
+                      apiKeyTail: '',
+                    });
+                  }}
                 >
                   {t('settings.mediaProviderClear')}
                 </button>
