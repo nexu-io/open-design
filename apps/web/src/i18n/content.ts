@@ -415,6 +415,7 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
+  'swiss-user-research-video-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
