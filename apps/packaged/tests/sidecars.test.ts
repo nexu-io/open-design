@@ -22,11 +22,13 @@ import { delimiter, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildPackagedDaemonSpawnEnv,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedPathEnv,
   waitForStatus,
 } from '../src/sidecars.js';
+import type { PackagedNamespacePaths } from '../src/paths.js';
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the default 35-second budget for normal cold boots', () => {
@@ -121,6 +123,92 @@ function fakeChild(): EventEmitter & {
   };
   return emitter;
 }
+
+describe('buildPackagedDaemonSpawnEnv', () => {
+  // PR #974 round-5 (lefarcen P2): the daemon's import-folder gate must
+  // be ON when an Electron desktop is being started alongside the daemon
+  // and OFF in headless packaged mode (daemon+web only, no shell.openPath
+  // surface, no client to register a secret). Pin both branches against
+  // a real pure-helper invocation so a future refactor can't silently
+  // regress either side.
+  function fakePaths(): PackagedNamespacePaths {
+    return {
+      cacheRoot: '/tmp/od-pkg/cache',
+      dataRoot: '/tmp/od-pkg/data',
+      desktopIdentityPath: '/tmp/od-pkg/runtime/desktop-root.json',
+      desktopLogPath: '/tmp/od-pkg/logs/desktop/latest.log',
+      desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
+      electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
+      electronUserDataRoot: '/tmp/od-pkg/user-data',
+      logsRoot: '/tmp/od-pkg/logs',
+      namespaceRoot: '/tmp/od-pkg',
+      resourceRoot: '/tmp/od-pkg/resources',
+      runtimeRoot: '/tmp/od-pkg/runtime',
+      webIdentityPath: '/tmp/od-pkg/runtime/web-root.json',
+    };
+  }
+
+  it('sets OD_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (Electron entry)', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: '1.2.3',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+    });
+    expect(env.OD_REQUIRE_DESKTOP_AUTH).toBe('1');
+    expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
+    expect(env.OD_RESOURCE_ROOT).toBe('/tmp/od-pkg/resources');
+    expect(env.OD_APP_VERSION).toBe('1.2.3');
+    expect(env.OD_LEGACY_DATA_DIR).toBeUndefined();
+  });
+
+  it('omits OD_REQUIRE_DESKTOP_AUTH entirely when requireDesktopAuth=false (headless)', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: false,
+    });
+    // Round-5 (lefarcen P2): MUST NOT set the env var, even to "0" —
+    // the daemon's gate trigger is `process.env.OD_REQUIRE_DESKTOP_AUTH === '1'`,
+    // so a literal "0" would behave the same as omitted today, but a
+    // future code change to truthy-check the variable would silently
+    // re-arm the gate. Omitted is the intent.
+    expect('OD_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
+    expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
+    expect(env.OD_APP_VERSION).toBeUndefined();
+  });
+
+  it('forwards OD_LEGACY_DATA_DIR only when set, irrespective of requireDesktopAuth', () => {
+    const withLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: '/old/.od',
+      requireDesktopAuth: false,
+    });
+    expect(withLegacy.OD_LEGACY_DATA_DIR).toBe('/old/.od');
+
+    const withEmptyLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: '',
+      requireDesktopAuth: true,
+    });
+    // Empty string must NOT propagate — daemon treats "env set but
+    // path invalid" as an error and refuses to start.
+    expect('OD_LEGACY_DATA_DIR' in withEmptyLegacy).toBe(false);
+  });
+
+  it('forwards daemonCliEntry through OD_DAEMON_CLI_PATH when set', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: '/path/to/cli/dist/index.js',
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+    });
+    expect(env.OD_DAEMON_CLI_PATH).toBe('/path/to/cli/dist/index.js');
+  });
+});
 
 describe('waitForStatus child-exit fast-fail', () => {
   // mrcfps round-7: when OD_LEGACY_DATA_DIR is set the daemon status
