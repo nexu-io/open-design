@@ -232,6 +232,7 @@ export function DesignFilesPanel({
             type="button"
             className="icon-only"
             onClick={() => setPreview(null)}
+            disabled={!preview}
             title={t('designFiles.up')}
             aria-label={t('designFiles.back')}
           >
