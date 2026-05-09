@@ -314,10 +314,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   attachDownloadSaveAsDialog(window);
 
   ipcMain.removeHandler('od:print-pdf');
-  ipcMain.handle('od:print-pdf', async (_event, html: unknown): Promise<void> => {
+  ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown): Promise<void> => {
     if (typeof html !== 'string') {
       throw new Error('Invalid print payload: expected HTML string');
     }
+    const printNonce = typeof nonce === 'string' ? nonce : '';
 
     const printWindow = new BrowserWindow({
       width: 800,
@@ -335,7 +336,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
     try {
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      await waitForPrintReadyHandshake(printWindow.webContents);
+      await waitForPrintReadyHandshake(printWindow.webContents, printNonce);
       printWindow.show();
 
       await new Promise<void>((resolve, reject) => {

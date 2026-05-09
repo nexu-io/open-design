@@ -256,9 +256,12 @@ export async function exportAsPdf(
   opts?: SrcdocOptions & { sandboxedPreview?: boolean },
 ): Promise<void> {
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
+  // Generate a per-export nonce so the print-ready handshake is resistant to
+  // spoofing by untrusted scripts inside the exported artifact.
+  const nonce = crypto.randomUUID();
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
-  doc = injectPrintReadyHandshake(doc);
+  doc = injectPrintReadyHandshake(doc, nonce);
 
   // Desktop native print bridge — uses Electron's webContents.print() API
   // instead of window.open + window.print(). The sandboxed wrapper omits
@@ -268,16 +271,16 @@ export async function exportAsPdf(
   const desktopApi =
     typeof window !== 'undefined'
       ? (window as unknown as Record<string, unknown>).__odDesktop as
-          | { printPdf?: (html: string) => Promise<void>; isDesktop?: boolean }
+          | { printPdf?: (html: string, nonce?: string) => Promise<void>; isDesktop?: boolean }
           | undefined
       : undefined;
   if (desktopApi?.printPdf) {
     if (sandboxedPreview) {
       doc = buildSandboxedPreviewDocument(doc, title);
     }
-    doc = injectParentPrintReadyCache(doc);
+    doc = injectParentPrintReadyCache(doc, nonce);
     try {
-      await desktopApi.printPdf(doc);
+      await desktopApi.printPdf(doc, nonce);
     } catch {
       if (typeof alert !== 'undefined') {
         alert('Print failed. Please try Export PDF again or use the browser version.');
@@ -291,7 +294,7 @@ export async function exportAsPdf(
   // popup.
   if (sandboxedPreview) {
     doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-    doc = injectParentPrintReadyCache(doc);
+    doc = injectParentPrintReadyCache(doc, nonce);
   }
   doc = injectPrintScript(doc, title);
 
@@ -336,20 +339,24 @@ function injectPrintScript(doc: string, title: string): string {
   return doc + script;
 }
 
-function injectPrintReadyHandshake(doc: string): string {
+function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // Wait for fonts, the window load event (which covers initial images), and
   // any images that are still loading after load fires (dynamically added or
   // slow images that weren't complete by the time this script ran). This
   // mirrors the safety of the legacy waitForPrintableContent() helper and
   // prevents image-heavy exports from printing with blank images.
-  const script = `<script data-od-print-ready>(function(){Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){var imgs=Array.from(document.images).filter(function(img){return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}).then(function(){window.parent.postMessage('OD_PRINT_READY','*')})})();<\/script>`;
+  //
+  // The nonce is a per-export random UUID that verifies the readiness signal
+  // came from our injected handshake, not a spoofed message from untrusted
+  // artifact code.
+  const script = `<script data-od-print-ready>(function(){Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){var imgs=Array.from(document.images).filter(function(img){return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}).then(function(){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}'},'*')})})();<\/script>`;
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
 }
 
-function injectParentPrintReadyCache(doc: string): string {
-  const script = `<script>window.__odPrintReady=false;window.addEventListener('message',function(e){if(e.data==='OD_PRINT_READY')window.__odPrintReady=true});<\/script>`;
+function injectParentPrintReadyCache(doc: string, nonce: string): string {
+  const script = `<script>window.__odPrintReady=false;window.addEventListener('message',function(e){if(e.data&&e.data.type==='OD_PRINT_READY'&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0])))window.__odPrintReady=true});<\/script>`;
   if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
   return script + doc;
 }

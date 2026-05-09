@@ -8,6 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 contextBridge.exposeInMainWorld('__odDesktop', {
-  printPdf: (html: string) => ipcRenderer.invoke('od:print-pdf', html),
+  printPdf: (html: string, nonce?: string) => ipcRenderer.invoke('od:print-pdf', html, nonce),
   isDesktop: true,
 });
