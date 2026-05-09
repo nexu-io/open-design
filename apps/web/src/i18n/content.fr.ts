@@ -372,6 +372,7 @@ export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'swiss-creative-mode-template',
   'github-dashboard',
 ] as const;
 
