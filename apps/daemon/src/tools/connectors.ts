@@ -53,6 +53,14 @@ function matchesConnectorToolUseCase(tool: ConnectorToolDetail, useCase: Connect
   return tool.curation?.useCases?.includes(useCase) ?? false;
 }
 
+function connectorNeedsHydratedDiscovery(definition: ConnectorCatalogDefinition | undefined): boolean {
+  if (!definition) return true;
+  if (definition.tools.length === 0) return true;
+  return definition.toolCount !== undefined && definition.tools.length < definition.toolCount;
+}
+
+const AGENT_CONNECTOR_TOOL_HYDRATION_LIMIT = 1000;
+
 export async function listConnectorTools(context: ConnectorToolContext & { useCase?: ConnectorToolUseCase }): Promise<Awaited<ReturnType<ConnectorService['listConnectors']>>> {
   const service = context.service ?? connectorService;
   // Agent-facing tool discovery sits on the hot path for unattended Orbit
@@ -66,11 +74,28 @@ export async function listConnectorTools(context: ConnectorToolContext & { useCa
   const connectedStatusIds = Object.entries(service.listConnectorStatuses())
     .filter(([, status]) => status.status === 'connected')
     .map(([connectorId]) => connectorId);
-  const hasConnectedConnectorNeedingDiscovery = connectedStatusIds.some((connectorId) => {
+  const connectedConnectorIdsNeedingDiscovery = connectedStatusIds.filter((connectorId) => {
     const fastDefinition = fastDefinitionsById.get(connectorId);
-    return !fastDefinition || fastDefinition.tools.length === 0;
+    return connectorNeedsHydratedDiscovery(fastDefinition);
   });
-  const definitions = hasConnectedConnectorNeedingDiscovery ? await service.listDefinitions() : fastDefinitions;
+  let definitions = fastDefinitions;
+  if (connectedConnectorIdsNeedingDiscovery.length > 0) {
+    const targetedDefinitions = await Promise.all(connectedConnectorIdsNeedingDiscovery.map(async (connectorId) => {
+      const fastDefinition = fastDefinitionsById.get(connectorId);
+      return fastDefinition
+        ? await service.getPreviewDefinition(connectorId, { toolsLimit: AGENT_CONNECTOR_TOOL_HYDRATION_LIMIT })
+        : await service.getHydratedDefinition(connectorId);
+    }));
+    const targetedDefinitionsById = new Map(
+      targetedDefinitions
+        .filter((definition): definition is ConnectorCatalogDefinition => definition !== undefined)
+        .map((definition) => [definition.id, definition]),
+    );
+    definitions = fastDefinitions.map((definition) => targetedDefinitionsById.get(definition.id) ?? definition);
+    for (const definition of targetedDefinitionsById.values()) {
+      if (!fastDefinitionsById.has(definition.id)) definitions.push(definition);
+    }
+  }
   const entries = definitions.map((definition) => {
     const detail = connectorDefinitionToDetail(definition);
     const status = service.getStatus(definition);

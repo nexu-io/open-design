@@ -217,6 +217,7 @@ describe('App media provider sync flows', () => {
     mockedLoadConfig.mockReturnValue({
       ...baseConfig,
       onboardingCompleted: false,
+      privacyDecisionAt: 1778244000000,
     });
 
     render(<App />);

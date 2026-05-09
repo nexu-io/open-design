@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+} from 'react';
 import { useT } from '../i18n';
 import {
   deleteProjectFile,
@@ -56,6 +62,7 @@ interface SketchState {
 }
 
 const DESIGN_FILES_TAB = '__design_files__';
+type TabDropEdge = 'before' | 'after';
 
 export function FileWorkspace({
   projectId,
@@ -88,8 +95,14 @@ export function FileWorkspace({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
+  const [dragOverTab, setDragOverTab] = useState<{
+    name: string;
+    edge: TabDropEdge;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  const draggedTabNameRef = useRef<string | null>(null);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -155,7 +168,10 @@ export function FileWorkspace({
   }
 
   function closeTab(name: string) {
-    const isPending = sketches[name] && !sketches[name]!.persisted;
+    const sketchEntry = sketches[name];
+    const isPending = sketchEntry && !sketchEntry.persisted;
+    const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
+    if (hasUnsavedStrokes && !confirm(t('sketch.closeConfirm'))) return;
     if (isPending) {
       setSketches((curr) => {
         const next = { ...curr };
@@ -180,6 +196,29 @@ export function FileWorkspace({
       if (entry && !entry.persisted) delete next[name];
       return next;
     });
+  }
+
+  function reorderPersistedTab(
+    draggedName: string,
+    targetName: string,
+    edge: TabDropEdge,
+  ) {
+    if (draggedName === targetName) return;
+    if (!persistedTabs.includes(draggedName)) return;
+    if (!persistedTabs.includes(targetName)) return;
+
+    const nextTabs = persistedTabs.filter((name) => name !== draggedName);
+    const targetIndex = nextTabs.indexOf(targetName);
+    if (targetIndex === -1) return;
+    nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, draggedName);
+    if (arraysEqual(nextTabs, persistedTabs)) return;
+    onTabsStateChange({ tabs: nextTabs, active: tabsState.active });
+  }
+
+  function clearTabDragState() {
+    draggedTabNameRef.current = null;
+    setDraggedTabName(null);
+    setDragOverTab(null);
   }
 
   async function handleFilePicked(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -246,6 +285,36 @@ export function FileWorkspace({
     tabBar.addEventListener('wheel', onWheel, { passive: false });
     return () => tabBar.removeEventListener('wheel', onWheel);
   }, []);
+
+  // Browser-style tab bar: when the active tab changes (open from a chat
+  // file chip, switch via Cmd+P, etc.), scroll it into view so the user
+  // can always see what they have selected even when the strip overflows.
+  // The Design Files entry is already sticky-pinned, so we only scroll
+  // for real workspace tabs. Issue #775.
+  useEffect(() => {
+    if (activeTab === DESIGN_FILES_TAB) return;
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+    const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
+    if (!el) return;
+    // The Design Files tab is sticky-pinned to the scrollport's left
+    // edge (index.css:.ws-tab.design-files-tab), so a naive scrollIntoView
+    // with inline: 'nearest' would slide a leftward-jumped active tab
+    // flush with that edge and leave it hidden underneath the sticky
+    // panel. Compute scrollLeft manually instead, treating the sticky
+    // tab's right edge as the effective visible-left boundary.
+    const tabRect = el.getBoundingClientRect();
+    const barRect = tabBar.getBoundingClientRect();
+    const stickyEl = tabBar.querySelector<HTMLElement>('.ws-tab.design-files-tab');
+    const stickyWidth = stickyEl ? stickyEl.getBoundingClientRect().width : 0;
+    const visibleLeft = barRect.left + stickyWidth;
+    const visibleRight = barRect.right;
+    if (tabRect.left < visibleLeft) {
+      tabBar.scrollLeft += tabRect.left - visibleLeft;
+    } else if (tabRect.right > visibleRight) {
+      tabBar.scrollLeft += tabRect.right - visibleRight;
+    }
+  }, [activeTab]);
 
   // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
   // so we beat the browser's default print dialog. Platform-gated so on
@@ -450,6 +519,14 @@ export function FileWorkspace({
           className="ws-tabs-bar"
           role="tablist"
           aria-label={t('workspace.designFiles')}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setDragOverTab(null);
+          }}
+          onDrop={(event) => {
+            if (event.target !== event.currentTarget) return;
+            clearTabDragState();
+          }}
         >
           <button
             type="button"
@@ -485,6 +562,44 @@ export function FileWorkspace({
                 onClose={() => closeTab(name)}
                 kind={kind}
                 liveArtifact={liveArtifact}
+                draggable={persistedTabs.includes(name)}
+                dragging={draggedTabName === name}
+                dragOverEdge={
+                  dragOverTab?.name === name && draggedTabName !== name
+                    ? dragOverTab.edge
+                    : null
+                }
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', name);
+                  draggedTabNameRef.current = name;
+                  setDraggedTabName(name);
+                }}
+                onDragOver={(event) => {
+                  const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
+                  if (!currentDraggedName || currentDraggedName === name) return;
+                  if (!persistedTabs.includes(currentDraggedName)) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  const edge = tabDropEdgeFromEvent(event);
+                  setDragOverTab((current) =>
+                    current?.name === name && current.edge === edge
+                      ? current
+                      : { name, edge },
+                  );
+                }}
+                onDragLeave={() => {
+                  setDragOverTab((current) => (current?.name === name ? null : current));
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedName = draggedTabNameRef.current || draggedTabName;
+                  if (draggedName) {
+                    reorderPersistedTab(draggedName, name, tabDropEdgeFromEvent(event));
+                  }
+                  clearTabDragState();
+                }}
+                onDragEnd={clearTabDragState}
               />
             );
           })}
@@ -506,7 +621,28 @@ export function FileWorkspace({
         ) : null}
       </div>
       <div className="ws-body">
-        {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
+        {/* Keep the failure banner visible across tab switches so the
+            partial-success case (some files succeed and auto-open while
+            others fail) doesn't silently drop the failure signal. The
+            banner now carries an explicit dismiss button so the user
+            can clear the stale message themselves, which is what #786
+            was really asking for: a way to drop the message rather than
+            have it pinned above an unrelated file preview forever. The
+            next upload also clears it via setUploadError(null) at the
+            top of uploadFiles(). */}
+        {uploadError ? (
+          <div className="viewer-empty viewer-empty-dismissible">
+            <span>{uploadError}</span>
+            <button
+              type="button"
+              className="ghost"
+              aria-label={t('common.close')}
+              onClick={() => setUploadError(null)}
+            >
+              {t('common.close')}
+            </button>
+          </div>
+        ) : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}
@@ -618,6 +754,14 @@ function Tab({
   closable = true,
   kind,
   liveArtifact,
+  draggable = false,
+  dragging = false,
+  dragOverEdge,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   label: string;
   active: boolean;
@@ -626,12 +770,27 @@ function Tab({
   closable?: boolean;
   kind?: ProjectFile['kind'] | 'live-artifact';
   liveArtifact?: LiveArtifactWorkspaceEntry;
+  draggable?: boolean;
+  dragging?: boolean;
+  dragOverEdge?: TabDropEdge | null;
+  onDragStart?: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragOver?: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragLeave?: () => void;
+  onDrop?: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
 }) {
   const t = useT();
   const iconName = kindIconName(kind);
   return (
     <div
-      className={`ws-tab${kind === 'live-artifact' ? ' live-artifact-tab' : ''} ${active ? 'active' : ''}`}
+      className={[
+        'ws-tab',
+        kind === 'live-artifact' ? 'live-artifact-tab' : '',
+        active ? 'active' : '',
+        draggable ? 'draggable' : '',
+        dragging ? 'dragging' : '',
+        dragOverEdge ? `drag-over-${dragOverEdge}` : '',
+      ].filter(Boolean).join(' ')}
       onClick={onActivate}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -642,6 +801,12 @@ function Tab({
       role="tab"
       aria-selected={active}
       tabIndex={0}
+      draggable={draggable}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragOver={draggable ? onDragOver : undefined}
+      onDragLeave={draggable ? onDragLeave : undefined}
+      onDrop={draggable ? onDrop : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
     >
       {iconName ? (
         <span className="tab-icon" aria-hidden>
@@ -672,6 +837,16 @@ function Tab({
       ) : null}
     </div>
   );
+}
+
+function tabDropEdgeFromEvent(event: ReactDragEvent<HTMLDivElement>): TabDropEdge {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
 }
 
 export function scrollWorkspaceTabsWithWheel(

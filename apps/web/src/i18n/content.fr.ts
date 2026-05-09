@@ -314,6 +314,7 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 };
 
 export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
+  'clinical-case-report',
   'dcf-valuation',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
@@ -386,6 +387,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'brutalism',
   'cafe',
   'canva',
+  'cisco',
   'claymorphism',
   'clean',
   'colorful',
@@ -435,6 +437,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'shadcn',
   'simple',
   'skeumorphism',
+  'slack',
   'sleek',
   'spacious',
   'storytelling',
@@ -443,6 +446,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'urdu',
   'vibrant',
   'vintage',
+  'webex',
 ] as const;
 
 export const FR_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {

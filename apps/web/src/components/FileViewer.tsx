@@ -36,6 +36,7 @@ import {
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsPdf,
   exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
@@ -1418,14 +1419,16 @@ function BoardComposerPopover({
         >
           Add note
         </button>
-        <button
-          type="button"
-          className="ghost"
-          disabled={target.selectionKind === 'pod' || !draft.trim()}
-          onClick={() => void onSaveComment()}
-        >
-          Save comment
-        </button>
+        {target.selectionKind === 'pod' ? null : (
+          <button
+            type="button"
+            className="ghost"
+            disabled={!draft.trim()}
+            onClick={() => void onSaveComment()}
+          >
+            Save comment
+          </button>
+        )}
         <button
           type="button"
           className="primary"
@@ -2882,6 +2885,8 @@ function HtmlViewer({
   const [boardMode, setBoardMode] = useState(false);
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
   const [inspectMode, setInspectMode] = useState(false);
+  // for hint managing hint box state
+  const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditMode] = useState(false);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
@@ -4232,6 +4237,7 @@ function HtmlViewer({
                   setBoardMode(false);
                   clearBoardComposer();
                   setManualEditMode(false);
+                  setOpenHintBox(true);
                 }
                 return next;
               });
@@ -4337,7 +4343,13 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck });
+                      void exportProjectAsPdf({
+                        deck: effectiveDeck,
+                        fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
+                        filePath: file.name,
+                        projectId,
+                        title: exportTitle,
+                      });
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
@@ -4617,9 +4629,19 @@ function HtmlViewer({
                 error={inspectError}
               />
             ) : null}
-            {inspectMode && !activeInspectTarget ? (
-              <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
+            {inspectMode && openHintBox && !activeInspectTarget ? (
+              <div className="inspect-empty-hint-container">
+                <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
                 Click any element with <code>data-od-id</code> to tune its style.
+              </div>
+               <button
+                type="button"
+                title="Close Inspect Hint"
+                aria-label="Close Inspect Hint"
+                onClick={() => setOpenHintBox(false)}
+                className="orbit-artifact-ghost">
+                 <Icon className='' name='close' size={12} />
+               </button>
               </div>
             ) : null}
           </div>
@@ -4717,7 +4739,7 @@ function HtmlViewer({
       ) : null}
       {deployModalOpen ? (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal deploy-modal" role="dialog" aria-modal="true">
+          <div className="modal deploy-modal deploy-flow-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
               <div className="kicker">{deployProviderLabel}</div>
               <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>

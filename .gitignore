@@ -6,7 +6,7 @@ out/
 .tmp/
 .DS_Store
 *.log
-*.exe
+/OpenDesign.exe
 .vite
 .astro/
 .vscode

@@ -12,7 +12,7 @@ The adapter layer is OD's most load-bearing design decision. We delegate the **e
 
 ## 1. Adapter interface (TypeScript)
 
-Every adapter implements this interface. Full types in [`schemas/adapter.md`](schemas/adapter.md) (TODO).
+Every adapter implements this interface. The current adapter implementation lives in [`apps/daemon/src/agents.ts`](../apps/daemon/src/agents.ts).
 
 ```ts
 interface AgentAdapter {

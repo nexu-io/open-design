@@ -127,6 +127,7 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(start.source).toBe('installed');
       expect(start.appPath).toBe(install.installedAppPath);
       expectPathInside(start.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
+      expect(start.pid).toBeGreaterThan(0);
       // `tools-pack mac start` performs a best-effort status probe before
       // returning, but GitHub's macOS runners can take longer than that probe
       // window to make the packaged desktop IPC-ready. Keep validating a

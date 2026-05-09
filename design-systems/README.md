@@ -23,17 +23,20 @@ will read it as part of its system prompt.
 - **57 design skills**, sourced from
   [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills)
   and added directly as normalized 9-section `DESIGN.md` files.
-- **70 product systems**, imported from
+- **72 product systems**, including 70 imported from
   [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)
   (the [`getdesign@latest`](https://www.npmjs.com/package/getdesign) npm
-  package, MIT-licensed). One folder per brand:
+  package, MIT-licensed), plus two hand-authored additions (`cisco`,
+  `webex`). This table covers that imported product-system subset only; the
+  full bundled catalog is larger once you include the hand-authored starters
+  and the separate design-skill systems listed above. One folder per brand:
 
   | Category | Systems |
   |---|---|
   | AI & LLM | claude · cohere · elevenlabs · minimax · mistral-ai · ollama · opencode-ai · replicate · runwayml · together-ai · voltagent · x-ai |
   | Developer Tools | cursor · expo · lovable · raycast · superhuman · vercel · warp |
-  | Productivity & SaaS | cal · intercom · linear-app · mintlify · notion · resend · zapier |
-  | Backend & Data | clickhouse · composio · hashicorp · mongodb · posthog · sanity · sentry · supabase |
+  | Productivity & SaaS | cal · intercom · linear-app · mintlify · notion · resend · webex · zapier |
+  | Backend & Data | cisco · clickhouse · composio · hashicorp · mongodb · posthog · sanity · sentry · supabase |
   | Design & Creative | airtable · clay · figma · framer · miro · webflow |
   | Fintech & Crypto | binance · coinbase · kraken · mastercard · revolut · stripe · wise |
   | E-Commerce & Retail | airbnb · meta · nike · shopify · starbucks |
@@ -70,8 +73,8 @@ any new label and it lands at the bottom of the dropdown.
 
 ## Refreshing the bundled set
 
-The 70 product systems are pulled from the upstream npm package. To re-sync
-to the latest hashes:
+The 70 imported product systems are pulled from the upstream npm package. To
+re-sync to the latest hashes:
 
 ```bash
 curl -sL $(npm view getdesign dist.tarball) -o /tmp/getdesign.tgz
@@ -84,10 +87,13 @@ For now, the original importer lives at the top of the
 
 ## Attribution
 
-The 70 product systems are sourced from
+The 70 imported product systems are sourced from
 [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)
 (MIT, © VoltAgent contributors). They are aesthetic *inspirations* — none
 of them are official assets of the brands they reference.
+
+The `cisco/` and `webex/` systems are hand-authored additions based on the
+current public Cisco and Webex / Momentum visual languages.
 
 The `kami/` system adapts tokens, type rules, and the "ten invariants" from
 [`tw93/kami`](https://github.com/tw93/kami) (MIT, © Tw93 and contributors),

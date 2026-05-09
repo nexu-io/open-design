@@ -1204,11 +1204,10 @@ code {
   position: absolute;
   top: 14px;
   right: 14px;
-  z-index: 3;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 8px;
-  pointer-events: none; /* children opt back in */
 }
 .settings-chrome > * {
   pointer-events: auto;
@@ -3151,9 +3150,20 @@ code {
   text-align: left;
   color: var(--text);
 }
-.settings-language-option:hover,
-.settings-language-option.active { background: var(--bg-subtle); }
-.settings-language-option.active { color: var(--accent); }
+/* Differentiate hover, selected, and keyboard-focus states so the
+   currently-selected language is visually distinct even when the
+   pointer is hovering a different row. Issue #628. */
+.settings-language-option:hover { background: var(--bg-subtle); }
+.settings-language-option.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+.settings-language-option.active:hover { background: var(--accent-soft); }
+.settings-language-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .empty-card {
   padding: 16px;
   border: 1px dashed var(--border);
@@ -5186,6 +5196,12 @@ code {
 .connector-status-pill.status-disabled {
   opacity: 0.7;
 }
+.connector-status.status-pending,
+.connector-status-pill.status-pending {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+}
 .connector-status-pill {
   display: inline-flex;
   align-items: center;
@@ -5237,8 +5253,18 @@ button.connector-action.is-disconnect:hover:not(:disabled) {
   color: var(--red);
   border-color: color-mix(in srgb, var(--red) 35%, var(--border));
 }
+button.connector-action.is-cancel-authorization {
+  min-width: 74px;
+  color: var(--text-muted);
+}
 button.connector-action.is-loading {
   cursor: wait;
+}
+.connector-authorization-hint {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* Connector gate — masks the grid when the Composio API key is missing. */
@@ -5964,6 +5990,15 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.connector-drawer-load-more {
+  align-self: flex-start;
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 14px;
 }
 .connector-drawer-foot {
   padding: 14px 22px 18px;
@@ -6764,6 +6799,21 @@ button.connector-action.is-loading {
   max-width: 320px;
 }
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
+.ws-tab.draggable { cursor: grab; }
+.ws-tab.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+.ws-tab.drag-over-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.ws-tab.drag-over-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
 .ws-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -6987,6 +7037,179 @@ button.connector-action.is-loading {
   font-weight: 500;
   letter-spacing: 0;
 }
+/* --- file list table --- */
+.df-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.df-table thead { border-bottom: 1px solid var(--border); }
+.df-th-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.df-th-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.df-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 12px 20px 6px;
+  text-align: left;
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+.df-th-sortable:hover { color: var(--text); }
+.df-th-check, .df-cell-check { width: 28px; padding: 10px 0 10px 20px; }
+.df-th-icon, .df-cell-icon { width: 36px; padding: 10px 0; }
+.df-th-name { width: auto; }
+.df-th-kind { width: 110px; }
+.df-th-time { width: 100px; }
+.df-th-menu, .df-cell-menu { width: 32px; padding: 10px 20px 10px 0; }
+.df-sort-arrow { font-size: 10px; }
+
+.df-file-row {
+  transition: background 120ms ease;
+}
+.df-file-row:hover { background: var(--bg-subtle); }
+.df-file-row.active { background: var(--blue-bg); }
+.df-file-row.active .df-row-name { color: var(--text-strong); }
+.df-file-row.selected { background: var(--blue-bg); }
+
+.df-cell-check {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-cell-icon {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-cell-name {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+}
+.df-row-name-btn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.df-row-name-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.df-cell-kind {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+}
+.df-cell-time {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.df-cell-menu {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-kind-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- pagination --- */
+.df-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.df-pagination-start {
+  justify-content: flex-start;
+}
+.df-pagination-center {
+  justify-content: center;
+}
+.df-pagination-end {
+  justify-content: flex-end;
+}
+.df-pagination-right {
+  margin-left: auto;
+}
+.df-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.df-pagination select {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.df-pagination select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.df-page-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.df-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.df-page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-info {
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
 .df-row {
   display: grid;
   grid-template-columns: 28px 36px 1fr auto auto;
@@ -7028,16 +7251,20 @@ button.connector-action.is-loading {
 .df-row-check:hover { background: var(--border); color: var(--text); }
 .df-row-check[aria-checked="true"] { color: var(--accent-strong); }
 
+.df-select-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .df-select-all {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-faint);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
   font-weight: 500;
-  margin-left: auto;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -7095,6 +7322,7 @@ button.connector-action.is-loading {
   transition: opacity 120ms ease;
 }
 .df-row:hover .df-row-menu { opacity: 1; }
+.df-row-menu:focus { opacity: 1; }
 .df-row-menu:hover { background: var(--border); color: var(--text); }
 .df-section-more {
   margin: 6px 20px 10px;
@@ -8265,7 +8493,8 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--red);
   font-size: 11px;
 }
-.inspect-empty-hint {
+
+.inspect-empty-hint-container {
   position: absolute;
   top: 14px;
   right: 14px;
@@ -8276,8 +8505,18 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   pointer-events: none;
 }
+
+.inspect-empty-hint-container button,
+.inspect-empty-hint-container .close-button {
+  pointer-events: auto;
+}
+
 .inspect-empty-hint code {
   padding: 1px 5px;
   border-radius: 3px;
@@ -8452,6 +8691,17 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+/* Compact horizontal variant for the upload-failure banner: the message
+   sits inline next to a dismiss button so the user can clear the stale
+   notice without changing tabs. Issue #786. */
+.viewer-empty.viewer-empty-dismissible {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
 }
 .document-preview {
   max-width: 860px;
@@ -9317,6 +9567,19 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   width: min(760px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   overflow: auto;
+}
+/* Add a few extra pixels above the deploy dialog's primary action so
+   it does not crowd the divider. The shared .modal-foot uses 12px
+   vertical padding which is fine for shorter dialogs but reads as
+   cramped here because the deploy form ends in dense token / domain
+   config rows that push content right up to the border. Scoped to the
+   deploy dialog only (the template-save dialog also carries the
+   .deploy-modal class on its root, which is why we key off the
+   purpose-specific .deploy-flow-modal hook instead). 16px matches the
+   bump proposed for the global rule in #957 so the rhythm stays close
+   to the rest of the app. Issue #913. */
+.deploy-flow-modal .modal-foot {
+  padding-top: 16px;
 }
 .deploy-form {
   display: flex;
@@ -14019,6 +14282,98 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   font-size: 11px;
   white-space: pre-wrap;
+}
+
+/* Privacy panel layout. The toggle row stack reuses .toggle-row (the
+   iOS-style switch from NewProjectPanel); we only need to space the rows
+   apart. The disclosure list inside the consent card is purely a typography
+   block — no chrome of its own. */
+.settings-privacy-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-privacy-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.settings-privacy-disclosure > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-privacy-disclosure dt {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-privacy-disclosure dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* First-run privacy consent banner. Cookie-consent-style: anchored to the
+   bottom-right of the viewport, prominent but non-blocking, equal-weight
+   accept / decline pair via the existing 2-cell seg-control. Reuses the
+   same typography + radii + shadow as the rest of the panels. */
+.privacy-consent-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  /* Below modal backdrops; App.tsx hides the banner while Settings is open. */
+  z-index: 90;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.privacy-consent-banner .seg-control {
+  pointer-events: auto;
+}
+
+.privacy-consent-banner-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.privacy-consent-banner-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.privacy-consent-banner-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.privacy-consent-banner-lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.privacy-consent-banner-footer {
+  margin: 2px 0 6px;
 }
 
 /* ============================================================

@@ -3,34 +3,50 @@ name: release-stable
 on:
   workflow_dispatch:
     inputs:
-      mac_signed:
-        description: "Build signed/notarized mac artifacts. Disable only for explicit unsigned validation releases."
+      channel:
+        description: "Release channel. nightly publishes to R2 only; stable also creates a GitHub Release and tag."
         required: true
-        type: boolean
-        default: true
+        type: choice
+        options:
+          - stable
+          - nightly
+        default: stable
+      nightly_version:
+        description: "Required when channel=stable: exact validated nightly version to promote, for example 0.5.1.nightly.3."
+        required: false
+        type: string
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
-  group: open-design-release-stable
+  group: open-design-release-stable-${{ inputs.channel }}
   cancel-in-progress: false
 
 jobs:
   metadata:
-    name: Prepare stable metadata
+    name: Prepare release metadata
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
+      OPEN_DESIGN_NIGHTLY_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/nightly/latest/metadata.json
+      OPEN_DESIGN_RELEASE_CHANNEL: ${{ inputs.channel }}
+      OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      OPEN_DESIGN_STABLE_NIGHTLY_VERSION: ${{ inputs.nightly_version }}
     outputs:
       base_version: ${{ steps.stable.outputs.base_version }}
       branch: ${{ steps.stable.outputs.branch }}
+      channel: ${{ steps.stable.outputs.channel }}
       commit: ${{ steps.stable.outputs.commit }}
-      mac_signed: ${{ inputs.mac_signed }}
+      github_release_enabled: ${{ steps.stable.outputs.github_release_enabled }}
+      nightly_number: ${{ steps.stable.outputs.nightly_number }}
       previous_stable: ${{ steps.stable.outputs.previous_stable }}
       release_name: ${{ steps.stable.outputs.release_name }}
+      release_version: ${{ steps.stable.outputs.release_version }}
       stable_version: ${{ steps.stable.outputs.stable_version }}
+      state_source: ${{ steps.stable.outputs.state_source }}
       version_tag: ${{ steps.stable.outputs.version_tag }}
     steps:
       - name: Checkout
@@ -43,9 +59,22 @@ jobs:
         with:
           node-version: 24
 
-      - name: Prepare stable release metadata
+      - name: Prepare release metadata
         id: stable
         run: node --experimental-strip-types ./scripts/release-stable.ts
+
+      - name: Validate R2 release access
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          R2_ACCESS_PROBE_NAME: release-stable
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: bash .github/scripts/release/r2/check.sh
 
   verify:
     name: Verify build (typecheck + tests)
@@ -99,7 +128,7 @@ jobs:
       # a follow-up; revisit once locale metadata is back in sync.
 
   build_mac:
-    name: Build stable mac arm64
+    name: Build release mac arm64
     needs: [metadata, verify]
     runs-on: macos-14
     env:
@@ -123,8 +152,29 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify mac Electron framework symlinks
+        run: |
+          set -euo pipefail
+          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
+          for link in \
+            "$framework/Electron Framework" \
+            "$framework/Helpers" \
+            "$framework/Libraries" \
+            "$framework/Resources" \
+            "$framework/Versions/Current"; do
+            if [ ! -L "$link" ]; then
+              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
+              ls -la "$framework" >&2 || true
+              ls -la "$framework/Versions" >&2 || true
+              exit 1
+            fi
+          done
+
+      - name: Apply release package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.stable_version }}" --prefix apps/packaged
+
       - name: Prepare Apple signing certificate
-        if: ${{ inputs.mac_signed }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -139,81 +189,165 @@ jobs:
             echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
           } >> "$GITHUB_ENV"
 
-      - name: Build stable mac artifacts
+      - name: Build release mac artifacts
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          signed_flag=""
-          if [ "${{ inputs.mac_signed }}" = "true" ]; then
-            signed_flag="--signed"
+          tools_pack_dir="$RUNNER_TEMP/tools-pack"
+          build_json_path="$RUNNER_TEMP/mac-tools-pack-build.json"
+          build_log_path="$RUNNER_TEMP/mac-tools-pack-build.log"
+          rm -rf "$tools_pack_dir"
+          : > "$build_log_path"
+          build_args=(
+            exec tools-pack mac build
+            --dir "$tools_pack_dir"
+            --namespace release-stable
+            --portable
+            --mac-compression maximum
+            --to all
+            --json
+            --signed
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$build_json_path"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output"
+            exit "$build_status"
           fi
-          pnpm exec tools-pack mac build \
-            --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace release-stable \
-            --portable \
-            --mac-compression maximum \
-            --to all \
-            --json \
-            $signed_flag
 
-      - name: Prepare stable mac assets
-        id: assets
+      - name: Capture mac framework diagnostics
+        if: ${{ failure() }}
+        continue-on-error: true
         run: |
           set -euo pipefail
-          release_dir="$RUNNER_TEMP/release-assets"
-          mkdir -p "$release_dir"
+          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
+          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
+          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/builder/mac-arm64/Open Design.app/Contents/Frameworks/Electron Framework.framework"
 
-          source_dmg="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/dmg/Open Design-release-stable.dmg"
-          source_zip="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/zip/Open Design-release-stable.zip"
-          if [ ! -f "$source_dmg" ]; then
-            echo "expected dmg not found at $source_dmg" >&2
-            exit 1
-          fi
-          if [ ! -f "$source_zip" ]; then
-            echo "expected zip not found at $source_zip" >&2
-            exit 1
-          fi
+          dump_framework() {
+            local label="$1"
+            local framework="$2"
+            echo "## $label"
+            echo "path=$framework"
+            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
+              echo "missing"
+              return 0
+            fi
+            echo "### top-level"
+            ls -la "$framework" || true
+            echo "### symlinks"
+            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
+              printf '%s -> %s\n' "$link" "$(readlink "$link")"
+            done || true
+            echo "### selected stat"
+            for path in \
+              "$framework" \
+              "$framework/Electron Framework" \
+              "$framework/Versions" \
+              "$framework/Versions/Current" \
+              "$framework/Versions/Current/Electron Framework" \
+              "$framework/Versions/A" \
+              "$framework/Versions/A/Electron Framework" \
+              "$framework/Resources" \
+              "$framework/Versions/A/Resources/Info.plist"; do
+              if [ -e "$path" ] || [ -L "$path" ]; then
+                stat -f '%Sp %HT %N' "$path" || true
+              else
+                echo "missing: $path"
+              fi
+            done
+            echo "### plist"
+            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
+            echo "### codesign display"
+            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework" 2>&1 || true
+          }
 
-          versioned_dmg="open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg"
-          versioned_zip="open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
-          dmg_checksum_file="$versioned_dmg.sha256"
-          zip_checksum_file="$versioned_zip.sha256"
+          {
+            date -u
+            if [ -n "$source_framework" ]; then
+              dump_framework "source Electron Framework" "$source_framework"
+            else
+              echo "## source Electron Framework"
+              echo "resolve failed"
+              cat "$source_resolve_log" || true
+            fi
+            dump_framework "built Electron Framework" "$built_framework"
+          } > "$output"
+          cat "$output"
 
-          cp "$source_dmg" "$release_dir/$versioned_dmg"
-          cp "$source_zip" "$release_dir/$versioned_zip"
-          (
-            cd "$release_dir"
-            shasum -a 256 "$versioned_dmg" > "$dmg_checksum_file"
-            shasum -a 256 "$versioned_zip" > "$zip_checksum_file"
-          )
+      - name: Upload mac build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-stable-mac-build-diagnostics
+          path: |
+            ${{ runner.temp }}/mac-tools-pack-build.log
+            ${{ runner.temp }}/mac-tools-pack-build.json
+            ${{ runner.temp }}/mac-framework-diagnostics.txt
+          if-no-files-found: warn
 
-          zip_sha512="$(openssl dgst -sha512 -binary "$release_dir/$versioned_zip" | openssl base64 -A)"
-          zip_size="$(stat -f%z "$release_dir/$versioned_zip")"
-          zip_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ needs.metadata.outputs.version_tag }}/$versioned_zip"
-          release_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          cat > "$release_dir/latest-mac.yml" <<EOF
-          version: "${{ needs.metadata.outputs.stable_version }}"
-          files:
-            - url: "$zip_url"
-              sha512: "$zip_sha512"
-              size: $zip_size
-          path: "$zip_url"
-          sha512: "$zip_sha512"
-          releaseDate: "$release_date"
-          releaseNotes: "Open Design ${{ needs.metadata.outputs.stable_version }}"
+      - name: Smoke release mac packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-stable
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/mac/screenshots/open-design-mac-smoke.png
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/release-report/mac"
+          mkdir -p "$report_dir/screenshots"
+          cat > "$report_dir/manifest.json" <<EOF
+          {
+            "channel": "${{ needs.metadata.outputs.channel }}",
+            "platform": "mac",
+            "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
+            "spec": "specs/mac.spec.ts",
+            "namespace": "release-stable",
+            "screenshot": "screenshots/open-design-mac-smoke.png",
+            "githubRunId": "$GITHUB_RUN_ID",
+            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
+            "commit": "$GITHUB_SHA"
+          }
           EOF
+          cp "$RUNNER_TEMP/mac-tools-pack-build.json" "$report_dir/tools-pack.json"
+          cp "$RUNNER_TEMP/mac-tools-pack-build.log" "$report_dir/tools-pack.log"
+          pnpm test specs/mac.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+
+      - name: Upload mac e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac
+          if-no-files-found: warn
+
+      - name: Prepare mac release assets
+        id: assets
+        env:
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-stable
+        run: bash .github/scripts/release/assets/mac.sh
 
       - name: Upload mac release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-stable-mac-release-assets
+          name: open-design-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets
 
   build_win:
-    name: Build stable win x64
+    name: Build release win x64
     needs: [metadata, verify]
     runs-on: windows-latest
     env:
@@ -245,64 +379,87 @@ jobs:
           }
           choco install nsis -y --no-progress
 
-      - name: Build stable windows artifacts
-        shell: pwsh
-        run: >-
-          pnpm exec tools-pack win build
-          --dir "${{ runner.temp }}/tools-pack"
-          --namespace release-stable-win
-          --portable
-          --to nsis
-          --json
+      - name: Apply release package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.stable_version }}" --prefix apps/packaged
 
-      - name: Prepare windows stable assets
+      - name: Build release windows artifacts
         shell: pwsh
         run: |
-          $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets"
-          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+          $ErrorActionPreference = "Stop"
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json"
+          $buildOutput = pnpm exec tools-pack win build `
+            --dir "${{ runner.temp }}/tools-pack" `
+            --namespace release-stable-win `
+            --portable `
+            --to nsis `
+            --json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows tools-pack build exited with code $LASTEXITCODE"
+          }
+          $buildOutput | Set-Content -Path $buildJsonPath
+          $buildOutput
 
-          $sourceInstaller = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-stable-win/builder/Open Design-release-stable-win-setup.exe"
-          if (!(Test-Path $sourceInstaller)) {
-            throw "expected installer not found at $sourceInstaller"
+      - name: Smoke release windows packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-stable-win
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          $ErrorActionPreference = "Stop"
+          $reportDir = Join-Path $env:RUNNER_TEMP "release-report/win"
+          $screenshotDir = Join-Path $reportDir "screenshots"
+          New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
+          $env:OD_PACKAGED_E2E_SCREENSHOT_PATH = Join-Path $screenshotDir "open-design-win-smoke.png"
+          @{
+            channel = "${{ needs.metadata.outputs.channel }}"
+            platform = "win"
+            releaseVersion = "${{ needs.metadata.outputs.release_version }}"
+            spec = "specs/win.spec.ts"
+            namespace = "release-stable-win"
+            screenshot = "screenshots/open-design-win-smoke.png"
+            githubRunId = $env:GITHUB_RUN_ID
+            githubRunAttempt = $env:GITHUB_RUN_ATTEMPT
+            commit = $env:GITHUB_SHA
+          } | ConvertTo-Json | Set-Content -Path (Join-Path $reportDir "manifest.json")
+          Copy-Item -Force -Path (Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json") -Destination (Join-Path $reportDir "tools-pack.json")
+          pnpm test specs/win.spec.ts 2>&1 | Tee-Object -FilePath (Join-Path $reportDir "vitest.log")
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            exit $testExitCode
           }
 
-          $versionedInstaller = "open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe"
-          $checksumFile = "$versionedInstaller.sha256"
-          Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
+      - name: Upload windows e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-win-e2e-report
+          path: ${{ runner.temp }}/release-report/win
+          if-no-files-found: warn
 
-          $installerPath = Join-Path $releaseDir $versionedInstaller
-          $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $versionedInstaller" | Set-Content -Path (Join-Path $releaseDir $checksumFile)
-          $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
-          $installerSha512 = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::Create().ComputeHash($installerBytes))
-          $installerSize = (Get-Item $installerPath).Length
-          $installerUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/${{ needs.metadata.outputs.version_tag }}/$versionedInstaller"
-          $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-          @(
-            'version: "${{ needs.metadata.outputs.stable_version }}"'
-            'files:'
-            "  - url: `"$installerUrl`""
-            "    sha512: `"$installerSha512`""
-            "    size: $installerSize"
-            "path: `"$installerUrl`""
-            "sha512: `"$installerSha512`""
-            "releaseDate: `"$releaseDate`""
-            "releaseNotes: `"Open Design ${{ needs.metadata.outputs.stable_version }}`""
-          ) | Set-Content -Path (Join-Path $releaseDir "latest.yml")
+      - name: Prepare windows release assets
+        shell: pwsh
+        env:
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-stable-win
+        run: ./.github/scripts/release/assets/win.ps1
 
       - name: Upload windows release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-stable-win-release-assets
+          name: open-design-release-win-release-assets
           path: ${{ runner.temp }}/release-assets
 
   build_linux:
-    name: Build stable linux x64
+    name: Build release linux x64
     needs: [metadata, verify]
     # Linux AppImage packaging is temporarily excluded from stable releases.
     # Keep the job definition in place so the Linux lane can be re-enabled once
     # the containerized pnpm bootstrap is fixed and reviewed.
-    if: ${{ false }}
+    if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -325,11 +482,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply release package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.stable_version }}" --prefix apps/packaged
+
       # `--containerized` builds the AppImage inside the electronuserland/builder
       # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
       # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
       # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
-      - name: Build stable linux artifacts
+      - name: Build release linux artifacts
         run: |
           set -euo pipefail
           pnpm exec tools-pack linux build \
@@ -340,146 +500,193 @@ jobs:
             --containerized \
             --json
 
-      - name: Prepare linux stable assets
+      - name: Prepare linux release assets
         env:
-          STABLE_VERSION: ${{ needs.metadata.outputs.stable_version }}
-        run: |
-          set -euo pipefail
-          release_dir="$RUNNER_TEMP/release-assets"
-          mkdir -p "$release_dir"
-
-          source_appimage="$RUNNER_TEMP/tools-pack/out/linux/namespaces/release-stable-linux/builder/Open Design-release-stable-linux.AppImage"
-          if [ ! -f "$source_appimage" ]; then
-            echo "expected AppImage not found at $source_appimage" >&2
-            exit 1
-          fi
-
-          # Linux currently has no signing path in tools-pack; the asset has no
-          # signing-related suffix (matches the windows convention above).
-          versioned_appimage="open-design-${STABLE_VERSION}-linux-x64.AppImage"
-          checksum_file="$versioned_appimage.sha256"
-
-          cp "$source_appimage" "$release_dir/$versioned_appimage"
-          (
-            cd "$release_dir"
-            sha256sum "$versioned_appimage" > "$checksum_file"
-          )
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-stable-linux
+        run: bash .github/scripts/release/assets/linux.sh
 
       - name: Upload linux release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-stable-linux-release-assets
+          name: open-design-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets
 
   publish:
-    name: Publish stable release
+    name: Publish ${{ needs.metadata.outputs.channel }} release
     needs:
       - metadata
       - verify
       - build_mac
       - build_win
+      - build_linux
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.result == 'success' &&
+        needs.verify.result == 'success' &&
+        needs.build_mac.result == 'success' &&
+        needs.build_win.result == 'success' &&
+        (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
+      }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+      AWS_DEFAULT_REGION: auto
+      AWS_EC2_METADATA_DISABLED: "true"
+      CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+      CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+      BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+      BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
+      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
+      ENABLE_MAC: "true"
+      ENABLE_WIN: "true"
+      GITHUB_RELEASE_ENABLED: ${{ needs.metadata.outputs.github_release_enabled }}
+      NIGHTLY_NUMBER: ${{ needs.metadata.outputs.nightly_number }}
+      RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+      RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
+      RELEASE_SIGNED: "true"
+      RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+      REPORT_MODE: zip
+      STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+      VERSION_TAG: ${{ needs.metadata.outputs.version_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
       - name: Pre-flight tag/release check
+        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
-            echo "tag ${{ needs.metadata.outputs.version_tag }} already exists on origin; aborting" >&2
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION_TAG" >/dev/null 2>&1; then
+            echo "tag $VERSION_TAG already exists on origin; aborting" >&2
             exit 1
           fi
-          if gh release view "${{ needs.metadata.outputs.version_tag }}" >/dev/null 2>&1; then
-            echo "release ${{ needs.metadata.outputs.version_tag }} already exists; aborting" >&2
+          if gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            echo "release $VERSION_TAG already exists; aborting" >&2
             exit 1
           fi
 
       - name: Download mac release bundle
         uses: actions/download-artifact@v8
         with:
-          name: open-design-stable-mac-release-assets
+          name: open-design-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
 
       - name: Download windows release bundle
         uses: actions/download-artifact@v8
         with:
-          name: open-design-stable-win-release-assets
+          name: open-design-release-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
-      - name: Write release notes shell
+      - name: Download linux release bundle
+        if: ${{ needs.build_linux.result == 'success' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-linux-release-assets
+          path: ${{ runner.temp }}/release-assets/linux
+
+      - name: Download mac e2e spec report
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac
+
+      - name: Download windows e2e spec report
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-win-e2e-report
+          path: ${{ runner.temp }}/release-report/win
+
+      - name: Write stable release notes
         id: notes
-        run: |
-          set -euo pipefail
-          notes_file="$RUNNER_TEMP/open-design-stable-notes.md"
-          cat > "$notes_file" <<EOF
-          ## Summary
-          - channel: stable
-          - version: ${{ needs.metadata.outputs.stable_version }}
-          - mac signed/notarized: ${{ inputs.mac_signed }}
-          - windows signed: false
-          - branch: ${{ needs.metadata.outputs.branch }}
-          - commit: ${{ needs.metadata.outputs.commit }}
-
-          See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${{ needs.metadata.outputs.version_tag }}/CHANGELOG.md) for the full release notes.
-
-          This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, checksums, and updater feed files. Linux AppImage packaging is temporarily deferred from the stable release lane.
-          EOF
-          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
+        run: bash .github/scripts/release/github/stable-notes.sh
 
       - name: Create draft release with tag
         id: create_release
+        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
         run: |
           set -euo pipefail
           # gh release create creates the tag at $GITHUB_SHA atomically with the release.
-          # Using --draft keeps the release invisible until all assets upload successfully;
-          # the cleanup step rolls back the release + tag together if any subsequent step fails.
-          gh release create "${{ needs.metadata.outputs.version_tag }}" \
+          # Using --draft keeps the release invisible until R2 publish and asset upload verify successfully.
+          gh release create "$VERSION_TAG" \
             --target "$GITHUB_SHA" \
-            --title "${{ needs.metadata.outputs.release_name }}" \
+            --title "$RELEASE_NAME" \
             --notes-file "${{ steps.notes.outputs.notes_file }}" \
             --draft
 
       - name: Upload assets to draft release
+        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
         run: |
           set -euo pipefail
           all_release_dir="$RUNNER_TEMP/release-assets/all"
           mkdir -p "$all_release_dir"
           cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
           cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
-          gh release upload "${{ needs.metadata.outputs.version_tag }}" "$all_release_dir"/*
+          if [ "$ENABLE_LINUX" = "true" ]; then
+            cp "$RUNNER_TEMP/release-assets/linux"/* "$all_release_dir/"
+          fi
+          gh release upload "$VERSION_TAG" "$all_release_dir"/*
+
+      - name: Publish release assets and metadata to R2
+        id: r2
+        run: bash .github/scripts/release/r2/publish.sh
+
+      - name: Verify R2 release publish
+        env:
+          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
+          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
+          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
+          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
+          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
+          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
+          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+        run: bash .github/scripts/release/r2/verify.sh
 
       - name: Promote draft to published latest
+        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
         run: |
           set -euo pipefail
-          gh release edit "${{ needs.metadata.outputs.version_tag }}" \
+          gh release edit "$VERSION_TAG" \
             --draft=false \
             --latest
 
       - name: Cleanup release + tag on failure
-        if: failure() && steps.create_release.outcome == 'success'
+        if: ${{ failure() && needs.metadata.outputs.github_release_enabled == 'true' && steps.create_release.outcome == 'success' }}
         run: |
           set +e
           echo "publish failed after release was created; rolling back release and tag"
-          gh release delete "${{ needs.metadata.outputs.version_tag }}" --cleanup-tag --yes
+          gh release delete "$VERSION_TAG" --cleanup-tag --yes
           # belt-and-suspenders: ensure remote tag is gone even if --cleanup-tag missed
-          git push origin --delete "refs/tags/${{ needs.metadata.outputs.version_tag }}" || true
+          git push origin --delete "refs/tags/$VERSION_TAG" || true
 
       - name: Publish summary
-        run: |
-          {
-            echo "## Stable release"
-            echo "- Channel: stable"
-            echo "- Version: ${{ needs.metadata.outputs.stable_version }}"
-            echo "- Version tag: ${{ needs.metadata.outputs.version_tag }}"
-            echo "- mac signed/notarized: ${{ inputs.mac_signed }}"
-            echo "- windows signed: false"
-            echo "- mac assets: open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.dmg, open-design-${{ needs.metadata.outputs.stable_version }}-mac-arm64.zip"
-            echo "- win assets: open-design-${{ needs.metadata.outputs.stable_version }}-win-x64-setup.exe"
-            echo "- linux assets: deferred from this stable release"
-            echo "- Feeds: latest-mac.yml, latest.yml"
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
+          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
+          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
+          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
+          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
+          R2_VERSION_METADATA_URL: ${{ steps.r2.outputs.version_metadata_url }}
+          R2_VERSION_PREFIX: ${{ steps.r2.outputs.version_prefix }}
+          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
+          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+        run: bash .github/scripts/release/r2/summary.sh
+
+      - name: Cleanup workflow artifacts
+        if: ${{ success() }}
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh

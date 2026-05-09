@@ -686,9 +686,15 @@ describe('SettingsDialog media providers interactions', () => {
       { initialSection: 'media' },
     );
 
+    // Issue #737 added a window.confirm guard on the Clear button so a
+    // stray click cannot wipe a saved API key. Auto-accept the prompt
+    // here so the test still exercises the cleared-payload path.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
     const clearButtons = screen.getAllByRole('button', { name: 'Clear' });
     fireEvent.click(clearButtons[0]!);
 
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect((screen.getByLabelText('OpenAI API key') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe('');
 
@@ -699,6 +705,38 @@ describe('SettingsDialog media providers interactions', () => {
       }),
       { forceMediaProviderSync: true },
     );
+
+    confirmSpy.mockRestore();
+  });
+
+  it('cancels Clear when the confirmation is dismissed (issue #737)', () => {
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        mediaProviders: {
+          openai: { apiKey: 'sk-media', baseUrl: 'https://custom.openai.example/v1' },
+        },
+      },
+      { initialSection: 'media' },
+    );
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const clearButtons = screen.getAllByRole('button', { name: 'Clear' });
+    fireEvent.click(clearButtons[0]!);
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    // Saved key + base URL must stay intact when the user dismisses
+    // the confirmation; without this guard a fat-fingered click on
+    // Clear would silently wipe the key. Autosave should never fire
+    // because nothing changed.
+    expect((screen.getByLabelText('OpenAI API key') as HTMLInputElement).value).toBe('sk-media');
+    expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe(
+      'https://custom.openai.example/v1',
+    );
+    expect(onPersist).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 
   it('supports persisting provider API key and base URL edits', async () => {
@@ -747,6 +785,10 @@ describe('SettingsDialog media providers interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'OpenAI Show key' }));
     expect(apiKeyInput.type).toBe('text');
 
+    // Issue #737 added a window.confirm guard on Clear; jsdom's
+    // unimplemented confirm() returns undefined, which would cancel
+    // the clear and leave this test asserting the wrong reveal state.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[0]!);
     expect(apiKeyInput.type).toBe('password');
 
@@ -755,6 +797,8 @@ describe('SettingsDialog media providers interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'OpenAI Show key' }));
     expect(apiKeyInput.type).toBe('text');
+
+    confirmSpy.mockRestore();
   });
 
   it('supports providers with a custom model override field', async () => {

@@ -5,6 +5,7 @@ import {
   buildSandboxedPreviewDocument,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
 } from '../../src/runtime/exports';
 
@@ -69,6 +70,51 @@ describe('archiveFilenameFrom', () => {
       'content-disposition': "attachment; filename*=UTF-8''%E9%9D",
     });
     expect(archiveFilenameFrom(resp, 'fallback', 'ui-design')).toBe('ui-design.zip');
+  });
+});
+
+describe('exportProjectAsPdf', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('uses the daemon desktop PDF export API before falling back to browser print', async () => {
+    const fallback = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+
+    const result = await exportProjectAsPdf({
+      deck: true,
+      fallbackPdf: fallback,
+      filePath: 'deck/index.html',
+      projectId: 'proj-1',
+      title: 'Seed Deck',
+    });
+
+    expect(result).toBe('desktop');
+    expect(fallback).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj-1/export/pdf', {
+      body: JSON.stringify({ deck: true, fileName: 'deck/index.html', title: 'Seed Deck' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+  });
+
+  it('falls back to browser print when the desktop PDF export API is unavailable', async () => {
+    const fallback = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'unavailable' } }), { status: 501 })));
+
+    const result = await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: fallback,
+      filePath: 'index.html',
+      projectId: 'proj-1',
+      title: 'Landing',
+    });
+
+    expect(result).toBe('fallback');
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
 

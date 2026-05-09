@@ -3,11 +3,6 @@ name: release-beta
 on:
   workflow_dispatch:
     inputs:
-      signed:
-        description: "Build signed/notarized mac artifacts. Disable only for explicit unsigned validation releases."
-        required: true
-        type: boolean
-        default: true
       enable_mac:
         description: "Build and publish mac arm64 beta artifacts."
         required: true
@@ -25,6 +20,7 @@ on:
         default: false
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -37,7 +33,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
-      OPEN_DESIGN_RELEASE_SIGNED: ${{ inputs.signed }}
     outputs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
@@ -45,7 +40,6 @@ jobs:
       branch: ${{ steps.beta.outputs.branch }}
       commit: ${{ steps.beta.outputs.commit }}
       release_name: ${{ steps.beta.outputs.release_name }}
-      signed: ${{ steps.beta.outputs.signed }}
       state_source: ${{ steps.beta.outputs.state_source }}
     steps:
       - name: Checkout
@@ -75,24 +69,9 @@ jobs:
           CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
-        run: |
-          set -euo pipefail
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CLOUDFLARE_R2_RELEASES_BUCKET CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN CLOUDFLARE_R2_RELEASES_URL; do
-            if [ -z "${!name}" ]; then
-              echo "$name is required" >&2
-              exit 1
-            fi
-          done
-          probe_file="$RUNNER_TEMP/r2-release-access.txt"
-          probe_key="beta/.ci-access-check/release-beta.txt"
-          printf 'run=%s\nsha=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > "$probe_file"
-          aws --endpoint-url "${CLOUDFLARE_R2_RELEASES_URL%/}" s3api put-object \
-            --bucket "$CLOUDFLARE_R2_RELEASES_BUCKET" \
-            --key "$probe_key" \
-            --body "$probe_file" \
-            --content-type "text/plain; charset=utf-8" \
-            --cache-control "no-store" \
-            --no-cli-pager >/dev/null
+          R2_ACCESS_PROBE_NAME: release-beta
+          RELEASE_CHANNEL: beta
+        run: bash .github/scripts/release/r2/check.sh
 
       - name: Prepare beta release metadata
         id: beta
@@ -118,33 +97,33 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Compute mac tools-pack cache key
-        id: mac_tools_pack_cache_key
-        run: |
-          set -euo pipefail
-          echo "epoch=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore mac tools-pack cache
-        id: mac_tools_pack_cache_restore
-        uses: actions/cache/restore@v5
-        continue-on-error: true
-        with:
-          path: ${{ runner.temp }}/tools-pack-cache
-          key: tools-pack-mac-v1-${{ runner.os }}-${{ steps.mac_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}
-          restore-keys: |
-            tools-pack-mac-v1-${{ runner.os }}-${{ steps.mac_tools_pack_cache_key.outputs.epoch }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify mac Electron framework symlinks
+        run: |
+          set -euo pipefail
+          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
+          for link in \
+            "$framework/Electron Framework" \
+            "$framework/Helpers" \
+            "$framework/Libraries" \
+            "$framework/Resources" \
+            "$framework/Versions/Current"; do
+            if [ ! -L "$link" ]; then
+              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
+              ls -la "$framework" >&2 || true
+              ls -la "$framework/Versions" >&2 || true
+              exit 1
+            fi
+          done
 
       - name: Apply beta package version
         run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
 
       - name: Prepare Apple signing certificate
-        if: ${{ inputs.signed }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -167,43 +146,102 @@ jobs:
         run: |
           set -euo pipefail
           tools_pack_dir="$RUNNER_TEMP/tools-pack"
-          cache_dir="$RUNNER_TEMP/tools-pack-cache"
           build_json_path="$RUNNER_TEMP/mac-tools-pack-build.json"
+          build_log_path="$RUNNER_TEMP/mac-tools-pack-build.log"
+          rm -rf "$tools_pack_dir"
+          : > "$build_log_path"
           build_args=(
             exec tools-pack mac build
             --dir "$tools_pack_dir"
-            --cache-dir "$cache_dir"
             --namespace release-beta
             --portable
             --mac-compression maximum
-            --to all
+            --to dmg
             --json
+            --signed
           )
-          if [ "${{ inputs.signed }}" = "true" ]; then
-            build_args+=(--signed)
-          fi
-          if build_output="$(pnpm "${build_args[@]}")"; then
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
             printf '%s\n' "$build_output" | tee "$build_json_path"
           else
-            cached_status=$?
+            build_status=$?
             printf '%s\n' "$build_output"
-            echo "mac tools-pack cached build failed with exit code $cached_status; removing cache and retrying without cache" >&2
-            rm -rf "$cache_dir"
-            fallback_args=(
-              exec tools-pack mac build
-              --dir "$tools_pack_dir"
-              --namespace release-beta
-              --portable
-              --mac-compression maximum
-              --to all
-              --json
-            )
-            if [ "${{ inputs.signed }}" = "true" ]; then
-              fallback_args+=(--signed)
-            fi
-            fallback_output="$(pnpm "${fallback_args[@]}")"
-            printf '%s\n' "$fallback_output" | tee "$build_json_path"
+            exit "$build_status"
           fi
+
+      - name: Capture mac framework diagnostics
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
+          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
+          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/builder/mac-arm64/Open Design.app/Contents/Frameworks/Electron Framework.framework"
+
+          dump_framework() {
+            local label="$1"
+            local framework="$2"
+            echo "## $label"
+            echo "path=$framework"
+            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
+              echo "missing"
+              return 0
+            fi
+            echo "### top-level"
+            ls -la "$framework" || true
+            echo "### symlinks"
+            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
+              printf '%s -> %s\n' "$link" "$(readlink "$link")"
+            done || true
+            echo "### selected stat"
+            for path in \
+              "$framework" \
+              "$framework/Electron Framework" \
+              "$framework/Versions" \
+              "$framework/Versions/Current" \
+              "$framework/Versions/Current/Electron Framework" \
+              "$framework/Versions/A" \
+              "$framework/Versions/A/Electron Framework" \
+              "$framework/Resources" \
+              "$framework/Versions/A/Resources/Info.plist"; do
+              if [ -e "$path" ] || [ -L "$path" ]; then
+                stat -f '%Sp %HT %N' "$path" || true
+              else
+                echo "missing: $path"
+              fi
+            done
+            echo "### plist"
+            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
+            echo "### codesign display"
+            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework" 2>&1 || true
+          }
+
+          {
+            date -u
+            if [ -n "$source_framework" ]; then
+              dump_framework "source Electron Framework" "$source_framework"
+            else
+              echo "## source Electron Framework"
+              echo "resolve failed"
+              cat "$source_resolve_log" || true
+            fi
+            dump_framework "built Electron Framework" "$built_framework"
+          } > "$output"
+          cat "$output"
+
+      - name: Upload mac build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-mac-build-diagnostics
+          path: |
+            ${{ runner.temp }}/mac-tools-pack-build.log
+            ${{ runner.temp }}/mac-tools-pack-build.json
+            ${{ runner.temp }}/mac-framework-diagnostics.txt
+          if-no-files-found: warn
 
       - name: Smoke beta mac packaged runtime
         working-directory: e2e
@@ -227,6 +265,8 @@ jobs:
             "commit": "$GITHUB_SHA"
           }
           EOF
+          cp "$RUNNER_TEMP/mac-tools-pack-build.json" "$report_dir/tools-pack.json"
+          cp "$RUNNER_TEMP/mac-tools-pack-build.log" "$report_dir/tools-pack.log"
           pnpm test specs/mac.spec.ts 2>&1 | tee "$report_dir/vitest.log"
 
       - name: Upload mac e2e spec report
@@ -237,161 +277,17 @@ jobs:
           path: ${{ runner.temp }}/release-report/mac
           if-no-files-found: warn
 
-      - name: Prune mac tools-pack cache
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          cache_root="$RUNNER_TEMP/tools-pack-cache"
-          if [ ! -d "$cache_root" ]; then
-            echo "tools-pack cache root does not exist; nothing to prune"
-            exit 0
-          fi
-          rm -rf "$cache_root/locks"
-          CACHE_ROOT="$cache_root" node --input-type=module <<'NODE'
-          import { rmSync, statSync, readdirSync } from "node:fs";
-          import { join } from "node:path";
-
-          const cacheRoot = process.env.CACHE_ROOT;
-          const entryRoot = join(cacheRoot, "entries");
-          const maxBytes = 6 * 1024 * 1024 * 1024;
-          const entries = [];
-
-          function directoryBytes(path) {
-            let total = 0;
-            for (const entry of readdirSync(path, { withFileTypes: true })) {
-              const child = join(path, entry.name);
-              if (entry.isDirectory()) total += directoryBytes(child);
-              else total += statSync(child).size;
-            }
-            return total;
-          }
-
-          try {
-            for (const node of readdirSync(entryRoot, { withFileTypes: true })) {
-              if (!node.isDirectory()) continue;
-              const nodeRoot = join(entryRoot, node.name);
-              for (const entry of readdirSync(nodeRoot, { withFileTypes: true })) {
-                if (!entry.isDirectory()) continue;
-                const path = join(nodeRoot, entry.name);
-                const size = directoryBytes(path);
-                entries.push({ node: node.name, path, size, mtimeMs: statSync(path).mtimeMs });
-              }
-            }
-          } catch {
-            console.log("tools-pack cache entries root does not exist; nothing to prune");
-            process.exit(0);
-          }
-
-          entries.sort((left, right) => right.mtimeMs - left.mtimeMs);
-          let keptBytes = 0;
-          let removedBytes = 0;
-          let removedCount = 0;
-          for (const entry of entries) {
-            if (keptBytes + entry.size <= maxBytes) {
-              keptBytes += entry.size;
-              continue;
-            }
-            rmSync(entry.path, { force: true, recursive: true });
-            removedBytes += entry.size;
-            removedCount += 1;
-          }
-          console.log(`keptBytes=${keptBytes} removedBytes=${removedBytes} removedCount=${removedCount} maxBytes=${maxBytes}`);
-          NODE
-
-      - name: Summarize mac tools-pack build
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          build_json_path="$RUNNER_TEMP/mac-tools-pack-build.json"
-          if [ ! -f "$build_json_path" ]; then
-            {
-              echo "### mac tools-pack build"
-              echo
-              echo "Build JSON was not found at \`$build_json_path\`."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          BUILD_JSON_PATH="$build_json_path" node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
-          import { readFileSync } from "node:fs";
-          const build = JSON.parse(readFileSync(process.env.BUILD_JSON_PATH, "utf8"));
-          console.log("### mac tools-pack build");
-          console.log("");
-          console.log("| Phase | Duration |");
-          console.log("| --- | ---: |");
-          for (const timing of build.timings ?? []) {
-            console.log(`| \`${timing.phase}\` | ${(Number(timing.durationMs) / 1000).toFixed(1)}s |`);
-          }
-          console.log("");
-          console.log("| Cache node | Status | Reason | Duration |");
-          console.log("| --- | --- | --- | ---: |");
-          for (const entry of build.cacheReport?.entries ?? []) {
-            console.log(`| \`${entry.nodeId}\` | \`${entry.status}\` | ${entry.reason ?? ""} | ${(Number(entry.durationMs) / 1000).toFixed(1)}s |`);
-          }
-          NODE
-
-      - name: Save mac tools-pack cache
-        if: ${{ success() && steps.mac_tools_pack_cache_restore.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
-        continue-on-error: true
-        with:
-          path: ${{ runner.temp }}/tools-pack-cache
-          key: tools-pack-mac-v1-${{ runner.os }}-${{ steps.mac_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}
-
       - name: Prepare beta assets
         id: assets
         env:
+          ASSET_VERSION_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
           CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-        run: |
-          set -euo pipefail
-          if [ -z "$CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN" ]; then
-            echo "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN is required" >&2
-            exit 1
-          fi
-          release_dir="$RUNNER_TEMP/release-assets"
-          mkdir -p "$release_dir"
-
-          source_dmg="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/dmg/Open Design-release-beta.dmg"
-          source_zip="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/zip/Open Design-release-beta.zip"
-          if [ ! -f "$source_dmg" ]; then
-            echo "expected dmg not found at $source_dmg" >&2
-            exit 1
-          fi
-          if [ ! -f "$source_zip" ]; then
-            echo "expected zip not found at $source_zip" >&2
-            exit 1
-          fi
-
-          asset_suffix="${{ needs.metadata.outputs.asset_version_suffix }}"
-          versioned_dmg="open-design-${{ needs.metadata.outputs.beta_version }}${asset_suffix}-mac-arm64.dmg"
-          versioned_zip="open-design-${{ needs.metadata.outputs.beta_version }}${asset_suffix}-mac-arm64.zip"
-          dmg_checksum_file="$versioned_dmg.sha256"
-          zip_checksum_file="$versioned_zip.sha256"
-
-          cp "$source_dmg" "$release_dir/$versioned_dmg"
-          cp "$source_zip" "$release_dir/$versioned_zip"
-          (
-            cd "$release_dir"
-            shasum -a 256 "$versioned_dmg" > "$dmg_checksum_file"
-            shasum -a 256 "$versioned_zip" > "$zip_checksum_file"
-          )
-
-          zip_sha512="$(openssl dgst -sha512 -binary "$release_dir/$versioned_zip" | openssl base64 -A)"
-          zip_size="$(stat -f%z "$release_dir/$versioned_zip")"
-          public_origin="${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN%/}"
-          version_prefix="beta/versions/${{ needs.metadata.outputs.beta_version }}${asset_suffix}"
-          zip_url="$public_origin/$version_prefix/$versioned_zip"
-          release_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          cat > "$release_dir/latest-mac.yml" <<EOF
-          version: "${{ needs.metadata.outputs.beta_version }}"
-          files:
-            - url: "$zip_url"
-              sha512: "$zip_sha512"
-              size: $zip_size
-          path: "$zip_url"
-          sha512: "$zip_sha512"
-          releaseDate: "$release_date"
-          releaseNotes: "Open Design beta ${{ needs.metadata.outputs.beta_version }}${asset_suffix}"
-          EOF
+          MAC_ARTIFACT_MODE: dmg-only
+          RELEASE_CHANNEL: beta
+          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_NAMESPACE: release-beta
+        run: bash .github/scripts/release/assets/mac.sh
 
       - name: Upload mac release bundle
         uses: actions/upload-artifact@v7
@@ -511,6 +407,7 @@ jobs:
             githubRunAttempt = $env:GITHUB_RUN_ATTEMPT
             commit = $env:GITHUB_SHA
           } | ConvertTo-Json | Set-Content -Path (Join-Path $reportDir "manifest.json")
+          Copy-Item -Force -Path (Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json") -Destination (Join-Path $reportDir "tools-pack.json")
           pnpm test specs/win.spec.ts 2>&1 | Tee-Object -FilePath (Join-Path $reportDir "vitest.log")
           $testExitCode = $LASTEXITCODE
           if ($testExitCode -ne 0) {
@@ -528,139 +425,7 @@ jobs:
       - name: Prune Windows tools-pack cache
         shell: pwsh
         continue-on-error: true
-        run: |
-          $cacheRoot = Join-Path $env:RUNNER_TEMP "tools-pack-cache"
-          if (!(Test-Path $cacheRoot)) {
-            "tools-pack cache root does not exist; nothing to prune"
-            exit 0
-          }
-
-          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $cacheRoot "locks")
-
-          $maxBytes = 6GB
-          $entryRoot = Join-Path $cacheRoot "entries"
-          if (!(Test-Path $entryRoot)) {
-            "tools-pack cache entries root does not exist; nothing to prune"
-            exit 0
-          }
-
-          $discardedBytes = 0L
-          $discardedCount = 0
-          $packagedAppRoot = Join-Path $entryRoot "win.packaged-app"
-          if (Test-Path $packagedAppRoot) {
-            $packagedAppEntries = Get-ChildItem -Path $packagedAppRoot -Directory -ErrorAction SilentlyContinue |
-              Where-Object { Test-Path (Join-Path $_.FullName "manifest.json") }
-            foreach ($entry in $packagedAppEntries) {
-              $size = (Get-ChildItem -Path $entry.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
-                Measure-Object -Property Length -Sum).Sum
-              Remove-Item -Recurse -Force -LiteralPath $entry.FullName
-              $discardedBytes += [int64]($size ?? 0)
-              $discardedCount += 1
-            }
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $packagedAppRoot
-          }
-
-          $priorityByNode = @{
-            "win.electron-builder-dir" = 0
-            "win.workspace-build" = 1
-            "win.resource-tree" = 2
-            "win.workspace-tarballs" = 3
-          }
-
-          $entries = Get-ChildItem -Path $entryRoot -Directory -Recurse |
-            Where-Object { Test-Path (Join-Path $_.FullName "manifest.json") } |
-            ForEach-Object {
-              $size = (Get-ChildItem -Path $_.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
-                Measure-Object -Property Length -Sum).Sum
-              $node = Split-Path (Split-Path $_.FullName -Parent) -Leaf
-              [pscustomobject]@{
-                Path = $_.FullName
-                Node = $node
-                Priority = [int]($priorityByNode[$node] ?? 100)
-                Size = [int64]($size ?? 0)
-                LastWriteTimeUtc = $_.LastWriteTimeUtc
-              }
-            } |
-            Sort-Object Priority, @{ Expression = "LastWriteTimeUtc"; Descending = $true }
-
-          $keptBytes = 0L
-          $removedBytes = 0L
-          $removedCount = 0
-          foreach ($entry in $entries) {
-            if (($keptBytes + $entry.Size) -le $maxBytes) {
-              $keptBytes += $entry.Size
-              continue
-            }
-            Remove-Item -Recurse -Force -LiteralPath $entry.Path
-            $removedBytes += $entry.Size
-            $removedCount += 1
-          }
-
-          "keptBytes=$keptBytes removedBytes=$removedBytes removedCount=$removedCount discardedBytes=$discardedBytes discardedCount=$discardedCount maxBytes=$maxBytes"
-
-      - name: Summarize Windows tools-pack build
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $summaryPath = $env:GITHUB_STEP_SUMMARY
-          $buildJsonPath = Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json"
-          if (!(Test-Path $buildJsonPath)) {
-            "### Windows tools-pack build" | Add-Content -Path $summaryPath
-            "" | Add-Content -Path $summaryPath
-            "Build JSON was not found at `$buildJsonPath`." | Add-Content -Path $summaryPath
-            exit 0
-          }
-
-          $build = Get-Content -Raw -Path $buildJsonPath | ConvertFrom-Json
-          "### Windows tools-pack build" | Add-Content -Path $summaryPath
-          "" | Add-Content -Path $summaryPath
-          "| Phase | Duration |" | Add-Content -Path $summaryPath
-          "| --- | ---: |" | Add-Content -Path $summaryPath
-          foreach ($timing in $build.timings) {
-            $seconds = [math]::Round(([double]$timing.durationMs) / 1000, 1)
-            "| `$($timing.phase)` | ${seconds}s |" | Add-Content -Path $summaryPath
-          }
-
-          "" | Add-Content -Path $summaryPath
-          "| Cache node | Status | Reason | Duration |" | Add-Content -Path $summaryPath
-          "| --- | --- | --- | ---: |" | Add-Content -Path $summaryPath
-          foreach ($entry in $build.cacheReport.entries) {
-            $seconds = [math]::Round(([double]$entry.durationMs) / 1000, 1)
-            $reason = if ($null -eq $entry.reason) { "" } else { [string]$entry.reason }
-            "| `$($entry.nodeId)` | `$($entry.status)` | $reason | ${seconds}s |" | Add-Content -Path $summaryPath
-          }
-
-          $cacheRoot = Join-Path $env:RUNNER_TEMP "tools-pack-cache"
-          $entryRoot = Join-Path $cacheRoot "entries"
-          if (Test-Path $entryRoot) {
-            $entries = Get-ChildItem -Path $entryRoot -Directory -Recurse |
-              Where-Object { Test-Path (Join-Path $_.FullName "manifest.json") } |
-              ForEach-Object {
-                $size = (Get-ChildItem -Path $_.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
-                  Measure-Object -Property Length -Sum).Sum
-                [pscustomobject]@{
-                  Node = Split-Path (Split-Path $_.FullName -Parent) -Leaf
-                  Size = [int64]($size ?? 0)
-                }
-              } |
-              Group-Object Node |
-              ForEach-Object {
-                [pscustomobject]@{
-                  Node = $_.Name
-                  Count = $_.Count
-                  Size = [int64](($_.Group | Measure-Object -Property Size -Sum).Sum ?? 0)
-                }
-              } |
-              Sort-Object Size -Descending
-
-            "" | Add-Content -Path $summaryPath
-            "| Saved cache node | Entries | Size |" | Add-Content -Path $summaryPath
-            "| --- | ---: | ---: |" | Add-Content -Path $summaryPath
-            foreach ($entry in $entries) {
-              $mb = [math]::Round(([double]$entry.Size) / 1MB, 1)
-              "| `$($entry.Node)` | $($entry.Count) | ${mb} MB |" | Add-Content -Path $summaryPath
-            }
-          }
+        run: ./.github/scripts/release/cache/win.ps1
 
       - name: Save Windows tools-pack cache
         if: ${{ success() && steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' }}
@@ -673,45 +438,14 @@ jobs:
       - name: Prepare windows beta assets
         shell: pwsh
         env:
+          ASSET_VERSION_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
           CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN)) {
-            throw "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN is required"
-          }
-          $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets"
-          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-
-          $sourceInstaller = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/release-beta-win/builder/Open Design-release-beta-win-setup.exe"
-          if (!(Test-Path $sourceInstaller)) {
-            throw "expected installer not found at $sourceInstaller"
-          }
-
-          $windowsAssetSuffix = ".unsigned"
-          $versionedInstaller = "open-design-${{ needs.metadata.outputs.beta_version }}$windowsAssetSuffix-win-x64-setup.exe"
-          $checksumFile = "$versionedInstaller.sha256"
-          Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
-
-          $installerPath = Join-Path $releaseDir $versionedInstaller
-          $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $versionedInstaller" | Set-Content -Path (Join-Path $releaseDir $checksumFile)
-          $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
-          $installerSha512 = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::Create().ComputeHash($installerBytes))
-          $installerSize = (Get-Item $installerPath).Length
-          $publicOrigin = $env:CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN.TrimEnd("/")
-          $versionPrefix = "beta/versions/${{ needs.metadata.outputs.beta_version }}${{ needs.metadata.outputs.asset_version_suffix }}"
-          $installerUrl = "$publicOrigin/$versionPrefix/$versionedInstaller"
-          $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-          @(
-            'version: "${{ needs.metadata.outputs.beta_version }}"'
-            'files:'
-            "  - url: `"$installerUrl`""
-            "    sha512: `"$installerSha512`""
-            "    size: $installerSize"
-            "path: `"$installerUrl`""
-            "sha512: `"$installerSha512`""
-            "releaseDate: `"$releaseDate`""
-            "releaseNotes: `"Open Design beta ${{ needs.metadata.outputs.beta_version }}$windowsAssetSuffix`""
-          ) | Set-Content -Path (Join-Path $releaseDir "latest.yml")
+          RELEASE_CHANNEL: beta
+          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}.unsigned
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_NAMESPACE: release-beta-win
+          WINDOWS_ASSET_SUFFIX: .unsigned
+        run: ./.github/scripts/release/assets/win.ps1
 
       - name: Upload windows release bundle
         uses: actions/upload-artifact@v7
@@ -765,29 +499,10 @@ jobs:
 
       - name: Prepare linux beta assets
         env:
-          BETA_VERSION: ${{ needs.metadata.outputs.beta_version }}
-        run: |
-          set -euo pipefail
-          release_dir="$RUNNER_TEMP/release-assets"
-          mkdir -p "$release_dir"
-
-          source_appimage="$RUNNER_TEMP/tools-pack/out/linux/namespaces/release-beta-linux/builder/Open Design-release-beta-linux.AppImage"
-          if [ ! -f "$source_appimage" ]; then
-            echo "expected AppImage not found at $source_appimage" >&2
-            exit 1
-          fi
-
-          # Linux currently has no signing path in tools-pack, so the suffix is
-          # hardcoded to .unsigned (matching the windows convention above).
-          linux_asset_suffix=".unsigned"
-          versioned_appimage="open-design-${BETA_VERSION}${linux_asset_suffix}-linux-x64.AppImage"
-          checksum_file="$versioned_appimage.sha256"
-
-          cp "$source_appimage" "$release_dir/$versioned_appimage"
-          (
-            cd "$release_dir"
-            sha256sum "$versioned_appimage" > "$checksum_file"
-          )
+          LINUX_ASSET_SUFFIX: .unsigned
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_NAMESPACE: release-beta-linux
+        run: bash .github/scripts/release/assets/linux.sh
 
       - name: Upload linux release bundle
         uses: actions/upload-artifact@v7
@@ -814,6 +529,7 @@ jobs:
       }}
     runs-on: ubuntu-latest
     env:
+      GH_TOKEN: ${{ github.token }}
       AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
       AWS_DEFAULT_REGION: auto
@@ -828,9 +544,21 @@ jobs:
       ENABLE_LINUX: ${{ inputs.enable_linux }}
       ENABLE_MAC: ${{ inputs.enable_mac }}
       ENABLE_WIN: ${{ inputs.enable_win }}
-      RELEASE_SIGNED: ${{ needs.metadata.outputs.signed }}
+      GITHUB_RELEASE_ENABLED: "false"
+      LINUX_ASSET_SUFFIX: .unsigned
+      MAC_ARTIFACT_MODE: dmg-only
+      RELEASE_CHANNEL: beta
+      RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+      RELEASE_SIGNED: "true"
+      REPORT_MODE: zip
       STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+      WIN_ASSET_SUFFIX: .unsigned
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
       - name: Download mac release bundle
         if: ${{ inputs.enable_mac }}
         uses: actions/download-artifact@v8
@@ -873,309 +601,34 @@ jobs:
 
       - name: Publish beta assets and metadata to R2
         id: r2
-        run: |
-          set -euo pipefail
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CLOUDFLARE_R2_RELEASES_BUCKET CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN CLOUDFLARE_R2_RELEASES_URL; do
-            if [ -z "${!name}" ]; then
-              echo "$name is required" >&2
-              exit 1
-            fi
-          done
-
-          release_root="$RUNNER_TEMP/release-assets"
-          report_root="$RUNNER_TEMP/release-report"
-          public_origin="${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN%/}"
-          version_prefix="beta/versions/${BETA_VERSION}${ASSET_VERSION_SUFFIX}"
-          latest_prefix="beta/latest"
-
-          upload() {
-            local file_path="$1"
-            local object_key="$2"
-            local content_type="$3"
-            local cache_control="$4"
-            if [ ! -f "$file_path" ]; then
-              echo "expected upload file not found: $file_path" >&2
-              exit 1
-            fi
-            aws --endpoint-url "${CLOUDFLARE_R2_RELEASES_URL%/}" s3api put-object \
-              --bucket "$CLOUDFLARE_R2_RELEASES_BUCKET" \
-              --key "$object_key" \
-              --body "$file_path" \
-              --content-type "$content_type" \
-              --cache-control "$cache_control" \
-              --no-cli-pager >/dev/null
-          }
-
-          report_content_type() {
-            case "$1" in
-              *.html) printf '%s' "text/html; charset=utf-8" ;;
-              *.json) printf '%s' "application/json; charset=utf-8" ;;
-              *.log) printf '%s' "text/plain; charset=utf-8" ;;
-              *.png) printf '%s' "image/png" ;;
-              *.txt) printf '%s' "text/plain; charset=utf-8" ;;
-              *.xml) printf '%s' "application/xml; charset=utf-8" ;;
-              *) printf '%s' "application/octet-stream" ;;
-            esac
-          }
-
-          upload_report_tree() {
-            local root="$1"
-            if [ ! -d "$root" ]; then
-              echo "e2e spec report root does not exist at $root; skipping"
-              return
-            fi
-            local uploaded_count=0
-            while IFS= read -r -d '' file_path; do
-              local relative_path="${file_path#"${root}/"}"
-              upload "$file_path" "$version_prefix/report/$relative_path" "$(report_content_type "$relative_path")" "public, max-age=31536000, immutable"
-              uploaded_count=$((uploaded_count + 1))
-            done < <(find "$root" -type f -print0 | sort -z)
-            echo "uploaded e2e spec report files: $uploaded_count"
-          }
-
-          mac_dmg="open-design-${BETA_VERSION}${ASSET_VERSION_SUFFIX}-mac-arm64.dmg"
-          mac_zip="open-design-${BETA_VERSION}${ASSET_VERSION_SUFFIX}-mac-arm64.zip"
-          win_installer="open-design-${BETA_VERSION}.unsigned-win-x64-setup.exe"
-          linux_appimage="open-design-${BETA_VERSION}.unsigned-linux-x64.AppImage"
-          metadata_path="$release_root/metadata.json"
-
-          if [ "$ENABLE_MAC" = "true" ]; then
-            upload "$release_root/mac/$mac_dmg" "$version_prefix/$mac_dmg" "application/x-apple-diskimage" "public, max-age=31536000, immutable"
-            upload "$release_root/mac/$mac_zip" "$version_prefix/$mac_zip" "application/zip" "public, max-age=31536000, immutable"
-            upload "$release_root/mac/$mac_dmg.sha256" "$version_prefix/$mac_dmg.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
-            upload "$release_root/mac/$mac_zip.sha256" "$version_prefix/$mac_zip.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
-            upload "$release_root/mac/latest-mac.yml" "$version_prefix/latest-mac.yml" "application/x-yaml; charset=utf-8" "public, max-age=31536000, immutable"
-            upload "$release_root/mac/latest-mac.yml" "$latest_prefix/latest-mac.yml" "application/x-yaml; charset=utf-8" "public, max-age=60, must-revalidate"
-            {
-              echo "mac_dmg_url=$public_origin/$version_prefix/$mac_dmg"
-              echo "mac_zip_url=$public_origin/$version_prefix/$mac_zip"
-              echo "mac_feed_url=$public_origin/$latest_prefix/latest-mac.yml"
-            } >> "$GITHUB_OUTPUT"
-          fi
-
-          if [ "$ENABLE_WIN" = "true" ]; then
-            upload "$release_root/win/$win_installer" "$version_prefix/$win_installer" "application/vnd.microsoft.portable-executable" "public, max-age=31536000, immutable"
-            upload "$release_root/win/$win_installer.sha256" "$version_prefix/$win_installer.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
-            upload "$release_root/win/latest.yml" "$version_prefix/latest.yml" "application/x-yaml; charset=utf-8" "public, max-age=31536000, immutable"
-            upload "$release_root/win/latest.yml" "$latest_prefix/latest.yml" "application/x-yaml; charset=utf-8" "public, max-age=60, must-revalidate"
-            {
-              echo "win_installer_url=$public_origin/$version_prefix/$win_installer"
-              echo "win_feed_url=$public_origin/$latest_prefix/latest.yml"
-            } >> "$GITHUB_OUTPUT"
-          fi
-
-          if [ "$ENABLE_LINUX" = "true" ]; then
-            upload "$release_root/linux/$linux_appimage" "$version_prefix/$linux_appimage" "application/octet-stream" "public, max-age=31536000, immutable"
-            upload "$release_root/linux/$linux_appimage.sha256" "$version_prefix/$linux_appimage.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
-            {
-              echo "linux_appimage_url=$public_origin/$version_prefix/$linux_appimage"
-            } >> "$GITHUB_OUTPUT"
-          fi
-
-          upload_report_tree "$report_root"
-
-          RELEASE_ROOT="$release_root" \
-          PUBLIC_ORIGIN="$public_origin" \
-          VERSION_PREFIX="$version_prefix" \
-          LATEST_PREFIX="$latest_prefix" \
-          MAC_DMG="$mac_dmg" \
-          MAC_ZIP="$mac_zip" \
-          WIN_INSTALLER="$win_installer" \
-          LINUX_APPIMAGE="$linux_appimage" \
-          METADATA_PATH="$metadata_path" \
-          node --input-type=module <<'NODE'
-          import { existsSync, statSync, writeFileSync } from "node:fs";
-          import { join } from "node:path";
-
-          const env = process.env;
-          const enabled = (name) => env[name] === "true";
-          const publicOrigin = env.PUBLIC_ORIGIN;
-          const versionPrefix = env.VERSION_PREFIX;
-          const latestPrefix = env.LATEST_PREFIX;
-          const releaseRoot = env.RELEASE_ROOT;
-          const url = (prefix, name) => `${publicOrigin}/${prefix}/${name}`;
-          const mustExist = (path) => {
-            if (!existsSync(path)) throw new Error(`metadata source file missing: ${path}`);
-            return statSync(path).size;
-          };
-          const fileEntry = (directory, name, contentType) => {
-            const path = join(releaseRoot, directory, name);
-            return {
-              contentType,
-              name,
-              sha256Url: url(versionPrefix, `${name}.sha256`),
-              size: mustExist(path),
-              url: url(versionPrefix, name),
-            };
-          };
-
-          const platforms = {};
-          if (enabled("ENABLE_MAC")) {
-            platforms.mac = {
-              arch: "arm64",
-              enabled: true,
-              feed: {
-                latestUrl: url(latestPrefix, "latest-mac.yml"),
-                name: "latest-mac.yml",
-                url: url(versionPrefix, "latest-mac.yml"),
-              },
-              signed: env.RELEASE_SIGNED === "true",
-              artifacts: {
-                dmg: fileEntry("mac", env.MAC_DMG, "application/x-apple-diskimage"),
-                zip: fileEntry("mac", env.MAC_ZIP, "application/zip"),
-              },
-            };
-          }
-          if (enabled("ENABLE_WIN")) {
-            platforms.win = {
-              arch: "x64",
-              enabled: true,
-              feed: {
-                latestUrl: url(latestPrefix, "latest.yml"),
-                name: "latest.yml",
-                url: url(versionPrefix, "latest.yml"),
-              },
-              signed: false,
-              artifacts: {
-                installer: fileEntry("win", env.WIN_INSTALLER, "application/vnd.microsoft.portable-executable"),
-              },
-            };
-          }
-          if (enabled("ENABLE_LINUX")) {
-            platforms.linux = {
-              arch: "x64",
-              enabled: true,
-              feed: null,
-              signed: false,
-              artifacts: {
-                appImage: fileEntry("linux", env.LINUX_APPIMAGE, "application/octet-stream"),
-              },
-            };
-          }
-
-          const metadata = {
-            assetVersionSuffix: env.ASSET_VERSION_SUFFIX,
-            baseVersion: env.BASE_VERSION,
-            betaNumber: Number(env.BETA_VERSION.split("-beta.")[1]),
-            betaVersion: env.BETA_VERSION,
-            channel: "beta",
-            generatedAt: new Date().toISOString(),
-            github: {
-              branch: env.BRANCH_NAME,
-              commit: env.GITHUB_SHA,
-              repository: env.GITHUB_REPOSITORY,
-              runAttempt: Number(env.GITHUB_RUN_ATTEMPT),
-              runId: Number(env.GITHUB_RUN_ID),
-              workflow: env.GITHUB_WORKFLOW,
-            },
-            platforms,
-            r2: {
-              latestMetadataUrl: url(latestPrefix, "metadata.json"),
-              latestPrefix,
-              publicOrigin,
-              reportUrl: url(versionPrefix, "report/"),
-              versionMetadataUrl: url(versionPrefix, "metadata.json"),
-              versionPrefix,
-            },
-            signed: env.RELEASE_SIGNED === "true",
-            stateSource: env.STATE_SOURCE,
-            version: 1,
-          };
-
-          writeFileSync(env.METADATA_PATH, `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
-          NODE
-
-          upload "$metadata_path" "$version_prefix/metadata.json" "application/json; charset=utf-8" "public, max-age=31536000, immutable"
-          upload "$metadata_path" "$latest_prefix/metadata.json" "application/json; charset=utf-8" "public, max-age=60, must-revalidate"
-
-          {
-            echo "metadata_url=$public_origin/$latest_prefix/metadata.json"
-            echo "report_url=$public_origin/$version_prefix/report/"
-            echo "version_metadata_url=$public_origin/$version_prefix/metadata.json"
-            echo "version_prefix=$version_prefix"
-          } >> "$GITHUB_OUTPUT"
+        run: bash .github/scripts/release/r2/publish.sh
 
       - name: Verify R2 beta publish
-        run: |
-          set -euo pipefail
-          metadata_url="${{ steps.r2.outputs.metadata_url }}"
-          downloaded_metadata="$RUNNER_TEMP/metadata.json"
-          curl -fsSL "$metadata_url?run=${GITHUB_RUN_ID}" -o "$downloaded_metadata"
-          DOWNLOADED_METADATA="$downloaded_metadata" \
-          EXPECTED_BETA_VERSION="${{ needs.metadata.outputs.beta_version }}" \
-          node --input-type=module <<'NODE'
-            import { readFileSync } from "node:fs";
-            const metadata = JSON.parse(readFileSync(process.env.DOWNLOADED_METADATA, "utf8"));
-            if (metadata.betaVersion !== process.env.EXPECTED_BETA_VERSION) {
-              throw new Error("unexpected metadata betaVersion: " + metadata.betaVersion);
-            }
-            if (metadata.channel !== "beta") {
-              throw new Error("unexpected metadata channel: " + metadata.channel);
-            }
-          NODE
-
-          if [ "$ENABLE_MAC" = "true" ]; then
-            downloaded_feed="$RUNNER_TEMP/latest-mac.yml"
-            curl -fsSL "${{ steps.r2.outputs.mac_feed_url }}?run=${GITHUB_RUN_ID}" -o "$downloaded_feed"
-            grep -F 'version: "${{ needs.metadata.outputs.beta_version }}"' "$downloaded_feed"
-            grep -F "${{ steps.r2.outputs.mac_zip_url }}" "$downloaded_feed"
-            curl -fsSI "${{ steps.r2.outputs.mac_zip_url }}" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.mac_dmg_url }}" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.report_url }}mac/manifest.json" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.report_url }}mac/screenshots/open-design-mac-smoke.png" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.report_url }}mac/vitest.log" >/dev/null
-          fi
-
-          if [ "$ENABLE_WIN" = "true" ]; then
-            downloaded_feed="$RUNNER_TEMP/latest.yml"
-            curl -fsSL "${{ steps.r2.outputs.win_feed_url }}?run=${GITHUB_RUN_ID}" -o "$downloaded_feed"
-            grep -F 'version: "${{ needs.metadata.outputs.beta_version }}"' "$downloaded_feed"
-            grep -F "${{ steps.r2.outputs.win_installer_url }}" "$downloaded_feed"
-            curl -fsSI "${{ steps.r2.outputs.win_installer_url }}" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.report_url }}win/manifest.json" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.report_url }}win/screenshots/open-design-win-smoke.png" >/dev/null
-            curl -fsSI "${{ steps.r2.outputs.report_url }}win/vitest.log" >/dev/null
-          fi
-
-          if [ "$ENABLE_LINUX" = "true" ]; then
-            curl -fsSI "${{ steps.r2.outputs.linux_appimage_url }}" >/dev/null
-          fi
+        env:
+          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
+          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
+          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
+          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
+          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
+          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
+          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+        run: bash .github/scripts/release/r2/verify.sh
 
       - name: Publish summary
-        run: |
-          {
-            echo "## Beta release"
-            echo "- Channel: beta"
-            echo "- Version: ${{ needs.metadata.outputs.beta_version }}"
-            echo "- Artifact path: ${{ steps.r2.outputs.version_prefix }}"
-            echo "- State source: ${{ needs.metadata.outputs.state_source }}"
-            echo "- Metadata: ${{ steps.r2.outputs.metadata_url }}"
-            echo "- Version metadata: ${{ steps.r2.outputs.version_metadata_url }}"
-            echo "- E2E report path: ${{ steps.r2.outputs.version_prefix }}/report/"
-            echo "- E2E report URL: ${{ steps.r2.outputs.report_url }}"
-            echo "- mac enabled: $ENABLE_MAC"
-            echo "- windows enabled: $ENABLE_WIN"
-            echo "- linux enabled: $ENABLE_LINUX"
-            echo "- mac signed/notarized: ${{ needs.metadata.outputs.signed }}"
-            if [ "$ENABLE_MAC" = "true" ]; then
-              echo "- mac dmg: ${{ steps.r2.outputs.mac_dmg_url }}"
-              echo "- mac zip: ${{ steps.r2.outputs.mac_zip_url }}"
-              echo "- mac feed: ${{ steps.r2.outputs.mac_feed_url }}"
-              echo "- mac e2e manifest: ${{ steps.r2.outputs.report_url }}mac/manifest.json"
-              echo "- mac e2e screenshot: ${{ steps.r2.outputs.report_url }}mac/screenshots/open-design-mac-smoke.png"
-              echo "- mac e2e vitest log: ${{ steps.r2.outputs.report_url }}mac/vitest.log"
-            fi
-            if [ "$ENABLE_WIN" = "true" ]; then
-              echo "- win installer: ${{ steps.r2.outputs.win_installer_url }}"
-              echo "- win feed: ${{ steps.r2.outputs.win_feed_url }}"
-              echo "- win e2e manifest: ${{ steps.r2.outputs.report_url }}win/manifest.json"
-              echo "- win e2e screenshot: ${{ steps.r2.outputs.report_url }}win/screenshots/open-design-win-smoke.png"
-              echo "- win e2e vitest log: ${{ steps.r2.outputs.report_url }}win/vitest.log"
-            fi
-            if [ "$ENABLE_LINUX" = "true" ]; then
-              echo "- linux AppImage: ${{ steps.r2.outputs.linux_appimage_url }}"
-              echo "- linux feed: not published; AppImage updater is not wired"
-            fi
-            echo "- GitHub Releases: not used for beta channel publishing"
-            echo "- Git tags: not used for beta channel publishing"
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
+          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
+          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
+          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
+          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
+          R2_VERSION_METADATA_URL: ${{ steps.r2.outputs.version_metadata_url }}
+          R2_VERSION_PREFIX: ${{ steps.r2.outputs.version_prefix }}
+          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
+          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+        run: bash .github/scripts/release/r2/summary.sh
+
+      - name: Cleanup workflow artifacts
+        if: ${{ success() }}
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh

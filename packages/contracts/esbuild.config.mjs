@@ -8,6 +8,7 @@ await build({
     "./src/critique.ts",
     "./src/api/connectionTest.ts",
     "./src/api/orbit.ts",
+    "./src/api/finalize.ts",
     "./src/api/research.ts",
   ],
   format: "esm",
