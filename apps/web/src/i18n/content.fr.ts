@@ -236,6 +236,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   kraken: 'Trading crypto. UI sombre avec accent violet, dashboards riches en données.',
   lamborghini: 'Marque supercar. Surfaces noir profond, accents or, typographie uppercase dramatique.',
   'linear-app': 'Project management. Ultraminimal, précis, accent violet.',
+  loom: 'Messagerie vidéo asynchrone. Primary violet, accent framboise, UI dark-first pour la communication vidéo.',
   lovable: 'Builder full-stack IA. Gradients ludiques, esthétique dev amicale.',
   mastercard: 'Réseau global de paiement. Canvas papier chaud, formes pill orbitales, chaleur éditoriale.',
   meta: 'Tech retail store. Centré photographie, surfaces clair/dark binaires, CTA Meta Blue.',
@@ -270,6 +271,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   supabase: 'Alternative Firebase open-source. Thème dark émeraude, code-first.',
   superhuman: 'Client email rapide. UI dark premium, keyboard-first, glow violet.',
   tesla: 'Automobile électrique. Réduction radicale, photographie full-viewport, presque aucune UI.',
+  'trading-terminal': 'Interface de trading financier. Terminal data-dense style Bloomberg, UI dark-only.',
   theverge:
     'Média tech éditorial. Accents acid mint et ultraviolet, display Manuka, story tiles façon rave flyer.',
   'together-ai': 'Infrastructure IA open-source. Technique, design proche blueprint.',
@@ -414,6 +416,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'glassmorphism',
   'gradient',
   'huggingface',
+  'hud',
   'levels',
   'lingo',
   'luxury',
