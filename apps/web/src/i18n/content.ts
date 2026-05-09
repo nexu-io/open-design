@@ -406,6 +406,7 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'ib-pitch-book',
   'last30days',
   'live-dashboard',
+  'login-flow',
   'orbit-general',
   'orbit-github',
   'orbit-gmail',

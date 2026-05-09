@@ -4932,6 +4932,7 @@ export async function startServer({
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
+      streamFormat,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
