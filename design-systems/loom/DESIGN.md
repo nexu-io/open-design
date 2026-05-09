@@ -11,7 +11,7 @@ A friendly, fast video-first async communication tool. Loom's design feels like 
 - **Color stance:** bright surfaces with purple accent
 - **Design intent:** keep outputs recognizable to this style family while preserving usability and readability
 
-## 2. Color
+## 2. Color Palette & Roles
 
 ### Surface Palette
 
@@ -63,7 +63,7 @@ Default. A content-first tool used in bright office environments.
 }
 ```
 
-## 3. Typography
+## 3. Typography Rules
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
@@ -90,27 +90,7 @@ Micro: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
 Mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 ```
 
-## 4. Spacing
-
-8px baseline grid. The 8px unit balances density for information-heavy layouts (video metadata, comment panels) against the generous whitespace Loom's brand conveys.
-
-```css
-:root {
-  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
-  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;   --space-10: 40px;
-  --space-12: 48px; --space-16: 64px;
-}
-```
-
-## 5. Layout & Composition
-
-Video-first layout. The video thumbnail dominates; metadata and actions cluster below. Clean horizontal rhythm with consistent 16px gaps between elements. Cards use 8px radius for a friendly but professional feel.
-
-### Responsive Behavior
-
-Video-first responsive layout. At narrower breakpoints, the video thumbnail stacks above metadata and actions. At ≥768px, a side-by-side layout (video left, actions right) activates. Touch targets minimum 44×44px at all breakpoints.
-
-## 6. Components
+## 4. Component Stylings
 
 ### Video Thumbnail Card
 
@@ -189,43 +169,33 @@ Video-first responsive layout. At narrower breakpoints, the video thumbnail stac
 }
 ```
 
-## 7. Motion & Interaction
+## 5. Layout Principles
 
-| Animation | Duration | Easing | Effect |
-|-----------|----------|--------|--------|
-| Card hover lift | 200ms | ease-out | translateY(-2px) + shadow increase |
-| Button press | 100ms | ease-out | scale(0.97) |
-| Overlay open | 200ms | ease-out | fade + scale(0.95→1) |
-| Skeleton shimmer | 1.5s | ease-in-out | background-position sweep |
+Video-first layout. The video thumbnail dominates; metadata and actions cluster below. Clean horizontal rhythm with consistent 16px gaps between elements. Cards use 8px radius for a friendly but professional feel.
 
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-```
+## 6. Depth & Elevation
 
-## 8. Voice & Brand
+Elevation is achieved through shadows only. `--shadow-card` for resting state, `--shadow-card-hover` for interactive lift, `--shadow-overlay` for modals and tooltips. No borders on cards — shadow conveys depth.
 
-### Iconography
+## 7. Do's and Don'ts
 
-Phosphor Icons (regular weight, 20px default) — single-stroke geometric style. 20px for inline, 24px for standalone. Violet `#625DF5` for active icons; gray `#6B6D76` for inactive.
-
-### Accessibility
-
-- Primary text on white: 13.8:1 (WCAG AAA)
-- Secondary text (#6B6D76) on white: 4.8:1 (WCAG AA)
-- Tertiary text (#9B9CA3) on white: 2.74:1 — use for timestamps/metadata only, not body
-- Error (#D64770) on white: 4.97:1 (WCAG AA for large text; 3.96:1 for normal text — use white text on error background for small text)
-- All interactive elements have a visible focus-visible state
-- Touch targets minimum 44×44px
-
-## 9. Anti-patterns
-
-- Do not use white text on Raspberry `#D64770` — use `#FDECEE` background with dark red text for WCAG AA compliance
 - Do not use Tertiary `#9B9CA3` for body text — timestamps and metadata only
 - Do not use semantic colors directly as text — always pair with a sufficiently contrasting background
 - Do not mix button variants in a single CSS block — use separate selectors
 - Do not use `line-height: 1.0` on buttons — diacritics, emoji, and CJK glyphs clip; use `1.2` minimum
+- Do not use `#D64770` (Error) for small text under 18px on white — it is 4.2:1, below the 4.5:1 AA threshold for normal text (14px). Use `#D64770` only for large text (18px+) or pair with a darker background surface
+- Do not use white text on `#D64770` background for normal text — white on #D64770 is also 4.2:1 (fails AA). Use `#FDECEE` (light pink) background with dark red text instead
+
+## 8. Responsive Behavior
+
+Video-first responsive layout. At narrower breakpoints, the video thumbnail stacks above metadata and actions. At ≥768px, a side-by-side layout (video left, actions right) activates. Touch targets minimum 44×44px at all breakpoints.
+
+## 9. Agent Prompt Guide
+
+When generating a Loom-style interface, prompt the model to:
+- Use Inter for all UI text; ui-monospace for code snippets
+- Apply `--radius-lg` (8px) to cards, `--radius-md` (6px) to buttons, `--radius-sm` (4px) to inputs
+- Use 200ms ease-out for card hover transitions, 100ms for button press
+- Include a recording indicator dot with a 1.5s pulse animation
+- Primary color `#625DF5` for all CTAs and active states
+- Ensure secondary text (#6B6D76) passes 4.5:1 on white before use; tertiary text (#9B9CA3) is for timestamps/metadata only

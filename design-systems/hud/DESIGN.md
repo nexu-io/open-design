@@ -32,7 +32,7 @@ HUD is purpose-built for:
 
 F-16 Fighting Falcon HUD, Apache AH-64 attack helicopter integrated display, F-35 helmet-mounted display system, Garmin G1000 flight deck. All share: phosphor green primary, decluttered minimalism, and information hierarchy driven by operational urgency.
 
-## 2. Color
+## 2. Color Palette & Roles
 
 ### Surface Palette
 
@@ -71,7 +71,7 @@ Dark mode is the native and only mode. A HUD is projected in low-light or high-g
 }
 ```
 
-## 3. Typography
+## 3. Typography Rules
 
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
@@ -92,31 +92,7 @@ Micro: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
 Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 ```
 
-## 4. Spacing
-
-8px baseline grid.
-
-```css
-:root {
-  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
-  --space-6: 24px; --space-8: 32px; --space-12: 48px;
-}
-```
-
-## 5. Layout & Composition
-
-HUDs are overlay systems — they display over a visual field. The layout is absolute-positioned overlays on a transparent or dark background. Information density is high; whitespace is used to separate data clusters, not for aesthetics.
-
-Key structural patterns:
-- Grid lines reference the center of the display (crosshair)
-- Data readouts cluster by update frequency (altitude updates slower than airspeed)
-- Warning states override all other information layers
-
-### Responsive Behavior
-
-HUD overlays are viewport-relative. On smaller viewports, data clusters compress proportionally. Critical readouts (speed, altitude, heading) remain visible at all sizes; secondary indicators hide or minimize. The layout uses a 12-column grid with absolute-positioned data panels anchored to screen edges.
-
-## 6. Components
+## 4. Component Stylings
 
 ### Data Readout
 
@@ -160,44 +136,38 @@ Dot or bar that reflects system state. Colors map to operational states.
 
 Reference marks for spatial orientation. Thin lines in `--data-tertiary`.
 
-## 7. Motion & Interaction
+## 5. Layout Principles
 
-Functional only. No decorative animation.
+HUDs are overlay systems — they display over a visual field. The layout is absolute-positioned overlays on a transparent or dark background. Information density is high; whitespace is used to separate data clusters, not for aesthetics.
 
-| Animation | Duration | Easing | Effect |
-|-----------|----------|--------|--------|
-| State transitions | 150ms | ease-out | Color/opacity change |
-| Panel reveals | 200ms | ease-out | Fade in |
-| Data value changes | 100ms | linear | Immediate feedback |
+Key structural patterns:
+- Grid lines reference the center of the display (crosshair)
+- Data readouts cluster by update frequency (altitude updates slower than airspeed)
+- Warning states override all other information layers
 
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-```
+## 6. Depth & Elevation
 
-## 8. Voice & Brand
+HUD overlays use opacity and glow rather than elevation shadows. Panels are distinguished by border color and subtle surface shifts, not drop shadows. The HUD exists in a single visual plane.
 
-Numeric and operational. All labels are uppercase monospace. No decorative copy — every word is a data point or a system label. Language is terse and functional: STATUS, ALTITUDE, HEADING, SPEED. No marketing language.
-
-### Accessibility
-
-- All data text meets WCAG AA 4.5:1 minimum contrast against background
-- Primary data (#00FF41) on #0A0A0A: 16.1:1
-- Secondary (#7FFF00) on #0A0A0A: 15.4:1
-- Tertiary (#5A9A5A) on #0A0A0A: 4.7:1 (grid lines only, not text)
-- Warning (#FFB800) on #0A0A0A: 9.6:1
-- No information is conveyed by color alone — state is reinforced by position and label
-- All interactive elements have a visible focus-visible state
-- Touch targets minimum 44×44px
-
-## 9. Anti-patterns
+## 7. Do's and Don'ts
 
 - Do not use tertiary `#5A9A5A` for body or readout text — only grid lines and reference marks
 - Do not animate elements that do not signal operational state
 - Do not provide a light mode — a HUD only exists in low-light or high-glare conditions
 - Do not use rounded corners greater than 50% (circle reticles only)
 - Do not use gradients — flat color fills only
+- Do not convey information by color alone — reinforce with position and label
+
+## 8. Responsive Behavior
+
+HUD overlays are viewport-relative. On smaller viewports, data clusters compress proportionally. Critical readouts (speed, altitude, heading) remain visible at all sizes; secondary indicators hide or minimize. The layout uses a 12-column grid with absolute-positioned data panels anchored to screen edges.
+
+## 9. Agent Prompt Guide
+
+When generating a HUD-style interface, prompt the model to:
+- Use JetBrains Mono for all data readouts; Inter (uppercase) for labels only
+- Set `--data-primary` to `#00FF41` for all active readouts
+- Apply 150ms ease-out for state transitions, 100ms linear for data value changes
+- Include a status indicator component with active/standby/warning/alert states
+- Ensure all text passes 4.5:1 contrast on `#0A0A0A`
+- Never add decorative animation or light mode variants

@@ -15,7 +15,7 @@ A professional-grade financial data terminal. Dense, information-rich layouts de
 
 Bloomberg Terminal, Refinitiv Eikon, FactSet, TradingView Pro. All share: dark-only surfaces, monospace data fonts, tabular layouts with no decorative spacing, and color-coded buy/sell signals.
 
-## 2. Color
+## 2. Color Palette & Roles
 
 ### Surface Palette
 
@@ -59,7 +59,7 @@ Default and only mode. Trading terminals operate in dim environments for focus.
 }
 ```
 
-## 3. Typography
+## 3. Typography Rules
 
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
@@ -80,26 +80,7 @@ Micro: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consola
 Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 ```
 
-## 4. Spacing
-
-4px baseline grid for maximum density.
-
-```css
-:root {
-  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
-  --space-6: 24px; --space-8: 32px; --space-12: 48px;
-}
-```
-
-## 5. Layout & Composition
-
-Grid-based dense layout. Multiple data columns visible simultaneously. Panels share borders, not gaps. No rounded corners — sharp edges communicate precision. The layout is tabular: rows of data, columns of similar data.
-
-### Responsive Behavior
-
-Terminal layouts target desktop-first (1280px+). On narrower viewports, columns collapse from rightmost to leftmost, prioritizing price and change data. Below 768px, single-column stack with horizontal scroll for overflow data. No breakpoints alter the dark-only constraint.
-
-## 6. Components
+## 4. Component Stylings
 
 ### Order Book Row
 
@@ -162,43 +143,34 @@ Horizontal scrolling single-line ticker for market overview.
 }
 ```
 
-## 7. Motion & Interaction
+## 5. Layout Principles
 
-Functional only. No decorative animation.
+Grid-based dense layout. Multiple data columns visible simultaneously. Panels share borders, not gaps. No rounded corners — sharp edges communicate precision. The layout is tabular: rows of data, columns of similar data.
 
-| Animation | Duration | Easing | Effect |
-|-----------|----------|--------|--------|
-| Price updates | 100ms | linear | Fade (no jarring jumps) |
-| Panel hover | 150ms | ease-out | Background-color change |
-| Tooltip | 100ms | ease-out | Fade in |
+## 6. Depth & Elevation
 
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-```
+Trading terminals use flat design with border-based separation — no shadows. Surface shifts (#141414 vs #0D0D0D) convey elevation. Thin borders (#2A2A2A) define panel boundaries without decorative elements.
 
-## 8. Voice & Brand
-
-Numeric and transactional. All labels are uppercase. No decorative copy — every word is a data point or a system label. Language is terse: PRICE, CHANGE, VOLUME, BID, ASK. No marketing language.
-
-### Accessibility
-
-- Text Primary (#FFFFFF) on #0D0D0D: 19.5:1 (WCAG AAA)
-- Text Secondary (#AAAAAA) on #0D0D0D: ~4.7:1 (WCAG AA)
-- Gain (#00D4AA) on #0D0D0D: 9.2:1 (WCAG AA)
-- Loss (#FF4757) on #0D0D0D: 5.9:1 (WCAG AA)
-- All data changes retain old value briefly before swapping to prevent flash blindness
-- All interactive elements have a visible focus-visible state
-- Touch targets minimum 44×44px
-
-## 9. Anti-patterns
+## 7. Do's and Don'ts
 
 - Do not use color alone to signal buy/sell — always pair with a directional icon or label
 - Do not animate data values decoratively — traders need instant, stable reads
 - Do not use rounded corners — sharp precision aesthetic only
 - Do not use light mode — trading terminals operate in dim environments
 - Do not show more than 5 price points in a column — cognitive overload reduces decision speed
+- Do not use gradients — flat fills only
+
+## 8. Responsive Behavior
+
+Terminal layouts target desktop-first (1280px+). On narrower viewports, columns collapse from rightmost to leftmost, prioritizing price and change data. Below 768px, single-column stack with horizontal scroll for overflow data. No breakpoints alter the dark-only constraint.
+
+## 9. Agent Prompt Guide
+
+When generating a trading terminal interface, prompt the model to:
+- Use JetBrains Mono for all numeric data; Inter for labels and headings
+- Always show gain/loss values in monospace with color coding (#00D4AA green, #FF4757 red)
+- No rounded corners on any element
+- Use 100ms transitions for price updates, 150ms for hover states
+- Never use light mode or bright backgrounds
+- Include a horizontal ticker bar with scrolling price updates
+- All data changes retain old value briefly before swapping to prevent flash blindness
