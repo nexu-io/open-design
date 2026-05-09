@@ -45,8 +45,9 @@ Expected: pnpm 10.33.2, no errors, all workspace packages linked.
 
 ```bash
 pnpm typecheck
-pnpm test
-pnpm check:residual-js
+pnpm guard
+pnpm --filter @open-design/web test
+pnpm --filter @open-design/daemon test
 ```
 Expected: all pass on the unmodified `feat/critique-theater` branch.
 
@@ -74,12 +75,12 @@ Expected: build completes; capture bundle size baseline for the size-limit gate 
 
 **Files:**
 - Create: `packages/contracts/src/critique.ts`
-- Test: `packages/contracts/src/critique.test.ts`
+- Test: `packages/contracts/tests/critique.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/contracts/src/critique.test.ts
+// packages/contracts/tests/critique.test.ts
 import { describe, expect, it } from 'vitest';
 import {
   CritiqueConfigSchema,
@@ -204,7 +205,7 @@ Expected: PASS, 5/5.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/contracts/src/critique.ts packages/contracts/src/critique.test.ts
+git add packages/contracts/src/critique.ts packages/contracts/tests/critique.test.ts
 git commit -m "feat(contracts): add CritiqueConfig schema and defaults"
 ```
 
@@ -212,11 +213,11 @@ git commit -m "feat(contracts): add CritiqueConfig schema and defaults"
 
 **Files:**
 - Modify: `packages/contracts/src/critique.ts`
-- Test: `packages/contracts/src/critique.test.ts`
+- Test: `packages/contracts/tests/critique.test.ts`
 
 - [ ] **Step 1: Add failing tests for the union exhaustiveness**
 
-Append to `packages/contracts/src/critique.test.ts`:
+Append to `packages/contracts/tests/critique.test.ts`:
 ```ts
 import { isPanelEvent, type PanelEvent } from './critique';
 
@@ -316,7 +317,7 @@ Expected: PASS, all assertions.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/contracts/src/critique.ts packages/contracts/src/critique.test.ts
+git add packages/contracts/src/critique.ts packages/contracts/tests/critique.test.ts
 git commit -m "feat(contracts): add PanelEvent discriminated union and isPanelEvent guard"
 ```
 
@@ -325,7 +326,7 @@ git commit -m "feat(contracts): add PanelEvent discriminated union and isPanelEv
 **Files:**
 - Modify: `packages/contracts/src/sse.ts` (existing)
 - Modify: `packages/contracts/src/index.ts` (re-export critique)
-- Test: `packages/contracts/src/sse.test.ts`
+- Test: `packages/contracts/tests/sse.test.ts`
 
 - [ ] **Step 1: Inspect the existing `sse.ts` to learn its pattern**
 
@@ -337,7 +338,7 @@ Expected: existing `SseEvent` discriminated union pattern. Match it exactly when
 - [ ] **Step 2: Write the failing test**
 
 ```ts
-// packages/contracts/src/sse.test.ts (append, do not overwrite if file exists)
+// packages/contracts/tests/sse.test.ts (append, do not overwrite if file exists)
 import { describe, expect, it } from 'vitest';
 import { isSseEvent, panelEventToSse, type SseEvent } from './sse';
 
@@ -401,7 +402,7 @@ pnpm --filter @open-design/contracts test
 Expected: all sse tests pass.
 
 ```bash
-git add packages/contracts/src/sse.ts packages/contracts/src/sse.test.ts packages/contracts/src/index.ts
+git add packages/contracts/src/sse.ts packages/contracts/tests/sse.test.ts packages/contracts/src/index.ts
 git commit -m "feat(contracts): extend SseEvent with critique.* variants and panelEventToSse mapper"
 ```
 
@@ -449,12 +450,12 @@ git commit -m "test(critique): add v1 wire-protocol golden fixtures"
 - Create: `apps/daemon/src/critique/parser.ts`
 - Create: `apps/daemon/src/critique/parsers/v1.ts`
 - Create: `apps/daemon/src/critique/errors.ts`
-- Test: `apps/daemon/src/critique/__tests__/parser.test.ts`
+- Test: `apps/daemon/tests/critique/parser.test.ts`
 
 - [ ] **Step 1: Write the failing test against the happy fixture**
 
 ```ts
-// apps/daemon/src/critique/__tests__/parser.test.ts
+// apps/daemon/tests/critique/parser.test.ts
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -776,7 +777,7 @@ git commit -m "feat(daemon): add v1 streaming parser for Critique Theater wire p
 ### Task 2.3: Cover failure-mode fixtures
 
 **Files:**
-- Modify: `apps/daemon/src/critique/__tests__/parser.test.ts`
+- Modify: `apps/daemon/tests/critique/parser.test.ts`
 
 - [ ] **Step 1: Add failing tests for malformed inputs**
 
@@ -843,12 +844,12 @@ git commit -m "test(daemon): cover parser failure modes with golden fixtures"
 
 **Files:**
 - Create: `apps/daemon/src/critique/scoreboard.ts`
-- Test: `apps/daemon/src/critique/__tests__/scoreboard.test.ts`
+- Test: `apps/daemon/tests/critique/scoreboard.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// apps/daemon/src/critique/__tests__/scoreboard.test.ts
+// apps/daemon/tests/critique/scoreboard.test.ts
 import { describe, expect, it } from 'vitest';
 import { defaultCritiqueConfig } from '@open-design/contracts/critique';
 import { computeComposite } from '../scoreboard';
@@ -909,7 +910,7 @@ pnpm --filter @open-design/daemon test scoreboard.test.ts
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/daemon/src/critique/scoreboard.ts apps/daemon/src/critique/__tests__/scoreboard.test.ts
+git add apps/daemon/src/critique/scoreboard.ts apps/daemon/tests/critique/scoreboard.test.ts
 git commit -m "feat(daemon): scoreboard composite formula with weight redistribution"
 ```
 
@@ -917,7 +918,7 @@ git commit -m "feat(daemon): scoreboard composite formula with weight redistribu
 
 **Files:**
 - Modify: `apps/daemon/src/critique/scoreboard.ts`
-- Modify: `apps/daemon/src/critique/__tests__/scoreboard.test.ts`
+- Modify: `apps/daemon/tests/critique/scoreboard.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -980,7 +981,7 @@ pnpm --filter @open-design/daemon test scoreboard.test.ts
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/daemon/src/critique/scoreboard.ts apps/daemon/src/critique/__tests__/scoreboard.test.ts
+git add apps/daemon/src/critique/scoreboard.ts apps/daemon/tests/critique/scoreboard.test.ts
 git commit -m "feat(daemon): scoreboard round-end gate with maxRounds fallback"
 ```
 
@@ -988,7 +989,7 @@ git commit -m "feat(daemon): scoreboard round-end gate with maxRounds fallback"
 
 **Files:**
 - Modify: `apps/daemon/src/critique/scoreboard.ts`
-- Modify: `apps/daemon/src/critique/__tests__/scoreboard.test.ts`
+- Modify: `apps/daemon/tests/critique/scoreboard.test.ts`
 
 - [ ] **Step 1: Write failing test**
 
@@ -1054,7 +1055,7 @@ git commit -m "feat(daemon): fallback-policy round selector"
 **Files:**
 - Create: `apps/daemon/src/db/migrations/0042_critique_rounds.up.sql` (number after the latest existing migration; rename if collides)
 - Create: `apps/daemon/src/db/migrations/0042_critique_rounds.down.sql`
-- Test: `apps/daemon/src/db/__tests__/migrations.test.ts` (extend existing)
+- Test: `apps/daemon/tests/db/migrations.test.ts` (extend existing)
 
 - [ ] **Step 1: Inspect current migration list to pick the next ordinal**
 
@@ -1089,7 +1090,7 @@ ALTER TABLE artifacts DROP COLUMN critique_score;
 - [ ] **Step 3: Add a migration test that exercises up/down round-trip**
 
 ```ts
-// apps/daemon/src/db/__tests__/migrations.test.ts (append)
+// apps/daemon/tests/db/migrations.test.ts (append)
 import Database from 'better-sqlite3';
 import { runMigrationsTo, migrationIds } from '../runner';
 
@@ -1122,7 +1123,7 @@ git commit -m "feat(daemon): add critique_* columns to artifacts via reversible 
 
 **Files:**
 - Create: `apps/daemon/src/critique/transcript.ts`
-- Test: `apps/daemon/src/critique/__tests__/transcript.test.ts`
+- Test: `apps/daemon/tests/critique/transcript.test.ts`
 
 - [ ] **Step 1: Failing test**
 
@@ -1193,7 +1194,7 @@ export async function writeTranscript(
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/daemon/src/critique/transcript.ts apps/daemon/src/critique/__tests__/transcript.test.ts
+git add apps/daemon/src/critique/transcript.ts apps/daemon/tests/critique/transcript.test.ts
 git commit -m "feat(daemon): transcript writer with ndjson + gzip threshold"
 ```
 
@@ -1201,7 +1202,7 @@ git commit -m "feat(daemon): transcript writer with ndjson + gzip threshold"
 
 **Files:**
 - Create: `apps/daemon/src/critique/orchestrator.ts`
-- Test: `apps/daemon/src/critique/__tests__/orchestrator.test.ts`
+- Test: `apps/daemon/tests/critique/orchestrator.test.ts`
 - Modify: `apps/daemon/src/agents/spawn.ts` (existing) to call orchestrator when `enabled`
 
 - [ ] **Step 1: Failing test against the happy fixture wired through orchestrator**
@@ -1365,7 +1366,7 @@ function writeTranscriptSync(dir: string, events: PanelEvent[]): string {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/daemon/src/critique/orchestrator.ts apps/daemon/src/critique/__tests__/orchestrator.test.ts
+git add apps/daemon/src/critique/orchestrator.ts apps/daemon/tests/critique/orchestrator.test.ts
 git commit -m "feat(daemon): orchestrator wires parser, scoreboard, SSE, and persistence"
 ```
 
@@ -1389,7 +1390,7 @@ In `spawn.ts`, after stdout is established, branch on `cfg.enabled`:
 - [ ] **Step 3: Add an integration test**
 
 ```ts
-// apps/daemon/src/agents/__tests__/spawn-critique.test.ts
+// apps/daemon/tests/agents/spawn-critique.test.ts
 import { spawnAgent } from '../spawn';
 
 it('routes through critique orchestrator when OD_CRITIQUE_ENABLED=true', async () => {
@@ -1421,7 +1422,7 @@ git commit -m "feat(daemon): branch agent spawn through critique orchestrator wh
 
 **Files:**
 - Create: `apps/web/src/prompts/panel.ts`
-- Test: `apps/web/src/prompts/__tests__/panel.test.ts`
+- Test: `apps/web/tests/prompts/panel.test.ts`
 
 - [ ] **Step 1: Failing snapshot test**
 
@@ -1529,7 +1530,7 @@ Skill: ${skill.id}.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/prompts/panel.ts apps/web/src/prompts/__tests__/panel.test.ts
+git add apps/web/src/prompts/panel.ts apps/web/tests/prompts/panel.test.ts
 git commit -m "feat(web): add Critique Theater prompt protocol addendum"
 ```
 
@@ -1547,7 +1548,7 @@ grep -n "compose\|render\|prompt" apps/web/src/prompts/discovery.ts | head -20
 - [ ] **Step 2: Add failing test that final composed prompt contains PROTOCOL block**
 
 ```ts
-// apps/web/src/prompts/__tests__/discovery.test.ts (extend)
+// apps/web/tests/prompts/discovery.test.ts (extend)
 it('appends Critique Theater protocol when cfg.enabled', () => {
   const out = composeDiscoveryPrompt({ ...input, critique: { enabled: true } });
   expect(out).toContain('<CRITIQUE_RUN');
@@ -1593,7 +1594,7 @@ git commit -m "feat(web): wire panel prompt addendum into discovery composer"
 
 **Files:**
 - Create: `apps/daemon/src/api/projects/critique/interrupt.ts`
-- Test: `apps/daemon/src/api/projects/critique/__tests__/interrupt.test.ts`
+- Test: `apps/daemon/tests/api/projects/critique/interrupt.test.ts`
 
 - [ ] **Step 1: Failing test**
 
@@ -1641,7 +1642,7 @@ git commit -m "feat(daemon): /api/projects/:id/critique/:runId/interrupt endpoin
 
 **Files:**
 - Create: `apps/daemon/src/api/projects/critique/rerun.ts`
-- Test: `apps/daemon/src/api/projects/critique/__tests__/rerun.test.ts`
+- Test: `apps/daemon/tests/api/projects/critique/rerun.test.ts`
 
 - [ ] **Step 1–5: Same TDD shape as 6.1.** Endpoint resolves the original brief, builds a new artifact row (immutable original), and starts a fresh run with the previous artifact attached as prior-art context.
 
@@ -1657,7 +1658,7 @@ git commit -m "feat(daemon): /api/projects/:id/artifacts/:artifactId/critique/re
 
 **Files:**
 - Create: `apps/web/src/components/Theater/state/reducer.ts`
-- Test: `apps/web/src/components/Theater/state/__tests__/reducer.test.ts`
+- Test: `apps/web/tests/components/Theater/state/reducer.test.ts`
 
 - [ ] **Step 1: Write failing reducer tests**
 
@@ -1800,7 +1801,7 @@ git commit -m "feat(web): pure reducer for Critique Theater states"
 
 **Files:**
 - Create: `apps/web/src/components/Theater/hooks/useCritiqueStream.ts`
-- Test: `apps/web/src/components/Theater/hooks/__tests__/useCritiqueStream.test.tsx`
+- Test: `apps/web/tests/components/Theater/hooks/useCritiqueStream.test.tsx`
 
 - [ ] **Step 1–5:** Standard React hook TDD. Hook subscribes to the existing `useProjectEvents()` SSE bus, filters to `critique.*` events, feeds them into the reducer via `useReducer`, and returns `[state, dispatch]`. Use RTL with a stub event source to drive the test.
 
@@ -1812,7 +1813,7 @@ git commit -m "feat(web): useCritiqueStream hook subscribes to SSE and feeds red
 
 **Files:**
 - Create: `apps/web/src/components/Theater/hooks/useCritiqueReplay.ts`
-- Test: same `__tests__/`
+- Test: same `tests/` component area
 
 - [ ] **Step 1–5:** Hook fetches `transcript_path`, decompresses if `.gz`, splits ndjson lines, dispatches into the reducer at the chosen speed. Test with a fixture transcript on disk.
 
@@ -1839,7 +1840,7 @@ For each of `PanelistLane.tsx`, `ScoreTicker.tsx`, `RoundDivider.tsx`, `TheaterS
 - [ ] **Step 5: Commit.** One component per commit:
 
 ```bash
-git add apps/web/src/components/Theater/<Component>.tsx apps/web/src/components/Theater/__tests__/<Component>.test.tsx
+git add apps/web/src/components/Theater/<Component>.tsx apps/web/tests/components/Theater/<Component>.test.tsx
 git commit -m "feat(web): Theater <Component>"
 ```
 
@@ -1944,7 +1945,7 @@ The conformance harness runs against every adapter listed `status: production` i
 - Create: `apps/daemon/src/critique/__fixtures__/adapters/synthetic-good.ts` — child-process stub that writes `happy-3-rounds.txt`.
 - Create: `apps/daemon/src/critique/__fixtures__/adapters/synthetic-bad.ts` — stub that writes `malformed-unbalanced.txt`.
 
-- [ ] **Step 1–5:** Write each as a tiny Node script invoked through the daemon's existing CLI-spawn primitive. Tests in `apps/daemon/src/critique/__tests__/conformance.test.ts` register both as fake adapters and assert good ⇒ shipped, bad ⇒ degraded with `critique:degraded` mark and 24h TTL.
+- [ ] **Step 1–5:** Write each as a tiny Node script invoked through the daemon's existing CLI-spawn primitive. Tests in `apps/daemon/tests/critique/conformance.test.ts` register both as fake adapters and assert good ⇒ shipped, bad ⇒ degraded with `critique:degraded` mark and 24h TTL.
 
 ```bash
 git commit -m "feat(daemon): adapter conformance synthetic fixtures and degraded TTL"
@@ -2012,7 +2013,7 @@ git commit -m "test(a11y): Theater self-audits to WCAG AA"
 
 **Files:**
 - Modify: `apps/daemon/src/metrics/index.ts` (existing)
-- Test: `apps/daemon/src/metrics/__tests__/critique.test.ts`
+- Test: `apps/daemon/tests/metrics/critique.test.ts`
 
 - [ ] **Step 1: Failing test.** Register the metrics, drive a synthetic run through the orchestrator, scrape `/api/metrics`, assert the named series exist with sane labels.
 
@@ -2194,7 +2195,7 @@ git commit -m "chore(rollout): M0 ships behind OD_CRITIQUE_ENABLED=false"
 
 ### Task 15.2: Final validation matrix
 
-- [ ] **Step 1: Run** `pnpm typecheck`, `pnpm test`, `pnpm test:ui`, `pnpm test:e2e:live`, `pnpm build`, `pnpm check:residual-js`, `pnpm check:dead-exports`, `pnpm check:critique-coverage`, `pnpm size-limit`. All must pass.
+- [ ] **Step 1: Run** `pnpm guard`, `pnpm typecheck`, package-scoped tests/builds for changed packages, `pnpm -C e2e test:ui`, `pnpm -C e2e test:e2e:live`, `pnpm check:dead-exports`, `pnpm check:critique-coverage`, `pnpm size-limit`. All must pass.
 
 - [ ] **Step 2: Run** `pnpm tools-dev run web --daemon-port 17456 --web-port 17573` and validate live happy path with a real CLI on PATH.
 
@@ -2213,8 +2214,8 @@ gh pr create --title "feat: Critique Theater (panel-tempered, scored, replayable
 - Zero new processes; same BYOK story; works across all 12 adapters with conformance grading.
 
 ## Test plan
-- [ ] pnpm typecheck && pnpm test && pnpm test:ui
-- [ ] pnpm test:e2e:live (Playwright happy + interrupt + visual + a11y)
+- [ ] pnpm guard && pnpm typecheck && pnpm -C e2e test:ui
+- [ ] pnpm -C e2e test:e2e:live (Playwright happy + interrupt + visual + a11y)
 - [ ] pnpm size-limit (Theater bundle < 18 KiB gz)
 - [ ] pnpm check:critique-coverage (no orphan surfaces)
 - [ ] manual: enable in Settings, submit a brief, watch Theater, ship at >= 8.0

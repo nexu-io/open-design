@@ -23,8 +23,16 @@ interface State {
   // arrives intact in one chunk is rejected before its body is sliced and emitted.
   // The post-drain check on state.buf only catches *unclosed* runaway blocks.
   parserMaxBlockBytes: number;
+  // Threaded from parser options into ship event artifactRef so downstream
+  // consumers see the real run identity instead of empty placeholders.
+  projectId: string;
+  artifactId: string;
   inRun: boolean;
   currentRound: number | null;
+  // Count of <ROUND_END> events fired since the last <CRITIQUE_RUN> opener.
+  // Used by the SHIP envelope guard: a SHIP that arrives before any round
+  // completes is malformed and must be rejected.
+  roundsClosed: number;
   shipSeen: boolean;
   designerArtifactInRound1: boolean;
   lastAdvance: number;
@@ -32,7 +40,13 @@ interface State {
 
 export async function* parseV1(
   source: AsyncIterable<string>,
-  opts: { runId: string; adapter: string; parserMaxBlockBytes: number },
+  opts: {
+    runId: string;
+    adapter: string;
+    parserMaxBlockBytes: number;
+    projectId?: string;
+    artifactId?: string;
+  },
 ): AsyncIterable<PanelEvent> {
   const state: State = {
     buf: '',
@@ -42,8 +56,11 @@ export async function* parseV1(
     protocolVersion: 1,
     scoreScale: DEFAULT_SCORE_SCALE,
     parserMaxBlockBytes: opts.parserMaxBlockBytes,
+    projectId: opts.projectId ?? '',
+    artifactId: opts.artifactId ?? '',
     inRun: false,
     currentRound: null,
+    roundsClosed: 0,
     shipSeen: false,
     designerArtifactInRound1: false,
     lastAdvance: 0,
@@ -275,6 +292,7 @@ function* drain(state: State): Generator<PanelEvent> {
         reason,
       };
       state.currentRound = null;
+      state.roundsClosed += 1;
       cursor += closeIdx + '</ROUND_END>'.length;
       state.lastAdvance = state.consumed + cursor;
       continue;
@@ -292,6 +310,15 @@ function* drain(state: State): Generator<PanelEvent> {
       if (!state.inRun) {
         throw new MalformedBlockError(
           `<SHIP> at position ${state.consumed + cursor} appeared before <CRITIQUE_RUN>`,
+          state.consumed + cursor,
+        );
+      }
+      // Envelope guard: SHIP must not arrive before at least one round has
+      // completed. A stream that skips directly from <CRITIQUE_RUN> to <SHIP>
+      // bypasses the round-1 designer-artifact invariant.
+      if (state.roundsClosed === 0) {
+        throw new MalformedBlockError(
+          `<SHIP> at position ${state.consumed + cursor} appeared before any <ROUND_END>`,
           state.consumed + cursor,
         );
       }
@@ -329,6 +356,15 @@ function* drain(state: State): Generator<PanelEvent> {
       }
       const attrs = parseAttrs(slice.slice('<SHIP'.length, headEnd));
       const inner = slice.slice(headEnd + 1, closeIdx);
+
+      // Validate that a non-empty <ARTIFACT> block is present inside <SHIP>.
+      const artifactMatch = inner.match(/<ARTIFACT\b[^>]*>([\s\S]*?)<\/ARTIFACT>/);
+      if (!artifactMatch || artifactMatch[1] === undefined || artifactMatch[1].trim().length === 0) {
+        throw new MissingArtifactError(
+          `<SHIP> at position ${state.consumed + cursor} contains no <ARTIFACT> block or the block is empty`,
+        );
+      }
+
       const summary = (inner.match(/<SUMMARY>([\s\S]*?)<\/SUMMARY>/)?.[1] ?? '').trim();
 
       const rawStatus = attrs['status'] ?? '';
@@ -345,7 +381,7 @@ function* drain(state: State): Generator<PanelEvent> {
         round: Number(attrs['round'] ?? '0'),
         composite: Number(attrs['composite'] ?? '0'),
         status,
-        artifactRef: { projectId: '', artifactId: '' },
+        artifactRef: { projectId: state.projectId, artifactId: state.artifactId },
         summary,
       };
       cursor += closeIdx + '</SHIP>'.length;

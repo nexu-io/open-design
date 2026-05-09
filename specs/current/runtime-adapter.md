@@ -109,14 +109,15 @@ These four runtimes currently use the unified `json-event-stream` output format,
 Codex currently uses:
 
 ```bash
-codex exec --json --skip-git-repo-check --full-auto -C <cwd> <prompt>
+codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true -C <cwd>
 ```
 
 The current integration uses the lightweight structured path through `exec --json`. Compared with the original plain-text `codex exec`, this path adds:
 
 - `--json`: structured event output
 - `--skip-git-repo-check`: allows running in a temporary working directory
-- `--full-auto`: non-interactive automatic execution
+- `--sandbox workspace-write`: allows Codex to edit within the project workspace without using the deprecated `--full-auto` shortcut
+- `-c sandbox_workspace_write.network_access=true`: keeps network access enabled inside the workspace-write sandbox
 - `-C <cwd>`: explicit working directory
 
 The daemon currently maps:
@@ -177,6 +178,26 @@ The daemon currently maps:
 - `result.usage` → `usage`
 
 Cursor outputs both partial assistant chunks and the final aggregated assistant message. The daemon currently prioritizes partial chunks and ignores the final aggregated text after partial chunks have appeared, avoiding duplicate rendering.
+
+#### Qoder
+
+Qoder currently uses:
+
+```bash
+qodercli -p --output-format stream-json --permission-mode bypass_permissions
+```
+
+The daemon delivers the composed prompt over stdin rather than argv. When runtime context is available, `--cwd <cwd>` is appended. When the user selects a model, `--model <id>` is appended. Additional readable directories are passed as repeated `--add-dir <dir>` pairs.
+
+Validated uploaded image paths are passed as repeated `--attachment <path>` pairs so Qoder receives the original multimodal context in addition to the textual `@path` prompt hint.
+
+The daemon parses Qoder stream-json output through `apps/daemon/src/qoder-stream.ts` and currently maps:
+
+- `system(subtype=init)` → `status(initializing)`
+- assistant text content blocks → `text_delta`
+- thinking content blocks → `thinking_start` / `thinking_delta`
+- assistant error records → `error`
+- result usage metadata → `usage`
 
 ### Qwen: Plain Text Pass-through
 

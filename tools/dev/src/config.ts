@@ -168,7 +168,7 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
     apps: {
       daemon: {
         ...daemon,
-        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/daemon/sidecar/index.ts"),
+        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/daemon/src/sidecar/index.ts"),
       },
       desktop: {
         ...desktop,

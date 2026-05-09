@@ -1,54 +1,138 @@
-// @ts-nocheck
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import type { Writable } from 'node:stream';
 import path from 'node:path';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
 
-function sendRpc(writable, id, method, params) {
+type JsonRpcId = string | number;
+type JsonObject = Record<string, unknown>;
+type RpcWritable = Pick<Writable, 'write' | 'end'>;
+type AcpChildProcess = ChildProcess;
+type TimerHandle = ReturnType<typeof setTimeout>;
+
+export interface AcpMcpServerInput {
+  type?: unknown;
+  name?: unknown;
+  command?: unknown;
+  args?: unknown;
+  env?: unknown;
+}
+
+interface AcpSessionOptions {
+  mcpServers?: AcpMcpServerInput[];
+}
+
+export interface ModelOption {
+  id: string;
+  label: string;
+}
+
+interface DetectAcpModelsOptions {
+  bin: string;
+  args: string[];
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+  clientName?: string;
+  clientVersion?: string;
+  defaultModelOption?: ModelOption;
+}
+
+interface AttachAcpSessionOptions {
+  child: AcpChildProcess;
+  prompt: string;
+  cwd?: string;
+  model?: string | null;
+  mcpServers?: AcpMcpServerInput[];
+  send: (event: string, payload: unknown) => void;
+  clientName?: string;
+  clientVersion?: string;
+  stageTimeoutMs?: number;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function asObject(value: unknown): JsonObject | null {
+  return value && typeof value === 'object' ? value as JsonObject : null;
+}
+
+export function buildAcpSessionNewParams(cwd: string, { mcpServers }: AcpSessionOptions = {}) {
+  const servers = Array.isArray(mcpServers) ? mcpServers : [];
+  return {
+    cwd: path.resolve(cwd),
+    // MCP is an optional compatibility layer. Default to no MCP servers so ACP
+    // agents can run through the skill + CLI path without MCP support. Do not
+    // auto-install or mutate user/global MCP config; callers must pass an
+    // explicit per-session MCP descriptor when a compatible agent supports it.
+    // Normalize to the ACP stdio server shape expected by Kimi/Hermes.
+    mcpServers: servers.map((s) => ({
+      type: typeof s?.type === 'string' ? s.type : 'stdio',
+      name: typeof s?.name === 'string' ? s.name : '',
+      command: typeof s?.command === 'string' ? s.command : '',
+      args: Array.isArray(s?.args) ? s.args : [],
+      env: Array.isArray(s?.env) ? s.env : [],
+    })),
+  };
+}
+
+function sendRpc(writable: RpcWritable, id: JsonRpcId, method: string, params: unknown): void {
   writable.write(
     `${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`,
   );
 }
 
-function sendRpcResult(writable, id, result) {
+function sendRpcResult(writable: RpcWritable, id: JsonRpcId, result: unknown): void {
   writable.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
 }
 
-function isJsonRpcId(value) {
+function isJsonRpcId(value: unknown): value is JsonRpcId {
   return typeof value === 'number' || typeof value === 'string';
 }
 
-function rpcErrorMessage(raw) {
-  if (!raw || typeof raw !== 'object' || !raw.error || typeof raw.error !== 'object') {
+function rpcErrorMessage(raw: unknown): string {
+  const obj = asObject(raw);
+  const error = asObject(obj?.error);
+  if (!obj || !error) {
     return '';
   }
   const message =
-    typeof raw.error.message === 'string'
-      ? raw.error.message
-      : typeof raw.error.code === 'number'
-        ? String(raw.error.code)
+    typeof error.message === 'string'
+      ? error.message
+      : typeof error.code === 'number'
+        ? String(error.code)
         : 'json-rpc error';
-  return typeof raw.id === 'number'
-    ? `json-rpc id ${raw.id}: ${message}`
+  return typeof obj.id === 'number'
+    ? `json-rpc id ${obj.id}: ${message}`
     : message;
 }
 
-function formatUsage(usage) {
-  if (!usage || typeof usage !== 'object') return null;
-  const out = {};
-  if (typeof usage.inputTokens === 'number') out.input_tokens = usage.inputTokens;
-  if (typeof usage.outputTokens === 'number') out.output_tokens = usage.outputTokens;
-  if (typeof usage.cachedReadTokens === 'number') {
-    out.cached_read_tokens = usage.cachedReadTokens;
+interface FormattedUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cached_read_tokens?: number;
+  thought_tokens?: number;
+  total_tokens?: number;
+}
+
+function formatUsage(usage: unknown): FormattedUsage | null {
+  const src = asObject(usage);
+  if (!src) return null;
+  const out: FormattedUsage = {};
+  if (typeof src.inputTokens === 'number') out.input_tokens = src.inputTokens;
+  if (typeof src.outputTokens === 'number') out.output_tokens = src.outputTokens;
+  if (typeof src.cachedReadTokens === 'number') {
+    out.cached_read_tokens = src.cachedReadTokens;
   }
-  if (typeof usage.thoughtTokens === 'number') out.thought_tokens = usage.thoughtTokens;
-  if (typeof usage.totalTokens === 'number') out.total_tokens = usage.totalTokens;
+  if (typeof src.thoughtTokens === 'number') out.thought_tokens = src.thoughtTokens;
+  if (typeof src.totalTokens === 'number') out.total_tokens = src.totalTokens;
   return Object.keys(out).length > 0 ? out : null;
 }
 
-function choosePermissionOutcome(options) {
+function choosePermissionOutcome(options: unknown): string | null {
   const list = Array.isArray(options) ? options : [];
   const approveForSession = list.find((option) => option?.optionId === 'approve_for_session');
   if (approveForSession) return 'approve_for_session';
@@ -59,10 +143,11 @@ function choosePermissionOutcome(options) {
   return null;
 }
 
-function normalizeModels(models, defaultModelOption) {
-  const available = Array.isArray(models?.availableModels) ? models.availableModels : [];
+function normalizeModels(models: unknown, defaultModelOption: ModelOption): ModelOption[] {
+  const modelsObj = asObject(models);
+  const available = Array.isArray(modelsObj?.availableModels) ? modelsObj.availableModels : [];
   const currentModelId =
-    typeof models?.currentModelId === 'string' ? models.currentModelId : null;
+    typeof modelsObj?.currentModelId === 'string' ? modelsObj.currentModelId : null;
   const seen = new Set([defaultModelOption.id]);
   const out = [defaultModelOption];
   for (const model of available) {
@@ -77,10 +162,10 @@ function normalizeModels(models, defaultModelOption) {
   return out;
 }
 
-export function createJsonLineStream(onMessage) {
+export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
   return {
-    feed(chunk) {
+    feed(chunk: string) {
       buffer += chunk;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -111,16 +196,17 @@ export async function detectAcpModels({
   bin,
   args,
   cwd = process.cwd(),
+  env = process.env,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   clientName = 'open-design-detect',
   clientVersion = 'runtime-adapter',
   defaultModelOption = { id: 'default', label: 'Default (CLI config)' },
-}) {
-  return await new Promise((resolve, reject) => {
+}: DetectAcpModelsOptions): Promise<ModelOption[]> {
+  return await new Promise<ModelOption[]>((resolve, reject) => {
     const child = spawn(bin, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...env },
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -130,7 +216,8 @@ export async function detectAcpModels({
     let expectedId = 1;
     let nextId = 2;
 
-    const finish = (fn, value) => {
+    let timer: TimerHandle;
+    const finish = <T extends ModelOption[] | Error>(fn: (value: T) => void, value: T) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -140,41 +227,46 @@ export async function detectAcpModels({
       fn(value);
     };
 
-    const fail = (message) => {
+    const fail = (message: string) => {
       finish(reject, new Error(message));
       if (!child.killed) child.kill('SIGTERM');
     };
 
-    const writeRpc = (id, method, params) => {
+    const writeRpc = (id: JsonRpcId, method: string, params: unknown) => {
       try {
         sendRpc(child.stdin, id, method, params);
       } catch (err) {
-        fail(`stdin write failed: ${err.message}`);
+        fail(`stdin write failed: ${errorMessage(err)}`);
       }
     };
 
     const sendSessionNew = () => {
       expectedId = nextId;
-      writeRpc(nextId, 'session/new', {
-        cwd: path.resolve(cwd),
-        mcpServers: [],
-      });
+      writeRpc(nextId, 'session/new', buildAcpSessionNewParams(cwd));
       nextId += 1;
     };
 
     const parser = createJsonLineStream((raw) => {
+      const obj = asObject(raw);
+      const error = asObject(obj?.error);
+      const result = asObject(obj?.result);
       const rpcErr = rpcErrorMessage(raw);
       if (rpcErr) {
+        // JSON-RPC -32603 "Internal error" during model detection:
+        // If this is for the current expected-id (initialize/session/new),
+        // it's a real probe failure — reject immediately.
+        // Otherwise it's cleanup noise — suppress it.
+        if (error?.code === -32603 && obj?.id !== expectedId) return;
         fail(rpcErr);
         return;
       }
-      if (raw.id !== expectedId || !raw.result || typeof raw.result !== 'object') return;
+      if (obj?.id !== expectedId || !result) return;
       if (expectedId === 1) {
         sendSessionNew();
         return;
       }
       if (expectedId === 2) {
-        const models = normalizeModels(raw.result.models, defaultModelOption);
+        const models = normalizeModels(result.models, defaultModelOption);
         finish(resolve, models);
         if (!child.killed) child.kill('SIGTERM');
       }
@@ -196,7 +288,7 @@ export async function detectAcpModels({
       }
     });
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       fail(`ACP model detection timed out after ${timeoutMs}ms`);
     }, timeoutMs);
 
@@ -213,37 +305,45 @@ export function attachAcpSession({
   prompt,
   cwd,
   model,
+  mcpServers,
   send,
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
-}) {
+}: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
+  if (!child.stdin || !child.stdout) {
+    throw new Error('ACP child process must expose stdin and stdout streams');
+  }
+  const stdin = child.stdin;
+  const stdout = child.stdout;
   let expectedId = 1;
   let nextId = 2;
-  let promptRequestId = null;
-  let sessionId = null;
-  let activeModel = null;
+  let promptRequestId: JsonRpcId | null = null;
+  let setModelRequestId: JsonRpcId | null = null;
+  let sessionId: string | null = null;
+  let activeModel: string | null = null;
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let finished = false;
   let fatal = false;
-  let stageTimer = null;
+  let aborted = false;
+  let stageTimer: TimerHandle | null = null;
 
-  const resetStageTimer = (label) => {
-    clearTimeout(stageTimer);
+  const resetStageTimer = (label: string) => {
+    if (stageTimer) clearTimeout(stageTimer);
     stageTimer = setTimeout(() => {
       fail(`ACP ${label} timed out after ${stageTimeoutMs}ms`);
     }, stageTimeoutMs);
   };
 
   const clearStageTimer = () => {
-    clearTimeout(stageTimer);
+    if (stageTimer) clearTimeout(stageTimer);
     stageTimer = null;
   };
 
-  const fail = (message) => {
+  const fail = (message: string) => {
     if (finished) return;
     finished = true;
     fatal = true;
@@ -252,12 +352,12 @@ export function attachAcpSession({
     if (!child.killed) child.kill('SIGTERM');
   };
 
-  const writeRpc = (id, method, params, timeoutLabel) => {
+  const writeRpc = (id: JsonRpcId, method: string, params: unknown, timeoutLabel: string) => {
     resetStageTimer(timeoutLabel);
     try {
-      sendRpc(child.stdin, id, method, params);
+      sendRpc(stdin, id, method, params);
     } catch (err) {
-      fail(`stdin write failed: ${err.message}`);
+      fail(`stdin write failed: ${errorMessage(err)}`);
     }
   };
 
@@ -276,37 +376,72 @@ export function attachAcpSession({
     nextId += 1;
   };
 
-  const replyPermission = (raw) => {
-    const optionId = choosePermissionOutcome(raw.params?.options);
+  const replyPermission = (raw: JsonObject) => {
+    const params = asObject(raw.params);
+    const optionId = choosePermissionOutcome(params?.options);
     if (!optionId || !isJsonRpcId(raw.id)) {
       fail(`unhandled ACP permission request: ${JSON.stringify(raw)}`);
       return;
     }
     resetStageTimer('session/request_permission');
     try {
-      sendRpcResult(child.stdin, raw.id, {
+      sendRpcResult(stdin, raw.id, {
         outcome: { outcome: 'selected', optionId },
       });
     } catch (err) {
-      fail(`stdin write failed: ${err.message}`);
+      fail(`stdin write failed: ${errorMessage(err)}`);
     }
   };
 
   const parser = createJsonLineStream((raw, rawLine) => {
+    if (aborted) return;
     resetStageTimer('response');
-    const rpcErr = rpcErrorMessage(raw);
+    const obj = asObject(raw);
+    if (!obj) return;
+    const error = asObject(obj.error);
+    const params = asObject(obj.params);
+    const result = asObject(obj.result);
+    const rpcErr = rpcErrorMessage(obj);
     if (rpcErr) {
-      fail(rpcErr);
+      // After response completion, any late-arriving errors from the agent
+      // (pipe-broken, cleanup race conditions, etc.) are safe to ignore.
+      if (finished) return;
+      // JSON-RPC error handling:
+      // -32603 "Internal error": unexpected-id errors are cleanup noise — suppress.
+      //   Expected-id errors for session/set_model fall through to the recovery
+      //   block. All others (initialize, session/new, session/prompt) are real
+      //   failures — call fail().
+      // -32602 "Invalid params": these are real validation failures. Only
+      //   suppress when they match setModelRequestId so the recovery block handles
+      //   them. Any other -32602 (unexpected-id or non-set_model expected-id) is
+      //   a genuine protocol error — call fail().
+      if (error?.code === -32603 && obj.id !== expectedId) {
+        return;
+      }
+      if (error?.code === -32602 && obj.id !== setModelRequestId) {
+        fail(rpcErr);
+        return;
+      }
+      if (error?.code === -32603 && obj.id === expectedId) {
+        if (obj.id === setModelRequestId) {
+          // Fall through — the recovery block will handle this
+        } else {
+          fail(rpcErr);
+          return;
+        }
+      }
+      if (error?.code === -32602 && obj.id === setModelRequestId) {
+        // Fall through — the recovery block will handle this
+      }
+    }
+    if (obj.method === 'session/request_permission') {
+      replyPermission(obj);
       return;
     }
-    if (raw.method === 'session/request_permission') {
-      replyPermission(raw);
-      return;
-    }
-    if (raw.method === 'session/update' && raw.params?.update) {
-      const update = raw.params.update;
+    const update = asObject(params?.update);
+    if (obj.method === 'session/update' && update) {
       if (update.sessionUpdate === 'agent_thought_chunk') {
-        const text = update.content?.text;
+        const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
           if (!emittedThinkingStart) {
             emittedThinkingStart = true;
@@ -317,7 +452,7 @@ export function attachAcpSession({
         return;
       }
       if (update.sessionUpdate === 'agent_message_chunk') {
-        const text = update.content?.text;
+        const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
           if (!emittedFirstTokenStatus) {
             emittedFirstTokenStatus = true;
@@ -333,7 +468,24 @@ export function attachAcpSession({
       }
       return;
     }
-    if (raw.id !== expectedId || !raw.result || typeof raw.result !== 'object') {
+    // Recovery: if session/set_model failed with -32603 or -32602, fall back to
+    // sending the prompt with the default (already-active) model.
+    // -32603: agent doesn't support set_model at all (internal error).
+    // -32602: agent rejects the model ID or set_model params (invalid params).
+    // This is scoped to the exact set_model request id to avoid
+    // triggering on prompt or other request failures.
+    if (
+      (error?.code === -32603 || error?.code === -32602) &&
+      obj.id === setModelRequestId &&
+      promptRequestId === null
+    ) {
+      setModelRequestId = null;
+      activeModel = activeModel || 'default';
+      send('agent', { type: 'status', label: 'model', model: activeModel });
+      sendPrompt();
+      return;
+    }
+    if (obj.id !== expectedId || !result) {
       return;
     }
     if (expectedId === 1) {
@@ -341,25 +493,27 @@ export function attachAcpSession({
       writeRpc(
         nextId,
         'session/new',
-        {
-          cwd: effectiveCwd,
-          mcpServers: [],
-        },
+        buildAcpSessionNewParams(
+          effectiveCwd,
+          mcpServers ? { mcpServers } : {},
+        ),
         'session/new',
       );
       nextId += 1;
       return;
     }
     if (expectedId === 2) {
-      sessionId = typeof raw.result.sessionId === 'string' ? raw.result.sessionId : null;
+      sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
+      const models = asObject(result.models);
       activeModel =
-        typeof raw.result.models?.currentModelId === 'string'
-          ? raw.result.models.currentModelId
+        typeof models?.currentModelId === 'string'
+          ? models.currentModelId
           : null;
       if (sessionId && activeModel) {
         send('agent', { type: 'status', label: 'model', model: activeModel });
       }
       if (sessionId && model && model !== 'default') {
+        setModelRequestId = nextId;
         expectedId = nextId;
         writeRpc(
           nextId,
@@ -380,8 +534,8 @@ export function attachAcpSession({
       sendPrompt();
       return;
     }
-    if (promptRequestId !== null && raw.id === promptRequestId) {
-      const usage = formatUsage(raw.result.usage);
+    if (promptRequestId !== null && obj.id === promptRequestId) {
+      const usage = formatUsage(result.usage);
       if (usage) {
         send('agent', {
           type: 'usage',
@@ -391,23 +545,23 @@ export function attachAcpSession({
       }
       finished = true;
       clearStageTimer();
-      child.stdin.end();
+      stdin.end();
       return;
     }
-    if (sessionId && model && model !== 'default' && raw.id === expectedId) {
+    if (sessionId && model && model !== 'default' && obj.id === expectedId) {
       activeModel = model;
       send('agent', { type: 'status', label: 'model', model: activeModel });
       sendPrompt();
     }
   });
 
-  child.stdout.on('data', (chunk) => parser.feed(chunk));
+  stdout.on('data', (chunk: string) => parser.feed(chunk));
   child.on('close', () => {
     clearStageTimer();
     parser.flush();
   });
-  child.on('error', (err) => fail(err.message));
-  child.stdin.on('error', (err) => fail(`stdin error: ${err.message}`));
+  child.on('error', (err: Error) => fail(err.message));
+  stdin.on('error', (err: Error) => fail(`stdin error: ${err.message}`));
 
   writeRpc(1, 'initialize', {
     protocolVersion: ACP_PROTOCOL_VERSION,
@@ -418,6 +572,19 @@ export function attachAcpSession({
   return {
     hasFatalError() {
       return fatal;
+    },
+    abort() {
+      if (aborted || finished) return;
+      aborted = true;
+      finished = true;
+      clearStageTimer();
+      if (!sessionId || !child.stdin || child.stdin.destroyed || child.stdin.writableEnded) return;
+      try {
+        sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
+        nextId += 1;
+      } catch {
+        // The caller owns process-signal fallback if the ACP transport is gone.
+      }
     },
   };
 }

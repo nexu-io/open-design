@@ -5,8 +5,10 @@ import type {
   AppConfig,
   MediaProviderCredentials,
   NotificationsConfig,
+  OrbitConfig,
   PetConfig,
 } from '../types';
+import { normalizeAccentColor } from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
   DEFAULT_SUCCESS_SOUND_ID,
@@ -40,6 +42,16 @@ export const DEFAULT_PET: PetConfig = {
   },
 };
 
+export const DEFAULT_ORBIT: OrbitConfig = {
+  enabled: false,
+  time: '08:00',
+  // Ship with the general-purpose Orbit briefing skill pre-selected so a
+  // fresh install runs against a real adaptive template instead of the
+  // bare built-in prompt. Users can clear it from Settings → Orbit to fall
+  // back to the built-in prompt or pick another scenario === 'orbit' skill.
+  templateSkillId: 'orbit-general',
+};
+
 export const DEFAULT_CONFIG: AppConfig = {
   mode: 'daemon',
   apiKey: '',
@@ -59,9 +71,12 @@ export const DEFAULT_CONFIG: AppConfig = {
   onboardingCompleted: false,
   theme: 'system',
   mediaProviders: {},
+  composio: {},
   agentModels: {},
+  agentCliEnv: {},
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
+  orbit: DEFAULT_ORBIT,
 };
 
 /** Well-known providers with pre-filled base URLs. */
@@ -201,6 +216,21 @@ function normalizeNotifications(
   return { ...DEFAULT_NOTIFICATIONS, ...(input ?? {}) };
 }
 
+function normalizeOrbit(input: Partial<OrbitConfig> | undefined): OrbitConfig {
+  const time = typeof input?.time === 'string' && isValidOrbitTime(input.time)
+    ? input.time
+    : DEFAULT_ORBIT.time;
+  return { ...DEFAULT_ORBIT, ...(input ?? {}), time };
+}
+
+function isValidOrbitTime(time: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return false;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
@@ -220,6 +250,7 @@ export function loadConfig(): AppConfig {
         ...DEFAULT_CONFIG,
         pet: normalizePet(DEFAULT_PET),
         notifications: normalizeNotifications(DEFAULT_NOTIFICATIONS),
+        orbit: normalizeOrbit(DEFAULT_ORBIT),
       };
     }
     const parsed = JSON.parse(raw) as Partial<AppConfig>;
@@ -232,9 +263,13 @@ export function loadConfig(): AppConfig {
       ...parsed,
       apiProtocolConfigs: { ...(parsed.apiProtocolConfigs ?? {}) },
       mediaProviders: { ...(parsed.mediaProviders ?? {}) },
+      composio: { ...(parsed.composio ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
+      agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
+      accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
+      orbit: normalizeOrbit(parsed.orbit),
     };
 
     if (parsed.configMigrationVersion !== CONFIG_MIGRATION_VERSION) {
@@ -262,12 +297,90 @@ export function loadConfig(): AppConfig {
       ...DEFAULT_CONFIG,
       pet: normalizePet(DEFAULT_PET),
       notifications: normalizeNotifications(DEFAULT_NOTIFICATIONS),
+      orbit: normalizeOrbit(DEFAULT_ORBIT),
     };
+  }
+}
+
+interface PublicComposioConfigResponse {
+  configured?: boolean;
+  apiKeyTail?: string;
+}
+
+export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['composio'] | null> {
+  try {
+    const response = await fetch('/api/connectors/composio/config');
+    if (!response.ok) return null;
+    const payload = await response.json() as PublicComposioConfigResponse;
+    return {
+      apiKey: '',
+      apiKeyConfigured: Boolean(payload.configured),
+      apiKeyTail: payload.apiKeyTail ?? '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function syncComposioConfigToDaemon(
+  config: AppConfig['composio'] | undefined,
+): Promise<boolean> {
+  const apiKey = config?.apiKey ?? '';
+  const payload = {
+    ...(apiKey.trim() || !config?.apiKeyConfigured ? { apiKey } : {}),
+  };
+  try {
+    const response = await fetch('/api/connectors/composio/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 
 export function saveConfig(config: AppConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export function mergeDaemonConfig(
+  localConfig: AppConfig,
+  daemonConfig: AppConfigPrefs | null,
+): AppConfig {
+  const next = { ...localConfig };
+  if (!daemonConfig) return next;
+
+  if (daemonConfig.onboardingCompleted != null) {
+    next.onboardingCompleted = daemonConfig.onboardingCompleted;
+  }
+  if (daemonConfig.agentId !== undefined) {
+    next.agentId = daemonConfig.agentId;
+  }
+  if (daemonConfig.skillId !== undefined) {
+    next.skillId = daemonConfig.skillId;
+  }
+  if (daemonConfig.designSystemId !== undefined) {
+    next.designSystemId = daemonConfig.designSystemId;
+  }
+  if (daemonConfig.agentModels) {
+    next.agentModels = {
+      ...(next.agentModels ?? {}),
+      ...daemonConfig.agentModels,
+    };
+  }
+  next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
+  if (daemonConfig.disabledSkills !== undefined) {
+    next.disabledSkills = daemonConfig.disabledSkills;
+  }
+  if (daemonConfig.disabledDesignSystems !== undefined) {
+    next.disabledDesignSystems = daemonConfig.disabledDesignSystems;
+  }
+  if (daemonConfig.orbit !== undefined) {
+    next.orbit = normalizeOrbit(daemonConfig.orbit);
+  }
+  return next;
 }
 
 export function hasAnyConfiguredProvider(
@@ -281,16 +394,18 @@ export function hasAnyConfiguredProvider(
 
 export async function syncMediaProvidersToDaemon(
   providers: Record<string, MediaProviderCredentials> | undefined,
-  options?: { force?: boolean },
+  options?: { force?: boolean; throwOnError?: boolean },
 ): Promise<void> {
   if (!providers) return;
   try {
-    await fetch('/api/media/config', {
+    const response = await fetch('/api/media/config', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ providers, force: Boolean(options?.force) }),
     });
+    if (!response.ok) throw new Error(`Failed to sync media config (${response.status})`);
   } catch {
+    if (options?.throwOnError) throw new Error('Media config save failed');
     // Daemon offline; localStorage keeps the user's copy for the next save.
   }
 }
@@ -306,21 +421,30 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   }
 }
 
-export async function syncConfigToDaemon(config: AppConfig): Promise<void> {
+export async function syncConfigToDaemon(
+  config: AppConfig,
+  options?: { throwOnError?: boolean },
+): Promise<void> {
   const prefs: AppConfigPrefs = {
     onboardingCompleted: config.onboardingCompleted,
     agentId: config.agentId,
     agentModels: config.agentModels,
+    agentCliEnv: config.agentCliEnv,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
+    disabledSkills: config.disabledSkills,
+    disabledDesignSystems: config.disabledDesignSystems,
+    orbit: normalizeOrbit(config.orbit),
   };
   try {
-    await fetch('/api/app-config', {
+    const response = await fetch('/api/app-config', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(prefs),
     });
-  } catch {
+    if (!response.ok) throw new Error(`Failed to sync app config (${response.status})`);
+  } catch (error) {
+    if (options?.throwOnError) throw error;
     // Daemon offline; localStorage keeps the user's copy for the next save.
   }
 }

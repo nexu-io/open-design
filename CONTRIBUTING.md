@@ -4,7 +4,7 @@ Thanks for thinking about contributing. OD is small on purpose — most of the v
 
 This guide tells you exactly where to look for each type of contribution and what bar a PR has to clear before we merge it.
 
-<p align="center"><b>English</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><b>English</b> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -33,12 +33,69 @@ corepack enable           # selects the pinned pnpm from packageManager
 pnpm install
 pnpm tools-dev run web    # daemon + web foreground loop
 pnpm typecheck            # tsc -b --noEmit
-pnpm build                # production build
+pnpm --filter @open-design/web build  # web package build when needed
 ```
 
 Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native should work but isn't a primary target — file an issue if it doesn't.
 
-You don't need any agent CLI on your `PATH` to develop OD itself — the daemon will tell you "no agents found" and fall back to the **Anthropic API · BYOK** path, which is the fastest dev loop anyway.
+## Docker Setup
+
+Run Open Design without installing Node.js or pnpm.
+
+### Prerequisites
+
+Make sure Docker Desktop with Compose v2 is installed:
+
+```bash
+docker compose version
+```
+
+### Start Open Design
+
+```bash
+cd deploy
+docker compose up -d
+```
+
+Open in your browser:
+
+```text
+http://localhost:7456
+```
+
+### Common Commands
+
+```bash
+# View logs
+docker compose logs -f
+
+# Restart containers
+docker compose restart
+
+# Stop containers
+docker compose down
+
+# Pull latest image
+docker compose pull
+docker compose up -d
+```
+
+### Optional Environment Overrides
+
+Create a `deploy/.env` file:
+
+```env
+OPEN_DESIGN_PORT=7456
+OPEN_DESIGN_MEM_LIMIT=384m
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+```
+
+> Projects and database data are persisted automatically using Docker volumes.
+
+For the full Docker guide and advanced configuration, see `QUICKSTART.md`.
+
+
 
 ---
 

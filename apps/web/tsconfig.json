@@ -37,6 +37,7 @@
     "app/**/*",
     "sidecar/**/*",
     "src/**/*",
+    "tests/**/*",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "out/types/**/*.ts",

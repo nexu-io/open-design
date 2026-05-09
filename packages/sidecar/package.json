@@ -1,6 +1,6 @@
 {
   "name": "@open-design/sidecar",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -17,7 +17,7 @@
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
