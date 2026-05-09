@@ -27,7 +27,8 @@ type GhItem = {
 type IssueStateFlag = "open" | "closed";
 type PrStateFlag = "open" | "closed" | "merged";
 
-type Mode = "open" | "closed" | "all";
+type IssueMode = "open" | "closed" | "all";
+type PrMode = "open" | "closed" | "merged" | "all";
 
 function parseArgs(argv: string[]) {
   const args: Record<string, string | boolean> = {};
@@ -56,11 +57,18 @@ function mustString(v: unknown, name: string): string {
   fail(`Missing required flag --${name}`);
 }
 
-function asMode(v: unknown, dflt: Mode): Mode {
+function asIssueMode(v: unknown, dflt: IssueMode): IssueMode {
   if (typeof v !== "string") return dflt;
   const s = v.trim();
   if (s === "open" || s === "closed" || s === "all") return s;
   fail(`Invalid value '${s}' (expected open|closed|all)`);
+}
+
+function asPrMode(v: unknown, dflt: PrMode): PrMode {
+  if (typeof v !== "string") return dflt;
+  const s = v.trim();
+  if (s === "open" || s === "closed" || s === "merged" || s === "all") return s;
+  fail(`Invalid value '${s}' (expected open|closed|merged|all)`);
 }
 
 function asLimit(v: unknown, dflt: number): number {
@@ -120,12 +128,12 @@ function runGhPrJson(repo: string, state: PrStateFlag, limit: number): GhItem[] 
   return parsed as GhItem[];
 }
 
-function getIssueStates(mode: Mode): IssueStateFlag[] {
+function getIssueStates(mode: IssueMode): IssueStateFlag[] {
   if (mode === "all") return ["open", "closed"];
   return [mode];
 }
 
-function getPrStates(mode: Mode): PrStateFlag[] {
+function getPrStates(mode: PrMode): PrStateFlag[] {
   if (mode === "all") return ["open", "closed", "merged"];
   return [mode];
 }
@@ -218,8 +226,8 @@ function renderItems(section: "Issue" | "PR", state: string, items: GhItem[]): s
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const repo = mustString(args.repo, "repo");
-  const issuesMode = asMode(args.issues, "open");
-  const prsMode = asMode(args.prs, "open");
+  const issuesMode = asIssueMode(args.issues, "open");
+  const prsMode = asPrMode(args.prs, "open");
   const limit = asLimit(args.limit, 50);
 
   const outPath = typeof args.out === "string" ? args.out : slugOutPath(repo);
