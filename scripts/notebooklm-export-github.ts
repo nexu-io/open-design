@@ -243,24 +243,56 @@ function main() {
   const prStates = getPrStates(prsMode);
 
   // `--limit` is a TOTAL budget across all exported items (issues + PRs),
-  // even when multiple states are selected (e.g. `--prs all`).
-  let remaining = limit;
+  // even when multiple states are selected (e.g. `--issues all --prs all`).
+  //
+  // To avoid starving later selections (e.g. `--prs merged` yielding zero PRs
+  // because issues consumed the whole budget), we fetch small batches for each
+  // selected bucket and then interleave them round-robin up to the total limit.
+  const bucketCount = issueStates.length + prStates.length;
+  const perBucketFetch = Math.max(1, Math.ceil(limit / Math.max(1, bucketCount)));
 
   const issuesByState: Record<IssueStateFlag, GhItem[]> = { open: [], closed: [] };
   for (const st of issueStates) {
-    if (remaining <= 0) break;
-    const batch = runGhIssueJson(repo, st, remaining);
-    issuesByState[st] = batch;
-    remaining -= batch.length;
+    issuesByState[st] = runGhIssueJson(repo, st, perBucketFetch);
   }
 
   const prsByState: Record<PrStateFlag, GhItem[]> = { open: [], closed: [], merged: [] };
   for (const st of prStates) {
-    if (remaining <= 0) break;
-    const batch = runGhPrJson(repo, st, remaining);
-    prsByState[st] = batch;
-    remaining -= batch.length;
+    prsByState[st] = runGhPrJson(repo, st, perBucketFetch);
   }
+
+  // Round-robin selection across requested buckets.
+  type Bucket = { kind: "issue" | "pr"; state: string; items: GhItem[]; idx: number };
+  const buckets: Bucket[] = [];
+  for (const st of issueStates) buckets.push({ kind: "issue", state: st, items: issuesByState[st], idx: 0 });
+  for (const st of prStates) buckets.push({ kind: "pr", state: st, items: prsByState[st], idx: 0 });
+
+  const selectedIssuesByState: Record<IssueStateFlag, GhItem[]> = { open: [], closed: [] };
+  const selectedPrsByState: Record<PrStateFlag, GhItem[]> = { open: [], closed: [], merged: [] };
+
+  let picked = 0;
+  while (picked < limit) {
+    let advanced = false;
+    for (const b of buckets) {
+      if (picked >= limit) break;
+      const it = b.items[b.idx];
+      if (!it) continue;
+      b.idx++;
+      advanced = true;
+      picked++;
+      if (b.kind === "issue") {
+        // Only open/closed are valid issue states.
+        (selectedIssuesByState as Record<string, GhItem[]>)[b.state].push(it);
+      } else {
+        (selectedPrsByState as Record<string, GhItem[]>)[b.state].push(it);
+      }
+    }
+    if (!advanced) break; // no more items anywhere
+  }
+
+  // Replace exported-by-state maps with the budgeted selections.
+  for (const st of issueStates) issuesByState[st] = selectedIssuesByState[st];
+  for (const st of prStates) prsByState[st] = selectedPrsByState[st];
 
   // Build TOC anchors.
   const tocIssues: { anchor: string; title: string }[] = [];
