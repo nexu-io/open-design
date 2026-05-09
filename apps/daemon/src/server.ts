@@ -774,8 +774,22 @@ export function resolveDataDir(raw, projectRoot) {
     fs.accessSync(resolved, fs.constants.W_OK);
   } catch (err) {
     const e = err;
+    const currentUser = (() => {
+      try {
+        return os.userInfo().username;
+      } catch {
+        return process.env.USER ?? process.env.LOGNAME ?? 'unknown';
+      }
+    })();
+    const parentDir = path.dirname(resolved);
     throw new Error(
-      `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+      [
+        `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+        `Current user: ${currentUser}`,
+        `Check whether the folder or one of its parents is owned by another user, is a symlink to a protected location, or was previously created with sudo.`,
+        `Try: ls -ld "${parentDir}" "${resolved}"`,
+        `If the folder should belong to you, fix ownership/permissions, for example: sudo chown -R "${currentUser}":staff "${parentDir}" && chmod -R u+rwX "${parentDir}"`,
+      ].join(' '),
     );
   }
   return resolved;
@@ -1836,10 +1850,19 @@ export interface StartServerOptions {
   returnServer?: boolean;
 }
 
+const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return 2 * 60 * 1000;
-  return Math.max(0, Math.floor(raw));
+  // This watchdog observes child stdout/stderr/SSE activity, not real CPU or
+  // filesystem progress. Keep the default long enough for agents that spend
+  // several minutes silently writing large artifacts.
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+  // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
+  // makes an oversized override fail almost immediately while reporting a huge
+  // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -4932,7 +4955,6 @@ export async function startServer({
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
-      streamFormat,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
