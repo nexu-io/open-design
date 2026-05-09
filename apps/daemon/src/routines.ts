@@ -452,9 +452,16 @@ export class RoutineService {
       return handlerStart;
     })();
     this.inflight.set(routineId, promise);
-    promise.finally(() => {
-      this.inflight.delete(routineId);
-    });
+    // The trailing `finally(...)` returns a new promise that mirrors the
+    // original rejection; without `.catch` it would surface as an
+    // unhandled rejection (fatal in modern Node) when the handler rejects
+    // before producing a start handle. The original `promise` is still
+    // returned to callers, who handle the rejection there.
+    promise
+      .finally(() => {
+        this.inflight.delete(routineId);
+      })
+      .catch(() => {});
     return promise;
   }
 }
