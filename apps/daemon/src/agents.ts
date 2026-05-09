@@ -1160,21 +1160,29 @@ export function enumerateOnPath(bin) {
 // otherwise-valid Gemini CLI versions just because the upstream tags
 // shipped that way.
 //
-// Returns 0 (equal) when either side is unparseable — the caller
-// already has a fall-through path to "use first found", so an
-// unparseable version shouldn't accidentally read as "lower than
-// minVersion" and disqualify a fine binary.
+// Returns `null` when either side is unparseable. The caller MUST
+// distinguish that from `0` (equal) — folding both into "passes the
+// floor" let an old `gemini` that prints a banner like
+// `gemini version 0.1.12` (instead of bare `0.1.12`) sneak past the
+// minVersion check and re-introduce #978. Only callers that have
+// their own fall-through path can safely treat null as "skip this
+// candidate".
 export function compareSemver(a, b) {
   const parse = (raw) => {
     if (typeof raw !== 'string') return null;
     const trimmed = raw.trim().replace(/^v/i, '');
+    // Anchor `^` so a banner like `gemini version 0.1.12` no longer
+    // reads as the bare semver `0.1.12` — that misread was the P1 in
+    // mrcfps + lefarcen's review of #1007: an old Gemini whose
+    // `--version` prints prose with embedded numbers would otherwise
+    // pass the minVersion floor and shadow a modern install.
     const match = trimmed.match(/^(\d+)\.(\d+)\.(\d+)/);
     if (!match) return null;
     return [Number(match[1]), Number(match[2]), Number(match[3])];
   };
   const aParts = parse(a);
   const bParts = parse(b);
-  if (!aParts || !bParts) return 0;
+  if (!aParts || !bParts) return null;
   for (let i = 0; i < 3; i++) {
     if (aParts[i] !== bParts[i]) return aParts[i] > bParts[i] ? 1 : -1;
   }
@@ -1244,7 +1252,15 @@ export async function chooseExecutableByMinVersion(def, configuredEnv, env) {
   );
   for (const result of probes) {
     if (!result.version) continue;
-    if (compareSemver(result.version, def.minVersion) >= 0) {
+    // `compareSemver` returns `null` for unparseable inputs (see
+    // its comment). Treat that as "this candidate's version is not
+    // confidently comparable with the floor" — skip it so a banner
+    // like `gemini version 0.1.12` doesn't accidentally pass the
+    // floor and re-introduce #978. The fall-through below still
+    // runs the spawn against the first candidate so the existing
+    // detection error path stays visible.
+    const cmp = compareSemver(result.version, def.minVersion);
+    if (cmp !== null && cmp >= 0) {
       return { resolved: result.path, version: result.version };
     }
   }
@@ -1320,6 +1336,16 @@ async function probe(def, configuredEnv = {}) {
       // would re-resolve via the first-match `resolveAgentExecutable`
       // and pick the stale binary even though detection skipped it.
       resolvedAgentBinCache.set(def.id, { resolved, version });
+    } else {
+      // Detection couldn't resolve a binary this pass — clear the
+      // cache so a previously-cached path doesn't survive an
+      // uninstall / PATH change / override clear. Without this,
+      // `detectAgents()` would correctly report Gemini unavailable
+      // while `resolveAgentBin()` still returned the stale cached
+      // path, and chat / connection-test would keep spawning the
+      // binary that no longer exists. mrcfps + codex review of
+      // #1007.
+      resolvedAgentBinCache.delete(def.id);
     }
   } else {
     resolved = resolveAgentExecutable(def, configuredEnv);
@@ -1644,10 +1670,19 @@ export function checkWindowsDirectExeCommandLineBudget(def, resolvedBin, args) {
 // first-match `resolveAgentExecutable` and pick the same stale binary
 // detection skipped, putting the user back into the cryptic
 // `Unknown arguments: output-format, outputFormat` failure.
+//
+// IMPORTANT: an explicit `<AGENT>_BIN` configured override (passed
+// per-request from `/api/chat` and `/api/test/connection`) always
+// wins over the cache. Without this guard, a cached auto-pick from
+// an earlier detect would shadow a request-scoped override the user
+// changed afterwards — re-introducing the problem #978's escape
+// hatch is supposed to solve. mrcfps + lefarcen review of #1007.
 export function resolveAgentBin(id, configuredEnv = {}) {
   const def = getAgentDef(id);
   if (!def?.bin) return null;
   if (def.minVersion) {
+    const configured = configuredExecutableOverride(def, configuredEnv);
+    if (configured) return configured;
     const cached = resolvedAgentBinCache.get(id);
     if (cached?.resolved) return cached.resolved;
   }
