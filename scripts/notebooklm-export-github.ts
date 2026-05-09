@@ -242,14 +242,24 @@ function main() {
   const issueStates = getIssueStates(issuesMode);
   const prStates = getPrStates(prsMode);
 
+  // `--limit` is a TOTAL budget across all exported items (issues + PRs),
+  // even when multiple states are selected (e.g. `--prs all`).
+  let remaining = limit;
+
   const issuesByState: Record<IssueStateFlag, GhItem[]> = { open: [], closed: [] };
   for (const st of issueStates) {
-    issuesByState[st] = runGhIssueJson(repo, st, limit);
+    if (remaining <= 0) break;
+    const batch = runGhIssueJson(repo, st, remaining);
+    issuesByState[st] = batch;
+    remaining -= batch.length;
   }
 
   const prsByState: Record<PrStateFlag, GhItem[]> = { open: [], closed: [], merged: [] };
   for (const st of prStates) {
-    prsByState[st] = runGhPrJson(repo, st, limit);
+    if (remaining <= 0) break;
+    const batch = runGhPrJson(repo, st, remaining);
+    prsByState[st] = batch;
+    remaining -= batch.length;
   }
 
   // Build TOC anchors.

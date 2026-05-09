@@ -45,7 +45,7 @@ pnpm exec tsx scripts/notebooklm-export-github.ts \
 - `--out <path>` (optional)
 - `--issues open|closed|all` (default: `open`)
 - `--prs open|closed|merged|all` (default: `open`)
-- `--limit <n>` (default: `50`)
+- `--limit <n>` (default: `50`) — **total item budget across issues + PRs**. If you select multiple states (e.g. `--issues all --prs all`), the exporter will stop once it has written `n` total items.
 
 ## Upload to NotebookLM
 
