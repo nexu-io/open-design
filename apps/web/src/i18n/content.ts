@@ -373,6 +373,7 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'orbit-gmail',
   'orbit-linear',
   'orbit-notion',
+  'release-notes-one-pager',
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
   'web-prototype-taste-brutalist',
