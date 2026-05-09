@@ -1,14 +1,20 @@
 import type { Server } from "node:http";
 
 import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
   type DaemonStatusSnapshot,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import {
   createJsonIpcServer,
+  requestJsonIpc,
+  resolveAppIpcPath,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
@@ -97,7 +103,22 @@ function attachParentMonitor(stop: () => Promise<void>): void {
 }
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
-  const started = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true }) as
+  const started = await startServer({
+    desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
+      const desktopIpc = resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace: runtime.namespace,
+      });
+      return await requestJsonIpc<DesktopExportPdfResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.EXPORT_PDF },
+        { timeoutMs: 600_000 },
+      );
+    },
+    port: parsePort(process.env[DAEMON_PORT_ENV]),
+    returnServer: true,
+  }) as
     | string
     | StartedDaemonServer;
   if (typeof started === "string") {

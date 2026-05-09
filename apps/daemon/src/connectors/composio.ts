@@ -1034,6 +1034,16 @@ export class ComposioConnectorProvider {
       .filter((tool) => tool.refreshEligible)
       .map((tool) => tool.name);
     const allowedToolNames = [...new Set([...staticDefinition.allowedToolNames, ...autoAllowedLiveToolNames])];
+    // `curatedToolNames` mirrors the static catalog ONLY — it
+    // intentionally never picks up `autoAllowedLiveToolNames`. The
+    // wire detail and the connector card / drawer header badge read
+    // this so the "N tools" summary stays at the catalog baseline
+    // (e.g. 2 for GitHub) instead of inflating by the tens of
+    // read-only auto-approved tools that show up after Composio
+    // discovery (issue #748). The execution-time gate keeps using
+    // `allowedToolNames`, so the dynamic auto-allow behavior is
+    // preserved end-to-end.
+    const curatedToolNames = [...staticDefinition.allowedToolNames];
     const name = getString(toolkit?.name) ?? staticDefinition.name;
     const category = firstCategoryName(toolkit?.meta?.categories) ?? firstCategoryName(toolkit?.categories) ?? staticDefinition.category;
     const liveDescription = getComposioToolkitDescription(toolkit);
@@ -1052,6 +1062,7 @@ export class ComposioConnectorProvider {
       ...(toolPage?.nextCursor === undefined ? {} : { toolsNextCursor: toolPage.nextCursor }),
       ...(toolPage === undefined ? {} : { toolsHasMore: toolPage.nextCursor !== undefined }),
       allowedToolNames,
+      curatedToolNames,
       ...(staticDefinition.featuredToolNames === undefined
         ? tools.length > 0 ? { featuredToolNames: tools.slice(0, 3).map((tool) => tool.name) } : {}
         : { featuredToolNames: staticDefinition.featuredToolNames }),

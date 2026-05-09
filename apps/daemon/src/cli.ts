@@ -503,6 +503,14 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart) {
       );
       process.exit(snap.error?.status || 5);
     }
+    if (snap.status === 'interrupted') {
+      const msg = snap.error?.message || 'task interrupted';
+      console.error(`task interrupted: ${msg}`);
+      process.stdout.write(
+        JSON.stringify({ taskId, status: 'interrupted', error: snap.error || {} }) + '\n',
+      );
+      process.exit(snap.error?.status || 5);
+    }
   }
 
   const handoff = {

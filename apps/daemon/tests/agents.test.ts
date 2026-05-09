@@ -709,6 +709,21 @@ test('gemini args preserve custom model selection', () => {
   ]);
 });
 
+test('gemini picker exposes the Gemini 3 previews and 2.5 family in priority order', () => {
+  // Pin the picker contents and ordering so the Settings UI cannot be
+  // silently reshaped by a future edit to AGENT_DEFS. Gemini also accepts
+  // arbitrary custom ids, which makes it especially easy for a regression
+  // here to slip through manual QA. Issue #981.
+  assert.deepEqual(gemini.fallbackModels.map((m) => m.id), [
+    'default',
+    'gemini-3-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ]);
+});
+
 test('qoder entry uses qodercli with stream-json stdin delivery and tier model hints', () => {
   assert.equal(qoder.name, 'Qoder CLI');
   assert.equal(qoder.bin, 'qodercli');

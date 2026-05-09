@@ -289,7 +289,7 @@ export const zhTW: Dict = {
   'connectors.emptyNoMatchAction': '清除搜尋',
 
   'newproj.tabPrototype': '原型',
-  'newproj.tabLiveArtifact': '新建即時成品',
+  'newproj.tabLiveArtifact': '即時成品',
   'newproj.tabDeck': '投影片',
   'newproj.tabTemplate': '從範本',
   'newproj.tabOther': '其它',

@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { migrateCritique } from './critique/persistence.js';
+import { migrateMediaTasks } from './media-tasks.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -208,6 +209,7 @@ function migrate(db: SqliteDb): void {
     db.exec(`ALTER TABLE deployments ADD COLUMN provider_metadata_json TEXT`);
   }
   migrateCritique(db);
+  migrateMediaTasks(db);
 }
 
 // ---------- deployments ----------
