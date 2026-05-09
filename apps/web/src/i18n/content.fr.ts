@@ -236,7 +236,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   kraken: 'Trading crypto. UI sombre avec accent violet, dashboards riches en données.',
   lamborghini: 'Marque supercar. Surfaces noir profond, accents or, typographie uppercase dramatique.',
   'linear-app': 'Project management. Ultraminimal, précis, accent violet.',
-  loom: 'Messagerie vidéo asynchrone. Primary violet, accent framboise, UI dark-first pour la communication vidéo.',
+  loom: 'Messagerie vidéo asynchrone. Primary violet, accent framboise, UI claire et lumineuse, surfaces blanches pour la communication vidéo.',
   lovable: 'Builder full-stack IA. Gradients ludiques, esthétique dev amicale.',
   mastercard: 'Réseau global de paiement. Canvas papier chaud, formes pill orbitales, chaleur éditoriale.',
   meta: 'Tech retail store. Centré photographie, surfaces clair/dark binaires, CTA Meta Blue.',
