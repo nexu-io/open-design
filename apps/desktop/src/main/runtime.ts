@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
-import { exportPdfFromHtml, waitForPrintableContent } from "./pdf-export.js";
+import { exportPdfFromHtml, waitForPrintReadyHandshake } from "./pdf-export.js";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -335,7 +335,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
     try {
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      await waitForPrintableContent(printWindow);
+      await waitForPrintReadyHandshake(printWindow.webContents);
       printWindow.show();
 
       await new Promise<void>((resolve, reject) => {
