@@ -60,6 +60,7 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
+import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 
 type CliOptions = ToolDevOptions & {
   expr?: string;
@@ -684,6 +685,24 @@ async function startApp(
     case APP_KEYS.WEB:
       return await startWeb(config, options);
     case APP_KEYS.DESKTOP:
+      // PR #974 round 6 (mrcfps): if a daemon is already running but
+      // ungated (split-start dev flow `start daemon` -> `start desktop`),
+      // restart it with the gate armed BEFORE launching desktop main —
+      // see `ensureDaemonGateForDesktop` above for the rationale.
+      await ensureDaemonGateForDesktop({
+        inspectDaemon: () => inspectDaemonRuntime(runtimeLookup(config)),
+        inspectWeb: () => inspectWebRuntime(runtimeLookup(config)),
+        stopApp: async (app) => {
+          await stopApp(config, app);
+        },
+        startDaemonGated: async () => {
+          await startDaemon(config, options, { requireDesktopAuth: true });
+        },
+        startWeb: async () => {
+          await startWeb(config, options);
+        },
+        log: (msg) => process.stderr.write(`${msg}\n`),
+      });
       return await startDesktop(config, options);
   }
 }
@@ -737,7 +756,17 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     const status = await inspectDaemonRuntime(runtimeLookup(config));
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
-    return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies DaemonStatusSnapshot;
+    return {
+      // PR #974 round 6: synthetic snapshot when the IPC is unreachable
+      // — daemon is starting or idle, so the gate is definitionally not
+      // active yet. The desktop-auth-gate helper treats this branch as
+      // "no daemon running" via the null check, but the type contract
+      // still requires the field.
+      desktopAuthGateActive: false,
+      pid: active.rootPids[0] ?? null,
+      state: active.pids.length > 0 ? "starting" : "idle",
+      url: null,
+    } satisfies DaemonStatusSnapshot;
   }
   if (appName === APP_KEYS.WEB) {
     const status = await inspectWebRuntime(runtimeLookup(config));
@@ -889,7 +918,10 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
 async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
   if (appName === APP_KEYS.DAEMON) {
     if (target != null && target !== "status") throw new Error(`unsupported daemon inspect target: ${target}`);
-    return (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle", url: null } satisfies DaemonStatusSnapshot);
+    return (
+      (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ??
+      ({ desktopAuthGateActive: false, state: "idle", url: null } satisfies DaemonStatusSnapshot)
+    );
   }
   if (appName === APP_KEYS.WEB) {
     if (target != null && target !== "status") throw new Error(`unsupported web inspect target: ${target}`);

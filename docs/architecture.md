@@ -368,6 +368,27 @@ fronted by an HMAC gate when the daemon is paired with a desktop:
   for that deployment. The Electron entry
   (`apps/packaged/src/index.ts`) passes `true` because it does start
   desktop main alongside the daemon.
+- **tools-dev split-start hardening.** `tools-dev start desktop`
+  introspects the running daemon's STATUS over IPC before launching
+  desktop main. The split-start dev sequence
+  `tools-dev start daemon` → `tools-dev start desktop` would
+  otherwise leave the daemon running without
+  `OD_REQUIRE_DESKTOP_AUTH=1` (the env var is only injected when
+  daemon and desktop spawn in the same orchestrator invocation, or
+  when a desktop is already alive at daemon spawn time). When
+  `start desktop` finds an ungated daemon
+  (`desktopAuthGateActive: false` on the new STATUS field), tools-dev
+  stops the daemon (and web, if running), respawns the daemon with
+  the env var pinned, restarts web, and only then launches desktop
+  main. The user sees a single `[tools-dev] daemon is running
+  without desktop-auth gate; restarting daemon (and web, if running)
+  before desktop start` line; in-flight daemon work is interrupted
+  but the gate is guaranteed armed before the BrowserWindow loads.
+  The bundled-targets path (`pnpm tools-dev`) is unaffected — its
+  daemon was already spawned gated by the same-invocation trigger,
+  so the helper is a single STATUS roundtrip with no side effects.
+  Packaged Electron and packaged headless modes are unaffected
+  because their gate state is fixed at packaged-runtime startup.
 
 Shared API contract types live in [`packages/contracts/src`](../packages/contracts/src).
 
