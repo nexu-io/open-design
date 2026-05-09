@@ -1,0 +1,932 @@
+<!doctype html>
+<!--
+  kami-article — canonical Open Design rendering.
+
+  Demonstrates the skill on a real reading task: a zh-CN interpretation
+  of Thariq's "The Unreasonable Effectiveness of HTML"
+  (X · @trq212 · status/2052809885763747935). The visible body is
+  original commentary; the two `.quote` pulls are short attributed
+  passages retained for critical commentary, with full attribution
+  in the footer Source column.
+
+  Self-contained: zero JS, zero external dependencies beyond Google
+  Fonts. Mirrors the visual contract of skills/kami-landing/.
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>kami-article — example: HTML 的不合理有效性</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500&family=Source+Serif+4:wght@400;500&family=Source+Sans+3:wght@500&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /*
+     * kami (紙 / 纸) — article transcript & interpretation stylesheet.
+     *
+     * Sibling of skills/kami-landing/example.html. Same tokens, same
+     * visual contract. The structure differs only in service of long-
+     * form reading: looser body line-height, .quote and .chapter-aside
+     * components carry more weight, .a-grid + .table primitives appear
+     * inside chapter asides.
+     *
+     * Token source of truth: design-systems/kami/DESIGN.md.
+     */
+
+    :root {
+      /* ----- Surface ----- */
+      --parchment: #f5f4ed;
+      --ivory: #faf9f5;
+      --warm-sand: #e8e6dc;
+
+      /* ----- Brand (single chromatic accent) ----- */
+      --brand: #1B365D;
+      --brand-light: #2D5A8A;
+
+      /* ----- Text ----- */
+      --near-black: #141413;
+      --dark-warm: #3d3d3a;
+      --olive: #504e49;
+      --stone: #6b6a64;
+
+      /* ----- Border ----- */
+      --border: #e8e6dc;
+      --border-soft: #e5e3d8;
+
+      /* ----- Tag tints (solid hex) ----- */
+      --tag-08: #EEF2F7;
+      --tag-14: #E4ECF5;
+      --tag-22: #D0DCE9;
+      --tag-30: #D6E1EE;
+
+      /* ----- Type stacks (zh-CN dominant) ----- */
+      --serif: 'Noto Serif SC', 'Source Serif 4', 'Source Han Serif SC',
+               'Songti SC', Charter, Georgia, Palatino, serif;
+      --sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont,
+              'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, Monaco, monospace;
+
+      /* ----- Motion ----- */
+      --whisper: 0 4px 24px rgba(0, 0, 0, 0.05);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: var(--parchment); color: var(--near-black); }
+    body {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 14px;
+      line-height: 1.7;
+      letter-spacing: 0.35px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: 'liga', 'calt';
+    }
+    strong { font-weight: 500; color: var(--near-black); }
+    img { max-width: 100%; display: block; }
+    a {
+      color: var(--brand);
+      text-decoration: none;
+      border-bottom: 1px solid currentColor;
+    }
+    a:hover { color: var(--brand-light); }
+
+    .shell {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 88px 64px 120px;
+      position: relative;
+    }
+
+    /* ---------- eyebrow strip ---------- */
+    .eyebrow-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--stone);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+      margin-bottom: 88px;
+    }
+    .eyebrow-row .left,
+    .eyebrow-row .right {
+      display: inline-flex;
+      gap: 22px;
+      align-items: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .eyebrow-row b { color: var(--near-black); font-weight: 500; }
+    .eyebrow-row .dot {
+      display: inline-block;
+      width: 4px; height: 4px;
+      background: var(--stone);
+      border-radius: 50%;
+    }
+
+    /* ---------- hero ---------- */
+    .hero {
+      display: grid;
+      grid-template-columns: 1.45fr 0.55fr;
+      gap: 64px;
+      align-items: end;
+      margin-bottom: 96px;
+    }
+    .hero-copy h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(56px, 7vw, 100px);
+      line-height: 1.08;
+      letter-spacing: -0.4px;
+      color: var(--near-black);
+      margin-bottom: 28px;
+    }
+    .hero-copy h1 .ink { color: var(--brand); }
+    .hero-copy .tagline {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--olive);
+      max-width: 42ch;
+      letter-spacing: 0.3px;
+    }
+    .hero-tokens {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      align-items: flex-end;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.4px;
+      color: var(--stone);
+      text-transform: uppercase;
+    }
+    .hero-tokens .row {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--ivory);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .hero-tokens .row b {
+      color: var(--brand);
+      font-weight: 500;
+      font-family: var(--serif);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    .hero-tokens .row span { font-family: var(--sans); }
+
+    /* ---------- manifesto ---------- */
+    .manifesto {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 44px 0 40px;
+      margin-bottom: 88px;
+      display: grid;
+      grid-template-columns: 1fr 1.85fr;
+      gap: 56px;
+      align-items: start;
+    }
+    .manifesto .label {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+    .manifesto .body {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 19px;
+      line-height: 1.75;
+      letter-spacing: 0.35px;
+      color: var(--olive);
+      border-left: 2px solid var(--brand);
+      padding: 4px 0 4px 24px;
+    }
+    .manifesto .body strong { color: var(--near-black); font-weight: 500; }
+    .manifesto .signature {
+      margin-top: 22px;
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--dark-warm);
+      display: inline-flex;
+      gap: 10px;
+      align-items: baseline;
+    }
+    .manifesto .signature span { color: var(--stone); }
+
+    /* ---------- metrics row ---------- */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 96px;
+    }
+    .metric {
+      padding: 28px 22px 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-right: 1px solid var(--border-soft);
+    }
+    .metric:last-child { border-right: 0; }
+    .metric .value {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 36px;
+      line-height: 1;
+      color: var(--brand);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.4px;
+    }
+    .metric .label {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--near-black);
+      margin-top: 8px;
+      letter-spacing: 0.3px;
+    }
+    .metric .sub {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 12.5px;
+      color: var(--olive);
+      line-height: 1.55;
+      max-width: 28ch;
+      letter-spacing: 0.3px;
+    }
+
+    /* ---------- chapters ---------- */
+    .chapters {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 80px;
+      margin-bottom: 96px;
+    }
+    .chapter {
+      display: grid;
+      grid-template-columns: 1fr 2.6fr;
+      gap: 56px;
+      align-items: start;
+    }
+    .chapter .head { display: flex; flex-direction: column; gap: 14px; }
+    .chapter .num {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--brand);
+      letter-spacing: 0.4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chapter .title {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 28px;
+      line-height: 1.3;
+      color: var(--near-black);
+      letter-spacing: 0.3px;
+    }
+    .chapter .lede {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--olive);
+      line-height: 1.6;
+      max-width: 22ch;
+      letter-spacing: 0.3px;
+    }
+    .chapter .body {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .chapter .body p {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 14.5px;
+      color: var(--dark-warm);
+      line-height: 1.8;
+      max-width: 62ch;
+      letter-spacing: 0.35px;
+    }
+    .chapter .body p strong { color: var(--near-black); font-weight: 500; }
+    .chapter .body code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--brand);
+      background: var(--tag-08);
+      padding: 1px 6px;
+      border-radius: 3px;
+      letter-spacing: 0;
+    }
+    .chapter ul.dash {
+      list-style: none;
+      padding: 0;
+      margin: 4px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chapter ul.dash li {
+      position: relative;
+      padding-left: 18px;
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--dark-warm);
+      line-height: 1.7;
+      letter-spacing: 0.3px;
+    }
+    .chapter ul.dash li::before {
+      content: '\2013';
+      position: absolute;
+      left: 0;
+      color: var(--brand);
+    }
+    .chapter ul.dash li strong { color: var(--near-black); font-weight: 500; }
+
+    /* ---------- pull quote ---------- */
+    .quote {
+      border-left: 2px solid var(--brand);
+      padding: 6px 0 6px 22px;
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--near-black);
+      letter-spacing: 0.3px;
+      max-width: 56ch;
+    }
+    .quote .src {
+      display: block;
+      margin-top: 10px;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+
+    /* ---------- chapter aside ---------- */
+    .chapter-aside {
+      background: var(--ivory);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px 22px 20px;
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: box-shadow 0.2s;
+    }
+    .chapter-aside:hover { box-shadow: var(--whisper); }
+    .chapter-aside .a-label {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+    .chapter-aside .a-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .chapter-aside .a-grid > div {
+      padding: 14px 16px;
+      background: var(--parchment);
+      border-right: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .chapter-aside .a-grid > div:nth-child(2n) { border-right: 0; }
+    .chapter-aside .a-grid > div:nth-last-child(-n+2) { border-bottom: 0; }
+    .chapter-aside .a-grid .k {
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--brand);
+      margin-bottom: 6px;
+    }
+    .chapter-aside .a-grid .v {
+      font-family: var(--serif);
+      font-size: 13.5px;
+      color: var(--dark-warm);
+      line-height: 1.65;
+      letter-spacing: 0.3px;
+    }
+
+    /* ---------- comparison table ---------- */
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4px;
+      font-family: var(--serif);
+      font-size: 13.5px;
+      color: var(--dark-warm);
+      letter-spacing: 0.3px;
+    }
+    .table th, .table td {
+      padding: 12px 14px 12px 0;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border-soft);
+      line-height: 1.6;
+    }
+    .table th {
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--stone);
+      padding-bottom: 14px;
+      border-bottom-color: var(--border);
+    }
+    .table td:first-child {
+      width: 30%;
+      color: var(--near-black);
+      font-weight: 500;
+    }
+    .table tr:last-child td { border-bottom: 0; }
+
+    /* ---------- tags ---------- */
+    .tag {
+      display: inline-block;
+      font-family: var(--sans);
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 3px;
+      color: var(--brand);
+      background: var(--tag-08);
+      letter-spacing: 0.4px;
+    }
+    .tag.standard { background: var(--tag-14); padding: 3px 9px; border-radius: 4px; }
+    .tag.brush {
+      background: linear-gradient(to right, #D6E1EE, #E4ECF5 70%, #EEF2F7);
+      padding: 3px 10px;
+      border-radius: 4px;
+    }
+    .tag-row { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+
+    /* ---------- chapter divider ---------- */
+    .chapter-divider {
+      border: 0;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+
+    /* ---------- footer ---------- */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding-top: 56px;
+      display: grid;
+      grid-template-columns: 1.4fr 0.85fr 0.85fr 0.9fr;
+      gap: 48px;
+      align-items: start;
+    }
+    .footer .kicker {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 52px;
+      line-height: 1.1;
+      letter-spacing: -0.3px;
+      color: var(--near-black);
+      margin-bottom: 14px;
+    }
+    .footer .kicker .ink { color: var(--brand); }
+    .footer .colophon {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--olive);
+      max-width: 32ch;
+      line-height: 1.65;
+      letter-spacing: 0.3px;
+    }
+    .footer .col h4 {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--stone);
+      margin-bottom: 16px;
+    }
+    .footer .col ul { list-style: none; padding: 0; margin: 0; }
+    .footer .col li {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--dark-warm);
+      margin-bottom: 10px;
+      letter-spacing: 0.3px;
+    }
+    .footer .col li a { color: var(--dark-warm); border-bottom: none; }
+    .footer .col li a:hover { color: var(--brand); }
+    .footer .col li small {
+      display: block;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--stone);
+      letter-spacing: 0.4px;
+      margin-top: 2px;
+    }
+
+    .legal {
+      margin-top: 56px;
+      border-top: 1px solid var(--border-soft);
+      padding-top: 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--stone);
+      letter-spacing: 0.4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .legal b { color: var(--near-black); font-weight: 500; }
+
+    /* ---------- responsive ---------- */
+    @media (max-width: 1080px) {
+      .shell { padding: 64px 48px 96px; }
+      .hero { grid-template-columns: 1fr; gap: 36px; align-items: start; }
+      .hero-tokens { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+      .manifesto { grid-template-columns: 1fr; gap: 22px; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .metric:nth-child(2n) { border-right: 0; }
+      .metric:nth-child(-n+2) { border-bottom: 1px solid var(--border-soft); }
+      .chapter { grid-template-columns: 1fr; gap: 22px; }
+      .chapter .lede { max-width: 50ch; }
+      .footer { grid-template-columns: 1fr 1fr; gap: 36px; }
+      .footer .kicker { font-size: 42px; }
+      .chapter-aside .a-grid { grid-template-columns: 1fr; }
+      .chapter-aside .a-grid > div { border-right: 0; }
+      .chapter-aside .a-grid > div:nth-last-child(-n+1) { border-bottom: 0; }
+      .chapter-aside .a-grid > div:not(:nth-last-child(-n+1)) { border-bottom: 1px solid var(--border-soft); }
+    }
+    @media (max-width: 640px) {
+      .shell { padding: 48px 24px 72px; }
+      .hero-copy h1 { font-size: 42px; line-height: 1.12; letter-spacing: -0.2px; }
+      .hero-copy .tagline { font-size: 16px; }
+      .metrics { grid-template-columns: 1fr; }
+      .metric { border-right: 0; border-bottom: 1px solid var(--border-soft); }
+      .metric:last-child { border-bottom: 0; }
+      .footer { grid-template-columns: 1fr; gap: 28px; }
+      .footer .kicker { font-size: 34px; }
+      .chapter .body p { font-size: 14px; }
+      .legal { flex-direction: column; gap: 10px; align-items: flex-start; }
+      .table td:first-child { width: 38%; }
+    }
+  </style>
+</head>
+<body data-od-id="kami-article-page">
+  <main class="shell">
+
+    <!-- ============== EYEBROW ============== -->
+    <div class="eyebrow-row" data-od-id="eyebrow">
+      <div class="left">
+        <span>X · <b>@trq212</b></span>
+        <span class="dot"></span>
+        <span>转录 &amp; 解读</span>
+      </div>
+      <div class="right">
+        <span>Vol. 01 · Issue Nº 09</span>
+        <span class="dot"></span>
+        <span>07 min read</span>
+        <span class="dot"></span>
+        <span>MMXXVI</span>
+      </div>
+    </div>
+
+    <!-- ============== HERO ============== -->
+    <section class="hero" data-od-id="hero">
+      <div class="hero-copy">
+        <h1>HTML 的<span class="ink">不合理</span>有效性。</h1>
+        <p class="tagline">
+          Anthropic Claude Code 团队的 Thariq 提议把 Agent 的默认输出从 Markdown 切到 HTML —— 这一页是原文的转录与解读。
+        </p>
+      </div>
+      <div class="hero-tokens">
+        <div class="row"><b>06</b><span>Reasons</span></div>
+        <div class="row"><b>100+</b><span>Line Threshold</span></div>
+        <div class="row"><b>2-4×</b><span>Generation Cost</span></div>
+      </div>
+    </section>
+
+    <!-- ============== MANIFESTO ============== -->
+    <section class="manifesto" data-od-id="manifesto">
+      <div class="label">Manifesto · Nº 01</div>
+      <div>
+        <div class="body">
+          当 Agent 强到能写出你已经懒得读完的内容时,文档的"格式"就不再是排版问题,而是 <strong>"你愿不愿意继续 in the loop"</strong> 的问题。Thariq 用 HTML 解决的不是审美 —— 是注意力的承载力。这意味着 Markdown 仍然是好的中间态,而 HTML 开始成为人和模型之间真正的<strong>消费层</strong>。
+        </div>
+        <div class="signature">
+          <span>—</span> 助手 · 对原文 <a href="https://x.com/trq212/status/2052809885763747935">@trq212/status/2052809885763747935</a> 的解读
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== METRICS ============== -->
+    <section class="metrics" data-od-id="metrics">
+      <div class="metric">
+        <div class="value">06</div>
+        <div class="label">核心理由</div>
+        <div class="sub">原文枚举:信息密度 · 视觉清晰 · 易分享 · 双向交互 · 上下文摄取 · 制作愉悦。</div>
+      </div>
+      <div class="metric">
+        <div class="value">100+</div>
+        <div class="label">阅读阈值</div>
+        <div class="sub">作者自陈:超过 100 行的 Markdown,他自己都很难读完一遍。</div>
+      </div>
+      <div class="metric">
+        <div class="value">2-4×</div>
+        <div class="label">生成成本</div>
+        <div class="sub">原文给出的范围:HTML 比 Markdown 慢 2 至 4 倍,但作者认为值得。</div>
+      </div>
+      <div class="metric">
+        <div class="value">1MM</div>
+        <div class="label">上下文窗口</div>
+        <div class="sub">Opus 4.7 的 1M context 让 token 成本不再敏感,HTML 才得以放开手脚。</div>
+      </div>
+    </section>
+
+    <!-- ============== CHAPTERS ============== -->
+    <section class="chapters" data-od-id="chapters">
+
+      <!-- 01 -->
+      <article class="chapter" data-od-id="chapter-01">
+        <header class="head">
+          <span class="num">01</span>
+          <h2 class="title">真正在说的事</h2>
+          <p class="lede">Markdown 的编辑前提,正在悄悄消失。</p>
+        </header>
+        <div class="body">
+          <p>
+            Markdown 之所以成为 Agent 的默认输出,是因为它<strong>易写、易读、易改</strong>。这三条里,真正决定它统治力的是"易改" —— 你随手可以打开一个 <code>.md</code> 文件改两行,这是它压过 PDF、HTML、Word 的护城河。
+          </p>
+          <p>
+            但作者的关键观察是:这个前提,在他自己的工作流里已经不成立了。
+          </p>
+
+          <div class="quote">
+            "我已经不再亲自编辑这些文件,我都是 prompt Claude 来改的 —— Markdown 最大优势之一已经消失了。"
+            <span class="src">— Thariq · 原文意译</span>
+          </div>
+
+          <p>
+            一旦你承认这件事,文档的角色只剩两种:<strong>给模型看</strong>(中间态),<strong>给人看</strong>(终态)。前者 Markdown 仍然合适,因为下一个 Agent 也得读它;但后者 —— 那个真正决定"你和你同事会不会读"的环节 —— Markdown 显得太朴素了。
+          </p>
+          <p>
+            这一段是全文最朴素也最锋利的洞察。它没有论证 HTML 多好,而是先撤掉 Markdown 站立的那块地。
+          </p>
+        </div>
+      </article>
+
+      <hr class="chapter-divider" />
+
+      <!-- 02 -->
+      <article class="chapter" data-od-id="chapter-02">
+        <header class="head">
+          <span class="num">02</span>
+          <h2 class="title">表达力的代差</h2>
+          <p class="lede">几乎不存在 Claude 能读懂、却不能用 HTML 表达出来的东西。</p>
+        </header>
+        <div class="body">
+          <p>
+            作者列了 HTML 能承载的内容种类 —— <strong>表格、CSS 排版、SVG 插画、内嵌脚本、交互、空间布局、图像</strong>。这份清单几乎覆盖了所有的语义形态。结论是:模型可以贴着内容选媒介。
+          </p>
+
+          <div class="tag-row">
+            <span class="tag standard">表格化数据</span>
+            <span class="tag standard">SVG 插画</span>
+            <span class="tag standard">交互组件</span>
+            <span class="tag standard">空间布局</span>
+            <span class="tag standard">代码片段</span>
+            <span class="tag brush">媒介贴着内容选</span>
+          </div>
+
+          <p>
+            讲流程,就画 SVG;讲数据,就画图表;讲设计,就直接渲染组件;讲色彩,就别再用 unicode 字符模拟了 —— 后面这一条作者举了一张 Claude Code 截图为例,模型在 Markdown 里用 emoji 凑出色块,看着滑稽,但其实是 Markdown 时代默认的<strong>妥协式表达</strong>。
+          </p>
+
+          <p>
+            HTML 让这些妥协可以收回来。模型不再需要"在 Markdown 的语法约束里把意思塞进去",而是可以为每一段内容选择最贴近它本质的呈现方式。
+          </p>
+
+          <div class="chapter-aside">
+            <div class="a-label">六个理由 · 重新分组</div>
+            <div class="a-grid">
+              <div>
+                <div class="k">表达 · Expression</div>
+                <div class="v">信息密度 / 视觉清晰度 —— 模型可以贴着内容选媒介,不再被纯文本将就。</div>
+              </div>
+              <div>
+                <div class="k">流通 · Distribution</div>
+                <div class="v">易分享 —— 一个 URL 就能传开,Markdown 还得当附件发邮件。</div>
+              </div>
+              <div>
+                <div class="k">协作 · Collaboration</div>
+                <div class="v">双向交互 / 自定义编辑器 —— 文档可以是一次性的小工具,人和模型来回交换。</div>
+              </div>
+              <div>
+                <div class="k">上下文 · Context</div>
+                <div class="v">Claude Code 能拼上文件系统、MCP、git 历史 —— 这是 Claude.ai 做不到的。</div>
+              </div>
+              <div>
+                <div class="k">体验 · Joy</div>
+                <div class="v">"做 HTML 这件事本身就让我觉得更投入" —— 这条不是修辞,工作的愉悦感本身就是生产力。</div>
+              </div>
+              <div>
+                <div class="k">观感 · Polish</div>
+                <div class="v">指着自家代码库生成一份 design system HTML 当上下文,后续生成自动有品牌一致性。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <hr class="chapter-divider" />
+
+      <!-- 03 -->
+      <article class="chapter" data-od-id="chapter-03">
+        <header class="head">
+          <span class="num">03</span>
+          <h2 class="title">文档变成小工具</h2>
+          <p class="lede">最被低估的一段:一次性的、为这件事专门定制的微型软件。</p>
+        </header>
+        <div class="body">
+          <p>
+            文章里 <strong>Custom Editing Interfaces</strong> 和 <strong>Two-way Interaction</strong> 那两节,我认为是整篇里最有产业含义的部分。作者描述的工作方式不再是"写一份文档",而是 ——
+          </p>
+
+          <div class="quote">
+            "做一个一次性的、为这件事专门定制的 HTML 编辑器,带个把当前状态复制为 JSON 或 prompt 的按钮 —— 用完就扔。"
+            <span class="src">— Thariq · 原文意译</span>
+          </div>
+
+          <p>
+            把 30 张 Linear 卡片拖到 Now / Next / Later / Cut 四个分桶、tune 一段 system prompt 的同时三个 sample input 实时预览、调一条动画曲线、annotate 一份 diff —— 这些事过去要么靠通用工具凑合,要么自己写一段脚本(贵)。
+          </p>
+
+          <p>
+            当模型可以为这一次任务专门做一个带导出按钮的 HTML 编辑器,这些事的<strong>边际成本归零了</strong>。文档不再是文档,而是为这一次任务存在的微型软件。
+          </p>
+
+          <ul class="dash">
+            <li><strong>排序与分桶</strong> —— 工单、测试用例、反馈,哪一份用一个拖拽 UI 都比写文字快。</li>
+            <li><strong>结构化配置</strong> —— feature flag、env vars、有依赖关系的 JSON / YAML。</li>
+            <li><strong>Prompt 调优</strong> —— 左右分栏的实时模板渲染、token 计数、复制按钮。</li>
+            <li><strong>数据集策展</strong> —— 一行一行 approve / reject、打 tag、导出选中行。</li>
+            <li><strong>难以用文字描述的取值</strong> —— 颜色、缓动曲线、裁切框、cron 表达式、正则。</li>
+          </ul>
+        </div>
+      </article>
+
+      <hr class="chapter-divider" />
+
+      <!-- 04 -->
+      <article class="chapter" data-od-id="chapter-04">
+        <header class="head">
+          <span class="num">04</span>
+          <h2 class="title">重新回到 loop</h2>
+          <p class="lede">当文档好读到你愿意打开它,你才有机会保留判断权。</p>
+        </header>
+        <div class="body">
+          <p>
+            原文最后一段才是 Thariq 真正想说的话。作者承认:他曾经因为 Markdown plan 太长读不下去,担心自己不得不把决定权交给 Claude。换成 HTML 之后,反而觉得自己比以前更能跟上 Claude 的工作。
+          </p>
+
+          <p>
+            翻译成一句话就是:<strong>当文档好读到你愿意打开它,你才有机会保留判断权。</strong> Markdown 的失败不是格式失败,是"读不下去"的失败 —— 而读不下去意味着你正在交出 review 权。HTML 解决的是这个问题,不是字体问题。
+          </p>
+
+          <p>
+            这件事比"换个文件格式"大得多。它在不经意间标记了一个相变点:<strong>Agent 输出的中位数复杂度,已经超过人类愿意线性阅读的承载力。</strong> 任何想继续 in the loop 的人,都得换一种方式才能继续负责 —— HTML 是 Thariq 给出的答案。
+          </p>
+
+          <div class="chapter-aside">
+            <div class="a-label">原文 FAQ · 务实回答</div>
+            <table class="table">
+              <thead>
+                <tr><th>常见疑问</th><th>作者的回答</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Token 是不是更费?</td>
+                  <td>是,但 1M context 让这件事不再敏感。换来的可读性更值钱。</td>
+                </tr>
+                <tr>
+                  <td>会不会比 Markdown 慢?</td>
+                  <td>慢 2-4 倍,但作者认为值得。</td>
+                </tr>
+                <tr>
+                  <td>怎么看 HTML?</td>
+                  <td>浏览器本地打开,或者扔到 S3 拿一个分享链接。</td>
+                </tr>
+                <tr>
+                  <td>版本控制怎么办?</td>
+                  <td>承认是真实代价 —— HTML diff 噪声大,这是当前最大的弱点。</td>
+                </tr>
+                <tr>
+                  <td>怎么避免做出来很丑?</td>
+                  <td>让 Claude 先读你公司代码库生成一份 design system HTML,再当上下文喂给后续生成。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ============== FOOTER ============== -->
+    <footer class="footer" data-od-id="footer">
+      <div>
+        <div class="kicker">
+          重新 <span class="ink">in the loop。</span>
+        </div>
+        <p class="colophon">
+          一个 kami-article 的真实样本 —— 暖羊皮纸底、墨蓝点缀、衬体单一字重、无斜体。内容是对 Thariq 原文的转录与解读。
+        </p>
+      </div>
+      <div class="col">
+        <h4>Source</h4>
+        <ul>
+          <li>
+            <a href="https://x.com/trq212/status/2052809885763747935">x.com/trq212</a>
+            <small>原文 · Thariq · 2026</small>
+          </li>
+          <li>
+            <a href="https://thariqs.github.io/html-effectiveness/">thariqs.github.io</a>
+            <small>HTML 用例集</small>
+          </li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Skill</h4>
+        <ul>
+          <li>
+            <a href="../kami-article/">skills/kami-article</a>
+            <small>本页所用 skill</small>
+          </li>
+          <li>
+            <a href="../kami-landing/">skills/kami-landing</a>
+            <small>姐妹 skill · 品牌一页书</small>
+          </li>
+          <li>
+            <a href="../kami-deck/">skills/kami-deck</a>
+            <small>姐妹 skill · 幻灯片</small>
+          </li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Studio</h4>
+        <ul>
+          <li>
+            转录格式 <small>YAML front matter · Markdown</small>
+          </li>
+          <li>
+            解读语调 <small>不反对 · 重新表述</small>
+          </li>
+          <li>
+            版本 <small>example v0.1.0 · MMXXVI</small>
+          </li>
+        </ul>
+      </div>
+    </footer>
+
+    <div class="legal">
+      <span>Composed in <b>kami</b> · 紙 · 纸 · paper-first</span>
+      <span>© Thariq for the source · 解读 by 助手 · MMXXVI · Apache-2.0</span>
+    </div>
+  </main>
+</body>
+</html>

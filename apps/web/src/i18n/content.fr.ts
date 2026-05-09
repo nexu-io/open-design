@@ -355,6 +355,7 @@ export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'html-ppt-zhangzara-vellum',
   // IB pitch-book skill (#888): English-only skill copy for now.
   'ib-pitch-book',
+  'kami-article',
   'last30days',
   'live-dashboard',
   'orbit-general',
