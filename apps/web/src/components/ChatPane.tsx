@@ -202,7 +202,9 @@ export function ChatPane({
         // Already handled by the auto-scroll effect — don't bottom-scroll.
         if (formEl) return;
       }
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      // Initial-load bottom-pin must be instant — smooth scrollTo emits
+      // intermediate scroll events that flip pinnedToBottomRef to false.
+      el.scrollTop = el.scrollHeight;
       setScrolledFromBottom(false);
       pinnedToBottomRef.current = true;
     });
