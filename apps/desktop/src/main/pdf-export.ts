@@ -130,18 +130,24 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
 }
 
 export async function waitForPrintReadyHandshake(webContents: Electron.WebContents): Promise<void> {
-  // Wait for the inner sandboxed document to post 'OD_PRINT_READY' once it
-  // has finished loading fonts and images (see injectPrintReadyHandshake in
-  // apps/web/src/runtime/exports.ts).
+  // The parent wrapper document caches 'OD_PRINT_READY' in
+  // window.__odPrintReady as soon as it arrives (injected by
+  // injectParentPrintReadyCache in apps/web/src/runtime/exports.ts).
+  // Check the cache first to avoid missing a message that fired before
+  // this listener was attached.
   await webContents.executeJavaScript(
-    `new Promise(function(resolve) {
-      window.addEventListener('message', function handler(event) {
-        if (event.data === 'OD_PRINT_READY') {
-          window.removeEventListener('message', handler);
-          resolve(true);
-        }
+    `(function() {
+      if (window.__odPrintReady) return Promise.resolve(true);
+      return new Promise(function(resolve) {
+        window.addEventListener('message', function handler(event) {
+          if (event.data === 'OD_PRINT_READY') {
+            window.__odPrintReady = true;
+            window.removeEventListener('message', handler);
+            resolve(true);
+          }
+        });
       });
-    })`,
+    })()`,
     true,
   );
 }

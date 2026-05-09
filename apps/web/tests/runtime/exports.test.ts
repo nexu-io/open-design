@@ -338,6 +338,9 @@ describe('sandboxed preview Blob exports', () => {
     // Verify the readiness handshake is present — the sandboxed iframe posts
     // 'OD_PRINT_READY' to the parent once fonts and images are loaded.
     expect(htmlArg).toContain('OD_PRINT_READY');
+    // Verify the parent-wrapper cache script is present so the handshake is
+    // never missed even if 'OD_PRINT_READY' fires before the listener attaches.
+    expect(htmlArg).toContain('__odPrintReady');
     // Verify the print script is NOT injected — Electron calls
     // webContents.print() natively, so a self-printing document would
     // trigger a second print dialog.

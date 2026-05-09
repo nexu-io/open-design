@@ -262,6 +262,7 @@ export async function exportAsPdf(
 
   if (sandboxedPreview) {
     doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+    doc = injectParentPrintReadyCache(doc);
   }
 
   // Desktop native print bridge — uses Electron's webContents.print() API
@@ -334,6 +335,12 @@ function injectPrintReadyHandshake(doc: string): string {
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
+}
+
+function injectParentPrintReadyCache(doc: string): string {
+  const script = `<script>window.__odPrintReady=false;window.addEventListener('message',function(e){if(e.data==='OD_PRINT_READY')window.__odPrintReady=true});<\/script>`;
+  if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
+  return script + doc;
 }
 
 // Stitches every .slide into a vertical multi-page PDF: 1920×1080 per page,
