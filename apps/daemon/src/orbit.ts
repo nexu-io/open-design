@@ -420,8 +420,9 @@ export class OrbitService {
 
     const startedAt = new Date().toISOString();
     const runId = `orbit-${randomUUID()}`;
-    const template = this.config.templateSkillId && this.templateResolver
-      ? await this.templateResolver(this.config.templateSkillId).catch(() => null)
+    const configuredTemplateSkillId = this.config.templateSkillId ?? null;
+    const template = configuredTemplateSkillId && this.templateResolver
+      ? await this.templateResolver(configuredTemplateSkillId).catch(() => null)
       : null;
     const now = new Date(startedAt);
     const prompt = buildOrbitPrompt(now, template);
@@ -449,7 +450,7 @@ export class OrbitService {
           startedAt,
           completedAt,
           trigger,
-          templateSkillId: template?.id ?? this.config.templateSkillId ?? null,
+          templateSkillId: template?.id ?? configuredTemplateSkillId,
           connectorsChecked: connectorsSucceeded + connectorsFailed + connectorsSkipped,
           connectorsSucceeded,
           connectorsFailed,
