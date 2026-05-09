@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
+  buildDesignHandoffContent,
   buildSandboxedPreviewDocument,
   exportAsMd,
   exportAsPdf,
@@ -69,6 +70,27 @@ describe('archiveFilenameFrom', () => {
       'content-disposition': "attachment; filename*=UTF-8''%E9%9D",
     });
     expect(archiveFilenameFrom(resp, 'fallback', 'ui-design')).toBe('ui-design.zip');
+  });
+});
+
+describe('buildDesignHandoffContent', () => {
+  it('documents coding handoff and responsive verification expectations', () => {
+    const content = buildDesignHandoffContent({
+      title: 'Checkout Design',
+      entryFile: 'index.html',
+      files: ['index.html', 'src/app.css', 'src/app.js'],
+    });
+
+    expect(content).toContain('Checkout Design implementation handoff');
+    expect(content).toContain('Desktop: 1440×900');
+    expect(content).toContain('Tablet: 1024×768');
+    expect(content).toContain('Mobile: 390×844');
+    expect(content).toContain('`src/app.css`');
+    expect(content).toContain('visual system');
+    expect(content).toContain('Design fidelity contract');
+    expect(content).toContain('Color and brand contract');
+    expect(content).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
+    expect(content).toContain('Build components from largest layout regions down to controls');
   });
 });
 

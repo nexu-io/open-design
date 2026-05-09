@@ -149,8 +149,12 @@ export interface Dict {
   'settings.cliEnvTitle': string;
   'settings.cliEnvHint': string;
   'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvClaudeBaseUrl': string;
+  'settings.cliEnvClaudeApiKey': string;
   'settings.cliEnvCodexHome': string;
   'settings.cliEnvCodexBin': string;
+  'settings.cliEnvCodexBaseUrl': string;
+  'settings.cliEnvCodexApiKey': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
@@ -888,6 +892,13 @@ export interface Dict {
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
+  'fileViewer.viewportAria': string;
+  'fileViewer.viewportDesktop': string;
+  'fileViewer.viewportDesktopTitle': string;
+  'fileViewer.viewportTablet': string;
+  'fileViewer.viewportTabletTitle': string;
+  'fileViewer.viewportMobile': string;
+  'fileViewer.viewportMobileTitle': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;

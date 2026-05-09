@@ -1,22 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
 
 /* ============================================================
-   Open Design — visual language modeled on claude.ai/design
+   Open Design — neutral product workspace
    ============================================================ */
 :root {
-  /* Surface palette — warmer paper, hairline borders, soft shadows.
-     The entry view and project view share the same warm cream backdrop
-     (--bg) so transitioning between them feels seamless. --bg-app is kept
-     as an alias for compatibility but now resolves to the same value. */
-  --bg: #faf9f7;
-  --bg-app: #faf9f7;
+  /* Surface palette — neutral app chrome that does not bias generated artifacts.
+     Keep warm/brand colors out of preview backgrounds; generated product UI
+     must choose its own palette through the active skill/design brief. */
+  --bg: #f6f7f9;
+  --bg-app: #f6f7f9;
   --bg-panel: #ffffff;
-  --bg-subtle: #f4f2ed;
-  --bg-muted: #ece9e2;
+  --bg-subtle: #eef1f5;
+  --bg-muted: #e4e8ef;
   --bg-elevated: #ffffff;
-  --border: #ebe8e1;
-  --border-strong: #d8d4cb;
-  --border-soft: #f1eee7;
+  --border: #e1e5eb;
+  --border-strong: #c9d0da;
+  --border-soft: #edf0f4;
 
   --text: #1a1916;
   --text-strong: #0d0c0a;
@@ -24,7 +23,7 @@
   --text-soft: #989590;
   --text-faint: #b3b0a8;
 
-  /* Accent — Claude rust/burnt-sienna. */
+  /* Accent — Open Design action color for app chrome only. */
   --accent: #c96442;
   --accent-strong: #b45a3b;
   --accent-soft: #f5d8cb;
@@ -271,10 +270,8 @@ code {
   --app-chrome-traffic-space: 0px;
   display: flex;
   align-items: center;
-  height: 40px;
-  min-height: 40px;
-  max-height: 40px;
-  padding: 4px 14px;
+  min-height: 48px;
+  padding: 5px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   gap: 12px;
@@ -343,6 +340,8 @@ code {
   align-items: center;
   gap: 10px;
   overflow: hidden;
+  align-self: stretch;
+  flex: 1 1 auto;
 }
 .app-chrome-drag {
   min-width: 24px;
@@ -358,9 +357,18 @@ code {
 .app-project-title {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
-  max-height: 32px;
+  width: 100%;
+  overflow: hidden;
+}
+.app-project-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
 }
 .app-project-title .title {
@@ -376,10 +384,58 @@ code {
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
-  line-height: 15px;
+  line-height: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.project-target-platforms {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: min(100%, 280px);
+  height: 22px;
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}
+.project-target-platforms-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 18px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+.project-target-platform-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 92px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-subtle) 88%, transparent);
+  font-size: 11px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}
+.project-target-platform-chip.is-count {
+  min-width: 28px;
+  max-width: 36px;
+  flex: 0 0 auto;
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent, #7c5cff) 12%, var(--bg-subtle));
 }
 
 .topbar {
@@ -3560,6 +3616,35 @@ code {
 }
 .newproj-name { width: 100%; }
 .newproj-section { display: flex; flex-direction: column; gap: 6px; }
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.platform-picker-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.platform-card {
+  min-height: 64px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.platform-card-title {
+  color: var(--text-strong);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.platform-card-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
 .newproj-label {
   font-size: 11.5px;
   color: var(--text-muted);
@@ -3725,6 +3810,7 @@ code {
 @media (max-width: 560px) {
   .newproj-model-grid,
   .newproj-option-grid,
+  .platform-grid,
   .newproj-option-grid.aspect-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -7915,12 +8001,79 @@ button.connector-action.is-loading {
   border: none;
   background: white;
 }
+.viewer-viewport-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.viewer-viewport-button {
+  min-height: 26px;
+  padding-inline: 8px;
+  border-color: transparent;
+  background: transparent;
+}
+.viewer-viewport-button.active {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.live-artifact-preview-layer,
 .comment-preview-layer {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
 }
+.preview-viewport:not(.preview-viewport-desktop) {
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--border) 28%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--border) 28%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--border) 28%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--border) 28%, transparent) 75%),
+    var(--bg-subtle);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
+.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip,
+.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas {
+  width: calc(var(--preview-viewport-width) * var(--preview-scale, 1));
+  height: calc(var(--preview-viewport-height) * var(--preview-scale, 1));
+  max-width: none;
+  max-height: none;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+  background: var(--bg-panel);
+}
+.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip > div,
+.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip > div,
+.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas > div {
+  will-change: transform;
+}
+.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
+.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip {
+  position: relative;
+  inset: auto;
+}
+.preview-viewport-mobile .preview-frame-clip,
+.preview-viewport-mobile .comment-frame-clip,
+.preview-viewport-mobile.manual-edit-workspace .manual-edit-canvas {
+  border-radius: 28px;
+}
+.preview-frame-clip,
 .comment-frame-clip {
   position: absolute;
   inset: 0;
@@ -13455,6 +13608,11 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   min-height: 0;
   padding: 10px;
   background: var(--bg);
+}
+
+.manual-edit-workspace.preview-viewport:not(.preview-viewport-desktop) {
+  grid-template-columns: 240px calc(var(--preview-viewport-width) * var(--preview-scale, 1)) 344px;
+  justify-content: start;
 }
 
 .manual-edit-canvas {

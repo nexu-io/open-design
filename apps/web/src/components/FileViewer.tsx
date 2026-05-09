@@ -82,6 +82,14 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
+type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
+type PreviewViewportPreset = {
+  id: PreviewViewportId;
+  width: number | null;
+  height: number | null;
+  labelKey: keyof Dict;
+  titleKey: keyof Dict;
+};
 type DeployProviderOption = {
   id: WebDeployProviderId;
   labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
@@ -113,6 +121,29 @@ type DeployResultCard = {
   message?: string;
 };
 const MAX_BRIDGE_COORDINATE = 1_000_000;
+const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
+  {
+    id: 'desktop',
+    width: null,
+    height: null,
+    labelKey: 'fileViewer.viewportDesktop',
+    titleKey: 'fileViewer.viewportDesktopTitle',
+  },
+  {
+    id: 'tablet',
+    width: 1024,
+    height: 768,
+    labelKey: 'fileViewer.viewportTablet',
+    titleKey: 'fileViewer.viewportTabletTitle',
+  },
+  {
+    id: 'mobile',
+    width: 390,
+    height: 844,
+    labelKey: 'fileViewer.viewportMobile',
+    titleKey: 'fileViewer.viewportMobileTitle',
+  },
+];
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
 // purpose — open-slide's design tokens panel only edits global tokens, so
@@ -258,6 +289,70 @@ function setMarkdownCodeBlockCopiedState(block: HTMLElement, copied: boolean, t:
   existingToast?.remove();
 }
 
+function PreviewViewportControls({
+  viewport,
+  onViewport,
+  t,
+  tabIndex,
+}: {
+  viewport: PreviewViewportId;
+  onViewport: (viewport: PreviewViewportId) => void;
+  t: TranslateFn;
+  tabIndex?: number;
+}) {
+  return (
+    <div className="viewer-viewport-switcher" role="group" aria-label={t('fileViewer.viewportAria')}>
+      {PREVIEW_VIEWPORT_PRESETS.map((preset) => (
+        <button
+          key={preset.id}
+          type="button"
+          className={`viewer-action viewer-viewport-button${viewport === preset.id ? ' active' : ''}`}
+          aria-pressed={viewport === preset.id}
+          title={t(preset.titleKey)}
+          tabIndex={tabIndex}
+          onClick={() => onViewport(preset.id)}
+        >
+          {t(preset.labelKey)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function previewViewportStyle(
+  viewport: PreviewViewportId,
+  previewScale = 1,
+): CSSProperties & Record<string, string | number> {
+  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
+  if (!preset.width) return {};
+  return {
+    '--preview-viewport-width': `${preset.width}px`,
+    '--preview-viewport-height': `${preset.height}px`,
+    '--preview-scale': previewScale,
+  };
+}
+
+function previewScaleShellStyle(
+  viewport: PreviewViewportId,
+  previewScale: number,
+): CSSProperties & Record<string, string | number> {
+  if (viewport === 'desktop') {
+    return {
+      width: `${100 / previewScale}%`,
+      height: `${100 / previewScale}%`,
+      transform: `scale(${previewScale})`,
+      transformOrigin: '0 0',
+    };
+  }
+  return {
+    '--preview-scale': previewScale,
+    width: 'var(--preview-viewport-width)',
+    height: 'var(--preview-viewport-height)',
+    transform: `scale(${previewScale})`,
+    transformOrigin: '0 0',
+  };
+}
+
 function ensureMarkdownCodeBlockControls(root: HTMLElement, t: TranslateFn) {
   for (const block of root.querySelectorAll<HTMLElement>(`[${MARKDOWN_CODE_BLOCK_ATTR}]`)) {
     let button = block.querySelector<HTMLButtonElement>(`.${MARKDOWN_COPY_BUTTON_CLASS}`);
@@ -383,6 +478,7 @@ export function LiveArtifactViewer({
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [zoom, setZoom] = useState(100);
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshSuccess, setRefreshSuccess] = useState<string | null>(null);
@@ -577,6 +673,13 @@ export function LiveArtifactViewer({
             aria-hidden={mode === 'preview' ? undefined : true}
           >
             <span className="viewer-divider" aria-hidden />
+            <PreviewViewportControls
+              viewport={previewViewport}
+              onViewport={setPreviewViewport}
+              t={t}
+              tabIndex={mode === 'preview' ? 0 : -1}
+            />
+            <span className="viewer-divider" aria-hidden />
             <button
               type="button"
               className="icon-only"
@@ -667,19 +770,21 @@ export function LiveArtifactViewer({
         ) : null}
         {mode === 'preview' ? (
           <div
-            style={{
-              width: `${100 / previewScale}%`,
-              height: `${100 / previewScale}%`,
-              transform: `scale(${previewScale})`,
-              transformOrigin: '0 0',
-            }}
+            className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
+            style={previewViewportStyle(previewViewport, previewScale)}
           >
-            <iframe
-              data-testid="live-artifact-preview-frame"
-              title={liveArtifact.title}
-              sandbox="allow-scripts allow-popups"
-              src={previewUrl}
-            />
+            <div className="preview-frame-clip">
+              <div
+                style={previewScaleShellStyle(previewViewport, previewScale)}
+              >
+                <iframe
+                  data-testid="live-artifact-preview-frame"
+                  title={liveArtifact.title}
+                  sandbox="allow-scripts allow-popups"
+                  src={previewUrl}
+                />
+              </div>
+            </div>
           </div>
         ) : loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
@@ -2846,6 +2951,7 @@ function HtmlViewer({
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   // Template save UX. We surface a transient "Saved" pill in the share
@@ -4260,6 +4366,12 @@ function HtmlViewer({
             <span>{t('fileViewer.edit')}</span>
           </button>
           <span className="viewer-divider" aria-hidden />
+          <PreviewViewportControls
+            viewport={previewViewport}
+            onViewport={setPreviewViewport}
+            t={t}
+          />
+          <span className="viewer-divider" aria-hidden />
           <button
             type="button"
             className="icon-only"
@@ -4477,7 +4589,10 @@ function HtmlViewer({
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
-          <div className={manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'}>
+          <div
+            className={`${manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
+            style={previewViewportStyle(previewViewport, previewScale)}
+          >
             {manualEditMode ? (
               <ManualEditPanel
                 targets={manualEditTargets}
@@ -4507,12 +4622,7 @@ function HtmlViewer({
             ) : null}
             <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
               <div
-                style={{
-                  width: `${100 / previewScale}%`,
-                  height: `${100 / previewScale}%`,
-                  transform: `scale(${previewScale})`,
-                  transformOrigin: '0 0',
-                }}
+                style={previewScaleShellStyle(previewViewport, previewScale)}
               >
                 {useUrlLoadPreview ? (
                   <iframe

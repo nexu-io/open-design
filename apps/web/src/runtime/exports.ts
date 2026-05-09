@@ -3,7 +3,7 @@
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
-//   - ZIP  : pack the artifact into a stored-mode ZIP (see ./zip.ts).
+//   - ZIP  : pack the artifact with a coding handoff guide (see ./zip.ts).
 //   - MD   : download the artifact's source verbatim with a `.md` extension
 //            so it can be ingested by markdown-aware tooling (LLM context
 //            windows, vault apps, etc.). No conversion is performed — the
@@ -43,14 +43,113 @@ export function exportAsHtml(html: string, title: string): void {
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
 }
 
+export function buildDesignHandoffContent(opts: {
+  title: string;
+  entryFile: string;
+  files?: string[];
+  kind?: 'html' | 'react';
+}): string {
+  const title = opts.title || 'Open Design artifact';
+  const entryFile = opts.entryFile || 'index.html';
+  const files = Array.from(new Set([entryFile, ...(opts.files ?? [])])).sort((a, b) => a.localeCompare(b));
+  const htmlFiles = files.filter((name) => /\.html?$/i.test(name));
+  const cssFiles = files.filter((name) => /\.css$/i.test(name));
+  const jsFiles = files.filter((name) => /\.[cm]?[jt]sx?$/i.test(name));
+  const assetFiles = files.filter((name) => !htmlFiles.includes(name) && !cssFiles.includes(name) && !jsFiles.includes(name));
+  const accentLikelyBrandLed =
+    files.some((name) => /(design|brand|tokens?|theme|style|tailwind|variables)\.(css|scss|sass|less|json|ts|tsx|js|jsx|md)$/i.test(name)) ||
+    cssFiles.length > 0;
+  const hasResponsiveClues =
+    htmlFiles.length > 0 ||
+    cssFiles.length > 0 ||
+    files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
+  const list = (items: string[]) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
+  const sourceNote = opts.kind === 'react'
+    ? 'Use the exported React source as the component contract, then preserve the rendered visual behavior in the target app.'
+    : `Start from \`${entryFile}\`, then preserve the visual system, responsive behavior, and interactions found in the exported files.`;
+
+  return `# ${title} implementation handoff
+
+This archive is the source of truth for turning the design into production code. ${sourceNote}
+
+## Implementation target
+- Build production UI from the exported design, not a loose reinterpretation.
+- Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
+- Replace static placeholders only when the target app has real data or functional equivalents.
+- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
+
+## Source map
+- Primary entry: \`${entryFile}\`
+- HTML screens detected: ${htmlFiles.length}
+- Stylesheets detected: ${cssFiles.length}
+- Script/component files detected: ${jsFiles.length}
+- Supporting assets detected: ${assetFiles.length}
+
+## Responsive contract
+Validate the implementation at these minimum browser viewports:
+- Desktop: 1440×900
+- Tablet: 1024×768
+- Mobile: 390×844
+
+For responsive web exports, treat these as breakpoints for one adaptive web experience. Do not split responsive web into unrelated native app screens unless the project explicitly includes native targets. ${hasResponsiveClues ? 'Preserve any CSS media queries, container queries, fluid `clamp()` scales, and layout changes already present in the exported files.' : 'If responsive rules are not present in the export, add them in the target implementation before shipping.'}
+
+## Design fidelity contract
+- Extract reusable tokens before writing components: background, surface, foreground, muted text, border, accent, radius, shadow, spacing, type scale, and motion duration/easing.
+- Match layout geometry: max-widths, gutters, grid columns, card proportions, sticky/fixed elements, and viewport-specific navigation.
+- Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
+- Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
+- Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
+- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+
+## Color and brand contract
+- Use the exported design tokens and product/domain context as the color source of truth.
+- Do not introduce warm beige / cream / peach / pink / orange-brown background washes unless they are already explicit brand/reference colors in the export.
+- ${accentLikelyBrandLed ? 'A stylesheet or design/token file was detected; inspect it for canonical color variables before choosing framework theme tokens.' : 'No obvious token stylesheet was detected; sample colors from the entry file and convert them into named tokens before coding.'}
+
+## Implementation sequence for AI coding tools
+1. Open \`${entryFile}\` and identify screens/sections/components.
+2. Extract a token table from CSS/root styles and inline styles before building framework components.
+3. Build components from largest layout regions down to controls; avoid starting with isolated atoms that lose spatial intent.
+4. Port responsive behavior at desktop/tablet/mobile breakpoints and test each viewport before cleanup.
+5. Port interactions and states, then replace static placeholders only with real app data or functional equivalents.
+6. Compare final screenshots against the export at 1440×900, 1024×768, and 390×844 before declaring done.
+
+## Entry points
+${list(htmlFiles.length > 0 ? htmlFiles : [entryFile])}
+
+## Styles
+${list(cssFiles)}
+
+## Scripts/components
+${list(jsFiles)}
+
+## Assets and supporting files
+${list(assetFiles)}
+
+## Coding checklist for AI tools
+1. Inspect \`${entryFile}\` first and identify reusable components before coding.
+2. Extract design tokens into the target stack: colors, type scale, spacing, radius, shadows, and motion.
+3. Implement layout with real responsive breakpoints and test desktop/tablet/mobile.
+4. Preserve interactive controls, hover/focus/pressed states, form behavior, validation, and copy actions where present.
+5. Confirm the production result visually matches the exported design before refactoring internals.
+6. Reject implementation shortcuts that flatten the design into generic cards, generic gradients, placeholder stats, or framework-default typography.
+7. If a detail is ambiguous, keep the exported HTML/CSS behavior rather than inventing a new pattern.
+`;
+}
+
 export function exportAsZip(html: string, title: string): void {
   const doc = buildSrcdoc(html);
   const slug = safeFilename(title, 'artifact');
   const blob = buildZip([
     { path: `${slug}/index.html`, content: doc },
     {
-      path: `${slug}/README.md`,
-      content: `# ${title || slug}\n\nGenerated by Open Design.\nOpen index.html in a browser to view.\n`,
+      path: `${slug}/DESIGN-HANDOFF.md`,
+      content: buildDesignHandoffContent({
+        title: title || slug,
+        entryFile: 'index.html',
+        files: ['index.html'],
+      }),
     },
   ]);
   triggerDownload(blob, `${slug}.zip`);
@@ -89,11 +188,17 @@ export function exportReactComponentAsZip(
   extension: ReactSourceExtension = '.jsx',
 ): void {
   const slug = safeFilename(title, 'component');
+  const componentFile = `${slug}${extension}`;
   const blob = buildZip([
-    { path: `${slug}/${slug}${extension}`, content: source },
+    { path: `${slug}/${componentFile}`, content: source },
     {
-      path: `${slug}/README.md`,
-      content: `# ${title || slug}\n\nGenerated by Open Design.\nOpen the JSX file in a React project or export the standalone HTML preview from Open Design.\n`,
+      path: `${slug}/DESIGN-HANDOFF.md`,
+      content: buildDesignHandoffContent({
+        title: title || slug,
+        entryFile: componentFile,
+        files: [componentFile],
+        kind: 'react',
+      }),
     },
   ]);
   triggerDownload(blob, `${slug}.zip`);

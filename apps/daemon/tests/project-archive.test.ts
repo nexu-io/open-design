@@ -36,7 +36,7 @@ describe('buildProjectArchive', () => {
       .filter((entry) => !entry.dir)
       .map((entry) => entry.name)
       .sort();
-    expect(fileEntries).toEqual(['frames/phone.html', 'index.html', 'src/app.css']);
+    expect(fileEntries).toEqual(['DESIGN-HANDOFF.md', 'frames/phone.html', 'index.html', 'src/app.css']);
   });
 
   it('zips the whole project when no root is given', async () => {
@@ -46,6 +46,7 @@ describe('buildProjectArchive', () => {
     const fileEntries = Object.values(zip.files)
       .filter((entry) => !entry.dir)
       .map((entry) => entry.name);
+    expect(fileEntries).toContain('DESIGN-HANDOFF.md');
     expect(fileEntries).toContain('README.md');
     expect(fileEntries).toContain('ui-design/index.html');
     expect(fileEntries).toContain('ui-design/src/app.css');
@@ -85,5 +86,30 @@ describe('buildProjectArchive', () => {
     expect(baseName).toBe(dirName);
     const zip = await JSZip.loadAsync(buffer);
     expect(Object.keys(zip.files)).toContain('index.html');
+  });
+
+  it('adds an AI-coding handoff guide to project archives', async () => {
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'ui-design');
+    const zip = await JSZip.loadAsync(buffer);
+    const handoff = await zip.file('DESIGN-HANDOFF.md')?.async('string');
+    expect(handoff).toContain('implementation handoff');
+    expect(handoff).toContain('Desktop: 1440×900');
+    expect(handoff).toContain('Tablet: 1024×768');
+    expect(handoff).toContain('Mobile: 390×844');
+    expect(handoff).toContain('Design fidelity contract');
+    expect(handoff).toContain('Color and brand contract');
+    expect(handoff).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
+    expect(handoff).toContain('Build components from largest layout regions down to controls');
+  });
+
+  it('does not overwrite an existing design handoff file', async () => {
+    const dir = path.join(projectsRoot, projectId, 'custom-handoff');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html>hi');
+    await writeFile(path.join(dir, 'DESIGN-HANDOFF.md'), '# custom handoff');
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'custom-handoff');
+    const zip = await JSZip.loadAsync(buffer);
+    const handoff = await zip.file('DESIGN-HANDOFF.md')?.async('string');
+    expect(handoff).toBe('# custom handoff');
   });
 });

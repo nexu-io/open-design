@@ -18,6 +18,7 @@ import {
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
+const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
@@ -182,6 +183,7 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
       binary: true,
     });
   }
+  addDesignHandoff(zip, entries, archiveBaseName || path.basename(projectRoot));
   // Level 6 is the zlib default — balances speed and ratio for typical
   // project trees (HTML/CSS/JS plus a handful of assets). Level 9 buys
   // <5% on already-compressed PNGs/fonts at 2-3× CPU; level 1 produces
@@ -332,6 +334,100 @@ async function collectArchiveEntries(dir, relDir, out) {
     const st = await stat(full);
     out.push({ relPath: rel, fullPath: full, mtime: st.mtimeMs });
   }
+}
+
+function addDesignHandoff(zip, entries, projectLabel) {
+  if (entries.some((entry) => entry.relPath === DESIGN_HANDOFF_FILENAME)) return;
+  zip.file(DESIGN_HANDOFF_FILENAME, buildDesignHandoff(entries, projectLabel), {
+    date: new Date(0),
+    binary: false,
+  });
+}
+
+function buildDesignHandoff(entries, projectLabel) {
+  const files = entries.map((entry) => entry.relPath).sort((a, b) => a.localeCompare(b));
+  const htmlFiles = files.filter((name) => /\.html?$/i.test(name));
+  const cssFiles = files.filter((name) => /\.css$/i.test(name));
+  const jsFiles = files.filter((name) => /\.[cm]?[jt]sx?$/i.test(name));
+  const assetFiles = files.filter((name) => !htmlFiles.includes(name) && !cssFiles.includes(name) && !jsFiles.includes(name));
+  const entryFile = htmlFiles.find((name) => /(^|\/)index\.html$/i.test(name)) || htmlFiles[0] || files[0] || 'index.html';
+  const accentLikelyBrandLed =
+    files.some((name) => /(design|brand|tokens?|theme|style|tailwind|variables)\.(css|scss|sass|less|json|ts|tsx|js|jsx|md)$/i.test(name)) ||
+    cssFiles.length > 0;
+  const hasResponsiveClues =
+    htmlFiles.length > 0 ||
+    cssFiles.length > 0 ||
+    files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
+  const list = (items) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
+
+  return `# ${projectLabel || 'Open Design project'} implementation handoff
+
+This archive is the source of truth for turning the design into production code. Start from \`${entryFile}\`, then preserve the visual system, responsive behavior, and interactions found in the exported files.
+
+## Implementation target
+- Build production UI from the exported design, not a loose reinterpretation.
+- Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
+- Replace static placeholders only when the target app has real data or functional equivalents.
+- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
+
+## Source map
+- Primary entry: \`${entryFile}\`
+- HTML screens detected: ${htmlFiles.length}
+- Stylesheets detected: ${cssFiles.length}
+- Script/component files detected: ${jsFiles.length}
+- Supporting assets detected: ${assetFiles.length}
+
+## Responsive contract
+Validate the implementation at these minimum browser viewports:
+- Desktop: 1440×900
+- Tablet: 1024×768
+- Mobile: 390×844
+
+For responsive web exports, treat these as breakpoints for one adaptive web experience. Do not split responsive web into unrelated native app screens unless the project explicitly includes native targets. ${hasResponsiveClues ? 'Preserve any CSS media queries, container queries, fluid `clamp()` scales, and layout changes already present in the exported files.' : 'If responsive rules are not present in the export, add them in the target implementation before shipping.'}
+
+## Design fidelity contract
+- Extract reusable tokens before writing components: background, surface, foreground, muted text, border, accent, radius, shadow, spacing, type scale, and motion duration/easing.
+- Match layout geometry: max-widths, gutters, grid columns, card proportions, sticky/fixed elements, and viewport-specific navigation.
+- Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
+- Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
+- Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
+- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+
+## Color and brand contract
+- Use the exported design tokens and product/domain context as the color source of truth.
+- Do not introduce warm beige / cream / peach / pink / orange-brown background washes unless they are already explicit brand/reference colors in the export.
+- ${accentLikelyBrandLed ? 'A stylesheet or design/token file was detected; inspect it for canonical color variables before choosing framework theme tokens.' : 'No obvious token stylesheet was detected; sample colors from the entry file and convert them into named tokens before coding.'}
+
+## Implementation sequence for AI coding tools
+1. Open \`${entryFile}\` and identify screens/sections/components.
+2. Extract a token table from CSS/root styles and inline styles before building framework components.
+3. Build components from largest layout regions down to controls; avoid starting with isolated atoms that lose spatial intent.
+4. Port responsive behavior at desktop/tablet/mobile breakpoints and test each viewport before cleanup.
+5. Port interactions and states, then replace static placeholders only with real app data or functional equivalents.
+6. Compare final screenshots against the export at 1440×900, 1024×768, and 390×844 before declaring done.
+
+## Entry points
+${list(htmlFiles)}
+
+## Styles
+${list(cssFiles)}
+
+## Scripts/components
+${list(jsFiles)}
+
+## Assets and supporting files
+${list(assetFiles)}
+
+## Coding checklist for AI tools
+1. Inspect \`${entryFile}\` first and identify reusable components before coding.
+2. Extract design tokens into the target stack: colors, type scale, spacing, radius, shadows, and motion.
+3. Implement layout with real responsive breakpoints and test desktop/tablet/mobile.
+4. Preserve interactive controls, hover/focus/pressed states, form behavior, validation, and copy actions where present.
+5. Confirm the production result visually matches the exported design before refactoring internals.
+6. Reject implementation shortcuts that flatten the design into generic cards, generic gradients, placeholder stats, or framework-default typography.
+7. If a detail is ambiguous, keep the exported HTML/CSS behavior rather than inventing a new pattern.
+`;
 }
 
 export async function readProjectFile(projectsRoot, projectId, name, metadata?) {

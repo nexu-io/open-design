@@ -45,6 +45,8 @@ type ProjectMetadata = {
   animations?: boolean | null;
   templateId?: string | null;
   templateLabel?: string | null;
+  platform?: string | null;
+  platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
   imageModel?: string | null;
   imageAspect?: string | null;
@@ -329,6 +331,32 @@ function renderMetadataBlock(
   );
   lines.push('');
   lines.push(`- **kind**: ${metadata.kind}`);
+  if (metadata.platform) {
+    lines.push(`- **platform**: ${metadata.platform}`);
+  } else if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
+    lines.push('- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)');
+  }
+  if (Array.isArray(metadata.platformTargets) && metadata.platformTargets.length > 0) {
+    lines.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
+  }
+  if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
+    lines.push(
+      '- **responsive web contract**: `responsive` means one web product experience that adapts across desktop, tablet, and mobile browser breakpoints. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real layout changes in the product UI; do not render viewport labels as user-facing product content.',
+    );
+  }
+  if ((metadata.platformTargets?.length ?? 0) > 1) {
+    lines.push(
+      '- **cross-platform rule**: each selected target keeps the same product goal but adapts navigation, density, safe areas, input behavior, and layout to that platform. Prefer separate product screens/files or a preview shell with real product variants. Do not replace the product with a cross-platform map, comparison board, or labelled documentation section.',
+    );
+  }
+  if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
+    lines.push(
+      '- **product-realism rule**: final artifacts must look like end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "full design target" badges, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard.',
+    );
+    lines.push(
+      '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
+    );
+  }
   if (metadata.intent === 'live-artifact') {
     lines.push(
       '- **intent**: live-artifact — the user chose New live artifact. The first output should be a live artifact/dashboard/report, not a one-off static mockup. Prefer the `live-artifact` skill workflow when available, keep source data compact, and register through the daemon live-artifact tool path once that wrapper/tooling is available.',

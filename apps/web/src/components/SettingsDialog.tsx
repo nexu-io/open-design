@@ -233,6 +233,19 @@ const AGENT_CLI_ENV_FIELDS = [
     placeholder: '~/.claude-2',
   },
   {
+    agentId: 'claude',
+    envKey: 'ANTHROPIC_BASE_URL',
+    labelKey: 'settings.cliEnvClaudeBaseUrl',
+    placeholder: 'https://your-proxy.example.com',
+  },
+  {
+    agentId: 'claude',
+    envKey: 'ANTHROPIC_API_KEY',
+    labelKey: 'settings.cliEnvClaudeApiKey',
+    placeholder: 'Paste proxy API key',
+    secret: true,
+  },
+  {
     agentId: 'codex',
     envKey: 'CODEX_HOME',
     labelKey: 'settings.cliEnvCodexHome',
@@ -243,6 +256,19 @@ const AGENT_CLI_ENV_FIELDS = [
     envKey: 'CODEX_BIN',
     labelKey: 'settings.cliEnvCodexBin',
     placeholder: '/absolute/path/to/codex',
+  },
+  {
+    agentId: 'codex',
+    envKey: 'OPENAI_BASE_URL',
+    labelKey: 'settings.cliEnvCodexBaseUrl',
+    placeholder: 'https://your-proxy.example.com/v1',
+  },
+  {
+    agentId: 'codex',
+    envKey: 'OPENAI_API_KEY',
+    labelKey: 'settings.cliEnvCodexApiKey',
+    placeholder: 'Paste proxy API key',
+    secret: true,
   },
 ] as const;
 
@@ -1631,10 +1657,11 @@ export function SettingsDialog({
                     <label className="field" key={`${field.agentId}:${field.envKey}`}>
                       <span className="field-label">{t(field.labelKey)}</span>
                       <input
-                        type="text"
+                        type={'secret' in field && field.secret ? 'password' : 'text'}
                         value={cfg.agentCliEnv?.[field.agentId]?.[field.envKey] ?? ''}
                         placeholder={field.placeholder}
                         spellCheck={false}
+                        autoComplete="off"
                         onChange={(e) =>
                           setCfg((c) =>
                             updateAgentCliEnvValue(
