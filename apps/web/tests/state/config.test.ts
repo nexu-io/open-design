@@ -389,6 +389,31 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
       ),
     ).toBe(false);
   });
+
+  it('returns false when local state only has masked saved markers', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+            model: '',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: false,
+            apiKeyTail: '',
+            baseUrl: '',
+            model: '',
+          },
+        },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('fetchMediaProvidersFromDaemon', () => {

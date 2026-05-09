@@ -414,6 +414,16 @@ function hasAnyDaemonManagedMediaProvider(
   return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
 }
 
+function hasRecoverableLocalMediaProviderFields(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.baseUrl?.trim()
+    || entry?.model?.trim(),
+  );
+}
+
 export function isStoredMediaProviderEntryPresent(
   entry: MediaProviderCredentials | null | undefined,
 ): boolean {
@@ -635,7 +645,7 @@ export function shouldSyncLocalMediaProvidersToDaemon(
   daemonProviders: Record<string, MediaProviderCredentials> | null | undefined,
 ): boolean {
   return daemonProviders != null
-    && hasAnyConfiguredProvider(localProviders)
+    && Object.values(localProviders ?? {}).some((entry) => hasRecoverableLocalMediaProviderFields(entry))
     && !hasAnyDaemonManagedMediaProvider(daemonProviders);
 }
 
