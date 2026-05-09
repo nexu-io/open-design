@@ -138,6 +138,20 @@ All text/background pairs below pass 4.5:1 minimum.
 | Button | 14px | 500 | 1.2 |
 | Micro | 11px | 500 | 1.2 |
 
+**Font labels for catalog extraction:**
+
+```
+Display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+H1: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+H2: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+Body: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
+Body Small: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
+Caption: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+Button: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+Micro: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
+Mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
+```
+
 ## 4. Spacing
 
 8px baseline grid. The 8px unit balances density for information-heavy layouts (video metadata, comment panels) against the generous whitespace Loom's brand conveys.
@@ -320,7 +334,7 @@ All text/background pairs below pass 4.5:1 minimum.
   color: var(--color-text);
 }
 
-.input-field:focus {
+.input-field:focus-visible {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(98, 93, 245, 0.15);
@@ -492,14 +506,7 @@ Phosphor Icons (regular weight, 20px default) — single-stroke geometric style.
 
 ### Shadows
 
-```css
-:root {
-  --shadow-card: 0 1px 3px rgba(31, 31, 35, 0.08), 0 4px 12px rgba(31, 31, 35, 0.04);
-  --shadow-card-hover: 0 4px 12px rgba(31, 31, 35, 0.12), 0 8px 24px rgba(31, 31, 35, 0.08);
-  --shadow-overlay: 0 8px 32px rgba(31, 31, 35, 0.16), 0 2px 8px rgba(31, 31, 35, 0.08);
-  --shadow-tooltip: 0 4px 12px rgba(31, 31, 35, 0.12);
-}
-```
+No shadow tokens are defined here — all `--shadow-*` tokens are defined in the Color section's `:root` block. Reference them with `var(--shadow-card)`, etc.
 
 ## 9. Anti-patterns
 
