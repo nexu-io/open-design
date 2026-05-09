@@ -20,6 +20,30 @@ export type DesignSystemSummary = {
 
 type ColorToken = { name: string; value: string };
 
+// Treat a directory entry as a directory both for real dirs and for
+// symlinks whose target is a directory. `Dirent.isDirectory()` returns
+// false for symlinks even when the target is a directory (it reports
+// the link, not the target), which silently dropped symlinked
+// design-system folders from the listing on macOS / Linux. Following
+// the link via `stat()` makes externally-managed design-system packs
+// (e.g. a sibling repo symlinked into `<projectRoot>/design-systems/`)
+// work transparently. Broken symlinks fail `stat` and are skipped
+// silently — same outcome the caller would have had with the previous
+// filter.
+async function entryIsDirectoryFollowingLinks(
+  parent: string,
+  entry: import('node:fs').Dirent,
+): Promise<boolean> {
+  if (entry.isDirectory()) return true;
+  if (!entry.isSymbolicLink()) return false;
+  try {
+    const s = await stat(path.join(parent, entry.name));
+    return s.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export async function listDesignSystems(root: string): Promise<DesignSystemSummary[]> {
   const out: DesignSystemSummary[] = [];
   let entries = [];
@@ -29,7 +53,7 @@ export async function listDesignSystems(root: string): Promise<DesignSystemSumma
     return out;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!(await entryIsDirectoryFollowingLinks(root, entry))) continue;
     const designPath = path.join(root, entry.name, 'DESIGN.md');
     try {
       const stats = await stat(designPath);
