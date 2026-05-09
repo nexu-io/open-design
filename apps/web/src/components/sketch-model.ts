@@ -111,7 +111,8 @@ export function computeSketchBounds(items: SketchItem[]): {
       const x = clampSketchNumber(item.x);
       const y = clampSketchNumber(item.y);
       const fontSize = Math.max(12, clampSketchSize(item.size));
-      const textWidth = Math.max(fontSize, item.text.length * fontSize * 0.62);
+      const text = normalizeSketchText(item.text);
+      const textWidth = Math.max(fontSize, text.length * fontSize * 0.62);
       includePoint(x, y - fontSize, 4);
       includePoint(x + textWidth, y + fontSize * 0.2, 4);
     }
@@ -136,4 +137,8 @@ export function clampSketchSize(value: unknown): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 1;
   return Math.max(1, Math.min(MAX_ITEM_SIZE, numeric));
+}
+
+export function normalizeSketchText(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

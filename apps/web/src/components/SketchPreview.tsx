@@ -6,6 +6,7 @@ import {
   clampSketchSize,
   computeSketchBounds,
   isSketchJsonFileName,
+  normalizeSketchText,
   parseSketchDocument,
   type SketchItem,
 } from './sketch-model';
@@ -173,7 +174,7 @@ function renderSketchSvgItem(item: SketchItem, index: number) {
       fontSize={Math.max(12, clampSketchSize(item.size))}
       fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     >
-      {item.text}
+      {normalizeSketchText(item.text)}
     </text>
   );
 }
