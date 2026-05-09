@@ -45,6 +45,7 @@ import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
+import { handleCritiqueRerun } from './critique/rerun-handler.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
@@ -6199,6 +6200,17 @@ export async function startServer({
   app.post(
     '/api/projects/:projectId/critique/:runId/interrupt',
     handleCritiqueInterrupt(db, critiqueRunRegistry),
+  );
+
+  // POST /api/projects/:projectId/critique/:runId/rerun
+  // Returns the rerun-context payload (prior artifact path, original score,
+  // round summaries) the web layer needs to spawn a fresh critique with the
+  // original artifact attached as prior-art context. Read-only; the daemon
+  // does not start the new run itself, since the spawn path needs the agent /
+  // model / prompt context that lives in the chat layer (Task 6.2).
+  app.post(
+    '/api/projects/:projectId/critique/:runId/rerun',
+    handleCritiqueRerun(db),
   );
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
