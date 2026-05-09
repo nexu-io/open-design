@@ -228,7 +228,15 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     // its links resolve to `http://127.0.0.1:.../...`, which is gated
     // by the separate `isHttpUrl` branch and continues to open in the
     // user's external browser via `shell.openExternal`.
-    return parsed.protocol === "blob:" || parsed.protocol === "od:";
+    // `about:blank` is used by the renderer's PDF export fallback path:
+    // `window.open('', '_blank')` opens a blank window that is then
+    // navigated to a Blob URL. Without this, the empty URL is denied
+    // and the user sees a "Popup blocked" alert.
+    return (
+      parsed.protocol === "blob:" ||
+      parsed.protocol === "od:" ||
+      (parsed.protocol === "about:" && parsed.pathname === "blank")
+    );
   } catch {
     return false;
   }
