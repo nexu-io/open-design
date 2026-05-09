@@ -50,4 +50,9 @@ jobs:
           BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
           BOT_APP_INSTALLATION_ID: ${{ secrets.BOT_APP_INSTALLATION_ID }}
           BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-        run: pnpm exec tsx scripts/action-handler.ts
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
+            GITHUB_EVENT_NAME=pull_request pnpm exec tsx scripts/action-handler.ts
+          else
+            pnpm exec tsx scripts/action-handler.ts
+          fi
