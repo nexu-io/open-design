@@ -104,6 +104,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Restore Playwright browser cache
+        id: playwright_browser_cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -111,8 +112,12 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+      - name: Install Playwright system dependencies
+        run: pnpm -C e2e exec playwright install-deps chromium
+
       - name: Install Playwright browsers
-        run: pnpm -C e2e exec playwright install --with-deps chromium
+        if: ${{ steps.playwright_browser_cache.outputs.cache-hit != 'true' }}
+        run: pnpm -C e2e exec playwright install chromium
 
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
