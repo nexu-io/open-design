@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const ptBR: Dict = {
+  ...en,
   'common.cancel': 'Cancelar',
   'common.save': 'Salvar',
   'common.close': 'Fechar',
@@ -83,6 +85,15 @@ export const ptBR: Dict = {
   'settings.testAgentMissing': '{agentName} não está instalado ou não está no PATH.',
   'settings.testAgentSpawn': 'Não foi possível iniciar {agentName}: {detail}.',
   'settings.testUnknown': 'Falha no teste: {detail}',
+  'settings.agentInstall.install': 'Instalar',
+  'settings.agentInstall.docs': 'Docs',
+  'settings.agentInstall.pathHint':
+    'Se você instalou uma CLI com npm ou Homebrew e ela ainda aparece como não instalada, garanta que o diretório bin da ferramenta esteja no PATH herdado pelo daemon do Open Design (Terminal e apps GUI podem diferir no macOS). Veja QUICKSTART.md (seção "Local agent CLI and PATH").',
+  'settings.agentInstall.stepOpenLinks': 'Abra Instalar ou Docs para o agente desejado.',
+  'settings.agentInstall.stepAuth':
+    'Autentique-se na CLI do fornecedor (faça login ou adicione credenciais de API) antes de voltar ao Open Design.',
+  'settings.agentInstall.stepRescan': 'Clique em Reescanear nesta seção.',
+  'settings.agentInstall.stepSelect': 'Selecione o cartão do agente quando ele aparecer como instalado.',
   'settings.noAgentsDetected':
     'Nenhum agente detectado ainda. Instale Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI e clique em Reescanear.',
   'settings.apiSection': 'API da Anthropic',
@@ -126,7 +137,7 @@ export const ptBR: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'Personalizado (digite abaixo)…',
@@ -146,6 +157,10 @@ export const ptBR: Dict = {
   'settings.mediaProviderClearConfirm': 'Remover as configurações salvas de {name}? Você precisará inseri-las novamente para usar {name}.',
   'settings.mediaProviderPlaceholder': 'Cole a API key',
   'settings.mediaProviderBaseUrlPlaceholder': 'Sobrescrever Base URL padrão',
+  'settings.mediaProviderReload': 'Recarregar do daemon',
+  'settings.mediaProviderReloadError': 'Não foi possível recarregar as configurações dos provedores de mídia do daemon local.',
+  'settings.mediaProviderReloadSuccess': 'As configurações dos provedores de mídia foram recarregadas do daemon local.',
+  'settings.mediaProviderLoadError': 'Não foi possível carregar as configurações dos provedores de mídia do daemon local. Usando por enquanto as configurações salvas no navegador.',
   'settings.privacy': 'Privacy',
   'settings.privacyHint': 'What data is shared with the Open Design team',
   'settings.privacyConsentKicker': 'Help us improve Open Design',
@@ -469,6 +484,8 @@ export const ptBR: Dict = {
   'examples.previewModalTitle': 'Abrir prévia completa (modal)',
   'examples.shareTitle': 'Compartilhar este exemplo',
   'examples.shareLoadFirst': 'Passe o cursor para carregar a prévia primeiro',
+  'examples.unavailablePlaceholder': 'Sem prévia {kind} incluída — abra para saber mais',
+  'examples.shareUnavailable': 'Sem prévia {kind} incluída para compartilhar',
   'examples.shareMenu': 'Compartilhar ▾',
   'examples.exportPdfAllSlides': 'Exportar como PDF (todos os slides)',
   'examples.exportPptxLocked': 'Exportar como PPTX… (abra o template primeiro)',
@@ -601,6 +618,8 @@ export const ptBR: Dict = {
   'preview.errorTitle': 'Não foi possível carregar este exemplo.',
   'preview.errorBody': 'A obtenção do HTML do exemplo falhou. Verifique se o Open Design está em execução e tente novamente.',
   'preview.retry': 'Tentar novamente',
+  'preview.unavailableTitle': 'Nenhuma prévia incluída para esta skill.',
+  'preview.unavailableBody': 'Esta skill produz um resultado {kind} — execute o prompt no chat para gerar um.',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 

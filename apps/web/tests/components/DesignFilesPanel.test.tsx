@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
@@ -53,6 +53,7 @@ function renderPanel(files: ProjectFile[]) {
       onRefreshFiles={vi.fn()}
       onOpenFile={onOpenFile}
       onOpenLiveArtifact={vi.fn()}
+      onRenameFile={vi.fn()}
       onDeleteFile={vi.fn()}
       onDeleteFiles={onDeleteFiles}
       onUpload={vi.fn()}
@@ -108,6 +109,7 @@ describe('DesignFilesPanel grouping', () => {
         onRefreshFiles={vi.fn()}
         onOpenFile={vi.fn()}
         onOpenLiveArtifact={vi.fn()}
+        onRenameFile={vi.fn()}
         onDeleteFile={vi.fn()}
         onDeleteFiles={vi.fn()}
         onUpload={vi.fn()}
@@ -255,6 +257,26 @@ describe('DesignFilesPanel grouping', () => {
     expect(screen.getByTestId('design-file-row-today-01.html')).toBeTruthy();
     expect(screen.queryByTestId('design-file-row-today-31.html')).toBeNull();
     expect(getPageInfo(document.body)).toContain('1–30 of 31');
+  });
+
+  it('updates modified date groups when the local day changes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 9, 23, 59, 50));
+
+    renderPanel([file({ name: 'late-edit.html', mtime: new Date(2026, 4, 9, 23, 59).getTime() })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.queryByText('Yesterday')).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(10_001);
+    });
+
+    expect(screen.getByText('Yesterday')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
+    expect(screen.getByTestId('design-file-row-late-edit.html')).toBeTruthy();
   });
 });
 

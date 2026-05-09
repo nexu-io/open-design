@@ -13,8 +13,11 @@ import {
 import {
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  isStoredMediaProviderEntryEmpty,
+  isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
+  mergeDaemonMediaProviders,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -47,6 +50,7 @@ import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
 import { PrivacySection } from './PrivacySection';
+import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
@@ -66,6 +70,7 @@ export type SettingsSection =
   | 'media'
   | 'composio'
   | 'orbit'
+  | 'routines'
   | 'integrations'
   | 'mcpClient'
   | 'language'
@@ -112,6 +117,10 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
 }
 
 export interface AgentRefreshOptions {
@@ -226,6 +235,16 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
 };
+
+function sanitizeHttpsUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   anthropic: 'sk-ant-...',
@@ -565,6 +584,10 @@ export function SettingsDialog({
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState = 'idle',
+  mediaProvidersNotice,
+  onReloadMediaProviders,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
@@ -583,6 +606,12 @@ export function SettingsDialog({
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  // Scroll the right-hand content pane back to the top whenever the user
+  // picks a different settings section. Without this, switching from a
+  // long section the user had scrolled (e.g. Library) into a short one
+  // (About) keeps the previous scrollTop, so the new section's header
+  // can land out of view and the panel reads as half-loaded. Issue #634.
+  const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
@@ -608,6 +637,10 @@ export function SettingsDialog({
   useEffect(() => {
     setActiveSection(initialSection);
   }, [initialSection]);
+  useEffect(() => {
+    const el = settingsContentRef.current;
+    if (el) el.scrollTop = 0;
+  }, [activeSection]);
 
   // Tests pin a result against the unsaved draft. Once the user edits any
   // field that feeds into the test, the result is no longer trustworthy —
@@ -1050,6 +1083,10 @@ export function SettingsDialog({
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
+    routines: {
+      title: 'Routines',
+      subtitle: 'Scheduled, unattended agent sessions that run on their own.',
+    },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
@@ -1203,6 +1240,17 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'routines' ? ' active' : ''}`}
+              onClick={() => setActiveSection('routines')}
+            >
+              <Icon name="history" size={18} />
+              <span>
+                <strong>Routines</strong>
+                <small>Schedule unattended agent runs</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
@@ -1301,7 +1349,7 @@ export function SettingsDialog({
               </span>
             </button>
           </aside>
-          <div className="settings-content">
+          <div className="settings-content" ref={settingsContentRef}>
           {activeSection === 'execution' ? (
             <>
               <div
@@ -1462,53 +1510,107 @@ export function SettingsDialog({
                   {t('settings.noAgentsDetected')}
                 </div>
               ) : (
-                <div className="agent-grid">
-                  {agents.map((a) => {
-                    const active = cfg.agentId === a.id;
-                    return (
-                      <button
-                        type="button"
-                        key={a.id}
-                        className={
-                          'agent-card' +
-                          (active ? ' active' : '') +
-                          (a.available ? '' : ' disabled')
-                        }
-                        onClick={() =>
-                          a.available && setCfg((c) => ({ ...c, agentId: a.id }))
-                        }
-                        disabled={!a.available}
-                        aria-pressed={active}
-                      >
-                        <AgentIcon id={a.id} size={40} />
-                        <div className="agent-card-body">
-                          <div className="agent-card-name">{a.name}</div>
-                          <div className="agent-card-meta">
-                            {a.available ? (
-                              a.version ? (
-                                <span title={a.path ?? ''}>{a.version}</span>
-                              ) : (
-                                <span title={a.path ?? ''}>
-                                  {t('common.installed')}
-                                </span>
-                              )
-                            ) : (
+                <>
+                  <div className="agent-grid">
+                    {agents.map((a) => {
+                      const active = cfg.agentId === a.id;
+                      if (a.available) {
+                        return (
+                          <button
+                            type="button"
+                            key={a.id}
+                            className={
+                              'agent-card' + (active ? ' active' : '')
+                            }
+                            onClick={() =>
+                              setCfg((c) => ({ ...c, agentId: a.id }))
+                            }
+                            aria-pressed={active}
+                          >
+                            <AgentIcon id={a.id} size={40} />
+                            <div className="agent-card-body">
+                              <div className="agent-card-name">{a.name}</div>
+                              <div className="agent-card-meta">
+                                {a.version ? (
+                                  <span title={a.path ?? ''}>{a.version}</span>
+                                ) : (
+                                  <span title={a.path ?? ''}>
+                                    {t('common.installed')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span
+                              className={
+                                'status-dot' + (active ? ' active' : '')
+                              }
+                              aria-hidden="true"
+                            />
+                          </button>
+                        );
+                      }
+                      const installUrl = sanitizeHttpsUrl(a.installUrl);
+                      const docsUrl = sanitizeHttpsUrl(a.docsUrl);
+                      const hasLinks = Boolean(installUrl || docsUrl);
+                      const cardLabel = `${a.name} · ${t('common.notInstalled')}`;
+                      return (
+                        <div
+                          key={a.id}
+                          className="agent-card disabled agent-card-unavailable"
+                          role="group"
+                          aria-label={cardLabel}
+                        >
+                          <AgentIcon id={a.id} size={40} />
+                          <div className="agent-card-body">
+                            <div className="agent-card-name">{a.name}</div>
+                            <div className="agent-card-meta">
                               <span className="muted">
                                 {t('common.notInstalled')}
                               </span>
-                            )}
+                            </div>
+                            {hasLinks ? (
+                              <div className="agent-card-actions">
+                                {installUrl ? (
+                                  <a
+                                    href={installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link"
+                                  >
+                                    {t('settings.agentInstall.install')}
+                                  </a>
+                                ) : null}
+                                {docsUrl ? (
+                                  <a
+                                    href={docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link"
+                                  >
+                                    {t('settings.agentInstall.docs')}
+                                  </a>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
-                        {a.available ? (
-                          <span
-                            className={'status-dot' + (active ? ' active' : '')}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                  {agents.some((x) => !x.available) ? (
+                    <div className="agent-install-guide">
+                      <p className="hint agent-install-path-hint">
+                        {t('settings.agentInstall.pathHint')}
+                      </p>
+                      <ol className="agent-install-steps">
+                        <li>{t('settings.agentInstall.stepOpenLinks')}</li>
+                        <li>{t('settings.agentInstall.stepAuth')}</li>
+                        <li>{t('settings.agentInstall.stepRescan')}</li>
+                        <li>{t('settings.agentInstall.stepSelect')}</li>
+                      </ol>
+                    </div>
+                  ) : null}
+                </>
               )}
               {(() => {
                 const selected = agents.find(
@@ -1854,6 +1956,8 @@ export function SettingsDialog({
             <MediaProvidersSection
               cfg={cfg}
               setCfg={setCfg}
+              mediaProvidersNotice={mediaProvidersNotice}
+              onReloadMediaProviders={onReloadMediaProviders}
               onChange={() => {
                 mediaProvidersChangeVersionRef.current += 1;
               }}
@@ -1872,11 +1976,15 @@ export function SettingsDialog({
             />
           ) : null}
 
+          {activeSection === 'routines' ? <RoutinesSection /> : null}
+
           {activeSection === 'orbit' ? (
             <OrbitSection
               cfg={cfg}
               setCfg={setCfg}
               composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
+              daemonMediaProviders={daemonMediaProviders}
+              daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
               onOpenComposioSection={() => setActiveSection('composio')}
               onLeaveForOrbitProject={(runConfig) => {
                 // Persist any in-flight Orbit edits (toggle / time) before
@@ -2456,8 +2564,16 @@ interface OrbitRunStartResponse {
 
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
+  options?: {
+    daemonProviders?: AppConfig['mediaProviders'] | null;
+    syncMediaProviders?: boolean;
+  },
 ): Promise<OrbitRunStartResponse> {
-  await syncMediaProvidersToDaemon(config.mediaProviders);
+  if (options?.syncMediaProviders !== false) {
+    await syncMediaProvidersToDaemon(config.mediaProviders, {
+      daemonProviders: options?.daemonProviders,
+    });
+  }
   await syncConfigToDaemon(config, { throwOnError: true });
   const response = await fetch('/api/orbit/run', { method: 'POST' });
   if (!response.ok) throw new Error('Orbit run failed');
@@ -2501,6 +2617,8 @@ function OrbitSection({
   cfg,
   setCfg,
   composioApiKeyConfigured,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState,
   onOpenComposioSection,
   onLeaveForOrbitProject,
 }: {
@@ -2511,6 +2629,8 @@ function OrbitSection({
    *  that Orbit needs Composio first; when true (key present, just no
    *  connectors yet) it nudges the user toward the connector catalog. */
   composioApiKeyConfigured: boolean;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   /** Switch the parent settings dialog to the Connectors (Composio) tab.
    *  Used by the Orbit gate's primary CTA so the user can fix the
    *  prerequisite without leaving the dialog. */
@@ -2669,7 +2789,10 @@ function OrbitSection({
     void (async () => {
       try {
         const runConfig = configForManualOrbitRun(cfg);
-        const payload = await persistConfigAndRunOrbit(runConfig);
+        const payload = await persistConfigAndRunOrbit(runConfig, {
+          daemonProviders: daemonMediaProviders,
+          syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
+        });
         if (!payload.projectId) throw new Error('Orbit run did not return a project');
 
         onLeaveForOrbitProject(runConfig);
@@ -3289,13 +3412,19 @@ function OrbitSection({
 function MediaProvidersSection({
   cfg,
   setCfg,
+  mediaProvidersNotice,
+  onReloadMediaProviders,
   onChange,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onChange: () => void;
 }) {
   const { t } = useI18n();
+  const [reloadRunning, setReloadRunning] = useState(false);
+  const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -3315,22 +3444,28 @@ function MediaProvidersSection({
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
       const bEntry = cfg.mediaProviders?.[b.id];
-      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim());
-      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim());
+      const aConfigured = isStoredMediaProviderEntryPresent(aEntry);
+      const bConfigured = isStoredMediaProviderEntryPresent(bEntry);
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       if (a.integrated !== b.integrated) return a.integrated ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
   const updateProvider = (
     provider: MediaProvider,
-    patch: { apiKey?: string; baseUrl?: string; model?: string },
+    patch: {
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      apiKeyConfigured?: boolean;
+      apiKeyTail?: string;
+    },
   ) => {
     onChange();
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
       const map = { ...(curr.mediaProviders ?? {}) };
-      if (!next.apiKey.trim() && !next.baseUrl.trim() && !next.model?.trim()) {
+      if (isStoredMediaProviderEntryEmpty(next)) {
         delete map[provider.id];
       } else {
         map[provider.id] = next;
@@ -3338,6 +3473,23 @@ function MediaProvidersSection({
       return { ...curr, mediaProviders: map };
     });
   };
+  const handleReload = async () => {
+    if (!onReloadMediaProviders || reloadRunning) return;
+    setReloadRunning(true);
+    setReloadNotice(null);
+    try {
+      const next = await onReloadMediaProviders();
+      if (!next) {
+        setReloadNotice({ kind: 'error', message: t('settings.mediaProviderReloadError') });
+        return;
+      }
+      setCfg((curr) => mergeDaemonMediaProviders(curr, next));
+      setReloadNotice({ kind: 'success', message: t('settings.mediaProviderReloadSuccess') });
+    } finally {
+      setReloadRunning(false);
+    }
+  };
+
   const toggleApiKeyVisibility = (providerId: string) => {
     setVisibleApiKeys((current) => {
       const next = new Set(current);
@@ -3357,20 +3509,46 @@ function MediaProvidersSection({
           <h3>{t('settings.mediaProviders')}</h3>
           <p className="hint">{t('settings.mediaProvidersHint')}</p>
         </div>
+        {onReloadMediaProviders ? (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void handleReload()}
+            disabled={reloadRunning}
+          >
+            {reloadRunning ? t('common.loading') : t('settings.mediaProviderReload')}
+          </button>
+        ) : null}
       </div>
+      {mediaProvidersNotice ? (
+        <p className="hint" role="alert">{mediaProvidersNotice}</p>
+      ) : null}
+      {reloadNotice ? (
+        <p className="hint" role={reloadNotice.kind === 'error' ? 'alert' : 'status'}>
+          {reloadNotice.message}
+        </p>
+      ) : null}
       <div className="media-provider-list">
         {providers.map((provider) => {
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
-          const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
+          const hasPendingEdit = Boolean(entry.apiKey.trim());
+          const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
+          const tail = entry.apiKeyTail?.trim();
+          const configured = isStoredMediaProviderEntryPresent(entry);
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
-          const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
+          const clearable = isStoredMediaProviderEntryPresent(entry);
           const apiKeyVisible = visibleApiKeys.has(provider.id);
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
                 <div className="media-provider-meta">
                   <span className="media-provider-name">{provider.label}</span>
+                  {isSavedState ? (
+                    <span className="field-status-badge" title={t('settings.connectorsSavedTitle')}>
+                      {tail ? t('settings.connectorsSavedWithTail', { tail }) : t('settings.connectorsSaved')}
+                    </span>
+                  ) : null}
                   <span className="media-provider-hint">{provider.hint}</span>
                 </div>
                 <div className="media-provider-badges">
@@ -3389,7 +3567,7 @@ function MediaProvidersSection({
                   <input
                     type={apiKeyVisible ? 'text' : 'password'}
                     value={entry.apiKey}
-                    placeholder={t('settings.mediaProviderPlaceholder')}
+                    placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
                     aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                     disabled={disabled}
                     onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
@@ -3406,9 +3584,9 @@ function MediaProvidersSection({
                     aria-pressed={apiKeyVisible}
                     onClick={() => toggleApiKeyVisibility(provider.id)}
                   >
-                    <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                  </button>
-                </div>
+                      <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                    </button>
+                  </div>
                 <input
                   value={entry.baseUrl}
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -3444,7 +3622,13 @@ function MediaProvidersSection({
                     ) {
                       return;
                     }
-                    updateProvider(provider, { apiKey: '', baseUrl: '', model: '' });
+                    updateProvider(provider, {
+                      apiKey: '',
+                      baseUrl: '',
+                      model: '',
+                      apiKeyConfigured: false,
+                      apiKeyTail: '',
+                    });
                   }}
                 >
                   {t('settings.mediaProviderClear')}
@@ -3518,7 +3702,7 @@ interface McpClient {
   // Optional one-click install action. Currently only Cursor
   // supports deeplinks of this shape.
   buildDeeplink?: (info: McpInstallInfo) => string;
-  deeplinkLabel?: string;
+  deeplinkLabel?: () => string;
 }
 
 // Path hint per OS. Localizes the "where to paste" copy so a
@@ -3583,129 +3767,96 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
 }`;
 }
 
-const MCP_CLIENTS: McpClient[] = [
-  {
-    id: 'claude',
-    label: 'Claude Code',
-    // `claude mcp add-json <name> '<json>'` takes ONLY the inner
-    // server-config object, not the full mcpServers wrapper. We
-    // inline the JSON into the command itself so the snippet is a
-    // real one-liner the user can copy and run, no template
-    // substitution. Single quotes around the JSON work in bash, zsh,
-    // PowerShell, and Git Bash; the only outlier is Windows cmd.exe,
-    // where users would need to swap to PowerShell.
-    buildMethod: () => 'CLI command',
-    buildInstruction: () => 'Run this in your terminal.',
-    buildSnippet: (info) => {
-      const inner = JSON.stringify(buildMcpStdioServerConfig(info));
-      return `claude mcp add-json --scope user open-design '${inner}'`;
-    },
-    buildSnippetLang: () => 'bash',
-  },
-  {
-    id: 'codex',
-    label: 'Codex',
-    // Codex CLI shares config between the terminal CLI and the IDE
-    // extension at ~/.codex/config.toml (TOML, not JSON, and a
-    // different table key from every other client - mcp_servers
-    // rather than mcpServers / servers / context_servers). Schema
-    // ref: https://developers.openai.com/codex/mcp.
-    //
-    // For our payload (just command + args, both strings/arrays of
-    // strings) JSON.stringify happens to produce valid TOML literal
-    // values, since TOML basic strings use the same double-quote
-    // escape rules and TOML inline arrays match JSON array syntax.
-    buildMethod: () => 'TOML config',
-    buildInstruction: (info) => {
-      const path = homeConfigPath(
-        info.platform,
-        '~/.codex/config.toml',
-        '%USERPROFILE%\\.codex\\config.toml',
-      );
-      return `Append this table to ${path}. The same config is shared between the Codex CLI and the Codex IDE extension.`;
-    },
-    buildSnippet: (info) => `[mcp_servers.open-design]
-command = ${JSON.stringify(info.command)}
-args = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
-    buildSnippetLang: () => 'toml',
-  },
-  {
-    id: 'cursor',
-    label: 'Cursor',
-    buildMethod: () => 'One-click install',
-    buildInstruction: (info) =>
-      `Click "Install in Cursor" to install with an approval dialog, or merge this JSON into ${homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json')}.`,
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-    buildDeeplink: (info) => {
-      const inner = buildMcpStdioServerConfig(info);
-      // Cursor expects the inner server-config object base64-encoded
-      // as ?config=...; the handler decodes it and pops an approval
-      // dialog before writing to mcp.json. We UTF-8-encode first so
-      // non-Latin1 chars in paths (e.g. an accented username) do not
-      // throw from btoa().
-      const encoded = utf8Btoa(JSON.stringify(inner));
-      return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
-    },
-    deeplinkLabel: 'Install in Cursor',
-  },
-  {
-    id: 'vscode',
-    label: 'VS Code',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open the Command Palette (${commandPaletteShortcut(info.platform)}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.`,
-    buildSnippet: (info) => `{
-  "servers": {
-    "open-design": {
-      "type": "stdio",
-      "command": ${JSON.stringify(info.command)},
-      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,
-      "env": ${JSON.stringify(info.env)}` : ''}
-    }
-  }
-}`,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'antigravity',
-    label: 'Antigravity',
-    buildMethod: () => 'JSON config',
-    buildInstruction: () =>
-      'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'zed',
-    label: 'Zed',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open Zed Settings (${settingsShortcut(info.platform)}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".`,
-    buildSnippet: (info) => `{
-  "context_servers": {
-    "open-design": {
-      "source": "custom",
-      "command": ${JSON.stringify(info.command)},
-      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,
-      "env": ${JSON.stringify(info.env)}` : ''}
-    }
-  }
-}`,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'windsurf',
-    label: 'Windsurf',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open ${homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json')} (or use the MCPs icon in Cascade → Configure) and merge:`,
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-  },
-];
-
 function IntegrationsSection() {
+  const { t } = useI18n();
+
+  const MCP_CLIENTS: McpClient[] = [
+    {
+      id: 'claude',
+      label: 'Claude Code',
+      buildMethod: () => t('settings.mcpMethodCli'),
+      buildInstruction: () => t('settings.mcpInstructionCli'),
+      buildSnippet: (info) => {
+        const inner = JSON.stringify(buildMcpStdioServerConfig(info));
+        return `claude mcp add-json --scope user open-design '${inner}'`;
+      },
+      buildSnippetLang: () => 'bash',
+    },
+    {
+      id: 'codex',
+      label: 'Codex',
+      buildMethod: () => t('settings.mcpMethodToml'),
+      buildInstruction: (info) => {
+        const path = homeConfigPath(
+          info.platform,
+          '~/.codex/config.toml',
+          '%USERPROFILE%\\.codex\\config.toml',
+        );
+        return t('settings.mcpInstructionCodex', { path });
+      },
+      buildSnippet: (info) => `[mcp_servers.open-design]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
+      buildSnippetLang: () => 'toml',
+    },
+    {
+      id: 'cursor',
+      label: 'Cursor',
+      buildMethod: () => t('settings.mcpMethodOneClick'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionCursor', {
+          path: homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+      buildDeeplink: (info) => {
+        const inner = buildMcpStdioServerConfig(info);
+        const encoded = utf8Btoa(JSON.stringify(inner));
+        return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
+      },
+      deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'vscode',
+      label: 'VS Code',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionCopilot', {
+          shortcut: commandPaletteShortcut(info.platform),
+        }),
+      buildSnippet: (info) => `{\n  "servers": {\n    "open-design": {\n      "type": "stdio",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'antigravity',
+      label: 'Antigravity',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: () => t('settings.mcpInstructionAntigravity'),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'zed',
+      label: 'Zed',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionZed', {
+          shortcut: settingsShortcut(info.platform),
+        }),
+      buildSnippet: (info) => `{\n  "context_servers": {\n    "open-design": {\n      "source": "custom",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'windsurf',
+      label: 'Windsurf',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionWindsurf', {
+          path: homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+  ];
+
   const [clientId, setClientId] = useState<McpClientId>('claude');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -3801,13 +3952,8 @@ function IntegrationsSection() {
     <section className="settings-section">
       <div className="section-head">
         <div>
-          <h3>MCP server</h3>
-          <p className="hint">
-            Lets a coding agent in another repo (Claude Code, Cursor,
-            VS Code, Antigravity, Zed, Windsurf) read your Open Design
-            projects. Use it to pull a design into your app without
-            exporting a zip first.
-          </p>
+          <h3>{t('settings.mcpTitle')}</h3>
+          <p className="hint">{t('settings.mcpHint')}</p>
         </div>
       </div>
 
@@ -3817,9 +3963,7 @@ function IntegrationsSection() {
             className="empty-card"
             style={{ marginBottom: 14, color: 'var(--danger-fg, #f88)' }}
           >
-            Couldn&rsquo;t reach the local daemon to resolve install paths
-            ({infoError}). Make sure Open Design is running, then reopen this
-            panel.
+            {t('settings.mcpDaemonError', { error: infoError! })}
           </div>
         ) : null}
 
@@ -3833,11 +3977,10 @@ function IntegrationsSection() {
           >
             <strong>
               {!info.cliExists
-                ? 'Build the daemon first.'
-                : 'Node binary is missing.'}
+                ? t('settings.mcpBuildDaemon')
+                : t('settings.mcpNodeMissing')}
             </strong>{' '}
-            {info.buildHint ??
-              'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.'}
+            {info.buildHint ?? t('settings.mcpBuildHint')}
           </div>
         ) : null}
 
@@ -3926,7 +4069,7 @@ function IntegrationsSection() {
               style={{ padding: '6px 14px', fontSize: 13 }}
             >
               <Icon name="link" size={14} />
-              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel}</span>
+              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel ? client.deeplinkLabel() : ''}</span>
             </button>
             <span
               style={{
@@ -3935,7 +4078,7 @@ function IntegrationsSection() {
                 color: 'var(--fg-2, #9aa0a6)',
               }}
             >
-              Cursor pops an approval dialog before writing the config.
+              {t('settings.mcpCursorApproval')}
             </span>
           </div>
         ) : null}
@@ -3971,8 +4114,8 @@ function IntegrationsSection() {
             <code>
               {snippet ||
                 (infoError
-                  ? '# resolving paths failed, see the error above'
-                  : '# loading install paths from the local daemon…')}
+                  ? t('settings.mcpResolvingFailed')
+                  : t('settings.mcpLoadingPaths'))}
             </code>
           </pre>
           <button
@@ -3987,10 +4130,10 @@ function IntegrationsSection() {
               padding: '4px 10px',
               fontSize: 12,
             }}
-            aria-label="Copy MCP configuration snippet"
+            aria-label={t('settings.mcpCopyAria')}
           >
             <Icon name={copied ? 'check' : 'copy'} size={14} />
-            <span style={{ marginLeft: 6 }}>{copied ? 'Copied' : 'Copy'}</span>
+            <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
           </button>
         </div>
 
@@ -4006,13 +4149,9 @@ function IntegrationsSection() {
             lineHeight: 1.5,
           }}
         >
-          <strong>Restart your client to pick up the new server.</strong>{' '}
+          <strong>{t('settings.mcpRestartNote')}</strong>{' '}
           <span style={{ color: 'var(--text-muted)' }}>
-            Most editors only load MCP servers at startup. In Cursor / VS
-            Code / Antigravity / Windsurf you can run{' '}
-            <code>Developer: Reload Window</code> from the command palette
-            instead of a full restart. Zed and Claude Code need a quit and
-            reopen.
+            {t('settings.mcpRestartDetail')}
           </span>
         </div>
 
@@ -4027,7 +4166,7 @@ function IntegrationsSection() {
               fontWeight: 600,
             }}
           >
-            What your agent can do
+            {t('settings.mcpCapabilitiesTitle')}
           </p>
           <ul
             style={{
@@ -4037,19 +4176,9 @@ function IntegrationsSection() {
               color: 'var(--text)',
             }}
           >
-            <li>
-              Read or search any file in a project (HTML, JSX, CSS, JSON,
-              SVG, Markdown).
-            </li>
-            <li>
-              Pull a design bundle in one call: the entry file plus every
-              CSS variable, component, and font it references.
-            </li>
-            <li>
-              Default to the project and file you have open in Open Design,
-              so you can say &ldquo;build this in my app&rdquo; without
-              re-stating which design.
-            </li>
+            <li>{t('settings.mcpCapabilityRead')}</li>
+            <li>{t('settings.mcpCapabilityPull')}</li>
+            <li>{t('settings.mcpCapabilityDefault')}</li>
           </ul>
         </div>
 
@@ -4061,9 +4190,7 @@ function IntegrationsSection() {
             lineHeight: 1.5,
           }}
         >
-          Open Design must be running for MCP tool calls to succeed. If
-          you started your coding agent before opening Open Design,
-          restart the agent so it can reach the live daemon.
+          {t('settings.mcpRunningNote')}
         </p>
       </div>
     </section>

@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const fa: Dict = {
+  ...en,
   'common.cancel': 'لغو',
   'common.save': 'ذخیره',
   'common.close': 'بستن',
@@ -83,6 +85,15 @@ export const fa: Dict = {
   'settings.testAgentMissing': '{agentName} نصب نشده یا در PATH نیست.',
   'settings.testAgentSpawn': '{agentName} اجرا نشد: {detail}.',
   'settings.testUnknown': 'آزمایش ناموفق بود: {detail}',
+  'settings.agentInstall.install': 'نصب',
+  'settings.agentInstall.docs': 'مستندات',
+  'settings.agentInstall.pathHint':
+    'اگر CLI را با npm یا Homebrew نصب کرده‌اید اما هنوز به‌صورت نصب‌نشده نمایش داده می‌شود، مطمئن شوید پوشه bin ابزار در PATHای باشد که daemon اوپن دیزاین به ارث می‌برد (در macOS ممکن است PATH ترمینال و برنامه‌های GUI متفاوت باشد). بخش "Local agent CLI and PATH" در QUICKSTART.md را ببینید.',
+  'settings.agentInstall.stepOpenLinks': 'برای عامل موردنظر، لینک نصب یا مستندات را باز کنید.',
+  'settings.agentInstall.stepAuth':
+    'قبل از بازگشت به Open Design، در CLI ارائه‌دهنده احراز هویت کنید (ورود یا افزودن اطلاعات API).',
+  'settings.agentInstall.stepRescan': 'در این بخش روی اسکن مجدد کلیک کنید.',
+  'settings.agentInstall.stepSelect': 'وقتی عامل به‌صورت نصب‌شده نمایش داده شد، کارت آن را انتخاب کنید.',
   'settings.noAgentsDetected':
     'هنوز هیچ عاملی شناسایی نشده. یکی از Claude Code، Codex، Gemini CLI، OpenCode، Cursor Agent، Qwen یا GitHub Copilot CLI را نصب کنید، سپس روی اسکن مجدد کلیک کنید.',
   'settings.apiSection': 'Anthropic API',
@@ -126,7 +137,7 @@ export const fa: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'سفارشی (در زیر تایپ کنید)…',
@@ -147,6 +158,10 @@ export const fa: Dict = {
   'settings.mediaProviderClearConfirm': 'پاک کردن تنظیمات ذخیره‌شده‌ی {name}؟ برای استفاده از {name} باید آن‌ها را دوباره وارد کنید.',
   'settings.mediaProviderPlaceholder': 'کلید API را وارد کنید',
   'settings.mediaProviderBaseUrlPlaceholder': 'بازنویسی آدرس پایه پیش‌فرض',
+  'settings.mediaProviderReload': 'بارگذاری دوباره از دیمن محلی',
+  'settings.mediaProviderReloadError': 'بارگذاری دوبارهٔ تنظیمات ارائه‌دهنده‌های رسانه از دیمن محلی ممکن نشد.',
+  'settings.mediaProviderReloadSuccess': 'تنظیمات ارائه‌دهنده‌های رسانه از دیمن محلی دوباره بارگذاری شد.',
+  'settings.mediaProviderLoadError': 'بارگذاری تنظیمات ارائه‌دهنده‌های رسانه از دیمن محلی ممکن نشد. فعلاً از تنظیمات ذخیره‌شده در مرورگر استفاده می‌شود.',
   'settings.privacy': 'Privacy',
   'settings.privacyHint': 'What data is shared with the Open Design team',
   'settings.privacyConsentKicker': 'Help us improve Open Design',
@@ -470,6 +485,8 @@ export const fa: Dict = {
   'examples.previewModalTitle': 'باز کردن پیش‌نمایش کامل (modal)',
   'examples.shareTitle': 'اشتراک‌گذاری این نمونه',
   'examples.shareLoadFirst': 'ابتدا برای بارگذاری پیش‌نمایش هاور کنید',
+  'examples.unavailablePlaceholder': 'پیش‌نمایش {kind} همراه ندارد — برای جزئیات باز کنید',
+  'examples.shareUnavailable': 'پیش‌نمایش {kind} برای اشتراک‌گذاری همراه ندارد',
   'examples.shareMenu': 'اشتراک‌گذاری ▾',
   'examples.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
   'examples.exportPptxLocked': 'صادرکردن به PPTX… (ابتدا قالب را باز کنید)',
@@ -602,6 +619,8 @@ export const fa: Dict = {
   'preview.errorTitle': 'بارگیری این نمونه ممکن نشد.',
   'preview.errorBody': 'دریافت HTML نمونه با خطا مواجه شد. مطمئن شوید Open Design در حال اجراست و دوباره تلاش کنید.',
   'preview.retry': 'تلاش دوباره',
+  'preview.unavailableTitle': 'برای این مهارت پیش‌نمایش همراهی وجود ندارد.',
+  'preview.unavailableBody': 'این مهارت خروجی {kind} تولید می‌کند — برای ساخت یکی، پرامپت را در گفتگو اجرا کنید.',
   'preview.showSidebar': 'نمایش {label}',
   'preview.hideSidebar': 'پنهان کردن {label}',
 

@@ -30,7 +30,7 @@ const sampleSkill: SkillSummary = {
   description: 'A team dashboard live artifact.',
   triggers: ['dashboard'],
   mode: 'prototype',
-  previewType: 'web',
+  previewType: 'html',
   designSystemRequired: false,
   defaultFor: [],
   upstream: null,
@@ -66,7 +66,7 @@ describe('ExamplesTab preview retry path (#860)', () => {
     // Initial fetch on mount.
     await flushPromises();
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(mockedFetch).toHaveBeenLastCalledWith('live-dashboard');
+    expect(mockedFetch).toHaveBeenLastCalledWith('live-dashboard', 'html');
 
     // Error UI replaces the loading placeholder.
     expect(screen.getByText("Couldn't load this example.")).toBeTruthy();
@@ -77,9 +77,11 @@ describe('ExamplesTab preview retry path (#860)', () => {
     await flushPromises();
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(mockedFetch).toHaveBeenLastCalledWith('live-dashboard');
+    expect(mockedFetch).toHaveBeenLastCalledWith('live-dashboard', 'html');
     // Defensive: a regression that wires the modal view id back into the
-    // fetcher would call with 'preview' here.
+    // fetcher would call with 'preview' as the first arg here, regardless
+    // of the previewType arg passed alongside.
+    expect(mockedFetch).not.toHaveBeenCalledWith('preview', expect.any(String));
     expect(mockedFetch).not.toHaveBeenCalledWith('preview');
   });
 });

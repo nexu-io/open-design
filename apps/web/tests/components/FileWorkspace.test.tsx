@@ -21,6 +21,9 @@ afterEach(() => {
   }
   host?.remove();
   host = null;
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 function workspaceFile(name: string): ProjectFile {
@@ -93,6 +96,12 @@ function stubTabRect(tab: HTMLElement, left = 0, width = 100) {
     height: 20,
     toJSON: () => ({}),
   }));
+}
+
+function changeInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 describe('FileWorkspace upload input', () => {
@@ -173,6 +182,145 @@ describe('FileWorkspace upload input', () => {
     );
 
     expect(markup).toContain('Show chat');
+  });
+});
+
+describe('FileWorkspace design file rename', () => {
+  it('renames from the Design Files row menu and replaces persisted tabs', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/projects/project-1/files/rename') && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            file: workspaceFile('resume-notes.txt'),
+            oldName: 'paste-1.txt',
+            newName: 'resume-notes.txt',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onTabsStateChange = vi.fn();
+    const onRefreshFiles = vi.fn();
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="project-1"
+        files={[workspaceFile('paste-1.txt'), workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: ['paste-1.txt', 'index.html'], active: 'paste-1.txt' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
+    if (!designFilesTab) throw new Error('Could not find design files tab');
+
+    act(() => designFilesTab.click());
+    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
+    if (!menuButton) throw new Error('Could not find design file menu');
+    act(() => menuButton.click());
+    const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'Rename');
+    if (!renameButton) throw new Error('Could not find rename command');
+    act(() => renameButton.click());
+
+    const input = container.querySelector<HTMLInputElement>('.df-rename-input');
+    if (!input) throw new Error('Could not find rename input');
+    act(() => {
+      changeInputValue(input, 'resume-notes.txt');
+    });
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/rename',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ from: 'paste-1.txt', to: 'resume-notes.txt' }),
+      }),
+    );
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['resume-notes.txt', 'index.html'],
+      active: 'resume-notes.txt',
+    });
+    expect(onRefreshFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects renaming a persisted file over an open pending sketch tab', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response('', { status: 200 }),
+    );
+    const alertMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', alertMock);
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const onTabsStateChange = vi.fn();
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="project-1"
+        files={[workspaceFile('paste-1.txt')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['paste-1.txt'], active: 'paste-1.txt' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
+    if (!designFilesTab) throw new Error('Could not find design files tab');
+    act(() => designFilesTab.click());
+
+    const newSketchButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'New sketch');
+    if (!newSketchButton) throw new Error('Could not find new sketch command');
+    act(() => newSketchButton.click());
+
+    const pendingSketchTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((tab) =>
+      tab.textContent?.includes('.sketch.json'),
+    );
+    if (!pendingSketchTab) throw new Error('Could not find pending sketch tab');
+    const pendingSketchName = pendingSketchTab.textContent!.replace(' •', '');
+
+    act(() => designFilesTab.click());
+    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
+    if (!menuButton) throw new Error('Could not find file menu');
+    act(() => menuButton.click());
+    const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'Rename');
+    if (!renameButton) throw new Error('Could not find rename command');
+    act(() => renameButton.click());
+
+    const input = container.querySelector<HTMLInputElement>('.df-rename-input');
+    if (!input) throw new Error('Could not find rename input');
+    act(() => {
+      changeInputValue(input, pendingSketchName);
+    });
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(alertMock).toHaveBeenCalledWith(
+      `A pending sketch named "${pendingSketchName}" is already open. Save or close it before renaming.`,
+    );
+    const renameCalls = fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith('/api/projects/project-1/files/rename'),
+    );
+    expect(renameCalls).toHaveLength(0);
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+    expect(pendingSketchTab.textContent).toContain(pendingSketchName);
   });
 });
 

@@ -85,6 +85,15 @@ export const esES: Dict = {
   'settings.testAgentMissing': '{agentName} no está instalado o no está en el PATH.',
   'settings.testAgentSpawn': 'No se pudo iniciar {agentName}: {detail}.',
   'settings.testUnknown': 'Prueba fallida: {detail}',
+  'settings.agentInstall.install': 'Instalar',
+  'settings.agentInstall.docs': 'Docs',
+  'settings.agentInstall.pathHint':
+    'Si instalaste una CLI con npm o Homebrew y sigue apareciendo como no instalada, asegúrate de que el directorio bin de la herramienta esté en el PATH que hereda el daemon de Open Design (Terminal y apps GUI pueden diferir en macOS). Consulta QUICKSTART.md (sección "Local agent CLI and PATH").',
+  'settings.agentInstall.stepOpenLinks': 'Abre Instalar o Docs para el agente que prefieras.',
+  'settings.agentInstall.stepAuth':
+    'Autentícate con la CLI del proveedor (inicia sesión o añade credenciales API) antes de volver a Open Design.',
+  'settings.agentInstall.stepRescan': 'Haz clic en Reescanear en esta sección.',
+  'settings.agentInstall.stepSelect': 'Selecciona la tarjeta del agente cuando aparezca como instalado.',
   'settings.noAgentsDetected':
     'Aún no se ha detectado ningún agente. Instala Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI y pulsa Reescanear.',
   'settings.apiSection': 'API de Anthropic',
@@ -128,7 +137,7 @@ export const esES: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'Personalizado (escribe abajo)…',
@@ -149,6 +158,10 @@ export const esES: Dict = {
   'settings.mediaProviderClearConfirm': '¿Eliminar la configuración guardada de {name}? Tendrás que introducirla de nuevo para usar {name}.',
   'settings.mediaProviderPlaceholder': 'Pega la clave de API',
   'settings.mediaProviderBaseUrlPlaceholder': 'Sobrescribir URL base por defecto',
+  'settings.mediaProviderReload': 'Recargar desde el daemon',
+  'settings.mediaProviderReloadError': 'No se pudieron recargar los ajustes de los proveedores de medios desde el daemon local.',
+  'settings.mediaProviderReloadSuccess': 'Se recargaron los ajustes de los proveedores de medios desde el daemon local.',
+  'settings.mediaProviderLoadError': 'No se pudieron cargar los ajustes de los proveedores de medios desde el daemon local. Por ahora se usarán los ajustes guardados en el navegador.',
   'settings.privacy': 'Privacy',
   'settings.privacyHint': 'What data is shared with the Open Design team',
   'settings.privacyConsentKicker': 'Help us improve Open Design',
@@ -348,6 +361,8 @@ export const esES: Dict = {
   'examples.previewModalTitle': 'Abrir vista previa completa (modal)',
   'examples.shareTitle': 'Compartir este ejemplo',
   'examples.shareLoadFirst': 'Pasa el cursor para cargar primero la vista previa',
+  'examples.unavailablePlaceholder': 'Sin vista previa {kind} incluida — abre para saber más',
+  'examples.shareUnavailable': 'Sin vista previa {kind} incluida para compartir',
   'examples.shareMenu': 'Compartir ▾',
   'examples.exportPdfAllSlides': 'Exportar como PDF (todas las diapositivas)',
   'examples.exportPptxLocked': 'Exportar como PPTX… (abre primero la plantilla)',
@@ -480,6 +495,8 @@ export const esES: Dict = {
   'preview.errorTitle': 'No se pudo cargar este ejemplo.',
   'preview.errorBody': 'No se pudo obtener el HTML del ejemplo. Asegúrate de que Open Design esté en ejecución e inténtalo de nuevo.',
   'preview.retry': 'Reintentar',
+  'preview.unavailableTitle': 'No hay vista previa incluida para esta skill.',
+  'preview.unavailableBody': 'Esta skill genera un resultado {kind} — ejecuta el prompt en el chat para crear uno.',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 

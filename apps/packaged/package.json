@@ -1,6 +1,6 @@
 {
   "name": "@open-design/packaged",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -21,7 +21,7 @@
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "pnpm --filter @open-design/desktop build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@open-design/daemon": "workspace:*",

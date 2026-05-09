@@ -83,6 +83,15 @@ export const th: Dict = {
   'settings.testAgentMissing': 'ยังไม่ได้ติดตั้ง {agentName} หรือไม่ได้อยู่ใน PATH',
   'settings.testAgentSpawn': 'ไม่สามารถเริ่ม {agentName} ได้: {detail}',
   'settings.testUnknown': 'การทดสอบล้มเหลว: {detail}',
+  'settings.agentInstall.install': 'ติดตั้ง',
+  'settings.agentInstall.docs': 'เอกสาร',
+  'settings.agentInstall.pathHint':
+    'หากคุณติดตั้ง CLI ด้วย npm หรือ Homebrew แล้วแต่ยังแสดงว่าไม่ได้ติดตั้ง โปรดตรวจสอบว่าโฟลเดอร์ bin ของเครื่องมือนั้นอยู่ใน PATH ที่ Open Design daemon ใช้งาน (บน macOS ค่า PATH ของ Terminal และแอป GUI อาจต่างกัน) ดู QUICKSTART.md (ส่วน "Local agent CLI and PATH")',
+  'settings.agentInstall.stepOpenLinks': 'เปิดลิงก์ติดตั้งหรือเอกสารสำหรับเอเจนต์ที่ต้องการ',
+  'settings.agentInstall.stepAuth':
+    'ยืนยันตัวตนกับ CLI ของผู้ให้บริการ (ลงชื่อเข้าใช้หรือเพิ่มข้อมูลรับรอง API) ก่อนกลับไปที่ Open Design',
+  'settings.agentInstall.stepRescan': 'คลิกสแกนใหม่ในส่วนนี้',
+  'settings.agentInstall.stepSelect': 'เลือกการ์ดเอเจนต์เมื่อแสดงว่าได้ติดตั้งแล้ว',
   'settings.noAgentsDetected': 'ยังไม่พบเอเจนต์ โปรดติดตั้งอย่างใดอย่างหนึ่ง: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen หรือ GitHub Copilot CLI แล้วคลิกสแกนใหม่',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'เลือกผู้ให้บริการอย่างรวดเร็ว',
