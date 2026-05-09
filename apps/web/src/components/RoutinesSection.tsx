@@ -33,9 +33,10 @@ const WEEKDAY_LABELS: { value: Weekday; short: string; long: string }[] = [
   { value: 6, short: 'Sat', long: 'Saturday' },
 ];
 
-// Curated common timezones. The browser's local zone is prepended at runtime
-// so the very first option always reflects "where the user actually is".
-const COMMON_TIMEZONES = [
+// Fallback list used only when the runtime doesn't expose
+// `Intl.supportedValuesOf('timeZone')`. The backend validator accepts any
+// IANA zone, so the picker should match — see `listSupportedTimezones`.
+const FALLBACK_TIMEZONES = [
   'UTC',
   'Asia/Shanghai',
   'Asia/Tokyo',
@@ -60,6 +61,23 @@ function detectLocalTimezone(): string {
   }
 }
 
+// Returns every IANA zone the platform recognizes, so the picker stays in
+// sync with the backend validator (which accepts any IANA timezone). Falls
+// back to a curated subset on older runtimes that lack `supportedValuesOf`.
+function listSupportedTimezones(): string[] {
+  try {
+    const fn = (Intl as { supportedValuesOf?: (key: string) => string[] })
+      .supportedValuesOf;
+    if (typeof fn === 'function') {
+      const list = fn('timeZone');
+      if (Array.isArray(list) && list.length > 0) return list;
+    }
+  } catch {
+    // fall through
+  }
+  return FALLBACK_TIMEZONES;
+}
+
 // "GMT+8", "GMT-5:30", "GMT" — short label that mirrors the screenshot's
 // "Shanghai (GMT+8)" pattern for legibility.
 function gmtLabel(timezone: string, at = new Date()): string {
@@ -82,7 +100,11 @@ function tzCityLabel(timezone: string): string {
 }
 
 function tzOptionLabel(timezone: string): string {
-  return `${tzCityLabel(timezone)} (${gmtLabel(timezone)})`;
+  // The GMT offset is intentionally omitted: it would drift seasonally for
+  // DST-observing zones (e.g. `America/New_York` is GMT-5 in winter and
+  // GMT-4 in summer) and a picker label that depends on `new Date()` is
+  // misleading. The IANA city stays stable year-round.
+  return tzCityLabel(timezone);
 }
 
 function formatTime12h(time: string): string {
@@ -95,12 +117,22 @@ function formatTime12h(time: string): string {
   return `${h12}:${mm} ${suffix}`;
 }
 
-function describeSchedule(schedule: RoutineSchedule): string {
+function describeSchedule(
+  schedule: RoutineSchedule,
+  nextRunAt?: number | null,
+): string {
   if (schedule.kind === 'hourly') {
     const mm = String(schedule.minute).padStart(2, '0');
     return `Runs every hour at :${mm}`;
   }
-  const tz = gmtLabel(schedule.timezone);
+  // Anchor the GMT offset to the next actual fire time so DST-observing
+  // zones don't drift seasonally — a New York routine created in winter
+  // would otherwise still render `GMT-5` after DST starts. When we don't
+  // know the next fire (e.g. the live preview while the form is open),
+  // fall back to the IANA city, which is stable year-round.
+  const tz = nextRunAt
+    ? gmtLabel(schedule.timezone, new Date(nextRunAt))
+    : tzCityLabel(schedule.timezone);
   if (schedule.kind === 'daily') {
     return `Runs daily at ${formatTime12h(schedule.time)} ${tz}`;
   }
@@ -335,7 +367,9 @@ export function RoutinesSection() {
 
   const timezones = useMemo(() => {
     const local = detectLocalTimezone();
-    const set = new Set<string>([local, ...COMMON_TIMEZONES]);
+    // Pin the user's local zone first, then expose every IANA zone the
+    // backend would accept so the picker matches the validator.
+    const set = new Set<string>([local, ...listSupportedTimezones()]);
     return Array.from(set);
   }, []);
 
@@ -613,7 +647,7 @@ export function RoutinesSection() {
                         <span className="routines-tag">paused</span>
                       ) : null}
                     </div>
-                    <div className="routines-item-line">{describeSchedule(r.schedule)}</div>
+                    <div className="routines-item-line">{describeSchedule(r.schedule, r.nextRunAt)}</div>
                     <div className="routines-item-meta">
                       <span>{targetLabel}</span>
                       <span aria-hidden>·</span>
