@@ -194,9 +194,7 @@ export function ChatPane({
         const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
         if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
           scrolledToFormRef.current.add(formEl.dataset.formId!);
-          const formRect = formEl.getBoundingClientRect();
-          const containerRect = el.getBoundingClientRect();
-          el.scrollTop += formRect.top - containerRect.top;
+          formEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
           pinnedToBottomRef.current = false;
           setScrolledFromBottom(true);
           return;
@@ -204,7 +202,7 @@ export function ChatPane({
         // Already handled by the auto-scroll effect — don't bottom-scroll.
         if (formEl) return;
       }
-      el.scrollTop = el.scrollHeight;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
       setScrolledFromBottom(false);
       pinnedToBottomRef.current = true;
     });
@@ -250,7 +248,7 @@ export function ChatPane({
         // undone when the form finishes rendering.
         if (streaming) return;
       }
-      el.scrollTop = el.scrollHeight;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }
   }, [messages, error, streaming]);
 
