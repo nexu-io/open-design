@@ -91,6 +91,29 @@ export function findSkillById(skills: unknown, id: unknown): SkillInfo | undefin
   return (skills as SkillInfo[]).find((s) => s.id === canonical);
 }
 
+// Treat a directory entry as a directory both for real dirs and for
+// symlinks whose target is a directory. `Dirent.isDirectory()` returns
+// false for symlinks even when the target is a directory (it reports
+// the link, not the target), which silently dropped symlinked skill
+// folders from the listing on macOS / Linux. Following the link via
+// `stat()` makes externally-managed skill packs (e.g. a sibling repo
+// symlinked into `<projectRoot>/skills/`) work transparently. Broken
+// symlinks fail `stat` and are skipped silently — same outcome the
+// caller would have had with the previous filter.
+async function entryIsDirectoryFollowingLinks(
+  parent: string,
+  entry: Dirent,
+): Promise<boolean> {
+  if (entry.isDirectory()) return true;
+  if (!entry.isSymbolicLink()) return false;
+  try {
+    const s = await stat(path.join(parent, entry.name));
+    return s.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export async function listSkills(skillsRoot: string): Promise<SkillInfo[]> {
   const out: SkillInfo[] = [];
   let entries: Dirent[] = [];
@@ -100,7 +123,7 @@ export async function listSkills(skillsRoot: string): Promise<SkillInfo[]> {
     return out;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!(await entryIsDirectoryFollowingLinks(skillsRoot, entry))) continue;
     const dir = path.join(skillsRoot, entry.name);
     const skillPath = path.join(dir, "SKILL.md");
     try {
