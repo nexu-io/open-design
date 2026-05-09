@@ -29,7 +29,13 @@ import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuickSwitcher } from './QuickSwitcher';
-import { SketchEditor, type SketchDocument, type SketchItem } from './SketchEditor';
+import { SketchEditor } from './SketchEditor';
+import {
+  isSketchJsonFileName,
+  parseSketchDocument,
+  type SketchDocument,
+  type SketchItem,
+} from './sketch-model';
 
 interface Props {
   projectId: string;
@@ -889,7 +895,7 @@ function kindIconName(
 }
 
 function isSketchName(name: string): boolean {
-  return name.endsWith('.sketch.json');
+  return isSketchJsonFileName(name);
 }
 
 function isLiveArtifactImplementationPath(name: string): boolean {
@@ -899,14 +905,4 @@ function isLiveArtifactImplementationPath(name: string): boolean {
   // particular, keep implementation-only snapshot and tile files hidden even
   // if a generic project-files endpoint returns them in older daemon builds.
   return true;
-}
-
-function parseSketchDocument(text: string | null): SketchItem[] {
-  if (!text) return [];
-  try {
-    const parsed = JSON.parse(text) as SketchDocument | { items?: SketchItem[] };
-    return Array.isArray(parsed.items) ? parsed.items : [];
-  } catch {
-    return [];
-  }
 }

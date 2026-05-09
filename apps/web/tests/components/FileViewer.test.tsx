@@ -93,6 +93,41 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).not.toContain('class="viewer-tabs"');
   });
 
+  it('renders sketch json files through the static sketch preview instead of the image viewer', async () => {
+    const file = baseFile({
+      name: 'board.sketch.json',
+      path: 'board.sketch.json',
+      kind: 'sketch',
+      mime: 'application/json; charset=utf-8',
+    });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      version: 1,
+      items: [
+        {
+          kind: 'arrow',
+          x1: 16,
+          y1: 24,
+          x2: 180,
+          y2: 108,
+          color: '#1c1b1a',
+          size: 3,
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeTruthy();
+    });
+    expect(container.querySelector('.viewer.image-viewer img')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/raw/board.sketch.json', { cache: 'no-store' });
+  });
+
   it('marks preview and source modes through the SVG viewer toggle controls', () => {
     const file = baseFile({ name: 'diagram.svg', path: 'diagram.svg', mime: 'image/svg+xml' });
 
