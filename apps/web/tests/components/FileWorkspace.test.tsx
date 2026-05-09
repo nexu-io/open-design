@@ -113,7 +113,7 @@ describe('FileWorkspace upload input', () => {
     expect(markup).not.toContain('accept=');
   });
 
-  it('keeps focus mode controls in the workspace tab bar', () => {
+  it('hides the workspace focus control while the chat pane is open', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
         projectId="project-1"
@@ -128,11 +128,12 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    expect(markup).toContain('data-testid="workspace-focus-toggle"');
-    expect(markup).toContain('Focus workspace');
+    // While chat is visible the collapse trigger lives in ChatPane.
+    // FileWorkspace only renders an expand control once chat is hidden.
+    expect(markup).not.toContain('data-testid="workspace-focus-toggle"');
   });
 
-  it('keeps the focus mode action outside the horizontally scrollable tablist', () => {
+  it('renders the expand control on the LEFT of the tab bar while focused', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
         projectId="project-1"
@@ -142,15 +143,17 @@ describe('FileWorkspace upload input', () => {
         isDeck={false}
         tabsState={{ tabs: [], active: null }}
         onTabsStateChange={vi.fn()}
-        focusMode={false}
+        focusMode
         onFocusModeChange={vi.fn()}
       />,
     );
 
     expect(markup).toContain('class="ws-tabs-shell"');
-    expect(markup).toContain('class="ws-tabs-actions"');
+    expect(markup).toContain('data-testid="workspace-focus-toggle"');
+    // The expand control sits before the tabs bar (left side) so its
+    // direction matches where the chat pane re-emerges from.
     expect(markup).toMatch(
-      /<div class="ws-tabs-bar" role="tablist"[^>]*>[\s\S]*?<\/div><div class="ws-tabs-actions">/,
+      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*<div class="ws-tabs-bar"/,
     );
   });
 

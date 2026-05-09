@@ -8,6 +8,7 @@ import {
   SettingsDialog,
   type SettingsSection,
 } from './components/SettingsDialog';
+import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
@@ -20,11 +21,14 @@ import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
+  fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
   mergeDaemonConfig,
+  mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -39,6 +43,7 @@ import {
   listTemplates,
   patchProject,
 } from './state/projects';
+import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
@@ -107,6 +112,7 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -127,6 +133,13 @@ export function App() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+  const [daemonMediaProviders, setDaemonMediaProviders] = useState<
+    AppConfig['mediaProviders'] | null
+  >(null);
+  const [daemonMediaProvidersFetchState, setDaemonMediaProvidersFetchState] = useState<
+    'idle' | 'ok' | 'error'
+  >('idle');
+  const [mediaProvidersNotice, setMediaProvidersNotice] = useState<string | null>(null);
   // Per-resource loading flags. Each goes false the moment its own fetch
   // resolves so each entry-view tab can render as its data lands instead of
   // every tab waiting on the slowest endpoint (typically `/api/agents`,
@@ -171,6 +184,8 @@ export function App() {
   // {active:false} if this hasn't run.
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
   const activeFileName = route.kind === 'project' ? route.fileName : null;
+  const showPrivacyConsent =
+    daemonConfigLoaded && config.privacyDecisionAt == null && !settingsOpen;
   useEffect(() => {
     const body = activeProjectId
       ? { projectId: activeProjectId, fileName: activeFileName }
@@ -195,7 +210,6 @@ export function App() {
       const alive = await daemonIsLive();
       if (cancelled) return;
       setDaemonLive(alive);
-
       if (!alive) {
         // No daemon — clear every loading flag so empty states render
         // instead of the entry view sitting on indefinite spinners.
@@ -252,35 +266,66 @@ export function App() {
         setAppVersionInfo(info);
       });
 
-      // Daemon-persisted config + composio config land together so the
-      // welcome-modal decision and the daemon-side composio key both apply
-      // in one merge, avoiding a flash where local-only state is shown
+      // Daemon-persisted config + composio config + media provider config land
+      // together so the welcome-modal decision and daemon-backed settings
+      // apply in one merge, avoiding a flash where local-only state is shown
       // before daemon overrides it.
       void Promise.all([
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
-      ]).then(([daemonConfig, daemonComposioConfig]) => {
+        fetchMediaProvidersFromDaemon(),
+      ]).then(([
+        daemonConfig,
+        daemonComposioConfig,
+        daemonMediaProvidersResult,
+      ]) => {
         if (cancelled) return;
+        const daemonMediaProvidersLoaded =
+          daemonMediaProvidersResult.status === 'ok'
+            ? daemonMediaProvidersResult.providers
+            : null;
+        setDaemonMediaProviders(daemonMediaProvidersLoaded);
+        setDaemonMediaProvidersFetchState(daemonMediaProvidersResult.status);
+        setMediaProvidersNotice(
+          daemonMediaProvidersResult.status === 'error'
+            ? t('settings.mediaProviderLoadError')
+            : null,
+        );
         setConfig((prev) => {
-          const next = mergeDaemonConfig(prev, daemonConfig);
+          const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
+            prev.mediaProviders,
+            daemonMediaProvidersLoaded,
+          );
+          const next = mergeDaemonMediaProviders(
+            mergeDaemonConfig(prev, daemonConfig),
+            daemonMediaProvidersLoaded,
+          );
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
           if (!hasLocalComposioKey && daemonComposioConfig) {
             next.composio = daemonComposioConfig;
           }
           saveConfig(next);
-          if (hasAnyConfiguredProvider(next.mediaProviders)) {
-            void syncMediaProvidersToDaemon(next.mediaProviders);
+          if (
+            daemonMediaProvidersResult.status === 'ok' &&
+            migratedLocalMediaProviders &&
+            hasAnyConfiguredProvider(next.mediaProviders)
+          ) {
+            void syncMediaProvidersToDaemon(next.mediaProviders, {
+              daemonProviders: daemonMediaProvidersLoaded,
+            });
           }
           // Migrate localStorage prefs to daemon on first boot with the new
-          // endpoint. If daemon already had values the merge above used
-          // them; writing back is idempotent and keeps both sides in sync.
+          // endpoint. If daemon already had values the merge above used them;
+          // writing back is idempotent and keeps both sides in sync.
           void syncConfigToDaemon(next);
           void syncComposioConfigToDaemon(next.composio);
 
           // Pop the onboarding modal only on the first run. Once the user
           // has saved or skipped past it once, we trust their stored config
-          // and let them re-open Settings explicitly via the env pill.
-          if (!next.onboardingCompleted) {
+          // and let them re-open Settings explicitly via the env pill. Hold
+          // the welcome modal until the privacy decision is resolved; the
+          // installation id can rotate later without re-opening the banner.
+          if (!next.onboardingCompleted && next.privacyDecisionAt != null) {
             setSettingsWelcome(true);
             setSettingsOpen(true);
           }
@@ -374,6 +419,26 @@ export function App() {
     setTemplates(list);
   }, []);
 
+  const reloadMediaProvidersFromDaemon = useCallback(async () => {
+    const result = await fetchMediaProvidersFromDaemon();
+    if (result.status !== 'ok') {
+      setDaemonMediaProvidersFetchState('error');
+      setMediaProvidersNotice(
+        t('settings.mediaProviderLoadError'),
+      );
+      return null;
+    }
+    setDaemonMediaProviders(result.providers);
+    setDaemonMediaProvidersFetchState('ok');
+    setMediaProvidersNotice(null);
+    setConfig((prev) => {
+      const merged = mergeDaemonMediaProviders(prev, result.providers);
+      saveConfig(merged);
+      return merged;
+    });
+    return result.providers;
+  }, []);
+
   /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
@@ -395,18 +460,22 @@ export function App() {
     latestPersistedConfigRef.current = persisted;
     saveConfig(persisted);
     setConfig(persisted);
-    await Promise.all([
-      shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
+    const shouldSyncMediaProviders =
+      daemonMediaProvidersFetchState === 'ok'
+      && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
         force: options?.forceMediaProviderSync,
-      })
+      });
+    await Promise.all([
+      shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
             force: options?.forceMediaProviderSync,
+            daemonProviders: daemonMediaProviders,
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
       syncConfigToDaemon(persisted),
     ]);
-  }, []);
+  }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
   /**
    * Explicit Composio API-key save. Called from the section-local
@@ -493,11 +562,15 @@ export function App() {
       // to "None" for every kind now, and the user expects that to land
       // as a no-design-system project rather than silently inheriting the
       // workspace default.
+      const derivedPendingPrompt =
+      input.pendingPrompt ??
+      (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
+
       const result = await createProject({
         name: input.name,
         skillId: input.skillId,
         designSystemId: input.designSystemId,
-        pendingPrompt: input.pendingPrompt,
+        pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
       });
       if (!result) return;
@@ -798,8 +871,55 @@ export function App() {
             setSettingsOpen(false);
           }}
           onRefreshAgents={refreshAgents}
+          daemonMediaProviders={daemonMediaProviders}
+          daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+          mediaProvidersNotice={mediaProvidersNotice}
+          onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+        />
+      ) : null}
+      {/* First-run privacy consent banner. It waits for daemon config
+          hydration because privacyDecisionAt is daemon-owned and stripped
+          from localStorage. It also yields while Settings is open so the
+          floating banner never intercepts modal interactions. */}
+      {showPrivacyConsent ? (
+        <PrivacyConsentModal
+          onShare={() => {
+            const installationId = generateInstallationIdSafe();
+            void handleConfigPersist({
+              ...latestPersistedConfigRef.current,
+              installationId,
+              privacyDecisionAt: Date.now(),
+              telemetry: { metrics: true, content: true, artifactManifest: false },
+            });
+            // Hand the foreground over to the welcome modal now that the
+            // privacy decision is recorded — bootstrap deferred opening
+            // it while consent was pending.
+            if (!latestPersistedConfigRef.current.onboardingCompleted) {
+              setSettingsWelcome(true);
+              setSettingsOpen(true);
+            }
+          }}
+          onDecline={() => {
+            void handleConfigPersist({
+              ...latestPersistedConfigRef.current,
+              installationId: null,
+              privacyDecisionAt: Date.now(),
+              telemetry: { metrics: false, content: false, artifactManifest: false },
+            });
+            if (!latestPersistedConfigRef.current.onboardingCompleted) {
+              setSettingsWelcome(true);
+              setSettingsOpen(true);
+            }
+          }}
         />
       ) : null}
     </>
   );
+}
+
+function generateInstallationIdSafe(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

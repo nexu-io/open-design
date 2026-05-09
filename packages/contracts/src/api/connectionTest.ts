@@ -133,7 +133,7 @@ export type ConnectionTestKind =
   | 'agent_spawn_failed'
   | 'unknown';
 
-export type ConnectionTestProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
+export type ConnectionTestProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
 
 export interface ProviderTestRequest {
   protocol: ConnectionTestProtocol;

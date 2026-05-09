@@ -530,6 +530,63 @@ describe('SettingsDialog Orbit run behavior', () => {
     });
   });
 
+  it('preserves masked daemon media keys before starting a manual Orbit run', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/media/config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-preserve' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit(
+        {
+          ...baseConfig,
+          mediaProviders: {
+            openai: {
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '1234',
+              baseUrl: 'https://custom.example/v1',
+            },
+          },
+        },
+        {
+          daemonProviders: {
+            openai: {
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '1234',
+              baseUrl: '',
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-preserve' });
+
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({
+      providers: {
+        openai: {
+          preserveApiKey: true,
+          baseUrl: 'https://custom.example/v1',
+        },
+      },
+      force: false,
+    });
+  });
+
   it('does not start a manual Orbit run when saving app config fails', async () => {
     const calls: string[] = [];
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {

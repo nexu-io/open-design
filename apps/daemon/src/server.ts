@@ -52,6 +52,7 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   redactSecrets,
   testAgentConnection,
@@ -115,6 +116,11 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import {
+  RoutineService,
+  validateSchedule as validateRoutineSchedule,
+  validateTarget as validateRoutineTarget,
+} from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
   buildProjectArchive,
@@ -148,6 +154,8 @@ import {
   getTemplate,
   insertConversation,
   insertProject,
+  insertRoutine,
+  insertRoutineRun,
   insertTemplate,
   listProjectsAwaitingInput,
   listConversations,
@@ -156,13 +164,20 @@ import {
   listMessages,
   listPreviewComments,
   listProjects,
+  listRoutines,
+  listRoutineRuns,
   listTabs,
   listTemplates,
+  getLatestRoutineRun,
+  getRoutine,
+  deleteRoutine as dbDeleteRoutine,
   openDatabase,
   setTabs,
   updateConversation,
   updatePreviewCommentStatus,
   updateProject,
+  updateRoutine,
+  updateRoutineRun,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
@@ -942,8 +957,22 @@ export function resolveDataDir(raw, projectRoot) {
     fs.accessSync(resolved, fs.constants.W_OK);
   } catch (err) {
     const e = err;
+    const currentUser = (() => {
+      try {
+        return os.userInfo().username;
+      } catch {
+        return process.env.USER ?? process.env.LOGNAME ?? 'unknown';
+      }
+    })();
+    const parentDir = path.dirname(resolved);
     throw new Error(
-      `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+      [
+        `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+        `Current user: ${currentUser}`,
+        `Check whether the folder or one of its parents is owned by another user, is a symlink to a protected location, or was previously created with sudo.`,
+        `Try: ls -ld "${parentDir}" "${resolved}"`,
+        `If the folder should belong to you, fix ownership/permissions, for example: sudo chown -R "${currentUser}":staff "${parentDir}" && chmod -R u+rwX "${parentDir}"`,
+      ].join(' '),
     );
   }
   return resolved;
@@ -975,6 +1004,7 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
+let routineService = null;
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
 // Maps the OAuth `state` parameter we generated in /api/mcp/oauth/start
@@ -1223,6 +1253,22 @@ function sendApiError(res, status, code, message, init = {}) {
   return res
     .status(status)
     .json(createCompatApiErrorResponse(code, message, init));
+}
+
+const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+
+export function shouldReportRunCompletedFromMessage(saved, body = {}) {
+  return Boolean(
+    saved &&
+      saved.runId &&
+      typeof saved.runStatus === 'string' &&
+      TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
+      body?.telemetryFinalized === true,
+  );
+}
+
+export function telemetryPromptFromRunRequest(message, currentPrompt) {
+  return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -1959,9 +2005,13 @@ export function createSseResponse(
     /** @param {ChatSseEvent['event'] | ProxySseEvent['event'] | string} event */
     send(event, data, id: string | number | null | undefined = null) {
       if (!canWrite()) return false;
-      if (id !== null && id !== undefined) res.write(`id: ${id}\n`);
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      // Assemble the full SSE event into a single write so id/event/data land
+      // in one TCP chunk. Three separate writes would let `event: <type>` flush
+      // ahead of the `data:` payload, which produces partial events for
+      // consumers that read chunk-by-chunk (e.g. tests using a Response body
+      // reader with a substring marker).
+      const idLine = id !== null && id !== undefined ? `id: ${id}\n` : '';
+      res.write(`${idLine}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       return true;
     },
     writeKeepAlive,
@@ -1984,10 +2034,19 @@ export interface StartServerOptions {
   returnServer?: boolean;
 }
 
+const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return 2 * 60 * 1000;
-  return Math.max(0, Math.floor(raw));
+  // This watchdog observes child stdout/stderr/SSE activity, not real CPU or
+  // filesystem progress. Keep the default long enough for agents that spend
+  // several minutes silently writing large artifacts.
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+  // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
+  // makes an oversized override fail almost immediately while reporting a huge
+  // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -2067,6 +2126,32 @@ export async function startServer({
   configureComposioConfigStore(RUNTIME_DATA_DIR);
   composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
   composioConnectorProvider.startCatalogRefreshLoop();
+
+  // RoutineService persistence is a thin adapter over the SQLite helpers.
+  // Routines are stored as DB rows; the service holds in-memory timers and
+  // delegates "list me everything" / "record a run" back to SQLite.
+  routineService = new RoutineService({
+    list: () => listRoutines(db).map((row) => routineDbRowToContract(row, null)),
+    insertRun: (run) => {
+      insertRoutineRun(db, {
+        id: run.id,
+        routineId: run.routineId,
+        trigger: run.trigger,
+        status: run.status,
+        projectId: run.projectId,
+        conversationId: run.conversationId,
+        agentRunId: run.agentRunId,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        summary: run.summary,
+        error: run.error,
+      });
+    },
+    updateRun: (id, patch) => {
+      updateRoutineRun(db, id, patch);
+    },
+    getLatestRun: (routineId) => getLatestRoutineRun(db, routineId),
+  });
   let daemonUrl = `http://127.0.0.1:${port}`;
 
   // Boot reconcile: any critique_runs row left in 'running' state by a prior
@@ -2105,6 +2190,8 @@ export async function startServer({
       return detectAgents(config.agentCliEnv ?? {});
     })
     .catch(() => detectAgents().catch(() => {}));
+
+  routineService.start();
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -3087,6 +3174,31 @@ export async function startServer({
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
+    // Forward to Langfuse only on the explicit final message write. The web
+    // stream can persist a terminal runStatus before onDone has flushed the
+    // final assistant content and produced-file manifest; telemetryFinalized
+    // marks the later PUT that is safe for the bridge's SQLite read.
+    if (
+      shouldReportRunCompletedFromMessage(saved, m) &&
+      !reportedRuns.has(saved.runId)
+    ) {
+      const run = design.runs.get(saved.runId);
+      if (run) {
+        reportedRuns.add(saved.runId);
+        // Auto-evict so the Set doesn't accumulate forever in long-running
+        // daemons. Same TTL as the runs map cleanup in runs.ts.
+        setTimeout(() => reportedRuns.delete(saved.runId), 30 * 60 * 1000).unref?.();
+        void reportRunCompletedFromDaemon({
+          db,
+          dataDir: RUNTIME_DATA_DIR,
+          run,
+          persistedRunStatus: saved.runStatus,
+          persistedEndedAt:
+            typeof saved.endedAt === 'number' ? saved.endedAt : undefined,
+          appVersion: cachedAppVersion,
+        });
+      }
+    }
     res.json({ message: saved });
   });
 
@@ -4812,6 +4924,356 @@ export async function startServer({
     }
   });
 
+  // ---------- routines ----------
+
+  // Map a DB row to the Routine contract shape. Schedule lives in
+  // schedule_json (the canonical form); when missing (rows written before
+  // that column existed) we fall back to the legacy daily-only kind/value
+  // pair with UTC as a safe default timezone.
+  function routineDbRowToContract(row, latestRun) {
+    let schedule;
+    if (row.scheduleJson) {
+      try {
+        schedule = JSON.parse(row.scheduleJson);
+      } catch {
+        schedule = null;
+      }
+    }
+    if (!schedule) {
+      // Legacy fallback: daily HH:MM in UTC.
+      schedule = {
+        kind: row.scheduleKind || 'daily',
+        time: row.scheduleValue || '09:00',
+        timezone: 'UTC',
+      };
+    }
+    const target = row.projectMode === 'reuse' && row.projectId
+      ? { mode: 'reuse', projectId: row.projectId }
+      : { mode: 'create_each_run' };
+    let lastRun = null;
+    if (latestRun) {
+      lastRun = {
+        runId: latestRun.id,
+        status: latestRun.status,
+        trigger: latestRun.trigger,
+        startedAt: latestRun.startedAt,
+        ...(latestRun.completedAt == null ? {} : { completedAt: latestRun.completedAt }),
+        projectId: latestRun.projectId,
+        conversationId: latestRun.conversationId,
+        agentRunId: latestRun.agentRunId,
+        ...(latestRun.summary ? { summary: latestRun.summary } : {}),
+      };
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      prompt: row.prompt,
+      schedule,
+      target,
+      skillId: row.skillId ?? null,
+      agentId: row.agentId ?? null,
+      enabled: row.enabled === true || row.enabled === 1,
+      nextRunAt: null,
+      lastRun,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Serialize a schedule into the kind/value/json triple stored in SQLite.
+  // schedule_value carries a kind-specific stringified scalar (minute for
+  // hourly, "HH:MM" for time-of-day kinds) so existing simple queries keep
+  // working; schedule_json is the authoritative form.
+  function scheduleToDbCols(schedule) {
+    const json = JSON.stringify(schedule);
+    let value = '';
+    if (schedule.kind === 'hourly') value = String(schedule.minute);
+    else if (schedule.kind === 'weekly') value = `${schedule.weekday}:${schedule.time}`;
+    else value = schedule.time;
+    return { scheduleKind: schedule.kind, scheduleValue: value, scheduleJson: json };
+  }
+
+  function routineFromDb(id) {
+    const row = getRoutine(db, id);
+    if (!row) return null;
+    const latest = getLatestRoutineRun(db, id);
+    const contract = routineDbRowToContract(row, latest);
+    const nextDate = routineService?.nextRunAt(id) ?? null;
+    contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+    return contract;
+  }
+
+  function validateRoutineInput(body, partial) {
+    if (!body || typeof body !== 'object') {
+      throw new Error('Request body must be an object');
+    }
+    if (!partial || body.name !== undefined) {
+      if (typeof body.name !== 'string' || !body.name.trim()) {
+        throw new Error('name is required');
+      }
+    }
+    if (!partial || body.prompt !== undefined) {
+      if (typeof body.prompt !== 'string' || !body.prompt.trim()) {
+        throw new Error('prompt is required');
+      }
+    }
+    if (!partial || body.schedule !== undefined) {
+      validateRoutineSchedule(body.schedule);
+    }
+    if (!partial || body.target !== undefined) {
+      validateRoutineTarget(body.target);
+      if (body.target.mode === 'reuse') {
+        const proj = getProject(db, body.target.projectId);
+        if (!proj) throw new Error(`target project ${body.target.projectId} not found`);
+      }
+    }
+  }
+
+  // Each routine fire: resolve agent, mint (or reuse) project + a fresh
+  // conversation, prime the user/assistant message pair, and dispatch into
+  // startChatRun. Returns the in-flight handles so the service can persist
+  // the routine_run row and observe completion.
+  routineService.setRunHandler(async ({ routine, trigger, startedAt, runId }) => {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    let agentId = routine.agentId
+      || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
+    if (!agentId) {
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      agentId = agents.find((agent) => agent.available)?.id ?? null;
+    }
+    if (!agentId) {
+      throw new Error('No available agent is configured. Choose an agent in Settings first.');
+    }
+
+    const now = startedAt;
+    const stamp = formatLocalProjectTimestamp(new Date(now).toISOString());
+
+    let projectId;
+    let projectName;
+    if (routine.target.mode === 'reuse') {
+      const proj = getProject(db, routine.target.projectId);
+      if (!proj) throw new Error(`Routine target project ${routine.target.projectId} not found`);
+      projectId = proj.id;
+      projectName = proj.name;
+    } else {
+      projectId = `routine-${randomUUID()}`;
+      projectName = `${routine.name} · ${stamp}`;
+      insertProject(db, {
+        id: projectId,
+        name: projectName,
+        skillId: routine.skillId ?? null,
+        designSystemId: appConfig.designSystemId ?? null,
+        pendingPrompt: null,
+        metadata: { kind: 'other', intent: 'routine', routineId: routine.id, trigger },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const conversationId = `routine-conv-${randomUUID()}`;
+    const conversationTitle = routine.target.mode === 'reuse'
+      ? `${routine.name} · ${stamp}`
+      : projectName;
+    insertConversation(db, {
+      id: conversationId,
+      projectId,
+      title: conversationTitle,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const assistantMessageId = `routine-assistant-${randomUUID()}`;
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: `routine-${trigger}-${randomUUID()}`,
+      agentId,
+    });
+    upsertMessage(db, conversationId, {
+      id: `routine-user-${run.id}`,
+      role: 'user',
+      content: routine.prompt,
+    });
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId,
+      agentName: getAgentDef(agentId)?.name ?? agentId,
+      runId: run.id,
+      runStatus: 'queued',
+      startedAt: now,
+    });
+
+    const modelPrefs = appConfig.agentModels?.[agentId] ?? {};
+    design.runs.start(run, () => startChatRun({
+      agentId,
+      projectId,
+      conversationId: run.conversationId,
+      assistantMessageId: run.assistantMessageId,
+      clientRequestId: run.clientRequestId,
+      skillId: routine.skillId ?? null,
+      designSystemId: appConfig.designSystemId ?? null,
+      model: modelPrefs.model ?? null,
+      reasoning: modelPrefs.reasoning ?? null,
+      message: routine.prompt,
+      systemPrompt: [
+        `You are running an unattended scheduled routine named "${routine.name}".`,
+        'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. Pick reasonable defaults and finish the task.',
+      ].join('\n'),
+    }, run));
+
+    const completion = (async () => {
+      const finalStatus = await design.runs.wait(run);
+      db.prepare(`UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`)
+        .run(finalStatus.status, Date.now(), assistantMessageId);
+      return {
+        status: finalStatus.status,
+        summary: `Routine "${routine.name}" ${finalStatus.status}.`,
+      };
+    })();
+
+    return { projectId, conversationId, agentRunId: run.id, completion };
+  });
+
+  app.get('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const rows = listRoutines(db);
+      const routines = rows.map((row) => {
+        const latest = getLatestRoutineRun(db, row.id);
+        const contract = routineDbRowToContract(row, latest);
+        const nextDate = routineService?.nextRunAt(row.id) ?? null;
+        contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+        return contract;
+      });
+      res.json({ routines });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.post('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const body = req.body || {};
+      validateRoutineInput(body, false);
+      const id = `routine-${randomUUID()}`;
+      const now = Date.now();
+      const scheduleCols = scheduleToDbCols(body.schedule);
+      insertRoutine(db, {
+        id,
+        name: body.name.trim(),
+        prompt: body.prompt,
+        ...scheduleCols,
+        projectMode: body.target.mode,
+        projectId: body.target.mode === 'reuse' ? body.target.projectId : null,
+        skillId: body.skillId ?? null,
+        agentId: body.agentId ?? null,
+        enabled: body.enabled !== false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      routineService?.rescheduleOne(id);
+      const routine = routineFromDb(id);
+      res.status(201).json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const routine = routineFromDb(req.params.id);
+    if (!routine) return res.status(404).json({ error: 'routine not found' });
+    res.json({ routine });
+  });
+
+  app.patch('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const body = req.body || {};
+      validateRoutineInput(body, true);
+      const patch = {};
+      if (body.name !== undefined) patch.name = body.name.trim();
+      if (body.prompt !== undefined) patch.prompt = body.prompt;
+      if (body.schedule !== undefined) {
+        const cols = scheduleToDbCols(body.schedule);
+        patch.scheduleKind = cols.scheduleKind;
+        patch.scheduleValue = cols.scheduleValue;
+        patch.scheduleJson = cols.scheduleJson;
+      }
+      if (body.target !== undefined) {
+        patch.projectMode = body.target.mode;
+        patch.projectId = body.target.mode === 'reuse' ? body.target.projectId : null;
+      }
+      if (body.skillId !== undefined) patch.skillId = body.skillId ?? null;
+      if (body.agentId !== undefined) patch.agentId = body.agentId ?? null;
+      if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+      updateRoutine(db, req.params.id, patch);
+      routineService?.rescheduleOne(req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.delete('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    routineService?.unschedule(req.params.id);
+    const removed = dbDeleteRoutine(db, req.params.id);
+    if (!removed) return res.status(404).json({ error: 'routine not found' });
+    res.status(204).end();
+  });
+
+  app.post('/api/routines/:id/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      if (!routineService) throw new Error('routine service unavailable');
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const start = await routineService.runNow(req.params.id);
+      const latest = getLatestRoutineRun(db, req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.status(202).json({
+        routine,
+        run: latest,
+        projectId: start.projectId,
+        conversationId: start.conversationId,
+        agentRunId: start.agentRunId,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id/runs', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const existing = getRoutine(db, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'routine not found' });
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const runs = listRoutineRuns(db, req.params.id, limit);
+    res.json({ runs });
+  });
+
   // Native OS folder picker dialog. Returns { path: string | null }.
   app.post('/api/dialog/open-folder', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
@@ -5056,6 +5518,26 @@ export async function startServer({
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
 
+  // Tracks runs whose completion has already been forwarded to Langfuse so
+  // that repeated PUT /messages/:id calls (web buffers + retries) only emit
+  // one trace per run. Entries are scrubbed when the run's TTL window
+  // expires (30 min, mirrors runs.ts).
+  const reportedRuns = new Set();
+
+  // App-version snapshot read once at server start. Used as static metadata
+  // on every Langfuse trace so we can correlate behaviour with releases
+  // without paying the package.json read cost per turn. Updates require a
+  // daemon restart, which is fine — version doesn't change in-process.
+  let cachedAppVersion = null;
+  void (async () => {
+    try {
+      cachedAppVersion = await readCurrentAppVersionInfo();
+    } catch {
+      // Telemetry is best-effort; running with appVersion === null just
+      // omits the field from the trace.
+    }
+  })();
+
   const composeDaemonSystemPrompt = async ({
     agentId,
     projectId,
@@ -5201,6 +5683,7 @@ export async function startServer({
     const {
       agentId,
       message,
+      currentPrompt,
       systemPrompt,
       imagePaths = [],
       projectId,
@@ -5223,6 +5706,17 @@ export async function startServer({
     if (typeof clientRequestId === 'string' && clientRequestId)
       run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+    // Stash the original user prompt + per-turn config so the
+    // langfuse-bridge report path can include them without reaching back
+    // into chatBody across the createChatRunService boundary. Each field
+    // is optional and only set when the chat body actually carried it.
+    const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
+    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (typeof model === 'string' && model) run.model = model;
+    if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
+    if (typeof skillId === 'string' && skillId) run.skillId = skillId;
+    if (typeof designSystemId === 'string' && designSystemId)
+      run.designSystemId = designSystemId;
     const def = getAgentDef(agentId);
     if (!def)
       return design.runs.fail(
@@ -5869,6 +6363,12 @@ export async function startServer({
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
+    // Reset the inactivity watchdog on every raw stdout byte so that
+    // structured adapters that buffer partial lines (Codex item.completed,
+    // pi-rpc session/prompt, ACP agent messages) and models that spend a
+    // long time in non-streamed reasoning still keep the run alive.
+    child.stdout.on('data', () => noteAgentActivity());
+
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
     // Adapters that emit structured wrappers (claude-stream-json,
@@ -6330,6 +6830,16 @@ export async function startServer({
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const run = design.runs.create(req.body || {});
+    // Capture which front-end carrier started the run (Electron desktop
+    // shell vs. plain browser). Web sets this header explicitly; falls
+    // back to a UA sniff if header is absent. Used as a telemetry tag.
+    const declared = String(req.get('x-od-client') ?? '').toLowerCase();
+    if (declared === 'desktop' || declared === 'web') {
+      run.clientType = declared;
+    } else {
+      const ua = String(req.get('user-agent') ?? '');
+      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
+    }
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
     res.status(202).json(body);
@@ -6398,13 +6908,13 @@ export async function startServer({
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google',
+            'protocol must be one of anthropic|openai|azure|google|ollama',
           );
         }
         if (
@@ -6609,6 +7119,44 @@ export async function startServer({
 
     const tail = buffer.trim();
     if (tail) await onFrame(collectSseFrame(tail));
+  };
+
+  // Ollama Cloud streams NDJSON (newline-delimited JSON) — each line is a
+  // complete JSON object. Parse per-line and dispatch parsed objects.
+  const streamUpstreamNdjson = async (response, onFrame) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (await onFrame({ data })) return;
+        } catch {
+          // skip unparseable lines
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        const data = JSON.parse(tail);
+        await onFrame({ data });
+      } catch {
+        // skip
+      }
+    }
   };
 
   const extractOpenAIText = (data) => {
@@ -6876,15 +7424,26 @@ export async function startServer({
       );
     }
 
+    const url = new URL(baseUrl);
+    const basePath = url.pathname.replace(/\/+$/, '');
+    const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
     const version =
       typeof apiVersion === 'string' && apiVersion.trim()
         ? apiVersion.trim()
-        : '2024-10-21';
-    const url = new URL(baseUrl);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
-    url.searchParams.set('api-version', version);
+        : usesVersionedOpenAIPath
+          ? ''
+          : '2024-10-21';
+    url.pathname = usesVersionedOpenAIPath
+      ? `${basePath}/chat/completions`
+      : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+    if (usesVersionedOpenAIPath && !version) {
+      url.searchParams.delete('api-version');
+    }
+    if (version) {
+      url.searchParams.set('api-version', version);
+    }
     console.log(
-      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version}`,
+      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version || 'omitted'}`,
     );
 
     const payloadMessages = Array.isArray(messages) ? [...messages] : [];
@@ -6893,6 +7452,7 @@ export async function startServer({
     }
 
     const payload = {
+      ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
       max_tokens:
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
@@ -7051,6 +7611,98 @@ export async function startServer({
     }
   });
 
+  app.post('/api/proxy/ollama/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const url = `${clean}/api/chat`;
+    console.log(
+      `[proxy:ollama] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const payload = {
+      model,
+      messages: payloadMessages,
+      stream: true,
+    };
+    if (typeof maxTokens === 'number' && maxTokens > 0) {
+      payload.options = { num_predict: maxTokens };
+    }
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamNdjson(response, ({ data }) => {
+        if (!data) return false;
+        if (data.done) {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        const content = data.message?.content;
+        if (typeof content === 'string' && content) {
+          sse.send('delta', { delta: content });
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:ollama] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
   // needs to advertise the port to a parent process before any request
@@ -7063,6 +7715,7 @@ export async function startServer({
     const cleanupDaemonBackgroundWork = () => {
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
+      routineService?.stop();
     };
     const shutdownDaemonRuns = async () => {
       if (daemonShutdownStarted) return;

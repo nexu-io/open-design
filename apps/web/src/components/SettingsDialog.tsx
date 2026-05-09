@@ -13,8 +13,11 @@ import {
 import {
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  isStoredMediaProviderEntryEmpty,
+  isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
+  mergeDaemonMediaProviders,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -34,6 +37,8 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ExecMode,
   SkillSummary,
 } from '../types';
@@ -44,6 +49,8 @@ import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
+import { PrivacySection } from './PrivacySection';
+import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
@@ -63,6 +70,7 @@ export type SettingsSection =
   | 'media'
   | 'composio'
   | 'orbit'
+  | 'routines'
   | 'integrations'
   | 'mcpClient'
   | 'language'
@@ -70,6 +78,7 @@ export type SettingsSection =
   | 'notifications'
   | 'pet'
   | 'library'
+  | 'privacy'
   | 'about';
 
 interface Props {
@@ -108,6 +117,10 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
 }
 
 export interface AgentRefreshOptions {
@@ -151,6 +164,47 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2',
     'mimo-v2.5-pro',
   ],
+  ollama: [
+    'cogito-2.1:671b',
+    'deepseek-v3.1:671b',
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'devstral-2:123b',
+    'devstral-small-2:24b',
+    'gemini-3-flash-preview',
+    'gemma3:4b',
+    'gemma3:12b',
+    'gemma3:27b',
+    'gemma4:31b',
+    'glm-4.6',
+    'glm-4.7',
+    'glm-5',
+    'glm-5.1',
+    'gpt-oss:20b',
+    'gpt-oss:120b',
+    'kimi-k2:1t',
+    'kimi-k2-thinking',
+    'kimi-k2.5',
+    'kimi-k2.6',
+    'minimax-m2',
+    'minimax-m2.1',
+    'minimax-m2.5',
+    'minimax-m2.7',
+    'ministral-3:3b',
+    'ministral-3:8b',
+    'ministral-3:14b',
+    'mistral-large-3:675b',
+    'nemotron-3-nano:30b',
+    'nemotron-3-super',
+    'qwen3-coder:480b',
+    'qwen3-coder-next',
+    'qwen3-next:80b',
+    'qwen3-vl:235b',
+    'qwen3-vl:235b-instruct',
+    'qwen3.5:397b',
+    'rnj-1:8b',
+  ],
   azure: [
     'gpt-4o',
     'gpt-4o-mini',
@@ -171,6 +225,7 @@ const API_PROTOCOL_TABS: Array<{
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure OpenAI' },
   { id: 'google', title: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud' },
 ];
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -178,6 +233,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   openai: 'OpenAI API',
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
+  ollama: 'Ollama Cloud API',
 };
 
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -185,6 +241,7 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   openai: 'sk-...',
   azure: 'azure key',
   google: 'AIza...',
+  ollama: 'Ollama API key',
 };
 
 type RescanNotice =
@@ -517,6 +574,10 @@ export function SettingsDialog({
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState = 'idle',
+  mediaProvidersNotice,
+  onReloadMediaProviders,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
@@ -1002,11 +1063,16 @@ export function SettingsDialog({
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
+    routines: {
+      title: 'Routines',
+      subtitle: 'Scheduled, unattended agent sessions that run on their own.',
+    },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
+    privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
@@ -1154,6 +1220,17 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'routines' ? ' active' : ''}`}
+              onClick={() => setActiveSection('routines')}
+            >
+              <Icon name="history" size={18} />
+              <span>
+                <strong>Routines</strong>
+                <small>Schedule unattended agent runs</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
@@ -1227,6 +1304,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.library')}</strong>
                 <small>{t('settings.libraryHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
+              onClick={() => setActiveSection('privacy')}
+            >
+              <Icon name="eye" size={18} />
+              <span>
+                <strong>{t('settings.privacy')}</strong>
+                <small>{t('settings.privacyHint')}</small>
               </span>
             </button>
             <button
@@ -1794,6 +1882,8 @@ export function SettingsDialog({
             <MediaProvidersSection
               cfg={cfg}
               setCfg={setCfg}
+              mediaProvidersNotice={mediaProvidersNotice}
+              onReloadMediaProviders={onReloadMediaProviders}
               onChange={() => {
                 mediaProvidersChangeVersionRef.current += 1;
               }}
@@ -1812,11 +1902,15 @@ export function SettingsDialog({
             />
           ) : null}
 
+          {activeSection === 'routines' ? <RoutinesSection /> : null}
+
           {activeSection === 'orbit' ? (
             <OrbitSection
               cfg={cfg}
               setCfg={setCfg}
               composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
+              daemonMediaProviders={daemonMediaProviders}
+              daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
               onOpenComposioSection={() => setActiveSection('composio')}
               onLeaveForOrbitProject={(runConfig) => {
                 // Persist any in-flight Orbit edits (toggle / time) before
@@ -1924,6 +2018,10 @@ export function SettingsDialog({
 
           {activeSection === 'library' ? (
             <LibrarySection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'privacy' ? (
+            <PrivacySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
           {activeSection === 'about' ? (
@@ -2385,22 +2483,6 @@ function ConnectorSection({
   );
 }
 
-interface OrbitRunSummary {
-  id?: string;
-  startedAt?: string;
-  completedAt: string;
-  trigger?: 'manual' | 'scheduled';
-  connectorsChecked: number;
-  connectorsSucceeded: number;
-  connectorsFailed: number;
-  connectorsSkipped: number;
-  artifactId?: string | null;
-  artifactProjectId?: string | null;
-  /** Identifier of the daemon run that produced this summary. Useful for log correlation. */
-  agentRunId?: string | null;
-  markdown: string;
-}
-
 interface OrbitRunStartResponse {
   projectId: string;
   agentRunId: string;
@@ -2408,8 +2490,16 @@ interface OrbitRunStartResponse {
 
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
+  options?: {
+    daemonProviders?: AppConfig['mediaProviders'] | null;
+    syncMediaProviders?: boolean;
+  },
 ): Promise<OrbitRunStartResponse> {
-  await syncMediaProvidersToDaemon(config.mediaProviders);
+  if (options?.syncMediaProviders !== false) {
+    await syncMediaProvidersToDaemon(config.mediaProviders, {
+      daemonProviders: options?.daemonProviders,
+    });
+  }
   await syncConfigToDaemon(config, { throwOnError: true });
   const response = await fetch('/api/orbit/run', { method: 'POST' });
   if (!response.ok) throw new Error('Orbit run failed');
@@ -2430,12 +2520,6 @@ export function configForManualOrbitRun(config: AppConfig): AppConfig {
 
 export function isOrbitRunDisabled(isBusy: boolean, connectedCount: number | null): boolean {
   return isBusy || connectedCount === null || connectedCount === 0;
-}
-
-interface OrbitStatusResponse {
-  running?: boolean;
-  nextRunAt?: string | null;
-  lastRun?: OrbitRunSummary | null;
 }
 
 function formatRelative(
@@ -2459,6 +2543,8 @@ function OrbitSection({
   cfg,
   setCfg,
   composioApiKeyConfigured,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState,
   onOpenComposioSection,
   onLeaveForOrbitProject,
 }: {
@@ -2469,6 +2555,8 @@ function OrbitSection({
    *  that Orbit needs Composio first; when true (key present, just no
    *  connectors yet) it nudges the user toward the connector catalog. */
   composioApiKeyConfigured: boolean;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   /** Switch the parent settings dialog to the Connectors (Composio) tab.
    *  Used by the Orbit gate's primary CTA so the user can fix the
    *  prerequisite without leaving the dialog. */
@@ -2483,6 +2571,9 @@ function OrbitSection({
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [legacyLastRunTemplateSkillId, setLegacyLastRunTemplateSkillId] = useState<string | null>(null);
+  const legacyLastRunIdentity = status?.lastRun?.id
+    ?? `${status?.lastRun?.completedAt ?? ''}:${status?.lastRun?.agentRunId ?? ''}:${status?.lastRun?.markdown ?? ''}`;
   // Orbit-scenario skill templates fetched from /api/skills. We fetch on mount
   // and keep three states for graceful UX: `null` = still loading, `[]` =
   // loaded with no orbit templates available, `SkillSummary[]` = ready. If
@@ -2500,8 +2591,15 @@ function OrbitSection({
   // Once the user clicks Generate we close Settings and navigate away. The ref
   // lets late-arriving handlers no-op without React warnings.
   const isMountedRef = useRef(true);
-  useEffect(() => () => {
-    isMountedRef.current = false;
+  useEffect(() => {
+    // React Strict Mode replays mount effects in development. Reset the ref on
+    // each setup so the synthetic cleanup from the first pass does not leave
+    // async Orbit status / connector refreshes permanently thinking the panel
+    // has unmounted.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {
@@ -2592,6 +2690,17 @@ function OrbitSection({
   // were on the default. Manual runs persist this effective value before
   // launching so the daemon uses the same template the UI displays.
   const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+  const supportsTemplateScopedHistory = status?.lastRunsByTemplate !== undefined;
+
+  useEffect(() => {
+    const hasTemplateScopedHistory = Object.keys(status?.lastRunsByTemplate ?? {}).length > 0;
+    const hasLegacyUnscopedLastRun = Boolean(status?.lastRun && !status.lastRun.templateSkillId);
+    if (!hasLegacyUnscopedLastRun || hasTemplateScopedHistory) {
+      setLegacyLastRunTemplateSkillId(null);
+      return;
+    }
+    setLegacyLastRunTemplateSkillId((current) => current ?? (effectiveTemplateSkillId || null));
+  }, [effectiveTemplateSkillId, legacyLastRunIdentity, status]);
 
   const selectedTemplate = useMemo(() => {
     if (!effectiveTemplateSkillId || !orbitTemplates) return null;
@@ -2606,7 +2715,10 @@ function OrbitSection({
     void (async () => {
       try {
         const runConfig = configForManualOrbitRun(cfg);
-        const payload = await persistConfigAndRunOrbit(runConfig);
+        const payload = await persistConfigAndRunOrbit(runConfig, {
+          daemonProviders: daemonMediaProviders,
+          syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
+        });
         if (!payload.projectId) throw new Error('Orbit run did not return a project');
 
         onLeaveForOrbitProject(runConfig);
@@ -2629,7 +2741,18 @@ function OrbitSection({
     })();
   };
 
-  const lastRun = status?.lastRun ?? null;
+  const templateScopedLastRun = effectiveTemplateSkillId
+    ? status?.lastRunsByTemplate?.[effectiveTemplateSkillId] ?? null
+    : null;
+  const hasLegacyUnscopedLastRun = Boolean(
+    status?.lastRun
+    && !status.lastRun.templateSkillId
+    && legacyLastRunTemplateSkillId
+    && legacyLastRunTemplateSkillId === effectiveTemplateSkillId,
+  );
+  const lastRun = supportsTemplateScopedHistory
+    ? (templateScopedLastRun ?? (hasLegacyUnscopedLastRun ? status?.lastRun ?? null : null))
+    : status?.lastRun ?? null;
   const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
@@ -3215,13 +3338,19 @@ function OrbitSection({
 function MediaProvidersSection({
   cfg,
   setCfg,
+  mediaProvidersNotice,
+  onReloadMediaProviders,
   onChange,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onChange: () => void;
 }) {
   const { t } = useI18n();
+  const [reloadRunning, setReloadRunning] = useState(false);
+  const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -3241,22 +3370,28 @@ function MediaProvidersSection({
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
       const bEntry = cfg.mediaProviders?.[b.id];
-      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim());
-      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim());
+      const aConfigured = isStoredMediaProviderEntryPresent(aEntry);
+      const bConfigured = isStoredMediaProviderEntryPresent(bEntry);
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       if (a.integrated !== b.integrated) return a.integrated ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
   const updateProvider = (
     provider: MediaProvider,
-    patch: { apiKey?: string; baseUrl?: string; model?: string },
+    patch: {
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      apiKeyConfigured?: boolean;
+      apiKeyTail?: string;
+    },
   ) => {
     onChange();
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
       const map = { ...(curr.mediaProviders ?? {}) };
-      if (!next.apiKey.trim() && !next.baseUrl.trim() && !next.model?.trim()) {
+      if (isStoredMediaProviderEntryEmpty(next)) {
         delete map[provider.id];
       } else {
         map[provider.id] = next;
@@ -3264,6 +3399,23 @@ function MediaProvidersSection({
       return { ...curr, mediaProviders: map };
     });
   };
+  const handleReload = async () => {
+    if (!onReloadMediaProviders || reloadRunning) return;
+    setReloadRunning(true);
+    setReloadNotice(null);
+    try {
+      const next = await onReloadMediaProviders();
+      if (!next) {
+        setReloadNotice({ kind: 'error', message: t('settings.mediaProviderReloadError') });
+        return;
+      }
+      setCfg((curr) => mergeDaemonMediaProviders(curr, next));
+      setReloadNotice({ kind: 'success', message: t('settings.mediaProviderReloadSuccess') });
+    } finally {
+      setReloadRunning(false);
+    }
+  };
+
   const toggleApiKeyVisibility = (providerId: string) => {
     setVisibleApiKeys((current) => {
       const next = new Set(current);
@@ -3283,20 +3435,46 @@ function MediaProvidersSection({
           <h3>{t('settings.mediaProviders')}</h3>
           <p className="hint">{t('settings.mediaProvidersHint')}</p>
         </div>
+        {onReloadMediaProviders ? (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void handleReload()}
+            disabled={reloadRunning}
+          >
+            {reloadRunning ? t('common.loading') : t('settings.mediaProviderReload')}
+          </button>
+        ) : null}
       </div>
+      {mediaProvidersNotice ? (
+        <p className="hint" role="alert">{mediaProvidersNotice}</p>
+      ) : null}
+      {reloadNotice ? (
+        <p className="hint" role={reloadNotice.kind === 'error' ? 'alert' : 'status'}>
+          {reloadNotice.message}
+        </p>
+      ) : null}
       <div className="media-provider-list">
         {providers.map((provider) => {
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
-          const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
+          const hasPendingEdit = Boolean(entry.apiKey.trim());
+          const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
+          const tail = entry.apiKeyTail?.trim();
+          const configured = isStoredMediaProviderEntryPresent(entry);
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
-          const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
+          const clearable = isStoredMediaProviderEntryPresent(entry);
           const apiKeyVisible = visibleApiKeys.has(provider.id);
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
                 <div className="media-provider-meta">
                   <span className="media-provider-name">{provider.label}</span>
+                  {isSavedState ? (
+                    <span className="field-status-badge" title={t('settings.connectorsSavedTitle')}>
+                      {tail ? t('settings.connectorsSavedWithTail', { tail }) : t('settings.connectorsSaved')}
+                    </span>
+                  ) : null}
                   <span className="media-provider-hint">{provider.hint}</span>
                 </div>
                 <div className="media-provider-badges">
@@ -3315,7 +3493,7 @@ function MediaProvidersSection({
                   <input
                     type={apiKeyVisible ? 'text' : 'password'}
                     value={entry.apiKey}
-                    placeholder={t('settings.mediaProviderPlaceholder')}
+                    placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
                     aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                     disabled={disabled}
                     onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
@@ -3332,9 +3510,9 @@ function MediaProvidersSection({
                     aria-pressed={apiKeyVisible}
                     onClick={() => toggleApiKeyVisibility(provider.id)}
                   >
-                    <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                  </button>
-                </div>
+                      <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                    </button>
+                  </div>
                 <input
                   value={entry.baseUrl}
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -3370,7 +3548,13 @@ function MediaProvidersSection({
                     ) {
                       return;
                     }
-                    updateProvider(provider, { apiKey: '', baseUrl: '', model: '' });
+                    updateProvider(provider, {
+                      apiKey: '',
+                      baseUrl: '',
+                      model: '',
+                      apiKeyConfigured: false,
+                      apiKeyTail: '',
+                    });
                   }}
                 >
                   {t('settings.mediaProviderClear')}

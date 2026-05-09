@@ -26,6 +26,7 @@ import { hu } from './locales/hu';
 import { fr } from './locales/fr';
 import { uk } from './locales/uk';
 import { tr } from './locales/tr';
+import { th } from './locales/th';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -51,6 +52,7 @@ const DICTS: Record<Locale, Dict> = {
   'fr': fr,
   'uk': uk,
   'tr': tr,
+  'th': th,
 };
 
 const LS_KEY = 'open-design:locale';

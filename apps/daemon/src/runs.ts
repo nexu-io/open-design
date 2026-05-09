@@ -48,7 +48,7 @@ export function createChatRunService({
 
   const emit = (run, event, data) => {
     const id = run.nextEventId++;
-    const record = { id, event, data };
+    const record = { id, event, data, timestamp: Date.now() };
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();

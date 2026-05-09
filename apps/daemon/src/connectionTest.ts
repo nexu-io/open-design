@@ -177,6 +177,15 @@ function inspectProviderCompletion(
     };
   }
 
+  if (protocol === 'ollama') {
+    const msg = (obj as { message?: { content?: unknown } }).message;
+    const hasContent = typeof msg?.content === 'string';
+    return {
+      valid: Array.isArray((obj as { messages?: unknown }).messages) || hasContent,
+      ...(hasContent ? { sample: truncateSample(msg?.content) } : {}),
+    };
+  }
+
   return { valid: false };
 }
 
@@ -342,18 +351,32 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         extractText: extractOpenAIMessageText,
       };
     case 'azure': {
+      const url = new URL(baseUrl);
+      const basePath = url.pathname.replace(/\/+$/, '');
+      const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
       const apiVersion =
         typeof input.apiVersion === 'string' && input.apiVersion.trim()
           ? input.apiVersion.trim()
-          : '2024-10-21';
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
+          : usesVersionedOpenAIPath
+            ? ''
+            : '2024-10-21';
+      url.pathname = usesVersionedOpenAIPath
+        ? `${basePath}/chat/completions`
+        : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+      if (usesVersionedOpenAIPath && !apiVersion) {
+        url.searchParams.delete('api-version');
+      }
+      if (apiVersion) {
+        url.searchParams.set('api-version', apiVersion);
+      }
       return {
-        url: `${trimmedBase}/openai/deployments/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`,
+        url: url.toString(),
         headers: {
           'content-type': 'application/json',
           'api-key': apiKey,
         },
         body: {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
           max_tokens: PROVIDER_MAX_TOKENS,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
@@ -363,8 +386,6 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
     }
     case 'google': {
       const trimmedBase = baseUrl.replace(/\/+$/, '');
-      // Non-streaming variant — deliberately not :streamGenerateContent so
-      // we can JSON.parse the response in one shot.
       return {
         url: `${trimmedBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
         headers: {
@@ -388,6 +409,28 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
               typeof p?.text === 'string' ? p.text : '',
             )
             .join('');
+        },
+      };
+    }
+    case 'ollama': {
+      const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+      return {
+        url: `${trimmedBase}/api/chat`,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: {
+          model,
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+        },
+        extractText: (data) => {
+          const message = (data as { message?: { content?: unknown } }).message;
+          if (message && typeof (message as { content?: unknown }).content === 'string') {
+            return (message as { content: string }).content;
+          }
+          return '';
         },
       };
     }

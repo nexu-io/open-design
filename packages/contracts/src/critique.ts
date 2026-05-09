@@ -173,3 +173,47 @@ export function panelEventToSse(e: PanelEvent): CritiqueSseEvent {
   // data. The cast is safe by construction.
   return { event: `critique.${type}`, data: payload } as CritiqueSseEvent;
 }
+
+/**
+ * Per-round summary persisted with each critique run. Mirrors the shape the
+ * orchestrator writes via decideRound; web clients consume it through the
+ * rerun and history endpoints, so it lives in the shared contract layer.
+ */
+export interface CritiqueRoundSummary {
+  n: number;
+  composite: number;
+  mustFix: number;
+  decision: RoundDecision;
+}
+
+/**
+ * Terminal critique status persisted with each run. Superset of ShipStatus
+ * that also covers degraded / failed / legacy outcomes. The daemon's CHECK
+ * constraint also accepts the in-flight 'running' value, but that is handled
+ * inline by daemon-side code; the public contract surface is terminal-only
+ * because every consumer of this type works against finished runs.
+ */
+export type CritiqueRunStatus =
+  | ShipStatus
+  | 'degraded'
+  | 'failed'
+  | 'legacy';
+
+/**
+ * Enumeration of every terminal CritiqueRunStatus value, in the order the
+ * UI / docs / status filters typically display them: SHIP outcomes first
+ * (shipped → below_threshold → timed_out → interrupted), then quality /
+ * lifecycle exits (degraded → failed), then the historical 'legacy' tag
+ * for runs created before the feature shipped. Web consumers (status
+ * filters, analytics dashboards) iterate this constant directly so the
+ * daemon stays the single source of truth on the order.
+ */
+export const CRITIQUE_RUN_STATUSES = [
+  'shipped',
+  'below_threshold',
+  'timed_out',
+  'interrupted',
+  'degraded',
+  'failed',
+  'legacy',
+] as const satisfies readonly CritiqueRunStatus[];
