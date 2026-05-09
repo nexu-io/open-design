@@ -149,6 +149,7 @@ export function ChatPane({
   // 80px cutoff: scrolling ~90px up is an intentional pause that
   // shouldn't be yanked back the moment the next chunk streams in.
   const pinnedToBottomRef = useRef(true);
+  const scrolledToFormRef = useRef<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
@@ -176,6 +177,7 @@ export function ChatPane({
     // A new conversation should land at the bottom (its own initial
     // scroll), not inherit the previous conversation's saved position.
     savedChatScrollRef.current = null;
+    scrolledToFormRef.current = new Set();
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -183,6 +185,23 @@ export function ChatPane({
     if (!el || didInitialScrollRef.current || messages.length === 0) return;
     didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
+      // If the last assistant message contains a question form, scroll to
+      // the form instead of the bottom, so the user sees the form first.
+      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (lastAssistantMsg?.content.includes('<question-form')) {
+        const assistantEls = el.querySelectorAll('.msg.assistant');
+        const lastAssistantEl = assistantEls[assistantEls.length - 1];
+        const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
+        if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
+          scrolledToFormRef.current.add(formEl.dataset.formId!);
+          el.scrollTop = formEl.offsetTop;
+          pinnedToBottomRef.current = false;
+          setScrolledFromBottom(true);
+          return;
+        }
+        // Already handled by the auto-scroll effect — don't bottom-scroll.
+        if (formEl) return;
+      }
       el.scrollTop = el.scrollHeight;
       setScrolledFromBottom(false);
       pinnedToBottomRef.current = true;
@@ -210,6 +229,25 @@ export function ChatPane({
     // threshold) so a deliberate ~90px scroll-up isn't snapped back the
     // next time content streams in. Issue #983.
     if (pinnedToBottomRef.current) {
+      // If the last assistant message contains a question form, scroll to
+      // the form instead of the bottom, so the user lands on the form.
+      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (lastAssistantMsg?.content.includes('<question-form')) {
+        const assistantEls = el.querySelectorAll('.msg.assistant');
+        const lastAssistantEl = assistantEls[assistantEls.length - 1];
+        const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
+        if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
+          scrolledToFormRef.current.add(formEl.dataset.formId!);
+          formEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          pinnedToBottomRef.current = false;
+          setScrolledFromBottom(true);
+          return;
+        }
+        // Form tag in content but the DOM element isn't ready yet (partial
+        // stream) — skip bottom-scroll to avoid a jarring jump that gets
+        // undone when the form finishes rendering.
+        return;
+      }
       el.scrollTop = el.scrollHeight;
     }
   }, [messages, error]);
@@ -490,7 +528,11 @@ export function ChatPane({
                         onRequestOpenFile={onRequestOpenFile}
                         isLast={m.id === lastAssistantId}
                         nextUserContent={nextUserContentByAssistantId.get(m.id)}
-                        onSubmitForm={onSubmitForm}
+                        onSubmitForm={(text) => {
+                          pinnedToBottomRef.current = true;
+                          scrolledToFormRef.current = new Set();
+                          onSubmitForm?.(text);
+                        }}
                         onContinueRemainingTasks={
                           m.id === lastAssistantId && onContinueRemainingTasks
                             ? (todos) => onContinueRemainingTasks(m, todos)
