@@ -5,6 +5,8 @@
 // These helpers fail soft (returning null / [] on transport errors) so
 // the UI can stay rendered when the daemon is briefly unreachable.
 
+import type { ImportFolderRequest, ImportFolderResponse } from '@open-design/contracts';
+import { randomUUID } from '../utils/uuid';
 import type {
   ChatMessage,
   Conversation,
@@ -44,7 +46,13 @@ export async function createProject(input: {
   metadata?: ProjectMetadata;
 }): Promise<{ project: Project; conversationId: string } | null> {
   try {
-    const id = crypto.randomUUID();
+    // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
+    // when `crypto.randomUUID` is unavailable. Open Design served over
+    // plain HTTP on a LAN IP (Docker / unRAID self-hosting) is a
+    // non-secure context, where `crypto.randomUUID` is undefined and
+    // calling it directly throws — the surrounding try/catch then turns
+    // the Create button into a silent no-op (issue #849).
+    const id = randomUUID();
     const resp = await fetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,6 +60,22 @@ export async function createProject(input: {
     });
     if (!resp.ok) return null;
     return (await resp.json()) as { project: Project; conversationId: string };
+  } catch {
+    return null;
+  }
+}
+
+export async function importFolderProject(
+  input: ImportFolderRequest,
+): Promise<ImportFolderResponse | null> {
+  try {
+    const resp = await fetch('/api/import/folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ImportFolderResponse;
   } catch {
     return null;
   }
@@ -254,18 +278,26 @@ export async function listMessages(
   }
 }
 
+export interface SaveMessageOptions {
+  telemetryFinalized?: boolean;
+}
+
 export async function saveMessage(
   projectId: string,
   conversationId: string,
   message: ChatMessage,
+  options: SaveMessageOptions = {},
 ): Promise<void> {
   try {
+    const body = options.telemetryFinalized
+      ? { ...message, telemetryFinalized: true }
+      : message;
     await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(message.id)}`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(message),
+        body: JSON.stringify(body),
       },
     );
   } catch {

@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { de } from './locales/de';
 import { en } from './locales/en';
+import { id } from './locales/id';
 import { esES } from './locales/es-ES';
 import { fa } from './locales/fa';
 import { ar } from './locales/ar';
@@ -24,6 +25,8 @@ import { pl } from './locales/pl';
 import { hu } from './locales/hu';
 import { fr } from './locales/fr';
 import { uk } from './locales/uk';
+import { tr } from './locales/tr';
+import { th } from './locales/th';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -33,6 +36,7 @@ type DictKey = keyof Dict;
 
 const DICTS: Record<Locale, Dict> = {
   'en': en,
+  'id': id,
   'de': de,
   'zh-CN': zhCN,
   'zh-TW': zhTW,
@@ -47,6 +51,8 @@ const DICTS: Record<Locale, Dict> = {
   'hu': hu,
   'fr': fr,
   'uk': uk,
+  'tr': tr,
+  'th': th,
 };
 
 const LS_KEY = 'open-design:locale';

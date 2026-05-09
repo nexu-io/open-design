@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Atlas — Strategic Alternatives Review · Hartfield & Co.</title>
+<style>
+  :root {
+    --paper:        oklch(98.5% 0.008 80);
+    --paper-warm:   oklch(96% 0.012 78);
+    --ink:          oklch(18% 0.012 70);
+    --ink-mid:      oklch(38% 0.010 70);
+    --ink-soft:     oklch(56% 0.008 70);
+    --rule:         oklch(86% 0.008 75);
+    --accent:       oklch(48% 0.18 28);   /* deep red ribbon */
+    --gold:         oklch(72% 0.12 78);
+    --teal:         oklch(45% 0.07 200);
+    --neg:          oklch(48% 0.16 28);
+    --pos:          oklch(45% 0.10 165);
+    --serif: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --sans:  system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; background: var(--ink); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  /* ──────────────────────────────────────────────────────────────────────────
+     Deck framework — horizontal swipe, slide counter, keyboard nav, print
+  ────────────────────────────────────────────────────────────────────────── */
+  .deck {
+    width: 100vw; height: 100vh; overflow: hidden; position: relative;
+    background: linear-gradient(180deg, oklch(14% 0.012 70), oklch(20% 0.012 70));
+    display: flex;
+    flex-direction: column;
+  }
+  .demo-banner {
+    flex: 0 0 auto;
+    z-index: 50;
+    padding: 9px 18px;
+    font-size: 11px;
+    line-height: 1.35;
+    letter-spacing: 0.02em;
+    text-align: center;
+    font-family: var(--sans);
+    color: oklch(90% 0.02 85);
+    background: oklch(22% 0.04 55);
+    border-bottom: 1px solid oklch(35% 0.03 70);
+  }
+  .demo-banner strong { color: oklch(96% 0.03 85); font-weight: 600; }
+  .demo-pill {
+    display: inline-flex;
+    width: max-content;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+    padding: 8px 11px;
+    border: 1px solid color-mix(in oklch, var(--accent) 45%, var(--rule));
+    background: color-mix(in oklch, var(--accent) 8%, var(--paper));
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .demo-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex; transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  .slide {
+    min-width: 100vw; height: 100vh;
+    background: var(--paper);
+    display: grid; place-items: stretch;
+    position: relative; overflow: hidden;
+  }
+  .slide-inner {
+    width: min(1320px, 92vw);
+    height: min(820px, 86vh);
+    margin: auto;
+    padding: 56px 64px 48px;
+    display: grid; grid-template-rows: auto 1fr auto;
+    background: var(--paper);
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35), 0 6px 18px -8px rgba(0,0,0,0.25);
+    position: relative;
+    border-top: 6px solid var(--ink);
+  }
+  /* Magazine masthead */
+  .mast {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+    font-family: var(--sans); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-mid);
+  }
+  .mast .brand {
+    font-family: var(--serif); font-weight: 500; font-size: 16px;
+    letter-spacing: 0.04em; color: var(--ink); text-transform: none;
+  }
+  .mast .brand i { color: var(--accent); font-style: normal; }
+  .mast .meta { display: flex; gap: 22px; }
+  .mast .meta span::before { content: "· "; color: var(--rule); margin-right: 6px; }
+  .mast .meta span:first-child::before { content: ""; margin: 0; }
+
+  /* Footer */
+  .foot {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 14px; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+  .foot .conf {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--sans); letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 500; font-size: 10.5px;
+  }
+  .foot .conf::before {
+    content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
+  }
+
+  /* Body region (per slide overrides this) */
+  .body { padding: 28px 0 22px; }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Chrome — counter, nav, print badge
+  ────────────────────────────────────────────────────────────────────────── */
+  .chrome {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center;
+    background: oklch(98% 0.005 80 / 0.92); backdrop-filter: blur(8px);
+    border: 1px solid oklch(86% 0.008 75); border-radius: 999px;
+    padding: 6px 8px; box-shadow: 0 8px 24px -10px rgba(0,0,0,0.35);
+    z-index: 50;
+  }
+  .chrome button {
+    width: 28px; height: 28px; border: 0; border-radius: 999px;
+    background: transparent; cursor: pointer; color: var(--ink);
+    display: grid; place-items: center;
+  }
+  .chrome button:hover { background: oklch(94% 0.008 75); }
+  .chrome .counter {
+    font-family: var(--mono); font-size: 11px; padding: 0 10px; color: var(--ink-mid);
+    letter-spacing: 0.04em;
+  }
+  .chrome .counter .now { color: var(--ink); font-weight: 500; }
+
+  .agent-stamp {
+    position: fixed; top: 18px; right: 18px;
+    background: oklch(98% 0.005 80 / 0.92); backdrop-filter: blur(6px);
+    border: 1px solid oklch(86% 0.008 75); border-radius: 8px;
+    padding: 8px 12px;
+    font-family: var(--sans); font-size: 11px; color: var(--ink-mid);
+    display: flex; gap: 10px; align-items: center;
+    z-index: 50;
+  }
+  .agent-stamp b { color: var(--ink); font-weight: 600; }
+  .agent-stamp .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--pos);
+    box-shadow: 0 0 0 3px oklch(45% 0.10 165 / 0.18);
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Typography
+  ────────────────────────────────────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--sans); font-size: 11px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+  }
+  h1.display {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(48px, 6.4vw, 92px); line-height: 0.94;
+    letter-spacing: -0.02em; color: var(--ink);
+  }
+  h1.display em { font-style: italic; color: var(--accent); }
+  h2.section {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 44px; line-height: 1.04; letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  h2.section em { font-style: italic; font-weight: 400; color: var(--accent); }
+  h3 {
+    font-family: var(--serif); font-weight: 500; font-size: 22px;
+    line-height: 1.15; letter-spacing: -0.005em; color: var(--ink);
+  }
+  .lede {
+    font-family: var(--serif); font-weight: 300; font-size: 22px;
+    line-height: 1.42; color: var(--ink-mid); max-width: 62ch;
+  }
+  .body-text {
+    font-family: var(--sans); font-size: 13.5px; line-height: 1.55;
+    color: var(--ink-mid); max-width: 64ch;
+  }
+  .kicker {
+    font-family: var(--sans); font-size: 11px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-soft); font-weight: 500;
+  }
+  .num {
+    font-family: var(--serif); font-weight: 400;
+    font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
+  }
+  .mono { font-family: var(--mono); font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 1 — COVER
+  ────────────────────────────────────────────────────────────────────────── */
+  .cover .body {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 48px;
+    align-items: end;
+    padding: 24px 0 16px;
+  }
+  .cover .ribbon {
+    display: inline-block; background: var(--accent); color: var(--paper);
+    padding: 6px 14px; font-family: var(--sans); font-size: 11px;
+    letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600;
+    margin-bottom: 28px;
+  }
+  .cover h1.display { font-size: clamp(64px, 7.6vw, 116px); }
+  .cover .subhead {
+    font-family: var(--serif); font-style: italic; font-weight: 300;
+    font-size: 28px; color: var(--ink-mid); margin-top: 18px; line-height: 1.2;
+  }
+  .cover-meta {
+    border-left: 2px solid var(--ink); padding-left: 22px;
+    display: grid; gap: 18px;
+  }
+  .cover-meta .row { display: grid; gap: 4px; }
+  .cover-meta .row .k {
+    font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .cover-meta .row .v {
+    font-family: var(--serif); font-size: 18px; color: var(--ink); line-height: 1.3;
+  }
+  .cover .marque {
+    position: absolute; right: 56px; top: 56px;
+    font-family: var(--serif); font-style: italic;
+    font-size: 11px; color: var(--ink-mid); letter-spacing: 0.04em;
+    transform: rotate(-2deg);
+  }
+  .cover .marque::before {
+    content: ""; display: block; width: 60px; height: 1px; background: var(--accent);
+    margin-bottom: 6px; transform: rotate(2deg);
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 2 — TOC
+  ────────────────────────────────────────────────────────────────────────── */
+  .toc .body {
+    display: grid; grid-template-columns: 1fr 1.4fr; gap: 56px; align-items: start;
+    padding-top: 36px;
+  }
+  .toc .lede { margin-top: 18px; }
+  .toc ol {
+    list-style: none; counter-reset: toc;
+    border-top: 1px solid var(--rule);
+  }
+  .toc ol li {
+    counter-increment: toc;
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 18px; align-items: baseline;
+    padding: 14px 0; border-bottom: 1px solid var(--rule);
+  }
+  .toc ol li::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em;
+  }
+  .toc ol li .t { font-family: var(--serif); font-size: 20px; color: var(--ink); }
+  .toc ol li .pg { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); }
+  .toc ol li .sub {
+    grid-column: 2 / -1;
+    font-family: var(--sans); font-size: 12px; color: var(--ink-soft);
+    margin-top: 2px;
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 3 — MARKET CONTEXT
+  ────────────────────────────────────────────────────────────────────────── */
+  .market .body {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 16px;
+    padding-top: 20px;
+  }
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+    border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+  }
+  .kpi {
+    padding: 12px 14px; display: grid; gap: 3px;
+    border-right: 1px solid var(--rule);
+  }
+  .kpi:last-child { border-right: 0; }
+  .kpi .k {
+    font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .kpi .v {
+    font-family: var(--serif); font-size: 31px; line-height: 1; color: var(--ink);
+    margin-top: 2px;
+  }
+  .kpi .v small { font-size: 16px; color: var(--ink-mid); margin-left: 2px; }
+  .kpi .delta {
+    font-family: var(--mono); font-size: 10.5px; margin-top: 4px; letter-spacing: 0.02em;
+  }
+  .kpi .delta.up { color: var(--pos); }
+  .kpi .delta.down { color: var(--neg); }
+  .market-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 26px; min-height: 0; }
+  .chartbox {
+    border: 1px solid var(--rule); padding: 14px 16px 12px; display: grid; gap: 6px;
+    background: var(--paper-warm);
+  }
+  .chartbox .title { display: flex; justify-content: space-between; align-items: baseline; }
+  .chartbox .title h3 { font-size: 16px; }
+  .chartbox .title .src { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); }
+  .chart svg { width: 100%; height: 150px; display: block; }
+  .legend {
+    display: flex; gap: 16px; font-family: var(--sans); font-size: 11px;
+    color: var(--ink-mid);
+  }
+  .legend .sw { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw i { width: 10px; height: 10px; display: inline-block; border-radius: 2px; font-style: normal; }
+  .pull {
+    border-left: 3px solid var(--accent); padding: 4px 0 4px 16px;
+    font-family: var(--serif); font-size: 15px; color: var(--ink); line-height: 1.32;
+  }
+  .market .body-text { font-size: 12.8px; line-height: 1.48; }
+  .market .kicker { font-size: 9.5px; letter-spacing: 0.12em; }
+  .market .num { line-height: 1.05; }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Tables
+  ────────────────────────────────────────────────────────────────────────── */
+  table.fin {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--sans); font-size: 12px;
+  }
+  table.fin th {
+    font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-soft); font-weight: 600;
+    text-align: right; padding: 10px 8px; border-bottom: 1px solid var(--ink);
+  }
+  table.fin th:first-child, table.fin td:first-child { text-align: left; }
+  table.fin td {
+    font-family: var(--mono); font-size: 12px; color: var(--ink);
+    padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--rule);
+    font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
+  }
+  table.fin td:first-child {
+    font-family: var(--serif); font-size: 13.5px; color: var(--ink); font-weight: 400;
+  }
+  table.fin tr.target td {
+    background: oklch(96% 0.04 78); font-weight: 500;
+  }
+  table.fin tr.target td:first-child::before {
+    content: "▸ "; color: var(--accent); font-weight: 700;
+  }
+  table.fin tr.summary td {
+    border-top: 1px solid var(--ink); border-bottom: 0;
+    color: var(--ink-mid); font-style: italic;
+  }
+  table.fin tr.summary td:first-child { font-style: italic; color: var(--ink-mid); }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 4 — TRADING COMPS
+  ────────────────────────────────────────────────────────────────────────── */
+  .comps .body { display: grid; grid-template-columns: 1fr 2.4fr; gap: 36px; padding-top: 28px; }
+  .col-narrative h2 { margin-bottom: 14px; }
+  .col-narrative .body-text { margin-top: 14px; }
+  .col-narrative .criteria { margin-top: 22px; display: grid; gap: 8px; }
+  .col-narrative .criteria .t { font-family: var(--sans); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .col-narrative .criteria ul { list-style: none; display: grid; gap: 6px; }
+  .col-narrative .criteria li {
+    font-family: var(--sans); font-size: 12px; color: var(--ink); line-height: 1.4;
+    padding-left: 14px; position: relative;
+  }
+  .col-narrative .criteria li::before {
+    content: "■"; color: var(--accent); position: absolute; left: 0; font-size: 9px; top: 4px;
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 5 — PRECEDENT TRANSACTIONS
+  ────────────────────────────────────────────────────────────────────────── */
+  .precedents .body { display: grid; grid-template-rows: auto 1fr; gap: 22px; padding-top: 28px; }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 6 — FOOTBALL FIELD
+  ────────────────────────────────────────────────────────────────────────── */
+  .football .body { display: grid; grid-template-columns: 1fr 1.6fr; gap: 36px; padding-top: 28px; }
+  .ff-chart { display: grid; gap: 14px; padding: 12px 0; }
+  .ff-row { display: grid; grid-template-columns: 200px 1fr 90px; gap: 16px; align-items: center; }
+  .ff-row .label {
+    font-family: var(--serif); font-size: 14px; color: var(--ink); line-height: 1.2;
+  }
+  .ff-row .label small {
+    display: block; font-family: var(--sans); font-size: 10.5px;
+    color: var(--ink-soft); letter-spacing: 0.06em; margin-top: 2px;
+  }
+  .ff-track {
+    height: 22px; background: oklch(94% 0.008 75); position: relative;
+  }
+  .ff-bar {
+    position: absolute; top: 0; bottom: 0; background: var(--ink);
+  }
+  .ff-bar.alt { background: var(--accent); opacity: 0.85; }
+  .ff-bar.alt2 { background: var(--gold); }
+  .ff-tick {
+    position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent);
+  }
+  .ff-tick::after {
+    content: "Current $42.10"; position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 10px; color: var(--accent); white-space: nowrap;
+  }
+  .ff-row .range {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink); text-align: right;
+  }
+  .ff-axis {
+    display: grid; grid-template-columns: 200px 1fr 90px; gap: 16px;
+    border-top: 1px solid var(--rule); padding-top: 6px; margin-top: 4px;
+  }
+  .ff-axis .ticks {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 10px; color: var(--ink-soft);
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 7 — DCF + SENSITIVITY
+  ────────────────────────────────────────────────────────────────────────── */
+  .dcf .body { display: grid; grid-template-columns: 1.1fr 1fr; gap: 36px; padding-top: 28px; }
+  .dcf table.sens {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--mono); font-size: 11.5px;
+  }
+  .dcf table.sens th, .dcf table.sens td {
+    border: 1px solid var(--rule); padding: 8px 6px; text-align: center;
+    font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
+  }
+  .dcf table.sens th {
+    background: var(--paper-warm); font-weight: 600; color: var(--ink-mid);
+    font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.06em;
+  }
+  .dcf table.sens td.h { color: var(--accent); font-weight: 600; }
+  .dcf table.sens td.center { background: oklch(96% 0.04 78); font-weight: 600; color: var(--ink); }
+  .dcf-asm { display: grid; gap: 10px; }
+  .dcf-asm .row {
+    display: grid; grid-template-columns: 1fr auto;
+    border-bottom: 1px dashed var(--rule); padding: 8px 0;
+    align-items: baseline;
+  }
+  .dcf-asm .row .k {
+    font-family: var(--sans); font-size: 12px; color: var(--ink-mid);
+  }
+  .dcf-asm .row .v {
+    font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500;
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 8 — STRATEGIC ALTERNATIVES MATRIX
+  ────────────────────────────────────────────────────────────────────────── */
+  .alts .body { display: grid; grid-template-rows: auto 1fr; gap: 18px; padding-top: 28px; }
+  .alts-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .alt {
+    border: 1px solid var(--rule); padding: 22px 24px;
+    display: grid; grid-template-rows: auto auto auto 1fr; gap: 12px;
+    background: var(--paper-warm);
+  }
+  .alt.recommended {
+    background: var(--ink); color: var(--paper);
+    border-color: var(--ink);
+  }
+  .alt .badge {
+    font-family: var(--sans); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-soft); display: flex; gap: 8px; align-items: center;
+  }
+  .alt.recommended .badge { color: var(--gold); }
+  .alt h3 { font-size: 24px; }
+  .alt.recommended h3 { color: var(--paper); }
+  .alt .stat { display: flex; gap: 24px; align-items: baseline; }
+  .alt .stat .v { font-family: var(--serif); font-size: 28px; }
+  .alt .stat .k { font-family: var(--sans); font-size: 11px; color: var(--ink-soft); letter-spacing: 0.1em; text-transform: uppercase; }
+  .alt.recommended .stat .v { color: var(--paper); }
+  .alt.recommended .stat .k { color: oklch(72% 0.012 75); }
+  .alt .pc { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 6px; }
+  .alt .pc .col h4 {
+    font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px;
+  }
+  .alt.recommended .pc .col h4 { color: oklch(72% 0.012 75); }
+  .alt .pc ul { list-style: none; display: grid; gap: 4px; }
+  .alt .pc li {
+    font-family: var(--sans); font-size: 11.5px; color: var(--ink); line-height: 1.4;
+    padding-left: 12px; position: relative;
+  }
+  .alt.recommended .pc li { color: var(--paper); }
+  .alt .pc li::before {
+    content: "+"; color: var(--pos); position: absolute; left: 0; font-weight: 600;
+  }
+  .alt .pc .col:nth-child(2) li::before { content: "−"; color: var(--neg); }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 9 — RECOMMENDATION
+  ────────────────────────────────────────────────────────────────────────── */
+  .reco .body { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; padding-top: 28px; }
+  .reco .pull {
+    font-size: 28px; font-family: var(--serif); font-weight: 400;
+    line-height: 1.25; color: var(--ink); border-left-width: 4px;
+  }
+  .reco .pull em { color: var(--accent); font-style: italic; }
+  .reco .next { display: grid; gap: 14px; margin-top: 22px; }
+  .reco .next .step {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 18px; align-items: baseline;
+    padding: 14px 0; border-bottom: 1px solid var(--rule);
+  }
+  .reco .next .step .n {
+    font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em;
+  }
+  .reco .next .step .t { font-family: var(--serif); font-size: 17px; color: var(--ink); }
+  .reco .next .step .when { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); }
+  .timeline { padding: 14px 0; }
+  .timeline svg { width: 100%; height: 200px; display: block; }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Slide 10 — DISCLAIMER / APPENDIX
+  ────────────────────────────────────────────────────────────────────────── */
+  .disc .body { display: grid; gap: 22px; padding-top: 28px; }
+  .disc .grid {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 56px;
+  }
+  .disc .body-text { font-size: 12.5px; max-width: none; line-height: 1.65; }
+  .disc .body-text p + p { margin-top: 10px; }
+  .disc h3 { margin-bottom: 8px; }
+  .disc .stamp {
+    border: 1px solid var(--ink); padding: 18px;
+    background: var(--paper-warm);
+    display: grid; gap: 10px;
+  }
+  .disc .stamp .lab { font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .disc .stamp .who { font-family: var(--serif); font-size: 18px; color: var(--ink); }
+  .disc .stamp .det { font-family: var(--sans); font-size: 12px; color: var(--ink-mid); }
+
+  @media print {
+    html, body, .deck { height: auto; overflow: visible; background: white; }
+    .stage { display: block; transform: none !important; transition: none; }
+    .slide { page-break-after: always; height: 100vh; }
+    .chrome, .agent-stamp, .demo-banner { display: none; }
+    .slide-inner { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="agent-stamp">
+  <span class="dot"></span>
+  Generated by <b>pitch-agent</b> · open-design · model: <b>claude-opus-4.7</b>
+</div>
+
+<div class="deck" id="deck">
+<div class="demo-banner" role="note" aria-label="Fictional sample disclaimer">
+  <strong>Fictional illustrative sample.</strong> Companies, tickers, and all figures are invented for demo purposes only — not investment advice, not sourced from live markets or filings.
+</div>
+<div class="stage" id="stage">
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 1 — COVER
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide cover">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co. — Investment Banking</div>
+      <div class="meta"><span>Coverage &amp; Advisory</span><span>Project Atlas</span><span>April 2026</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="ribbon">Strictly Confidential — Discussion Materials</span>
+        <h1 class="display">Project <em>Atlas</em></h1>
+        <div class="subhead">Strategic alternatives review for the Board of Directors of NorthPeak Industries, Inc.</div>
+        <div class="demo-pill">Demo data / fictional sample</div>
+      </div>
+      <div class="cover-meta">
+        <div class="row"><span class="k">Prepared for</span><span class="v">Board of Directors<br/>NorthPeak Industries, Inc. (NYSE: NPK)</span></div>
+        <div class="row"><span class="k">Prepared by</span><span class="v">Hartfield &amp; Co.<br/>Industrials &amp; Industrial Tech, M&amp;A</span></div>
+        <div class="row"><span class="k">Date</span><span class="v">April 24, 2026</span></div>
+        <div class="row"><span class="k">Engagement</span><span class="v">Strategic alternatives — sell-side, IPO, recapitalization, status quo</span></div>
+        <div class="row"><span class="k">Sample status</span><span class="v">All companies, tickers, dates, market metrics, valuation outputs, and source labels are fictional placeholders for Open Design demonstration only.</span></div>
+      </div>
+    </div>
+    <div class="marque">Volume IV · Edition 02</div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>Page 1 / 10 · /v1/agents · pitch-agent · run 7f3a91</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 2 — TABLE OF CONTENTS
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide toc">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas</span><span>Discussion Materials</span><span>02 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Contents</span>
+        <h2 class="section">A working <em>roadmap</em> for the next 90 days</h2>
+        <p class="lede">Discussion materials prepared at the request of the Board to frame strategic options ahead of the May 14 strategy session.</p>
+      </div>
+      <ol>
+        <li><span class="t">Sector context &amp; market dynamics</span><span class="pg">p.03</span><span class="sub">Industrial automation cycle, capital flows, trading multiples</span></li>
+        <li><span class="t">Trading comparables analysis</span><span class="pg">p.04</span><span class="sub">12 selected listed peers, EV/EBITDA &amp; EV/Revenue 2026E</span></li>
+        <li><span class="t">Precedent transactions</span><span class="pg">p.05</span><span class="sub">M&amp;A transactions $0.5–5.0B, 2022–2025</span></li>
+        <li><span class="t">Valuation football field</span><span class="pg">p.06</span><span class="sub">Six valuation methodologies, indicative range</span></li>
+        <li><span class="t">DCF output &amp; sensitivity</span><span class="pg">p.07</span><span class="sub">5-year explicit, terminal value, WACC × g</span></li>
+        <li><span class="t">Strategic alternatives matrix</span><span class="pg">p.08</span><span class="sub">Status quo · sale · IPO · recap — pros, cons, value</span></li>
+        <li><span class="t">Recommendation &amp; process timeline</span><span class="pg">p.09</span><span class="sub">Suggested path, indicative milestones</span></li>
+        <li><span class="t">Disclaimers &amp; appendix</span><span class="pg">p.10</span><span class="sub">Demo-data notice, methodology notes, required disclosures</span></li>
+      </ol>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>02 / 10 · skill: pitch-deck · ds: investment-banking</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 3 — MARKET CONTEXT
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide market">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §1</span><span>Sector Context</span><span>03 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Section 1 · Sector context</span>
+        <h2 class="section">Industrial automation is <em>recoupling</em> with capex.</h2>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi"><span class="k">Sector EV / EBITDA '26E</span><span class="v num">14.8<small>×</small></span><span class="delta up">+1.4× vs. 5-yr avg</span></div>
+        <div class="kpi"><span class="k">Median EV / Revenue</span><span class="v num">2.7<small>×</small></span><span class="delta up">+0.3×</span></div>
+        <div class="kpi"><span class="k">YTD M&amp;A volume</span><span class="v num">$48.2<small>B</small></span><span class="delta up">+22% YoY</span></div>
+        <div class="kpi"><span class="k">PE dry powder, sector-tagged</span><span class="v num">$184<small>B</small></span><span class="delta up">+9%</span></div>
+        <div class="kpi"><span class="k">NPK relative perf., 12M</span><span class="v num">+18.4<small>%</small></span><span class="delta down">−6pp vs. peers</span></div>
+      </div>
+      <div class="market-cols">
+        <div class="chartbox">
+          <div class="title">
+            <h3>Sector EV/EBITDA — rolling 36 months</h3>
+            <div class="src">Source: demo dataset — fictional placeholders</div>
+          </div>
+          <div class="chart">
+            <svg viewBox="0 0 600 180" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="oklch(48% 0.18 28)" stop-opacity="0.18"/>
+                  <stop offset="100%" stop-color="oklch(48% 0.18 28)" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <g stroke="oklch(86% 0.008 75)" stroke-width="1">
+                <line x1="0" y1="40" x2="600" y2="40"/>
+                <line x1="0" y1="80" x2="600" y2="80"/>
+                <line x1="0" y1="120" x2="600" y2="120"/>
+                <line x1="0" y1="160" x2="600" y2="160"/>
+              </g>
+              <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="9" fill="oklch(56% 0.008 70)">
+                <text x="2" y="38">18×</text>
+                <text x="2" y="78">16×</text>
+                <text x="2" y="118">14×</text>
+                <text x="2" y="158">12×</text>
+              </g>
+              <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58 L 600 180 L 0 180 Z" fill="url(#g1)"/>
+              <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58" fill="none" stroke="oklch(48% 0.18 28)" stroke-width="2"/>
+              <line x1="0" y1="100" x2="600" y2="100" stroke="oklch(38% 0.010 70)" stroke-dasharray="4 4" stroke-width="1"/>
+              <text x="540" y="96" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="10" fill="oklch(38% 0.010 70)">5-yr avg 14.0×</text>
+            </svg>
+          </div>
+          <div class="legend">
+            <span class="sw"><i style="background:oklch(48% 0.18 28)"></i> Sector EV/EBITDA</span>
+            <span class="sw"><i style="background:oklch(38% 0.010 70)"></i> 5-year average</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:18px;align-content:start;">
+          <div class="pull">"Strategics with clean balance sheets and PE sponsors are competing again on industrial-tech assets — bid–ask is the narrowest it's been since 2021."</div>
+          <p class="body-text">Three signals point to a re-opening window for NorthPeak. (i) Strategic acquirers in adjacent automation segments have re-prioritized inorganic growth in their FY26 capital plans. (ii) The mid-cap PE bid is back, with 17 sector-tagged funds raised in the past 9 months. (iii) Public market multiples have re-rated +1.4× since Q4'24, narrowing the discount the company would absorb in a process today.</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--rule);padding-top:12px;">
+            <div><div class="kicker">Strategic interest</div><div class="num" style="font-size:22px;">8 likely</div></div>
+            <div><div class="kicker">Sponsor interest</div><div class="num" style="font-size:22px;">12 likely</div></div>
+            <div><div class="kicker">Process tone</div><div class="num" style="font-size:22px;">Targeted</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>03 / 10 · source: demo dataset · no live market data</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 4 — TRADING COMPARABLES
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide comps">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §2</span><span>Trading Comparables</span><span>04 / 10</span></div>
+    </header>
+    <div class="body">
+      <div class="col-narrative">
+        <span class="eyebrow">Section 2 · Trading comps</span>
+        <h2 class="section">Where NorthPeak <em>trades</em> today.</h2>
+        <p class="body-text">Twelve listed peers selected on revenue scale ($0.6–4.5B), industrial-automation exposure, and adjusted EBITDA margin profile. NorthPeak's headline <strong>12.5×</strong> '26E EV/EBITDA sits <strong>in line with the peer median (12.4×)</strong> — the softer equity story is growth and mix: lower disclosed organic growth (4.8% vs. 7.1% median) and a thinner high‑margin services contribution.</p>
+        <div class="criteria">
+          <div class="t">Selection criteria</div>
+          <ul>
+            <li>'26E revenue $0.6B–$4.5B</li>
+            <li>≥35% revenue from industrial automation, controls, or test &amp; measurement</li>
+            <li>Adj. EBITDA margin between 14% and 32%</li>
+            <li>Listed on a major US, EU, or APAC exchange (excl. micro-caps)</li>
+            <li>2+ sell-side analysts publishing forward estimates</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <table class="fin">
+          <thead>
+            <tr>
+              <th>Company</th><th>Country</th><th>Mkt Cap ($M)</th><th>EV ($M)</th><th>Rev '26E ($M)</th><th>EBITDA '26E ($M)</th><th>EV/Rev</th><th>EV/EBITDA</th><th>Org. growth</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Aldenberg Controls</td><td>US</td><td>3,847</td><td>4,210</td><td>1,612</td><td>329</td><td>2.6×</td><td>12.8×</td><td>+6.8%</td></tr>
+            <tr><td>Brunswick Automation</td><td>DE</td><td>2,194</td><td>2,488</td><td>982</td><td>176</td><td>2.5×</td><td>14.1×</td><td>+5.4%</td></tr>
+            <tr><td>Calder Industrial Tech</td><td>US</td><td>5,720</td><td>6,012</td><td>2,140</td><td>462</td><td>2.8×</td><td>13.0×</td><td>+8.1%</td></tr>
+            <tr><td>Daiyo Precision</td><td>JP</td><td>1,962</td><td>1,734</td><td>904</td><td>148</td><td>1.9×</td><td>11.7×</td><td>+4.9%</td></tr>
+            <tr><td>EvoControl Systems</td><td>US</td><td>3,310</td><td>3,580</td><td>1,210</td><td>278</td><td>3.0×</td><td>12.9×</td><td>+9.2%</td></tr>
+            <tr><td>Fenstra Industrials</td><td>NL</td><td>1,485</td><td>1,612</td><td>720</td><td>118</td><td>2.2×</td><td>13.7×</td><td>+5.0%</td></tr>
+            <tr><td>Greythorne Robotics</td><td>UK</td><td>2,012</td><td>2,124</td><td>740</td><td>188</td><td>2.9×</td><td>11.3×</td><td>+11.2%</td></tr>
+            <tr class="target"><td>NorthPeak Industries</td><td>US</td><td>1,884</td><td>2,108</td><td>1,040</td><td>168</td><td>2.0×</td><td>12.5×</td><td>+4.8%</td></tr>
+            <tr><td>Pinevale Test &amp; Meas.</td><td>US</td><td>4,120</td><td>4,388</td><td>1,720</td><td>402</td><td>2.6×</td><td>10.9×</td><td>+7.1%</td></tr>
+            <tr><td>Sierra Drives</td><td>US</td><td>2,840</td><td>3,012</td><td>1,180</td><td>248</td><td>2.6×</td><td>12.1×</td><td>+8.4%</td></tr>
+            <tr><td>Trentham Sensors</td><td>UK</td><td>1,118</td><td>1,194</td><td>582</td><td>96</td><td>2.1×</td><td>12.4×</td><td>+5.7%</td></tr>
+            <tr><td>Vortex Automation</td><td>US</td><td>3,540</td><td>3,728</td><td>1,330</td><td>312</td><td>2.8×</td><td>12.0×</td><td>+8.7%</td></tr>
+            <tr class="summary"><td>Median (excl. NPK)</td><td>—</td><td>2,840</td><td>3,012</td><td>1,180</td><td>248</td><td>2.6×</td><td>12.4×</td><td>+7.1%</td></tr>
+            <tr class="summary"><td>Mean (excl. NPK)</td><td>—</td><td>2,923</td><td>3,099</td><td>1,193</td><td>251</td><td>2.5×</td><td>12.4×</td><td>+7.3%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>04 / 10 · skill: comps-analysis · source: demo dataset</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 5 — PRECEDENT TRANSACTIONS
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide precedents">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §3</span><span>Precedent Transactions</span><span>05 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Section 3 · Precedents</span>
+        <h2 class="section">M&amp;A market <em>has paid</em> 11.8–14.2× for assets like NorthPeak.</h2>
+        <p class="body-text" style="margin-top:10px;">14 transactions screened, 9 retained based on size, sector overlap, and disclosure quality. Strategic-led deals carry a +1.6× premium over sponsor-led on EV/EBITDA, consistent with synergy capture in adjacent OEM channels.</p>
+      </div>
+      <table class="fin">
+        <thead>
+          <tr>
+            <th>Date</th><th>Target</th><th>Acquirer</th><th>Type</th><th>EV ($M)</th><th>Rev ($M)</th><th>EBITDA ($M)</th><th>EV/Rev</th><th>EV/EBITDA</th><th>Premium</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Mar 2025</td><td>Quanta Drives</td><td>Schneider Electric</td><td>Strategic</td><td>2,840</td><td>1,012</td><td>212</td><td>2.8×</td><td>13.4×</td><td>+38%</td></tr>
+          <tr><td>Nov 2024</td><td>Hilltop Sensors</td><td>Honeywell</td><td>Strategic</td><td>1,720</td><td>612</td><td>122</td><td>2.8×</td><td>14.1×</td><td>+42%</td></tr>
+          <tr><td>Sep 2024</td><td>Marquette Automation</td><td>KKR Industrial Fund VI</td><td>Sponsor</td><td>3,140</td><td>1,180</td><td>262</td><td>2.7×</td><td>12.0×</td><td>+27%</td></tr>
+          <tr><td>Jun 2024</td><td>Bramwell Test &amp; Meas.</td><td>Fortive</td><td>Strategic</td><td>1,490</td><td>540</td><td>108</td><td>2.8×</td><td>13.8×</td><td>+44%</td></tr>
+          <tr><td>Feb 2024</td><td>Easton Controls</td><td>Carlyle Industrial Tech</td><td>Sponsor</td><td>2,210</td><td>912</td><td>184</td><td>2.4×</td><td>12.0×</td><td>+24%</td></tr>
+          <tr><td>Oct 2023</td><td>Crestmark Robotics</td><td>Emerson Electric</td><td>Strategic</td><td>2,640</td><td>1,008</td><td>192</td><td>2.6×</td><td>13.8×</td><td>+36%</td></tr>
+          <tr><td>Jul 2023</td><td>Driscoll Industrial</td><td>Apollo</td><td>Sponsor</td><td>1,940</td><td>820</td><td>168</td><td>2.4×</td><td>11.5×</td><td>+22%</td></tr>
+          <tr><td>Apr 2023</td><td>Yardley Precision</td><td>ABB</td><td>Strategic</td><td>1,212</td><td>462</td><td>92</td><td>2.6×</td><td>13.2×</td><td>+39%</td></tr>
+          <tr><td>Dec 2022</td><td>Westgate Automation</td><td>Bain Capital</td><td>Sponsor</td><td>2,510</td><td>1,070</td><td>222</td><td>2.3×</td><td>11.3×</td><td>+19%</td></tr>
+          <tr class="summary"><td>Median — strategic (n=5)</td><td colspan="2">—</td><td>—</td><td>2,640</td><td>1,008</td><td>192</td><td>2.8×</td><td>13.8×</td><td>+39%</td></tr>
+          <tr class="summary"><td>Median — sponsor (n=4)</td><td colspan="2">—</td><td>—</td><td>2,360</td><td>966</td><td>203</td><td>2.4×</td><td>11.8×</td><td>+23%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>05 / 10 · source: demo dataset · no live transaction data</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 6 — FOOTBALL FIELD
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide football">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §4</span><span>Valuation Football Field</span><span>06 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Section 4 · Valuation</span>
+        <h2 class="section">Six methods, one <em>indicative range</em>.</h2>
+        <p class="body-text" style="margin-top:14px;">Indicative per-share equity value across six methodologies, intersected with the current $42.10 trading price (April 22 close). The composite range of <b>$48 – $63</b> per share implies a 14–50% premium versus today.</p>
+        <div class="pull" style="margin-top:18px;">"There is real-money upside in every method we ran. The Board's question is which path captures it with the lowest execution risk."</div>
+      </div>
+      <div>
+        <div class="ff-chart">
+          <div class="ff-row">
+            <div class="label">Trading Comps<small>EV/EBITDA '26E · 11.0–14.0×</small></div>
+            <div class="ff-track"><div class="ff-bar" style="left:18%;width:32%;"></div><div class="ff-tick" style="left:24%;"></div></div>
+            <div class="range">$41 – $54</div>
+          </div>
+          <div class="ff-row">
+            <div class="label">Precedent Trans. — Sponsor<small>EV/EBITDA · 11.0–13.0×</small></div>
+            <div class="ff-track"><div class="ff-bar" style="left:24%;width:30%;"></div><div class="ff-tick" style="left:24%;"></div></div>
+            <div class="range">$44 – $52</div>
+          </div>
+          <div class="ff-row">
+            <div class="label">Precedent Trans. — Strategic<small>EV/EBITDA · 13.0–15.5×</small></div>
+            <div class="ff-track"><div class="ff-bar alt" style="left:36%;width:34%;"></div><div class="ff-tick" style="left:24%;"></div></div>
+            <div class="range">$54 – $66</div>
+          </div>
+          <div class="ff-row">
+            <div class="label">DCF (base case)<small>WACC 9.0% · g 2.5%</small></div>
+            <div class="ff-track"><div class="ff-bar alt" style="left:30%;width:36%;"></div><div class="ff-tick" style="left:24%;"></div></div>
+            <div class="range">$50 – $63</div>
+          </div>
+          <div class="ff-row">
+            <div class="label">LBO Analysis<small>5-yr · 22% IRR floor</small></div>
+            <div class="ff-track"><div class="ff-bar alt2" style="left:22%;width:28%;"></div><div class="ff-tick" style="left:24%;"></div></div>
+            <div class="range">$45 – $54</div>
+          </div>
+          <div class="ff-row">
+            <div class="label">52-week range<small>Public market</small></div>
+            <div class="ff-track"><div class="ff-bar" style="left:14%;width:24%;background:oklch(56% 0.008 70);"></div><div class="ff-tick" style="left:24%;"></div></div>
+            <div class="range">$36 – $48</div>
+          </div>
+          <div class="ff-axis">
+            <div></div>
+            <div class="ticks"><span>$30</span><span>$40</span><span>$50</span><span>$60</span><span>$70</span></div>
+            <div></div>
+          </div>
+        </div>
+        <div style="margin-top:18px;border-top:1px solid var(--ink);padding-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+          <div><div class="kicker">Composite range</div><div class="num" style="font-size:22px;">$48 – $63</div></div>
+          <div><div class="kicker">Premium to current</div><div class="num" style="font-size:22px;">+14% / +50%</div></div>
+          <div><div class="kicker">Implied EV</div><div class="num" style="font-size:22px;">$2.6B – $3.4B</div></div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>06 / 10 · skills: comps-analysis · dcf-model · lbo-model</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 7 — DCF + SENSITIVITY
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide dcf">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §5</span><span>DCF &amp; Sensitivity</span><span>07 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Section 5 · DCF</span>
+        <h2 class="section">A discounted-cash-flow that <em>does the work</em>.</h2>
+        <p class="body-text" style="margin-top:14px;">5-year explicit forecast, terminal value via perpetuity growth. WACC of 9.0% blends a 4.4% risk-free rate, 5.8% ERP, levered β of 1.10 and 28% target leverage. Working-capital cycle held flat at 47 days; capex at 4.2% of revenue.</p>
+        <div class="dcf-asm" style="margin-top:18px;">
+          <div class="row"><span class="k">Revenue CAGR (FY26–FY30E)</span><span class="v">+6.4%</span></div>
+          <div class="row"><span class="k">Adj. EBITDA margin (terminal)</span><span class="v">19.5%</span></div>
+          <div class="row"><span class="k">WACC (base)</span><span class="v">9.00%</span></div>
+          <div class="row"><span class="k">Terminal growth (base)</span><span class="v">2.50%</span></div>
+          <div class="row"><span class="k">Implied EV (base)</span><span class="v">$2,920M</span></div>
+          <div class="row"><span class="k">Implied equity value / share</span><span class="v">$56.40</span></div>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:10px;">Sensitivity — implied equity value / share</h3>
+        <table class="sens">
+          <thead>
+            <tr>
+              <th colspan="2" rowspan="2"></th>
+              <th colspan="5">Terminal growth rate</th>
+            </tr>
+            <tr>
+              <th>1.5%</th><th>2.0%</th><th>2.5%</th><th>3.0%</th><th>3.5%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th rowspan="5">WACC</th>
+              <th>8.0%</th><td>$54.20</td><td>$58.10</td><td>$62.80</td><td>$68.40</td><td>$75.30</td>
+            </tr>
+            <tr><th>8.5%</th><td>$50.90</td><td>$54.20</td><td>$58.10</td><td>$62.70</td><td>$68.20</td></tr>
+            <tr><th>9.0%</th><td>$47.80</td><td>$50.70</td><td class="center">$56.40</td><td>$58.00</td><td>$62.60</td></tr>
+            <tr><th>9.5%</th><td>$45.10</td><td>$47.50</td><td>$50.40</td><td>$53.80</td><td>$57.80</td></tr>
+            <tr><th>10.0%</th><td>$42.60</td><td>$44.70</td><td>$47.20</td><td>$50.10</td><td>$53.60</td></tr>
+          </tbody>
+        </table>
+        <p class="kicker" style="margin-top:14px;">Highlighted cell = base case · all values rounded to nearest $0.10 · pre-synergy</p>
+        <div style="margin-top:18px;border-top:1px solid var(--ink);padding-top:12px;">
+          <div class="kicker">Pre-flight checklist · run by audit-xls</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--ink-mid);">
+            <span>✓ Balance sheet ties</span>
+            <span>✓ Cash flow reconciles</span>
+            <span>✓ No hardcoded forecast</span>
+            <span>✓ Terminal &gt; trough margin</span>
+            <span>✓ Demo sources labeled</span>
+            <span>✓ Sensitivity ±2σ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>07 / 10 · skill: dcf-model · /dcf · QC: ib-check-deck (pass)</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 8 — STRATEGIC ALTERNATIVES MATRIX
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide alts">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §6</span><span>Strategic Alternatives</span><span>08 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Section 6 · Strategic alternatives</span>
+        <h2 class="section">Four paths, <em>one</em> we'd recommend pursuing first.</h2>
+      </div>
+      <div class="alts-grid">
+
+        <div class="alt">
+          <div class="badge">Option A · Status quo</div>
+          <h3>Continue as standalone public company</h3>
+          <div class="stat"><span class="v num">~$42</span><span class="k">Indicative / share</span></div>
+          <div class="pc">
+            <div class="col"><h4>For</h4><ul>
+              <li>Preserves optionality</li>
+              <li>No execution risk</li>
+              <li>Captures full operating upside if margin plan delivers</li>
+            </ul></div>
+            <div class="col"><h4>Against</h4><ul>
+              <li>Requires re-rating that may not come</li>
+              <li>Limited TAM expansion organically</li>
+              <li>Activist exposure remains</li>
+            </ul></div>
+          </div>
+        </div>
+
+        <div class="alt recommended">
+          <div class="badge">Option B · Recommended</div>
+          <h3>Targeted strategic sale process</h3>
+          <div class="stat"><span class="v num">$58 – $63</span><span class="k">Indicative / share</span></div>
+          <div class="pc">
+            <div class="col"><h4>For</h4><ul>
+              <li>Strategic premium ~$1.6B in synergies (channel, COGS)</li>
+              <li>Limited number of credible bidders → tight, controllable process</li>
+              <li>Cleanest tax outcome for long-tenured holders</li>
+            </ul></div>
+            <div class="col"><h4>Against</h4><ul>
+              <li>Antitrust review on top-3 strategics adds 4–6 months</li>
+              <li>Customer-overlap concerns require carve-out planning</li>
+            </ul></div>
+          </div>
+        </div>
+
+        <div class="alt">
+          <div class="badge">Option C · IPO of Test &amp; Meas. segment</div>
+          <h3>Carve-out + spin / partial IPO</h3>
+          <div class="stat"><span class="v num">$50 – $55</span><span class="k">Indicative / share</span></div>
+          <div class="pc">
+            <div class="col"><h4>For</h4><ul>
+              <li>Unlocks multiple arbitrage on the higher-growth segment</li>
+              <li>Retains controls business as a clean cash compounder</li>
+            </ul></div>
+            <div class="col"><h4>Against</h4><ul>
+              <li>Carve-out cost &amp; complexity (TSAs, ERP)</li>
+              <li>IPO-window dependent</li>
+              <li>Stranded-cost overhang on RemainCo</li>
+            </ul></div>
+          </div>
+        </div>
+
+        <div class="alt">
+          <div class="badge">Option D · Sponsor-led recap</div>
+          <h3>Take-private / minority recapitalization</h3>
+          <div class="stat"><span class="v num">$48 – $54</span><span class="k">Indicative / share</span></div>
+          <div class="pc">
+            <div class="col"><h4>For</h4><ul>
+              <li>Speed and certainty of execution</li>
+              <li>Permits longer-horizon investment without quarterly drag</li>
+            </ul></div>
+            <div class="col"><h4>Against</h4><ul>
+              <li>Lower premium than strategic outcome</li>
+              <li>Leverage post-deal limits flexibility</li>
+              <li>Roll-over economics complex for management</li>
+            </ul></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>08 / 10 · skill: strategic-alternatives</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 9 — RECOMMENDATION & TIMELINE
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide reco">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · §7</span><span>Recommendation</span><span>09 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Section 7 · Recommendation</span>
+        <h2 class="section">Run a <em>narrow, fast</em> strategic process.</h2>
+        <p class="pull" style="margin-top:24px;">Authorize a <em>4-month</em> Hartfield-led process targeting <em>3–5 strategic acquirers</em>, with a single contingent sponsor backstop, on a path to signed announcement by <em>August 28, 2026</em>.</p>
+        <p class="body-text" style="margin-top:18px;">A targeted process maximizes the probability of capturing the strategic-premium ($58–$63 per share) while limiting market disclosure risk. Sponsor outreach is held in reserve to discipline pricing. The Board retains full optionality to re-rate &amp; remain public if no offer clears the agreed reservation price.</p>
+      </div>
+      <div>
+        <h3>Process timeline (indicative)</h3>
+        <div class="next">
+          <div class="step"><span class="n">01</span><span class="t">Board approval &amp; engagement letter execution</span><span class="when">Apr 30</span></div>
+          <div class="step"><span class="n">02</span><span class="t">Management presentation, CIM, financial model finalized</span><span class="when">May 2 – May 22</span></div>
+          <div class="step"><span class="n">03</span><span class="t">Confidential outreach, NDAs, first-round process letter</span><span class="when">May 26 – Jun 12</span></div>
+          <div class="step"><span class="n">04</span><span class="t">First-round bids · selection of 2–3 finalists</span><span class="when">Jun 30</span></div>
+          <div class="step"><span class="n">05</span><span class="t">Management meetings · diligence room · financing commitments</span><span class="when">Jul 1 – Jul 31</span></div>
+          <div class="step"><span class="n">06</span><span class="t">Final bids · negotiation · documentation</span><span class="when">Aug 1 – Aug 26</span></div>
+          <div class="step"><span class="n">07</span><span class="t">Signed announcement (or formal close-out)</span><span class="when">Aug 28</span></div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample</span>
+      <span>09 / 10 · skill: process-letter · /process-letter</span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLIDE 10 — DISCLAIMERS / APPENDIX
+─────────────────────────────────────────────────────────────────────────── -->
+<section class="slide disc">
+  <div class="slide-inner">
+    <header class="mast">
+      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
+      <div class="meta"><span>Project Atlas · Appendix</span><span>Disclaimers &amp; Sources</span><span>10 / 10</span></div>
+    </header>
+    <div class="body">
+      <div>
+        <span class="eyebrow">Appendix</span>
+        <h2 class="section">Disclaimers, sources, and <em>methodology</em>.</h2>
+      </div>
+      <div class="grid">
+        <div>
+          <h3>Important disclosures</h3>
+          <div class="body-text">
+            <p>These materials have been prepared by Hartfield &amp; Co. for the exclusive use of the Board of Directors of NorthPeak Industries, Inc. They are intended to provide a basis for discussion only and are not, and may not be relied upon as, financial, investment, legal, tax, or accounting advice. Recipients should consult their own professional advisors.</p>
+            <p><strong>Demo-data notice:</strong> NorthPeak Industries, Hartfield &amp; Co., Project Atlas, all people, dates, tickers, financial figures, valuation outputs, process dates, and source labels in this artifact are fictional illustrative placeholders created for Open Design demonstration only. They are not sourced from live market data, filings, third-party vendors, or management materials.</p>
+            <p>In a live engagement, the financial analysis must be derived only from documented source material such as public filings, licensed third-party data, user-provided management materials, or explicitly labeled assumptions. Each figure should carry a source date and should be traceable to a citation log before external distribution.</p>
+            <p>Trading multiples, projections, and precedent-transaction metrics in this sample are synthetic and should not be reused as factual market observations. Replace this sample source block with engagement-specific citations, freshness dates, licensing notes, and the firm's required review status.</p>
+            <p>The nominal valuation outputs presented are indicative and are intended to frame the Board's discussion of strategic alternatives. They are not a recommendation to enter into, or refrain from entering into, any specific transaction. Any decision to pursue a transaction will require independent Board approval, fairness analysis at the appropriate juncture, and customary regulatory and shareholder approvals.</p>
+          </div>
+        </div>
+        <div style="display:grid;gap:14px;">
+          <div class="stamp">
+            <div class="lab">Engagement team</div>
+            <div class="who">Hartfield &amp; Co. — Industrials &amp; Industrial Tech</div>
+            <div class="det">Lead: Margaret Eun, Managing Director<br/>Coverage: David Brennan, Director<br/>Execution: Aisha Patel, VP · Lukas Marek, Associate</div>
+          </div>
+          <div class="stamp">
+            <div class="lab">Demo source status</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">Synthetic Open Design demo dataset · no live vendor feeds · no filings · no MNPI · no management materials</div>
+          </div>
+          <div class="stamp">
+            <div class="lab">Generated with</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">open-design v0.18 · skill: pitch-agent · vertical: investment-banking · ds: editorial-monocle · model: claude-opus-4.7 · turn: 7f3a91 · pre-flight: passed · checks: ib-check-deck (pass) · audit-xls (pass)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">
+      <span class="conf">Demo data — fictional sample · End of document</span>
+      <span>10 / 10 · © 2026 Hartfield &amp; Co. · All rights reserved</span>
+    </footer>
+  </div>
+</section>
+
+</div><!-- /stage -->
+
+<div class="chrome">
+  <button id="prev" aria-label="Previous slide">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <span class="counter"><span class="now" id="now">01</span> / <span id="total">10</span></span>
+  <button id="next" aria-label="Next slide">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+  </button>
+  <button id="print" aria-label="Print as PDF" title="Print / save as PDF">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+  </button>
+</div>
+
+</div><!-- /deck -->
+
+<script>
+(function(){
+  const stage  = document.getElementById('stage');
+  const slides = stage.querySelectorAll('.slide');
+  const total  = slides.length;
+  const now    = document.getElementById('now');
+  document.getElementById('total').textContent = String(total).padStart(2,'0');
+  let i = 0;
+  function go(n){
+    i = Math.max(0, Math.min(total-1, n));
+    stage.style.transform = `translateX(-${i*100}vw)`;
+    now.textContent = String(i+1).padStart(2,'0');
+  }
+  document.getElementById('prev').onclick = () => go(i-1);
+  document.getElementById('next').onclick = () => go(i+1);
+  document.getElementById('print').onclick = () => window.print();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(i+1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'PageUp')                   { e.preventDefault(); go(i-1); }
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End')  go(total-1);
+  });
+  let touchX = 0;
+  stage.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, {passive:true});
+  stage.addEventListener('touchend',   (e) => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 60) go(i + (dx < 0 ? 1 : -1));
+  }, {passive:true});
+})();
+</script>
+</body>
+</html>

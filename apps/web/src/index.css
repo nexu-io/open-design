@@ -271,7 +271,9 @@ code {
   --app-chrome-traffic-space: 0px;
   display: flex;
   align-items: center;
+  height: 40px;
   min-height: 40px;
+  max-height: 40px;
   padding: 4px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
@@ -340,6 +342,7 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
+  overflow: hidden;
 }
 .app-chrome-drag {
   min-width: 24px;
@@ -352,15 +355,153 @@ code {
   gap: 6px;
   flex-shrink: 0;
 }
+.app-chrome-file-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.app-chrome-file-actions:not(:empty) + .app-chrome-actions {
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.chrome-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.chrome-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.chrome-action-secondary {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.chrome-action-secondary:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--text-muted);
+}
+.chrome-action-primary {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--bg);
+}
+.chrome-action-primary:hover:not(:disabled) {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.chrome-share-menu .share-menu-popover,
+.chrome-present-wrap .present-menu {
+  top: calc(100% + 6px);
+  right: 0;
+}
+.zoom-menu { position: relative; display: inline-block; }
+.zoom-menu .zoom-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.zoom-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  min-width: 110px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.zoom-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.zoom-menu-item:hover { background: var(--bg-subtle); }
+.zoom-menu-item.active { color: var(--accent-strong); font-weight: 600; }
+@media (max-width: 880px) {
+  .chrome-action-secondary span { display: none; }
+  .chrome-action-secondary { padding: 0 10px; }
+}
+@media (max-width: 720px) {
+  .app-chrome-content { display: none; }
+}
+.viewer.is-tab-present .viewer-toolbar,
+.viewer.is-tab-present .live-artifact-refresh-notice {
+  display: none;
+}
+.viewer.is-tab-present .viewer-body {
+  inset: 0;
+}
+.viewer .present-exit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+}
+.viewer .present-exit-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.live-artifact-preview-frame-host {
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+.live-artifact-preview-frame-host:fullscreen {
+  background: var(--bg);
+}
 .app-project-title {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  max-height: 32px;
+  overflow: hidden;
 }
 .app-project-title .title {
   color: var(--text-strong);
   font-size: 13.5px;
+  line-height: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -370,6 +511,7 @@ code {
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
+  line-height: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -580,17 +722,75 @@ code {
 /* -------- Split / panes -------------------------------------------- */
 .split {
   display: grid;
-  grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
+  grid-template-columns: 460px 8px minmax(400px, 1fr);
   min-height: 0;
+  min-width: 0;
+}
+.split.is-resizing-chat {
+  cursor: col-resize;
+  user-select: none;
+}
+.split.is-resizing-chat iframe {
+  pointer-events: none;
+}
+.split.split-focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+.split-chat-slot {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.split-chat-slot[hidden] {
+  display: none;
+}
+.split-chat-slot > .pane {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .pane {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--border);
+  min-width: 0;
   background: var(--bg-panel);
+  overflow: hidden;
 }
-.pane:last-child { border-right: none; }
+.split-resize-handle {
+  width: 8px;
+  min-width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 3px,
+      var(--border) 3px,
+      var(--border) 5px,
+      transparent 5px
+    );
+  transition: background 120ms ease;
+  touch-action: none;
+}
+.split-resize-handle:hover,
+.split-resize-handle:focus-visible,
+.split.is-resizing-chat .split-resize-handle {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent) 16%, transparent) 0,
+      color-mix(in srgb, var(--accent) 16%, transparent) 3px,
+      var(--accent) 3px,
+      var(--accent) 5px,
+      color-mix(in srgb, var(--accent) 16%, transparent) 5px
+    );
+}
+.split-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 /* -------- Chat sticky header --------------------------------------- */
 .chat-header {
@@ -642,6 +842,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
 }
 
 /* -------- Messages -------------------------------------------------- */
@@ -772,6 +973,30 @@ code {
   color: var(--text-muted);
 }
 .composer-import:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.composer-research:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research.on {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.composer-research-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .composer-send {
   display: inline-flex;
   align-items: center;
@@ -906,15 +1131,6 @@ code {
   white-space: nowrap;
 }
 
-.composer-import-item-enabled {
-  cursor: pointer;
-  color: var(--text);
-}
-.composer-import-item-enabled:hover {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-
 .user-attachments {
   display: flex;
   gap: 6px;
@@ -1001,6 +1217,7 @@ code {
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1009,6 +1226,7 @@ code {
 }
 .modal {
   background: var(--bg-elevated);
+  -webkit-app-region: no-drag;
   border-radius: var(--radius-lg);
   padding: 22px;
   width: 520px;
@@ -1051,12 +1269,16 @@ code {
   padding: 0;
   gap: 0;
   max-height: calc(100vh - 64px);
+  /* Anchor for the absolutely-positioned `.settings-chrome` strip
+     (close button + autosave indicator). Without this the chrome
+     would escape to the viewport on long-scrolling sections. */
+  position: relative;
 }
 @media (max-height: 600px) {
   .modal-settings { max-height: 90vh; }
 }
 .modal-settings .modal-body {
-  overflow-y: auto;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -1091,7 +1313,12 @@ code {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.55;
-  max-width: 50ch;
+  /* 72ch lets typical one-sentence English subtitles fit on a single
+   * line inside the 920px settings modal while still wrapping cleanly
+   * on narrow viewports (the modal width clamps to 100vw - 48px) and
+   * for the longest locales (German, French). 50ch was forcing even
+   * the English subtitle onto two lines. See nexu-io/open-design#743. */
+  max-width: 72ch;
 }
 .modal-foot {
   display: flex;
@@ -1102,6 +1329,391 @@ code {
   margin-top: 0;
   flex-shrink: 0;
 }
+
+/* Top-right chrome strip for the Settings dialog. Floats above the
+   sidebar/content rhythm so the close affordance and the autosave
+   indicator never compete with the title or sidebar nav. The strip
+   is a flex row right-anchored to the modal corner; the autosave
+   pill comes first so the close button keeps a stable optical
+   position and the user's eye returns to the same place after a
+   save settles. */
+.settings-chrome {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-chrome > * {
+  pointer-events: auto;
+}
+
+/* Close button. Minimal circular icon button with a hairline ring
+   that warms on hover and snaps to the accent on focus-visible.
+   Sized to read as a passive corner control rather than a primary
+   CTA — the autosave indicator next to it carries any system
+   feedback the user might need. */
+.settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.settings-close:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+  background: var(--bg-panel);
+  transform: scale(1.04);
+}
+.settings-close:active {
+  transform: scale(0.96);
+}
+.settings-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-close { transition: color 80ms linear, border-color 80ms linear; transform: none !important; }
+}
+
+/* Autosave status pill. Lives in the chrome strip now (next to the
+   close button) instead of a footer. Renders nothing while idle so
+   the chrome reads as a single close button until something is
+   actually saving; settles to a green check on success and red on
+   failure. The pill never takes focus and never blocks input — it
+   is a passive system message announced to assistive tech via
+   aria-live on the wrapper. */
+.settings-autosave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  border: 1px solid transparent;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: opacity 160ms ease, color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+.settings-autosave.is-idle {
+  opacity: 0;
+  transform: translateY(-2px);
+  /* Collapse the visual weight so the chrome strip is just the
+     close button when nothing is happening. */
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  min-height: 0;
+}
+.settings-autosave.is-pending,
+.settings-autosave.is-saving {
+  opacity: 1;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 12%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+.settings-autosave.is-saved {
+  opacity: 1;
+  color: var(--green, #1f9d55);
+  background: color-mix(in srgb, var(--green, #1f9d55) 14%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--green, #1f9d55) 30%, transparent);
+  animation: settingsAutosavePop 220ms ease-out;
+}
+.settings-autosave.is-error {
+  opacity: 1;
+  color: var(--red, #d23434);
+  background: color-mix(in srgb, var(--red, #d23434) 14%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red, #d23434) 32%, transparent);
+}
+@keyframes settingsAutosavePop {
+  from { transform: translateY(-2px) scale(0.98); }
+  to   { transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-autosave { transition: opacity 80ms linear; animation: none !important; }
+}
+
+/* Hide the verbose error copy on narrow viewports so the chrome
+   strip doesn't crowd the close button. The icon + tooltip carry
+   the meaning, and the screen-reader announcement still fires. */
+@media (max-width: 720px) {
+  .settings-autosave.is-error span,
+  .settings-autosave.is-saved span,
+  .settings-autosave.is-pending span,
+  .settings-autosave.is-saving span {
+    display: none;
+  }
+  .settings-autosave.is-idle { padding: 0; }
+}
+
+/* Make sure header copy doesn't crash into the close button on
+   narrow viewports. The kicker/title/subtitle should keep their
+   normal width but reserve right-side gutter for the chrome. */
+.modal-settings .modal-head {
+  padding-right: calc(var(--modal-padding) + 56px);
+}
+
+/* Section-local Save key button for the Composio API key field. We do
+   NOT autosave secrets, so this is the explicit gesture. Styled as a
+   primary button to stand out next to the password input + ghost
+   Clear, with a tighter vertical rhythm so it sits flush in the
+   field-row alongside the input. */
+.settings-connectors-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.settings-connectors-save.is-busy {
+  opacity: 0.85;
+  cursor: progress;
+}
+.settings-section-connectors .field-row {
+  /* Allow the input + Save key + Clear triplet to wrap on narrow widths
+     instead of crushing the input. */
+  flex-wrap: wrap;
+}
+@media (max-width: 540px) {
+  .settings-section-connectors .field-row > input,
+  .settings-section-connectors .field-row > .field-input-skeleton-wrap {
+    flex: 1 1 100%;
+  }
+}
+
+/* Two-stage destructive confirmation for clearing the saved Composio
+   API key. Step 1 ("confirm") is a soft amber-ish warning rooted in
+   the same red palette as other destructive surfaces so it reads as
+   "this will undo something" without screaming. Step 2 ("final") leans
+   into red with a brief arming animation on the commit button so a
+   reflex double-click cannot blow through both stages. The whole panel
+   collapses inline beneath the credentials field so the destructive
+   action stays visually anchored to the row that started it. */
+.settings-connectors-clear.is-arming {
+  border-color: var(--red-border);
+  color: var(--red);
+  background: color-mix(in srgb, var(--red-bg) 65%, transparent);
+}
+.settings-connectors-clear-confirm {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--red-border);
+  background: color-mix(in srgb, var(--red-bg) 78%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  animation: settings-connectors-clear-confirm-in 180ms ease-out;
+}
+.settings-connectors-clear-confirm.is-final {
+  background: var(--red-bg);
+  border-color: color-mix(in srgb, var(--red) 55%, var(--red-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 18%, transparent),
+    0 8px 24px -16px color-mix(in srgb, var(--red) 80%, transparent);
+}
+@keyframes settings-connectors-clear-confirm-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.settings-connectors-clear-confirm-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--red) 35%, var(--red-border));
+  background: var(--bg-panel);
+  color: var(--red);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.settings-connectors-clear-confirm.is-final .settings-connectors-clear-confirm-icon {
+  background: var(--red);
+  color: var(--bg-panel);
+  border-color: var(--red);
+}
+.settings-connectors-clear-confirm-glyph {
+  display: inline-block;
+  transform: translateY(-0.5px);
+}
+.settings-connectors-clear-confirm-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.settings-connectors-clear-confirm-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.3;
+}
+.settings-connectors-clear-confirm-copy span {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.settings-connectors-clear-confirm.is-final .settings-connectors-clear-confirm-copy strong {
+  color: var(--red);
+}
+.settings-connectors-clear-confirm-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  align-self: center;
+}
+/* "Continue" — moves to stage 2. Styled as a quiet outlined button
+   tinted with the red palette so it reads as "destructive but not
+   yet committed". */
+.settings-connectors-clear-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--red-border);
+  background: var(--bg-panel);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    transform 120ms ease-out;
+}
+.settings-connectors-clear-step:hover {
+  background: color-mix(in srgb, var(--red-bg) 60%, var(--bg-panel));
+  border-color: var(--red);
+}
+.settings-connectors-clear-step:active {
+  transform: translateY(1px);
+}
+/* Final commit button. Solid red with an arming sweep that fills the
+   left edge for ~700ms before the click is honored. While "arming",
+   the button is visually hot but disabled so an Enter-spam can't get
+   ahead of the user's intent; once armed, the label swaps to the
+   destructive verb and the click commits. */
+.settings-connectors-clear-commit {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 200px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--red);
+  background: var(--red);
+  color: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    transform 120ms ease-out,
+    box-shadow 160ms ease-out,
+    background 160ms ease-out;
+}
+.settings-connectors-clear-commit:disabled,
+.settings-connectors-clear-commit[aria-disabled='true'] {
+  cursor: progress;
+  background: color-mix(in srgb, var(--red) 70%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red) 60%, var(--red-border));
+}
+.settings-connectors-clear-commit.is-armed {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent),
+    0 10px 20px -12px color-mix(in srgb, var(--red) 75%, transparent);
+}
+.settings-connectors-clear-commit.is-armed:hover {
+  background: color-mix(in srgb, var(--red) 88%, #000);
+}
+.settings-connectors-clear-commit.is-armed:active {
+  transform: translateY(1px);
+}
+/* The arming sweep — a translucent fill that races from left to right
+   over the disabled window, signaling "almost ready". CSS-only so it
+   renders the same in every browser without a second timer. */
+.settings-connectors-clear-commit-arm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #fff 28%, transparent) 0%,
+    color-mix(in srgb, #fff 12%, transparent) 100%
+  );
+  transform: translateX(-100%);
+  opacity: 0.85;
+  animation: settings-connectors-clear-commit-arm 700ms ease-out forwards;
+}
+.settings-connectors-clear-commit.is-armed .settings-connectors-clear-commit-arm {
+  display: none;
+}
+@keyframes settings-connectors-clear-commit-arm {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0%); }
+}
+.settings-connectors-clear-commit-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 1;
+}
+@media (max-width: 540px) {
+  .settings-connectors-clear-confirm {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+  .settings-connectors-clear-confirm-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .settings-connectors-clear-commit {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-connectors-clear-confirm {
+    animation: none;
+  }
+  .settings-connectors-clear-commit-arm {
+    animation: none;
+    transform: translateX(0%);
+    opacity: 0.4;
+  }
+}
 .settings-sidebar {
   display: flex;
   flex-direction: column;
@@ -1109,6 +1721,9 @@ code {
   padding: 22px 12px;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .settings-nav-item {
   width: 100%;
@@ -1158,8 +1773,10 @@ code {
 }
 .settings-content {
   min-width: 0;
+  min-height: 0;
   padding: 22px var(--modal-padding);
   overflow: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -1174,6 +1791,7 @@ code {
   .settings-sidebar {
     flex-direction: row;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     padding: 10px 12px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
@@ -1257,6 +1875,17 @@ code {
 }
 
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
+.settings-section-connectors { gap: 16px; }
+/* Credentials sit above the catalog now; the divider lives under the field
+   so the eye reads "configure key → catalog unlocks below". */
+.settings-section-connectors > .settings-section-connectors-credentials {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+}
+.settings-section-connectors > .connectors-panel-embedded {
+  margin-top: 0;
+}
 .settings-rescan-btn {
   display: inline-flex;
   align-items: center;
@@ -1269,7 +1898,8 @@ code {
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
-.settings-rescan-status {
+.settings-rescan-status,
+.settings-test-status {
   margin: -4px 0 0;
   padding: 7px 10px;
   border: 1px solid var(--green-border);
@@ -1279,10 +1909,1137 @@ code {
   font-size: 12px;
   line-height: 1.4;
 }
-.settings-rescan-status.error {
+.settings-rescan-status.error,
+.settings-test-status.error {
   border-color: var(--red-border);
   background: var(--red-bg);
   color: var(--red);
+}
+.settings-test-status.warn {
+  border-color: var(--amber-border, var(--orange-border, var(--green-border)));
+  background: var(--amber-bg, var(--orange-bg, var(--green-bg)));
+  color: var(--amber, var(--orange, var(--green)));
+}
+.settings-test-status.running {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.settings-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+  justify-content: center;
+}
+.settings-test-btn.loading {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.section-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* ============================================================
+   Orbit settings section — redesigned layout
+   Hero · Automation card · Run receipt · Artifact strip
+   ============================================================ */
+.orbit-section {
+  gap: 16px;
+}
+
+/* ---------- 1. Hero / header zone ---------- */
+.orbit-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(140% 160% at 100% 0%, color-mix(in srgb, var(--accent-tint) 75%, transparent) 0%, transparent 60%),
+    var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.orbit-hero-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  color: #fff;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 32%, transparent);
+  flex-shrink: 0;
+}
+.orbit-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.orbit-hero-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+.orbit-hero-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+  line-height: 1.15;
+}
+.orbit-hero-lede {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 52ch;
+}
+.orbit-hero-lede strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.orbit-hero-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.orbit-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.orbit-state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.orbit-state-pill.orbit-state-active {
+  background: color-mix(in srgb, var(--accent-tint) 80%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent-strong);
+}
+.orbit-state-pill.orbit-state-active .orbit-state-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+.orbit-run-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  cursor: pointer;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-strong) 22%, transparent) inset, var(--shadow-xs);
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.orbit-run-cta:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.orbit-run-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.orbit-run-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+}
+.orbit-run-cta.is-busy {
+  background: color-mix(in srgb, var(--accent) 75%, #000);
+  border-color: transparent;
+}
+.orbit-run-cta .icon-spin {
+  color: #fff;
+}
+
+@media (max-width: 620px) {
+  .orbit-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 10px;
+  }
+  .orbit-hero-actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+}
+
+/* ---------- 2. Automation card ---------- */
+.orbit-automation {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.orbit-automation.is-on {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-tint) 40%, var(--bg-panel)) 0%, var(--bg-panel) 40%);
+}
+
+/* ---------- Locked state ----------
+   When no Composio connector is wired up the automation card collapses
+   into a passive, gated surface. We desaturate the hue, tighten contrast,
+   and overlay a soft diagonal sheen so the card reads as "intentionally
+   off" rather than "broken styling". The lock banner above the rows
+   names the prerequisite plainly and points back to the Connectors gate
+   without competing with it. */
+.orbit-automation.is-locked {
+  border-color: color-mix(in srgb, var(--text-soft) 22%, var(--border));
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text-soft) 4%, transparent) 0 6px,
+      transparent 6px 14px
+    ),
+    var(--bg-subtle);
+  filter: saturate(0.55);
+}
+.orbit-automation.is-locked.is-on {
+  /* When the user previously had the schedule on but later removed the
+     last connector we still show the "on" gradient very faintly — but
+     the locked treatment wins so the panel reads as gated. */
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text-soft) 4%, transparent) 0 6px,
+      transparent 6px 14px
+    ),
+    var(--bg-subtle);
+}
+.orbit-automation.is-locked .orbit-automation-row {
+  /* Block any accidental click-through into the row's whitespace; real
+     controls retain their own pointer behavior via :disabled. */
+  cursor: not-allowed;
+}
+.orbit-automation.is-locked .orbit-automation-title,
+.orbit-automation.is-locked .orbit-automation-sub {
+  color: var(--text-soft);
+}
+.orbit-automation.is-locked .orbit-time-input,
+.orbit-automation.is-locked .orbit-switch,
+.orbit-automation.is-locked .orbit-template-select-input,
+.orbit-automation.is-locked .orbit-automation-sub-action {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.orbit-automation.is-locked .orbit-time-input:disabled,
+.orbit-automation.is-locked .orbit-template-select-input:disabled {
+  /* The native :disabled state already dims; keep our own opacity tuned
+     so it matches the surrounding desaturated card. */
+  background: color-mix(in srgb, var(--text-soft) 6%, var(--bg-subtle));
+}
+
+/* Lock banner — sits above the configuration rows and names the gate
+   reason in a single line. Compact, low-contrast accent so it reads as
+   metadata rather than a second hero. */
+.orbit-automation-lock-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.orbit-automation-lock-banner svg {
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+.orbit-automation-lock-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  flex-shrink: 0;
+}
+.orbit-automation-lock-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .orbit-automation-lock-text { white-space: normal; }
+}
+
+.orbit-automation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 18px;
+}
+.orbit-automation-schedule-row {
+  align-items: start;
+}
+.orbit-automation-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 0 18px;
+}
+.orbit-automation-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.orbit-automation-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+.orbit-automation-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* Custom switch control — rebuilt rather than reusing .toggle-row so the
+   Orbit section owns the pattern and can tune track/thumb proportions. */
+.orbit-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.orbit-switch:hover { border-color: var(--border-strong); }
+.orbit-switch.is-on {
+  background: color-mix(in srgb, var(--accent-tint) 70%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent-strong);
+}
+.orbit-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.orbit-switch:disabled,
+.orbit-switch.is-locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-soft);
+}
+.orbit-switch:disabled .orbit-switch-track,
+.orbit-switch.is-locked .orbit-switch-track {
+  background: var(--border);
+}
+.orbit-switch:disabled.is-on .orbit-switch-track,
+.orbit-switch.is-locked.is-on .orbit-switch-track {
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.orbit-switch-track {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 160ms ease;
+}
+.orbit-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(28, 27, 26, 0.22);
+  transition: transform 180ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.orbit-switch.is-on .orbit-switch-track { background: var(--accent); }
+.orbit-switch.is-on .orbit-switch-thumb { transform: translateX(14px); }
+.orbit-switch-text {
+  font-variant-numeric: tabular-nums;
+  min-width: 22px;
+  text-align: right;
+}
+
+.orbit-automation-schedule-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.orbit-time-input {
+  width: 140px;
+  padding: 6px 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  border-radius: var(--radius-sm);
+}
+.orbit-next-run {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orbit-next-run-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.orbit-next-run-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-next-run-value.muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (max-width: 620px) {
+  .orbit-automation-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .orbit-automation-schedule-controls {
+    align-items: stretch;
+  }
+  .orbit-time-input {
+    width: 100%;
+  }
+  .orbit-switch { align-self: flex-start; }
+}
+
+/* ---------- 3. Template row (folded into Automation card) ----------
+   Previously this section lived in its own paired card. We folded it into
+   the automation card as a third row + dedicated preview slot so users
+   configure schedule and prompt-steering in one place, and the section
+   reads as one cohesive configuration surface instead of two parallel
+   panels competing for attention. The class names below still use the
+   `orbit-template-` prefix because they continue to describe template
+   surface elements — they just live inside the automation card now. */
+
+.orbit-automation.has-template {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.orbit-automation-template-row {
+  /* Slightly more vertical breathing room than the switch/schedule rows
+     because the right column hosts a wider select control. */
+  align-items: start;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+.orbit-automation-template-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 220px;
+  width: clamp(220px, 36%, 320px);
+}
+
+/* Inline warning variant of the row sub-copy. Used by the Prompt
+   template row when the saved skill id is no longer in the registry —
+   takes the place of the standard descriptive sub-line and inlines a
+   small Reset action that pushes the config back to the default
+   (`orbit-general`). The warning lives flush inside the automation
+   row so we do not need a separate preview panel for the missing
+   state. */
+.orbit-automation-sub-warning {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-top: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #c47a2c 10%, var(--bg-panel));
+  color: #8a5217;
+  font-weight: 500;
+}
+.orbit-automation-sub-warning svg {
+  color: #c47a2c;
+  flex-shrink: 0;
+}
+.orbit-automation-sub-warning strong {
+  color: #6c3f0f;
+  font-weight: 600;
+}
+.orbit-automation-sub-action {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-left: auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #8a5217;
+  background: var(--bg-panel);
+  border: 1px solid color-mix(in srgb, #c47a2c 32%, var(--border));
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.orbit-automation-sub-action:hover {
+  color: #6c3f0f;
+  border-color: color-mix(in srgb, #c47a2c 55%, var(--border));
+  background: color-mix(in srgb, #c47a2c 8%, var(--bg-panel));
+}
+.orbit-automation-sub-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, #c47a2c 65%, var(--accent));
+  outline-offset: 2px;
+}
+
+/* Native select wrapper. Originally a labelled grid (label + select);
+   the row title now carries the inline label, so the select stretches
+   to fill its column. */
+.orbit-template-select {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.orbit-template-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.orbit-template-select-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding: 8px 32px 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.orbit-template-select-input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+}
+.orbit-template-select-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.orbit-template-select-input:disabled {
+  /* While the skill registry is loading we show a progress cursor; the
+     locked variant overrides this back to not-allowed via the parent
+     `.orbit-automation.is-locked` rule above. */
+  cursor: progress;
+  opacity: 0.65;
+}
+.orbit-template-select-chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  pointer-events: none;
+}
+
+@media (max-width: 620px) {
+  /* On narrow viewports the template row should stack: title block on top,
+     select control full-width below it. */
+  .orbit-automation-template-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .orbit-automation-template-controls {
+    width: 100%;
+    min-width: 0;
+    justify-content: stretch;
+  }
+}
+
+/* ---------- 4. Run receipt ---------- */
+.orbit-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.orbit-receipt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.orbit-receipt-head-left {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.orbit-receipt-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.orbit-receipt-eyebrow svg { color: var(--text-soft); }
+.orbit-receipt-timestamp {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-strong);
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-receipt-timestamp.muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.orbit-trigger-pill {
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.orbit-trigger-pill.orbit-trigger-manual {
+  background: var(--blue-bg);
+  border-color: var(--blue-border);
+  color: var(--blue);
+}
+.orbit-trigger-pill.orbit-trigger-scheduled {
+  background: color-mix(in srgb, var(--accent-tint) 80%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent-strong);
+}
+
+.orbit-inline-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.orbit-inline-notice.is-success {
+  border-color: var(--green-border);
+  background: var(--green-bg);
+  color: var(--green);
+}
+.orbit-inline-notice.is-error {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+/* Proportional run meter: a single bar whose segment widths reflect the
+   success / skip / failure ratio. Preferred over 4 equal tiles because it
+   communicates "mostly succeeded" or "mostly failed" at a glance. */
+.orbit-meter {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.orbit-meter-seg {
+  height: 100%;
+  transition: width 260ms ease;
+}
+.orbit-meter-seg.is-succeeded { background: var(--green); }
+.orbit-meter-seg.is-skipped { background: var(--border-strong); }
+.orbit-meter-seg.is-failed { background: var(--red); }
+.orbit-meter-seg.is-empty {
+  width: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-subtle) 0 6px,
+    var(--bg-muted) 6px 12px
+  );
+}
+
+.orbit-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.orbit-counts .orbit-count {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px;
+}
+.orbit-counts .orbit-count + .orbit-count::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border-soft);
+}
+.orbit-count dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0;
+}
+.orbit-count dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.orbit-count.is-succeeded dd { color: var(--green); }
+.orbit-count.is-skipped dd { color: var(--text-muted); }
+.orbit-count.is-failed dd { color: var(--red); }
+
+@media (max-width: 620px) {
+  .orbit-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
+  .orbit-counts .orbit-count + .orbit-count::before { display: none; }
+}
+
+/* ---------- 1b. Configuration gate ---------------------------------------
+   Surfaces when the user has no connected integrations. We share the
+   orbit-themed accent palette of the hero/firstrun panel so the gate
+   reads as a first-class part of the panel rather than an inline error
+   banner. Layout mirrors the firstrun composition (glyph · copy · action)
+   so the section feels rhythmically consistent regardless of which
+   empty-state panel is showing. The decorative ring glyph reuses the
+   same dashed-orbit motif as the firstrun glyph but anchors a small
+   "link" icon at the center to telegraph "wire up a connector". */
+.orbit-config-gate {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 160% at 0% 50%, color-mix(in srgb, var(--accent-tint) 90%, transparent) 0%, transparent 60%),
+    var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  animation: orbitConfigGateIn 220ms ease-out;
+}
+.orbit-config-gate::after {
+  /* Soft outer ring decoration in the corner — pure visual, mirrors the
+     firstrun panel so the two empty states feel like siblings. */
+  content: '';
+  position: absolute;
+  right: -50px;
+  top: -50px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  pointer-events: none;
+}
+@keyframes orbitConfigGateIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.orbit-config-gate-glyph {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.orbit-config-gate-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--accent) 42%, transparent);
+}
+.orbit-config-gate-ring-outer {
+  inset: 0;
+  animation: orbitFirstrunSpin 22s linear infinite;
+}
+.orbit-config-gate-ring-inner {
+  inset: 9px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  animation: orbitFirstrunSpin 16s linear infinite reverse;
+}
+.orbit-config-gate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  color: var(--btn-primary-fg, #fff);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-config-gate-ring { animation: none !important; }
+}
+
+.orbit-config-gate-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.orbit-config-gate-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+.orbit-config-gate-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text-strong);
+  line-height: 1.3;
+}
+.orbit-config-gate-body {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 56ch;
+}
+
+.orbit-config-gate-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.orbit-config-gate-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--btn-primary-fg, #fff);
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.orbit-config-gate-action:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.orbit-config-gate-action:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+.orbit-config-gate-action svg {
+  transition: transform 160ms ease;
+}
+.orbit-config-gate-action:hover svg {
+  transform: translateX(2px);
+}
+
+@media (max-width: 620px) {
+  .orbit-config-gate {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 12px;
+  }
+  .orbit-config-gate-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+/* ---------- 5. Live artifact strip ---------- */
+.orbit-artifact-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  row-gap: 10px;
+  align-items: center;
+  padding: 14px 16px 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-tint) 60%, var(--bg-panel)) 0%, var(--bg-panel) 55%);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.orbit-artifact-strip::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 50%, transparent) 100%);
+}
+.orbit-artifact-strip.is-legacy {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  border-style: dashed;
+}
+.orbit-artifact-strip.is-legacy::before { display: none; }
+
+.orbit-artifact-strip-icon {
+  grid-row: 1;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+.orbit-artifact-strip.is-legacy .orbit-artifact-strip-icon {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.orbit-artifact-strip-copy {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.orbit-artifact-strip-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+.orbit-artifact-strip.is-legacy .orbit-artifact-strip-kicker {
+  color: var(--text-muted);
+}
+.orbit-artifact-strip-title {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.orbit-artifact-strip-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.orbit-artifact-strip-actions {
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.orbit-artifact-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.orbit-artifact-ghost:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+
+.orbit-artifact-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-strong) 20%, transparent) inset, var(--shadow-xs);
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.orbit-artifact-open:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.orbit-artifact-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.orbit-artifact-peek {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border-soft));
+  padding-top: 8px;
+}
+.orbit-artifact-strip.is-legacy .orbit-artifact-peek {
+  border-top-color: var(--border-soft);
+}
+.orbit-artifact-peek summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  user-select: none;
+}
+.orbit-artifact-peek summary::-webkit-details-marker { display: none; }
+.orbit-artifact-peek summary svg {
+  transition: transform 160ms ease;
+  color: var(--text-soft);
+}
+.orbit-artifact-peek[open] summary svg { transform: rotate(90deg); }
+.orbit-artifact-peek[open] summary { color: var(--text); }
+.orbit-artifact-peek pre {
+  margin: 8px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: 11.5px/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .orbit-artifact-strip {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .orbit-artifact-strip-actions {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-content: flex-end;
+  }
+  .orbit-artifact-peek {
+    grid-column: 1 / -1;
+  }
 }
 .settings-field-error {
   color: var(--red);
@@ -1388,6 +3145,40 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 6px;
+}
+.media-provider-secret-field {
+  position: relative;
+  min-width: 0;
+}
+.media-provider-secret-field input {
+  width: 100%;
+  padding-right: 34px;
+}
+.secret-visibility-button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+.secret-visibility-button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-subtle);
+  box-shadow: none;
+}
+.secret-visibility-button:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
 }
 .section-head {
   display: flex;
@@ -1496,9 +3287,20 @@ code {
   text-align: left;
   color: var(--text);
 }
-.settings-language-option:hover,
-.settings-language-option.active { background: var(--bg-subtle); }
-.settings-language-option.active { color: var(--accent); }
+/* Differentiate hover, selected, and keyboard-focus states so the
+   currently-selected language is visually distinct even when the
+   pointer is hovering a different row. Issue #628. */
+.settings-language-option:hover { background: var(--bg-subtle); }
+.settings-language-option.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+.settings-language-option.active:hover { background: var(--accent-soft); }
+.settings-language-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .empty-card {
   padding: 16px;
   border: 1px dashed var(--border);
@@ -1569,6 +3371,32 @@ code {
   color: var(--text-muted);
 }
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
+.agent-cli-env {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.agent-cli-env-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agent-cli-env-head h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.agent-cli-env-head .hint { margin: 0; font-size: 11.5px; }
+.agent-cli-env-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
 .status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
@@ -2142,6 +3970,31 @@ code {
 .newproj-import svg {
   display: block;
   flex: 0 0 auto;
+}
+.newproj-open-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.newproj-folder-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg));
+  color: var(--text);
+  box-sizing: border-box;
+}
+.newproj-folder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.newproj-folder-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 .newproj-footer {
   padding: 0 18px 16px;
@@ -3001,6 +4854,17 @@ code {
   font-size: 13px;
 }
 
+.connector-inline-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, #ff6b6b 45%, var(--line) 55%);
+  border-radius: 12px;
+  background: color-mix(in oklab, #ff6b6b 10%, var(--panel) 90%);
+  color: color-mix(in oklab, #ff6b6b 70%, var(--fg) 30%);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .connectors-heading h2 {
   margin: 0;
   font-size: 18px;
@@ -3111,10 +4975,245 @@ code {
   line-height: 1.25;
   letter-spacing: -0.005em;
   color: var(--text);
+  /* The title is now a flex row so a connection-status dot can sit
+     inline next to the connector name without breaking the title's
+     truncation. The name span owns the ellipsis; the dot stays at a
+     fixed size on the trailing edge of the row. */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.connector-card-title-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Inline title-anchored connection dot. Sized + offset so it visually
+   aligns with the title's cap-height rather than its full line-height,
+   and given a soft halo on the connected variant so the live state
+   reads as a small "online" pulse next to the connector name. The
+   halo collapses to nothing in non-connected variants because today
+   the dot is only rendered for `connected` (error/disabled use a
+   separate pill in the action column). */
+.connector-card-title-dot {
+  flex: 0 0 auto;
+  /* Optical alignment: pull the dot up by ~1px so it sits on the
+     baseline of an uppercase letter rather than the descender line. */
+  margin-top: -1px;
+}
+
+/* Connector brand mark. Used in two sizes: a compact 28px tile inside
+   catalog cards (`size-sm`) and a 44px mark in the detail drawer head
+   (`size-lg`). The wrapper also hosts the fallback initials tile so the
+   image fades over a stable, themed surface — there is no flash of empty
+   space while the network resolves and no broken-icon chrome if the
+   request fails. The remote logos come from `logos.composio.dev`, keyed
+   by the lowercased toolkit slug stripped of underscores; the URL is
+   built in `ConnectorsBrowser.tsx` so the daemon's friendlier ids
+   (`google_drive`) still resolve to the right CDN entry (`googledrive`). */
+.connector-logo {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: hidden;
+  isolation: isolate;
+  /* `var(--bg-panel)` already inverts in dark mode, so the logo's
+     transparent corners read cleanly on either theme. The remote SVGs
+     ship with theme-aware fills (we request `?theme=light|dark` to
+     match), but the soft border still gives them a tidy frame. */
+  box-shadow: var(--shadow-xs);
+  user-select: none;
+}
+.connector-logo.size-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.connector-logo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* Inset the rendered image a hair so brand marks with no built-in
+     padding (small monograms, square photos) don't crash into the
+     border on the small tile. */
+  padding: 4px;
+  /* Fade the image in when it lands so a slow connection doesn't pop
+     content under the user's eye. The fallback underneath provides
+     instant visual presence in the meantime. */
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+  z-index: 1;
+}
+.connector-logo.size-lg .connector-logo-img {
+  padding: 6px;
+}
+.connector-logo.state-loaded .connector-logo-img {
+  opacity: 1;
+  transform: scale(1);
+}
+/* Fallback initials tile. Three jobs, in priority order:
+   1. While the image is pending, the tile is a *neutral skeleton* —
+      no color, no letters showing through. The user shouldn't see a
+      bright colored placeholder flash and then morph into a totally
+      different brand mark when the SVG lands; that mismatch reads as
+      "wrong logo" before it reads as "loading".
+   2. Once the image has loaded, the tile is fully hidden. Composio
+      SVGs frequently have transparent regions, and even a faint
+      colored backdrop bleeds through and tints the brand — exactly
+      the visual mixing we want to avoid. Hiding it (not just dimming)
+      guarantees the real image owns the slot.
+   3. Only when the network actually fails (`state-error`) — or when
+      no slug was derivable in the first place (`is-fallback`) — do we
+      promote the tile to a quiet brand mark with stable initials.
+      Even then it's deliberately *muted*: a single low-saturation
+      neutral surface, lighter weight type, and a subtle hue accent
+      from a hashed palette so two adjacent fallbacks don't read as
+      identical. The intent is "calm placeholder", never "louder than
+      the real logos one row up". */
+.connector-logo-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: transparent;
+  background: var(--bg-subtle);
+  text-transform: uppercase;
+  z-index: 0;
+  /* Default: skeleton mode. Initials are kept in the DOM (so a paint
+     of the error state doesn't have to re-flow text) but rendered
+     transparent. The only visible thing is the soft `--bg-subtle`
+     surface, which sits flush with the wrapper border and reads as a
+     quiet placeholder, not a brand. */
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out,
+    opacity 120ms ease-out;
+}
+.connector-logo.size-lg .connector-logo-fallback {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+/* Pending: gentle shimmer over the neutral surface so the user can
+   tell something is loading, without a colored tile suggesting a
+   particular brand. The shimmer only kicks in if the image takes
+   long enough to matter — short loads finish before the animation
+   even completes one cycle. */
+.connector-logo.state-pending .connector-logo-fallback {
+  background:
+    linear-gradient(
+      90deg,
+      var(--bg-subtle) 0%,
+      color-mix(in srgb, var(--bg-subtle) 60%, var(--bg-panel)) 50%,
+      var(--bg-subtle) 100%
+    );
+  background-size: 200% 100%;
+  animation: connector-logo-shimmer 1400ms ease-in-out infinite;
+}
+@keyframes connector-logo-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+/* Loaded: yank the fallback entirely. `visibility: hidden` keeps it
+   out of the paint pipeline so transparent regions in the SVG can't
+   composite over a colored backdrop. */
+.connector-logo.state-loaded .connector-logo-fallback {
+  visibility: hidden;
+  opacity: 0;
+}
+/* Error / no-slug: quiet brand mark. Initials become visible, but in
+   a muted neutral palette by default. The hashed palette below adds
+   a hint of hue so a row of fallbacks isn't monotone, but every
+   variant stays low-saturation and low-contrast against the card
+   surface so the real logos always read as the focal point. */
+.connector-logo.state-error .connector-logo-fallback,
+.connector-logo.is-fallback .connector-logo-fallback {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  animation: none;
+}
+.connector-logo.state-error[data-palette='0'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='0'] .connector-logo-fallback {
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-subtle));
+  color: color-mix(in oklab, var(--accent) 35%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='1'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='1'] .connector-logo-fallback {
+  background: color-mix(in oklab, #6b8afd 7%, var(--bg-subtle));
+  color: color-mix(in oklab, #6b8afd 38%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='2'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='2'] .connector-logo-fallback {
+  background: color-mix(in oklab, #2dbfa8 7%, var(--bg-subtle));
+  color: color-mix(in oklab, #2dbfa8 38%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='3'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='3'] .connector-logo-fallback {
+  background: color-mix(in oklab, #d18b3a 7%, var(--bg-subtle));
+  color: color-mix(in oklab, #d18b3a 40%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='4'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='4'] .connector-logo-fallback {
+  background: color-mix(in oklab, #c356b3 6%, var(--bg-subtle));
+  color: color-mix(in oklab, #c356b3 38%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='5'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='5'] .connector-logo-fallback {
+  background: color-mix(in oklab, #5d6b85 9%, var(--bg-subtle));
+  color: color-mix(in oklab, #5d6b85 42%, var(--text-muted));
+}
+/* The wrapper border is what visually frames the tile. When the real
+   image is loaded we keep it; in the fallback states we soften it a
+   step so the tile recedes further compared to a card with a real
+   logo on the same row. */
+.connector-logo.state-error,
+.connector-logo.is-fallback {
+  border-color: var(--border-soft, var(--border));
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .connector-logo-img {
+    transition: none;
+    transform: none;
+  }
+  .connector-logo.state-pending .connector-logo-fallback {
+    animation: none;
+    background: var(--bg-subtle);
+  }
+}
+
+/* Embedded catalog (Settings → Connectors). Cards are tighter here so
+   the logo shrinks to 24px and sheds a touch of border radius so it
+   reads as a quiet badge next to the connector name rather than a
+   prominent brand mark. The card-top gap (already 8px in the embedded
+   variant) keeps the logo close to the head copy. */
+.connectors-panel-embedded .connector-logo.size-sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.connectors-panel-embedded .connector-logo.size-sm .connector-logo-img {
+  padding: 3px;
+}
+.connectors-panel-embedded .connector-logo.size-sm .connector-logo-fallback {
+  font-size: 10px;
+}
+
 .connector-meta {
   display: flex;
   align-items: center;
@@ -3234,6 +5333,12 @@ code {
 .connector-status-pill.status-disabled {
   opacity: 0.7;
 }
+.connector-status.status-pending,
+.connector-status-pill.status-pending {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+}
 .connector-status-pill {
   display: inline-flex;
   align-items: center;
@@ -3285,8 +5390,18 @@ button.connector-action.is-disconnect:hover:not(:disabled) {
   color: var(--red);
   border-color: color-mix(in srgb, var(--red) 35%, var(--border));
 }
+button.connector-action.is-cancel-authorization {
+  min-width: 74px;
+  color: var(--text-muted);
+}
 button.connector-action.is-loading {
   cursor: wait;
+}
+.connector-authorization-hint {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* Connector gate — masks the grid when the Composio API key is missing. */
@@ -3329,9 +5444,376 @@ button.connector-action.is-loading {
 .connector-card.is-locked {
   cursor: not-allowed;
 }
+
+/* Embedded inside Settings → Connectors. The section-head already shows the
+   "Connectors" heading + hint, so suppress the inner panel heading and let
+   the toolbar collapse to just the search input. The masked gate keeps its
+   absolute positioning relative to .connector-grid-wrap (already set), but
+   we cap its height inside the modal so the gate stays visible without
+   blowing the dialog out vertically. */
+.tab-panel.connectors-panel.connectors-panel-embedded {
+  gap: 14px;
+}
+.connectors-panel-embedded .tab-panel-toolbar {
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+.connectors-panel-embedded .toolbar-left.connectors-heading {
+  display: none;
+}
+.connectors-panel-embedded .toolbar-right {
+  flex: 1 1 auto;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.connectors-panel-embedded .tab-panel-toolbar .toolbar-search.connectors-search {
+  flex: 0 1 320px;
+  width: min(320px, 100%);
+  max-width: 320px;
+  min-width: 180px;
+}
+
+/* Provider tabs sit in the toolbar's left edge (right of the hidden inner
+   heading). Today there is only Composio, but the segmented control is
+   built so additional providers slot in without re-styling. */
+.connectors-provider-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.connectors-provider-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 180ms ease;
+}
+.connectors-provider-tab:hover:not(.is-active) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.connectors-provider-tab.is-active {
+  color: var(--text);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--text) 12%, var(--border));
+}
+.connectors-provider-tab:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--text) 14%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.connectors-panel-embedded .connector-grid-wrap.is-masked {
+  /* Cap the masked grid's height so the gate's centered card stays in the
+     visible portion of the settings dialog without forcing the modal body
+     to scroll past it. The grid below is blurred and intentionally clipped. */
+  min-height: clamp(320px, 45vh, 420px);
+  max-height: clamp(360px, 56vh, 560px);
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+.connectors-panel-embedded .connector-grid-wrap.is-masked .connector-grid {
+  max-height: 100%;
+  overflow: hidden;
+}
+/* Compact catalog density inside the modal: tighter tracks, no description
+   row, action collapsed to an icon-only button anchored top-right. */
+.connectors-panel-embedded .connector-grid {
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 10px;
+}
+.connectors-panel-embedded .connector-card {
+  min-height: 0;
+  padding: 10px 10px 10px 12px;
+  gap: 6px;
+}
+.connectors-panel-embedded .connector-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+/* Two-row meta layout for the embedded catalog. The previous single
+   row let long category labels wrap unpredictably, leaving cards in
+   a 3-column grid with mismatched heights. Stacking onto its own
+   rows fixes the height and gives the async tools-badge a stable
+   anchor to animate into without resizing the card. */
+.connectors-panel-embedded .connector-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  font-size: 11px;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+/* Category row: single line with ellipsis. The full label is still
+   reachable via the `title` attribute on the span and the card's
+   own openDetailsAria, so we never lose information. */
+.connectors-panel-embedded .connector-meta-category {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+/* Tools-badge slot. Reserves its own row and a fixed height even
+   while the discovery call is in flight (`aria-hidden` is set on the
+   span before the badge resolves), so the card doesn't grow when
+   the badge animates in. The fixed height matches the embedded
+   badge's pill (1px + 1px borders + 10px text + 2px padding × 2 ≈
+   18px). */
+.connectors-panel-embedded .connector-meta-tools {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  /* Hairline visual placeholder while the discovery request is in
+     flight — a 1px-tall faint baseline so the row reads as
+     intentionally reserved space rather than an empty gap. The
+     placeholder is dropped the moment the badge appears. */
+  position: relative;
+}
+.connectors-panel-embedded .connector-meta-tools[aria-hidden="true"]::after {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 1px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 999px;
+}
+/* The dot separator was only meaningful when the meta was a single
+   inline row; in the stacked layout it would float orphaned at the
+   start of the badge row. Hide it (the embedded card no longer
+   renders it in JSX, but keep the rule defensive in case a future
+   refactor reintroduces inline separators here). */
+.connectors-panel-embedded .connector-meta .connector-meta-dot {
+  display: none;
+}
+.connectors-panel-embedded .connector-tools-badge {
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 999px;
+}
+/* Anchor the action column to the top now that the meta block can be
+   one or two rows tall — center alignment used to make the action
+   drift down whenever the badge appeared. Keeping the action top-
+   aligned matches the title baseline and stops the eye from
+   tracking up and down across cards. */
+.connectors-panel-embedded .connector-card-top {
+  align-items: flex-start;
+  gap: 8px;
+}
+.connectors-panel-embedded .connector-card-actions {
+  /* Nudge the action button down a touch so it optically aligns with
+     the title's cap-height instead of its top edge. */
+  margin-top: 1px;
+}
+
+/* Icon-only connect/disconnect action: a 26px circular control anchored
+   at the card's top-right edge. We keep the same `connector-action`
+   class so loading/disabled state styling carries over from the
+   shared rules above, but the visual treatment is overridden here so
+   the catalog grid doesn't end up with a row of high-contrast filled
+   squares competing for attention. The default state is a subtle
+   ghost — almost recedes into the card — and the action picks up
+   accent weight only when the card or the button itself is hovered
+   or focused. The whole card is also clickable (it opens the
+   details drawer where Connect lives at full size), so this is a
+   secondary affordance, not the primary CTA. */
+.connectors-panel-embedded .connector-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.connectors-panel-embedded button.connector-action.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  /* Reset the min-width from the non-embedded `.is-connect` /
+     `.is-disconnect` pill rules above; in the compact catalog the
+     action collapses to a 26px circle and any `min-width` would
+     force it back into a wide pill that overlaps the card head
+     text. */
+  min-width: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 120ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+/* Soft default fill so the ghost button still has a visible target on
+   the lightest card backgrounds. We tint with `--text` rather than a
+   solid color so the control reads correctly in both dark and light
+   themes without per-theme overrides. */
+.connectors-panel-embedded button.connector-action.icon-only {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+/* When the parent card is hovered, the action gains a touch more weight
+   so it telegraphs interactivity without ever flashing to full white.
+   This applies whether the user is hovering the card or the button
+   directly, so reaching for the action never feels like the button
+   moves out from under them. */
+.connectors-panel-embedded .connector-card:hover:not(.is-locked) button.connector-action.icon-only:not(:disabled),
+.connectors-panel-embedded .connector-card:focus-visible button.connector-action.icon-only:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.connectors-panel-embedded button.connector-action.icon-only:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text) 24%, transparent);
+}
+.connectors-panel-embedded button.connector-action.icon-only:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.connectors-panel-embedded button.connector-action.icon-only:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.connectors-panel-embedded button.connector-action.icon-only:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .connectors-panel-embedded button.connector-action.icon-only {
+    transition: background 80ms linear, color 80ms linear;
+  }
+  .connectors-panel-embedded button.connector-action.icon-only:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Connect (the "+" affordance). Refined into an accent-tinted ghost so
+   the action reads as inviting rather than competing — the previous
+   "fill with var(--text)" rule produced a hard off-white square in
+   dark theme that fought every other card. Default state borrows a
+   whisper of the accent so the plus is visibly the accent action of
+   the card; hover/card-hover both lift the tint up while keeping the
+   button transparent enough to feel like part of the card surface,
+   not a stamped-on chip. */
+.connectors-panel-embedded button.connector-action.is-connect {
+  color: color-mix(in srgb, var(--accent) 76%, var(--text-muted));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.connectors-panel-embedded .connector-card:hover:not(.is-locked) button.connector-action.is-connect:not(:disabled),
+.connectors-panel-embedded .connector-card:focus-visible button.connector-action.is-connect:not(:disabled) {
+  color: var(--accent-strong, var(--accent));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.connectors-panel-embedded button.connector-action.is-connect:hover:not(:disabled) {
+  color: var(--accent-strong, var(--accent));
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 56%, transparent);
+  box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.connectors-panel-embedded button.connector-action.is-connect:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+/* Disconnect stays neutral until the user actually points at it, then
+   warms to the destructive red so the "remove" intent is unambiguous.
+   Slightly de-emphasized at rest compared to Connect — the connected
+   row already carries a green status dot to communicate state, so
+   this control doesn't need to advertise itself. */
+.connectors-panel-embedded button.connector-action.is-disconnect {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.connectors-panel-embedded .connector-card:hover:not(.is-locked) button.connector-action.is-disconnect:not(:disabled),
+.connectors-panel-embedded .connector-card:focus-visible button.connector-action.is-disconnect:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.connectors-panel-embedded button.connector-action.is-disconnect:hover:not(:disabled) {
+  color: var(--red, var(--text));
+  background: color-mix(in srgb, var(--red, var(--text)) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red, var(--text)) 42%, transparent);
+}
+
+/* Connection-status pip. Lives inline next to the connector name in
+   the embedded catalog (anchored via `.connector-card-title-dot`),
+   and the same dot is reused in the drawer where the rules above
+   handle the larger non-embedded variant. The halo is a `box-shadow`
+   ring rather than a `border` so the dot's optical size stays at
+   7px even with the green pulse around it. */
+.connectors-panel-embedded .connector-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  flex: 0 0 auto;
+}
+.connectors-panel-embedded .connector-status-dot.status-connected {
+  background: var(--green, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #22c55e) 22%, transparent);
+}
+.connectors-panel-embedded .connector-status-dot.status-error {
+  background: var(--red, #ef4444);
+}
+.connectors-panel-embedded .connector-status-dot.status-disabled {
+  background: var(--text-faint);
+}
+/* Error/disabled pills inside the compact card stay legible but small. */
+.connectors-panel-embedded .connector-card .connector-status-pill {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+/* On very narrow modals, keep tabs and search on one row while letting the
+   search input absorb the squeeze. */
+@media (max-width: 540px) {
+  .connectors-provider-tabs {
+    flex-shrink: 0;
+  }
+  .connectors-panel-embedded .tab-panel-toolbar .toolbar-search.connectors-search {
+    min-width: 0;
+  }
+}
 .connector-gate {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3343,6 +5825,7 @@ button.connector-action.is-loading {
   -webkit-backdrop-filter: blur(6px);
   border-radius: var(--radius);
   animation: connector-gate-fade 220ms ease-out;
+  pointer-events: auto;
 }
 @keyframes connector-gate-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -3386,13 +5869,6 @@ button.connector-action.is-loading {
   font-size: 13px;
   line-height: 1.5;
 }
-.connector-gate-action {
-  margin-top: 6px;
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
 /* ------------------------------------------------------------------ */
 /* Connector detail drawer                                             */
 /* ------------------------------------------------------------------ */
@@ -3652,6 +6128,15 @@ button.connector-action.is-loading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.connector-drawer-load-more {
+  align-self: flex-start;
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 14px;
+}
 .connector-drawer-foot {
   padding: 14px 22px 18px;
   border-top: 1px solid var(--border);
@@ -3905,6 +6390,7 @@ button.connector-action.is-loading {
 .design-live-count {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   border-radius: 999px;
   border: 1px solid var(--border);
   padding: 2px 7px;
@@ -3912,6 +6398,8 @@ button.connector-action.is-loading {
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.2;
   background: var(--bg-panel);
 }
 .live-artifact-badge.live {
@@ -4374,8 +6862,8 @@ button.connector-action.is-loading {
 @media (max-width: 900px) {
   .entry {
     grid-template-columns: 1fr !important;
-    height: auto;
-    min-height: 100vh;
+    height: 100%;
+    min-height: 0;
   }
   .entry-side {
     width: 100% !important;
@@ -4396,23 +6884,36 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
   flex: 1;
+  overflow: hidden;
+}
+.ws-tabs-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  height: 44px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 .ws-tabs-bar {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
-  height: 44px;
-  position: sticky;
-  top: 0;
-  z-index: 4;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  /* thinner scrollbar to avoid overlap */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .ws-tab {
@@ -4427,10 +6928,29 @@ button.connector-action.is-loading {
   cursor: pointer;
   flex-shrink: 0;
   max-width: 220px;
+  min-width: 0;
   color: var(--text-muted);
   transition: background 120ms ease, color 120ms ease;
 }
+.ws-tab.live-artifact-tab {
+  max-width: 320px;
+}
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
+.ws-tab.draggable { cursor: grab; }
+.ws-tab.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+.ws-tab.drag-over-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.ws-tab.drag-over-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
 .ws-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -4441,6 +6961,7 @@ button.connector-action.is-loading {
   font-weight: 500;
 }
 .ws-tab .tab-icon {
+  flex: 0 0 auto;
   font-size: 13px;
   color: var(--text-muted);
   width: 14px;
@@ -4448,20 +6969,30 @@ button.connector-action.is-loading {
 }
 .ws-tab.active .tab-icon { color: var(--text); }
 .ws-tab-label {
+  flex: 1 1 auto;
+  min-width: 32px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 180px;
 }
+.ws-tab.live-artifact-tab .ws-tab-label {
+  max-width: none;
+}
 .ws-live-artifact-badges {
+  flex: 0 0 auto;
   flex-wrap: nowrap;
-  max-width: 145px;
-  overflow: hidden;
+  max-width: none;
+  overflow: visible;
 }
 .ws-live-artifact-badges .live-artifact-badge:not(.live):not(.refreshing):not(.refresh-failed):not(.archived) {
   display: none;
 }
+.ws-live-artifact-badges:has(.refreshing) .live-artifact-badge.live {
+  display: none;
+}
 .ws-tab-close {
+  flex: 0 0 auto;
   border: none;
   background: transparent;
   padding: 0 2px;
@@ -4481,10 +7012,52 @@ button.connector-action.is-loading {
 .ws-tab.design-files-tab {
   font-weight: 500;
   color: var(--text);
+  /* Pin the Design Files entry to the left edge of the horizontally
+     scrollable tab strip so the user always has a way back to the file
+     list even when many tabs overflow. Without sticky positioning,
+     Design Files sits at flex index 0 and scrolls off the left edge
+     once the strip is wide enough to require horizontal scrolling.
+     Issue #775. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  /* Solid panel surface so other tabs that scroll past underneath the
+     sticky element do not visibly bleed through. */
+  background: var(--bg-panel);
+  /* Subtle right-edge shadow signals the visual separation when other
+     tabs are scrolled beneath it. */
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+.ws-tab.design-files-tab.active {
+  /* Active state should still read as selected; layer the active tint
+     over the sticky panel surface. */
+  background: var(--bg-subtle);
 }
 
-.ws-tabs-spacer { flex: 1; }
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
+.ws-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ws-focus-toggle:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.ws-focus-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .ws-tab-action {
   padding: 4px 12px;
   font-size: 12.5px;
@@ -4576,6 +7149,8 @@ button.connector-action.is-loading {
   gap: 6px;
 }
 .df-head .df-actions button:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.df-head .df-actions button.danger { color: var(--red); }
+.df-head .df-actions button.danger:hover:not(:disabled) { background: var(--red-bg); color: var(--red); }
 
 .df-body {
   flex: 1;
@@ -4599,6 +7174,187 @@ button.connector-action.is-loading {
   font-weight: 500;
   letter-spacing: 0;
 }
+/* --- file list table --- */
+.df-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.df-table thead { border-bottom: 1px solid var(--border); }
+.df-th-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.df-th-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.df-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 12px 20px 6px;
+  text-align: left;
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+.df-th-sortable:hover { color: var(--text); }
+.df-th-check, .df-cell-check { width: 28px; padding: 10px 0 10px 20px; }
+.df-th-icon, .df-cell-icon { width: 36px; padding: 10px 0; }
+.df-th-name { width: auto; }
+.df-th-kind { width: 110px; }
+.df-th-time { width: 100px; }
+.df-th-menu, .df-cell-menu { width: 32px; padding: 10px 20px 10px 0; }
+.df-sort-arrow { font-size: 10px; }
+
+.df-file-row {
+  transition: background 120ms ease;
+}
+.df-file-row:hover { background: var(--bg-subtle); }
+.df-file-row.active:not(.selected) { background: var(--bg-subtle); }
+.df-file-row.active.selected { background: var(--blue-bg); }
+.df-file-row.active .df-row-name { color: var(--text-strong); }
+.df-file-row.selected { background: var(--blue-bg); }
+
+.df-cell-check {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-cell-icon {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-cell-name {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+}
+.df-cell-openable {
+  cursor: pointer;
+}
+.df-row-name-btn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.df-row-name-btn:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.df-row-name-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.df-cell-kind {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+}
+.df-cell-time {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.df-cell-menu {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-kind-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- pagination --- */
+.df-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.df-pagination-start {
+  justify-content: flex-start;
+}
+.df-pagination-center {
+  justify-content: center;
+}
+.df-pagination-end {
+  justify-content: flex-end;
+}
+.df-pagination-right {
+  margin-left: auto;
+}
+.df-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.df-pagination select {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.df-pagination select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.df-page-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.df-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.df-page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-info {
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
 .df-row {
   display: grid;
   grid-template-columns: 28px 36px 1fr auto auto;
@@ -4615,6 +7371,9 @@ button.connector-action.is-loading {
   color: inherit;
   position: relative;
   transition: background 120ms ease;
+}
+.df-row-live-artifact {
+  grid-template-columns: 36px minmax(0, 1fr) auto;
 }
 .df-row:hover { background: var(--bg-subtle); }
 .df-row.active { background: var(--blue-bg); color: var(--text); }
@@ -4637,16 +7396,20 @@ button.connector-action.is-loading {
 .df-row-check:hover { background: var(--border); color: var(--text); }
 .df-row-check[aria-checked="true"] { color: var(--accent-strong); }
 
+.df-select-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .df-select-all {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-faint);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
   font-weight: 500;
-  margin-left: auto;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -4704,6 +7467,7 @@ button.connector-action.is-loading {
   transition: opacity 120ms ease;
 }
 .df-row:hover .df-row-menu { opacity: 1; }
+.df-row-menu:focus { opacity: 1; }
 .df-row-menu:hover { background: var(--border); color: var(--text); }
 .df-section-more {
   margin: 6px 20px 10px;
@@ -5567,31 +8331,16 @@ button.connector-action.is-loading {
 .comment-target-overlay.selected {
   border-width: 2px;
 }
-.comment-target-tooltip {
+.comment-target-overlay-label {
   position: absolute;
-  left: 0;
-  top: 0;
-  transform: translateY(calc(-100% - 6px));
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: min(380px, 80vw);
-  padding: 4px 7px;
-  border-radius: 4px;
-  background: rgba(17, 24, 39, 0.95);
-  color: white;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-}
-.comment-target-tooltip strong {
-  color: #8ec5ff;
-  font-weight: 700;
-}
-.comment-target-tooltip span {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .comment-saved-marker {
   position: absolute;
@@ -5647,11 +8396,25 @@ button.connector-action.is-loading {
 .comment-popover-head div {
   display: grid;
   gap: 1px;
+  min-width: 0;
+  overflow: hidden;
 }
-.comment-popover-head strong { font-size: 13px; }
+.comment-popover-head strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .comment-popover-head span {
   color: var(--text-muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-popover-head button.ghost {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .board-pod-summary {
   display: grid;
@@ -5695,7 +8458,15 @@ button.connector-action.is-loading {
   font-size: 12px;
 }
 .board-note-item span {
+  /* The note span sits next to a Remove button inside a fixed-width
+     ~300px popover. Without flex: 1 + min-width: 0 + overflow-wrap an
+     unbroken long string (URL, hash, base64) refuses to break and
+     pushes the popover layout sideways past its 320px boundary.
+     Issue #782. */
+  flex: 1;
+  min-width: 0;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .comment-popover textarea {
   min-height: 78px;
@@ -5706,8 +8477,17 @@ button.connector-action.is-loading {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+.comment-popover-actions > * {
+  /* Buttons may carry labels longer than their natural fair-share of the
+     320px popover width (Save comment, Send to chat, Sending..., Add note,
+     Remove). Without an explicit shrink ceiling and wrap, the row pushes
+     past the popover's right edge instead of breaking onto a new line.
+     Issue #779. */
+  max-width: 100%;
 }
 .comment-popover-remove {
   color: var(--red);
@@ -5718,6 +8498,177 @@ button.connector-action.is-loading {
   background: var(--red-bg);
   border-color: var(--red-border);
 }
+
+/* Inspect panel — sibling of the comment popover. Anchored to the
+   right side of the preview surface. Width is fixed so layout doesn't
+   reflow as the user scrubs slider values; controls reserve space for
+   their numeric readouts. */
+.inspect-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: 296px;
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+}
+.inspect-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inspect-panel-head > button {
+  /* Without an explicit shrink-floor, a long selected-component label
+     in the title can squeeze the Close button so narrowly that the
+     "x" glyph stacks into a vertical layout on some font/zoom
+     combinations. Pinning flex-shrink: 0 keeps the close affordance
+     on a stable single-line size regardless of label length. Issue
+     #785. */
+  flex-shrink: 0;
+}
+.inspect-panel-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.inspect-panel-title strong {
+  /* Long target.label values (deeply-nested component selectors) used
+     to spill past the title container and out of the panel because
+     this rule had no overflow constraint. Truncate with ellipsis;
+     the <strong> carries title={label} so the full string is still
+     visible on hover. Issue #780. */
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspect-panel-title code {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* MCP Copy button floats above a syntax-highlighted <pre>; .ghost's
+   transparent background let the dark code surface bleed through and
+   made the affordance effectively invisible. Pin a solid panel
+   background here (not inline) so button.ghost:hover:not(:disabled)
+   still wins the cascade. Issue #742. */
+button.ghost.mcp-copy-btn {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+button.ghost.mcp-copy-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.inspect-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inspect-section-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inspect-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.inspect-row > label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.inspect-row input[type='color'] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+.inspect-row input[type='text'],
+.inspect-row select {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 11px;
+  font-family: inherit;
+}
+.inspect-row input[type='range'] {
+  width: 100%;
+}
+.inspect-row-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 42px;
+  text-align: right;
+}
+.inspect-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inspect-panel-error {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--red-border);
+  border-radius: 4px;
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 11px;
+}
+
+.inspect-empty-hint-container {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.inspect-empty-hint-container button,
+.inspect-empty-hint-container .close-button {
+  pointer-events: auto;
+}
+
+.inspect-empty-hint code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  font-size: 11px;
+}
+
 .comments-panel {
   display: flex;
   flex-direction: column;
@@ -5885,6 +8836,17 @@ button.connector-action.is-loading {
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+/* Compact horizontal variant for the upload-failure banner: the message
+   sits inline next to a dismiss button so the user can clear the stale
+   notice without changing tabs. Issue #786. */
+.viewer-empty.viewer-empty-dismissible {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
 }
 .document-preview {
   max-width: 860px;
@@ -6310,7 +9272,19 @@ button.connector-action.is-loading {
   line-height: 1.5;
 }
 .prose-block .md-code code { font-family: var(--mono); }
-.prose-block .md-link { color: var(--accent); text-decoration: underline; }
+.prose-block .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.prose-block .md-link-bare {
+  /* Long bare URLs (OAuth flows etc.) need to wrap mid-string so they
+     don't escape the chat column. break-word is enough for most agents,
+     but `anywhere` covers query strings with no spaces. */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
 .prose-block .md-hr {
   border: none;
   border-top: 1px solid var(--border);
@@ -6437,6 +9411,8 @@ button.connector-action.is-loading {
   background: var(--bg-panel);
   overflow: hidden;
   box-shadow: var(--shadow-xs);
+  min-width: 0;
+  max-width: 100%;
 }
 .op-card-head {
   display: flex;
@@ -6475,7 +9451,7 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 220px;
+  max-width: min(220px, 100%);
 }
 .op-status {
   margin-left: auto;
@@ -6584,31 +9560,51 @@ button.connector-action.is-loading {
 .op-todo .todo-list {
   list-style: none;
   margin: 0;
-  padding: 4px 12px 10px;
+  padding: 6px 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   font-size: 12px;
 }
 .todo-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 2px 0;
-  line-height: 1.4;
+  gap: 10px;
+  padding: 5px 8px;
+  line-height: 1.45;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 .todo-check {
   width: 16px;
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-soft);
   font-family: var(--mono);
   text-align: center;
+  line-height: 1.45;
 }
+.todo-text { color: var(--text); }
+
+/* Pending — quietly waiting */
+.todo-pending .todo-check { color: var(--text-faint); }
 .todo-pending .todo-text { color: var(--text-muted); }
+
+/* In progress — the only row that should pop */
+.todo-in_progress {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
 .todo-in_progress .todo-check { color: var(--accent); }
-.todo-in_progress .todo-text { color: var(--text); font-weight: 500; }
+.todo-in_progress .todo-text { color: var(--text-strong); font-weight: 600; }
+
+/* Completed — settled, but still readable */
 .todo-completed .todo-check { color: var(--green); }
-.todo-completed .todo-text { text-decoration: line-through; color: var(--text-muted); }
+.todo-completed .todo-text {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  color: var(--text-muted);
+}
 
 /* Composer extras */
 .composer.drag-active {
@@ -6717,11 +9713,29 @@ button.connector-action.is-loading {
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+/* Add a few extra pixels above the deploy dialog's primary action so
+   it does not crowd the divider. The shared .modal-foot uses 12px
+   vertical padding which is fine for shorter dialogs but reads as
+   cramped here because the deploy form ends in dense token / domain
+   config rows that push content right up to the border. Scoped to the
+   deploy dialog only (the template-save dialog also carries the
+   .deploy-modal class on its root, which is why we key off the
+   purpose-specific .deploy-flow-modal hook instead). 16px matches the
+   bump proposed for the global rule in #957 so the rhythm stays close
+   to the rest of the app. Issue #913. */
+.deploy-flow-modal .modal-foot {
+  padding-top: 16px;
+}
 .deploy-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
   margin-top: 18px;
+}
+.deploy-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .field-label-row {
   display: flex;
@@ -6729,7 +9743,20 @@ button.connector-action.is-loading {
   justify-content: space-between;
   gap: 16px;
 }
-.field-label-row a {
+.field-label-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: min(420px, 70%);
+  text-align: right;
+}
+.field-label-note .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.field-label-row a:not(.field-label-link) {
   color: var(--accent);
   font-size: 13px;
   white-space: nowrap;
@@ -6743,8 +9770,8 @@ button.connector-action.is-loading {
 .field-label-link {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
+  gap: 3px;
+  font-size: 10.5px;
   color: var(--text-muted);
   text-decoration: none;
   white-space: nowrap;
@@ -6774,7 +9801,113 @@ button.connector-action.is-loading {
   border: 1px solid color-mix(in srgb, #1f9d55 28%, var(--border));
   font-variant-numeric: tabular-nums;
 }
-.deploy-form input {
+/* ---------- Composio API key skeleton ----------
+   The Composio config is daemon-backed, so on first paint after a
+   restart there is a window where the section renders empty even
+   though a saved key exists. Rather than show a misleading "no key
+   saved" state, we overlay a skeleton on the input + chip + buttons
+   so the user understands the field is still resolving.
+   We intentionally keep the real input mounted underneath the shimmer
+   so focus, autofill, and accessibility nodes are not torn down on
+   resolve — the parent label gets aria-busy and the disabled flags
+   on the buttons are the structural safety net. */
+.field-status-badge-skeleton {
+  /* Same footprint as the saved-state chip so the row geometry
+     doesn't shift when hydration completes. The width is a
+     calibrated guess for a "Saved · ••••XXXX" string; close enough
+     that the swap-in feels stable without depending on the actual
+     tail length. */
+  width: 86px;
+  height: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-soft) 8%, var(--bg-subtle)) 0%,
+      color-mix(in srgb, var(--text-soft) 18%, var(--bg-subtle)) 50%,
+      color-mix(in srgb, var(--text-soft) 8%, var(--bg-subtle)) 100%
+    );
+  background-size: 200% 100%;
+  animation: settingsSkeletonShimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-pill);
+  padding: 0;
+  color: transparent;
+}
+
+.field-input-skeleton-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.field-input-skeleton-wrap > input {
+  flex: 1;
+  min-width: 0;
+}
+.field-input-skeleton-shimmer {
+  position: absolute;
+  inset: 1px;
+  border-radius: var(--radius);
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--text-soft) 14%, transparent) 50%,
+      transparent 100%
+    );
+  background-size: 220% 100%;
+  animation: settingsSkeletonShimmer 1.6s ease-in-out infinite;
+}
+
+/* The whole credentials field gets a softened, "we're checking" feel
+   while loading: muted label, slightly desaturated input chrome.
+   Matches the broader Settings shimmer language. */
+.settings-section-connectors-credentials.is-loading .field-label {
+  color: var(--text-muted);
+}
+.settings-section-connectors-credentials.is-loading input:disabled {
+  cursor: progress;
+  background: color-mix(in srgb, var(--text-soft) 4%, var(--bg-subtle));
+  /* Preserve readable placeholder color even when disabled — the
+     placeholder doubles as the "Checking for a saved key…" cue. */
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+.settings-section-connectors-credentials.is-loading input:disabled::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Inline status hint variant — the help line below the input becomes
+   a small spinner + status string while loading. Sits in the same
+   slot as the regular hint so layout doesn't jump. */
+.field-hint-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.field-hint-loading svg {
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
+@keyframes settingsSkeletonShimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .field-status-badge-skeleton,
+  .field-input-skeleton-shimmer {
+    animation: none;
+  }
+  .field-input-skeleton-shimmer {
+    background: color-mix(in srgb, var(--text-soft) 8%, transparent);
+  }
+}
+.deploy-form input,
+.deploy-form select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--border);
@@ -6793,59 +9926,184 @@ button.connector-action.is-loading {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.cloudflare-domain-grid {
+  grid-template-columns: minmax(180px, 0.85fr) minmax(220px, 1.15fr);
+}
+.deploy-field-grid.single-field {
+  grid-template-columns: minmax(0, 1fr);
+}
 .deploy-field-grid label {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
 .deploy-error {
   margin: 0;
   color: var(--red);
 }
-.deploy-result {
+.deploy-result-block {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.deploy-result-block.ready {
+  border-color: color-mix(in srgb, var(--green) 26%, var(--border));
+}
+.deploy-result-block.delayed {
+  border-color: color-mix(in srgb, #b7791f 34%, var(--border));
+}
+.deploy-result-block.protected,
+.deploy-result-block.failed {
+  border-color: color-mix(in srgb, #c96442 38%, var(--border));
+}
+.deploy-result-summary {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border-radius: var(--radius-lg);
+  gap: 6px;
+  padding: 14px 16px 12px;
+  background: color-mix(in srgb, var(--bg-subtle) 64%, var(--bg-panel));
 }
-.deploy-result.ready {
-  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--border));
-  background: color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+.deploy-result-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.deploy-result.delayed {
-  border: 1px solid color-mix(in srgb, #b7791f 42%, var(--border));
-  background: color-mix(in srgb, #b7791f 10%, var(--bg-panel));
+.deploy-result-link-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
-.deploy-result.protected {
-  border: 1px solid color-mix(in srgb, #c96442 48%, var(--border));
-  background: color-mix(in srgb, #c96442 10%, var(--bg-panel));
+.deploy-result-badge,
+.deploy-result-link-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.deploy-result-badge.ready,
+.deploy-result-link-state.ready {
+  color: #137a3d;
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 28%, var(--border));
+}
+.deploy-result-badge.delayed,
+.deploy-result-link-state.delayed {
+  color: #9a5b12;
+  background: color-mix(in srgb, #b7791f 14%, transparent);
+  border: 1px solid color-mix(in srgb, #b7791f 28%, var(--border));
+}
+.deploy-result-badge.protected,
+.deploy-result-badge.failed,
+.deploy-result-link-state.protected,
+.deploy-result-link-state.failed {
+  color: #a34828;
+  background: color-mix(in srgb, #c96442 14%, transparent);
+  border: 1px solid color-mix(in srgb, #c96442 30%, var(--border));
 }
 .deploy-result-label {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--green);
-}
-.deploy-result.delayed .deploy-result-label {
-  color: #9a5b12;
-}
-.deploy-result.protected .deploy-result-label {
-  color: #a34828;
+  color: var(--text);
 }
 .deploy-result-message {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
 }
-.deploy-result a {
+.deploy-result-links {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+.deploy-result-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  background: var(--bg-panel);
+}
+.deploy-result-link + .deploy-result-link {
+  border-top: 1px solid var(--border);
+}
+.deploy-result-link-main {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.deploy-result-link-label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.deploy-result-link-message {
+  margin: 0;
+  color: var(--text-muted);
+}
+.deploy-result-url {
+  min-width: 0;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 .deploy-result-actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.deploy-result-actions .viewer-action,
+.deploy-result-actions .ghost-link {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+}
+.deploy-result-actions .viewer-action:hover:not(:disabled),
+.deploy-result-actions .ghost-link:hover {
+  background: var(--bg-panel);
+}
+@media (max-width: 640px) {
+  .deploy-form .field-label-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .deploy-form .field-label-note {
+    align-items: flex-start;
+    max-width: none;
+    text-align: left;
+  }
+  .deploy-field-grid,
+  .cloudflare-domain-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploy-result-link {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploy-result-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    width: fit-content;
+  }
 }
 .ghost-link.disabled,
 .ghost-link[aria-disabled='true'] {
@@ -7175,27 +10433,27 @@ button.connector-action.is-loading {
 /* op-todo card variant (the .op-todo .todo-list rule already exists above) */
 .op-todo {
   border-color: var(--accent-soft);
-  background: linear-gradient(180deg, #fff8f3 0%, var(--bg-panel) 60%);
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 60%);
 }
 .op-todo .op-card-head {
-  border-bottom: 1px solid var(--accent-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-soft) 70%, transparent);
   background: transparent;
 }
 .op-todo .op-icon {
   background: var(--accent-soft);
-  color: var(--accent-hover);
+  color: var(--accent);
 }
 .op-todo .op-title {
   letter-spacing: 0.02em;
   text-transform: uppercase;
   font-size: 11px;
-  color: var(--accent-hover);
+  color: var(--text-strong);
 }
 .op-todo .op-meta {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--accent-hover);
+  color: var(--text-strong);
 }
 
 /* Question form — interactive form a planning agent can post into chat */
@@ -7452,6 +10710,7 @@ button.connector-action.is-loading {
   z-index: 900;
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(2px);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -7461,6 +10720,7 @@ button.connector-action.is-loading {
   width: 100%;
   max-width: 1320px;
   background: var(--bg);
+  -webkit-app-region: no-drag;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -7622,6 +10882,27 @@ button.connector-action.is-loading {
   justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+/* Error state extends .ds-modal-empty: stacks a title, body, and Retry
+   button instead of a single line, so a fetch failure no longer leaves
+   the modal stuck at "Loading…" with disabled toolbar buttons and no
+   recovery path. Issue #860. */
+.ds-modal-error {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+}
+.ds-modal-error-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-modal-error-body {
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 48ch;
+  line-height: 1.5;
 }
 .ds-modal-actions .ghost.is-active {
   background: var(--accent-tint);
@@ -7965,6 +11246,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-subtle);
   color: var(--text);
 }
+.composer-import-item-enabled {
+  cursor: pointer;
+  color: var(--text);
+}
+.composer-import-item-enabled:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
 .composer-import-item-label { flex: 1; }
 .composer-import-item-soon {
   font-size: 10px;
@@ -8116,7 +11405,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ============================================================
    Scroll-to-bottom button (chat)
    ============================================================ */
-.chat-log-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.chat-log-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; }
 .chat-log-wrap .chat-log { flex: 1; }
 .chat-jump-btn {
   position: absolute;
@@ -8423,6 +11712,28 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   justify-content: center;
   letter-spacing: 0;
 }
+.prompt-template-thumb-provider {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  max-width: calc(100% - 16px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prompt-template-thumb-provider.is-hyperframes {
+  background: linear-gradient(135deg, #ff5e3a 0%, #f0c14b 100%);
+  color: #1a1410;
+}
 .prompt-template-meta {
   display: flex;
   flex-direction: column;
@@ -8494,23 +11805,42 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   padding: 24px;
 }
 .prompt-template-modal {
+  position: relative;
   background: var(--bg-panel);
   border-radius: 14px;
   width: min(820px, 100%);
-  max-height: 90vh;
+  max-height: calc(100vh - 48px);
+  max-height: min(90vh, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border: 1px solid var(--border);
   overflow: hidden;
   box-shadow: 0 32px 80px rgba(0, 0, 0, 0.25);
 }
 .prompt-template-modal-head {
+  flex: 0 0 auto;
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 18px 18px 0;
+  min-height: 56px;
+  padding: 18px 66px 0 18px;
+  background: var(--bg-panel);
 }
 .prompt-template-modal-titles { flex: 1; min-width: 0; }
+.prompt-template-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 20;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
 .prompt-template-modal-titles h2 {
   font-size: 17px;
   margin: 0 0 6px 0;
@@ -8523,12 +11853,15 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   line-height: 1.45;
 }
 .prompt-template-modal-tags {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding: 10px 18px 0;
 }
 .prompt-template-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -8683,6 +12016,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   overflow: auto;
 }
 .prompt-template-modal-foot {
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -9623,6 +12957,231 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ============================================================
+   Composer — consolidated Tools popover
+   ------------------------------------------------------------
+   The leading sliders icon now opens a single tabbed popover
+   containing MCP / Import / Pet quick actions plus a shortcut
+   to the full Settings dialog. Replaces three standalone row
+   buttons that were overflowing in narrow chats.
+   ============================================================ */
+.composer-tools-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.composer-tools-trigger {
+  position: relative;
+}
+.composer-tools-trigger.active {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-tools-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.composer-tools-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.composer-tools-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+}
+.composer-tools-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+  font-size: 11.5px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 0;
+}
+.composer-tools-tab:hover { color: var(--text); }
+.composer-tools-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+.composer-tools-tab-count {
+  font-size: 10px;
+  background: var(--accent);
+  color: white;
+  border-radius: 7px;
+  padding: 0 4px;
+  min-width: 14px;
+  height: 14px;
+  line-height: 14px;
+  text-align: center;
+}
+.composer-tools-tab-glyph {
+  font-size: 13px;
+  line-height: 1;
+}
+.composer-tools-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.composer-tools-empty {
+  padding: 14px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+}
+.composer-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.composer-tools-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  width: 100%;
+}
+.composer-tools-row:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-tools-row-body {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.composer-tools-row-body strong {
+  font-weight: 500;
+  font-size: 12px;
+}
+.composer-tools-row-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-transform: lowercase;
+}
+.composer-tools-row-action {
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0;
+  margin-top: 4px;
+  padding-top: 8px;
+  color: var(--text-muted);
+}
+.composer-tools-row-action:hover { color: var(--text); }
+.composer-tools-row-toggle {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.composer-tools-pet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.composer-tools-pet-head {
+  padding: 0 4px 4px;
+}
+.composer-tools-pet-head .hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.composer-tools-pet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 0 2px;
+}
+.composer-tools-pet-item {
+  --pet-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.composer-tools-pet-item:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.composer-tools-pet-item.active {
+  border-color: var(--pet-accent);
+  background: color-mix(in srgb, var(--pet-accent) 12%, transparent);
+  color: var(--text);
+}
+.composer-tools-pet-item span:first-child {
+  font-size: 18px;
+  line-height: 1;
+}
+.composer-tools-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  width: 100%;
+}
+.composer-tools-settings:hover {
+  background: var(--bg-subtle);
+}
+
+/* ============================================================
    Pet — uploaded image / spritesheet rendering
    ------------------------------------------------------------
    The face element switches between an emoji glyph and an
@@ -10184,4 +13743,1416 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 [dir="rtl"] .title,
 [dir="rtl"] .meta {
   text-align: right;
+}
+
+/* ============================================================
+   Quick Switcher (Cmd/Ctrl+P file palette)
+   ============================================================ */
+.qs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 12, 10, 0.32);
+  /* Sits in the modal tier (alongside prompt-template-modal-overlay) so
+   * the palette renders above any open context menus or popovers. */
+  z-index: 1500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.qs-palette {
+  width: min(560px, 92vw);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text);
+}
+.qs-input {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+}
+.qs-input::placeholder {
+  color: var(--text-faint);
+}
+.qs-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.qs-empty {
+  padding: 20px 16px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.qs-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.qs-row-active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.qs-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qs-path {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.qs-kind {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.qs-row-active .qs-kind {
+  color: var(--accent-strong);
+}
+.qs-footer {
+  display: flex;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.qs-footer kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 2px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Library section (Skills & Design Systems management) */
+
+.library-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.library-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.library-search:focus {
+  border-color: var(--accent);
+}
+
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.library-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.library-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-group-count {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.library-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.library-card.disabled {
+  opacity: 0.45;
+}
+
+.library-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.library-card-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.library-card-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.library-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.library-card-expand {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+
+.library-card-expand:hover {
+  background: var(--border);
+}
+
+.library-ds-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 12px;
+  gap: 8px;
+}
+
+.library-ds-card.disabled {
+  opacity: 0.45;
+}
+
+.library-ds-card-content {
+  cursor: pointer;
+}
+
+.library-ds-swatches {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.library-ds-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.library-ds-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.library-ds-summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.library-ds-card .toggle-switch {
+  align-self: flex-end;
+}
+
+.library-preview {
+  width: 100%;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.library-preview-body {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.library-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 32px 0;
+}
+
+/* Toggle switch */
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border);
+  border-radius: 20px;
+  transition: background-color 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.toggle-switch-sm {
+  width: 30px;
+  height: 17px;
+}
+
+.toggle-switch-sm .toggle-slider::before {
+  height: 11px;
+  width: 11px;
+}
+
+.toggle-switch-sm input:checked + .toggle-slider::before {
+  transform: translateX(13px);
+}
+/* Manual edit mode */
+.manual-edit-workspace {
+  display: grid;
+  grid-template-columns: 240px minmax(420px, 1fr) 344px;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding: 10px;
+  background: var(--bg);
+}
+
+.manual-edit-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.manual-edit-canvas iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.manual-edit-layers,
+.manual-edit-right {
+  min-height: 0;
+}
+
+.manual-edit-layers,
+.manual-edit-modal,
+.manual-edit-changes {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.manual-edit-layers {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.manual-edit-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.manual-edit-panel-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.manual-edit-panel-head span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.manual-edit-layer-list,
+.manual-edit-history-list {
+  display: grid;
+  gap: 7px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.manual-edit-layer-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  height: auto;
+  padding: 9px 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+}
+
+.manual-edit-layer-row.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.manual-edit-layer-row strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.manual-edit-layer-row span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.manual-edit-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manual-edit-modal {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+.manual-edit-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.manual-edit-modal-head span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.manual-edit-modal-head h3 {
+  max-width: 220px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-edit-modal-head em {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.manual-edit-empty {
+  margin: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.manual-edit-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 12px 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.manual-edit-meta strong,
+.manual-edit-meta span,
+.manual-edit-meta code {
+  display: block;
+}
+
+.manual-edit-meta span {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.manual-edit-meta code {
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-edit-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 0 12px 12px;
+}
+
+.manual-edit-tabs button {
+  min-height: 30px;
+  padding: 0 6px;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.manual-edit-tabs button.active {
+  color: var(--bg-panel);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.manual-edit-tab-body {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 0 12px 12px;
+  overflow: auto;
+}
+
+.manual-edit-field {
+  display: grid;
+  gap: 6px;
+}
+
+.manual-edit-field span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.manual-edit-field input,
+.manual-edit-field textarea,
+.manual-edit-field select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 9px;
+  color: var(--text);
+  background: var(--bg-panel);
+  font: inherit;
+}
+
+.manual-edit-field textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.manual-edit-field.compact {
+  gap: 4px;
+}
+
+.manual-edit-field.compact input,
+.manual-edit-field.compact select {
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.manual-edit-code {
+  min-height: 150px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+  font-size: 11px !important;
+  white-space: pre;
+}
+
+.manual-edit-code.tall {
+  min-height: 260px;
+}
+
+.manual-edit-style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.manual-edit-style-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.manual-edit-error {
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--red-border);
+  border-radius: 6px;
+  color: var(--red);
+  background: var(--red-bg);
+  font-size: 12px;
+}
+
+.manual-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.manual-edit-actions .primary {
+  color: var(--bg-panel);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.manual-edit-changes {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.manual-edit-history-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 8px;
+}
+
+.manual-edit-history-entry {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.manual-edit-history-entry strong {
+  font-size: 12px;
+}
+
+.manual-edit-history-entry code {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+/* Privacy panel layout. The toggle row stack reuses .toggle-row (the
+   iOS-style switch from NewProjectPanel); we only need to space the rows
+   apart. The disclosure list inside the consent card is purely a typography
+   block — no chrome of its own. */
+.settings-privacy-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-privacy-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.settings-privacy-disclosure > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-privacy-disclosure dt {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-privacy-disclosure dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.privacy-consent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.privacy-consent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.privacy-consent-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
+/* First-run privacy consent banner. Cookie-consent-style: anchored to the
+   bottom-right of the viewport, prominent but non-blocking. Reuses the
+   same typography + radii + shadow as the rest of the panels. */
+.privacy-consent-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  /* Below modal backdrops; App.tsx hides the banner while Settings is open. */
+  z-index: 90;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.privacy-consent-banner .privacy-consent-actions {
+  pointer-events: auto;
+}
+
+.privacy-consent-banner-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.privacy-consent-banner-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.privacy-consent-banner-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.privacy-consent-banner-lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.privacy-consent-banner-footer {
+  margin: 2px 0 6px;
+}
+
+/* ============================================================
+   External MCP servers — Settings panel
+   ------------------------------------------------------------
+   Compact card-per-server layout. Inputs stack vertically inside
+   each card so the narrow settings column (~440px after sidebar)
+   doesn't crush the inner grid.
+   ============================================================ */
+.mcp-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mcp-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--bg-subtle);
+}
+.mcp-picker-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.mcp-picker-head strong { font-size: 12.5px; }
+.mcp-picker-grid {
+  display: grid;
+  gap: 6px;
+}
+.mcp-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.mcp-picker-item:hover {
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+/* The clickable region of a template card. Split out from the wrapper so a
+   sibling homepage `<a>` can sit next to it without nesting interactives. */
+.mcp-picker-item-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  color: inherit;
+}
+.mcp-picker-item-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  width: 100%;
+}
+.mcp-picker-transport {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  margin-left: auto;
+}
+.mcp-picker-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.mcp-picker-example {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.mcp-picker-example-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  align-self: center;
+}
+.mcp-picker-example-text {
+  font-style: italic;
+  color: var(--text);
+}
+.mcp-picker-homepage {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+}
+.mcp-picker-homepage:hover {
+  color: var(--accent, var(--text));
+  text-decoration: underline;
+}
+
+/* ── Picker grouping (added when the catalog crossed ~12 templates) ─── */
+
+/* Sticky-header row inside `.mcp-picker-head` so the close affordance is
+   always visible even after the user scrolls into a long category. */
+.mcp-picker-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mcp-picker-close {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+.mcp-picker-search {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.mcp-picker-search:focus {
+  outline: none;
+  border-color: var(--border-strong, var(--text-faint));
+}
+
+/* Cap the group region so 17+ templates do not push the picker into a
+   2000px tall block. The footer (custom-server card) sits OUTSIDE this
+   scroll region so it is always reachable. */
+.mcp-picker-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.mcp-picker-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.mcp-picker-group[open] {
+  background: var(--bg);
+}
+.mcp-picker-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  user-select: none;
+  list-style: none;
+}
+.mcp-picker-group-summary::-webkit-details-marker { display: none; }
+.mcp-picker-group-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  transition: transform 120ms ease;
+}
+.mcp-picker-group[open] > .mcp-picker-group-summary::before {
+  transform: rotate(90deg);
+}
+.mcp-picker-group-summary:hover {
+  background: var(--bg-subtle);
+}
+.mcp-picker-group-summary-title {
+  font-weight: 600;
+}
+.mcp-picker-group-summary-count {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+.mcp-picker-group-summary-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  text-align: right;
+  /* Hide the per-group hint on narrow widths so the count + title stay
+     readable. The hint is supplementary so dropping it is acceptable. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+@media (max-width: 480px) {
+  .mcp-picker-group-summary-hint { display: none; }
+}
+.mcp-picker-group .mcp-picker-grid {
+  padding: 4px 8px 10px;
+}
+
+.mcp-picker-empty {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 12px;
+}
+
+.mcp-picker-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.mcp-picker-custom {
+  /* Visual nudge so the custom-server card reads as a footer affordance,
+     not just another template card. */
+  border-style: dashed !important;
+}
+
+.mcp-error {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #d54) 50%, transparent);
+  background: color-mix(in srgb, var(--danger, #d54) 10%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--danger, #d54);
+}
+
+.mcp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mcp-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.mcp-row-disabled { opacity: 0.55; }
+/* Template-derived hint shown on saved rows that came from a built-in
+   preset (filesystem, github, fetch, higgsfield…). Default-collapsed
+   `<details>`; the summary line is the only thing visible until the user
+   clicks. Keeps long descriptions out of the way but still discoverable. */
+.mcp-row-info {
+  border-left: 2px solid var(--border-strong, var(--border));
+  background: var(--bg-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.mcp-row-info-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  user-select: none;
+  list-style: none;
+}
+.mcp-row-info-summary::-webkit-details-marker { display: none; }
+.mcp-row-info-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.mcp-row-info[open] > .mcp-row-info-summary::before {
+  transform: rotate(90deg);
+}
+.mcp-row-info-summary:hover {
+  color: var(--text);
+}
+.mcp-row-info-summary-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-row-info-body {
+  padding: 0 8px 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mcp-row-info-desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.mcp-row-info-example {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.mcp-row-info-example-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mcp-row-info-example-text {
+  font-style: italic;
+  color: var(--text);
+}
+.mcp-row-info-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.mcp-row-info-link:hover {
+  color: var(--accent, var(--text));
+  text-decoration: underline;
+}
+.mcp-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mcp-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.mcp-row-toggle input { width: auto; }
+.mcp-row-label {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.mcp-row-counter {
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.mcp-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.mcp-row-actions .icon-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.mcp-row-actions .icon-btn:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+}
+/* The expand/collapse chevron at the end of the row header. Uses a single
+   `chevron-down` icon and rotates it 180° when the row is open so the
+   element stays visually anchored to the same DOM node. */
+.mcp-row-toggle-btn svg {
+  transition: transform 120ms ease;
+}
+.mcp-row-expanded .mcp-row-toggle-btn svg {
+  transform: rotate(180deg);
+}
+
+/* Read-only "title bar" shown when a row is collapsed. Acts as a click
+   target that expands the row, so the user doesn't have to aim for the
+   tiny chevron at the end of the row. */
+.mcp-row-summary-title {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.mcp-row-summary-title:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.mcp-row-summary-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+.mcp-row-summary-transport {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+
+.mcp-row-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 8px;
+}
+@media (max-width: 720px) {
+  .mcp-row-grid { grid-template-columns: 1fr; }
+}
+.mcp-row-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.mcp-row-field-label {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mcp-row-field input,
+.mcp-row-field select,
+.mcp-row-field textarea {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+}
+.mcp-row-field textarea {
+  font-family: var(--mono);
+  resize: vertical;
+  min-height: 38px;
+}
+.mcp-row-field-stack { width: 100%; }
+
+.mcp-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.mcp-foot-spacer { flex: 1; }
+.mcp-saved-msg { color: var(--success, #6c6); }
+
+/* Per-row OAuth Connect/Disconnect control. Sits between the row header
+ * and the field grid so the connection state is the FIRST thing the user
+ * sees on a row that needs auth. */
+.mcp-oauth-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.mcp-oauth-control.connected {
+  border-color: color-mix(in srgb, var(--success, #2da44e) 60%, var(--border));
+  background: color-mix(in srgb, var(--success, #2da44e) 8%, var(--bg-subtle));
+}
+.mcp-oauth-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.mcp-oauth-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.mcp-oauth-dot-ok {
+  background: var(--success, #2da44e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #2da44e) 25%, transparent);
+}
+.mcp-oauth-dot-pending {
+  background: var(--accent);
+  animation: mcp-oauth-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mcp-oauth-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.mcp-oauth-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+.mcp-oauth-actions button {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.mcp-oauth-error {
+  font-size: 11.5px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger, #d54) 14%, transparent);
+  color: var(--danger, #d54);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mcp-oauth-hint {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 11.5px;
+}
+.mcp-oauth-fallback {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.mcp-oauth-fallback .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mcp-oauth-fallback .md-link:hover {
+  text-decoration-thickness: 2px;
 }

@@ -5,6 +5,7 @@ import {
   buildSandboxedPreviewDocument,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
 } from '../../src/runtime/exports';
 
@@ -69,6 +70,51 @@ describe('archiveFilenameFrom', () => {
       'content-disposition': "attachment; filename*=UTF-8''%E9%9D",
     });
     expect(archiveFilenameFrom(resp, 'fallback', 'ui-design')).toBe('ui-design.zip');
+  });
+});
+
+describe('exportProjectAsPdf', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('uses the daemon desktop PDF export API before falling back to browser print', async () => {
+    const fallback = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+
+    const result = await exportProjectAsPdf({
+      deck: true,
+      fallbackPdf: fallback,
+      filePath: 'deck/index.html',
+      projectId: 'proj-1',
+      title: 'Seed Deck',
+    });
+
+    expect(result).toBe('desktop');
+    expect(fallback).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj-1/export/pdf', {
+      body: JSON.stringify({ deck: true, fileName: 'deck/index.html', title: 'Seed Deck' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+  });
+
+  it('falls back to browser print when the desktop PDF export API is unavailable', async () => {
+    const fallback = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'unavailable' } }), { status: 501 })));
+
+    const result = await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: fallback,
+      filePath: 'index.html',
+      projectId: 'proj-1',
+      title: 'Landing',
+    });
+
+    expect(result).toBe('fallback');
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -145,24 +191,30 @@ describe('exportAsMd', () => {
 describe('sandboxed preview Blob exports', () => {
   let capturedBlob: Blob | undefined;
   let openedFeatures: string | undefined;
+  let mockWin: { opener: unknown; location: { href: string } };
+  let openCalls: string[][];
 
   beforeEach(() => {
     capturedBlob = undefined;
     openedFeatures = undefined;
+    openCalls = [];
+    mockWin = { opener: {}, location: { href: '' } };
     vi.stubGlobal('URL', {
       createObjectURL: (blob: Blob) => {
         capturedBlob = blob;
         return 'blob:test';
       },
-      revokeObjectURL: () => {},
+      revokeObjectURL: vi.fn(),
     });
     vi.stubGlobal('window', {
       open: (_url: string, _target: string, features?: string) => {
+        openCalls.push([_url, _target]);
         openedFeatures = features;
-        return null;
+        return mockWin;
       },
       addEventListener: () => {},
     });
+    vi.stubGlobal('alert', vi.fn());
   });
 
   afterEach(() => {
@@ -206,10 +258,12 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).not.toContain('allow-same-origin');
   });
 
-  it('uses a sandboxed noopener Blob wrapper by default for PDF exports', async () => {
+  it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {
     exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
 
-    expect(openedFeatures).toBe('noopener,noreferrer');
+    expect(openCalls).toEqual([['', '_blank']]);
+    expect(mockWin.opener).toBeNull();
+    expect(mockWin.location.href).toBe('blob:test');
     expect(capturedBlob).toBeDefined();
     const wrapper = await capturedBlob!.text();
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
@@ -221,11 +275,12 @@ describe('sandboxed preview Blob exports', () => {
   it('preserves deck print handling inside sandboxed PDF exports', async () => {
     exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
 
-    expect(openedFeatures).toBe('noopener,noreferrer');
+    expect(openCalls).toEqual([['', '_blank']]);
+    expect(mockWin.opener).toBeNull();
+    expect(mockWin.location.href).toBe('blob:test');
     expect(capturedBlob).toBeDefined();
     const wrapper = await capturedBlob!.text();
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
-    expect(wrapper).not.toContain('allow-same-origin');
     expect(wrapper).toContain('data-deck-print=&quot;injected&quot;');
     expect(wrapper).toContain('page-break-after: always;');
   });
@@ -235,10 +290,27 @@ describe('sandboxed preview Blob exports', () => {
       sandboxedPreview: false,
     });
 
-    expect(openedFeatures).toBeUndefined();
+    expect(openCalls).toEqual([['', '_blank']]);
+    expect(mockWin.opener).toEqual({});
+    expect(mockWin.location.href).toBe('blob:test');
     expect(capturedBlob).toBeDefined();
     const doc = await capturedBlob!.text();
     expect(doc).not.toContain('sandbox="allow-scripts allow-modals"');
     expect(doc).toContain('<main>Trusted local document</main>');
+  });
+
+  it('shows an alert and revokes the blob URL when the popup is blocked', async () => {
+    vi.stubGlobal('window', {
+      ...window,
+      open: () => null,
+    });
+
+    const revokeSpy = URL.revokeObjectURL as ReturnType<typeof vi.fn>;
+    revokeSpy.mockClear();
+
+    exportAsPdf('<p>test</p>', 'Blocked');
+
+    expect(alert).toHaveBeenCalledWith('Popup blocked! Please allow popups for this site to export as PDF.');
+    expect(revokeSpy).toHaveBeenCalledWith('blob:test');
   });
 });

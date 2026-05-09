@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_CONFIG,
   loadConfig,
+  mergeDaemonConfig,
+  saveConfig,
   syncComposioConfigToDaemon,
+  syncConfigToDaemon,
+  syncMediaProvidersToDaemon,
 } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
@@ -52,6 +56,144 @@ describe('syncComposioConfigToDaemon', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
     });
+  });
+});
+
+describe('syncConfigToDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('syncs per-agent CLI env prefs to the daemon app config', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe('/api/app-config');
+    expect(init.method).toBe('PUT');
+    expect(init.headers).toEqual({ 'content-type': 'application/json' });
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      onboardingCompleted: DEFAULT_CONFIG.onboardingCompleted,
+      agentId: DEFAULT_CONFIG.agentId,
+      agentModels: DEFAULT_CONFIG.agentModels,
+      skillId: DEFAULT_CONFIG.skillId,
+      designSystemId: DEFAULT_CONFIG.designSystemId,
+      agentCliEnv: {
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
+      },
+    });
+  });
+
+  it('syncs daemon-owned privacy decision fields', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      installationId: 'install-1',
+      privacyDecisionAt: 1778244000000,
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      installationId: 'install-1',
+      privacyDecisionAt: 1778244000000,
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+  });
+});
+
+describe('syncMediaProvidersToDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('throws when a forced media sync fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })));
+
+    await expect(
+      syncMediaProvidersToDaemon({}, { force: true, throwOnError: true }),
+    ).rejects.toThrow('Media config save failed');
+  });
+});
+
+describe('mergeDaemonConfig', () => {
+  it('clears stale local CLI env prefs when the daemon has none', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-old' },
+        },
+      },
+      {
+        agentId: 'codex',
+      },
+    );
+
+    expect(merged.agentId).toBe('codex');
+    expect(merged.agentCliEnv).toEqual({});
+  });
+
+  it('uses daemon CLI env prefs instead of merging with stale local entries', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-old' },
+        },
+      },
+      {
+        agentCliEnv: {
+          codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
+        },
+      },
+    );
+
+    expect(merged.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
+    });
+  });
+
+  it('copies privacyDecisionAt from daemon config', () => {
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
+      installationId: 'install-1',
+      privacyDecisionAt: 1778244000000,
+      telemetry: { metrics: true },
+    });
+
+    expect(merged.installationId).toBe('install-1');
+    expect(merged.privacyDecisionAt).toBe(1778244000000);
+    expect(merged.telemetry).toEqual({ metrics: true });
+  });
+
+  it('migrates old daemon privacy config to a resolved decision', () => {
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
+      installationId: 'install-1',
+      telemetry: { metrics: true },
+    });
+
+    expect(merged.installationId).toBe('install-1');
+    expect(typeof merged.privacyDecisionAt).toBe('number');
   });
 });
 
@@ -117,6 +259,65 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(1);
   });
 
+  it('migrates legacy Ollama Cloud configs to an explicit ollama apiProtocol', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'ollama-key',
+      baseUrl: 'https://ollama.com',
+      model: 'gpt-oss:120b',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.mode).toBe('api');
+    expect(config.baseUrl).toBe('https://ollama.com');
+    expect(config.model).toBe('gpt-oss:120b');
+    expect(config.apiProtocol).toBe('ollama');
+    expect(config.apiProviderBaseUrl).toBe('https://ollama.com');
+    expect(config.configMigrationVersion).toBe(1);
+  });
+
+  it('migrates legacy ollama.com configs with a custom base URL path', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'ollama-key',
+      baseUrl: 'https://ollama.com/api',
+      model: 'deepseek-v4-pro',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('ollama');
+    // /api suffix must be stripped so the daemon doesn't build /api/api/chat.
+    expect(config.baseUrl).toBe('https://ollama.com');
+  });
+
+  it('migrates legacy ollama.com configs with a trailing /api/ suffix', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'ollama-key',
+      baseUrl: 'https://ollama.com/api/',
+      model: 'glm-5',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('ollama');
+    expect(config.baseUrl).toBe('https://ollama.com');
+  });
+
   it('does not overwrite an already explicit apiProtocol', () => {
     const explicitConfig: Partial<AppConfig> = {
       mode: 'api',
@@ -156,6 +357,41 @@ describe('loadConfig', () => {
     expect(config.apiProtocol).toBe('anthropic');
   });
 
+  it('preserves a valid saved accent color', () => {
+    const savedConfig: Partial<AppConfig> = {
+      theme: 'dark',
+      accentColor: '#4F46E5',
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    const config = loadConfig();
+
+    expect(config.theme).toBe('dark');
+    expect(config.accentColor).toBe('#4f46e5');
+  });
+
+  it('falls back to the default accent color for malformed saved colors', () => {
+    const savedConfig: Partial<AppConfig> = {
+      accentColor: 'blue',
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    expect(loadConfig().accentColor).toBe(DEFAULT_CONFIG.accentColor);
+  });
+
+  it('falls back to the default Orbit time for out-of-range saved times', () => {
+    const savedConfig: Partial<AppConfig> = {
+      orbit: {
+        enabled: true,
+        time: '99:99',
+        templateSkillId: 'orbit-general',
+      },
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    expect(loadConfig().orbit?.time).toBe(DEFAULT_CONFIG.orbit?.time);
+  });
+
   it('returns defaults for malformed localStorage JSON', () => {
     store.set('open-design:config', '{broken-json');
 
@@ -165,5 +401,21 @@ describe('loadConfig', () => {
   it('sets an explicit apiProtocol for new default configs', () => {
     expect(DEFAULT_CONFIG.apiProtocol).toBe('anthropic');
     expect(DEFAULT_CONFIG.configMigrationVersion).toBe(1);
+  });
+});
+
+describe('saveConfig', () => {
+  it('keeps daemon-owned privacy fields out of localStorage', () => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      installationId: 'install-1',
+      privacyDecisionAt: 1778244000000,
+      telemetry: { metrics: true },
+    });
+
+    const saved = JSON.parse(store.get('open-design:config') ?? '{}');
+    expect(saved.installationId).toBeUndefined();
+    expect(saved.privacyDecisionAt).toBeUndefined();
+    expect(saved.telemetry).toBeUndefined();
   });
 });

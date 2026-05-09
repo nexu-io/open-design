@@ -1,6 +1,6 @@
 # Open Design
 
-> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **10 種類の coding-agent CLI**（Claude Code、Codex、Cursor Agent、Gemini CLI、OpenCode、Qwen、GitHub Copilot CLI、Hermes、Kimi、Pi）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
+> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — ノートパソコン上のエージェントとデザインする" width="100%" />
@@ -20,15 +20,15 @@
   <a href="https://open-design.ai/"><img alt="ダウンロード" src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-open--design.ai-ff6b35?style=flat-square" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-10%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
+  <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
   <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
   <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
+  <a href="QUICKSTART.ja-JP.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -44,7 +44,7 @@ Anthropic の [Claude Design][cd]（2026-04-17 リリース、Opus 4.7 搭載）
 
 OD は 4 つのオープンソースプロジェクトの上に立っています：
 
-- [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) — デザイン哲学の羅針盤。Junior-Designer ワークフロー、5 ステップのブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、そしてディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」のアイデア — すべて [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) に蒸留されています。
+- [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) — デザイン哲学の羅針盤。Junior-Designer ワークフロー、5 ステップのブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、そしてディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」のアイデア — すべて [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) に蒸留されています。
 - [**`op7418/guizang-ppt-skill`**（歸藏の雑誌風 PPT Skill）](https://github.com/op7418/guizang-ppt-skill) — Deck モード。[`skills/guizang-ppt/`](skills/guizang-ppt/) 以下にオリジナルのまま同梱、元の LICENSE を保持。雑誌レイアウト、WebGL hero、P0/P1/P2 チェックリスト。
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — UX の北極星であり、最も近い同類プロジェクト。初のオープンソース Claude-Design 代替。ストリーミング artifact ループ、サンドボックス iframe プレビュー（React 18 + Babel 同梱）、ライブエージェントパネル（todo + tool calls + 中断可能な生成）、5 種類のエクスポート形式リスト（HTML / PDF / PPTX / ZIP / Markdown）を借用。形態では意図的に分岐しています — 彼らは [`pi-ai`][piai] を同梱するデスクトップ Electron アプリ、私たちは既存の CLI に委任する Web アプリ + ローカル daemon です。
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — Daemon とランタイムのアーキテクチャ。PATH スキャンによるエージェント検出、ローカル daemon を唯一の特権プロセスとする思想、agent-as-teammate の世界観。
@@ -53,12 +53,12 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 
 | | 提供される機能 |
 |---|---|
-| **Coding-agent CLI（10 種類）** | Claude Code · Codex CLI · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · GitHub Copilot CLI · Hermes（ACP）· Kimi CLI（ACP）· Pi（RPC）— `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
+| **Coding-agent CLI（16 種類）** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
 | **BYOK フォールバック** | OpenAI 互換プロキシ `/api/proxy/stream` — `baseUrl` + `apiKey` + `model` を貼れば、任意のベンダー（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、セルフホスト vLLM、その他の OpenAI 互換プロバイダ）がエンジンになります。daemon 側で loopback / link-local / RFC1918 を拒否し SSRF を防御。 |
 | **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **メディア生成** | 画像 · 動画 · 音声サーフェスがデザインループと並走。**gpt-image-2**（Azure / OpenAI）でポスター・アバター・インフォグラフィック・イラスト都市マップ · **Seedance 2.0**（ByteDance）で 15 秒のシネマティック text-to-video / image-to-video · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）で HTML→MP4 のモーショングラフィック（プロダクトリビール、キネティックタイポグラフィ、データチャート、ソーシャルオーバーレイ、ロゴアウトロ）。**93 件**のすぐ複製できる prompt ギャラリー — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames、すべて [`prompt-templates/`](prompt-templates/) にプレビュー画像と出典付きで配置。Chat の入口はコードと同じ；実体の `.mp4` / `.png` がプロジェクトワークスペースに chip として落ちます。 |
-| **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)） |
+| **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **デバイスフレーム** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — ピクセル単位で正確、Skill 間で共有、[`assets/frames/`](assets/frames/) に集約 |
 | **エージェントランタイム** | ローカル daemon がプロジェクトフォルダ内で CLI を spawn — エージェントは実際のディスク上で `Read` / `Write` / `Bash` / `WebFetch` を使用。各 adapter に Windows `ENAMETOOLONG` フォールバック（stdin / 一時 prompt ファイル）あり |
 | **インポート** | [Claude Design][cd] のエクスポート ZIP をウェルカムダイアログにドロップ — `POST /api/import/claude-design` が実プロジェクトとして展開し、Anthropic の中断箇所からエージェントが編集を続行 |
@@ -220,7 +220,7 @@ Skill の追加はフォルダ 1 つで完了します。拡張 frontmatter の�
 
 ### 1 · エージェントは同梱しない — あなたのもので十分
 
-Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/mariozechner/pi-ai) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
+Daemon は起動時に `PATH` を走査し、[`claude`](https://docs.anthropic.com/en/docs/claude-code)、[`codex`](https://github.com/openai/codex)、[`cursor-agent`](https://www.cursor.com/cli)、[`gemini`](https://github.com/google-gemini/gemini-cli)、[`opencode`](https://opencode.ai/)、[`qwen`](https://github.com/QwenLM/qwen-code)、`qodercli`、[`copilot`](https://github.com/features/copilot/cli)、`hermes`、`kimi`、[`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) を検索します。見つかったものすべてが候補デザインエンジンになります — stdio 経由で CLI ごとに 1 つの adapter を持ち、モデルピッカーからワンクリックで切り替え可能。[`multica`](https://github.com/multica-ai/multica) と [`cc-switch`](https://github.com/farion1231/cc-switch) に着想を得ています。CLI が 1 つもない？`POST /api/proxy/stream` が spawn を除いた同じパイプラインです — 任意の OpenAI 互換 `baseUrl` + `apiKey` を貼れば、daemon が SSE チャンクをブラウザに転送し、loopback / link-local / RFC1918 はエッジで拒否されます。
 
 ### 2 · Skill はファイルであり、プラグインではない
 
@@ -254,7 +254,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
   + （deck kind かつ Skill seed なし時） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
 ```
 
-すべてのレイヤーが組み合わせ可能で、すべてのレイヤーが編集可能なファイルです。実際の契約は [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) と [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) で確認できます。
+すべてのレイヤーが組み合わせ可能で、すべてのレイヤーが編集可能なファイルです。実際の契約は [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) と [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) で確認できます。
 
 ## アーキテクチャ
 
@@ -282,7 +282,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · gemini · opencode · cursor-agent · qwen        │
-   │  copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
+   │  qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC)                  │
    │  SKILL.md + DESIGN.md を読み、artifact をディスクに書き出す         │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -291,7 +291,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
 |---|---|
 | フロントエンド | Next.js 16 App Router + React 18 + TypeScript、Vercel デプロイ可能 |
 | Daemon | Node 24 · Express · SSE ストリーミング · `better-sqlite3`；テーブル：`projects` · `conversations` · `messages` · `tabs` · `templates` |
-| エージェント転送 | `child_process.spawn`；Claude Code は `claude-stream-json`、Copilot は `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent は `json-event-stream`（CLI ごとのパーサー）、Hermes / Kimi は `acp-json-rpc`（Agent Client Protocol）、Pi は `pi-rpc`（stdio JSON-RPC）、Qwen Code は `plain` |
+| エージェント転送 | `child_process.spawn`；Claude Code は `claude-stream-json`、Qoder CLI は `qoder-stream-json`、Copilot は `copilot-stream-json`、Codex / Gemini / OpenCode / Cursor Agent は `json-event-stream`（CLI ごとのパーサー）、Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe は `acp-json-rpc`（Agent Client Protocol）、Pi は `pi-rpc`（stdio JSON-RPC）、Qwen Code / DeepSeek TUI は `plain` |
 | BYOK プロキシ | `POST /api/proxy/stream` → OpenAI 互換 `/v1/chat/completions` SSE パススルー；daemon エッジで loopback / link-local / RFC1918 を拒否 |
 | ストレージ | プレーンファイル `.od/projects/<id>/` + SQLite `.od/app.sqlite`（gitignore 済み、daemon 起動時に自動作成）。`OD_DATA_DIR` でルートを変更可能（テスト分離用） |
 | プレビュー | サンドボックス iframe（`srcdoc`）+ Skill ごとの `<artifact>` パーサー（[`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)） |
@@ -322,7 +322,7 @@ pnpm tools-dev run web
 
 環境要件：Node `~24`、pnpm `10.33.x`。`nvm` / `fnm` はあくまでオプションのヘルパーです。使用する場合は `pnpm install` の前に `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。
 
-デスクトップ / バックグラウンド起動、固定ポート再起動、メディア生成ディスパッチャの確認（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）は [`QUICKSTART.md`](QUICKSTART.md) を参照。
+デスクトップ / バックグラウンド起動、固定ポート再起動、メディア生成ディスパッチャの確認（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）は [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md) を参照。
 
 初回ロード時：
 
@@ -350,7 +350,7 @@ Daemon はリポジトリルートに 1 つの隠しフォルダを管理しま�
 | 完全にリセット | `pnpm tools-dev stop` → `rm -rf .od` → `pnpm tools-dev run web` を再実行 |
 | 別の場所に移動 | 未対応 — パスはリポジトリルートからの相対パスで固定 |
 
-完全なファイルマップ、スクリプト、トラブルシューティング → [`QUICKSTART.md`](QUICKSTART.md)。
+完全なファイルマップ、スクリプト、トラブルシューティング → [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md)。
 
 ## リポジトリ構成
 
@@ -491,7 +491,7 @@ open-design/
 | Brutalist | 生々しい、巨大タイプ、シャドウなし、鮮烈なアクセント | Bloomberg Businessweek · Achtung |
 | Soft warm | おおらか、低コントラスト、ピーチ系ニュートラル | Notion マーケティングページ · Apple Health |
 
-完全な仕様 → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
+完全な仕様 → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)。
 
 ## メディア生成
 
@@ -576,12 +576,12 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 - **タブ永続化。** 各プロジェクトは開いているファイルとアクティブタブを `tabs` テーブルに記録。翌日開いてもワークスペースは昨日の状態そのまま。
 - **Artifact lint API。** `POST /api/artifacts/lint` は生成された artifact に対して構造チェックを実行（`<artifact>` フレーミングの破損、必須副ファイルの欠落、古いパレットトークン）し、エージェントが次のターンで読み返せる findings を返します。五次元セルフ評価はこれを使ってスコアを vibes ではなくエビデンスに基づかせます。
 - **Sidecar プロトコル + デスクトップ自動化。** Daemon、web、desktop プロセスは型付き 5 フィールドスタンプ（`app · mode · namespace · ipc · source`）を持ち、`/tmp/open-design/ipc/<namespace>/<app>.sock` に JSON-RPC IPC チャネルを公開。`tools-dev inspect desktop status \| eval \| screenshot` はこのチャネル上で動作するため、ヘッドレス E2E テストが実際の Electron シェルに対して、カスタムハーネスなしで実行可能（[`packages/sidecar-proto/`](packages/sidecar-proto/)、[`apps/desktop/src/main/`](apps/desktop/src/main/)）。
-- **Windows フレンドリーな spawn。** 長いプロンプトで `CreateProcess` の約 32 KB argv 上限に達する adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Pi）はすべて stdin 経由でプロンプトを渡します。Claude Code と Copilot は `-p` を維持。stdin でも溢れる場合、daemon は一時 prompt ファイルにフォールバック。
+- **Windows フレンドリーな spawn。** 長いプロンプトで `CreateProcess` の約 32 KB argv 上限に達する adapter（Codex、Gemini、OpenCode、Cursor Agent、Qwen、Qoder CLI、Pi）はすべて stdin 経由でプロンプトを渡します。Claude Code と Copilot は `-p` を維持。stdin でも溢れる場合、daemon は一時 prompt ファイルにフォールバック。
 - **ネームスペースごとのランタイムデータ分離。** `OD_DATA_DIR` + `--namespace` で完全に分離された `.od/` スタイルのディレクトリツリーを提供。Playwright、beta チャネル、本番プロジェクトが同一 SQLite ファイルを共有することはありません。
 
 ## anti-AI-slop 機構
 
-以下の機構はすべて [`huashu-design`](https://github.com/alchaincyf/huashu-design) のプレイブックを OD のプロンプトスタックに移植し、Skill 副ファイルの pre-flight で各 Skill に適用可能にしたものです。実際の文言は [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) を参照：
+以下の機構はすべて [`huashu-design`](https://github.com/alchaincyf/huashu-design) のプレイブックを OD のプロンプトスタックに移植し、Skill 副ファイルの pre-flight で各 Skill に適用可能にしたものです。実際の文言は [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) を参照：
 
 - **まずフォーム。** Turn 1 は `<question-form>` のみ — thinking 禁止、tools 禁止、ナレーション禁止。ユーザーはラジオの速度でデフォルトを選択。
 - **ブランドアセットプロトコル。** ユーザーがスクリーンショットや URL を添付した場合、エージェントは 5 ステップのプロトコル（特定 · ダウンロード · grep hex · `brand-spec.md` 作成 · 復唱）を実行してから CSS を書きます。**記憶からブランドカラーを推測することは絶対にありません。**
@@ -600,7 +600,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 | エージェントランタイム | 同梱 (Opus 4.7) | 同梱 ([`pi-ai`][piai]) | **ユーザーの既存 CLI に委任** |
 | Skill | プロプライエタリ | 12 個のカスタム TS モジュール + `SKILL.md` | **31 個のファイルベース [`SKILL.md`][skill] バンドル、ドロップイン** |
 | Design System | プロプライエタリ | `DESIGN.md`（v0.2 ロードマップ） | **`DESIGN.md` × 72 種、すぐに利用可能** |
-| プロバイダ柔軟性 | Anthropic のみ | 7+（[`pi-ai`][piai]） | **10 種の CLI adapter + OpenAI 互換 BYOK プロキシ** |
+| プロバイダ柔軟性 | Anthropic のみ | 7+（[`pi-ai`][piai]） | **11 種の CLI adapter + OpenAI 互換 BYOK プロキシ** |
 | 初期化質問フォーム | ❌ | ❌ | **✅ ハードルール、turn 1** |
 | ディレクションピッカー | ❌ | ❌ | **✅ 5 つの決定論的ディレクション** |
 | ライブ todo 進捗 + tool ストリーム | ❌ | ✅ | **✅**（UX パターンは open-codesign 由来） |
@@ -618,7 +618,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/mariozechner/pi-ai
+[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
@@ -631,17 +631,23 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 |---|---|---|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json`（型付きイベント） | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + `codex` パーサー | `codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true [-C cwd] [--model …] [-c model_reasoning_effort=…]`（プロンプトは stdin） |
+| Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + `gemini` パーサー | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]`（プロンプトは stdin） |
 | [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + `opencode` パーサー | `opencode run --format json --dangerously-skip-permissions [--model …] -`（プロンプトは stdin） |
 | [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + `cursor-agent` パーサー | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -`（プロンプトは stdin） |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain`（生 stdout チャンク） | `qwen --yolo [--model …] -`（プロンプトは stdin） |
+| Qoder CLI | `qodercli` | `qoder-stream-json`（型付きイベント） | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]`（プロンプトは stdin） |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json`（型付きイベント） | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
 | [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc`（Agent Client Protocol） | `hermes acp --accept-hooks` |
 | Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Pi](https://github.com/mariozechner/pi-ai) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc --no-session [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
+| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc`（stdio JSON-RPC） | `pi --mode rpc [--model …] [--thinking …]`（プロンプトは RPC `prompt` コマンドで送信） |
+| [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
+| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
+| DeepSeek TUI | `deepseek` | `plain`（生 stdout チャンク） | `deepseek exec --auto [--model …] <prompt>` |
 | **OpenAI 互換 BYOK** | n/a | SSE パススルー | `POST /api/proxy/stream` → `<baseUrl>/v1/chat/completions`；loopback / link-local / RFC1918 を拒否 |
 
-新しい CLI の追加 = [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。ストリーム形式は `claude-stream-json` / `copilot-stream-json` / `json-event-stream`（CLI ごとの `eventParser` 付き）/ `acp-json-rpc` / `pi-rpc` / `plain` から選択。
+新しい CLI の追加 = [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) にエントリを 1 つ追加。ストリーム形式は `claude-stream-json` / `qoder-stream-json` / `copilot-stream-json` / `json-event-stream`（CLI ごとの `eventParser` 付き）/ `acp-json-rpc` / `pi-rpc` / `plain` から選択。
 
 ## 参考文献 & 系譜
 
@@ -650,7 +656,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | プロジェクト | 本リポジトリでの役割 |
 |---|---|
 | [`Claude Design`][cd] | 本リポジトリがオープンソース代替を提供するクローズドソースプロダクト。 |
-| [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) | デザイン哲学のコア。Junior-Designer ワークフロー、5 ステップブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、ディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」ライブラリ — すべて [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) と [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts) に蒸留。 |
+| [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) | デザイン哲学のコア。Junior-Designer ワークフロー、5 ステップブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、ディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」ライブラリ — すべて [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) と [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts) に蒸留。 |
 | [**`op7418/guizang-ppt-skill`**（歸藏）][guizang] | Magazine-web-PPT Skill を [`skills/guizang-ppt/`](skills/guizang-ppt/) にそのまま同梱、元の LICENSE 保持。Deck モードのデフォルト。P0/P1/P2 チェックリスト文化を他のすべての Skill に波及。 |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + adapter アーキテクチャ。PATH スキャンによるエージェント検出、ローカル daemon を唯一の特権プロセスとする思想、agent-as-teammate の世界観。モデルを採用、コードは vendor せず。 |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 初のオープンソース Claude-Design 代替、最も近い同類。採用済み UX パターン：ストリーミング artifact ループ、サンドボックス iframe プレビュー（React 18 + Babel 同梱）、ライブエージェントパネル（todo + tool calls + 中断可能）、5 種エクスポート形式リスト（HTML/PDF/PPTX/ZIP/Markdown）、ローカルファーストストレージハブ、`SKILL.md` テイスト注入。ロードマップ上の UX パターン：コメントモード精密編集、AI 出力 tweaks パネル。**[`pi-ai`][piai] は意図的に vendor していません** — open-codesign はそれをエージェントランタイムとして同梱していますが、私たちはユーザーの既存 CLI に委任します。 |
@@ -662,7 +668,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 
 ## ロードマップ
 
-- [x] Daemon + エージェント検出（10 種 CLI adapter）+ Skill レジストリ + Design System カタログ
+- [x] Daemon + エージェント検出（11 種 CLI adapter）+ Skill レジストリ + Design System カタログ
 - [x] Web アプリ + チャット + 質問フォーム + 5 つのディレクションピッカー + todo 進捗 + サンドボックスプレビュー
 - [x] 31 個の Skill + 72 種の Design System + 5 つのビジュアルディレクション + 5 つのデバイスフレーム
 - [x] SQLite バックドの projects · conversations · messages · tabs · templates
@@ -706,10 +712,10 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-05" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-09" alt="Open Design コントリビューター" />
 </a>
 
-初めての PR を送った方 — ようこそ。[`good-first-issue`](https://github.com/nexu-io/open-design/contribute) ラベルがエントリポイントです。
+初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
 
 ## リポジトリ活動
 
@@ -723,9 +729,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-05" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-05" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-09" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
   </picture>
 </a>
 
