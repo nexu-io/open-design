@@ -65,6 +65,7 @@ const orbitTemplates = [
     upstream: null,
     hasBody: true,
     examplePrompt: 'General prompt',
+    aggregatesExamples: false,
   },
   {
     id: 'orbit-editorial',
@@ -79,6 +80,7 @@ const orbitTemplates = [
     upstream: null,
     hasBody: true,
     examplePrompt: 'Editorial prompt',
+    aggregatesExamples: false,
   },
 ];
 
