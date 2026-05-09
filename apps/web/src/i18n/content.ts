@@ -458,6 +458,7 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'glassmorphism',
   'gradient',
   'huggingface',
+  'hud',
   'levels',
   'lingo',
   'luxury',
