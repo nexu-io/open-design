@@ -36,6 +36,37 @@ import {
 } from '../media/models';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
+import { Toast } from './Toast';
+
+/**
+ * Best-effort flattening of the `details` field that the
+ * pickAndImport main-process handler attaches when the daemon returned
+ * a structured error envelope (PR #974 round-4 mrcfps). Daemon errors
+ * carry `error.message` and sometimes nested `error.details.reason`;
+ * we surface the most operator-actionable string we can find without
+ * over-coupling to any particular error code.
+ */
+function formatPickAndImportErrorDetails(details: unknown): string | undefined {
+  if (typeof details === 'string' && details.length > 0) return details;
+  if (details == null || typeof details !== 'object') return undefined;
+  const record = details as Record<string, unknown>;
+  const error = record.error;
+  if (error != null && typeof error === 'object') {
+    const errRecord = error as Record<string, unknown>;
+    const message = errRecord.message;
+    const nestedDetails = errRecord.details;
+    if (typeof message === 'string' && message.length > 0) {
+      if (nestedDetails != null && typeof nestedDetails === 'object') {
+        const nestedReason = (nestedDetails as Record<string, unknown>).reason;
+        if (typeof nestedReason === 'string' && nestedReason.length > 0) {
+          return `${message} (${nestedReason})`;
+        }
+      }
+      return message;
+    }
+  }
+  return undefined;
+}
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -136,6 +167,14 @@ export function NewProjectPanel({
   const [importing, setImporting] = useState(false);
   const [baseDir, setBaseDir] = useState('');
   const [importingFolder, setImportingFolder] = useState(false);
+  // PR #974 round-4 (mrcfps): pickAndImport now returns structured
+  // failure shapes (`desktop auth secret not registered`, `web sidecar
+  // URL not available`, `daemon returned HTTP X`) — surfacing them
+  // gives the user a recovery hint instead of a silent no-op.
+  // Shape: `{ message, details? }`. `null` means no toast.
+  const [importFolderError, setImportFolderError] = useState<
+    { message: string; details?: string } | null
+  >(null);
   const [tab, setTab] = useState<CreateTab>('prototype');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
@@ -394,11 +433,32 @@ export function NewProjectPanel({
   async function handleOpenFolder() {
     if (hasElectronPickAndImport) {
       if (!onImportFolderResponse) return;
+      setImportFolderError(null);
       setImportingFolder(true);
       try {
         const result = await window.electronAPI!.pickAndImport!();
-        if (!result || result.ok !== true) return;
-        await onImportFolderResponse(result.response);
+        if (!result) return;
+        if (result.ok === true) {
+          await onImportFolderResponse(result.response);
+          return;
+        }
+        // Round-4 (mrcfps #2): every non-OK shape used to fall through
+        // a silent `return`. Reserve silent for the explicit cancel
+        // case; surface the structured reason for everything else
+        // (auth-not-registered, web-sidecar-down, daemon HTTP errors,
+        // network errors). The pickAndImport handler already pre-shapes
+        // these into a `{ ok: false, reason, details? }` envelope.
+        if ('canceled' in result && result.canceled === true) return;
+        const reason = 'reason' in result && typeof result.reason === 'string'
+          ? result.reason
+          : 'unknown failure';
+        const details = 'details' in result && result.details != null
+          ? formatPickAndImportErrorDetails(result.details)
+          : undefined;
+        setImportFolderError({
+          message: `Open folder failed: ${reason}`,
+          ...(details ? { details } : {}),
+        });
       } finally {
         setImportingFolder(false);
       }
@@ -652,6 +712,14 @@ export function NewProjectPanel({
         ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
+      {importFolderError ? (
+        <Toast
+          message={importFolderError.message}
+          details={importFolderError.details ?? null}
+          ttlMs={6000}
+          onDismiss={() => setImportFolderError(null)}
+        />
+      ) : null}
     </div>
   );
 }

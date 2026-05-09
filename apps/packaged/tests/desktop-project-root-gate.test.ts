@@ -121,7 +121,35 @@ describe("fetchResolvedProjectDir", () => {
 
   it("rejects project ids containing disallowed characters (path traversal guard)", async () => {
     const fetchImpl = vi.fn();
+    // `/` is not in the daemon's `isSafeId` regex `[A-Za-z0-9._-]{1,128}`,
+    // so a path-traversal attempt is rejected before the request is
+    // built (no leakage to the daemon, no fetch attempted).
     const result = await fetchResolvedProjectDir("http://localhost:1234", "../escape", fetchImpl);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/disallowed characters/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("accepts dotted project ids that the daemon also accepts", async () => {
+    // PR #974 round-4 mrcfps: the prior regex was stricter than
+    // `apps/daemon/src/projects.ts#isSafeId` (which allows `.`), so
+    // legitimate ids like `my-project.v2` regressed Continue in CLI /
+    // Finalize even though the backend created them happily.
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ project: { id: "my-project.v2" }, resolvedDir: "/p" }),
+        { status: 200 },
+      ),
+    );
+    const result = await fetchResolvedProjectDir("http://localhost:1234", "my-project.v2", fetchImpl);
+    expect(result.ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledWith("http://localhost:1234/api/projects/my-project.v2");
+  });
+
+  it("rejects project ids longer than the daemon's 128-char cap", async () => {
+    const fetchImpl = vi.fn();
+    const tooLong = "a".repeat(129);
+    const result = await fetchResolvedProjectDir("http://localhost:1234", tooLong, fetchImpl);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/disallowed characters/i);
     expect(fetchImpl).not.toHaveBeenCalled();

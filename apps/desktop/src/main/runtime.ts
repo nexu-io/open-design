@@ -125,8 +125,13 @@ export async function fetchResolvedProjectDir(
   }
   // Reject obviously malformed ids before sending — the daemon enforces
   // its own isSafeId check, but the floor here keeps URL construction
-  // honest and short-circuits trivial malicious input.
-  if (!/^[a-zA-Z0-9_-]+$/.test(projectId)) {
+  // honest and short-circuits trivial malicious input. The regex mirrors
+  // `apps/daemon/src/projects.ts#isSafeId` and `POST /api/projects`'s
+  // `[A-Za-z0-9._-]{1,128}` shape (round-4 mrcfps): legitimate dotted
+  // ids like `my-project.v2` would otherwise be rejected here even
+  // though the backend accepted them at create time, regressing
+  // Continue in CLI / Finalize on those projects.
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(projectId)) {
     return { ok: false, reason: "project id contains disallowed characters" };
   }
   let resp: Response;
