@@ -43,7 +43,7 @@ Anthropic [Claude Design][cd] (выпущен 2026-04-17, на Opus 4.7) пок�
 
 OD стоит на плечах четырёх open-source проектов:
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — философский компас дизайна. Junior-Designer workflow, 5-step protocol для brand assets, anti-AI-slop checklist, 5-dimensional self-critique и идея «5 schools × 20 design philosophies» для выбора направления — всё это distilled в [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts).
+- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — философский компас дизайна. Junior-Designer workflow, 5-step protocol для brand assets, anti-AI-slop checklist, 5-dimensional self-critique и идея «5 schools × 20 design philosophies» для выбора направления — всё это distilled в [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts).
 - [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — режим deck. Встроен без изменений в [`skills/guizang-ppt/`](skills/guizang-ppt/) с сохранением исходной LICENSE; журнальные раскладки, WebGL hero и P0/P1/P2 checklists.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — UX-северная звезда и наш ближайший peer. Мы заимствуем streaming-artifact loop, шаблон sandboxed iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible generation) и набор из пяти форматов экспорта (HTML / PDF / PPTX / ZIP / Markdown). Осознанное расхождение — в форм-факторе: они делают desktop Electron app с bundled [`pi-ai`][piai], мы — web app + local daemon, делегирующий работу вашему существующему CLI.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — архитектура демона и runtime. PATH-scan detection агентов, local daemon как единственный привилегированный процесс и мировоззрение agent-as-teammate.
@@ -57,7 +57,7 @@ OD стоит на плечах четырёх open-source проектов:
 | **Design systems built-in** | **129** — 2 вручную написанных стартера + 70 продуктовых систем (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) из [`awesome-design-md`][acd2], плюс 57 design skills из [`awesome-design-skills`][ads], добавленных напрямую в `design-systems/` |
 | **Skills built-in** | **31** — 27 в режиме `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 в режиме `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). В picker группируются по `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Media generation** | Режимы image · video · audio идут рядом с дизайн-циклом. **gpt-image-2** (Azure / OpenAI) — для постеров, аватаров, инфографики и иллюстрированных карт; **Seedance 2.0** (ByteDance) — для кинематографичных 15s text-to-video и image-to-video; **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) — для HTML→MP4 motion graphics (product reveals, kinetic typography, charts, social overlays, logo outros). Галерея из **93 готовых к воспроизведению промптов** — 43 для gpt-image-2, 39 для Seedance и 11 для HyperFrames — лежит в [`prompt-templates/`](prompt-templates/), с preview thumbnail и указанием источника. Тот же чатовый surface, что и для кода; на выходе в проектном workspace появляется реальный `.mp4` / `.png`. |
-| **Visual directions** | 5 отобранных школ (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — каждая с детерминированной OKLch-палитрой и стеком шрифтов ([`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)) |
+| **Visual directions** | 5 отобранных школ (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — каждая с детерминированной OKLch-палитрой и стеком шрифтов ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-perfect, общие для навыков, хранятся в [`assets/frames/`](assets/frames/) |
 | **Agent runtime** | Local daemon запускает CLI в папке проекта — агент получает реальные `Read`, `Write`, `Bash`, `WebFetch` поверх реальной on-disk среды, с Windows fallback’ами для `ENAMETOOLONG` (stdin / prompt-file) на каждом адаптере |
 | **Imports** | Перетащите ZIP-экспорт из [Claude Design][cd] в welcome dialog — `POST /api/import/claude-design` превратит его в реальный проект, чтобы ваш агент продолжил редактирование там, где остановился Anthropic |
@@ -254,7 +254,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
 ```
 
-Каждый слой компонуем. Каждый слой — это файл, который можно редактировать. Откройте [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) и [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts), чтобы увидеть реальный контракт.
+Каждый слой компонуем. Каждый слой — это файл, который можно редактировать. Откройте [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) и [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts), чтобы увидеть реальный контракт.
 
 ## Архитектура
 
@@ -496,7 +496,7 @@ open-design/
 | Brutalist | Сырой, с крупной типографикой, без теней, с жёсткими акцентами | Bloomberg Businessweek · Achtung |
 | Soft warm | Просторный, низкоконтрастный, в персиково-нейтральной гамме | Notion marketing · Apple Health |
 
-Полная спецификация → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts).
+Полная спецификация → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts).
 
 ## Генерация медиа
 
@@ -586,7 +586,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 
 ## Механика против AI-slop
 
-Вся эта механика — прямое переложение методологии [`huashu-design`](https://github.com/alchaincyf/huashu-design) в prompt stack OD с enforce’ом через side-file pre-flight. Текущие формулировки можно посмотреть в [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts):
+Вся эта механика — прямое переложение методологии [`huashu-design`](https://github.com/alchaincyf/huashu-design) в prompt stack OD с enforce’ом через side-file pre-flight. Текущие формулировки можно посмотреть в [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts):
 
 - **Сначала question form.** Ход 1 — только `<question-form>`, без размышлений, без tools, без narration. Пользователь выбирает дефолты со скоростью radio-click.
 - **Извлечение brand spec.** Если пользователь прикладывает screenshot или URL, агент перед написанием CSS проходит пятишаговый протокол (locate · download · grep hex · codify `brand-spec.md` · vocalise). **Никогда не угадывает brand colors по памяти.**
@@ -661,7 +661,7 @@ OD не заканчивается на коде. Тот же чатовый sur
 | Project | Роль в проекте |
 |---|---|
 | [`Claude Design`][cd] | Закрытый продукт, для которого этот репозиторий служит open-source альтернативой. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | Ядро дизайн-философии. Junior-Designer workflow, 5-step protocol для brand assets, anti-AI-slop checklist, пятимерная самокритика и библиотека «5 schools × 20 design philosophies» для direction picker’а — всё это distilled в [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) и [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts). |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | Ядро дизайн-философии. Junior-Designer workflow, 5-step protocol для brand assets, anti-AI-slop checklist, пятимерная самокритика и библиотека «5 schools × 20 design philosophies» для direction picker’а — всё это distilled в [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) и [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Skill для magazine-web-PPT, встроенный без изменений в [`skills/guizang-ppt/`](skills/guizang-ppt/) с сохранением оригинальной LICENSE. Используется по умолчанию в режиме deck. Культура P0/P1/P2 checklist’ов позаимствована для всех остальных skills. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Архитектура демона и адаптеров. PATH-scan detection агентов, local daemon как единственный привилегированный процесс, worldview agent-as-teammate. Мы переняли модель, а не vendored code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | Первая open-source альтернатива Claude Design и наш ближайший peer. Заимствованные UX-паттерны: streaming-artifact loop, sandboxed iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), список из пяти экспортных форматов (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md`-внедрение вкуса и первая версия preview-аннотаций для comment mode. Всё ещё в roadmap: полная надёжность surgical edits и tweaks panel, генерируемая ИИ. **Мы намеренно не вендорим [`pi-ai`][piai]** — open-codesign включает его как runtime агента, а мы делегируем исполнение тому CLI, который уже установлен у пользователя. |
@@ -718,7 +718,7 @@ Issues, PR, новые skills и новые design systems приветству�
 Спасибо всем, кто помогает двигать Open Design вперёд — кодом, документацией, обратной связью, новыми skills, новыми design systems или просто точным issue. Вклад любого реального масштаба здесь важен, а стена ниже — самый простой способ сказать это вслух.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Contributors Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-09" alt="Contributors Open Design" />
 </a>
 
 Если вы только что отправили свой первый PR — добро пожаловать. Метка [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) — хорошая точка входа.
@@ -735,9 +735,9 @@ SVG выше ежедневно пересобирается workflow [`.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
-    <img alt="История звёзд Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-09" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
+    <img alt="История звёзд Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
   </picture>
 </a>
 

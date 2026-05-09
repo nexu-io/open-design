@@ -1,5 +1,5 @@
 export { packMac } from "./build.js";
-export { resolveSeededAppConfigPaths, seedPackagedAppConfig } from "./app-config.js";
+export { PACKAGED_CONFIG_PATH_ENV, resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "./app-config.js";
 export {
   cleanupPackedMacNamespace,
   installPackedMacDmg,

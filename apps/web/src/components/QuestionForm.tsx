@@ -21,6 +21,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
   const initial = useMemo(() => buildInitialState(form, submittedAnswers), [form, submittedAnswers]);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
+  const currentAnswers = submittedAnswers ?? answers;
 
   function update(id: string, value: string | string[]) {
     if (locked) return;
@@ -43,7 +44,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
   function missingRequired(): string | null {
     for (const q of form.questions) {
       if (!q.required) continue;
-      const v = answers[q.id];
+      const v = currentAnswers[q.id];
       if (Array.isArray(v) ? v.length === 0 : !(typeof v === 'string' && v.trim().length > 0)) {
         return q.label;
       }
@@ -66,11 +67,11 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
   const required = form.questions.filter((q) => q.required);
   const withinSelectionLimits = form.questions.every((q) => {
     if (q.type !== 'checkbox' || q.maxSelections === undefined) return true;
-    const v = answers[q.id];
+    const v = currentAnswers[q.id];
     return !Array.isArray(v) || v.length <= q.maxSelections;
   });
   const ready = withinSelectionLimits && required.every((q) => {
-    const v = answers[q.id];
+    const v = currentAnswers[q.id];
     return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
   });
 
@@ -88,7 +89,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
       </div>
       <div className="question-form-body">
         {form.questions.map((q) => {
-          const value = answers[q.id];
+          const value = currentAnswers[q.id];
           return (
             <div key={q.id} className="qf-field">
               <label className="qf-label">

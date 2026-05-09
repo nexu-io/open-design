@@ -88,6 +88,7 @@ async function writeStandaloneFixture(
 async function runFixture(options: {
   includeHoistedNext?: boolean;
   includeWebNext: boolean;
+  omitMacAdhocBundleSign?: boolean;
   platformName?: "darwin" | "win32";
   useAbsolutePnpmSymlinks?: boolean;
 }): Promise<{
@@ -119,6 +120,7 @@ async function runFixture(options: {
     `${JSON.stringify(
       {
         auditReportPath,
+        ...(options.omitMacAdhocBundleSign ? {} : { macAdhocBundleSign: false }),
         pruneCopiedSharp: false,
         pruneRootNext: false,
         pruneRootSharp: false,
@@ -201,6 +203,22 @@ describe("web standalone afterPack hook", () => {
     await expect(runFixture({ includeHoistedNext: false, includeWebNext: false })).rejects.toThrow(
       /copied standalone app-local Next package missing/,
     );
+  });
+
+  it("defaults the mac ad-hoc signing hook option off for win32 configs", async () => {
+    const fixture = await runFixture({ includeWebNext: true, omitMacAdhocBundleSign: true });
+
+    try {
+      const report = JSON.parse(await readFile(fixture.auditReportPath, "utf8")) as {
+        macAdhocBundleSign: unknown[];
+        platformName: string;
+      };
+
+      expect(report.platformName).toBe("win32");
+      expect(report.macAdhocBundleSign).toEqual([]);
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
   });
 
   it("rewrites darwin copied pnpm symlinks to stay inside the packaged resource", async () => {

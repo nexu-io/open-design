@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
@@ -22,21 +21,48 @@ import {
 } from '../src/agents.js';
 import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../src/mcp-live-artifacts-server.js';
 
-const codex = AGENT_DEFS.find((agent) => agent.id === 'codex');
-const hermes = AGENT_DEFS.find((agent) => agent.id === 'hermes');
-const kimi = AGENT_DEFS.find((agent) => agent.id === 'kimi');
+type TestAgentDef = (typeof AGENT_DEFS)[number];
 
-const copilot = AGENT_DEFS.find((agent) => agent.id === 'copilot');
-const cursorAgent = AGENT_DEFS.find((agent) => agent.id === 'cursor-agent');
-const kiro = AGENT_DEFS.find((agent) => agent.id === 'kiro');
-const kilo = AGENT_DEFS.find((agent) => agent.id === 'kilo');
-const vibe = AGENT_DEFS.find((agent) => agent.id === 'vibe');
-const claude = AGENT_DEFS.find((agent) => agent.id === 'claude');
-const devin = AGENT_DEFS.find((agent) => agent.id === 'devin');
-const pi = AGENT_DEFS.find((agent) => agent.id === 'pi');
-const deepseek = AGENT_DEFS.find((agent) => agent.id === 'deepseek');
-const gemini = AGENT_DEFS.find((agent) => agent.id === 'gemini');
-const qoder = AGENT_DEFS.find((agent) => agent.id === 'qoder');
+function requireAgent(id: string): TestAgentDef {
+  const agent = AGENT_DEFS.find((candidate) => candidate.id === id);
+  assert.ok(agent, `missing agent definition for ${id}`);
+  return agent;
+}
+
+function minimalAgentDef(partial: Pick<TestAgentDef, 'bin'> & Partial<TestAgentDef>): TestAgentDef {
+  const { bin, ...rest } = partial;
+  return {
+    id: partial.id ?? `test-${bin}`,
+    name: partial.name ?? bin,
+    bin,
+    versionArgs: partial.versionArgs ?? ['--version'],
+    fallbackModels: partial.fallbackModels ?? [{ id: 'default', label: 'Default' }],
+    buildArgs: partial.buildArgs ?? (() => []),
+    streamFormat: partial.streamFormat ?? 'plain',
+    ...rest,
+  } as unknown as TestAgentDef;
+}
+
+const codex = requireAgent('codex');
+const hermes = requireAgent('hermes');
+const kimi = requireAgent('kimi');
+
+const copilot = requireAgent('copilot');
+const cursorAgent = requireAgent('cursor-agent');
+const kiro = requireAgent('kiro');
+const kilo = requireAgent('kilo');
+const vibe = requireAgent('vibe');
+const claude = requireAgent('claude');
+const devin = requireAgent('devin');
+const pi = requireAgent('pi');
+const deepseek = requireAgent('deepseek');
+const gemini = requireAgent('gemini');
+const qoder = requireAgent('qoder');
+const deepseekMaxPromptArgBytes = deepseek.maxPromptArgBytes;
+assert.ok(
+  deepseekMaxPromptArgBytes !== undefined,
+  'deepseek must define maxPromptArgBytes for argv budget tests',
+);
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
@@ -44,7 +70,10 @@ const originalAgentHome = process.env.OD_AGENT_HOME;
 const originalDaemonUrl = process.env.OD_DAEMON_URL;
 const originalToolToken = process.env.OD_TOOL_TOKEN;
 const originalNpmConfigPrefix = process.env.NPM_CONFIG_PREFIX;
+const originalPathExt = process.env.PATHEXT;
+const originalVpHome = process.env.VP_HOME;
 const originalFetch = globalThis.fetch;
+const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
 
 afterEach(() => {
   if (originalDisablePlugins == null) {
@@ -78,8 +107,29 @@ afterEach(() => {
   } else {
     process.env.NPM_CONFIG_PREFIX = originalNpmConfigPrefix;
   }
+  if (originalPathExt == null) {
+    delete process.env.PATHEXT;
+  } else {
+    process.env.PATHEXT = originalPathExt;
+  }
+  if (originalVpHome == null) {
+    delete process.env.VP_HOME;
+  } else {
+    process.env.VP_HOME = originalVpHome;
+  }
   globalThis.fetch = originalFetch;
+  if (originalPlatformDescriptor) {
+    Object.defineProperty(process, 'platform', originalPlatformDescriptor);
+  }
 });
+
+function withPlatform<T>(platform: NodeJS.Platform, run: () => T): T {
+  Object.defineProperty(process, 'platform', {
+    configurable: true,
+    value: platform,
+  });
+  return run();
+}
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
@@ -145,6 +195,8 @@ test('codex model picker includes current OpenAI choices in priority order', asy
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.3-codex',
+    'gpt-5.1',
+    'gpt-5.1-codex-mini',
     'gpt-5-codex',
     'gpt-5',
     'o3',
@@ -152,6 +204,7 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   ];
 
   assert.deepEqual(codex.fallbackModels.map((m) => m.id), expectedModels);
+  assert.ok(codex.reasoningOptions, 'codex must define reasoningOptions');
   assert.deepEqual(codex.reasoningOptions.map((o) => o.id), [
     'default',
     'none',
@@ -190,10 +243,17 @@ test('codex model picker includes current OpenAI choices in priority order', asy
     assert.ok(detected);
     assert.equal(detected.available, true);
     assert.equal(detected.version, 'codex 1.0.0');
-    assert.deepEqual(detected.models.map((m) => m.id), expectedModels);
+    assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('codex picker includes gpt-5.1 model family', () => {
+  const pickerModels = new Set(codex.fallbackModels.map((model) => model.id));
+
+  assert.equal(pickerModels.has('gpt-5.1'), true);
+  assert.equal(pickerModels.has('gpt-5.1-codex-mini'), true);
 });
 
 // Recent Codex CLI versions reject a bare `-` argv sentinel; passing it
@@ -241,7 +301,7 @@ test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', (
   const args = codex.buildArgs(
     '',
     [],
-    ['/repo/skills', '', null, '/tmp/codex/generated_images', undefined],
+    ['/repo/skills', '', null, '/tmp/codex/generated_images', undefined] as unknown as string[],
     {},
     { cwd: '/tmp/od-project' },
   );
@@ -285,7 +345,7 @@ test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
     buildLiveArtifactsMcpServersForAgent(hermes, {
       command: process.execPath,
       argsPrefix: ['/workspace/apps/daemon/dist/cli.js'],
-    }),
+    } as unknown as Parameters<typeof buildLiveArtifactsMcpServersForAgent>[1]),
     [
       {
         name: 'open-design-live-artifacts',
@@ -314,25 +374,51 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
     assert.equal(tool.inputSchema.type, 'object');
   }
 
-  const initialized = await handleLiveArtifactsMcpRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  const initialized = await handleLiveArtifactsMcpRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }) as { result: { serverInfo: { name: string }; capabilities: unknown } };
   assert.equal(initialized.result.serverInfo.name, 'open-design-live-artifacts');
   assert.deepEqual(initialized.result.capabilities, { tools: {} });
 
-  const listed = await handleLiveArtifactsMcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  const listed = await handleLiveArtifactsMcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) as { result: { tools: Array<{ name: string }> } };
   assert.deepEqual(listed.result.tools.map((tool) => tool.name), tools.map((tool) => tool.name));
 
   const createTool = tools.find((tool) => tool.name === 'live_artifacts_create')!;
   const updateTool = tools.find((tool) => tool.name === 'live_artifacts_update')!;
+  const connectorsListTool = tools.find((tool) => tool.name === 'connectors_list')!;
   const createProperties = createTool.inputSchema.properties as Record<string, unknown>;
   const updateProperties = updateTool.inputSchema.properties as Record<string, unknown>;
+  const connectorsListProperties = connectorsListTool.inputSchema.properties as Record<string, unknown>;
   assert.deepEqual(Object.keys(createProperties).sort(), ['input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
+  assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
+});
+
+test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {
+  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456/base';
+  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ connectors: [] }), { status: 200 });
+  };
+
+  const response = await handleLiveArtifactsMcpRequest({
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'tools/call',
+    params: { name: 'connectors_list', arguments: { useCase: 'personal_daily_digest' } },
+  }) as { error?: unknown };
+
+  assert.equal(response.error, undefined);
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  assert.ok(call);
+  assert.equal(call.url, 'http://127.0.0.1:17456/base/api/tools/connectors/list?useCase=personal_daily_digest');
 });
 
 test('live artifact MCP create forwards input and artifact payload fields to daemon tools', async () => {
   process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
   process.env.OD_TOOL_TOKEN = 'test-tool-token';
-  const calls = [];
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
     return new Response(JSON.stringify({ artifact: { id: 'artifact-1' } }), { status: 200 });
@@ -346,18 +432,21 @@ test('live artifact MCP create forwards input and artifact payload fields to dae
     id: 3,
     method: 'tools/call',
     params: { name: 'live_artifacts_create', arguments: { input, templateHtml, provenanceJson } },
-  });
+  }) as { error?: unknown };
 
   assert.equal(response.error, undefined);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'http://127.0.0.1:17456/api/tools/live-artifacts/create');
-  assert.deepEqual(JSON.parse(calls[0].init.body), { input, templateHtml, provenanceJson });
+  const call = calls[0];
+  assert.ok(call);
+  assert.ok(call.init);
+  assert.equal(call.url, 'http://127.0.0.1:17456/api/tools/live-artifacts/create');
+  assert.deepEqual(JSON.parse(call.init.body as string), { input, templateHtml, provenanceJson });
 });
 
 test('live artifact MCP update preserves nested input and artifact payload fields', async () => {
   process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
   process.env.OD_TOOL_TOKEN = 'test-tool-token';
-  const calls = [];
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
     return new Response(JSON.stringify({ artifact: { id: 'artifact-1', title: 'Updated' } }), { status: 200 });
@@ -371,12 +460,15 @@ test('live artifact MCP update preserves nested input and artifact payload field
     id: 4,
     method: 'tools/call',
     params: { name: 'live_artifacts_update', arguments: { artifactId: 'artifact-1', input, templateHtml, provenanceJson } },
-  });
+  }) as { error?: unknown };
 
   assert.equal(response.error, undefined);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'http://127.0.0.1:17456/api/tools/live-artifacts/update');
-  assert.deepEqual(JSON.parse(calls[0].init.body), { artifactId: 'artifact-1', input, templateHtml, provenanceJson });
+  const call = calls[0];
+  assert.ok(call);
+  assert.ok(call.init);
+  assert.equal(call.url, 'http://127.0.0.1:17456/api/tools/live-artifacts/update');
+  assert.deepEqual(JSON.parse(call.init.body as string), { artifactId: 'artifact-1', input, templateHtml, provenanceJson });
 });
 
 test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
@@ -456,7 +548,7 @@ test('copilot drops empty / non-string entries from extraAllowedDirs without rei
   const args = copilot.buildArgs(
     prompt,
     [],
-    ['', null, '/tmp/od-skills', undefined],
+    ['', null, '/tmp/od-skills', undefined] as unknown as string[],
     {},
   );
   assert.ok(!args.includes('-p'));
@@ -617,6 +709,21 @@ test('gemini args preserve custom model selection', () => {
   ]);
 });
 
+test('gemini picker exposes the Gemini 3 previews and 2.5 family in priority order', () => {
+  // Pin the picker contents and ordering so the Settings UI cannot be
+  // silently reshaped by a future edit to AGENT_DEFS. Gemini also accepts
+  // arbitrary custom ids, which makes it especially easy for a regression
+  // here to slip through manual QA. Issue #981.
+  assert.deepEqual(gemini.fallbackModels.map((m) => m.id), [
+    'default',
+    'gemini-3-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ]);
+});
+
 test('qoder entry uses qodercli with stream-json stdin delivery and tier model hints', () => {
   assert.equal(qoder.name, 'Qoder CLI');
   assert.equal(qoder.bin, 'qodercli');
@@ -640,7 +747,7 @@ test('qoder args use non-interactive print mode with cwd, model, and add-dir', (
     [
       '/repo/skills',
       '',
-      null,
+      null as unknown as string,
       './relative-skills',
       'relative-design-systems',
       '/repo/design-systems',
@@ -688,9 +795,9 @@ test('qoder args omit default model and cwd when absent', () => {
 test('qoder args omit empty, non-string, and relative add-dir entries', () => {
   const args = qoder.buildArgs('', [], [
     '',
-    null,
-    undefined,
-    42,
+    null as unknown as string,
+    undefined as unknown as string,
+    42 as unknown as string,
     './skills',
     'design-systems',
   ]);
@@ -701,13 +808,13 @@ test('qoder args omit empty, non-string, and relative add-dir entries', () => {
 test('qoder args omit empty, non-string, and relative image attachment entries', () => {
   const args = qoder.buildArgs('', [
     '',
-    null,
-    undefined,
-    42,
+    null as unknown as string,
+    undefined as unknown as string,
+    42 as unknown as string,
     './uploads/logo.png',
     'uploads/hero.png',
     '/tmp/uploads/logo.png',
-  ]);
+  ], []);
 
   assert.deepEqual(
     args.filter((arg) => arg === '--attachment').length,
@@ -731,7 +838,10 @@ test('qoder adapter inherits QODER_PERSONAL_ACCESS_TOKEN from daemon env', () =>
 });
 
 test('qoder adapter does not define static secret env', () => {
-  assert.equal(qoder.env?.QODER_PERSONAL_ACCESS_TOKEN, undefined);
+  assert.equal(
+    (qoder as TestAgentDef & { env?: Record<string, string> }).env?.QODER_PERSONAL_ACCESS_TOKEN,
+    undefined,
+  );
 });
 
 test('detectAgents keeps qoder unavailable with fallback metadata when qodercli is missing', async () => {
@@ -746,7 +856,7 @@ test('detectAgents keeps qoder unavailable with fallback metadata when qodercli 
     assert.ok(detected);
     assert.equal(detected.available, false);
     assert.equal(detected.bin, 'qodercli');
-    assert.deepEqual(detected.models.map((m) => m.id), [
+    assert.deepEqual(detected.models.map((m: { id: string }) => m.id), [
       'default',
       'lite',
       'efficient',
@@ -762,13 +872,16 @@ test('detectAgents keeps qoder unavailable with fallback metadata when qodercli 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {
   // fetchModels rejects when the binary doesn't exist; the daemon's
   // probe() catches this and uses fallbackModels instead.
+  assert.ok(kiro.fetchModels, 'kiro must define fetchModels');
   const result = await kiro
-    .fetchModels('/nonexistent/kiro-cli')
+    .fetchModels('/nonexistent/kiro-cli', {})
     .catch(() => null);
 
   assert.equal(result, null);
   assert.ok(Array.isArray(kiro.fallbackModels));
-  assert.equal(kiro.fallbackModels[0].id, 'default');
+  const fallbackModel = kiro.fallbackModels[0];
+  assert.ok(fallbackModel);
+  assert.equal(fallbackModel.id, 'default');
 });
 
 test('kilo args use acp subcommand for json-rpc streaming', () => {
@@ -779,11 +892,14 @@ test('kilo args use acp subcommand for json-rpc streaming', () => {
 });
 
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {
-  const result = await kilo.fetchModels('/nonexistent/kilo').catch(() => null);
+  assert.ok(kilo.fetchModels, 'kilo must define fetchModels');
+  const result = await kilo.fetchModels('/nonexistent/kilo', {}).catch(() => null);
 
   assert.equal(result, null);
   assert.ok(Array.isArray(kilo.fallbackModels));
-  assert.equal(kilo.fallbackModels[0].id, 'default');
+  const fallbackModel = kilo.fallbackModels[0];
+  assert.ok(fallbackModel);
+  assert.equal(fallbackModel.id, 'default');
   assert.equal(kilo.fallbackModels.length, 1);
 });
 
@@ -793,7 +909,7 @@ test('kilo fetchModels falls back to fallbackModels when detection fails', async
 // flag is what the codex CLI (and ultimately OpenAI) actually sees.
 
 test('codex buildArgs clamps reasoning effort per model', () => {
-  const cases = [
+  const cases: Array<[string | undefined, string, string]> = [
     // [model, reasoning, expected wire-level effort]
     // gpt-5.5 family (and unknown / 'default' which we treat as 5.5):
     // minimal -> low, others pass through.
@@ -825,7 +941,7 @@ test('codex buildArgs clamps reasoning effort per model', () => {
       '',
       [],
       [],
-      { model, reasoning },
+      { ...(model === undefined ? {} : { model }), reasoning },
       { cwd: '/tmp/od-project' },
     );
     assert.ok(
@@ -919,7 +1035,7 @@ test('claude buildArgs passes --add-dir when dirs are supplied (issue #430, prob
 });
 
 test('claude buildArgs drops empty / null dirs but keeps valid ones (issue #430 edge case)', () => {
-  const args = claude.buildArgs('', [], ['', null, '/repo/skills', undefined], {});
+  const args = claude.buildArgs('', [], ['', null, '/repo/skills', undefined] as unknown as string[], {});
 
   const addDirIndex = args.indexOf('--add-dir');
   assert.ok(addDirIndex >= 0, '--add-dir should survive filter');
@@ -929,8 +1045,8 @@ test('claude buildArgs drops empty / null dirs but keeps valid ones (issue #430 
   assert.equal(args.filter((a) => a === '--add-dir').length, 1);
   // Should NOT have null / undefined / '' sneaking into argv.
   assert.equal(args.includes(''), false);
-  assert.equal(args.includes(null), false);
-  assert.equal(args.includes(undefined), false);
+  assert.equal(args.includes(null as unknown as string), false);
+  assert.equal(args.includes(undefined as unknown as string), false);
 });
 
 test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430 root cause)', () => {
@@ -979,10 +1095,10 @@ fsTest(
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
 
-      const resolved = resolveAgentExecutable({
+      const resolved = resolveAgentExecutable(minimalAgentDef({
         bin: 'claude',
         fallbackBins: ['openclaude'],
-      });
+      }));
       assert.equal(resolved, join(dir, 'claude'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1001,10 +1117,10 @@ fsTest(
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
 
-      const resolved = resolveAgentExecutable({
+      const resolved = resolveAgentExecutable(minimalAgentDef({
         bin: 'claude',
         fallbackBins: ['openclaude'],
-      });
+      }));
       assert.equal(resolved, join(dir, 'openclaude'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1020,10 +1136,10 @@ fsTest(
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
 
-      const resolved = resolveAgentExecutable({
+      const resolved = resolveAgentExecutable(minimalAgentDef({
         bin: 'claude',
         fallbackBins: ['openclaude'],
-      });
+      }));
       assert.equal(resolved, null);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1052,9 +1168,9 @@ fsTest(
       process.env.OD_AGENT_HOME = home;
       process.env.PATH = '/usr/bin:/bin';
 
-      const resolved = resolveAgentExecutable({
+      const resolved = resolveAgentExecutable(minimalAgentDef({
         bin: 'codex',
-      });
+      }));
       assert.equal(resolved, join(dir, 'codex'));
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -1074,7 +1190,7 @@ fsTest(
       chmodSync(join(dir, 'codex'), 0o755);
       process.env.PATH = dir;
 
-      const resolved = resolveAgentExecutable({ bin: 'codex' });
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'codex' }));
       assert.equal(resolved, join(dir, 'codex'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1102,7 +1218,7 @@ fsTest(
       // `~/.npm-global/bin`, no `/opt/homebrew/bin`, nothing user-side.
       process.env.PATH = '/usr/bin:/bin';
 
-      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
       assert.equal(resolved, join(dir, 'gemini'));
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -1124,10 +1240,50 @@ fsTest(
       process.env.OD_AGENT_HOME = home;
       process.env.PATH = '/usr/bin:/bin';
 
-      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
       assert.equal(resolved, join(dir, 'gemini'));
     } finally {
       rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentExecutable searches ~/.vite-plus/bin under a minimal GUI-launched PATH (vp global install)',
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'od-agents-vp-home-'));
+    try {
+      const dir = join(home, '.vite-plus', 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.OD_AGENT_HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'vp-cli-probe' }));
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentExecutable honors $VP_HOME/bin when the custom Vite+ home is outside PATH',
+  () => {
+    const vpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-custom-'));
+    try {
+      const dir = join(vpHome, 'bin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'vp-cli-probe'), '');
+      chmodSync(join(dir, 'vp-cli-probe'), 0o755);
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = vpHome;
+
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'vp-cli-probe' }));
+      assert.equal(resolved, join(dir, 'vp-cli-probe'));
+    } finally {
+      rmSync(vpHome, { recursive: true, force: true });
     }
   },
 );
@@ -1157,7 +1313,7 @@ fsTest(
       process.env.PATH = '/usr/bin:/bin';
       process.env.NPM_CONFIG_PREFIX = realPrefix;
 
-      const resolved = resolveAgentExecutable({ bin: 'gemini' });
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
       assert.equal(
         resolved,
         null,
@@ -1172,6 +1328,34 @@ fsTest(
       // same Vitest worker.
       rmSync(sandbox, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_AGENT_HOME isolates resolution from $VP_HOME leakage',
+  () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-vp-sandbox-'));
+    const realVpHome = mkdtempSync(join(tmpdir(), 'od-agents-vp-real-home-'));
+    const realVpBin = join(realVpHome, 'bin');
+    try {
+      mkdirSync(realVpBin, { recursive: true });
+      writeFileSync(join(realVpBin, 'vp-cli-probe'), '');
+      chmodSync(join(realVpBin, 'vp-cli-probe'), 0o755);
+
+      process.env.OD_AGENT_HOME = sandbox;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.VP_HOME = realVpHome;
+
+      const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'vp-cli-probe' }));
+      assert.equal(
+        resolved,
+        null,
+        `OD_AGENT_HOME sandbox must not see the real $VP_HOME bin; got ${resolved}`,
+      );
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(realVpHome, { recursive: true, force: true });
     }
   },
 );
@@ -1218,13 +1402,13 @@ test('deepseek args omit --model when model is "default"', () => {
 // the field so removing it can't silently regress the guard.
 test('deepseek declares a conservative argv-byte budget for the prompt', () => {
   assert.equal(
-    typeof deepseek.maxPromptArgBytes,
+    typeof deepseekMaxPromptArgBytes,
     'number',
     'deepseek must set maxPromptArgBytes so the spawn path can pre-flight oversized prompts before hitting CreateProcess / E2BIG',
   );
   assert.ok(
-    deepseek.maxPromptArgBytes > 0 && deepseek.maxPromptArgBytes < 32_768,
-    `deepseek.maxPromptArgBytes must stay strictly under the Windows CreateProcess limit (~32 KB); got ${deepseek.maxPromptArgBytes}`,
+    deepseekMaxPromptArgBytes > 0 && deepseekMaxPromptArgBytes < 32_768,
+    `deepseekMaxPromptArgBytes must stay strictly under the Windows CreateProcess limit (~32 KB); got ${deepseekMaxPromptArgBytes}`,
   );
 });
 
@@ -1238,12 +1422,12 @@ test('deepseek declares a conservative argv-byte budget for the prompt', () => {
 // budget drift over the Windows limit fails this test before any
 // real spawn would surface a generic ENAMETOOLONG / E2BIG.
 test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prompts through', () => {
-  const oversized = 'x'.repeat(deepseek.maxPromptArgBytes + 1);
+  const oversized = 'x'.repeat(deepseekMaxPromptArgBytes + 1);
   const flagged = checkPromptArgvBudget(deepseek, oversized);
   assert.ok(flagged, 'oversized prompts must trip the argv-byte guard');
   assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
-  assert.equal(flagged.limit, deepseek.maxPromptArgBytes);
-  assert.equal(flagged.bytes, deepseek.maxPromptArgBytes + 1);
+  assert.equal(flagged.limit, deepseekMaxPromptArgBytes);
+  assert.equal(flagged.bytes, deepseekMaxPromptArgBytes + 1);
   assert.match(flagged.message, /DeepSeek/);
   assert.match(flagged.message, /command-line argument/);
   assert.match(flagged.message, /stdin support/);
@@ -1254,14 +1438,14 @@ test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prom
 
   // The exact-budget edge: a prompt right at the limit must pass; the
   // guard fires only when the byte count strictly exceeds the budget.
-  const atLimit = 'x'.repeat(deepseek.maxPromptArgBytes);
+  const atLimit = 'x'.repeat(deepseekMaxPromptArgBytes);
   assert.equal(checkPromptArgvBudget(deepseek, atLimit), null);
 
   // A multi-byte UTF-8 prompt (e.g. CJK characters) is measured in
   // bytes, not code points — pin that so a 3-byte-per-char prompt
   // can't sneak past a code-point-based regression of the helper.
   const cjkOversized = '汉'.repeat(
-    Math.ceil(deepseek.maxPromptArgBytes / 3) + 1,
+    Math.ceil(deepseekMaxPromptArgBytes / 3) + 1,
   );
   const cjkFlagged = checkPromptArgvBudget(deepseek, cjkOversized);
   assert.ok(cjkFlagged, 'byte-counted UTF-8 prompts must also trip the guard');
@@ -1293,7 +1477,7 @@ test('checkPromptArgvBudget is a no-op for adapters without maxPromptArgBytes', 
 test('checkWindowsCmdShimCommandLineBudget flags quote-heavy prompts that expand past CreateProcess limit', () => {
   // Prompt is *under* the raw byte budget, but ~entirely `"` chars so
   // cmd.exe's quote-doubling roughly doubles its command-line cost.
-  const quoteHeavyPromptLength = deepseek.maxPromptArgBytes - 100;
+  const quoteHeavyPromptLength = deepseekMaxPromptArgBytes - 100;
   const quoteHeavyPrompt = '"'.repeat(quoteHeavyPromptLength);
 
   // Sanity: the raw-byte guard must let this through, otherwise the new
@@ -1319,9 +1503,11 @@ test('checkWindowsCmdShimCommandLineBudget flags quote-heavy prompts that expand
     'quote-heavy prompt that doubles past the CreateProcess cap must trip the cmd-shim guard',
   );
   assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
+  const commandLineLength = flagged.commandLineLength;
+  assert.ok(commandLineLength !== undefined);
   assert.ok(
-    flagged.commandLineLength > flagged.limit,
-    `commandLineLength (${flagged.commandLineLength}) must exceed limit (${flagged.limit})`,
+    commandLineLength > flagged.limit,
+    `commandLineLength (${commandLineLength}) must exceed limit (${flagged.limit})`,
   );
   assert.ok(
     flagged.limit < 32_768,
@@ -1440,7 +1626,7 @@ test('checkWindowsCmdShimCommandLineBudget no-ops when resolvedBin is null or ad
 test('checkWindowsDirectExeCommandLineBudget flags quote-heavy prompts on a direct .exe resolution', () => {
   // Prompt is *under* the raw byte budget, but ~entirely `"` chars so
   // libuv's `\"` escaping roughly doubles its command-line cost.
-  const quoteHeavyPromptLength = deepseek.maxPromptArgBytes - 100;
+  const quoteHeavyPromptLength = deepseekMaxPromptArgBytes - 100;
   const quoteHeavyPrompt = '"'.repeat(quoteHeavyPromptLength);
 
   // Sanity: the raw-byte guard must let this through, otherwise the
@@ -1467,9 +1653,11 @@ test('checkWindowsDirectExeCommandLineBudget flags quote-heavy prompts on a dire
     'quote-heavy prompt that expands past the CreateProcess cap on a direct .exe spawn must trip the guard',
   );
   assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
+  const commandLineLength = flagged.commandLineLength;
+  assert.ok(commandLineLength !== undefined);
   assert.ok(
-    flagged.commandLineLength > flagged.limit,
-    `commandLineLength (${flagged.commandLineLength}) must exceed limit (${flagged.limit})`,
+    commandLineLength > flagged.limit,
+    `commandLineLength (${commandLineLength}) must exceed limit (${flagged.limit})`,
   );
   assert.ok(
     flagged.limit < 32_768,
@@ -1497,7 +1685,7 @@ test('checkWindowsDirectExeCommandLineBudget no-ops on .cmd / .bat resolutions a
   // skip them so an oversized prompt on a `.cmd` install doesn't trip
   // both guards (and double-emit an SSE error).
   const args = deepseek.buildArgs(
-    '"'.repeat(deepseek.maxPromptArgBytes - 100),
+    '"'.repeat(deepseekMaxPromptArgBytes - 100),
     [],
     [],
     {},
@@ -1565,7 +1753,7 @@ test('checkWindowsDirectExeCommandLineBudget no-ops when resolvedBin is null/emp
 // SSE error events back to back. Pin both branches with a quote-heavy
 // prompt that's over the kernel cap under either quoting rule.
 test('cmd-shim and direct-exe guards are mutually exclusive on a single resolution', () => {
-  const quoteHeavy = '"'.repeat(deepseek.maxPromptArgBytes - 100);
+  const quoteHeavy = '"'.repeat(deepseekMaxPromptArgBytes - 100);
   const args = deepseek.buildArgs(quoteHeavy, [], [], {});
 
   const cmdPath = 'C:\\Users\\Tester\\AppData\\Roaming\\npm\\deepseek.cmd';
@@ -1592,9 +1780,10 @@ test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {
   // the first /api/chat run fail. Pin the absence so the fallback can't
   // drift back without an accompanying buildArgs branch + test.
   assert.equal(
-    Array.isArray(deepseek.fallbackBins) && deepseek.fallbackBins.length > 0,
+    Array.isArray((deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins)
+      && ((deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins?.length ?? 0) > 0,
     false,
-    `deepseek must not declare fallbackBins until the deepseek-tui-only invocation is implemented and tested; got ${JSON.stringify(deepseek.fallbackBins)}`,
+    `deepseek must not declare fallbackBins until the deepseek-tui-only invocation is implemented and tested; got ${JSON.stringify((deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins)}`,
   );
 });
 
@@ -1608,13 +1797,16 @@ test('vibe args use empty array for acp-json-rpc streaming', () => {
 test('vibe fetchModels falls back to fallbackModels when detection fails', async () => {
   // fetchModels rejects when the binary doesn't exist; the daemon's
   // probe() catches this and uses fallbackModels instead.
+  assert.ok(vibe.fetchModels, 'vibe must define fetchModels');
   const result = await vibe
-    .fetchModels('/nonexistent/vibe-acp')
+    .fetchModels('/nonexistent/vibe-acp', {})
     .catch(() => null);
 
   assert.equal(result, null);
   assert.ok(Array.isArray(vibe.fallbackModels));
-  assert.equal(vibe.fallbackModels[0].id, 'default');
+  const fallbackModel = vibe.fallbackModels[0];
+  assert.ok(fallbackModel);
+  assert.equal(fallbackModel.id, 'default');
 });
 
 // Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
@@ -1673,11 +1865,44 @@ test('resolveAgentExecutable prefers a configured CODEX_BIN override over PATH r
     process.env.OD_AGENT_HOME = dir;
 
     const resolved = resolveAgentExecutable(
-      { id: 'codex', bin: 'codex' },
+      minimalAgentDef({ id: 'codex', bin: 'codex' }),
       { CODEX_BIN: configured },
     );
 
     assert.equal(resolved, configured);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable supports configured binary overrides for non-Codex adapters', () => {
+  const cases: Array<[string, string, string]> = [
+    ['claude', 'claude', 'CLAUDE_BIN'],
+    ['gemini', 'gemini', 'GEMINI_BIN'],
+    ['opencode', 'opencode', 'OPENCODE_BIN'],
+    ['cursor-agent', 'cursor-agent', 'CURSOR_AGENT_BIN'],
+    ['qwen', 'qwen', 'QWEN_BIN'],
+    ['qoder', 'qodercli', 'QODER_BIN'],
+    ['copilot', 'copilot', 'COPILOT_BIN'],
+    ['deepseek', 'deepseek', 'DEEPSEEK_BIN'],
+  ];
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-overrides-'));
+  try {
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = dir;
+
+    for (const [id, binName, envKey] of cases) {
+      const configured = join(dir, `${binName}-custom`);
+      writeFileSync(configured, '#!/bin/sh\nexit 0\n');
+      chmodSync(configured, 0o755);
+
+      const resolved = resolveAgentExecutable(
+        minimalAgentDef({ id, bin: binName }),
+        { [envKey]: configured },
+      );
+
+      assert.equal(resolved, configured, `expected ${id} to use ${envKey}`);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1695,13 +1920,85 @@ test('resolveAgentExecutable ignores relative CODEX_BIN overrides', () => {
     process.env.OD_AGENT_HOME = dir;
 
     const resolved = resolveAgentExecutable(
-      { id: 'codex', bin: 'codex' },
+      minimalAgentDef({ id: 'codex', bin: 'codex' }),
       { CODEX_BIN: configured },
     );
 
     assert.equal(resolved, null);
   } finally {
     process.chdir(oldCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable ignores configured binary overrides that are not executable files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-invalid-'));
+  try {
+    const directoryOverride = join(dir, 'as-directory');
+    mkdirSync(directoryOverride);
+    const fileOverride = join(dir, 'not-executable');
+    writeFileSync(fileOverride, '#!/bin/sh\nexit 0\n');
+    if (process.platform !== 'win32') chmodSync(fileOverride, 0o644);
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = dir;
+
+    assert.equal(
+      resolveAgentExecutable(minimalAgentDef({ id: 'codex', bin: 'codex' }), { CODEX_BIN: directoryOverride }),
+      null,
+    );
+    if (process.platform !== 'win32') {
+      assert.equal(
+        resolveAgentExecutable(minimalAgentDef({ id: 'codex', bin: 'codex' }), { CODEX_BIN: fileOverride }),
+        null,
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable ignores Windows CODEX_BIN overrides without executable PATHEXT extension', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-win-invalid-'));
+  try {
+    const invalidOverride = join(dir, 'codex-custom.txt');
+    const fallback = join(dir, 'codex.CMD');
+    writeFileSync(invalidOverride, '@echo off\r\nexit /b 0\r\n');
+    writeFileSync(fallback, '@echo off\r\nexit /b 0\r\n');
+    process.env.PATH = dir;
+    process.env.PATHEXT = '.EXE;.CMD;.BAT';
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolved = withPlatform('win32', () =>
+      resolveAgentExecutable(
+        minimalAgentDef({ id: 'codex', bin: 'codex' }),
+        { CODEX_BIN: invalidOverride },
+      ),
+    );
+
+    assert.equal(resolved, fallback);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable accepts Windows CODEX_BIN overrides with executable PATHEXT extension', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-win-valid-'));
+  try {
+    const configured = join(dir, 'codex-custom.CMD');
+    writeFileSync(configured, '@echo off\r\nexit /b 0\r\n');
+    process.env.PATH = '';
+    process.env.PATHEXT = '.EXE;.CMD;.BAT';
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolved = withPlatform('win32', () =>
+      resolveAgentExecutable(
+        minimalAgentDef({ id: 'codex', bin: 'codex' }),
+        { CODEX_BIN: configured },
+      ),
+    );
+
+    assert.equal(resolved, configured);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

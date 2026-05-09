@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { reattachDaemonRun, streamViaDaemon } from '../../src/providers/daemon';
+import {
+  latestUserPromptFromHistory,
+  reattachDaemonRun,
+  streamViaDaemon,
+} from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
 
@@ -31,6 +35,47 @@ describe('parseSseFrame', () => {
 });
 
 describe('streamViaDaemon', () => {
+  it('sends the latest user turn separately from the full CLI transcript', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [
+        { id: '1', role: 'user', content: 'pre-consent brief' },
+        { id: '2', role: 'assistant', content: 'draft response' },
+        { id: '3', role: 'user', content: 'post-consent revision' },
+      ],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.message).toContain('pre-consent brief');
+    expect(body.message).toContain('post-consent revision');
+    expect(body.currentPrompt).toBe('post-consent revision');
+  });
+
+  it('extracts only the latest user prompt for telemetry', () => {
+    expect(
+      latestUserPromptFromHistory([
+        { id: '1', role: 'user', content: 'first turn' },
+        { id: '2', role: 'assistant', content: 'answer' },
+        { id: '3', role: 'user', content: 'current turn' },
+      ]),
+    ).toBe('current turn');
+  });
+
   it('ignores comment frames without notifying handlers', async () => {
     const handlers = createDaemonHandlers();
     vi.stubGlobal('fetch', vi.fn()

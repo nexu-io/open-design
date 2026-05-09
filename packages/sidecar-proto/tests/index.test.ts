@@ -74,4 +74,40 @@ describe("open-design sidecar contract", () => {
     expect(() => normalizeDesktopSidecarMessage({ input: { expression: 42 }, type: SIDECAR_MESSAGES.EVAL })).toThrow();
     expect(() => normalizeDesktopSidecarMessage({ input: { selector: "" }, type: SIDECAR_MESSAGES.CLICK })).toThrow();
   });
+
+  it("validates desktop PDF export IPC message inputs", () => {
+    expect(
+      normalizeDesktopSidecarMessage({
+        input: {
+          baseHref: "http://127.0.0.1:7456/api/projects/proj/raw/deck/",
+          deck: true,
+          defaultFilename: "Seed Deck.pdf",
+          html: "<!doctype html><section class=\"slide\">One</section>",
+          title: "Seed Deck",
+        },
+        type: SIDECAR_MESSAGES.EXPORT_PDF,
+      }),
+    ).toEqual({
+      input: {
+        baseHref: "http://127.0.0.1:7456/api/projects/proj/raw/deck/",
+        deck: true,
+        defaultFilename: "Seed Deck.pdf",
+        html: "<!doctype html><section class=\"slide\">One</section>",
+        title: "Seed Deck",
+      },
+      type: "export-pdf",
+    });
+    expect(() =>
+      normalizeDesktopSidecarMessage({
+        input: { deck: true, defaultFilename: "x.pdf", html: "", title: "x" },
+        type: SIDECAR_MESSAGES.EXPORT_PDF,
+      }),
+    ).toThrow();
+    expect(() =>
+      normalizeDesktopSidecarMessage({
+        input: { deck: "yes", defaultFilename: "x.pdf", html: "<p>x</p>", title: "x" },
+        type: SIDECAR_MESSAGES.EXPORT_PDF,
+      }),
+    ).toThrow();
+  });
 });

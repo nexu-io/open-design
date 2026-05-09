@@ -4,7 +4,8 @@ import type { ConnectorDetail } from '@open-design/contracts';
 declare global {
   interface Window {
     electronAPI?: {
-      pickFolder: () => Promise<string | null>;
+      openExternal?: (url: string) => Promise<boolean>;
+      pickFolder?: () => Promise<string | null>;
     };
   }
 }
@@ -182,11 +183,12 @@ export function NewProjectPanel({
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
-  // Some skills (e.g. the Orbit briefings) ship their own complete visual
-  // language baked into example.html and explicitly opt out of DESIGN.md
-  // injection via `od.design_system.requires: false`. When such a skill is
-  // the active default for the current tab, hide the picker entirely so
-  // the user isn't asked to attach a brand we'll then ignore.
+  // Orbit briefings ship their own complete visual language baked into
+  // example.html and explicitly opt out of DESIGN.md injection via
+  // `od.design_system.requires: false`. Hide the picker only for those
+  // Orbit scenario skills; the general prototype creation surface should
+  // still honor the user's configured default design system even when a
+  // non-Orbit default skill does not require one.
   const tabDefaultSkillForcesNoDs = useMemo(() => {
     const tabSkillId = ((): string | null => {
       if (tab === 'prototype' || tab === 'live-artifact') {
@@ -203,7 +205,9 @@ export function NewProjectPanel({
     })();
     if (!tabSkillId) return false;
     const s = skills.find((x) => x.id === tabSkillId);
-    return s ? s.designSystemRequired === false : false;
+    return s
+      ? s.scenario === 'orbit' && s.designSystemRequired === false
+      : false;
   }, [tab, skills]);
   const showDesignSystemPicker =
     tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
@@ -376,7 +380,7 @@ export function NewProjectPanel({
     if (!onImportFolder) return;
     let pathToOpen: string;
     if (hasElectronPicker) {
-      const picked = await window.electronAPI!.pickFolder();
+      const picked = await window.electronAPI!.pickFolder!();
       if (!picked) return;
       pathToOpen = picked;
     } else {
@@ -667,8 +671,8 @@ function FidelityPicker({
    - Lists configured connectors as compact chips so the user can
      see at a glance what data sources this artifact can pull from.
    - When no connector is configured (or the list hasn't loaded yet
-     and ended up empty), shows a guidance card that, on click, pops
-     the entry-tab-connectors tab in the main view.
+     and ended up empty), shows a guidance card that, on click, opens
+     the Settings → Connectors surface (the new home of the catalog).
    ============================================================ */
 function ConnectorsSection({
   connectors,

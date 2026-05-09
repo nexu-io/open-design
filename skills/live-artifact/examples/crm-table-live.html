@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quiver · Q2 Pipeline (CRM)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Productivity light mode — Linear/Airtable/Stripe vibe */
+    --bg: #f7f7f5;
+    --paper: #ffffff;
+    --paper-elev: #ffffff;
+    --paper-tint: #fafaf9;
+    --line: #ececea;
+    --line-strong: #d8d8d4;
+    --hairline: rgba(15,23,42,0.06);
+
+    --ink: #1a1a1f;
+    --ink-soft: #36363d;
+    --muted: #74747e;
+    --muted-2: #9b9ba6;
+    --dim: #b8b8c2;
+
+    /* Accents — productivity software palette */
+    --accent: #5b5bd6;        /* indigo brand */
+    --accent-soft: #ecebfb;
+    --accent-hover: #4848c7;
+
+    --gmail: #ea4335;
+    --gmail-soft: rgba(234,67,53,0.08);
+
+    /* Stage palette */
+    --st-lead: #94a3b8;
+    --st-lead-soft: #e6e9ef;
+    --st-qual: #3b82f6;
+    --st-qual-soft: #e6efff;
+    --st-demo: #f59e0b;
+    --st-demo-soft: #fef0d4;
+    --st-prop: #8b5cf6;
+    --st-prop-soft: #f0e9ff;
+    --st-won:  #10b981;
+    --st-won-soft: #d6f4e6;
+    --st-lost: #ef4444;
+    --st-lost-soft: #fde2e2;
+
+    /* Type */
+    --display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --serif: 'Instrument Serif', Georgia, serif;
+
+    --r-card: 10px;
+    --r-cell: 6px;
+    --r-pill: 999px;
+
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 0 rgba(15,23,42,0.02);
+    --shadow-md: 0 4px 16px rgba(15,23,42,0.06), 0 1px 0 rgba(15,23,42,0.02);
+    --shadow-lg: 0 16px 48px rgba(15,23,42,0.08), 0 1px 0 rgba(15,23,42,0.02);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 13.5px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ─────── Header ─────── */
+  header.app {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .h-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .logo {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, #5b5bd6 0%, #8b5cf6 50%, #ec4899 100%);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 13px; letter-spacing: -0.02em;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+  .word { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .crumb { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+  .crumb .sep { color: var(--dim); }
+  .crumb a:hover { color: var(--ink); }
+  .crumb .here { color: var(--ink); font-weight: 500; }
+
+  .h-right { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    height: 30px; padding: 0 12px; border-radius: 7px;
+    background: var(--paper); border: 1px solid var(--line);
+    color: var(--ink-soft); font-size: 12.5px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .icon-btn:hover { background: var(--paper-tint); border-color: var(--line-strong); color: var(--ink); }
+  .icon-btn.primary {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+    box-shadow: var(--shadow-sm);
+  }
+  .icon-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .icon-btn .ic { width: 14px; height: 14px; }
+  .icon-btn.spin .ic { animation: spin 0.8s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .icon-btn.gmail { color: var(--gmail); border-color: rgba(234,67,53,0.35); background: var(--gmail-soft); }
+  .icon-btn.gmail:hover { background: rgba(234,67,53,0.14); }
+
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #fbbf24, #f97316);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 11px;
+    border: 1px solid var(--line);
+  }
+
+  /* ─────── AI banner ─────── */
+  .ai-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 10px 24px;
+    background: linear-gradient(90deg, #fff7ed 0%, #fef3c7 30%, #ffffff 100%);
+    border-bottom: 1px solid var(--line);
+    font-size: 12.5px;
+  }
+  .ai-banner .magic {
+    display: inline-flex; gap: 8px; align-items: center;
+    color: var(--ink);
+  }
+  .ai-banner .magic-dot {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: linear-gradient(135deg, #f59e0b, #ec4899);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; font-weight: 700;
+    box-shadow: 0 0 12px rgba(245,158,11,0.4);
+  }
+  .ai-banner b { font-weight: 600; }
+  .ai-banner .sep { color: var(--dim); margin: 0 2px; }
+  .ai-banner .meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .ai-banner .actions { display: flex; gap: 8px; }
+  .ai-banner .pill {
+    padding: 4px 10px; font-size: 11.5px; border-radius: var(--r-pill);
+    background: var(--paper); border: 1px solid var(--line); color: var(--ink-soft);
+    transition: all 0.15s;
+  }
+  .ai-banner .pill:hover { border-color: var(--line-strong); color: var(--ink); }
+
+  /* ─────── View switcher + toolbar ─────── */
+  .toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 10px 24px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .views { display: inline-flex; gap: 2px; padding: 3px; background: var(--paper-tint); border: 1px solid var(--line); border-radius: 8px; }
+  .view-tab {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 5px 11px; font-size: 12.5px; font-weight: 500; border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s;
+  }
+  .view-tab:hover { color: var(--ink); }
+  .view-tab.active { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-sm); }
+  .view-tab .ic { width: 14px; height: 14px; opacity: 0.85; }
+
+  .toolbar-right { display: flex; gap: 8px; align-items: center; }
+  .chip {
+    display: inline-flex; gap: 6px; align-items: center;
+    padding: 5px 10px; font-size: 12px;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 7px;
+    color: var(--ink-soft);
+  }
+  .chip:hover { border-color: var(--line-strong); color: var(--ink); }
+  .chip.active { background: var(--accent-soft); border-color: rgba(91,91,214,0.35); color: var(--accent); }
+  .chip .ic { width: 12px; height: 12px; }
+  .search {
+    display: inline-flex; gap: 6px; align-items: center;
+    padding: 5px 10px 5px 12px; font-size: 12px;
+    background: var(--paper-tint); border: 1px solid var(--line); border-radius: 7px;
+    color: var(--muted);
+    min-width: 220px;
+  }
+  .search kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--paper); color: var(--muted); }
+
+  /* ─────── Layout ─────── */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 0;
+    min-height: calc(100vh - 100px);
+  }
+  .content {
+    padding: 16px 24px 32px;
+    overflow-x: auto;
+  }
+  .sidebar {
+    border-left: 1px solid var(--line);
+    padding: 16px;
+    background: var(--paper);
+    overflow-y: auto;
+  }
+
+  /* ─────── Grid view ─────── */
+  .grid-table {
+    width: 100%;
+    border-collapse: separate; border-spacing: 0;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    font-size: 13px;
+  }
+  .grid-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--paper-tint);
+    border-bottom: 1px solid var(--line);
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted);
+    position: sticky; top: 0; z-index: 1;
+    white-space: nowrap;
+  }
+  .grid-table thead th .field-type {
+    margin-right: 6px; opacity: 0.5;
+    font-size: 10px;
+  }
+  .grid-table tbody tr {
+    transition: background 0.12s ease;
+    cursor: pointer;
+  }
+  .grid-table tbody tr:hover { background: var(--paper-tint); }
+  .grid-table tbody tr.flash { animation: rowFlash 1.6s ease-out; }
+  @keyframes rowFlash {
+    0%   { background: rgba(245,158,11,0.18); }
+    60%  { background: rgba(245,158,11,0.08); }
+    100% { background: var(--paper); }
+  }
+  .grid-table tbody td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .grid-table tbody tr:last-child td { border-bottom: 0; }
+
+  .co-cell { display: inline-flex; align-items: center; gap: 9px; }
+  .co-logo {
+    width: 22px; height: 22px; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; color: #fff;
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+  }
+  .co-name { font-weight: 500; color: var(--ink); }
+
+  .stage {
+    display: inline-flex; gap: 5px; align-items: center;
+    font-size: 11.5px; font-weight: 500;
+    padding: 3px 8px; border-radius: 5px;
+    cursor: pointer; user-select: none;
+    transition: filter 0.15s;
+  }
+  .stage:hover { filter: brightness(0.97); }
+  .stage::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .stage.lead { background: var(--st-lead-soft); color: var(--st-lead); }
+  .stage.qualified { background: var(--st-qual-soft); color: var(--st-qual); }
+  .stage.demo { background: var(--st-demo-soft); color: var(--st-demo); }
+  .stage.proposal { background: var(--st-prop-soft); color: var(--st-prop); }
+  .stage.won { background: var(--st-won-soft); color: var(--st-won); }
+  .stage.lost { background: var(--st-lost-soft); color: var(--st-lost); }
+
+  .arr-cell { font-family: var(--mono); font-weight: 500; color: var(--ink); }
+  .date-cell { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+  .date-cell .rel { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+  .owner-cell { display: inline-flex; align-items: center; gap: 6px; }
+  .owner-cell .av {
+    width: 20px; height: 20px; border-radius: 50%;
+    color: #fff; font-size: 9.5px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  .next-cell { color: var(--ink); }
+  .next-cell .due { color: var(--muted); font-size: 11.5px; margin-left: 6px; font-family: var(--mono); }
+  .next-cell .due.soon { color: var(--st-demo); }
+  .next-cell .due.overdue { color: var(--st-lost); font-weight: 600; }
+
+  .gmail-cell {
+    display: inline-flex; gap: 5px; align-items: center;
+    padding: 2px 7px; font-size: 11px; border-radius: 4px;
+    background: var(--gmail-soft); color: var(--gmail); font-weight: 500;
+    cursor: pointer;
+  }
+  .gmail-cell:hover { background: rgba(234,67,53,0.14); }
+
+  .engage {
+    display: inline-flex; align-items: center; gap: 8px;
+    width: 100px;
+  }
+  .engage .bar { flex: 1; height: 5px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .engage .fill { height: 100%; border-radius: 999px; }
+  .engage .fill.hot { background: linear-gradient(90deg, #f97316, #ef4444); }
+  .engage .fill.warm { background: linear-gradient(90deg, #f59e0b, #f97316); }
+  .engage .fill.cool { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+  .engage .fill.cold { background: linear-gradient(90deg, #94a3b8, #64748b); }
+  .engage .v { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 24px; text-align: right; }
+
+  /* ─────── Kanban view ─────── */
+  .kanban {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .kanban-col {
+    background: var(--paper-tint);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 8px;
+    min-height: 480px;
+  }
+  .kanban-col-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px 8px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .kanban-col-head .title {
+    display: inline-flex; gap: 6px; align-items: center;
+    font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .kanban-col-head .title::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+  .kanban-col[data-stage="lead"] .title { color: var(--st-lead); }
+  .kanban-col[data-stage="lead"] .title::before { background: var(--st-lead); }
+  .kanban-col[data-stage="qualified"] .title { color: var(--st-qual); }
+  .kanban-col[data-stage="qualified"] .title::before { background: var(--st-qual); }
+  .kanban-col[data-stage="demo"] .title { color: var(--st-demo); }
+  .kanban-col[data-stage="demo"] .title::before { background: var(--st-demo); }
+  .kanban-col[data-stage="proposal"] .title { color: var(--st-prop); }
+  .kanban-col[data-stage="proposal"] .title::before { background: var(--st-prop); }
+  .kanban-col[data-stage="won"] .title { color: var(--st-won); }
+  .kanban-col[data-stage="won"] .title::before { background: var(--st-won); }
+
+  .kanban-col-head .count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .kanban-card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 11px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .kanban-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .kanban-card:last-child { margin-bottom: 0; }
+  .kanban-card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .kanban-card .name { font-weight: 600; font-size: 12.5px; color: var(--ink); }
+  .kanban-card .arr { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .kanban-card .next { margin-top: 8px; font-size: 11.5px; color: var(--ink-soft); display: flex; gap: 6px; align-items: center; }
+  .kanban-card .next .ic { width: 11px; height: 11px; opacity: 0.6; }
+  .kanban-card .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hairline); }
+
+  /* ─────── Gallery view ─────── */
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .gal-card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .gal-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .gal-card .stripe {
+    position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  }
+  .gal-card .gh-row { display: flex; align-items: center; gap: 10px; }
+  .gal-card .co-logo-lg {
+    width: 38px; height: 38px; border-radius: 8px;
+    color: #fff; font-weight: 700; font-size: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .gal-card .co-name-lg { font-weight: 600; font-size: 14px; }
+  .gal-card .co-domain { font-size: 11px; color: var(--muted); margin-top: 1px; font-family: var(--mono); }
+  .gal-card .gh-meta { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-soft); }
+  .gal-card .gh-meta .row { display: flex; justify-content: space-between; align-items: center; }
+  .gal-card .gh-meta .lbl { color: var(--muted); font-size: 11px; }
+  .gal-card .gh-meta .val { font-family: var(--mono); }
+  .gal-card .gh-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); display: flex; align-items: center; justify-content: space-between; }
+
+  /* ─────── Calendar view ─────── */
+  .calendar {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .cal-month { font-family: var(--serif); font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  .cal-month .yr { color: var(--muted); margin-left: 6px; font-style: italic; }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .cal-grid .dow {
+    background: var(--paper-tint); padding: 8px 10px;
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .cal-day {
+    background: var(--paper);
+    min-height: 86px;
+    padding: 6px 8px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .cal-day:hover { background: var(--paper-tint); }
+  .cal-day .num { font-size: 12px; color: var(--ink-soft); font-family: var(--mono); }
+  .cal-day.muted { background: var(--paper-tint); }
+  .cal-day.muted .num { color: var(--dim); }
+  .cal-day.today {
+    background: linear-gradient(180deg, rgba(91,91,214,0.06), transparent 80%);
+  }
+  .cal-day.today .num {
+    background: var(--accent); color: #fff; padding: 2px 6px; border-radius: 4px;
+    font-weight: 600;
+  }
+  .cal-pill {
+    display: block; margin-top: 4px;
+    padding: 2px 6px; font-size: 10.5px; border-radius: 4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: pointer;
+  }
+  .cal-pill.demo { background: var(--st-demo-soft); color: var(--st-demo); }
+  .cal-pill.qual { background: var(--st-qual-soft); color: var(--st-qual); }
+  .cal-pill.prop { background: var(--st-prop-soft); color: var(--st-prop); }
+  .cal-pill.won { background: var(--st-won-soft); color: var(--st-won); }
+
+  /* ─────── Sidebar (AI suggestions + summary) ─────── */
+  .side-card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .side-card.ai {
+    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 80%);
+    border-color: rgba(245,158,11,0.25);
+  }
+  .side-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .side-title { font-weight: 600; font-size: 12.5px; display: inline-flex; gap: 6px; align-items: center; }
+  .side-title .badge {
+    font-family: var(--mono); font-size: 9.5px;
+    padding: 1px 6px; border-radius: 4px;
+    background: var(--accent-soft); color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .side-title .badge.warn { background: rgba(245,158,11,0.14); color: #b45309; }
+
+  .suggestion {
+    display: grid; grid-template-columns: 22px 1fr; gap: 9px; align-items: flex-start;
+    padding: 9px 10px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--paper);
+    margin-bottom: 8px;
+    transition: all 0.15s;
+  }
+  .suggestion:hover { border-color: var(--line-strong); }
+  .suggestion .num {
+    font-family: var(--mono); font-size: 10px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 5px; padding: 2px 0; text-align: center;
+    font-weight: 600;
+  }
+  .suggestion .text { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  .suggestion .text strong { color: var(--ink); font-weight: 600; }
+  .suggestion .text .meta { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .suggestion .actions { grid-column: 2; display: flex; gap: 6px; margin-top: 8px; }
+  .sug-btn {
+    padding: 4px 9px; font-size: 11px; border-radius: 5px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft);
+    transition: all 0.15s;
+  }
+  .sug-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sug-btn.primary:hover { background: var(--accent-hover); }
+  .sug-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+
+  .stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .stat-row:last-child { border-bottom: 0; }
+  .stat-row .l { font-size: 12px; color: var(--muted); }
+  .stat-row .v { font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500; }
+  .stat-row .v.up { color: var(--st-won); }
+  .stat-row .v.warn { color: var(--st-demo); }
+
+  /* ─────── Toast ─────── */
+  .toast-box {
+    position: fixed; bottom: 24px; right: 24px; z-index: 200;
+    display: flex; flex-direction: column; gap: 10px;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    min-width: 280px; max-width: 380px;
+    padding: 12px 14px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    font-size: 12.5px; color: var(--ink);
+    animation: toastIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .toast.success { border-left-color: var(--st-won); }
+  .toast.warn  { border-left-color: var(--st-demo); }
+  .toast.error { border-left-color: var(--st-lost); }
+  .toast .t-title { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
+  .toast .t-body { color: var(--ink-soft); line-height: 1.45; }
+  .toast .t-body strong { color: var(--ink); }
+  .toast.fade { opacity: 0; transform: translateX(20px); transition: all 0.25s; }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px) scale(0.96); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Switching panels */
+  [data-view-panel] { display: none; }
+  [data-view-panel].active { display: block; animation: panelIn 0.22s ease; }
+  @keyframes panelIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 1080px) {
+    main { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .kanban { grid-template-columns: repeat(3, minmax(220px, 1fr)); overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────── Header ─────── -->
+<header class="app">
+  <div class="h-left">
+    <div class="logo">Q</div>
+    <div class="word">quiver</div>
+    <div class="crumb">
+      <span>Workspace</span>
+      <span class="sep">/</span>
+      <a>CRM</a>
+      <span class="sep">/</span>
+      <span class="here">Q2 Pipeline</span>
+    </div>
+  </div>
+  <div class="h-right">
+    <button class="icon-btn gmail" id="refreshGmail" title="Refresh from Gmail">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M14 8a6 6 0 1 1-1.76-4.24M14 3v3.5h-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Sync from Gmail
+    </button>
+    <button class="icon-btn">Share</button>
+    <button class="icon-btn primary">＋ New record</button>
+    <span class="avatar">PT</span>
+  </div>
+</header>
+
+<!-- ─────── AI banner ─────── -->
+<div class="ai-banner">
+  <div class="magic">
+    <span class="magic-dot">✦</span>
+    <span><b>Filled from Gmail</b> · 27 leads extracted from past 30 days <span class="sep">·</span> Last sync <span class="meta" id="lastSync">2m ago</span></span>
+  </div>
+  <div class="actions">
+    <button class="pill" data-side-action="seeprompt">View AI prompt</button>
+    <button class="pill" data-side-action="undo">Undo last fill</button>
+    <button class="pill" data-side-action="export">Export as CSV</button>
+  </div>
+</div>
+
+<!-- ─────── Toolbar ─────── -->
+<div class="toolbar">
+  <div class="views" role="tablist">
+    <button class="view-tab active" data-view="grid">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h12M2 10h12M6 3v10M10 3v10" stroke="currentColor" stroke-width="1.4"/></svg>
+      Grid
+    </button>
+    <button class="view-tab" data-view="kanban">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="3" height="10" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="6.5" y="3" width="3" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="11" y="3" width="3" height="8" rx="1" stroke="currentColor" stroke-width="1.4"/></svg>
+      Kanban
+    </button>
+    <button class="view-tab" data-view="gallery">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="8.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="8.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg>
+      Gallery
+    </button>
+    <button class="view-tab" data-view="calendar">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12" stroke="currentColor" stroke-width="1.4"/><path d="M5 2v3M11 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Calendar
+    </button>
+  </div>
+  <div class="toolbar-right">
+    <span class="search">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span style="flex:1;">Search records…</span>
+      <kbd>⌘</kbd><kbd>K</kbd>
+    </span>
+    <button class="chip">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Filter (2)
+    </button>
+    <button class="chip">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M5 3l-3 3M5 3v10M5 3l3 3M11 13l3-3M11 13V3M11 13l-3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Sort
+    </button>
+    <button class="chip active">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.5" fill="currentColor"/><circle cx="12" cy="4" r="1.5" fill="currentColor"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M5.5 4h5M5.5 12h5M4 5.5v5M12 5.5v5" stroke="currentColor" stroke-width="1"/></svg>
+      Group · Stage
+    </button>
+  </div>
+</div>
+
+<!-- ─────── Main ─────── -->
+<main>
+
+  <div class="content">
+
+    <!-- ── Grid view ── -->
+    <div data-view-panel="grid" class="active">
+      <table class="grid-table" id="gridTable">
+        <thead>
+          <tr>
+            <th><span class="field-type">⊞</span>Company</th>
+            <th><span class="field-type">●</span>Stage</th>
+            <th><span class="field-type">$</span>ARR</th>
+            <th><span class="field-type">📅</span>Last contact</th>
+            <th><span class="field-type">👤</span>Owner</th>
+            <th><span class="field-type">→</span>Next action</th>
+            <th><span class="field-type">✉</span>Threads</th>
+            <th><span class="field-type">▮</span>Engagement</th>
+          </tr>
+        </thead>
+        <tbody id="gridBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ── Kanban view ── -->
+    <div data-view-panel="kanban">
+      <div class="kanban">
+        <div class="kanban-col" data-stage="lead">
+          <div class="kanban-col-head">
+            <span class="title">Lead <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">cold inbound</span></span>
+            <span class="count" id="cnt-lead">0</span>
+          </div>
+          <div class="kanban-col-body" id="kb-lead"></div>
+        </div>
+        <div class="kanban-col" data-stage="qualified">
+          <div class="kanban-col-head">
+            <span class="title">Qualified <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">2-call</span></span>
+            <span class="count" id="cnt-qualified">0</span>
+          </div>
+          <div class="kanban-col-body" id="kb-qualified"></div>
+        </div>
+        <div class="kanban-col" data-stage="demo">
+          <div class="kanban-col-head">
+            <span class="title">Demo <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">scheduled</span></span>
+            <span class="count" id="cnt-demo">0</span>
+          </div>
+          <div class="kanban-col-body" id="kb-demo"></div>
+        </div>
+        <div class="kanban-col" data-stage="proposal">
+          <div class="kanban-col-head">
+            <span class="title">Proposal <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">redlining</span></span>
+            <span class="count" id="cnt-proposal">0</span>
+          </div>
+          <div class="kanban-col-body" id="kb-proposal"></div>
+        </div>
+        <div class="kanban-col" data-stage="won">
+          <div class="kanban-col-head">
+            <span class="title">Closed-Won <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">live</span></span>
+            <span class="count" id="cnt-won">0</span>
+          </div>
+          <div class="kanban-col-body" id="kb-won"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Gallery view ── -->
+    <div data-view-panel="gallery">
+      <div class="gallery" id="gallery"></div>
+    </div>
+
+    <!-- ── Calendar view ── -->
+    <div data-view-panel="calendar">
+      <div class="calendar">
+        <div class="cal-head">
+          <div class="cal-month">May<span class="yr">2026</span></div>
+          <div style="display:flex;gap:6px;">
+            <button class="chip">‹ Prev</button>
+            <button class="chip active">Today</button>
+            <button class="chip">Next ›</button>
+          </div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─────── Sidebar ─────── -->
+  <aside class="sidebar">
+
+    <div class="side-card ai">
+      <div class="side-head">
+        <span class="side-title">✦ AI suggestions <span class="badge">Quiver</span></span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted)">3 new</span>
+      </div>
+      <div class="suggestion">
+        <div class="num">01</div>
+        <div class="text">
+          <strong>Mark 3 leads as cold</strong> — Acme Robotics, Hexagon Labs, NorthDelta haven't replied in 21+ days. Auto-cool reduces follow-up noise.
+          <div class="meta">Confidence 92% · Saves ~12min/wk</div>
+          <div class="actions">
+            <button class="sug-btn primary" data-side-action="cool">Mark as cold</button>
+            <button class="sug-btn" data-side-action="dismiss">Dismiss</button>
+          </div>
+        </div>
+      </div>
+      <div class="suggestion">
+        <div class="num">02</div>
+        <div class="text">
+          <strong>Schedule follow-up with Lattice Health</strong> — last reply mentioned legal review wraps Friday; auto-draft an opener for Mon.
+          <div class="meta">Confidence 88% · Estimated +14% reply rate</div>
+          <div class="actions">
+            <button class="sug-btn primary" data-side-action="schedule">Draft email</button>
+            <button class="sug-btn" data-side-action="dismiss">Dismiss</button>
+          </div>
+        </div>
+      </div>
+      <div class="suggestion">
+        <div class="num">03</div>
+        <div class="text">
+          <strong>Move Pioneer Robotics to Proposal</strong> — Gmail thread shows pricing approved, contract requested. Stage is stale.
+          <div class="meta">Confidence 95% · Auto-detected from thread</div>
+          <div class="actions">
+            <button class="sug-btn primary" data-side-action="moveStage">Move to Proposal</button>
+            <button class="sug-btn" data-side-action="dismiss">Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-card">
+      <div class="side-head">
+        <span class="side-title">Pipeline · Q2</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--st-won)">▲ 18%</span>
+      </div>
+      <div class="stat-row"><span class="l">Open ARR</span><span class="v">$2.84M</span></div>
+      <div class="stat-row"><span class="l">Weighted (P×ARR)</span><span class="v">$1.12M</span></div>
+      <div class="stat-row"><span class="l">Closed-won YTD</span><span class="v up">$684k</span></div>
+      <div class="stat-row"><span class="l">Avg deal cycle</span><span class="v">42 days</span></div>
+      <div class="stat-row"><span class="l">Stale (&gt;14d)</span><span class="v warn">5 records</span></div>
+      <div class="stat-row"><span class="l">Conversion · Demo→Won</span><span class="v">38%</span></div>
+    </div>
+
+    <div class="side-card">
+      <div class="side-head"><span class="side-title">Sources</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="display:inline-flex;gap:6px;align-items:center;color:var(--ink-soft);">
+            <span style="width:14px;height:14px;border-radius:3px;background:var(--gmail);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;">M</span>
+            Gmail
+          </span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">23 records</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="display:inline-flex;gap:6px;align-items:center;color:var(--ink-soft);">
+            <span style="width:14px;height:14px;border-radius:3px;background:#4a154b;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;">#</span>
+            Slack DMs
+          </span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">3 records</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="display:inline-flex;gap:6px;align-items:center;color:var(--ink-soft);">
+            <span style="width:14px;height:14px;border-radius:3px;background:#0077b5;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;">in</span>
+            LinkedIn
+          </span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">1 record</span>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<!-- Toasts -->
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+(() => {
+  // ─────── Records ───────
+  const RECS = [
+    { id: 'r01', co: 'Pioneer Robotics', domain: 'pioneerrobotics.com', logo: 'P', logoBg: '#1f2937', stage: 'demo', arr: 480000, lastContact: '2026-05-04', owner: { name: 'Mira O.', av: 'M', avBg: '#f97316' }, next: 'Send pricing 2-pager', dueRel: 2, threads: 14, engage: 88, eClass: 'hot' },
+    { id: 'r02', co: 'Lattice Health', domain: 'latticehealth.io', logo: 'L', logoBg: '#0ea5e9', stage: 'proposal', arr: 320000, lastContact: '2026-05-05', owner: { name: 'Jules K.', av: 'J', avBg: '#a855f7' }, next: 'Legal review handoff', dueRel: 0, threads: 22, engage: 94, eClass: 'hot' },
+    { id: 'r03', co: 'Atlas Cooperative', domain: 'atlas.coop', logo: 'A', logoBg: '#0f766e', stage: 'qualified', arr: 240000, lastContact: '2026-05-02', owner: { name: 'Mira O.', av: 'M', avBg: '#f97316' }, next: 'Schedule discovery #2', dueRel: 4, threads: 8, engage: 62, eClass: 'warm' },
+    { id: 'r04', co: 'Foundry Group', domain: 'foundry.group', logo: 'F', logoBg: '#dc2626', stage: 'demo', arr: 180000, lastContact: '2026-04-28', owner: { name: 'Sam D.', av: 'S', avBg: '#10b981' }, next: 'Demo recording follow-up', dueRel: -1, threads: 11, engage: 76, eClass: 'warm' },
+    { id: 'r05', co: 'Voltage Co.', domain: 'voltage.co', logo: 'V', logoBg: '#facc15', stage: 'won', arr: 142000, lastContact: '2026-05-06', owner: { name: 'Jules K.', av: 'J', avBg: '#a855f7' }, next: 'Onboarding kickoff', dueRel: 1, threads: 31, engage: 100, eClass: 'hot' },
+    { id: 'r06', co: 'Hexagon Labs', domain: 'hexagonlabs.ai', logo: 'H', logoBg: '#6d28d9', stage: 'lead', arr: 96000, lastContact: '2026-04-12', owner: { name: 'Sam D.', av: 'S', avBg: '#10b981' }, next: 'Cold restart email', dueRel: -3, threads: 2, engage: 22, eClass: 'cold' },
+    { id: 'r07', co: 'NorthDelta', domain: 'northdelta.eu', logo: 'N', logoBg: '#0369a1', stage: 'lead', arr: 84000, lastContact: '2026-04-10', owner: { name: 'Mira O.', av: 'M', avBg: '#f97316' }, next: 'Re-engagement seq', dueRel: -3, threads: 3, engage: 18, eClass: 'cold' },
+    { id: 'r08', co: 'Acme Robotics', domain: 'acme-robotics.io', logo: 'A', logoBg: '#475569', stage: 'lead', arr: 60000, lastContact: '2026-04-14', owner: { name: 'Sam D.', av: 'S', avBg: '#10b981' }, next: 'Mark cold (auto-suggested)', dueRel: -3, threads: 1, engage: 12, eClass: 'cold' },
+    { id: 'r09', co: 'Pixel Forge', domain: 'pixelforge.studio', logo: 'P', logoBg: '#ec4899', stage: 'qualified', arr: 110000, lastContact: '2026-05-03', owner: { name: 'Jules K.', av: 'J', avBg: '#a855f7' }, next: 'Send case study deck', dueRel: 1, threads: 6, engage: 54, eClass: 'warm' },
+    { id: 'r10', co: 'Ironclad Mfg', domain: 'ironclad.mfg', logo: 'I', logoBg: '#1f2937', stage: 'proposal', arr: 268000, lastContact: '2026-05-05', owner: { name: 'Mira O.', av: 'M', avBg: '#f97316' }, next: 'Term sheet v2', dueRel: 0, threads: 18, engage: 84, eClass: 'hot' },
+    { id: 'r11', co: 'Bright Coast', domain: 'brightcoast.app', logo: 'B', logoBg: '#06b6d4', stage: 'demo', arr: 72000, lastContact: '2026-05-01', owner: { name: 'Jules K.', av: 'J', avBg: '#a855f7' }, next: 'Demo scheduled', dueRel: 3, threads: 4, engage: 48, eClass: 'cool' },
+    { id: 'r12', co: 'Quanta Foods', domain: 'quanta.food', logo: 'Q', logoBg: '#65a30d', stage: 'won', arr: 96000, lastContact: '2026-05-04', owner: { name: 'Sam D.', av: 'S', avBg: '#10b981' }, next: 'Quarterly check-in', dueRel: 8, threads: 12, engage: 92, eClass: 'hot' },
+    { id: 'r13', co: 'Mosaic Health', domain: 'mosaichealth.com', logo: 'M', logoBg: '#7c3aed', stage: 'qualified', arr: 156000, lastContact: '2026-05-02', owner: { name: 'Mira O.', av: 'M', avBg: '#f97316' }, next: 'Procurement intro', dueRel: 2, threads: 7, engage: 66, eClass: 'warm' }
+  ];
+
+  const STAGE_LABEL = {
+    lead: 'Lead', qualified: 'Qualified', demo: 'Demo', proposal: 'Proposal', won: 'Closed-Won', lost: 'Closed-Lost'
+  };
+
+  // ─────── Helpers ───────
+  function fmtUSD(n) {
+    if (n >= 1e6) return '$' + (n/1e6).toFixed(2).replace(/\.0+$/,'') + 'M';
+    if (n >= 1e3) return '$' + (n/1e3).toFixed(0) + 'k';
+    return '$' + n.toLocaleString();
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso + 'T00:00:00Z');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  function relDay(n) {
+    if (n === 0) return 'today';
+    if (n === 1) return 'tomorrow';
+    if (n === -1) return 'yesterday';
+    if (n > 0) return `in ${n}d`;
+    return `${Math.abs(n)}d ago`;
+  }
+
+  // ─────── Render: Grid ───────
+  const gridBody = document.getElementById('gridBody');
+  function renderGrid() {
+    gridBody.innerHTML = RECS.map(r => `
+      <tr data-id="${r.id}">
+        <td>
+          <div class="co-cell">
+            <span class="co-logo" style="background:${r.logoBg}">${r.logo}</span>
+            <span class="co-name">${r.co}</span>
+          </div>
+        </td>
+        <td>
+          <span class="stage ${r.stage}" data-stage-cell="${r.id}">${STAGE_LABEL[r.stage]}</span>
+        </td>
+        <td class="arr-cell">${fmtUSD(r.arr)}</td>
+        <td class="date-cell">${fmtDate(r.lastContact)} <span class="rel">${relDay(daysSince(r.lastContact))}</span></td>
+        <td>
+          <span class="owner-cell">
+            <span class="av" style="background:${r.owner.avBg}">${r.owner.av}</span>
+            <span>${r.owner.name}</span>
+          </span>
+        </td>
+        <td class="next-cell">${r.next}<span class="due ${r.dueRel < 0 ? 'overdue' : (r.dueRel <= 1 ? 'soon' : '')}">${relDay(r.dueRel)}</span></td>
+        <td><span class="gmail-cell" title="Open Gmail thread">✉ ${r.threads}</span></td>
+        <td><span class="engage"><span class="bar"><span class="fill ${r.eClass}" style="width:${r.engage}%"></span></span><span class="v">${r.engage}</span></span></td>
+      </tr>
+    `).join('');
+    bindGridRows();
+  }
+  function daysSince(iso) {
+    const today = new Date('2026-05-06T00:00:00Z');
+    const then = new Date(iso + 'T00:00:00Z');
+    const ms = today - then;
+    return -Math.round(ms / 86400000);
+  }
+  function bindGridRows() {
+    gridBody.querySelectorAll('tr').forEach(tr => {
+      const id = tr.dataset.id;
+      const r = RECS.find(x => x.id === id);
+      tr.addEventListener('click', e => {
+        if (e.target.closest('.stage') || e.target.closest('.gmail-cell')) return;
+        toast({ title: r.co, body: `<strong>${STAGE_LABEL[r.stage]}</strong> · ${fmtUSD(r.arr)} · Owner ${r.owner.name}<br/>Next: ${r.next} (${relDay(r.dueRel)})` });
+      });
+      // stage cycle
+      const stageEl = tr.querySelector('.stage');
+      if (stageEl) {
+        stageEl.addEventListener('click', e => {
+          e.stopPropagation();
+          const order = ['lead','qualified','demo','proposal','won'];
+          const cur = order.indexOf(r.stage);
+          const next = order[(cur + 1) % order.length];
+          r.stage = next;
+          renderAll();
+          flashRow(r.id);
+          toast({ kind: 'success', title: 'Stage updated', body: `${r.co} → <strong>${STAGE_LABEL[next]}</strong>` });
+        });
+      }
+      // gmail open
+      const gmailEl = tr.querySelector('.gmail-cell');
+      if (gmailEl) {
+        gmailEl.addEventListener('click', e => {
+          e.stopPropagation();
+          toast({ kind: 'warn', title: 'Gmail thread', body: `Opening ${r.threads} threads with <strong>${r.co}</strong> in Gmail.` });
+        });
+      }
+    });
+  }
+  function flashRow(id) {
+    const tr = gridBody.querySelector(`tr[data-id="${id}"]`);
+    if (!tr) return;
+    tr.classList.remove('flash');
+    void tr.offsetWidth;
+    tr.classList.add('flash');
+  }
+
+  // ─────── Render: Kanban ───────
+  function renderKanban() {
+    const byStage = { lead: [], qualified: [], demo: [], proposal: [], won: [] };
+    for (const r of RECS) {
+      if (byStage[r.stage]) byStage[r.stage].push(r);
+    }
+    Object.entries(byStage).forEach(([stage, items]) => {
+      const body = document.getElementById(`kb-${stage}`);
+      const cnt = document.getElementById(`cnt-${stage}`);
+      if (cnt) cnt.textContent = items.length;
+      if (!body) return;
+      body.innerHTML = items.map(r => `
+        <div class="kanban-card" data-id="${r.id}">
+          <div class="top">
+            <div>
+              <div class="name">${r.co}</div>
+              <div class="arr">${fmtUSD(r.arr)} · ${r.threads} threads</div>
+            </div>
+            <span class="co-logo" style="background:${r.logoBg}">${r.logo}</span>
+          </div>
+          <div class="next">
+            <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            ${r.next}
+          </div>
+          <div class="foot">
+            <span class="owner-cell" style="font-size:11px;color:var(--muted)">
+              <span class="av" style="background:${r.owner.avBg};width:18px;height:18px;font-size:9px">${r.owner.av}</span>
+              ${r.owner.name}
+            </span>
+            <span style="font-family:var(--mono);font-size:10.5px;color:${r.dueRel < 0 ? 'var(--st-lost)' : (r.dueRel <= 1 ? 'var(--st-demo)' : 'var(--muted)')};">${relDay(r.dueRel)}</span>
+          </div>
+        </div>
+      `).join('');
+      body.querySelectorAll('.kanban-card').forEach(card => {
+        const r = RECS.find(x => x.id === card.dataset.id);
+        card.addEventListener('click', () => {
+          toast({ title: r.co, body: `<strong>${STAGE_LABEL[r.stage]}</strong> · ${fmtUSD(r.arr)}<br/>Next: ${r.next} (${relDay(r.dueRel)})` });
+        });
+      });
+    });
+  }
+
+  // ─────── Render: Gallery ───────
+  function renderGallery() {
+    const gal = document.getElementById('gallery');
+    gal.innerHTML = RECS.map(r => {
+      const stripe = {
+        lead: '#94a3b8', qualified: '#3b82f6', demo: '#f59e0b', proposal: '#8b5cf6', won: '#10b981', lost: '#ef4444'
+      }[r.stage];
+      return `
+        <div class="gal-card" data-id="${r.id}">
+          <div class="stripe" style="background:${stripe}"></div>
+          <div class="gh-row">
+            <span class="co-logo-lg" style="background:${r.logoBg}">${r.logo}</span>
+            <div>
+              <div class="co-name-lg">${r.co}</div>
+              <div class="co-domain">${r.domain}</div>
+            </div>
+          </div>
+          <div class="gh-meta">
+            <div class="row"><span class="lbl">Stage</span><span class="stage ${r.stage}">${STAGE_LABEL[r.stage]}</span></div>
+            <div class="row"><span class="lbl">ARR</span><span class="val">${fmtUSD(r.arr)}</span></div>
+            <div class="row"><span class="lbl">Last contact</span><span class="val">${fmtDate(r.lastContact)}</span></div>
+            <div class="row"><span class="lbl">Threads</span><span class="val">${r.threads}</span></div>
+          </div>
+          <div class="gh-foot">
+            <span class="owner-cell" style="font-size:11px;color:var(--muted)">
+              <span class="av" style="background:${r.owner.avBg};width:18px;height:18px;font-size:9px">${r.owner.av}</span>
+              ${r.owner.name}
+            </span>
+            <span class="engage" style="width:80px;"><span class="bar"><span class="fill ${r.eClass}" style="width:${r.engage}%"></span></span><span class="v">${r.engage}</span></span>
+          </div>
+        </div>
+      `;
+    }).join('');
+    gal.querySelectorAll('.gal-card').forEach(card => {
+      const r = RECS.find(x => x.id === card.dataset.id);
+      card.addEventListener('click', () => {
+        toast({ title: r.co, body: `Opened company card · ${r.threads} email threads · ${fmtUSD(r.arr)} ARR` });
+      });
+    });
+  }
+
+  // ─────── Render: Calendar ───────
+  function renderCalendar() {
+    const grid = document.getElementById('calGrid');
+    const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    let html = dows.map(d => `<div class="dow">${d}</div>`).join('');
+    // May 2026 starts on Friday (real cal)
+    const startOffset = 5; // May 1 = Friday → blank Sun..Thu
+    for (let i = 0; i < startOffset; i++) {
+      html += `<div class="cal-day muted"><div class="num">${30 - startOffset + i + 1}</div></div>`;
+    }
+    const today = 6;
+    const eventsByDay = {};
+    // Map records' dueRel to actual date in May
+    for (const r of RECS) {
+      const d = today + r.dueRel;
+      if (d < 1 || d > 31) continue;
+      eventsByDay[d] = eventsByDay[d] || [];
+      eventsByDay[d].push(r);
+    }
+    for (let d = 1; d <= 31; d++) {
+      const isToday = d === today ? 'today' : '';
+      const evts = (eventsByDay[d] || []).slice(0, 2);
+      const more = (eventsByDay[d] || []).length - evts.length;
+      html += `
+        <div class="cal-day ${isToday}" data-day="${d}">
+          <div class="num">${d}</div>
+          ${evts.map(r => `<span class="cal-pill ${r.stage === 'demo' ? 'demo' : r.stage === 'qualified' ? 'qual' : r.stage === 'proposal' ? 'prop' : r.stage === 'won' ? 'won' : 'qual'}" data-id="${r.id}">${r.co}</span>`).join('')}
+          ${more > 0 ? `<div style="font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:2px;">+ ${more} more</div>` : ''}
+        </div>
+      `;
+    }
+    // trailing
+    const totalCells = 7 + startOffset + 31;
+    const trailing = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= trailing; i++) {
+      html += `<div class="cal-day muted"><div class="num">${i}</div></div>`;
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll('.cal-pill').forEach(p => {
+      p.addEventListener('click', e => {
+        e.stopPropagation();
+        const r = RECS.find(x => x.id === p.dataset.id);
+        if (r) toast({ title: r.co, body: `Calendar event · ${r.next}` });
+      });
+    });
+    grid.querySelectorAll('.cal-day').forEach(d => {
+      d.addEventListener('click', () => {
+        const dn = d.dataset.day;
+        if (dn) toast({ kind: 'warn', title: `May ${dn}`, body: 'Click a pill to open the linked record.' });
+      });
+    });
+  }
+
+  function renderAll() {
+    renderGrid();
+    renderKanban();
+    renderGallery();
+    renderCalendar();
+  }
+  renderAll();
+
+  // ─────── View switcher ───────
+  document.querySelectorAll('.view-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const v = tab.dataset.view;
+      document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('[data-view-panel]').forEach(p => p.classList.toggle('active', p.dataset.viewPanel === v));
+    });
+  });
+
+  // ─────── Toasts ───────
+  const toastBox = document.getElementById('toastBox');
+  function toast(opts) {
+    const { kind = '', title = '', body = '' } = (typeof opts === 'string') ? { body: opts } : opts;
+    const node = document.createElement('div');
+    node.className = `toast ${kind}`;
+    node.innerHTML = `<div class="t-title">${title}</div><div class="t-body">${body}</div>`;
+    toastBox.appendChild(node);
+    setTimeout(() => {
+      node.classList.add('fade');
+      setTimeout(() => node.remove(), 280);
+    }, 4000);
+  }
+
+  // ─────── Sync from Gmail ───────
+  const syncBtn = document.getElementById('refreshGmail');
+  let mins = 2;
+  syncBtn.addEventListener('click', () => {
+    syncBtn.classList.add('spin');
+    syncBtn.disabled = true;
+    setTimeout(() => {
+      syncBtn.classList.remove('spin');
+      syncBtn.disabled = false;
+      mins = 0;
+      document.getElementById('lastSync').textContent = 'just now';
+      // Bump 1 random record's threads + engagement, flash it
+      const i = Math.floor(Math.random() * RECS.length);
+      RECS[i].threads += 1;
+      RECS[i].engage = Math.min(100, RECS[i].engage + 4);
+      RECS[i].lastContact = '2026-05-06';
+      renderAll();
+      flashRow(RECS[i].id);
+      toast({ kind: 'success', title: 'Synced from Gmail', body: `Pulled <strong>4 new emails</strong> · 1 record updated (${RECS[i].co}) · 0 new leads` });
+    }, 1100);
+  });
+
+  // tick "X min ago"
+  setInterval(() => {
+    mins += 1;
+    const el = document.getElementById('lastSync');
+    if (el) el.textContent = mins === 0 ? 'just now' : (mins === 1 ? '1m ago' : `${mins}m ago`);
+  }, 60000);
+
+  // ─────── Side actions ───────
+  document.querySelectorAll('[data-side-action]').forEach(b => {
+    b.addEventListener('click', () => {
+      const a = b.dataset.sideAction;
+      const map = {
+        seeprompt: { kind: '', title: 'AI prompt', body: '"Extract leads I emailed in the last 30 days. For each, infer stage, ARR estimate, next action, and engagement score from thread tone."' },
+        undo: { kind: 'warn', title: 'Reverted last fill', body: '27 auto-extracted records reverted. You can re-run anytime.' },
+        export: { kind: 'success', title: 'Export started', body: 'Q2-Pipeline.csv · 13 rows · sent to Downloads/' },
+        cool: { kind: 'success', title: 'Marked cold', body: '<strong>Acme · Hexagon · NorthDelta</strong> moved to Cold list. They\'ll resurface if they reply.' },
+        schedule: { kind: 'success', title: 'Email drafted', body: 'Follow-up draft for <strong>Lattice Health</strong> ready in Gmail · scheduled for Mon 9 AM' },
+        moveStage: { kind: 'success', title: 'Stage updated', body: '<strong>Pioneer Robotics</strong> moved to <em>Proposal</em>. Slack posted to #sales.' },
+        dismiss: { kind: '', title: 'Dismissed', body: 'AI suggestion archived. Won\'t reappear for 7 days.' }
+      };
+      if (map[a]) toast(map[a]);
+      // For some actions, mutate state visibly
+      if (a === 'moveStage') {
+        const r = RECS.find(x => x.id === 'r01');
+        if (r) { r.stage = 'proposal'; renderAll(); flashRow('r01'); }
+      }
+      if (a === 'cool') {
+        ['r06','r07','r08'].forEach(id => {
+          const r = RECS.find(x => x.id === id);
+          if (r) { r.stage = 'lost'; }
+        });
+        renderAll();
+      }
+    });
+  });
+
+})();
+</script>
+
+</body>
+</html>

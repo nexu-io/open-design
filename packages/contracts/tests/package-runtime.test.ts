@@ -58,7 +58,9 @@ describe('@open-design/contracts package runtime shape', () => {
 
     expect(contracts.composeSystemPrompt).toEqual(expect.any(Function));
     expect(contracts.exampleHealthResponse).toEqual({ ok: true, service: 'daemon' });
-    expect(Object.keys(connectionTest)).toEqual([]);
+    expect(connectionTest.validateBaseUrl).toEqual(expect.any(Function));
+    expect(connectionTest.isLoopbackApiHost).toEqual(expect.any(Function));
+    expect(connectionTest.isBlockedExternalApiHostname).toEqual(expect.any(Function));
     expect(research.RESEARCH_DEFAULT_MAX_SOURCES.shallow).toBe(5);
     expect(critique.defaultCritiqueConfig()).toMatchObject({
       enabled: false,

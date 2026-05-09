@@ -3,6 +3,9 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+
+import { exportPdfFromHtml } from "./pdf-export.js";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -59,6 +62,7 @@ export type DesktopRuntime = {
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
+  exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
   status(): DesktopStatusSnapshot;
@@ -97,6 +101,16 @@ const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-drag {
     -webkit-app-region: drag;
   }
+  .modal-backdrop,
+  .modal-backdrop *,
+  .modal,
+  .modal *,
+  .ds-modal-backdrop,
+  .ds-modal-backdrop *,
+  .ds-modal,
+  .ds-modal * {
+    -webkit-app-region: no-drag;
+  }
   .entry-brand,
   .entry-header {
     -webkit-app-region: drag;
@@ -107,10 +121,10 @@ const MAC_WINDOW_CHROME_CSS = `
   .entry-header [role="button"],
   .entry-tabs,
   .entry-tabs *,
-  .ds-modal-header,
-  .ds-modal-header *,
-  .ds-modal-actions,
-  .ds-modal-actions *,
+  .viewer-toolbar,
+  .viewer-toolbar *,
+  .deck-nav,
+  .deck-nav *,
   .share-menu-popover,
   .share-menu-popover *,
   .entry-side-resizer,
@@ -178,7 +192,11 @@ async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
   await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
 }
 
-function isHttpUrl(url: string): boolean {
+// Exported for unit tests in `apps/packaged/tests/desktop-url-allowlist.test.ts`
+// — these are pure URL-policy helpers and `apps/desktop` itself has no
+// vitest setup, so the packaged workspace hosts the coverage. Keep them
+// pure and side-effect-free.
+export function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.protocol === "http:" || parsed.protocol === "https:";
@@ -187,10 +205,24 @@ function isHttpUrl(url: string): boolean {
   }
 }
 
-function isAllowedChildWindowUrl(url: string): boolean {
+export function isAllowedChildWindowUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "blob:";
+    // `blob:` covers in-renderer generated downloads / object URLs.
+    // `od:` is the packaged Electron entry's privileged scheme
+    // registered by `apps/packaged/src/protocol.ts` and proxied to the
+    // local web sidecar. Without this branch, any in-app
+    // `<a target="_blank" href="/api/...">` resolves to `od://app/...`
+    // in packaged builds, falls through `setWindowOpenHandler` to
+    // `{ action: "deny" }`, and the click is silently dropped — that
+    // was the Orbit "Open artifact" no-op reported in #911. Allowing
+    // `od:` here lets Electron open the link in a child BrowserWindow
+    // that inherits the same protocol registration + preload, so the
+    // live artifact preview renders normally. Dev mode is unaffected:
+    // its links resolve to `http://127.0.0.1:.../...`, which is gated
+    // by the separate `isHttpUrl` branch and continues to open in the
+    // user's external browser via `shell.openExternal`.
+    return parsed.protocol === "blob:" || parsed.protocol === "od:";
   } catch {
     return false;
   }
@@ -254,9 +286,19 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // a second handler" on the second createDesktopRuntime() call (e.g. dev
   // hot-reload). removeHandler is a no-op when nothing is registered.
   ipcMain.removeHandler("dialog:pick-folder");
+  ipcMain.removeHandler("shell:open-external");
   ipcMain.handle("dialog:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+  ipcMain.handle("shell:open-external", async (_event, url: string) => {
+    if (!isHttpUrl(url)) return false;
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
@@ -382,6 +424,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       } catch (error) {
         return { error: error instanceof Error ? error.message : String(error), ok: false };
       }
+    },
+    exportPdf(input) {
+      return exportPdfFromHtml(input);
     },
     async screenshot(input) {
       if (window.isDestroyed()) throw new Error("desktop window is destroyed");

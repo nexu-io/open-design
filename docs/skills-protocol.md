@@ -1,6 +1,8 @@
 # Skills Protocol
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
+**Parent:** [`spec.md`](spec.md) · **Siblings:** [`skills-contributing.md`](skills-contributing.md) · [`architecture.md`](architecture.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
+
+> Want to ship a skill upstream rather than read the protocol spec? See [`skills-contributing.md`](skills-contributing.md) — quick start, merge bar, PR template, common rejections. This file is the **what** (frontmatter grammar, discovery rules, mode semantics); that file is the **how** (clone to merged PR).
 
 A **Skill** is the atomic unit of design capability in OD. We adopt Claude Code's `SKILL.md` convention verbatim as the base format, then add optional fields for design-specific features (preview type, input schema, slider parameters). A skill written for plain Claude Code runs in OD. An OD skill that doesn't use our extensions runs in plain Claude Code.
 
@@ -210,7 +212,7 @@ The 9-section DESIGN.md format is **not invented by OD**; it's the [awesome-clau
 ## Agent Prompt Guide
 ```
 
-Full schema and examples: [`schemas/design-system.md`](schemas/design-system.md) and [`examples/DESIGN.sample.md`](examples/DESIGN.sample.md) (TODO).
+Example: [`docs/examples/DESIGN.sample.md`](examples/DESIGN.sample.md).
 
 ## 5.5 Craft references (`craft/`)
 

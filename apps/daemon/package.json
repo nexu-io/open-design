@@ -29,7 +29,7 @@
     "dev": "pnpm run build && node dist/cli.js --no-open",
     "start": "pnpm run build && node dist/cli.js",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "pnpm --filter @open-design/contracts build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -42,13 +42,13 @@
     "chokidar": "^5.0.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.1.1",
     "undici": "^7.16.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^4.17.21",
-    "@types/multer": "^1.4.12",
+    "@types/multer": "^2.1.0",
     "@types/node": "^20.17.10",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

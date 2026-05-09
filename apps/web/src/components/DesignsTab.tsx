@@ -114,12 +114,20 @@ export function DesignsTab({
 
 	const filtered = useMemo(() => {
 		const q = filter.trim().toLowerCase();
-		let list: DesignListItem[] = projects.map((project) => ({
-			type: "project",
-			project,
-			updatedAt: project.updatedAt,
-			createdAt: project.createdAt,
-		}));
+		let list: DesignListItem[] = projects
+			.filter(
+				(project) =>
+					!shouldHideProjectCard(
+						project,
+						liveArtifactsByProject[project.id] ?? [],
+					),
+			)
+			.map((project) => ({
+				type: "project",
+				project,
+				updatedAt: project.updatedAt,
+				createdAt: project.createdAt,
+			}));
 
 		const liveItems = projects.flatMap((project) =>
 			(liveArtifactsByProject[project.id] ?? []).map((liveArtifact) => ({
@@ -257,6 +265,8 @@ export function DesignsTab({
 						const ds = dsName(p.designSystemId);
 						if (item.type === "live-artifact") {
 							const artifact = item.liveArtifact;
+							const title = liveArtifactCardTitle(p, artifact);
+							const metaLead = liveArtifactCardMetaLead(p, artifact);
 							return (
 								<div
 									key={`live:${artifact.id}`}
@@ -295,11 +305,11 @@ export function DesignsTab({
 											status={artifact.status}
 											refreshStatus={artifact.refreshStatus}
 										/>
-										<div className="design-card-name" title={artifact.title}>
-											{artifact.title}
+										<div className="design-card-name" title={title}>
+											{title}
 										</div>
 										<div className="design-card-meta">
-											<span className="ds">{p.name}</span>
+											<span className="ds">{metaLead}</span>
 											{" · "}
 											{artifactStatusLabel(
 												artifact.status,
@@ -505,4 +515,26 @@ function artifactStatusLabel(
 	if (refreshStatus === "failed") return t("designs.statusRefreshFailed");
 	if (refreshStatus === "succeeded") return t("designs.statusRefreshed");
 	return t("designs.statusLive");
+}
+
+function shouldHideProjectCard(project: Project, liveArtifacts: LiveArtifactSummary[]): boolean {
+  if (liveArtifacts.length === 0) return false;
+  return project.skillId === 'live-artifact' && isOrbitProject(project);
+}
+
+function liveArtifactCardTitle(project: Project, liveArtifact: LiveArtifactSummary): string {
+  return isCollapsedOrbitArtifactProject(project) ? project.name : liveArtifact.title;
+}
+
+function liveArtifactCardMetaLead(project: Project, liveArtifact: LiveArtifactSummary): string {
+  return isCollapsedOrbitArtifactProject(project) ? liveArtifact.title : project.name;
+}
+
+function isCollapsedOrbitArtifactProject(project: Project): boolean {
+  return project.skillId === 'live-artifact' && isOrbitProject(project);
+}
+
+function isOrbitProject(project: Project): boolean {
+  const metadata = project.metadata as { kind?: unknown } | undefined;
+  return metadata?.kind === 'orbit';
 }

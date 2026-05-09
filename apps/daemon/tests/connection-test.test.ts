@@ -606,6 +606,106 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('keeps the default Azure api-version in connection tests when the field is blank', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'deployment-1',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [upstreamUrl] = upstream!;
+    expect(String(upstreamUrl)).toBe(
+      'https://my-azure.openai.azure.com/openai/deployments/deployment-1/chat/completions?api-version=2024-10-21',
+    );
+  });
+
+  it('omits Azure api-version in connection tests for OpenAI-compatible v1 paths when blank', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'deployment-1',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [upstreamUrl, upstreamInit] = upstream!;
+    expect(String(upstreamUrl)).toBe(
+      'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deployment-1',
+    });
+  });
+
+  it('removes copied Azure api-version query params in connection tests for OpenAI-compatible v1 paths when blank', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl:
+          'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1?api-version=2024-10-21',
+        apiKey: 'azure-key',
+        model: 'deployment-1',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [upstreamUrl] = upstream!;
+    expect(String(upstreamUrl)).toBe(
+      'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+  });
+
   it('uses the non-streaming Gemini endpoint and extracts text from candidates', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
@@ -1011,7 +1111,14 @@ setInterval(() => {}, 1000);
             agentId: 'codex',
             signal: controller.signal,
           });
-          await waitForFile(pidFile);
+          await Promise.race([
+            waitForFile(pidFile, 15_000),
+            pending.then((result) => {
+              throw new Error(
+                `Agent probe finished before fake agent wrote pid: ${JSON.stringify(result)}`,
+              );
+            }),
+          ]);
           controller.abort();
           await expect(pending).resolves.toMatchObject({
             ok: false,

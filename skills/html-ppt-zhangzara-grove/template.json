@@ -1,0 +1,51 @@
+{
+  "slug": "zhangzara-grove",
+  "name": "Grove",
+  "tagline": "Forest-green canvas with cream type, classical Playfair serifs, and a single rust accent.",
+  "mood": [
+    "organic",
+    "considered",
+    "warm",
+    "literary",
+    "natural"
+  ],
+  "occasion": [
+    "sustainability brand",
+    "wellness brand",
+    "outdoor / nature product",
+    "winery or restaurant",
+    "literary or arts deck",
+    "advisory deliverable",
+    "bilingual EN/CN deck"
+  ],
+  "tone": [
+    "classical",
+    "warm",
+    "considered",
+    "patient"
+  ],
+  "formality": "medium-high",
+  "density": "medium",
+  "palette": {
+    "bg": "#192b1b",
+    "bg_alt": "#1e3221",
+    "fg": "#d4cfbf",
+    "accent": "#c8524a",
+    "bg_light": "#e8e4d6",
+    "description": "deep forest green canvas with warm bone type and a single rust-red accent; alternate cream-paper mode for breathing room"
+  },
+  "typography": {
+    "display": "Playfair Display",
+    "body": "Jost",
+    "mono": "JetBrains Mono",
+    "serif_cn": "Noto Serif SC",
+    "sans_cn": "Noto Sans SC",
+    "style": "transitional serif headlines + clean geometric sans body + technical mono; full Chinese serif/sans support"
+  },
+  "scheme": "mixed",
+  "best_for": "Anything that should feel organic, considered, and grown-up: sustainability and wellness brands, outdoor / nature products, wineries and restaurants, literary or arts decks, advisory deliverables, bilingual EN/CN reports. Also a calm, distinctive choice for tech, research, or business decks that want patience over urgency.",
+  "avoid_for": "Decks that need neon energy or rapid-fire pop — the forest-green canvas and Playfair serif commit to a slow, classical voice.",
+  "slide_count": 12,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/grove"
+}

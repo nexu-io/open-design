@@ -1,6 +1,6 @@
-import { execFile } from "node:child_process";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { execFile, type ChildProcess } from "node:child_process";
+import { mkdir, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -18,13 +18,15 @@ import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open
 import {
   collectProcessTreePids,
   createProcessStampArgs,
+  isProcessAlive,
   listProcessSnapshots,
   matchesStampedProcess,
   readLogTail,
-  spawnBackgroundProcess,
+  spawnLoggedProcess,
   stopProcesses,
 } from "@open-design/platform";
 import type { ToolPackConfig } from "../config.js";
+import { PACKAGED_CONFIG_PATH_ENV, writeLaunchPackagedConfig } from "./app-config.js";
 import { DESKTOP_LOG_ECHO_ENV, PRODUCT_NAME } from "./constants.js";
 import { clearQuarantine, pathExists } from "./fs.js";
 import { desktopIdentityPath, desktopLogPath, macAppExecutablePath, resolveMacPaths } from "./paths.js";
@@ -226,6 +228,217 @@ async function waitForDesktopStatus(config: ToolPackConfig, timeoutMs = 45_000):
   return null;
 }
 
+type ProcessExit = { code: number | null; signal: NodeJS.Signals | null };
+
+function watchProcessExit(child: ChildProcess): {
+  current(): ProcessExit | null;
+  wait(timeoutMs: number): Promise<ProcessExit | null>;
+} {
+  let exit: ProcessExit | null = null;
+  const waiters = new Set<(value: ProcessExit) => void>();
+
+  child.once("exit", (code, signal) => {
+    exit = { code, signal };
+    for (const resolveWait of waiters) resolveWait(exit);
+    waiters.clear();
+  });
+
+  return {
+    current() {
+      return exit;
+    },
+    async wait(timeoutMs: number): Promise<ProcessExit | null> {
+      if (exit != null) return exit;
+      return await new Promise((resolveWait) => {
+        const timer = setTimeout(() => {
+          waiters.delete(onExit);
+          resolveWait(null);
+        }, timeoutMs);
+        const onExit = (value: ProcessExit) => {
+          clearTimeout(timer);
+          resolveWait(value);
+        };
+        waiters.add(onExit);
+      });
+    },
+  };
+}
+
+function formatExit(exit: ProcessExit): string {
+  return `code=${exit.code ?? "null"} signal=${exit.signal ?? "null"}`;
+}
+
+function nonEmptyLines(value: string): string[] {
+  return value.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.length > 0);
+}
+
+function tailLines(lines: string[], maxLines: number): string[] {
+  return lines.slice(Math.max(0, lines.length - maxLines));
+}
+
+function truncateLine(line: string, maxLength = 260): string {
+  return line.length <= maxLength ? line : `${line.slice(0, maxLength - 3)}...`;
+}
+
+async function collectLaunchAssessment(appPath: string): Promise<string[]> {
+  const commands: Array<{ args: string[]; label: string }> = [
+    { args: ["--verify", "--deep", "--strict", "--verbose=2", appPath], label: "codesign" },
+    { args: ["--assess", "--type", "execute", "--verbose=4", appPath], label: "spctl" },
+  ];
+  const lines: string[] = [];
+
+  for (const command of commands) {
+    try {
+      const result = await execFileAsync(command.label, command.args, { maxBuffer: 1024 * 1024 });
+      lines.push(`[${command.label}] ok`);
+      if (result.stdout.trim().length > 0) lines.push(result.stdout.trim());
+      if (result.stderr.trim().length > 0) lines.push(result.stderr.trim());
+    } catch (error) {
+      lines.push(`[${command.label}] failed`);
+      if (isRecord(error) && typeof error.stdout === "string" && error.stdout.trim().length > 0) {
+        lines.push(error.stdout.trim());
+      }
+      if (isRecord(error) && typeof error.stderr === "string" && error.stderr.trim().length > 0) {
+        lines.push(error.stderr.trim());
+      }
+      if (error instanceof Error && lines.at(-1) !== error.message) {
+        lines.push(error.message);
+      }
+    }
+  }
+
+  return lines;
+}
+
+async function collectLaunchXattrSummary(appPath: string): Promise<string[]> {
+  try {
+    const result = await execFileAsync("xattr", ["-lr", appPath], { maxBuffer: 2 * 1024 * 1024 });
+    const lines = nonEmptyLines(result.stdout);
+    const quarantine = lines.filter((line) => line.includes("com.apple.quarantine"));
+    const provenance = lines.filter((line) => line.includes("com.apple.provenance"));
+    const matched = [...quarantine, ...provenance];
+    return [
+      `quarantine entries: ${quarantine.length}`,
+      `provenance entries: ${provenance.length}`,
+      ...(matched.length === 0 ? [] : tailLines(matched, 8).map((line) => truncateLine(line))),
+    ];
+  } catch (error) {
+    if (isRecord(error) && typeof error.stdout === "string") {
+      const lines = nonEmptyLines(error.stdout);
+      if (lines.length > 0) return tailLines(lines, 40);
+    }
+    return [error instanceof Error ? error.message : String(error)];
+  }
+}
+
+function isRelevantSystemPolicyLine(line: string): boolean {
+  return [
+    "Malware rejection",
+    "lack of matching active rule",
+    "notarization daemon",
+    "code signature",
+    "Gatekeeper",
+    "proc_exit",
+  ].some((keyword) => line.includes(keyword)) || /\b(crash|exited|exit|fault|killed|terminated|termination)\b/i.test(line);
+}
+
+function compactSystemPolicyLines(lines: string[]): string[] {
+  const relevant = lines.filter(isRelevantSystemPolicyLine);
+  if (relevant.length === 0) return tailLines(lines, 24).map((line) => truncateLine(line));
+
+  const malware = relevant.filter((line) => line.includes("Malware rejection"));
+  const missingRule = relevant.filter((line) => line.includes("lack of matching active rule"));
+  const notarization = relevant.filter((line) => line.includes("notarization daemon"));
+  const other = relevant.filter((line) =>
+    !line.includes("Malware rejection") &&
+    !line.includes("lack of matching active rule") &&
+    !line.includes("notarization daemon")
+  );
+  const samples = [
+    ...tailLines(malware, 5),
+    ...tailLines(notarization, 5),
+    ...tailLines(missingRule, 5),
+    ...tailLines(other, 8),
+  ];
+
+  return [
+    `matching entries: ${relevant.length}`,
+    `malware rejection entries: ${malware.length}`,
+    `missing active rule entries: ${missingRule.length}`,
+    `notarization daemon entries: ${notarization.length}`,
+    ...[...new Set(samples)].map((line) => truncateLine(line)),
+  ];
+}
+
+async function collectSystemPolicyLog(target: { appPath: string; executablePath: string }): Promise<string[]> {
+  const appName = basename(target.appPath, ".app");
+  const executableName = basename(target.executablePath);
+  const predicate = [...new Set([
+    `process == "${appName}"`,
+    `process == "${executableName}"`,
+    `process == "amfid"`,
+    `eventMessage CONTAINS[c] "${appName}"`,
+    `eventMessage CONTAINS[c] "${executableName}"`,
+    'eventMessage CONTAINS[c] "Malware rejection"',
+    'eventMessage CONTAINS[c] "lack of matching active rule"',
+    'eventMessage CONTAINS[c] "notarization daemon"',
+    'eventMessage CONTAINS[c] "code signature"',
+    'eventMessage CONTAINS[c] "Gatekeeper"',
+  ])].join(" OR ");
+
+  try {
+    const result = await execFileAsync("/usr/bin/log", [
+      "show",
+      "--style",
+      "compact",
+      "--last",
+      "3m",
+      "--predicate",
+      predicate,
+    ], { maxBuffer: 2 * 1024 * 1024 });
+    const lines = nonEmptyLines([result.stdout, result.stderr].join("\n"));
+    return compactSystemPolicyLines(lines);
+  } catch (error) {
+    const lines = [
+      ...(isRecord(error) && typeof error.stdout === "string" ? nonEmptyLines(error.stdout) : []),
+      ...(isRecord(error) && typeof error.stderr === "string" ? nonEmptyLines(error.stderr) : []),
+    ];
+    if (lines.length > 0) {
+      return compactSystemPolicyLines(lines);
+    }
+    return [error instanceof Error ? error.message : String(error)];
+  }
+}
+
+async function createLaunchFailureMessage(
+  config: ToolPackConfig,
+  target: { appPath: string; executablePath: string; source: MacStartSource },
+  details: { pid: number; reason: string },
+): Promise<string> {
+  const logPath = desktopLogPath(config);
+  const logLines = await readLogTail(logPath, 80).catch(() => []);
+  const assessment = await collectLaunchAssessment(target.appPath);
+  const xattrs = await collectLaunchXattrSummary(target.appPath);
+  const systemPolicyLog = await collectSystemPolicyLog(target);
+  return [
+    `mac desktop failed to become healthy (${details.reason})`,
+    `namespace: ${config.namespace}`,
+    `source: ${target.source}`,
+    `pid: ${details.pid}`,
+    `appPath: ${target.appPath}`,
+    `executablePath: ${target.executablePath}`,
+    `logPath: ${logPath}`,
+    "launch assessment:",
+    ...(assessment.length === 0 ? ["(no assessment output)"] : assessment),
+    "launch xattrs:",
+    ...(xattrs.length === 0 ? ["(no xattr output)"] : xattrs),
+    "macOS system policy log:",
+    ...(systemPolicyLog.length === 0 ? ["(no matching system log lines)"] : systemPolicyLog),
+    "desktop log tail:",
+    ...(logLines.length === 0 ? ["(no log lines)"] : logLines),
+  ].join("\n");
+}
+
 async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
   appPath: string;
   executablePath: string;
@@ -305,31 +518,64 @@ export async function startPackedMacApp(config: ToolPackConfig): Promise<MacStar
   const target = await resolvePackedMacStartTarget(config);
   const stamp = desktopStamp(config);
   const logPath = desktopLogPath(config);
+  const launchConfigPath = await writeLaunchPackagedConfig(config, target.appPath);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
 
-  const spawned = await spawnBackgroundProcess({
-    args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
-    command: target.executablePath,
-    cwd: target.appPath,
-    env: createSidecarLaunchEnv({
-      base: join(config.roots.runtime.namespaceRoot, "runtime"),
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      extraEnv: {
-        ...process.env,
-        [DESKTOP_LOG_ECHO_ENV]: "0",
-      },
-      stamp,
-    }),
-    logFd: null,
-  });
+  const logHandle = await open(logPath, "a");
+  let child: ChildProcess;
+  try {
+    child = await spawnLoggedProcess({
+      args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+      command: target.executablePath,
+      cwd: target.appPath,
+      detached: true,
+      env: createSidecarLaunchEnv({
+        base: join(config.roots.runtime.namespaceRoot, "runtime"),
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        extraEnv: {
+          ...process.env,
+          [DESKTOP_LOG_ECHO_ENV]: "0",
+          [PACKAGED_CONFIG_PATH_ENV]: launchConfigPath,
+        },
+        stamp,
+      }),
+      logFd: logHandle.fd,
+    });
+  } finally {
+    await logHandle.close().catch(() => undefined);
+  }
+  const pid = child.pid ?? 0;
+  const exit = watchProcessExit(child);
+  const earlyExit = await exit.wait(1500);
+  child.unref();
+  if (earlyExit != null) {
+    throw new Error(await createLaunchFailureMessage(config, target, {
+      pid,
+      reason: `process exited early ${formatExit(earlyExit)}`,
+    }));
+  }
+
   const status = await waitForDesktopStatus(config);
+  const delayedExit = exit.current();
+  if (status == null && delayedExit != null) {
+    throw new Error(await createLaunchFailureMessage(config, target, {
+      pid,
+      reason: `process exited before desktop IPC was available ${formatExit(delayedExit)}`,
+    }));
+  }
+  if (status == null && !isProcessAlive(pid)) {
+    throw new Error(await createLaunchFailureMessage(config, target, {
+      pid,
+      reason: "process exited before desktop IPC was available without an observed exit event",
+    }));
+  }
   return {
     appPath: target.appPath,
     executablePath: target.executablePath,
     logPath,
     namespace: config.namespace,
-    pid: spawned.pid,
+    pid,
     source: target.source,
     status,
   };

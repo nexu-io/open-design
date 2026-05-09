@@ -30,6 +30,7 @@ from `LOCALES`.
 | Code    | Language             | UI dict                | Root README         | Core docs | Display metadata | Status |
 | ------- | -------------------- | ---------------------- | ------------------- | --------- | ---------------- | ------ |
 | `en`    | English              | `en.ts` (source)       | `README.md`         | source    | `content.ts`     | active |
+| `id`    | Bahasa Indonesia     | `id.ts`                | —                   | —         | —                | active |
 | `ar`    | العربية              | `ar.ts`                | `README.ar.md`      | —         | —                | active |
 | `de`    | Deutsch              | `de.ts`                | `README.de.md`      | yes       | —                | active |
 | `es-ES` | Español (España)     | `es-ES.ts`             | `README.es.md`      | —         | —                | active |
@@ -45,6 +46,7 @@ from `LOCALES`.
 | `fr`    | Français             | `fr.ts`                | `README.fr.md`      | yes       | `content.fr.ts`  | active |
 | `uk`    | Українська           | `uk.ts`                | `README.uk.md`      | —         | —                | active |
 | `tr`    | Türkçe               | `tr.ts`                | `README.tr.md`      | —         | —                | active |
+| `th`    | ภาษาไทย              | `th.ts`                | —                   | —         | —                | active |
 
 > A locale may ship a UI dict, a root README, core docs, display metadata,
 > or any subset of those surfaces. The English locale is the source of

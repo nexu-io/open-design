@@ -338,6 +338,16 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes ~/.vite-plus/bin so vp-managed global shims resolve under GUI launchers", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".vite-plus", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("appends $NPM_CONFIG_PREFIX/bin when set so corporate prefixes resolve", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-"));
@@ -370,6 +380,41 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("prepends $VP_HOME/bin and expands ~/ so custom Vite+ homes outrank the default", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-home-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { VP_HOME: "~/custom-vp-home" },
+        includeSystemBins: false,
+      });
+      expect(dirs[0]).toBe(join(home, "custom-vp-home", "bin"));
+      expect(dirs).toContain(join(home, ".vite-plus", "bin"));
+      expect(dirs.indexOf(join(home, ".vite-plus", "bin"))).toBeGreaterThan(0);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("places $VP_HOME/bin before $NPM_CONFIG_PREFIX/bin when both explicit homes are set", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-npm-order-"));
+    const npmPrefix = mkdtempSync(join(tmpdir(), "wkutb-vp-npm-prefix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: npmPrefix, VP_HOME: "~/custom-vp-home" },
+        includeSystemBins: false,
+      });
+      const vpIdx = dirs.indexOf(join(home, "custom-vp-home", "bin"));
+      const npmIdx = dirs.indexOf(join(npmPrefix, "bin"));
+      expect(vpIdx).toBe(0);
+      expect(npmIdx).toBeGreaterThan(vpIdx);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(npmPrefix, { recursive: true, force: true });
+    }
+  });
+
   it("does not append a prefix entry when neither env var is set", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-noprefix-"));
     try {
@@ -390,7 +435,7 @@ describe("wellKnownUserToolchainBins", () => {
   // including ~/.local/bin (which is also a shared pip --user / cargo
   // install dumping ground). Conventional locations frequently retain
   // *stale* binaries from an older prefix.
-  it("places $NPM_CONFIG_PREFIX/bin before every conventional location, including ~/.local/bin", () => {
+  it("places $NPM_CONFIG_PREFIX/bin before every conventional location when VP_HOME is unset", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-order-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-order-"));
     try {
