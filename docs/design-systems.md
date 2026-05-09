@@ -22,7 +22,7 @@ Every `DESIGN.md` must have these nine section headings:
 ## 9. Anti-patterns
 ```
 
-Headings must match exactly — the skill prompt grep targets `## [0-9].` patterns. Empty section bodies are acceptable (for rarely-used tokens like motion), but the headings must be present.
+The schema parser extracts headings with `## [0-9].*` — it matches the section number prefix, not the full text. You can add context after the number (e.g., `## 4. Spacing & Grid` or `## 4. Spacing and layout`). Only the `## [digit].` prefix is required. Empty section bodies are acceptable (for rarely-used tokens like motion), but the nine numbered headings must be present.
 
 ### Header format
 
@@ -131,7 +131,7 @@ Labels must be `Display:`, `Body:`, `Mono:` with a colon, followed by the full f
 All text and data colors must pass **4.5:1 minimum** contrast ratio against their background (4.5:1 for normal text, 3:1 for large text at 18px+ or 14px+ bold).
 
 **How to verify:**
-- Use a contrast checker tool (e.g., WebAIM Contrast Checker, or `#rrggbb` on `#bgbgbb`)
+- Use a contrast checker tool (e.g., WebAIM Contrast Checker, or `#B37A00` on `#FFFFFF`)
 - Test each foreground token against its paired background token — not against white by default
 
 **Common mistakes:**
@@ -254,15 +254,19 @@ When adding a new design system, you must also add its localized catalog entry. 
 
 ### Which locales need updating?
 
-| Locale | File to update | What to add |
-|--------|---------------|-------------|
-| German | `apps/web/src/i18n/content.ts` | Add entry to `DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` |
-| French | `apps/web/src/i18n/content.fr.ts` | Add to `FR_DESIGN_SYSTEM_SUMMARIES` AND `FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` |
-| Russian | `apps/web/src/i18n/content.ru.ts` | Add to `RU_DESIGN_SYSTEM_SUMMARIES` AND `RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` |
+Use this decision tree to decide which array to add to:
 
-### Common mistake: duplicate IDs in fallback arrays
+**Does a localized summary already exist for this design system?**
+- **Yes** → Add to `*_DESIGN_SYSTEM_SUMMARIES` only (FR + RU). **Never also add to the fallback array** — `buildLocalizedContentIds()` concatenates both without deduplication, producing a duplicate that fails the test.
+- **No** (no translation yet) → Add to `*_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` only. This makes the system appear in the catalog with English fallbacks.
 
-If you add a system to both `FR_DESIGN_SYSTEM_SUMMARIES` and `FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK`, `buildLocalizedContentIds()` will concatenate them and produce a duplicate. Add to `*_DESIGN_SYSTEM_SUMMARIES` only — the fallback ID array is for systems without localized summaries.
+| Locale | File to update | Array |
+|--------|---------------|-------|
+| German | `apps/web/src/i18n/content.ts` | `DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` |
+| French | `apps/web/src/i18n/content.fr.ts` | `FR_DESIGN_SYSTEM_SUMMARIES` (if localized copy exists) or `FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` (if not) |
+| Russian | `apps/web/src/i18n/content.ru.ts` | `RU_DESIGN_SYSTEM_SUMMARIES` (if localized copy exists) or `RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` (if not) |
+
+> ⚠️ **The duplicate-ID trap:** `buildLocalizedContentIds()` concatenates summary keys and fallback IDs **without deduplication**. Adding to both arrays produces the same ID twice, and the e2e test's curated ID list rejects duplicates. This is exactly what caused the loom/trading-terminal #929 failure.
 
 ### Test behavior
 
