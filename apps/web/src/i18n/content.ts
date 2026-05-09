@@ -492,6 +492,7 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'storytelling',
   'totality-festival',
   'tetris',
+  'trading-terminal',
   'urdu',
   'vibrant',
   'vintage',
