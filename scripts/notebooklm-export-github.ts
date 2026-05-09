@@ -27,7 +27,7 @@ type GhItem = {
 type IssueStateFlag = "open" | "closed";
 type PrStateFlag = "open" | "closed" | "merged";
 
-type IssueMode = "open" | "closed" | "all";
+type IssueMode = "open" | "closed" | "all" | "none";
 type PrMode = "open" | "closed" | "merged" | "all";
 
 function parseArgs(argv: string[]) {
@@ -60,8 +60,8 @@ function mustString(v: unknown, name: string): string {
 function asIssueMode(v: unknown, dflt: IssueMode): IssueMode {
   if (typeof v !== "string") return dflt;
   const s = v.trim();
-  if (s === "open" || s === "closed" || s === "all") return s;
-  fail(`Invalid value '${s}' (expected open|closed|all)`);
+  if (s === "open" || s === "closed" || s === "all" || s === "none") return s;
+  fail(`Invalid value '${s}' (expected open|closed|all|none)`);
 }
 
 function asPrMode(v: unknown, dflt: PrMode): PrMode {
@@ -99,12 +99,20 @@ function runGhIssueJson(repo: string, state: IssueStateFlag, limit: number): GhI
     "body"
   ];
 
-  const out = execFileSync("gh", [...baseArgs, "--json", jsonFields.join(",")], {
-    encoding: "utf8"
-  });
-  const parsed = JSON.parse(out) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed as GhItem[];
+  try {
+    const out = execFileSync("gh", [...baseArgs, "--json", jsonFields.join(",")], {
+      encoding: "utf8"
+    });
+    const parsed = JSON.parse(out) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed as GhItem[];
+  } catch (e: any) {
+    // Some repos disable issues (e.g. github/.github). In that case, allow PR-only
+    // exports to continue by treating issues as an empty bucket.
+    const stderr = (e?.stderr ? String(e.stderr) : "") + (e?.message ? `\n${String(e.message)}` : "");
+    if (/disabled issues/i.test(stderr) || /has disabled issues/i.test(stderr)) return [];
+    throw e;
+  }
 }
 
 function runGhPrJson(repo: string, state: PrStateFlag, limit: number): GhItem[] {
@@ -129,6 +137,7 @@ function runGhPrJson(repo: string, state: PrStateFlag, limit: number): GhItem[] 
 }
 
 function getIssueStates(mode: IssueMode): IssueStateFlag[] {
+  if (mode === "none") return [];
   if (mode === "all") return ["open", "closed"];
   return [mode];
 }
