@@ -411,12 +411,9 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'orbit-gmail',
   'orbit-linear',
   'orbit-notion',
-<<<<<<< feat/release-notes-one-pager
   'release-notes-one-pager',
-=======
   // TODO: add localized copy for social-media-dashboard (introduced in #678).
   // Fallback for now so the localized-content coverage test passes.
->>>>>>> main
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
   'web-prototype-taste-brutalist',
