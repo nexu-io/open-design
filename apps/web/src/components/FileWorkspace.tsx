@@ -3,6 +3,7 @@ import { useT } from '../i18n';
 import {
   deleteProjectFile,
   fetchProjectFileText,
+  type UploadProjectFilesResult,
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
@@ -193,7 +194,14 @@ export function FileWorkspace({
     if (picked.length === 0) return;
 
     setUploadError(null);
-    const result = await uploadProjectFiles(projectId, picked);
+    let result: UploadProjectFilesResult;
+    try {
+      result = await uploadProjectFiles(projectId, picked);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
+      return;
+    }
     if (result.uploaded.length > 0) {
       await onRefreshFiles();
       const lastUploaded = result.uploaded[result.uploaded.length - 1];
@@ -473,8 +481,17 @@ export function FileWorkspace({
         ) : null}
       </div>
       <div className="ws-body">
-        {uploadError && activeTab === DESIGN_FILES_TAB ? (
-          <div className="viewer-empty">{uploadError}</div>
+        {uploadError && activeTab !== DESIGN_FILES_TAB ? (
+          <div className="df-upload-banner" data-testid="upload-error-banner">
+            <span>{uploadError}</span>
+            <button
+              type="button"
+              data-testid="upload-error-dismiss"
+              onClick={() => setUploadError(null)}
+            >
+              Dismiss
+            </button>
+          </div>
         ) : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
@@ -490,6 +507,8 @@ export function FileWorkspace({
             onUploadFiles={(picked) => void uploadFiles(picked)}
             onPaste={() => setShowPasteDialog(true)}
             onNewSketch={startNewSketch}
+            uploadError={uploadError}
+            onClearUploadError={() => setUploadError(null)}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
