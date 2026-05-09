@@ -348,6 +348,35 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).not.toContain('window.print()');
   });
 
+  it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: () => mockWin,
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    // HTML with an intentionally non-loadable image to exercise the
+    // incomplete-image detection in the injected handshake.
+    const html = '<div><img src="https://example.com/will-not-load.png" alt="test"/></div>';
+    await exportAsPdf(html, 'Image Test');
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // In the sandboxed wrapper the srcdoc attribute is HTML-escaped, so the
+    // handshake script content is present as unescaped JS fragments.
+    expect(htmlArg).toContain('document.images');
+    expect(htmlArg).toContain('img.onload');
+    expect(htmlArg).toContain('img.onerror');
+    expect(htmlArg).toContain('img.complete');
+    // The original font- and load-waiting logic must still be present.
+    expect(htmlArg).toContain('document.fonts');
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // The parent cache should still be injected.
+    expect(htmlArg).toContain('__odPrintReady');
+    // No window.print() since the desktop bridge handles printing natively.
+    expect(htmlArg).not.toContain('window.print()');
+  });
+
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
     const printPdfMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('window', {

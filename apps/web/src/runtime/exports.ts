@@ -337,7 +337,12 @@ function injectPrintScript(doc: string, title: string): string {
 }
 
 function injectPrintReadyHandshake(doc: string): string {
-  const script = `<script data-od-print-ready>(function(){Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){window.parent.postMessage('OD_PRINT_READY','*')})})();<\/script>`;
+  // Wait for fonts, the window load event (which covers initial images), and
+  // any images that are still loading after load fires (dynamically added or
+  // slow images that weren't complete by the time this script ran). This
+  // mirrors the safety of the legacy waitForPrintableContent() helper and
+  // prevents image-heavy exports from printing with blank images.
+  const script = `<script data-od-print-ready>(function(){var imgs=Array.from(document.images).filter(function(img){return !img.complete});var imgPromises=imgs.map(function(img){return new Promise(function(r){img.onload=img.onerror=r;if(img.complete)r()})});Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})}),Promise.all(imgPromises)]).then(function(){window.parent.postMessage('OD_PRINT_READY','*')})})();<\/script>`;
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
