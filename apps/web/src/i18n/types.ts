@@ -168,6 +168,10 @@ export interface Dict {
   'settings.mediaProviderClearConfirm': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
+  'settings.mediaProviderReload': string;
+  'settings.mediaProviderReloadError': string;
+  'settings.mediaProviderReloadSuccess': string;
+  'settings.mediaProviderLoadError': string;
   'settings.privacy': string;
   'settings.privacyHint': string;
   'settings.privacyConsentKicker': string;

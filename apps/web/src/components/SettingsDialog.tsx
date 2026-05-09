@@ -115,6 +115,8 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
 }
@@ -570,6 +572,8 @@ export function SettingsDialog({
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
 }: Props) {
@@ -1886,6 +1890,8 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
+              daemonMediaProviders={daemonMediaProviders}
+              daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
               onOpenComposioSection={() => setActiveSection('composio')}
               onLeaveForOrbitProject={(runConfig) => {
                 // Persist any in-flight Orbit edits (toggle / time) before
@@ -2465,8 +2471,16 @@ interface OrbitRunStartResponse {
 
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
+  options?: {
+    daemonProviders?: AppConfig['mediaProviders'] | null;
+    syncMediaProviders?: boolean;
+  },
 ): Promise<OrbitRunStartResponse> {
-  await syncMediaProvidersToDaemon(config.mediaProviders);
+  if (options?.syncMediaProviders !== false) {
+    await syncMediaProvidersToDaemon(config.mediaProviders, {
+      daemonProviders: options?.daemonProviders,
+    });
+  }
   await syncConfigToDaemon(config, { throwOnError: true });
   const response = await fetch('/api/orbit/run', { method: 'POST' });
   if (!response.ok) throw new Error('Orbit run failed');
@@ -2510,6 +2524,8 @@ function OrbitSection({
   cfg,
   setCfg,
   composioApiKeyConfigured,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState,
   onOpenComposioSection,
   onLeaveForOrbitProject,
 }: {
@@ -2520,6 +2536,8 @@ function OrbitSection({
    *  that Orbit needs Composio first; when true (key present, just no
    *  connectors yet) it nudges the user toward the connector catalog. */
   composioApiKeyConfigured: boolean;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   /** Switch the parent settings dialog to the Connectors (Composio) tab.
    *  Used by the Orbit gate's primary CTA so the user can fix the
    *  prerequisite without leaving the dialog. */
@@ -2671,7 +2689,10 @@ function OrbitSection({
     void (async () => {
       try {
         const runConfig = configForManualOrbitRun(cfg);
-        const payload = await persistConfigAndRunOrbit(runConfig);
+        const payload = await persistConfigAndRunOrbit(runConfig, {
+          daemonProviders: daemonMediaProviders,
+          syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
+        });
         if (!payload.projectId) throw new Error('Orbit run did not return a project');
 
         onLeaveForOrbitProject(runConfig);
@@ -3303,7 +3324,7 @@ function MediaProvidersSection({
 }) {
   const { t } = useI18n();
   const [reloadRunning, setReloadRunning] = useState(false);
-  const [reloadNotice, setReloadNotice] = useState<string | null>(null);
+  const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -3359,11 +3380,11 @@ function MediaProvidersSection({
     try {
       const next = await onReloadMediaProviders();
       if (!next) {
-        setReloadNotice('Could not reload media provider settings from the local daemon.');
+        setReloadNotice({ kind: 'error', message: t('settings.mediaProviderReloadError') });
         return;
       }
       setCfg((curr) => mergeDaemonMediaProviders(curr, next));
-      setReloadNotice('Reloaded media provider settings from the local daemon.');
+      setReloadNotice({ kind: 'success', message: t('settings.mediaProviderReloadSuccess') });
     } finally {
       setReloadRunning(false);
     }
@@ -3395,7 +3416,7 @@ function MediaProvidersSection({
             onClick={() => void handleReload()}
             disabled={reloadRunning}
           >
-            {reloadRunning ? t('common.loading') : 'Reload from daemon'}
+            {reloadRunning ? t('common.loading') : t('settings.mediaProviderReload')}
           </button>
         ) : null}
       </div>
@@ -3403,8 +3424,8 @@ function MediaProvidersSection({
         <p className="hint" role="alert">{mediaProvidersNotice}</p>
       ) : null}
       {reloadNotice ? (
-        <p className="hint" role={reloadNotice.startsWith('Could not') ? 'alert' : 'status'}>
-          {reloadNotice}
+        <p className="hint" role={reloadNotice.kind === 'error' ? 'alert' : 'status'}>
+          {reloadNotice.message}
         </p>
       ) : null}
       <div className="media-provider-list">
@@ -3424,8 +3445,8 @@ function MediaProvidersSection({
                 <div className="media-provider-meta">
                   <span className="media-provider-name">{provider.label}</span>
                   {isSavedState ? (
-                    <span className="field-status-badge" title="Saved to local daemon">
-                      {tail ? `Saved · ••••${tail}` : 'Saved'}
+                    <span className="field-status-badge" title={t('settings.connectorsSavedTitle')}>
+                      {tail ? t('settings.connectorsSavedWithTail', { tail }) : t('settings.connectorsSaved')}
                     </span>
                   ) : null}
                   <span className="media-provider-hint">{provider.hint}</span>
@@ -3446,7 +3467,7 @@ function MediaProvidersSection({
                   <input
                     type={apiKeyVisible ? 'text' : 'password'}
                     value={entry.apiKey}
-                    placeholder={isSavedState ? 'Paste a new key to replace the saved one' : t('settings.mediaProviderPlaceholder')}
+                    placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
                     aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                     disabled={disabled}
                     onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}

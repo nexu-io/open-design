@@ -29,6 +29,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isAllowedChildWindowUrl,
   isHttpUrl,
+  resolveDesktopStatusUrl,
 } from '@open-design/desktop/main';
 
 describe('isHttpUrl', () => {
@@ -92,5 +93,17 @@ describe('isAllowedChildWindowUrl (issue #911)', () => {
   it('returns false for malformed URLs without throwing', () => {
     expect(isAllowedChildWindowUrl('not a url')).toBe(false);
     expect(isAllowedChildWindowUrl('')).toBe(false);
+  });
+});
+
+describe('resolveDesktopStatusUrl', () => {
+  it('reports the pending URL while navigation is in flight', () => {
+    expect(resolveDesktopStatusUrl(null, 'od://app/')).toBe('od://app/');
+    expect(resolveDesktopStatusUrl('http://127.0.0.1:3000/', 'od://app/')).toBe('od://app/');
+  });
+
+  it('falls back to the last successful URL when no navigation is pending', () => {
+    expect(resolveDesktopStatusUrl('od://app/', null)).toBe('od://app/');
+    expect(resolveDesktopStatusUrl(null, null)).toBe(null);
   });
 });

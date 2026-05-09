@@ -43,6 +43,7 @@ import {
   listTemplates,
   patchProject,
 } from './state/projects';
+import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
@@ -111,6 +112,7 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -286,7 +288,7 @@ export function App() {
         setDaemonMediaProvidersFetchState(daemonMediaProvidersResult.status);
         setMediaProvidersNotice(
           daemonMediaProvidersResult.status === 'error'
-            ? 'Could not load media provider settings from the local daemon. Using browser-saved settings for now.'
+            ? t('settings.mediaProviderLoadError')
             : null,
         );
         setConfig((prev) => {
@@ -422,7 +424,7 @@ export function App() {
     if (result.status !== 'ok') {
       setDaemonMediaProvidersFetchState('error');
       setMediaProvidersNotice(
-        'Could not load media provider settings from the local daemon. Using browser-saved settings for now.',
+        t('settings.mediaProviderLoadError'),
       );
       return null;
     }
@@ -854,6 +856,8 @@ export function App() {
             setSettingsOpen(false);
           }}
           onRefreshAgents={refreshAgents}
+          daemonMediaProviders={daemonMediaProviders}
+          daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
         />

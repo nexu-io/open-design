@@ -424,6 +424,13 @@ function hasRecoverableLocalMediaProviderFields(
   );
 }
 
+function isMarkerOnlyMediaProviderEntry(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return isStoredMediaProviderEntryPresent(entry)
+    && !hasRecoverableLocalMediaProviderFields(entry);
+}
+
 export function isStoredMediaProviderEntryPresent(
   entry: MediaProviderCredentials | null | undefined,
 ): boolean {
@@ -617,8 +624,17 @@ export function mergeDaemonMediaProviders(
   localConfig: AppConfig,
   daemonProviders: AppConfig['mediaProviders'] | null,
 ): AppConfig {
-  if (!hasAnyDaemonManagedMediaProvider(daemonProviders)) {
+  if (daemonProviders == null) {
     return { ...localConfig };
+  }
+
+  if (!hasAnyDaemonManagedMediaProvider(daemonProviders)) {
+    return {
+      ...localConfig,
+      mediaProviders: Object.fromEntries(
+        Object.entries(localConfig.mediaProviders ?? {}).filter(([, entry]) => !isMarkerOnlyMediaProviderEntry(entry)),
+      ),
+    };
   }
 
   const mediaProviders = { ...(localConfig.mediaProviders ?? {}) };

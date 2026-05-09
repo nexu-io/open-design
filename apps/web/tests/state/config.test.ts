@@ -298,6 +298,37 @@ describe('mergeDaemonMediaProviders', () => {
 
     expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
   });
+
+  it('drops stale marker-only local entries when daemon definitively has no stored state', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+            model: '',
+          },
+          fal: {
+            apiKey: 'sk-local-fal',
+            baseUrl: 'https://queue.fal.run',
+            model: 'fal-ai/imagen4/preview',
+          },
+        },
+      },
+      {},
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      fal: {
+        apiKey: 'sk-local-fal',
+        baseUrl: 'https://queue.fal.run',
+        model: 'fal-ai/imagen4/preview',
+      },
+    });
+  });
 });
 
 describe('media provider entry presence helpers', () => {
