@@ -47,6 +47,7 @@ import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
 import { PrivacySection } from './PrivacySection';
+import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
@@ -66,6 +67,7 @@ export type SettingsSection =
   | 'media'
   | 'composio'
   | 'orbit'
+  | 'routines'
   | 'integrations'
   | 'mcpClient'
   | 'language'
@@ -1050,6 +1052,10 @@ export function SettingsDialog({
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
+    routines: {
+      title: 'Routines',
+      subtitle: 'Scheduled, unattended agent sessions that run on their own.',
+    },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
@@ -1199,6 +1205,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.orbit.title')}</strong>
                 <small>{t('settings.orbit.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'routines' ? ' active' : ''}`}
+              onClick={() => setActiveSection('routines')}
+            >
+              <Icon name="history" size={18} />
+              <span>
+                <strong>Routines</strong>
+                <small>Schedule unattended agent runs</small>
               </span>
             </button>
             <button
@@ -1871,6 +1888,8 @@ export function SettingsDialog({
               onPersistComposioKey={onPersistComposioKey}
             />
           ) : null}
+
+          {activeSection === 'routines' ? <RoutinesSection /> : null}
 
           {activeSection === 'orbit' ? (
             <OrbitSection

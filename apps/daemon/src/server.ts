@@ -116,6 +116,11 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import {
+  RoutineService,
+  validateSchedule as validateRoutineSchedule,
+  validateTarget as validateRoutineTarget,
+} from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
   buildProjectArchive,
@@ -148,6 +153,8 @@ import {
   getTemplate,
   insertConversation,
   insertProject,
+  insertRoutine,
+  insertRoutineRun,
   insertTemplate,
   listProjectsAwaitingInput,
   listConversations,
@@ -156,13 +163,20 @@ import {
   listMessages,
   listPreviewComments,
   listProjects,
+  listRoutines,
+  listRoutineRuns,
   listTabs,
   listTemplates,
+  getLatestRoutineRun,
+  getRoutine,
+  deleteRoutine as dbDeleteRoutine,
   openDatabase,
   setTabs,
   updateConversation,
   updatePreviewCommentStatus,
   updateProject,
+  updateRoutine,
+  updateRoutineRun,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
@@ -807,6 +821,7 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
+let routineService = null;
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
 // Maps the OAuth `state` parameter we generated in /api/mcp/oauth/start
@@ -1919,6 +1934,32 @@ export async function startServer({
   configureComposioConfigStore(RUNTIME_DATA_DIR);
   composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
   composioConnectorProvider.startCatalogRefreshLoop();
+
+  // RoutineService persistence is a thin adapter over the SQLite helpers.
+  // Routines are stored as DB rows; the service holds in-memory timers and
+  // delegates "list me everything" / "record a run" back to SQLite.
+  routineService = new RoutineService({
+    list: () => listRoutines(db).map((row) => routineDbRowToContract(row, null)),
+    insertRun: (run) => {
+      insertRoutineRun(db, {
+        id: run.id,
+        routineId: run.routineId,
+        trigger: run.trigger,
+        status: run.status,
+        projectId: run.projectId,
+        conversationId: run.conversationId,
+        agentRunId: run.agentRunId,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        summary: run.summary,
+        error: run.error,
+      });
+    },
+    updateRun: (id, patch) => {
+      updateRoutineRun(db, id, patch);
+    },
+    getLatestRun: (routineId) => getLatestRoutineRun(db, routineId),
+  });
   let daemonUrl = `http://127.0.0.1:${port}`;
 
   // Boot reconcile: any critique_runs row left in 'running' state by a prior
@@ -1957,6 +1998,8 @@ export async function startServer({
       return detectAgents(config.agentCliEnv ?? {});
     })
     .catch(() => detectAgents().catch(() => {}));
+
+  routineService.start();
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -4539,6 +4582,356 @@ export async function startServer({
     }
   });
 
+  // ---------- routines ----------
+
+  // Map a DB row to the Routine contract shape. Schedule lives in
+  // schedule_json (the canonical form); when missing (rows written before
+  // that column existed) we fall back to the legacy daily-only kind/value
+  // pair with UTC as a safe default timezone.
+  function routineDbRowToContract(row, latestRun) {
+    let schedule;
+    if (row.scheduleJson) {
+      try {
+        schedule = JSON.parse(row.scheduleJson);
+      } catch {
+        schedule = null;
+      }
+    }
+    if (!schedule) {
+      // Legacy fallback: daily HH:MM in UTC.
+      schedule = {
+        kind: row.scheduleKind || 'daily',
+        time: row.scheduleValue || '09:00',
+        timezone: 'UTC',
+      };
+    }
+    const target = row.projectMode === 'reuse' && row.projectId
+      ? { mode: 'reuse', projectId: row.projectId }
+      : { mode: 'create_each_run' };
+    let lastRun = null;
+    if (latestRun) {
+      lastRun = {
+        runId: latestRun.id,
+        status: latestRun.status,
+        trigger: latestRun.trigger,
+        startedAt: latestRun.startedAt,
+        ...(latestRun.completedAt == null ? {} : { completedAt: latestRun.completedAt }),
+        projectId: latestRun.projectId,
+        conversationId: latestRun.conversationId,
+        agentRunId: latestRun.agentRunId,
+        ...(latestRun.summary ? { summary: latestRun.summary } : {}),
+      };
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      prompt: row.prompt,
+      schedule,
+      target,
+      skillId: row.skillId ?? null,
+      agentId: row.agentId ?? null,
+      enabled: row.enabled === true || row.enabled === 1,
+      nextRunAt: null,
+      lastRun,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Serialize a schedule into the kind/value/json triple stored in SQLite.
+  // schedule_value carries a kind-specific stringified scalar (minute for
+  // hourly, "HH:MM" for time-of-day kinds) so existing simple queries keep
+  // working; schedule_json is the authoritative form.
+  function scheduleToDbCols(schedule) {
+    const json = JSON.stringify(schedule);
+    let value = '';
+    if (schedule.kind === 'hourly') value = String(schedule.minute);
+    else if (schedule.kind === 'weekly') value = `${schedule.weekday}:${schedule.time}`;
+    else value = schedule.time;
+    return { scheduleKind: schedule.kind, scheduleValue: value, scheduleJson: json };
+  }
+
+  function routineFromDb(id) {
+    const row = getRoutine(db, id);
+    if (!row) return null;
+    const latest = getLatestRoutineRun(db, id);
+    const contract = routineDbRowToContract(row, latest);
+    const nextDate = routineService?.nextRunAt(id) ?? null;
+    contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+    return contract;
+  }
+
+  function validateRoutineInput(body, partial) {
+    if (!body || typeof body !== 'object') {
+      throw new Error('Request body must be an object');
+    }
+    if (!partial || body.name !== undefined) {
+      if (typeof body.name !== 'string' || !body.name.trim()) {
+        throw new Error('name is required');
+      }
+    }
+    if (!partial || body.prompt !== undefined) {
+      if (typeof body.prompt !== 'string' || !body.prompt.trim()) {
+        throw new Error('prompt is required');
+      }
+    }
+    if (!partial || body.schedule !== undefined) {
+      validateRoutineSchedule(body.schedule);
+    }
+    if (!partial || body.target !== undefined) {
+      validateRoutineTarget(body.target);
+      if (body.target.mode === 'reuse') {
+        const proj = getProject(db, body.target.projectId);
+        if (!proj) throw new Error(`target project ${body.target.projectId} not found`);
+      }
+    }
+  }
+
+  // Each routine fire: resolve agent, mint (or reuse) project + a fresh
+  // conversation, prime the user/assistant message pair, and dispatch into
+  // startChatRun. Returns the in-flight handles so the service can persist
+  // the routine_run row and observe completion.
+  routineService.setRunHandler(async ({ routine, trigger, startedAt, runId }) => {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    let agentId = routine.agentId
+      || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
+    if (!agentId) {
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      agentId = agents.find((agent) => agent.available)?.id ?? null;
+    }
+    if (!agentId) {
+      throw new Error('No available agent is configured. Choose an agent in Settings first.');
+    }
+
+    const now = startedAt;
+    const stamp = formatLocalProjectTimestamp(new Date(now).toISOString());
+
+    let projectId;
+    let projectName;
+    if (routine.target.mode === 'reuse') {
+      const proj = getProject(db, routine.target.projectId);
+      if (!proj) throw new Error(`Routine target project ${routine.target.projectId} not found`);
+      projectId = proj.id;
+      projectName = proj.name;
+    } else {
+      projectId = `routine-${randomUUID()}`;
+      projectName = `${routine.name} · ${stamp}`;
+      insertProject(db, {
+        id: projectId,
+        name: projectName,
+        skillId: routine.skillId ?? null,
+        designSystemId: appConfig.designSystemId ?? null,
+        pendingPrompt: null,
+        metadata: { kind: 'other', intent: 'routine', routineId: routine.id, trigger },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const conversationId = `routine-conv-${randomUUID()}`;
+    const conversationTitle = routine.target.mode === 'reuse'
+      ? `${routine.name} · ${stamp}`
+      : projectName;
+    insertConversation(db, {
+      id: conversationId,
+      projectId,
+      title: conversationTitle,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const assistantMessageId = `routine-assistant-${randomUUID()}`;
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: `routine-${trigger}-${randomUUID()}`,
+      agentId,
+    });
+    upsertMessage(db, conversationId, {
+      id: `routine-user-${run.id}`,
+      role: 'user',
+      content: routine.prompt,
+    });
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId,
+      agentName: getAgentDef(agentId)?.name ?? agentId,
+      runId: run.id,
+      runStatus: 'queued',
+      startedAt: now,
+    });
+
+    const modelPrefs = appConfig.agentModels?.[agentId] ?? {};
+    design.runs.start(run, () => startChatRun({
+      agentId,
+      projectId,
+      conversationId: run.conversationId,
+      assistantMessageId: run.assistantMessageId,
+      clientRequestId: run.clientRequestId,
+      skillId: routine.skillId ?? null,
+      designSystemId: appConfig.designSystemId ?? null,
+      model: modelPrefs.model ?? null,
+      reasoning: modelPrefs.reasoning ?? null,
+      message: routine.prompt,
+      systemPrompt: [
+        `You are running an unattended scheduled routine named "${routine.name}".`,
+        'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. Pick reasonable defaults and finish the task.',
+      ].join('\n'),
+    }, run));
+
+    const completion = (async () => {
+      const finalStatus = await design.runs.wait(run);
+      db.prepare(`UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`)
+        .run(finalStatus.status, Date.now(), assistantMessageId);
+      return {
+        status: finalStatus.status,
+        summary: `Routine "${routine.name}" ${finalStatus.status}.`,
+      };
+    })();
+
+    return { projectId, conversationId, agentRunId: run.id, completion };
+  });
+
+  app.get('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const rows = listRoutines(db);
+      const routines = rows.map((row) => {
+        const latest = getLatestRoutineRun(db, row.id);
+        const contract = routineDbRowToContract(row, latest);
+        const nextDate = routineService?.nextRunAt(row.id) ?? null;
+        contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+        return contract;
+      });
+      res.json({ routines });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.post('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const body = req.body || {};
+      validateRoutineInput(body, false);
+      const id = `routine-${randomUUID()}`;
+      const now = Date.now();
+      const scheduleCols = scheduleToDbCols(body.schedule);
+      insertRoutine(db, {
+        id,
+        name: body.name.trim(),
+        prompt: body.prompt,
+        ...scheduleCols,
+        projectMode: body.target.mode,
+        projectId: body.target.mode === 'reuse' ? body.target.projectId : null,
+        skillId: body.skillId ?? null,
+        agentId: body.agentId ?? null,
+        enabled: body.enabled !== false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      routineService?.rescheduleOne(id);
+      const routine = routineFromDb(id);
+      res.status(201).json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const routine = routineFromDb(req.params.id);
+    if (!routine) return res.status(404).json({ error: 'routine not found' });
+    res.json({ routine });
+  });
+
+  app.patch('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const body = req.body || {};
+      validateRoutineInput(body, true);
+      const patch = {};
+      if (body.name !== undefined) patch.name = body.name.trim();
+      if (body.prompt !== undefined) patch.prompt = body.prompt;
+      if (body.schedule !== undefined) {
+        const cols = scheduleToDbCols(body.schedule);
+        patch.scheduleKind = cols.scheduleKind;
+        patch.scheduleValue = cols.scheduleValue;
+        patch.scheduleJson = cols.scheduleJson;
+      }
+      if (body.target !== undefined) {
+        patch.projectMode = body.target.mode;
+        patch.projectId = body.target.mode === 'reuse' ? body.target.projectId : null;
+      }
+      if (body.skillId !== undefined) patch.skillId = body.skillId ?? null;
+      if (body.agentId !== undefined) patch.agentId = body.agentId ?? null;
+      if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+      updateRoutine(db, req.params.id, patch);
+      routineService?.rescheduleOne(req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.delete('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    routineService?.unschedule(req.params.id);
+    const removed = dbDeleteRoutine(db, req.params.id);
+    if (!removed) return res.status(404).json({ error: 'routine not found' });
+    res.status(204).end();
+  });
+
+  app.post('/api/routines/:id/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      if (!routineService) throw new Error('routine service unavailable');
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const start = await routineService.runNow(req.params.id);
+      const latest = getLatestRoutineRun(db, req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.status(202).json({
+        routine,
+        run: latest,
+        projectId: start.projectId,
+        conversationId: start.conversationId,
+        agentRunId: start.agentRunId,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id/runs', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const existing = getRoutine(db, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'routine not found' });
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const runs = listRoutineRuns(db, req.params.id, limit);
+    res.json({ runs });
+  });
+
   // Native OS folder picker dialog. Returns { path: string | null }.
   app.post('/api/dialog/open-folder', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
@@ -6980,6 +7373,7 @@ export async function startServer({
     const cleanupDaemonBackgroundWork = () => {
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
+      routineService?.stop();
     };
     const shutdownDaemonRuns = async () => {
       if (daemonShutdownStarted) return;
