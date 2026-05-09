@@ -64,13 +64,19 @@ function detectLocalTimezone(): string {
 // Returns every IANA zone the platform recognizes, so the picker stays in
 // sync with the backend validator (which accepts any IANA timezone). Falls
 // back to a curated subset on older runtimes that lack `supportedValuesOf`.
+// `UTC` is always prepended because `Intl.supportedValuesOf('timeZone')`
+// returns only canonical region names on current runtimes (e.g. Node 24)
+// and would otherwise drop the most common non-local zone — which the
+// backend validator and contract examples still accept.
 function listSupportedTimezones(): string[] {
   try {
     const fn = (Intl as { supportedValuesOf?: (key: string) => string[] })
       .supportedValuesOf;
     if (typeof fn === 'function') {
       const list = fn('timeZone');
-      if (Array.isArray(list) && list.length > 0) return list;
+      if (Array.isArray(list) && list.length > 0) {
+        return list.includes('UTC') ? list : ['UTC', ...list];
+      }
     }
   } catch {
     // fall through
