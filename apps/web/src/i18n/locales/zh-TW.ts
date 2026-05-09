@@ -596,7 +596,7 @@ export const zhTW: Dict = {
   'preview.errorBody': '範例 HTML 載入失敗。請確認 Open Design 正在執行後重試。',
   'preview.retry': '重試',
   'preview.unavailableTitle': '此技能尚未附帶預覽範例。',
-  'preview.unavailableBody': '此技能用於產生 {kind} 文件 — 請在對話中執行此 Prompt 來產生。',
+  'preview.unavailableBody': '此技能用於產生 {kind} 產物 — 請在對話中執行此 Prompt 來產生。',
   'preview.showSidebar': '展開{label}',
   'preview.hideSidebar': '收合{label}',
 

@@ -604,7 +604,7 @@ export const ptBR: Dict = {
   'preview.errorBody': 'A obtenção do HTML do exemplo falhou. Verifique se o Open Design está em execução e tente novamente.',
   'preview.retry': 'Tentar novamente',
   'preview.unavailableTitle': 'Nenhuma prévia incluída para esta skill.',
-  'preview.unavailableBody': 'Esta skill produz um documento {kind} — execute o prompt no chat para gerar um.',
+  'preview.unavailableBody': 'Esta skill produz um resultado {kind} — execute o prompt no chat para gerar um.',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 

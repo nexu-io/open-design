@@ -605,7 +605,7 @@ export const uk: Dict = {
   'preview.errorBody': 'Не вдалося отримати HTML прикладу. Переконайтеся, що Open Design запущено, і повторіть спробу.',
   'preview.retry': 'Повторити',
   'preview.unavailableTitle': 'Для цієї навички немає вбудованого попереднього перегляду.',
-  'preview.unavailableBody': 'Ця навичка створює документ {kind} — запустіть підказку в чаті, щоб його згенерувати.',
+  'preview.unavailableBody': 'Ця навичка створює {kind}-вивід — запустіть підказку в чаті, щоб його згенерувати.',
   'preview.showSidebar': 'Показати {label}',
   'preview.hideSidebar': 'Приховати {label}',
 

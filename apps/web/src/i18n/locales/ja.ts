@@ -481,7 +481,7 @@ export const ja: Dict = {
   'preview.errorBody': '例の HTML を取得できませんでした。Open Design が起動していることを確認して再試行してください。',
   'preview.retry': '再試行',
   'preview.unavailableTitle': 'このスキルにはプレビューが同梱されていません。',
-  'preview.unavailableBody': 'このスキルは {kind} ドキュメントを生成します — チャットでプロンプトを実行して生成してください。',
+  'preview.unavailableBody': 'このスキルは {kind} 出力を生成します — チャットでプロンプトを実行して生成してください。',
   'preview.showSidebar': '{label} を表示',
   'preview.hideSidebar': '{label} を非表示',
 

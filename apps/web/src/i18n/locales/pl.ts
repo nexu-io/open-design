@@ -594,7 +594,7 @@ export const pl: Dict = {
   'preview.errorBody': 'Nie udało się pobrać kodu HTML przykładu. Upewnij się, że Open Design jest uruchomiony, i spróbuj ponownie.',
   'preview.retry': 'Spróbuj ponownie',
   'preview.unavailableTitle': 'Brak dołączonego podglądu dla tej umiejętności.',
-  'preview.unavailableBody': 'Ta umiejętność tworzy dokument {kind} — uruchom prompt w czacie, aby go wygenerować.',
+  'preview.unavailableBody': 'Ta umiejętność tworzy {kind} wynik — uruchom prompt w czacie, aby go wygenerować.',
   'preview.showSidebar': 'Pokaż {label}',
   'preview.hideSidebar': 'Ukryj {label}',
 

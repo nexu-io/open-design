@@ -594,7 +594,7 @@ export const fr: Dict = {
   'preview.errorBody': 'Le chargement du HTML de l\'exemple a échoué. Vérifiez qu\'Open Design est en cours d\'exécution et réessayez.',
   'preview.retry': 'Réessayer',
   'preview.unavailableTitle': 'Aucun aperçu fourni pour cette compétence.',
-  'preview.unavailableBody': 'Cette compétence produit un document {kind} — exécutez le prompt dans le chat pour en générer un.',
+  'preview.unavailableBody': 'Cette compétence produit un résultat {kind} — exécutez le prompt dans le chat pour en générer un.',
   'preview.showSidebar': 'Afficher {label}',
   'preview.hideSidebar': 'Masquer {label}',
 

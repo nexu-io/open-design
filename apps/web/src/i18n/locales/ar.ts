@@ -594,7 +594,7 @@ export const ar: Dict = {
   'preview.errorBody': 'فشل جلب HTML الخاص بالمثال. تأكد من تشغيل Open Design ثم أعد المحاولة.',
   'preview.retry': 'إعادة المحاولة',
   'preview.unavailableTitle': 'لا توجد معاينة مرفقة لهذه المهارة.',
-  'preview.unavailableBody': 'هذه المهارة تنتج مستند {kind} — شغّل الأمر في المحادثة لإنشاء واحد.',
+  'preview.unavailableBody': 'هذه المهارة تنتج مخرجات {kind} — شغّل الأمر في المحادثة لإنشاء واحدة.',
   'preview.showSidebar': 'إظهار {label}',
   'preview.hideSidebar': 'إخفاء {label}',
 

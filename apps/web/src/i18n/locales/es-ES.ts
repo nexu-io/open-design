@@ -483,7 +483,7 @@ export const esES: Dict = {
   'preview.errorBody': 'No se pudo obtener el HTML del ejemplo. Asegúrate de que Open Design esté en ejecución e inténtalo de nuevo.',
   'preview.retry': 'Reintentar',
   'preview.unavailableTitle': 'No hay vista previa incluida para esta skill.',
-  'preview.unavailableBody': 'Esta skill genera un documento {kind} — ejecuta el prompt en el chat para crear uno.',
+  'preview.unavailableBody': 'Esta skill genera un resultado {kind} — ejecuta el prompt en el chat para crear uno.',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 

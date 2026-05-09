@@ -604,7 +604,7 @@ export const ru: Dict = {
   'preview.errorBody': 'Не удалось получить HTML примера. Убедитесь, что Open Design запущен, и повторите попытку.',
   'preview.retry': 'Повторить',
   'preview.unavailableTitle': 'Для этого навыка нет встроенного предпросмотра.',
-  'preview.unavailableBody': 'Этот навык создаёт документ {kind} — запустите запрос в чате, чтобы сгенерировать его.',
+  'preview.unavailableBody': 'Этот навык создаёт {kind}-вывод — запустите запрос в чате, чтобы сгенерировать его.',
   'preview.showSidebar': 'Показать {label}',
   'preview.hideSidebar': 'Скрыть {label}',
 

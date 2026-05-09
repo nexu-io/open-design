@@ -594,7 +594,7 @@ export const hu: Dict = {
   'preview.errorBody': 'A példa HTML-jének letöltése meghiúsult. Győződj meg róla, hogy az Open Design fut, majd próbáld újra.',
   'preview.retry': 'Újra',
   'preview.unavailableTitle': 'Ehhez a skillhez nincs mellékelt előnézet.',
-  'preview.unavailableBody': 'Ez a skill {kind} dokumentumot készít — futtasd a promptot a csevegésben egy létrehozásához.',
+  'preview.unavailableBody': 'Ez a skill {kind} kimenetet készít — futtasd a promptot a csevegésben egy létrehozásához.',
   'preview.showSidebar': '{label} megjelenítése',
   'preview.hideSidebar': '{label} elrejtése',
 

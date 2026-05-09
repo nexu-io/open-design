@@ -605,7 +605,7 @@ export const en: Dict = {
   'preview.errorBody': 'The example HTML failed to fetch. Make sure Open Design is running and try again.',
   'preview.retry': 'Retry',
   'preview.unavailableTitle': 'No shipped preview for this skill.',
-  'preview.unavailableBody': 'This skill produces a {kind} document — run the prompt in chat to generate one.',
+  'preview.unavailableBody': 'This skill produces {kind} output — run the prompt in chat to generate one.',
   'preview.showSidebar': 'Show {label}',
   'preview.hideSidebar': 'Hide {label}',
 

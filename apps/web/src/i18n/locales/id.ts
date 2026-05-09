@@ -693,7 +693,7 @@ export const id: Dict = {
   'preview.errorBody': 'Pengambilan HTML contoh gagal. Pastikan Open Design berjalan, lalu coba lagi.',
   'preview.retry': 'Coba lagi',
   'preview.unavailableTitle': 'Tidak ada pratinjau bawaan untuk skill ini.',
-  'preview.unavailableBody': 'Skill ini menghasilkan dokumen {kind} — jalankan prompt di chat untuk membuatnya.',
+  'preview.unavailableBody': 'Skill ini menghasilkan keluaran {kind} — jalankan prompt di chat untuk membuatnya.',
   'preview.showSidebar': 'Tampilkan {label}',
   'preview.hideSidebar': 'Sembunyikan {label}',
 
