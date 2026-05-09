@@ -77,9 +77,12 @@ All text/background pairs below pass 4.5:1 minimum.
   --color-border: #E8E9EC;
   --color-text: #1F1F23;
   --color-text-secondary: #6B6D76;
+  --color-text-inverse: #ffffff;
   --color-success: #0F7A55;
   --color-warning: #8A5A00;
   --color-error: #C41E3A;
+  --color-info: #4F4DDD;
+  --color-overlay: #1F1F2380;
 
   --shadow-card: 0 1px 3px rgba(31, 31, 35, 0.08), 0 4px 12px rgba(31, 31, 35, 0.04);
   --shadow-card-hover: 0 4px 12px rgba(31, 31, 35, 0.12), 0 8px 24px rgba(31, 31, 35, 0.08);
@@ -197,7 +200,7 @@ All text/background pairs below pass 4.5:1 minimum.
 ```css
 .button-primary {
   background: var(--color-primary);
-  color: var(--color-text);
+  color: var(--color-text-inverse, #ffffff);
   border: none;
   border-radius: var(--radius-sm);
   font-weight: 500;
@@ -376,7 +379,7 @@ All text/background pairs below pass 4.5:1 minimum.
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  background: rgba(31, 31, 35, 0.8);
+  background: var(--color-overlay);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   backdrop-filter: blur(8px);
 }
@@ -479,7 +482,7 @@ Recording pulse animation is disabled when `prefers-reduced-motion: reduce` is a
 
   .thumbnail-card:hover {
     transform: none;
-    border-color: var(--color-primary);
+    box-shadow: var(--shadow-card-hover);
   }
 }
 ```
