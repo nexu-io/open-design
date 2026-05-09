@@ -1525,6 +1525,10 @@ export function ProjectView({
     try {
       const fresh = await createConversation(project.id);
       if (!fresh) throw new Error('Could not create a conversation for this project.');
+      // Eagerly clear messages and update ref so rapid clicks don't create
+      // duplicate empty conversations before the effect resolves.
+      setMessages([]);
+      messagesConversationIdRef.current = fresh.id;
       setConversations((curr) => [fresh, ...curr]);
       setActiveConversationId(fresh.id);
       setError(null);
