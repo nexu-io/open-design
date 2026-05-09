@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in BASE_VERSION ENABLE_LINUX ENABLE_MAC ENABLE_WIN GITHUB_STEP_SUMMARY RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION STATE_SOURCE; do
+for name in BASE_VERSION ENABLE_LINUX ENABLE_MAC ENABLE_MAC_INTEL ENABLE_WIN GITHUB_STEP_SUMMARY RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION STATE_SOURCE; do
   if [ -z "${!name:-}" ]; then
     echo "$name is required" >&2
     exit 1
@@ -46,6 +46,10 @@ const platforms = {
     enabled: enabled("ENABLE_LINUX"),
     signed: false,
   },
+  macIntel: {
+    enabled: enabled("ENABLE_MAC_INTEL"),
+    signed: false,
+  },
 };
 
 if (platforms.mac.enabled) {
@@ -70,6 +74,13 @@ if (platforms.linux.enabled) {
     appImage: optional("R2_LINUX_APPIMAGE_URL"),
   };
   platforms.linux.feed = null;
+}
+if (platforms.macIntel.enabled) {
+  platforms.macIntel.artifacts = {
+    dmg: optional("R2_MAC_INTEL_DMG_URL"),
+    zip: optional("R2_MAC_INTEL_ZIP_URL"),
+  };
+  platforms.macIntel.feed = null;
 }
 
 const githubReleaseEnabled = env.GITHUB_RELEASE_ENABLED === "true";
@@ -140,6 +151,15 @@ const platformRows = [
     linkList([{ label: "AppImage", url: platforms.linux.artifacts?.appImage }]),
     "-",
   ],
+  [
+    "macOS x64 (Intel)",
+    platformStatus(platforms.macIntel, "Published"),
+    linkList([
+      { label: "DMG", url: platforms.macIntel.artifacts?.dmg },
+      { label: "ZIP", url: platforms.macIntel.artifacts?.zip },
+    ]),
+    "-",
+  ],
 ];
 
 const platformTable = [
@@ -169,6 +189,11 @@ const reportRows = reportZipUrl == null
         ]),
       ],
       ["Linux x64", platforms.linux.enabled ? "Not collected" : "Skipped", "-"],
+      [
+        "macOS x64 (Intel)",
+        platforms.macIntel.enabled ? "Published" : "Skipped",
+        "-",
+      ],
     ]
   : [["report.zip", "Published", link("download", reportZipUrl)]];
 
