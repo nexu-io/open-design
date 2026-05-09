@@ -1419,14 +1419,16 @@ function BoardComposerPopover({
         >
           Add note
         </button>
-        <button
-          type="button"
-          className="ghost"
-          disabled={target.selectionKind === 'pod' || !draft.trim()}
-          onClick={() => void onSaveComment()}
-        >
-          Save comment
-        </button>
+        {target.selectionKind === 'pod' ? null : (
+          <button
+            type="button"
+            className="ghost"
+            disabled={!draft.trim()}
+            onClick={() => void onSaveComment()}
+          >
+            Save comment
+          </button>
+        )}
         <button
           type="button"
           className="primary"
