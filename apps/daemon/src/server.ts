@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
@@ -30,7 +31,7 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
-import { findSkillById, listSkills } from './skills.js';
+import { findSkillById, listSkills, splitDerivedSkillId } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
@@ -52,16 +53,23 @@ import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import {
+  redactSecrets,
   testAgentConnection,
   testProviderConnection,
   validateBaseUrl,
 } from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
+import {
+  finalizeDesignPackage,
+  FinalizePackageLockedError,
+  FinalizeUpstreamError,
+} from './finalize-design.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
+import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
@@ -75,6 +83,36 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
+import {
+  deleteMediaTask,
+  getMediaTask,
+  insertMediaTask,
+  listMediaTasksByProject,
+  listRecentMediaTasks,
+  reconcileMediaTasksOnBoot,
+  updateMediaTask,
+} from './media-tasks.js';
+import {
+  MCP_TEMPLATES,
+  buildAcpMcpServers,
+  buildClaudeMcpJson,
+  isManagedProjectCwd,
+  readMcpConfig,
+  writeMcpConfig,
+} from './mcp-config.js';
+import {
+  beginAuth,
+  exchangeCodeForToken,
+  PendingAuthCache,
+  refreshAccessToken,
+} from './mcp-oauth.js';
+import {
+  clearToken,
+  getToken,
+  isTokenExpired,
+  readAllTokens,
+  setToken,
+} from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
@@ -85,6 +123,7 @@ import {
   deleteProjectFile,
   detectEntryFile,
   ensureProject,
+  isSafeId,
   listFiles,
   mimeFor,
   projectDir,
@@ -768,6 +807,84 @@ const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 
+// In-memory OAuth state cache. Lives for the daemon process's lifetime.
+// Maps the OAuth `state` parameter we generated in /api/mcp/oauth/start
+// to the verifier + endpoint info needed to finish the exchange when the
+// browser hits /api/mcp/oauth/callback.
+const mcpPendingAuth = new PendingAuthCache();
+
+/**
+ * Resolve the daemon's public base URL — the origin the user's browser
+ * (or the OAuth provider) reaches us at. Order of precedence:
+ *
+ *   1. `OD_PUBLIC_BASE_URL` env var. Cloud and packaged-electron deployments
+ *      set this to the externally-routable URL (e.g. `https://app.example.com`).
+ *   2. `req.protocol://req.get('host')` from the inbound request. Works in
+ *      local dev and most reverse-proxy setups (Express respects
+ *      `trust proxy` so X-Forwarded-* headers are honored).
+ *
+ * The OAuth callback URI is derived from this — it MUST be reachable from
+ * the user's browser, otherwise the redirect after auth lands on
+ * ERR_CONNECTION_REFUSED. Misconfiguration is loud: the OAuth provider
+ * will reject `redirect_uri` mismatches.
+ */
+function getPublicBaseUrl(req) {
+  const env = process.env.OD_PUBLIC_BASE_URL;
+  if (env && /^https?:\/\//i.test(env)) {
+    return env.replace(/\/+$/u, '');
+  }
+  const proto = req.protocol || 'http';
+  const host = req.get('host');
+  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
+  return `${proto}://${host}`;
+}
+
+function mcpOAuthCallbackUrl(req) {
+  return `${getPublicBaseUrl(req)}/api/mcp/oauth/callback`;
+}
+
+/**
+ * Refresh an expired token using the OAuth client context that the original
+ * authorization-code exchange persisted alongside the token. Refresh tokens
+ * are bound (RFC 6749 §6) to the client that received them, so we MUST
+ * refresh against the same `tokenEndpoint` / `clientId` / `clientSecret`
+ * pair — re-running discovery with a different redirect URI would risk
+ * registering a new client_id that the upstream then rejects the refresh
+ * for. Tokens persisted before that context was recorded can't be safely
+ * refreshed; the caller treats `null` as "needs reconnect".
+ */
+async function refreshAndPersistToken(dataDir, serverId, current) {
+  if (!current.refreshToken) return null;
+  if (!current.tokenEndpoint || !current.clientId) return null;
+  const tokenResp = await refreshAccessToken({
+    tokenEndpoint: current.tokenEndpoint,
+    clientId: current.clientId,
+    clientSecret: current.clientSecret,
+    refreshToken: current.refreshToken,
+    scope: current.scope,
+    resource: current.resourceUrl,
+  });
+  const next = {
+    accessToken: tokenResp.access_token,
+    refreshToken: tokenResp.refresh_token ?? current.refreshToken,
+    tokenType: tokenResp.token_type ?? 'Bearer',
+    scope: tokenResp.scope ?? current.scope,
+    expiresAt:
+      typeof tokenResp.expires_in === 'number'
+        ? Date.now() + tokenResp.expires_in * 1000
+        : undefined,
+    savedAt: Date.now(),
+    tokenEndpoint: current.tokenEndpoint,
+    clientId: current.clientId,
+    clientSecret: current.clientSecret,
+    authServerIssuer: current.authServerIssuer,
+    redirectUri: current.redirectUri,
+    resourceUrl: current.resourceUrl,
+  };
+  await setToken(dataDir, serverId, next);
+  return next;
+}
+
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
 
@@ -1199,6 +1316,95 @@ function requireLocalDaemonRequest(req, res, next) {
   next();
 }
 
+/**
+ * Render the small HTML page that the OAuth callback returns to the
+ * user's browser tab. It posts a message back to the opener (the
+ * Settings dialog window) and offers a manual close button. We keep
+ * the markup pure HTML/CSS — no external scripts, no React — so the
+ * page works even if the opener was closed and the user just sees a
+ * static success/failure screen.
+ */
+function renderOAuthResultPage(opts) {
+  const ok = Boolean(opts.ok);
+  const title = ok ? 'Connected' : 'Authorization failed';
+  const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
+  const body = ok
+    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to Open Design.`
+    : escapeHtml(opts.message ?? 'Authorization could not be completed.');
+  const accent = ok ? '#1a7f37' : '#cf222e';
+  const payload = ok
+    ? { type: 'mcp-oauth', ok: true, serverId: opts.serverId ?? null }
+    : { type: 'mcp-oauth', ok: false, message: opts.message ?? null };
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(title)} — Open Design</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+    background: #f6f7f9; color: #1f2328; padding: 24px;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #e6edf3; }
+    .card { background: #161b22; border-color: #30363d; }
+    code { background: #1f242c; }
+  }
+  .card {
+    max-width: 420px; width: 100%; padding: 28px 28px 22px; border-radius: 12px;
+    background: white; border: 1px solid #d0d7de; box-shadow: 0 8px 24px rgba(0,0,0,.06);
+    text-align: left;
+  }
+  h1 { margin: 0 0 8px; font-size: 18px; color: ${accent}; }
+  p  { margin: 0 0 16px; font-size: 14px; line-height: 1.55; }
+  code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+  button {
+    appearance: none; border: 1px solid #d0d7de; background: white;
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: #f6f8fa; }
+  @media (prefers-color-scheme: dark) {
+    button { background: #21262d; border-color: #30363d; color: #e6edf3; }
+    button:hover { background: #30363d; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>${escapeHtml(heading)}</h1>
+    <p>${body}</p>
+    <button type="button" onclick="window.close()">Close this tab</button>
+  </div>
+  <script>
+    try {
+      var payload = ${JSON.stringify(payload)};
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payload, '*');
+      }
+      if (window.BroadcastChannel) {
+        var bc = new BroadcastChannel('open-design-mcp-oauth');
+        bc.postMessage(payload);
+        bc.close();
+      }
+    } catch (e) { /* ignore postMessage failures */ }
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function setLiveArtifactPreviewHeaders(res) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -1398,6 +1604,7 @@ function sendMulterError(res, err) {
       LIMIT_FIELD_KEY: 400,
       LIMIT_FIELD_VALUE: 400,
       LIMIT_FIELD_COUNT: 400,
+      MISSING_FIELD_NAME: 400,
     };
     const errorByCode = {
       LIMIT_FILE_SIZE: 'file too large',
@@ -1407,6 +1614,7 @@ function sendMulterError(res, err) {
       LIMIT_FIELD_KEY: 'field name too long',
       LIMIT_FIELD_VALUE: 'field value too long',
       LIMIT_FIELD_COUNT: 'too many form fields',
+      MISSING_FIELD_NAME: 'missing field name',
     };
     const status = statusByCode[code] ?? 400;
     const message = errorByCode[code] ?? 'upload failed';
@@ -1428,8 +1636,34 @@ function sendMulterError(res, err) {
 
 const mediaTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
+const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
 
-function createMediaTask(taskId, projectId, info = {}) {
+function hydrateMediaTask(row) {
+  const task = {
+    id: row.id,
+    projectId: row.projectId,
+    status: row.status,
+    surface: row.surface,
+    model: row.model,
+    progress: Array.isArray(row.progress) ? row.progress.slice() : [],
+    file: row.file ?? null,
+    error: row.error ?? null,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    waiters: new Set(),
+  };
+  mediaTasks.set(task.id, task);
+  return task;
+}
+
+function getLiveMediaTask(db, taskId) {
+  const cached = mediaTasks.get(taskId);
+  if (cached) return cached;
+  const row = getMediaTask(db, taskId);
+  return row ? hydrateMediaTask(row) : null;
+}
+
+function createMediaTask(db, taskId, projectId, info = {}) {
   const task = {
     id: taskId,
     projectId,
@@ -1444,15 +1678,41 @@ function createMediaTask(taskId, projectId, info = {}) {
     waiters: new Set(),
   };
   mediaTasks.set(taskId, task);
+  insertMediaTask(db, {
+    id: taskId,
+    projectId,
+    status: task.status,
+    surface: task.surface,
+    model: task.model,
+    progress: task.progress,
+    file: task.file,
+    error: task.error,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+  });
   return task;
 }
 
-function appendTaskProgress(task, line) {
-  task.progress.push(line);
-  notifyTaskWaiters(task);
+function persistMediaTask(db, task) {
+  updateMediaTask(db, task.id, {
+    status: task.status,
+    surface: task.surface,
+    model: task.model,
+    progress: task.progress,
+    file: task.file,
+    error: task.error,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+  });
 }
 
-function notifyTaskWaiters(task) {
+function appendTaskProgress(db, task, line) {
+  task.progress.push(line);
+  persistMediaTask(db, task);
+  notifyTaskWaiters(db, task);
+}
+
+function notifyTaskWaiters(db, task) {
   const wakers = Array.from(task.waiters);
   for (const w of wakers) {
     try {
@@ -1462,14 +1722,33 @@ function notifyTaskWaiters(task) {
     }
   }
   if (
-    (task.status === 'done' || task.status === 'failed') &&
+    MEDIA_TERMINAL_STATUSES.has(task.status) &&
     !task._gcScheduled
   ) {
     task._gcScheduled = true;
     setTimeout(() => {
-      if (task.waiters.size === 0) mediaTasks.delete(task.id);
+      if (task.waiters.size === 0) {
+        mediaTasks.delete(task.id);
+        deleteMediaTask(db, task.id);
+      }
     }, TASK_TTL_AFTER_DONE_MS).unref?.();
   }
+}
+
+function mediaTaskSnapshot(task, since = 0) {
+  const snapshot = {
+    taskId: task.id,
+    status: task.status,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+    progress: task.progress.slice(since),
+    nextSince: task.progress.length,
+  };
+  if (task.status === 'done') snapshot.file = task.file;
+  if (task.status === 'failed' || task.status === 'interrupted') {
+    snapshot.error = task.error;
+  }
+  return snapshot;
 }
 
 export function createSseResponse(
@@ -1509,7 +1788,7 @@ export function createSseResponse(
 
   return {
     /** @param {ChatSseEvent['event'] | ProxySseEvent['event'] | string} event */
-    send(event, data, id = null) {
+    send(event, data, id: string | number | null | undefined = null) {
       if (!canWrite()) return false;
       if (id !== null && id !== undefined) res.write(`id: ${id}\n`);
       res.write(`event: ${event}\n`);
@@ -1527,8 +1806,35 @@ export function createSseResponse(
   };
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
+export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+
+export interface StartServerOptions {
+  desktopPdfExporter?: DesktopPdfExporter | null;
+  host?: string;
+  port?: number;
+  returnServer?: boolean;
+}
+
+function resolveChatRunInactivityTimeoutMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return 2 * 60 * 1000;
+  return Math.max(0, Math.floor(raw));
+}
+
+function resolveChatRunShutdownGraceMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
+  if (!Number.isFinite(raw)) return 3_000;
+  return Math.max(0, Math.floor(raw));
+}
+
+export async function startServer({
+  port = 7456,
+  host = process.env.OD_BIND_HOST || '127.0.0.1',
+  returnServer = false,
+  desktopPdfExporter = null,
+}: StartServerOptions = {}) {
   let resolvedPort = port;
+  let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -1602,6 +1908,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const reconciledStaleRuns = reconcileStaleRuns(db, { staleAfterMs: critiqueCfg.totalTimeoutMs });
   if (reconciledStaleRuns > 0) {
     console.warn(`[critique] reconcileStaleRuns flipped ${reconciledStaleRuns} stale running row(s) to interrupted`);
+  }
+  const mediaReconcile = reconcileMediaTasksOnBoot(db, {
+    terminalTtlMs: TASK_TTL_AFTER_DONE_MS,
+  });
+  if (mediaReconcile.interrupted > 0 || mediaReconcile.deleted > 0) {
+    console.warn(
+      `[media] reconcileMediaTasksOnBoot interrupted ${mediaReconcile.interrupted} task(s), ` +
+        `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
+    );
+  }
+  mediaTasks.clear();
+  for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
+    hydrateMediaTask(row);
   }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
@@ -1788,6 +2107,210 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
     installInfoCache = { t: now, payload };
     res.json(payload);
+  });
+
+  // External MCP server configuration. Open Design connects to these as a
+  // CLIENT and surfaces their tools to the underlying agent at spawn time.
+  // GET returns user-saved entries plus the built-in template list so the UI
+  // can render the "Add MCP server" picker without a second round-trip.
+  app.get('/api/mcp/servers', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
+      res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.put('/api/mcp/servers', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const cfg = await writeMcpConfig(RUNTIME_DATA_DIR, req.body);
+      res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
+    } catch (err) {
+      res
+        .status(400)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // External MCP server OAuth — daemon-owned authorization flow.
+  //
+  // Replaces per-spawn `mcp-remote` subprocesses. The token is stored
+  // server-side in <dataDir>/mcp-tokens.json and injected as a Bearer
+  // header into the `.mcp.json` we write for Claude Code at spawn time.
+  // The redirect URI points at THIS daemon's public origin so the flow
+  // works the same in local dev (loopback) and in cloud deployments
+  // where OD_PUBLIC_BASE_URL pins the externally-routable URL.
+  // ─────────────────────────────────────────────────────────────────
+
+  app.post('/api/mcp/oauth/start', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const serverId =
+      typeof req.body?.serverId === 'string' ? req.body.serverId.trim() : '';
+    if (!serverId) {
+      return res.status(400).json({ error: 'serverId is required' });
+    }
+    try {
+      const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
+      const server = cfg.servers.find((s) => s.id === serverId);
+      if (!server) {
+        return res.status(404).json({ error: `unknown serverId ${serverId}` });
+      }
+      if (server.transport !== 'http' && server.transport !== 'sse') {
+        return res
+          .status(400)
+          .json({ error: 'OAuth flow only applies to http/sse transports' });
+      }
+      if (!server.url) {
+        return res.status(400).json({ error: 'server has no URL configured' });
+      }
+      const redirectUri = mcpOAuthCallbackUrl(req);
+      console.log(
+        `[mcp-oauth] start serverId=${serverId} url=${server.url} redirect=${redirectUri}`,
+      );
+      const result = await beginAuth({
+        serverId,
+        serverUrl: server.url,
+        redirectUri,
+        dataDir: RUNTIME_DATA_DIR,
+        fetchImpl: fetch,
+      });
+      mcpPendingAuth.put(result.state, result.pending);
+      console.log(
+        `[mcp-oauth] start ok serverId=${serverId} authServer=${result.pending.authServerIssuer} clientId=${result.pending.clientId}`,
+      );
+      res.json({
+        authorizeUrl: result.authorizeUrl,
+        state: result.state,
+        redirectUri,
+      });
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      console.error(`[mcp-oauth] start failed serverId=${serverId}:`, msg);
+      res.status(502).json({ error: msg });
+    }
+  });
+
+  // Public endpoint — the OAuth provider's user-agent redirect lands here
+  // after the user approves. We deliberately do NOT enforce
+  // isLocalSameOrigin: in cloud the daemon IS the public origin, and even
+  // locally the request comes back from the OAuth provider's redirect
+  // (no Origin header at all on a top-level navigation).
+  app.get('/api/mcp/oauth/callback', async (req, res) => {
+    const code = typeof req.query.code === 'string' ? req.query.code : '';
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const error = typeof req.query.error === 'string' ? req.query.error : '';
+    if (error) {
+      return res.status(400).type('html').send(renderOAuthResultPage({
+        ok: false,
+        message: `Auth provider returned error: ${error}`,
+      }));
+    }
+    if (!code || !state) {
+      return res.status(400).type('html').send(renderOAuthResultPage({
+        ok: false,
+        message: 'Missing code or state — open Settings → External MCP servers and click Connect again.',
+      }));
+    }
+    const pending = mcpPendingAuth.consume(state);
+    if (!pending) {
+      return res.status(400).type('html').send(renderOAuthResultPage({
+        ok: false,
+        message: 'Auth state expired or already used. Click Connect again.',
+      }));
+    }
+    try {
+      const tokenResp = await exchangeCodeForToken({
+        tokenEndpoint: pending.tokenEndpoint,
+        clientId: pending.clientId,
+        clientSecret: pending.clientSecret,
+        redirectUri: pending.redirectUri,
+        code,
+        codeVerifier: pending.codeVerifier,
+        resource: pending.resourceUrl,
+      });
+      const stored = {
+        accessToken: tokenResp.access_token,
+        refreshToken: tokenResp.refresh_token,
+        tokenType: tokenResp.token_type ?? 'Bearer',
+        scope: tokenResp.scope ?? pending.scope,
+        expiresAt:
+          typeof tokenResp.expires_in === 'number'
+            ? Date.now() + tokenResp.expires_in * 1000
+            : undefined,
+        savedAt: Date.now(),
+        // Persist the OAuth client context so refresh-token rotation can
+        // hit the same client_id / token endpoint the upstream issued the
+        // refresh_token to. Refresh tokens are client-bound (RFC 6749 §6).
+        tokenEndpoint: pending.tokenEndpoint,
+        clientId: pending.clientId,
+        clientSecret: pending.clientSecret,
+        authServerIssuer: pending.authServerIssuer,
+        redirectUri: pending.redirectUri,
+        resourceUrl: pending.resourceUrl,
+      };
+      await setToken(RUNTIME_DATA_DIR, pending.serverId, stored);
+      res.type('html').send(renderOAuthResultPage({
+        ok: true,
+        serverId: pending.serverId,
+      }));
+    } catch (err) {
+      console.error(
+        '[mcp-oauth] callback failed:',
+        err && err.message ? err.message : err,
+      );
+      res.status(502).type('html').send(renderOAuthResultPage({
+        ok: false,
+        message: String(err && err.message ? err.message : err),
+      }));
+    }
+  });
+
+  app.get('/api/mcp/oauth/status', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const serverId =
+      typeof req.query.serverId === 'string' ? req.query.serverId.trim() : '';
+    if (!serverId) return res.status(400).json({ error: 'serverId is required' });
+    try {
+      const tok = await getToken(RUNTIME_DATA_DIR, serverId);
+      if (!tok) return res.json({ connected: false });
+      res.json({
+        connected: true,
+        expiresAt: tok.expiresAt ?? null,
+        scope: tok.scope ?? null,
+        savedAt: tok.savedAt,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.post('/api/mcp/oauth/disconnect', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const serverId =
+      typeof req.body?.serverId === 'string' ? req.body.serverId.trim() : '';
+    if (!serverId) return res.status(400).json({ error: 'serverId is required' });
+    try {
+      await clearToken(RUNTIME_DATA_DIR, serverId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+    }
   });
 
   app.get('/api/projects', (_req, res) => {
@@ -2657,18 +3180,56 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // so we resolve the actual directory via listSkills() rather than guessing.
   //
   // Resolution order:
-  //   1. <skillDir>/example.html — fully-baked static example (preferred)
-  //   2. <skillDir>/assets/template.html  +
+  //   1. Derived id (`<parent>:<child>`):
+  //      <parentDir>/examples/<child>.html — pre-baked single-file sample.
+  //      Subfolder layouts (e.g. live-artifact's
+  //      `examples/<name>/template.html`) are intentionally not served:
+  //      they still contain `{{data.x}}` placeholders that only the
+  //      daemon-side renderer fills in, and serving the raw template
+  //      would render visible placeholder braces in the gallery.
+  //   2. <skillDir>/example.html — fully-baked static example (preferred)
+  //   3. <skillDir>/assets/template.html  +
   //      <skillDir>/assets/example-slides.html — assemble at request time
   //      by replacing the `<!-- SLIDES_HERE -->` marker with the snippet
   //      and patching the placeholder <title>. Lets a skill ship one
   //      canonical seed plus a small content fragment, so the example
   //      never drifts from the seed.
-  //   3. <skillDir>/assets/template.html — raw template, no content slides
-  //   4. <skillDir>/assets/index.html — generic fallback
+  //   4. <skillDir>/assets/template.html — raw template, no content slides
+  //   5. <skillDir>/assets/index.html — generic fallback
+  //   6. First .html in <skillDir>/examples/ — used as a friendly fallback
+  //      so a skill that aggregates examples (like live-artifact) still has
+  //      a real preview on its parent card instead of returning 404.
   app.get('/api/skills/:id/example', async (req, res) => {
     try {
       const skills = await listSkills(SKILLS_DIR);
+
+      // 1. Derived `<parent>:<child>` id — resolve straight to the matching
+      // file under <parentDir>/examples/. Done before findSkillById so the
+      // parent's normal fallback chain never accidentally serves a stale
+      // file when a sample is missing (we'd rather 404 explicitly).
+      const derived = splitDerivedSkillId(req.params.id);
+      if (derived) {
+        const parent = findSkillById(skills, derived.parentId);
+        if (!parent) {
+          return res.status(404).type('text/plain').send('skill not found');
+        }
+        const candidate = path.join(
+          parent.dir,
+          'examples',
+          `${derived.childKey}.html`,
+        );
+        if (fs.existsSync(candidate)) {
+          const html = await fs.promises.readFile(candidate, 'utf8');
+          return res
+            .type('text/html')
+            .send(rewriteSkillAssetUrls(html, parent.id));
+        }
+        return res
+          .status(404)
+          .type('text/plain')
+          .send('derived example not found');
+      }
+
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
@@ -2709,11 +3270,44 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           .type('text/html')
           .send(rewriteSkillAssetUrls(html, skill.id));
       }
+
+      // Friendly fallback for skills that aggregate examples in a sibling
+      // `examples/` folder (e.g. live-artifact). The parent card would
+      // otherwise 404 even though plenty of perfectly valid samples ship
+      // alongside SKILL.md; pick the first .html file alphabetically so
+      // direct URL access (e.g. deep links) shows something representative.
+      // Subfolder layouts are excluded for the same reason as the derived
+      // resolver above — their `template.html` still has unresolved
+      // `{{data.x}}` placeholders.
+      const examplesDir = path.join(skill.dir, 'examples');
+      if (fs.existsSync(examplesDir)) {
+        let entries: string[] = [];
+        try {
+          entries = await fs.promises.readdir(examplesDir);
+        } catch {
+          entries = [];
+        }
+        entries.sort();
+        for (const name of entries) {
+          if (name.startsWith('.')) continue;
+          if (!name.toLowerCase().endsWith('.html')) continue;
+          const direct = path.join(examplesDir, name);
+          try {
+            const html = await fs.promises.readFile(direct, 'utf8');
+            return res
+              .type('text/html')
+              .send(rewriteSkillAssetUrls(html, skill.id));
+          } catch {
+            continue;
+          }
+        }
+      }
+
       res
         .status(404)
         .type('text/plain')
         .send(
-          'no example.html, assets/template.html, or assets/index.html for this skill',
+          'no example.html, assets/template.html, assets/index.html, or examples/*.html for this skill',
         );
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
@@ -3299,6 +3893,101 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+    try {
+      // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
+      // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
+      // the char-class regex and resolve to the parent directory under
+      // path.join. Express decodes percent-encoded `%2e%2e` to `..` before
+      // we see it, so this check covers both URL-supplied and stored-row
+      // attack vectors.
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
+      if (typeof apiKey !== 'string' || !apiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      }
+      if (baseUrl !== undefined) {
+        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
+        }
+        const validated = validateExternalApiBaseUrl(baseUrl);
+        if (validated.error) {
+          return sendApiError(
+            res,
+            validated.forbidden ? 403 : 400,
+            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+            validated.error,
+          );
+        }
+      }
+      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      }
+
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      const result = await finalizeDesignPackage(
+        db,
+        PROJECTS_DIR,
+        DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { apiKey, baseUrl, model, maxTokens },
+      );
+      res.json(result);
+    } catch (err) {
+      // Concurrent finalize - the lockfile was already held by another
+      // call. Caller can retry after a short wait; not a client error.
+      // Maps to the shared CONFLICT code per @lefarcen P2 on PR #832.
+      if (err instanceof FinalizePackageLockedError) {
+        return sendApiError(res, 409, 'CONFLICT', err.message);
+      }
+
+      // Upstream Anthropic error - status-aware mapping using shared
+      // ApiErrorCode values. Run the raw upstream body through
+      // redactSecrets so the API key cannot leak even if Anthropic
+      // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
+      // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
+      if (err instanceof FinalizeUpstreamError) {
+        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const init = safeDetails ? { details: safeDetails } : {};
+        if (err.status === 401) {
+          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
+        }
+        if (err.status === 429) {
+          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+        }
+        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
+      }
+
+      // The blocking call hit our 120s AbortController timeout - or the
+      // caller passed an already-aborted signal. Either way, surface as
+      // 503 with the shared UPSTREAM_UNAVAILABLE code (no dedicated
+      // TIMEOUT code in the contracts ApiErrorCode union).
+      const errName =
+        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
+      if (errName === 'AbortError') {
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'finalize timed out');
+      }
+
+      // Unexpected runtime failure (file IO, db access, prompt build).
+      // Log via console.error per the daemon convention; client sees a
+      // generic 500 with the shared INTERNAL_ERROR code. Run the message
+      // through redactSecrets defensively.
+      console.error('[finalize/anthropic]', err);
+      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
+    }
+  });
+
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
     async (req, res) => {
@@ -3514,6 +4203,41 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err),
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/export/pdf', async (req, res) => {
+    if (typeof desktopPdfExporter !== 'function') {
+      return sendApiError(
+        res,
+        501,
+        'UPSTREAM_UNAVAILABLE',
+        'desktop PDF export is only available in the desktop runtime',
+      );
+    }
+    try {
+      const { fileName, title, deck } = req.body || {};
+      if (typeof fileName !== 'string' || fileName.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      const input = await buildDesktopPdfExportInput({
+        daemonUrl,
+        deck: deck === true,
+        fileName,
+        projectId: req.params.id,
+        projectsRoot: PROJECTS_DIR,
+        title: typeof title === 'string' ? title : undefined,
+      });
+      const result = await desktopPdfExporter(input);
+      res.json(result);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
       );
     }
   });
@@ -3798,7 +4522,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!project) return res.status(404).json({ error: 'project not found' });
 
       const taskId = randomUUID();
-      const task = createMediaTask(taskId, projectId, {
+      const task = createMediaTask(db, taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
       });
@@ -3810,6 +4534,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
 
       task.status = 'running';
+      persistMediaTask(db, task);
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -3830,13 +4555,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         language: typeof req.body?.language === 'string' ? req.body.language : undefined,
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
-        onProgress: (line) => appendTaskProgress(task, line),
+        onProgress: (line) => appendTaskProgress(db, task, line),
       })
         .then((meta) => {
           task.status = 'done';
           task.file = meta;
           task.endedAt = Date.now();
-          notifyTaskWaiters(task);
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
           console.error(
             `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
               `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
@@ -3850,7 +4576,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             code: err?.code,
           };
           task.endedAt = Date.now();
-          notifyTaskWaiters(task);
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
           console.error(
             `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
               `message=${(task.error.message || '').slice(0, 240)}`,
@@ -3912,7 +4639,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
-    const task = mediaTasks.get(taskId);
+    const task = getLiveMediaTask(db, taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
@@ -3923,22 +4650,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const respond = () => {
       if (res.writableEnded) return;
-      const snapshot = {
-        taskId,
-        status: task.status,
-        startedAt: task.startedAt,
-        endedAt: task.endedAt,
-        progress: task.progress.slice(since),
-        nextSince: task.progress.length,
-      };
-      if (task.status === 'done') snapshot.file = task.file;
-      if (task.status === 'failed') snapshot.error = task.error;
-      res.json(snapshot);
+      res.json(mediaTaskSnapshot(task, since));
     };
 
     if (
-      task.status === 'done' ||
-      task.status === 'failed' ||
+      MEDIA_TERMINAL_STATUSES.has(task.status) ||
       task.progress.length > since
     ) {
       return respond();
@@ -3964,25 +4680,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const projectId = req.params.id;
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = [];
-    for (const t of mediaTasks.values()) {
-      if (t.projectId !== projectId) continue;
-      const isTerminal = t.status === 'done' || t.status === 'failed';
-      if (isTerminal && !includeDone) continue;
-      tasks.push({
-        taskId: t.id,
-        status: t.status,
-        startedAt: t.startedAt,
-        endedAt: t.endedAt,
-        elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
-        surface: t.surface,
-        model: t.model,
-        progress: t.progress.slice(-3),
-        progressCount: t.progress.length,
-        ...(t.status === 'done' ? { file: t.file } : {}),
-        ...(t.status === 'failed' ? { error: t.error } : {}),
-      });
-    }
+    const tasks = listMediaTasksByProject(db, projectId, {
+      includeTerminal: includeDone,
+    }).map((t) => ({
+      taskId: t.id,
+      status: t.status,
+      startedAt: t.startedAt,
+      endedAt: t.endedAt,
+      elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
+      surface: t.surface,
+      model: t.model,
+      progress: t.progress.slice(-3),
+      progressCount: t.progress.length,
+      ...(t.status === 'done' ? { file: t.file } : {}),
+      ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
+    }));
     tasks.sort((a, b) => b.startedAt - a.startedAt);
     res.json({ tasks });
   });
@@ -4031,6 +4743,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     skillId,
     designSystemId,
     streamFormat,
+    connectedExternalMcp,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -4150,6 +4863,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       critique: critiqueShouldRun ? critiqueCfg : undefined,
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
+      connectedExternalMcp: Array.isArray(connectedExternalMcp)
+        ? connectedExternalMcp
+        : undefined,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -4311,6 +5027,70 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
+
+    // Resolve external MCP config + stored OAuth tokens up-front so the
+    // system prompt can warn the model away from Claude Code's synthetic
+    // `*_authenticate` / `*_complete_authentication` tools for any
+    // server the daemon already holds a valid Bearer for. We re-use both
+    // values further down at .mcp.json write time — see the spawn block
+    // below — instead of re-reading.
+    let externalMcpConfig = { servers: [] };
+    try {
+      externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
+    } catch (err) {
+      console.warn(
+        '[mcp-config] read failed:',
+        err && err.message ? err.message : err,
+      );
+    }
+    const enabledExternalMcp = externalMcpConfig.servers.filter((s) => s.enabled);
+    const oauthTokensForSpawn = {};
+    try {
+      const stored = await readAllTokens(RUNTIME_DATA_DIR);
+      for (const [serverId, tok] of Object.entries(stored)) {
+        if (!enabledExternalMcp.find((s) => s.id === serverId)) continue;
+        // Default to the persisted access token; null it out if expired so
+        // we never inject a stale `Authorization: Bearer …` header. The
+        // model treats a server with a Bearer pinned as connected and
+        // discourages re-auth, which is the worst possible UX when the
+        // token is going to 401 every call.
+        let access = isTokenExpired(tok) ? null : tok.accessToken;
+        if (isTokenExpired(tok) && tok.refreshToken) {
+          try {
+            const refreshed = await refreshAndPersistToken(
+              RUNTIME_DATA_DIR,
+              serverId,
+              tok,
+            );
+            if (refreshed) access = refreshed.accessToken;
+          } catch (err) {
+            console.warn(
+              '[mcp-oauth] refresh failed for',
+              serverId,
+              err && err.message ? err.message : err,
+            );
+          }
+        }
+        if (access) {
+          oauthTokensForSpawn[serverId] = access;
+        } else {
+          console.warn(
+            '[mcp-oauth] skipping expired token for',
+            serverId,
+            '— reconnect required',
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        '[mcp-tokens] read failed:',
+        err && err.message ? err.message : err,
+      );
+    }
+    const connectedExternalMcp = enabledExternalMcp
+      .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
+      .map((s) => ({ id: s.id, label: s.label }));
+
     const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
       await composeDaemonSystemPrompt({
         agentId,
@@ -4318,6 +5098,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId,
         designSystemId,
         streamFormat: def?.streamFormat ?? 'plain',
+        connectedExternalMcp,
       });
 
     // Make skill side files reachable through three layers, in order of
@@ -4442,6 +5223,79 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       argsPrefix: [OD_BIN],
     });
 
+    // External MCP servers configured by the user in Settings → External MCP.
+    // Open Design relays them to the agent so the model can call those tools.
+    // Two delivery shapes today:
+    //   - Claude Code: write a `.mcp.json` into the project cwd. Claude Code
+    //     auto-loads that file at spawn (same format the CLI accepts via
+    //     `claude mcp add` + Claude Desktop's config). Fire-and-forget; we
+    //     deliberately do NOT block spawn on a write failure since the agent
+    //     can still run without external tools — log a warning and continue.
+    //   - ACP agents (Hermes/Kimi): merge stdio entries into the existing
+    //     `mcpServers` array; SSE/HTTP entries are skipped because ACP's
+    //     stdio-only descriptor can't represent them yet.
+    // Other agents (Codex, Gemini, OpenCode, Cursor, Qwen, Qoder, Copilot,
+    // Pi, DeepSeek) inherit the user's per-CLI MCP config from their own
+    // home dir for now — a future change can grow this list.
+    //
+    // The MCP config + OAuth tokens were resolved earlier (above
+    // composeDaemonSystemPrompt) so the system prompt could mention any
+    // already-authenticated servers; we reuse `enabledExternalMcp` and
+    // `oauthTokensForSpawn` here for the Claude `.mcp.json` write +
+    // ACP merge so we don't pay for a second filesystem read.
+    //
+    // Claude Code: write `.mcp.json` to the daemon-managed project cwd before
+    // spawn so Claude Code auto-loads the user's external MCP servers. Strict
+    // gating is essential here:
+    //   - cwd must be set (no project → no `.mcp.json` write).
+    //   - cwd must live UNDER PROJECTS_DIR. We never write to a git-linked
+    //     baseDir (= the user's own repo), since that would silently overwrite
+    //     a hand-crafted .mcp.json the user already keeps in their source tree.
+    // We also unlink a stale `.mcp.json` we previously wrote when the user has
+    // since disabled all servers, so removing a server actually takes effect
+    // on the next run.
+    if (def.id === 'claude' && isManagedProjectCwd(cwd, PROJECTS_DIR)) {
+      {
+        const target = path.join(cwd, '.mcp.json');
+        if (enabledExternalMcp.length > 0) {
+          try {
+            const claudeMcp = buildClaudeMcpJson(
+              enabledExternalMcp,
+              oauthTokensForSpawn,
+            );
+            if (claudeMcp) {
+              await fs.promises.mkdir(path.dirname(target), { recursive: true });
+              await fs.promises.writeFile(
+                target,
+                JSON.stringify(claudeMcp, null, 2),
+                'utf8',
+              );
+            }
+          } catch (err) {
+            console.warn(
+              '[mcp-config] failed to write project .mcp.json:',
+              err && err.message ? err.message : err,
+            );
+          }
+        } else {
+          try {
+            await fs.promises.unlink(target);
+          } catch (err) {
+            if ((err && err.code) !== 'ENOENT') {
+              console.warn(
+                '[mcp-config] failed to remove stale .mcp.json:',
+                err && err.message ? err.message : err,
+              );
+            }
+          }
+        }
+      }
+    }
+    if (enabledExternalMcp.length > 0 && def.streamFormat === 'acp-json-rpc') {
+      const acpExternal = buildAcpMcpServers(enabledExternalMcp);
+      mcpServers.push(...acpExternal);
+    }
+
     // Pre-flight the composed prompt against any argv-byte budget the
     // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
     // a `-` stdin sentinel, so the prompt has to ride argv). Doing this
@@ -4537,12 +5391,50 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const send = (event, data) => design.runs.emit(run, event, data);
+    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const inactivityKillGraceMs = 3_000;
+    let inactivityTimer = null;
+    const clearInactivityWatchdog = () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+      }
+    };
+    const scheduleForcedChildShutdown = () => {
+      if (!child) return;
+      setTimeout(() => {
+        if (child && !child.killed) child.kill('SIGTERM');
+      }, inactivityKillGraceMs).unref?.();
+      setTimeout(() => {
+        if (child && !child.killed) child.kill('SIGKILL');
+      }, inactivityKillGraceMs * 2).unref?.();
+    };
+    const failForInactivity = () => {
+      if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+      const message =
+        `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
+        'The model or CLI likely hung while generating. Retry the turn or pick a different model.';
+      clearInactivityWatchdog();
+      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
+      design.runs.finish(run, 'failed', 1, null);
+      if (acpSession?.abort) {
+        acpSession.abort();
+      }
+      if (child && !child.killed) child.kill('SIGTERM');
+      scheduleForcedChildShutdown();
+    };
+    const noteAgentActivity = () => {
+      if (inactivityTimeoutMs <= 0) return;
+      clearInactivityWatchdog();
+      inactivityTimer = setTimeout(failForInactivity, inactivityTimeoutMs);
+      inactivityTimer.unref?.();
+    };
     const unregisterChatAgentEventSink = () => {
       activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
     };
     if (toolTokenGrant?.runId) {
       activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) =>
-        send('agent', payload),
+        (noteAgentActivity(), send('agent', payload)),
       );
     }
     // If detection can't find the binary, surface a friendly SSE error
@@ -4590,6 +5482,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       reasoning: safeReasoning,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
+    noteAgentActivity();
 
     let child;
     let acpSession = null;
@@ -4715,7 +5608,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         // an early child error fired before the orchestrator returns has no
         // listener. Both registrations are idempotent and the run lifecycle
         // is owned solely by the orchestrator's awaited result below.
-        child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+        child.stderr.on('data', (chunk) => {
+          noteAgentActivity();
+          send('stderr', { chunk });
+        });
         child.on('error', (err) => {
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
         });
@@ -4796,12 +5692,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (ev?.type === 'error') {
         if (agentStreamError) return;
         agentStreamError = String(ev.message || 'Agent stream error');
+        clearInactivityWatchdog();
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
           details: ev.raw ? { raw: ev.raw } : undefined,
           retryable: false,
         }));
         return;
       }
+      noteAgentActivity();
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
       }
@@ -4809,7 +5707,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
 
     if (def.streamFormat === 'claude-stream-json') {
-      const claude = createClaudeStreamHandler((ev) => send('agent', ev));
+      const claude = createClaudeStreamHandler((ev) => {
+        noteAgentActivity();
+        send('agent', ev);
+      });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
@@ -4818,7 +5719,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
-      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      const copilot = createCopilotStreamHandler((ev) => {
+        noteAgentActivity();
+        send('agent', ev);
+      });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
@@ -4849,12 +5753,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           } else if (channel === 'error') {
             if (agentStreamError) return;
             agentStreamError = String(payload?.message || 'Pi session error');
+            clearInactivityWatchdog();
             send('error', createSseErrorPayload(
               'AGENT_EXECUTION_FAILED',
               agentStreamError,
               { retryable: false },
             ));
           } else {
+            noteAgentActivity();
             send(channel, payload);
           }
         },
@@ -4868,7 +5774,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         cwd: effectiveCwd,
         model: safeModel,
         mcpServers,
-        send,
+        send: (event, data) => {
+          noteAgentActivity();
+          send(event, data);
+        },
       });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
@@ -4884,20 +5793,28 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
     } else {
-      child.stdout.on('data', (chunk) => send('stdout', { chunk }));
+      child.stdout.on('data', (chunk) => {
+        noteAgentActivity();
+        send('stdout', { chunk });
+      });
     }
     // Wire the acpSession onto the run so cancel() can call abort()
     // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
     run.acpSession = acpSession;
-    child.stderr.on('data', (chunk) => send('stderr', { chunk }));
+    child.stderr.on('data', (chunk) => {
+      noteAgentActivity();
+      send('stderr', { chunk });
+    });
 
     child.on('error', (err) => {
+      clearInactivityWatchdog();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
+      clearInactivityWatchdog();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
@@ -5090,6 +6007,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   app.post('/api/runs', (req, res) => {
+    if (daemonShuttingDown) {
+      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
+    }
     const run = design.runs.create(req.body || {});
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
@@ -5127,6 +6047,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   app.post('/api/chat', (req, res) => {
+    if (daemonShuttingDown) {
+      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
+    }
     const run = design.runs.create();
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
@@ -5471,6 +6394,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -5566,6 +6490,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -5665,6 +6590,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           'api-key': apiKey,
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -5762,6 +6688,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -5809,13 +6736,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // critical when port=0 (ephemeral port) and when the embedding sidecar
   // needs to advertise the port to a parent process before any request
   // can flow. Three callers depend on this contract:
-  //   - `apps/daemon/src/cli.ts`            → expects a `url` string
+  //   - `apps/daemon/src/cli.ts`            → expects `{ url, server, shutdown }`
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
+    let daemonShutdownStarted = false;
     const cleanupDaemonBackgroundWork = () => {
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
+    };
+    const shutdownDaemonRuns = async () => {
+      if (daemonShutdownStarted) return;
+      daemonShutdownStarted = true;
+      daemonShuttingDown = true;
+      await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
     };
     let server;
     try {
@@ -5845,14 +6779,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           console.log(`[od] daemon listening on ${url}`);
         }
         daemonUrl = url;
-        resolve(returnServer ? { url, server } : url);
+        resolve(returnServer ? { url, server, shutdown: shutdownDaemonRuns } : url);
       });
     } catch (error) {
       cleanupDaemonBackgroundWork();
       reject(error);
       return;
     }
-    server.once('close', cleanupDaemonBackgroundWork);
+    server.once('close', () => {
+      void shutdownDaemonRuns().finally(cleanupDaemonBackgroundWork);
+    });
     // `app.listen` throws synchronously when the port is already in use on
     // some Node versions, but emits an `error` event on others (and for
     // EACCES / EADDRNOTAVAIL even on the same Node). Wire the event so the

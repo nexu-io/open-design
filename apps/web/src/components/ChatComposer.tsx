@@ -10,6 +10,8 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
+import { fetchMcpServers } from "../state/mcp";
+import type { McpServerConfig } from "../state/mcp";
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata } from "../types";
 import type { ResearchOptions } from '@open-design/contracts';
 import { Icon } from "./Icon";
@@ -51,6 +53,9 @@ interface Props {
   // composer's leading gear icon routes here so users can switch models
   // without leaving the chat.
   onOpenSettings?: () => void;
+  // Opens settings on the External MCP tab. Wired from ChatPane → App.
+  // The composer's `/mcp` slash command and the MCP picker button route here.
+  onOpenMcpSettings?: () => void;
   // Optional pet wiring — when present, the composer renders a small
   // 🐾 button + popover so users can adopt / wake / tuck a pet without
   // leaving chat. Typing `/pet` (or `/pet wake|tuck|<id>`) is parsed
@@ -97,6 +102,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onSend,
       onStop,
       onOpenSettings,
+      onOpenMcpSettings,
       petConfig,
       onAdoptPet,
       onTogglePet,
@@ -126,14 +132,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [slashIndex, setSlashIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
-    const [importOpen, setImportOpen] = useState(false);
-    const [petOpen, setPetOpen] = useState(false);
+    // External MCP servers configured by the user. Fetched lazily on mount;
+    // shown in the slash-command palette so `/mcp <id>` inserts a hint into
+    // the prompt that nudges the model to use that server's tools.
+    const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
+    // Consolidated "tools" popover — a single dropdown anchored to the
+    // leading sliders icon that hosts MCP / Import / Pet quick actions and
+    // a shortcut to open the full Settings dialog. Replaces the previous
+    // row of three standalone buttons (which overflowed in narrow chats).
+    const [toolsOpen, setToolsOpen] = useState(false);
+    type ToolsTab = 'mcp' | 'import' | 'pet';
+    const [toolsTab, setToolsTab] = useState<ToolsTab>('mcp');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-    const importMenuRef = useRef<HTMLDivElement | null>(null);
-    const importTriggerRef = useRef<HTMLButtonElement | null>(null);
-    const petMenuRef = useRef<HTMLDivElement | null>(null);
-    const petTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const toolsMenuRef = useRef<HTMLDivElement | null>(null);
+    const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // initialDraft is only honored on the first non-empty value the parent
@@ -156,42 +169,65 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }, [initialDraft, draft]);
 
     useEffect(() => {
-      if (!importOpen) return;
+      if (!toolsOpen) return;
       function onPointer(e: MouseEvent) {
         const target = e.target as Node;
-        if (importMenuRef.current?.contains(target)) return;
-        if (importTriggerRef.current?.contains(target)) return;
-        setImportOpen(false);
+        if (toolsMenuRef.current?.contains(target)) return;
+        if (toolsTriggerRef.current?.contains(target)) return;
+        setToolsOpen(false);
       }
       function onKey(e: KeyboardEvent) {
-        if (e.key === "Escape") setImportOpen(false);
+        if (e.key === 'Escape') setToolsOpen(false);
       }
-      document.addEventListener("mousedown", onPointer);
-      document.addEventListener("keydown", onKey);
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
       return () => {
-        document.removeEventListener("mousedown", onPointer);
-        document.removeEventListener("keydown", onKey);
+        document.removeEventListener('mousedown', onPointer);
+        document.removeEventListener('keydown', onKey);
       };
-    }, [importOpen]);
+    }, [toolsOpen]);
 
+    // Lazy-fetch the user's external MCP servers list once on mount so the
+    // `/mcp …` slash palette and the composer's MCP button popover have
+    // something to render. We deliberately do not reactively re-fetch when
+    // the user toggles servers from Settings — the dialog refreshes itself,
+    // and the chat composer rehydrates next time the user re-opens it. A
+    // background poll would be cheap but unnecessary for the typical
+    // edit-once-then-chat workflow.
     useEffect(() => {
-      if (!petOpen) return;
-      function onPointer(e: MouseEvent) {
-        const target = e.target as Node;
-        if (petMenuRef.current?.contains(target)) return;
-        if (petTriggerRef.current?.contains(target)) return;
-        setPetOpen(false);
-      }
-      function onKey(e: KeyboardEvent) {
-        if (e.key === "Escape") setPetOpen(false);
-      }
-      document.addEventListener("mousedown", onPointer);
-      document.addEventListener("keydown", onKey);
+      let cancelled = false;
+      void (async () => {
+        const data = await fetchMcpServers();
+        if (cancelled || !data) return;
+        setMcpServers(data.servers.filter((s) => s.enabled));
+      })();
       return () => {
-        document.removeEventListener("mousedown", onPointer);
-        document.removeEventListener("keydown", onKey);
+        cancelled = true;
       };
-    }, [petOpen]);
+    }, []);
+
+    // Resolve which tabs to surface in the consolidated tools popover.
+    // We intentionally always render at least the Import tab, since it has
+    // unconditional folder linking. MCP and Pet tabs only show when their
+    // respective wiring was provided by the parent (App).
+    const availableTabs = useMemo<ToolsTab[]>(() => {
+      const tabs: ToolsTab[] = [];
+      if (onOpenMcpSettings) tabs.push('mcp');
+      tabs.push('import');
+      if (petEnabled) tabs.push('pet');
+      return tabs;
+    }, [onOpenMcpSettings, petEnabled]);
+
+    // When the popover opens, snap the active tab to the first available one
+    // so the user never lands on an empty / hidden tab if their config
+    // changes mid-session.
+    useEffect(() => {
+      if (!toolsOpen) return;
+      if (!availableTabs.includes(toolsTab)) {
+        const first = availableTabs[0];
+        if (first) setToolsTab(first);
+      }
+    }, [toolsOpen, availableTabs, toolsTab]);
 
     // Catalog of supported slash commands. Each entry shows up in the
     // popover when the user types `/` in the composer. The `insert`
@@ -200,6 +236,30 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // ready for an argument.
     const slashCommands = useMemo<SlashCommand[]>(() => {
       const list: SlashCommand[] = [];
+      // External MCP servers — `/mcp` opens settings, `/mcp <id>` inserts a
+      // prompt-side hint nudging the model to use that server's tools. The
+      // hint flows through to the agent verbatim; the daemon already wired
+      // the MCP config into the agent's launch so the tools are callable.
+      if (onOpenMcpSettings) {
+        list.push({
+          id: 'mcp',
+          label: '/mcp',
+          insert: '/mcp ',
+          descKey: 'pet.slashPet',
+          icon: 'sliders',
+          argHint: 'open settings · <server-id> to insert hint',
+        });
+      }
+      for (const s of mcpServers) {
+        list.push({
+          id: `mcp-${s.id}`,
+          label: `/mcp ${s.id}`,
+          insert: `Use the \`${s.id}\` MCP server tools. `,
+          descKey: 'pet.slashPet',
+          icon: 'sparkles',
+          argHint: s.label || s.transport,
+        });
+      }
       if (researchAvailable) {
         list.push({
           id: 'search',
@@ -245,7 +305,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         );
       }
       return list;
-    }, [petEnabled, researchAvailable, t]);
+    }, [petEnabled, researchAvailable, t, mcpServers, onOpenMcpSettings]);
 
     const filteredSlash = useMemo(() => {
       if (!slash) return [] as SlashCommand[];
@@ -295,6 +355,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         '',
         'When the spritesheet is saved, tell me the absolute path and the pet folder name. I will adopt it from Settings → Pets → Recently hatched.',
       ].join('\n');
+    }
+
+    // `/mcp` (no arg) opens settings on the External MCP tab — pure UX hook,
+    // never sent to the agent. `/mcp <id>` is intentionally NOT intercepted
+    // here: the slash palette already replaces it with a natural-language
+    // hint sentence ("Use the `<id>` MCP server tools."), and the user is
+    // expected to keep typing the rest of the prompt before sending.
+    function tryHandleMcpSlash(): boolean {
+      if (!onOpenMcpSettings) return false;
+      const trimmed = draft.trim();
+      if (!/^\/mcp\s*$/i.test(trimmed)) return false;
+      onOpenMcpSettings();
+      setDraft('');
+      return true;
     }
 
     function expandSearchCommand(input: string): { prompt: string; query: string } | null {
@@ -447,7 +521,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function handleLinkFolder() {
-      setImportOpen(false);
       if (!projectId) return;
       const selected = await openFolderDialog();
       if (!selected) return;
@@ -525,9 +598,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function submit() {
       const prompt = draft.trim();
-      // Intercept `/pet …` before sending so the slash command never
-      // hits the agent — it is a local UX hook, not a model prompt.
+      // Intercept `/pet …` and `/mcp` before sending so the slash command
+      // never hits the agent — these are local UX hooks, not model prompts.
       if (tryHandlePetSlash()) return;
+      if (tryHandleMcpSlash()) return;
       // `/hatch <concept>` expands into the canonical hatch-pet skill
       // prompt and *is* sent to the agent — the agent runs the skill,
       // packages a Codex pet under `~/.codex/pets/`, and the user
@@ -677,22 +751,147 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               data-testid="chat-file-input"
               type="file"
               multiple
-              style={{ display: "none" }}
+              style={{ display: 'none' }}
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
                 void uploadFiles(files);
-                e.target.value = "";
+                e.target.value = '';
               }}
             />
-            <button
-              className="icon-btn"
-              onClick={() => onOpenSettings?.()}
-              title={t('chat.cliSettingsTitle')}
-              aria-label={t('chat.cliSettingsAria')}
-              disabled={!onOpenSettings}
-            >
-              <Icon name="sliders" size={15} />
-            </button>
+            <div className="composer-tools-wrap">
+              <button
+                ref={toolsTriggerRef}
+                type="button"
+                className={`icon-btn composer-tools-trigger${toolsOpen ? ' active' : ''}`}
+                onClick={() => setToolsOpen((v) => !v)}
+                title={t('chat.cliSettingsTitle')}
+                aria-haspopup="menu"
+                aria-expanded={toolsOpen}
+                aria-label={t('chat.cliSettingsAria')}
+              >
+                <Icon name="sliders" size={15} />
+                {mcpServers.length > 0 ? (
+                  <span className="composer-tools-badge">{mcpServers.length}</span>
+                ) : null}
+              </button>
+              {toolsOpen ? (
+                <div
+                  ref={toolsMenuRef}
+                  className="composer-tools-menu"
+                  role="menu"
+                >
+                  <div className="composer-tools-tabs" role="tablist">
+                    {availableTabs.map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        role="tab"
+                        aria-selected={toolsTab === tab}
+                        className={`composer-tools-tab${toolsTab === tab ? ' active' : ''}`}
+                        onClick={() => setToolsTab(tab)}
+                      >
+                        {tab === 'mcp' ? (
+                          <>
+                            <Icon name="link" size={12} />
+                            <span>MCP</span>
+                            {mcpServers.length > 0 ? (
+                              <span className="composer-tools-tab-count">
+                                {mcpServers.length}
+                              </span>
+                            ) : null}
+                          </>
+                        ) : null}
+                        {tab === 'import' ? (
+                          <>
+                            <Icon name="import" size={12} />
+                            <span>{t('chat.importLabel')}</span>
+                          </>
+                        ) : null}
+                        {tab === 'pet' ? (
+                          <>
+                            <span className="composer-tools-tab-glyph" aria-hidden>
+                              {resolveActivePet(petConfig)?.glyph ?? '🐾'}
+                            </span>
+                            <span>{t('pet.composerMenuTitle')}</span>
+                          </>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="composer-tools-content">
+                    {toolsTab === 'mcp' && onOpenMcpSettings ? (
+                      <ToolsMcpPanel
+                        servers={mcpServers}
+                        onInsert={(serverId) => {
+                          const ta = textareaRef.current;
+                          const insert = `Use the \`${serverId}\` MCP server tools. `;
+                          const cursor = ta?.selectionStart ?? draft.length;
+                          const before = draft.slice(0, cursor);
+                          const after = draft.slice(cursor);
+                          const next = before + insert + after;
+                          setDraft(next);
+                          setToolsOpen(false);
+                          requestAnimationFrame(() => {
+                            const el = textareaRef.current;
+                            if (!el) return;
+                            el.focus();
+                            const pos = before.length + insert.length;
+                            el.setSelectionRange(pos, pos);
+                          });
+                        }}
+                        onManage={() => {
+                          setToolsOpen(false);
+                          onOpenMcpSettings?.();
+                        }}
+                      />
+                    ) : null}
+                    {toolsTab === 'import' ? (
+                      <ToolsImportPanel
+                        t={t}
+                        onLinkFolder={async () => {
+                          setToolsOpen(false);
+                          await handleLinkFolder();
+                        }}
+                      />
+                    ) : null}
+                    {toolsTab === 'pet' && petEnabled ? (
+                      <ToolsPetPanel
+                        t={t}
+                        petConfig={petConfig}
+                        onTogglePet={() => {
+                          onTogglePet?.();
+                          setToolsOpen(false);
+                        }}
+                        onAdoptPet={(id) => {
+                          onAdoptPet?.(id);
+                          setToolsOpen(false);
+                        }}
+                        onOpenPetSettings={() => {
+                          onOpenPetSettings?.();
+                          setToolsOpen(false);
+                        }}
+                      />
+                    ) : null}
+                  </div>
+
+                  {onOpenSettings ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="composer-tools-settings"
+                      onClick={() => {
+                        setToolsOpen(false);
+                        onOpenSettings?.();
+                      }}
+                    >
+                      <Icon name="settings" size={13} />
+                      <span>{t('pet.composerOpenSettings')}</span>
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <button
               className="icon-btn"
               data-testid="chat-attach"
@@ -707,143 +906,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="attach" size={15} />
               )}
             </button>
-            <span className="composer-icon-divider" aria-hidden />
-            <div className="composer-import-wrap">
-              <button
-                ref={importTriggerRef}
-                type="button"
-                className="composer-import"
-                onClick={() => setImportOpen((v) => !v)}
-                aria-haspopup="menu"
-                aria-expanded={importOpen}
-                title={t('chat.importTitle')}
-              >
-                <Icon name="import" size={13} />
-                <span>{t('chat.importLabel')}</span>
-                <Icon name="chevron-down" size={12} />
-              </button>
-              {importOpen ? (
-                <div
-                  ref={importMenuRef}
-                  className="composer-import-menu"
-                  role="menu"
-                >
-                  <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
-                  <ImportItem icon="link" label={t('chat.importGitHub')} t={t} />
-                  <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
-                  <ImportItem
-                    icon="folder"
-                    label={t('chat.importFolder')}
-                    t={t}
-                    enabled
-                    onClick={handleLinkFolder}
-                  />
-                  <ImportItem
-                    icon="sparkles"
-                    label={t('chat.importSkills')}
-                    t={t}
-                  />
-                  <ImportItem icon="file" label={t('chat.importProject')} t={t} />
-                </div>
-              ) : null}
-            </div>
-            {petEnabled ? (
-              <div className="composer-pet-wrap">
-                <button
-                  ref={petTriggerRef}
-                  type="button"
-                  className={`composer-pet${petConfig?.adopted ? ' adopted' : ''}`}
-                  onClick={() => setPetOpen((v) => !v)}
-                  aria-haspopup="menu"
-                  aria-expanded={petOpen}
-                  title={t('pet.composerTitle')}
-                >
-                  <span className="composer-pet-glyph" aria-hidden>
-                    {(() => {
-                      const active = resolveActivePet(petConfig);
-                      if (active) return active.glyph;
-                      return '🐾';
-                    })()}
-                  </span>
-                  <span className="composer-pet-label">
-                    {petConfig?.adopted
-                      ? petConfig.enabled
-                        ? t('pet.tuck')
-                        : t('pet.wake')
-                      : t('pet.adopt')}
-                  </span>
-                  <Icon name="chevron-down" size={12} />
-                </button>
-                {petOpen ? (
-                  <div
-                    ref={petMenuRef}
-                    className="composer-pet-menu"
-                    role="menu"
-                  >
-                    <div className="composer-pet-menu-head">
-                      <strong>{t('pet.composerMenuTitle')}</strong>
-                      <span>{t('pet.composerMenuHint')}</span>
-                    </div>
-                    {petConfig?.adopted ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="composer-pet-menu-row toggle"
-                        onClick={() => {
-                          onTogglePet?.();
-                          setPetOpen(false);
-                        }}
-                      >
-                        <Icon
-                          name={petConfig.enabled ? 'eye' : 'sparkles'}
-                          size={12}
-                        />
-                        <span>
-                          {petConfig.enabled
-                            ? t('pet.tuck')
-                            : t('pet.wake')}
-                        </span>
-                      </button>
-                    ) : null}
-                    <div className="composer-pet-menu-grid">
-                      {BUILT_IN_PETS.map((p) => {
-                        const active =
-                          petConfig?.adopted && petConfig.petId === p.id;
-                        return (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            key={p.id}
-                            className={`composer-pet-menu-pet${active ? ' active' : ''}`}
-                            onClick={() => {
-                              onAdoptPet?.(p.id);
-                              setPetOpen(false);
-                            }}
-                            style={{ ['--pet-accent' as string]: p.accent }}
-                            title={p.flavor}
-                          >
-                            <span aria-hidden>{p.glyph}</span>
-                            <span>{p.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="composer-pet-menu-row settings"
-                      onClick={() => {
-                        onOpenPetSettings?.();
-                        setPetOpen(false);
-                      }}
-                    >
-                      <Icon name="settings" size={12} />
-                      <span>{t('pet.composerOpenSettings')}</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
             <span className="composer-spacer" />
             {streaming ? (
               <button
@@ -941,6 +1003,140 @@ function StagedCommentAttachments({
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ToolsMcpPanel({
+  servers,
+  onInsert,
+  onManage,
+}: {
+  servers: McpServerConfig[];
+  onInsert: (serverId: string) => void;
+  onManage: () => void;
+}) {
+  return (
+    <>
+      {servers.length === 0 ? (
+        <div className="composer-tools-empty">
+          No MCP servers configured yet. Open Settings to add Higgsfield,
+          GitHub, Filesystem, or a custom server.
+        </div>
+      ) : (
+        <div className="composer-tools-list">
+          {servers.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="menuitem"
+              className="composer-tools-row"
+              onClick={() => onInsert(s.id)}
+              title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
+            >
+              <Icon name="link" size={12} />
+              <span className="composer-tools-row-body">
+                <strong>{s.label || s.id}</strong>
+                <span className="composer-tools-row-meta">{s.transport}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        role="menuitem"
+        className="composer-tools-row composer-tools-row-action"
+        onClick={onManage}
+      >
+        <Icon name="settings" size={12} />
+        <span>Manage MCP servers…</span>
+      </button>
+    </>
+  );
+}
+
+function ToolsImportPanel({
+  t,
+  onLinkFolder,
+}: {
+  t: TranslateFn;
+  onLinkFolder: () => Promise<void> | void;
+}) {
+  return (
+    <div className="composer-tools-list">
+      <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
+      <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
+      <ImportItem
+        icon="folder"
+        label={t('chat.importFolder')}
+        t={t}
+        enabled
+        onClick={() => void onLinkFolder()}
+      />
+      <ImportItem icon="sparkles" label={t('chat.importSkills')} t={t} />
+      <ImportItem icon="file" label={t('chat.importProject')} t={t} />
+    </div>
+  );
+}
+
+function ToolsPetPanel({
+  t,
+  petConfig,
+  onTogglePet,
+  onAdoptPet,
+  onOpenPetSettings,
+}: {
+  t: TranslateFn;
+  petConfig: AppConfig['pet'] | undefined;
+  onTogglePet: () => void;
+  onAdoptPet: (id: string) => void;
+  onOpenPetSettings: () => void;
+}) {
+  return (
+    <div className="composer-tools-pet">
+      <div className="composer-tools-pet-head">
+        <span className="hint">{t('pet.composerMenuHint')}</span>
+      </div>
+      {petConfig?.adopted ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="composer-tools-row composer-tools-row-toggle"
+          onClick={onTogglePet}
+        >
+          <Icon name={petConfig.enabled ? 'eye' : 'sparkles'} size={12} />
+          <span>{petConfig.enabled ? t('pet.tuck') : t('pet.wake')}</span>
+        </button>
+      ) : null}
+      <div className="composer-tools-pet-grid">
+        {BUILT_IN_PETS.map((p) => {
+          const active = petConfig?.adopted && petConfig.petId === p.id;
+          return (
+            <button
+              type="button"
+              role="menuitem"
+              key={p.id}
+              className={`composer-tools-pet-item${active ? ' active' : ''}`}
+              onClick={() => onAdoptPet(p.id)}
+              style={{ ['--pet-accent' as string]: p.accent }}
+              title={p.flavor}
+            >
+              <span aria-hidden>{p.glyph}</span>
+              <span>{p.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        role="menuitem"
+        className="composer-tools-row composer-tools-row-action"
+        onClick={onOpenPetSettings}
+      >
+        <Icon name="settings" size={12} />
+        <span>{t('pet.composerOpenSettings')}</span>
+      </button>
     </div>
   );
 }

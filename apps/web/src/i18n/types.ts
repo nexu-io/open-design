@@ -156,11 +156,16 @@ export interface Dict {
   'settings.modelCustomPlaceholder': string;
   'settings.mediaProviders': string;
   'settings.mediaProvidersHint': string;
+  'settings.mcpServerTitle': string;
+  'settings.mcpServerHint': string;
+  'settings.externalMcpTitle': string;
+  'settings.externalMcpHint': string;
   'settings.mediaProviderApiKey': string;
   'settings.mediaProviderBaseUrl': string;
   'settings.mediaProviderConfigured': string;
   'settings.mediaProviderUnset': string;
   'settings.mediaProviderClear': string;
+  'settings.mediaProviderClearConfirm': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
   'settings.about': string;
@@ -324,6 +329,9 @@ export interface Dict {
   'connectors.tools': string;
   'connectors.connect': string;
   'connectors.disconnect': string;
+  'connectors.authorizationPending': string;
+  'connectors.authorizationPendingHint': string;
+  'connectors.cancelAuthorization': string;
   'connectors.configure': string;
   'connectors.unavailable': string;
   'connectors.phaseStubTitle': string;
@@ -403,6 +411,8 @@ export interface Dict {
   'connectors.toolsSection': string;
   'connectors.toolsLoading': string;
   'connectors.noToolsAvailable': string;
+  'connectors.toolDetailsUnavailable': string;
+  'connectors.loadMoreTools': string;
   'connectors.openDetailsAria': string;
   'connectors.toolsBadgeNone': string;
   'connectors.toolsBadgeOne': string;
@@ -570,6 +580,7 @@ export interface Dict {
   'examples.modeDeck': string;
   'examples.modeDocument': string;
   'examples.modeOrbit': string;
+  'examples.modeLive': string;
   'examples.scenarioGeneral': string;
   'examples.scenarioEngineering': string;
   'examples.scenarioProduct': string;

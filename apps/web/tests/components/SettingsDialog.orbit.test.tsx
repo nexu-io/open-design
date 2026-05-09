@@ -47,6 +47,8 @@ const connectedConnector: ConnectorDetail = {
   status: 'connected',
   auth: { provider: 'composio', configured: true },
   tools: [],
+  allowedToolNames: [],
+  curatedToolNames: [],
 };
 
 describe('SettingsDialog Orbit connector gate refresh', () => {

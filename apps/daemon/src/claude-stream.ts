@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Parses Claude Code's `--output-format stream-json --verbose` JSONL stream
  * (with or without `--include-partial-messages`) into a small set of
@@ -20,27 +19,35 @@
  * `tool_use` event when that block stops.
  */
 
-export function createClaudeStreamHandler(onEvent) {
+type StreamEvent = Record<string, unknown>;
+type EventSink = (event: StreamEvent) => void;
+type BlockState = { type?: unknown; name?: unknown; id?: unknown; input: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function createClaudeStreamHandler(onEvent: EventSink) {
   let buffer = '';
 
   // Per-content-block scratch, keyed by `${messageId}:${blockIndex}`.
-  const blocks = new Map();
+  const blocks = new Map<string, BlockState>();
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
-  let currentMessageId = null;
+  let currentMessageId: string | null = null;
   // Message ids that already streamed text via `stream_event` deltas.
   // When `--include-partial-messages` is OFF (older Claude Code, e.g. 1.0.84
   // pre-flag), no deltas arrive — only the final `assistant` wrapper carries
   // text. The fallback below emits that text once, but we must skip it for
   // newer builds that already streamed deltas, otherwise the message would
   // duplicate.
-  const textStreamed = new Set();
+  const textStreamed = new Set<string>();
 
-  function blockKey(index) {
+  function blockKey(index: unknown): string {
     return `${currentMessageId ?? 'anon'}:${index}`;
   }
 
-  function feed(chunk) {
+  function feed(chunk: string) {
     buffer += chunk;
     let nl;
     while ((nl = buffer.indexOf('\n')) !== -1) {
@@ -69,8 +76,8 @@ export function createClaudeStreamHandler(onEvent) {
     }
   }
 
-  function handleObject(obj) {
-    if (!obj || typeof obj !== 'object') return;
+  function handleObject(obj: unknown) {
+    if (!isRecord(obj)) return;
 
     if (obj.type === 'system' && obj.subtype === 'init') {
       onEvent({
@@ -87,7 +94,7 @@ export function createClaudeStreamHandler(onEvent) {
       return;
     }
 
-    if (obj.type === 'stream_event' && obj.event) {
+    if (obj.type === 'stream_event' && isRecord(obj.event)) {
       handleStreamEvent(obj.event);
       return;
     }
@@ -98,11 +105,12 @@ export function createClaudeStreamHandler(onEvent) {
     // the text as a single delta — but only if no streaming deltas already
     // covered it (older Claude Code without --include-partial-messages
     // delivers text only here; newer builds stream it and would duplicate).
-    if (obj.type === 'assistant' && obj.message?.content) {
-      currentMessageId = obj.message.id ?? currentMessageId;
-      const msgId = obj.message.id ?? null;
+    if (obj.type === 'assistant' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
+      currentMessageId = typeof obj.message.id === 'string' ? obj.message.id : currentMessageId;
+      const msgId = typeof obj.message.id === 'string' ? obj.message.id : null;
       const alreadyStreamed = msgId ? textStreamed.has(msgId) : false;
       for (const block of obj.message.content) {
+        if (!isRecord(block)) continue;
         if (block.type === 'tool_use') {
           onEvent({
             type: 'tool_use',
@@ -131,8 +139,9 @@ export function createClaudeStreamHandler(onEvent) {
 
     // `user` messages in a stream-json transcript are usually tool_result
     // wrappers from prior turns.
-    if (obj.type === 'user' && obj.message?.content) {
+    if (obj.type === 'user' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
       for (const block of obj.message.content) {
+        if (!isRecord(block)) continue;
         if (block.type === 'tool_result') {
           onEvent({
             type: 'tool_result',
@@ -157,16 +166,16 @@ export function createClaudeStreamHandler(onEvent) {
     }
   }
 
-  function handleStreamEvent(ev) {
+  function handleStreamEvent(ev: Record<string, unknown>) {
     if (ev.type === 'message_start') {
-      currentMessageId = ev.message?.id ?? null;
+      currentMessageId = isRecord(ev.message) && typeof ev.message.id === 'string' ? ev.message.id : null;
       if (typeof ev.ttft_ms === 'number') {
         onEvent({ type: 'status', label: 'streaming', ttftMs: ev.ttft_ms });
       }
       return;
     }
 
-    if (ev.type === 'content_block_start' && ev.content_block) {
+    if (ev.type === 'content_block_start' && isRecord(ev.content_block)) {
       const key = blockKey(ev.index);
       const block = ev.content_block;
       blocks.set(key, { type: block.type, name: block.name, id: block.id, input: '' });
@@ -176,7 +185,7 @@ export function createClaudeStreamHandler(onEvent) {
       return;
     }
 
-    if (ev.type === 'content_block_delta' && ev.delta) {
+    if (ev.type === 'content_block_delta' && isRecord(ev.delta)) {
       const state = blocks.get(blockKey(ev.index));
       const delta = ev.delta;
 
@@ -207,11 +216,11 @@ export function createClaudeStreamHandler(onEvent) {
   return { feed, flush };
 }
 
-function stringifyToolResult(content) {
+function stringifyToolResult(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
-      .map((c) => (c?.type === 'text' ? c.text : JSON.stringify(c)))
+      .map((c) => (isRecord(c) && c.type === 'text' ? String(c.text) : JSON.stringify(c)))
       .join('\n');
   }
   return JSON.stringify(content);

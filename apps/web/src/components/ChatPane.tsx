@@ -86,6 +86,9 @@ interface Props {
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: () => void;
+  // Same dialog, but landing on the External MCP tab. Forwarded to the
+  // composer's `/mcp` slash and MCP picker button.
+  onOpenMcpSettings?: () => void;
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -125,6 +128,7 @@ export function ChatPane({
   onDeleteConversation,
   onRenameConversation,
   onOpenSettings,
+  onOpenMcpSettings,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -138,6 +142,13 @@ export function ChatPane({
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const didInitialScrollRef = useRef(false);
+  // Tracks whether the user is glued close enough to the bottom that
+  // streamed content should auto-follow. Distinct from the jump-button
+  // state below, which uses a wider threshold (120px) so the affordance
+  // stays visible for short scroll-ups. Auto-follow needs the tighter
+  // 80px cutoff: scrolling ~90px up is an intentional pause that
+  // shouldn't be yanked back the moment the next chunk streams in.
+  const pinnedToBottomRef = useRef(true);
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
@@ -174,6 +185,7 @@ export function ChatPane({
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
       setScrolledFromBottom(false);
+      pinnedToBottomRef.current = true;
     });
     // `tab` is in the deps so that switching conversations while
     // Comments is open doesn't strand the new conversation at scrollTop:
@@ -186,11 +198,18 @@ export function ChatPane({
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
-    // Auto-scroll only when we're already pinned near the bottom — preserves
-    // a user's scrollback position when they're reading earlier output while
-    // a new turn streams in.
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distance < 80) {
+    // Auto-scroll only when the user was already pinned near the bottom,
+    // so a scrollback session reading earlier output isn't yanked to the
+    // latest message. We key off the pre-content `pinnedToBottomRef`
+    // (a ref so it doesn't itself re-fire this effect on scroll) instead
+    // of recomputing distance from the just-grown scrollHeight: a single
+    // streamed chunk can add 100+ px in one render, which made the
+    // post-content distance check skip auto-scroll even when the user
+    // was glued to the bottom. We deliberately use the tighter 80px
+    // cutoff tracked by the ref (not the wider 120px jump-button
+    // threshold) so a deliberate ~90px scroll-up isn't snapped back the
+    // next time content streams in. Issue #983.
+    if (pinnedToBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
   }, [messages, error]);
@@ -232,6 +251,7 @@ export function ChatPane({
         const distance =
           target.scrollHeight - target.scrollTop - target.clientHeight;
         setScrolledFromBottom(distance > 120);
+        pinnedToBottomRef.current = distance < 80;
       });
     }
 
@@ -251,6 +271,7 @@ export function ChatPane({
       const distance =
         target.scrollHeight - target.scrollTop - target.clientHeight;
       setScrolledFromBottom(distance > 120);
+      pinnedToBottomRef.current = distance < 80;
     }
     el.addEventListener('scroll', onScroll);
     return () => {
@@ -506,6 +527,7 @@ export function ChatPane({
             onSend={onSend}
             onStop={onStop}
             onOpenSettings={onOpenSettings}
+            onOpenMcpSettings={onOpenMcpSettings}
             petConfig={petConfig}
             onAdoptPet={onAdoptPet}
             onTogglePet={onTogglePet}

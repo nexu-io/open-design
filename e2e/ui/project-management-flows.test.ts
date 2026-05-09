@@ -349,7 +349,7 @@ test('change pet opens pet settings and updates the custom companion draft', asy
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'Pets' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { level: 3, name: 'Pets' })).toBeVisible();
 
   await dialog.getByRole('tab', { name: 'Custom' }).click();
   const customPanel = dialog.locator('.pet-custom');

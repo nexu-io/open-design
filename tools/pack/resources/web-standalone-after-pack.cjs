@@ -1,10 +1,13 @@
+const { execFile } = require("node:child_process");
 const { access, cp, lstat, mkdir, readFile, readlink, readdir, realpath, rm, stat, symlink, writeFile } = require("node:fs/promises");
 const { createRequire } = require("node:module");
 const path = require("node:path");
+const { promisify } = require("node:util");
 
 const CONFIG_ENV = "OD_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
 const STANDALONE_RESOURCE_NAME = "open-design-web-standalone";
 const REQUIRED_MODULES = ["next/package.json", "react/package.json", "react-dom/package.json", "styled-jsx/package.json"];
+const execFileAsync = promisify(execFile);
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,6 +23,15 @@ function requireString(record, key) {
 
 function requireBoolean(record, key) {
   const value = record[key];
+  if (typeof value !== "boolean") {
+    throw new Error(`[tools-pack web-standalone] config.${key} must be a boolean`);
+  }
+  return value;
+}
+
+function optionalBoolean(record, key, fallback) {
+  const value = record[key];
+  if (value == null) return fallback;
   if (typeof value !== "boolean") {
     throw new Error(`[tools-pack web-standalone] config.${key} must be a boolean`);
   }
@@ -94,6 +106,7 @@ async function readHookConfig() {
 
   return {
     auditReportPath,
+    macAdhocBundleSign: optionalBoolean(raw, "macAdhocBundleSign", false),
     pruneCopiedSharp: requireBoolean(raw, "pruneCopiedSharp"),
     pruneRootNext: requireBoolean(raw, "pruneRootNext"),
     pruneRootSharp: requireBoolean(raw, "pruneRootSharp"),
@@ -535,6 +548,45 @@ async function collectClosureStats(
   return stats;
 }
 
+function isMacCodeBundle(name) {
+  return name.endsWith(".app") || name.endsWith(".framework");
+}
+
+async function collectMacAdhocSignTargets(appPath) {
+  const frameworksRoot = path.join(appPath, "Contents", "Frameworks");
+  const targets = [];
+
+  async function visit(current) {
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = path.join(current, entry.name);
+      if (isMacCodeBundle(entry.name)) {
+        targets.push(entryPath);
+        continue;
+      }
+      await visit(entryPath);
+    }
+  }
+
+  await visit(frameworksRoot);
+  targets.push(appPath);
+  return targets;
+}
+
+async function signMacAdhocBundle(appPath) {
+  const targets = await collectMacAdhocSignTargets(appPath);
+  for (const target of targets) {
+    await execFileAsync("codesign", ["--force", "--sign", "-", "--timestamp=none", target], {
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  }
+  await execFileAsync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], {
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  return targets;
+}
+
 async function assertResolvedInside(root, moduleName, resolvedPath) {
   if (!(await isWithinPhysicalPath(root, resolvedPath))) {
     throw new Error(`[tools-pack web-standalone] ${moduleName} resolved outside copied standalone: ${resolvedPath}`);
@@ -807,6 +859,9 @@ async function runWebStandaloneAfterPack(context) {
     appNodeModulesRoot,
     "root app node_modules",
   );
+  const macAdhocBundleSign = context.electronPlatformName === "darwin" && config.macAdhocBundleSign
+    ? await signMacAdhocBundle(appPath)
+    : [];
   const report = {
     appPath,
     brokenSymlinkPrune,
@@ -816,6 +871,7 @@ async function runWebStandaloneAfterPack(context) {
     copiedNextDedupeAudit,
     copiedPrune,
     generatedAt: new Date().toISOString(),
+    macAdhocBundleSign,
     platformName: context.electronPlatformName,
     resourcesRoot,
     rootBuildResiduePrune,

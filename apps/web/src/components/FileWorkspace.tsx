@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+} from 'react';
 import { useT } from '../i18n';
 import {
   deleteProjectFile,
@@ -56,6 +62,7 @@ interface SketchState {
 }
 
 const DESIGN_FILES_TAB = '__design_files__';
+type TabDropEdge = 'before' | 'after';
 
 export function FileWorkspace({
   projectId,
@@ -88,8 +95,14 @@ export function FileWorkspace({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
+  const [dragOverTab, setDragOverTab] = useState<{
+    name: string;
+    edge: TabDropEdge;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  const draggedTabNameRef = useRef<string | null>(null);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -180,6 +193,29 @@ export function FileWorkspace({
       if (entry && !entry.persisted) delete next[name];
       return next;
     });
+  }
+
+  function reorderPersistedTab(
+    draggedName: string,
+    targetName: string,
+    edge: TabDropEdge,
+  ) {
+    if (draggedName === targetName) return;
+    if (!persistedTabs.includes(draggedName)) return;
+    if (!persistedTabs.includes(targetName)) return;
+
+    const nextTabs = persistedTabs.filter((name) => name !== draggedName);
+    const targetIndex = nextTabs.indexOf(targetName);
+    if (targetIndex === -1) return;
+    nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, draggedName);
+    if (arraysEqual(nextTabs, persistedTabs)) return;
+    onTabsStateChange({ tabs: nextTabs, active: tabsState.active });
+  }
+
+  function clearTabDragState() {
+    draggedTabNameRef.current = null;
+    setDraggedTabName(null);
+    setDragOverTab(null);
   }
 
   async function handleFilePicked(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -450,6 +486,14 @@ export function FileWorkspace({
           className="ws-tabs-bar"
           role="tablist"
           aria-label={t('workspace.designFiles')}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setDragOverTab(null);
+          }}
+          onDrop={(event) => {
+            if (event.target !== event.currentTarget) return;
+            clearTabDragState();
+          }}
         >
           <button
             type="button"
@@ -485,6 +529,44 @@ export function FileWorkspace({
                 onClose={() => closeTab(name)}
                 kind={kind}
                 liveArtifact={liveArtifact}
+                draggable={persistedTabs.includes(name)}
+                dragging={draggedTabName === name}
+                dragOverEdge={
+                  dragOverTab?.name === name && draggedTabName !== name
+                    ? dragOverTab.edge
+                    : null
+                }
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', name);
+                  draggedTabNameRef.current = name;
+                  setDraggedTabName(name);
+                }}
+                onDragOver={(event) => {
+                  const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
+                  if (!currentDraggedName || currentDraggedName === name) return;
+                  if (!persistedTabs.includes(currentDraggedName)) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  const edge = tabDropEdgeFromEvent(event);
+                  setDragOverTab((current) =>
+                    current?.name === name && current.edge === edge
+                      ? current
+                      : { name, edge },
+                  );
+                }}
+                onDragLeave={() => {
+                  setDragOverTab((current) => (current?.name === name ? null : current));
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedName = draggedTabNameRef.current || draggedTabName;
+                  if (draggedName) {
+                    reorderPersistedTab(draggedName, name, tabDropEdgeFromEvent(event));
+                  }
+                  clearTabDragState();
+                }}
+                onDragEnd={clearTabDragState}
               />
             );
           })}
@@ -618,6 +700,14 @@ function Tab({
   closable = true,
   kind,
   liveArtifact,
+  draggable = false,
+  dragging = false,
+  dragOverEdge,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   label: string;
   active: boolean;
@@ -626,12 +716,27 @@ function Tab({
   closable?: boolean;
   kind?: ProjectFile['kind'] | 'live-artifact';
   liveArtifact?: LiveArtifactWorkspaceEntry;
+  draggable?: boolean;
+  dragging?: boolean;
+  dragOverEdge?: TabDropEdge | null;
+  onDragStart?: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragOver?: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragLeave?: () => void;
+  onDrop?: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
 }) {
   const t = useT();
   const iconName = kindIconName(kind);
   return (
     <div
-      className={`ws-tab${kind === 'live-artifact' ? ' live-artifact-tab' : ''} ${active ? 'active' : ''}`}
+      className={[
+        'ws-tab',
+        kind === 'live-artifact' ? 'live-artifact-tab' : '',
+        active ? 'active' : '',
+        draggable ? 'draggable' : '',
+        dragging ? 'dragging' : '',
+        dragOverEdge ? `drag-over-${dragOverEdge}` : '',
+      ].filter(Boolean).join(' ')}
       onClick={onActivate}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -642,6 +747,12 @@ function Tab({
       role="tab"
       aria-selected={active}
       tabIndex={0}
+      draggable={draggable}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragOver={draggable ? onDragOver : undefined}
+      onDragLeave={draggable ? onDragLeave : undefined}
+      onDrop={draggable ? onDrop : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
     >
       {iconName ? (
         <span className="tab-icon" aria-hidden>
@@ -672,6 +783,16 @@ function Tab({
       ) : null}
     </div>
   );
+}
+
+function tabDropEdgeFromEvent(event: ReactDragEvent<HTMLDivElement>): TabDropEdge {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
 }
 
 export function scrollWorkspaceTabsWithWheel(

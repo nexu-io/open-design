@@ -162,7 +162,9 @@ test('live artifact empty connector CTA opens the gated connector setup path', a
   await page.getByTestId('new-project-connectors-empty').click();
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole('heading', { name: 'Connectors' })).toBeVisible();
+  await expect(
+    settingsDialog.getByRole('heading', { level: 3, name: 'Connectors' }),
+  ).toBeVisible();
   await expect(settingsDialog.getByPlaceholder('Paste Composio API key')).toBeVisible();
   await expect(settingsDialog.getByTestId('connector-gate')).toBeVisible();
   await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();

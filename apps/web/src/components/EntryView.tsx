@@ -46,7 +46,15 @@ interface Props {
   defaultDesignSystemId: string | null;
   config: AppConfig;
   agents: AgentInfo[];
-  loading?: boolean;
+  // Per-resource loading flags. Each tab gates its own content on whichever
+  // flag matches the data it renders, so a slow `/api/agents` probe does
+  // not block tabs that don't need agents. Templates are not gated here —
+  // the sidebar 'From template' tab renders an empty state until they
+  // arrive (fast fetch), which keeps the prop surface narrower.
+  skillsLoading?: boolean;
+  designSystemsLoading?: boolean;
+  projectsLoading?: boolean;
+  promptTemplatesLoading?: boolean;
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
@@ -213,7 +221,10 @@ export function EntryView({
   defaultDesignSystemId,
   config,
   agents,
-  loading = false,
+  skillsLoading = false,
+  designSystemsLoading = false,
+  projectsLoading = false,
+  promptTemplatesLoading = false,
   onCreateProject,
   onImportClaudeDesign,
   onImportFolder,
@@ -469,7 +480,7 @@ export function EntryView({
           connectors={connectors}
           connectorsLoading={connectorsLoading}
           onOpenConnectorsTab={() => onOpenSettings('composio')}
-          loading={loading}
+          loading={skillsLoading || designSystemsLoading}
         />
         <div className="entry-side-foot">
           <button
@@ -565,47 +576,65 @@ export function EntryView({
           </div>
         </div>
         <div className="entry-tab-content">
-          {loading ? (
-            <CenteredLoader label={t('entry.loadingWorkspace')} />
-          ) : (
-            <>
-              {topTab === 'designs' ? (
-                <DesignsTab
-                  projects={projects}
-                  skills={skills}
-                  designSystems={designSystems}
-                  onOpen={onOpenProject}
-                  onOpenLiveArtifact={onOpenLiveArtifact}
-                  onDelete={onDeleteProject}
-                />
-              ) : null}
-              {topTab === 'examples' ? (
-                <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
-              ) : null}
-              {topTab === 'design-systems' ? (
-                <DesignSystemsTab
-                  systems={designSystems}
-                  selectedId={defaultDesignSystemId}
-                  onSelect={onChangeDefaultDesignSystem}
-                  onPreview={previewDesignSystem}
-                />
-              ) : null}
-              {topTab === 'image-templates' ? (
-                <PromptTemplatesTab
-                  surface="image"
-                  templates={promptTemplates}
-                  onPreview={setPreviewPromptTemplate}
-                />
-              ) : null}
-              {topTab === 'video-templates' ? (
-                <PromptTemplatesTab
-                  surface="video"
-                  templates={promptTemplates}
-                  onPreview={setPreviewPromptTemplate}
-                />
-              ) : null}
-            </>
-          )}
+          {topTab === 'designs' ? (
+            // DesignsTab uses skills + designSystems for tag rendering on
+            // each card, so wait until projects + that metadata are present
+            // to avoid a flash of "No projects yet" before the real list
+            // arrives.
+            projectsLoading || skillsLoading || designSystemsLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <DesignsTab
+                projects={projects}
+                skills={skills}
+                designSystems={designSystems}
+                onOpen={onOpenProject}
+                onOpenLiveArtifact={onOpenLiveArtifact}
+                onDelete={onDeleteProject}
+              />
+            )
+          ) : null}
+          {topTab === 'examples' ? (
+            skillsLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
+            )
+          ) : null}
+          {topTab === 'design-systems' ? (
+            designSystemsLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <DesignSystemsTab
+                systems={designSystems}
+                selectedId={defaultDesignSystemId}
+                onSelect={onChangeDefaultDesignSystem}
+                onPreview={previewDesignSystem}
+              />
+            )
+          ) : null}
+          {topTab === 'image-templates' ? (
+            promptTemplatesLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <PromptTemplatesTab
+                surface="image"
+                templates={promptTemplates}
+                onPreview={setPreviewPromptTemplate}
+              />
+            )
+          ) : null}
+          {topTab === 'video-templates' ? (
+            promptTemplatesLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <PromptTemplatesTab
+                surface="video"
+                templates={promptTemplates}
+                onPreview={setPreviewPromptTemplate}
+              />
+            )
+          ) : null}
         </div>
       </main>
       {petRailHidden ? null : (

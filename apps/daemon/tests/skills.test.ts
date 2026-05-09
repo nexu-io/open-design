@@ -63,7 +63,7 @@ describe('listSkills', () => {
     const skills = await listSkills(skillsRoot);
     const skill = skills.find((entry: { id: string }) => entry.id === 'live-artifact');
 
-    expect(skill).toBeTruthy();
+    if (!skill) throw new Error('live-artifact skill not found');
     expect(skill).toMatchObject({
       id: 'live-artifact',
       name: 'live-artifact',
@@ -154,7 +154,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('demo-skill not found');
 
     // The cwd-relative alias path is the primary one — that's what makes
     // the agent stay inside its working directory when reading skill
@@ -185,7 +186,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('orbit-style skill not found');
 
     expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/`);
     expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/example.html`);
@@ -201,7 +203,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('magazine-web-ppt skill not found');
 
     // `id`/`name` reflect the frontmatter value (used elsewhere as a stable
     // public id), but the on-disk alias path must use the actual folder
@@ -220,7 +223,8 @@ describe('listSkills preamble', () => {
 
     const skills = await listSkills(root);
     expect(skills).toHaveLength(1);
-    const [skill] = skills;
+    const skill = skills[0];
+    if (!skill) throw new Error('lone-skill not found');
 
     expect(skill.body).not.toContain(SKILLS_CWD_ALIAS);
     expect(skill.body).not.toContain('Skill root');

@@ -36,6 +36,7 @@ const sampleSkill: SkillSummary = {
   upstream: null,
   hasBody: true,
   examplePrompt: 'Build me a Notion-style team dashboard.',
+  aggregatesExamples: false,
 };
 
 async function flushPromises() {
