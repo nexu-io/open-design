@@ -332,7 +332,8 @@ describe('sandboxed preview Blob exports', () => {
     expect(openCalls).toEqual([]);
 
     const htmlArg = printPdfMock.mock.calls[0]![0];
-    expect(htmlArg).toContain('sandbox="allow-scripts allow-modals"');
+    expect(htmlArg).toContain('sandbox="allow-scripts"');
+    expect(htmlArg).not.toContain('allow-modals');
     expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
     expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
     // Verify the readiness handshake is present — the sandboxed iframe posts

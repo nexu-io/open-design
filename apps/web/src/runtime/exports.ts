@@ -260,15 +260,11 @@ export async function exportAsPdf(
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc);
 
-  if (sandboxedPreview) {
-    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-    doc = injectParentPrintReadyCache(doc);
-  }
-
   // Desktop native print bridge — uses Electron's webContents.print() API
-  // instead of window.open + window.print(). The bridge receives the
-  // sandboxed-wrapped document with an embedded readiness handshake that
-  // posts 'OD_PRINT_READY' to the parent once fonts and images are loaded.
+  // instead of window.open + window.print(). The sandboxed wrapper omits
+  // allow-modals here because the native flow doesn't call window.print();
+  // granting it would let untrusted artifact code call alert()/confirm()
+  // and stall the hidden Electron window indefinitely.
   const desktopApi =
     typeof window !== 'undefined'
       ? (window as unknown as Record<string, unknown>).__odDesktop as
@@ -276,6 +272,10 @@ export async function exportAsPdf(
           | undefined
       : undefined;
   if (desktopApi?.printPdf) {
+    if (sandboxedPreview) {
+      doc = buildSandboxedPreviewDocument(doc, title);
+      doc = injectParentPrintReadyCache(doc);
+    }
     try {
       await desktopApi.printPdf(doc);
     } catch {
@@ -286,7 +286,13 @@ export async function exportAsPdf(
     return;
   }
 
-  // Browser fallback: inject the self-printing script, then open a popup.
+  // Browser fallback: wrap with allow-modals so the injected script can
+  // call window.print(), then inject the self-printing script and open a
+  // popup.
+  if (sandboxedPreview) {
+    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+    doc = injectParentPrintReadyCache(doc);
+  }
   doc = injectPrintScript(doc, title);
 
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
