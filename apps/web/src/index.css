@@ -8692,6 +8692,17 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text-muted);
   font-size: 13px;
 }
+/* Compact horizontal variant for the upload-failure banner: the message
+   sits inline next to a dismiss button so the user can clear the stale
+   notice without changing tabs. Issue #786. */
+.viewer-empty.viewer-empty-dismissible {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
 .document-preview {
   max-width: 860px;
   margin: 0 auto;
@@ -14271,6 +14282,98 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   font-size: 11px;
   white-space: pre-wrap;
+}
+
+/* Privacy panel layout. The toggle row stack reuses .toggle-row (the
+   iOS-style switch from NewProjectPanel); we only need to space the rows
+   apart. The disclosure list inside the consent card is purely a typography
+   block — no chrome of its own. */
+.settings-privacy-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-privacy-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.settings-privacy-disclosure > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-privacy-disclosure dt {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-privacy-disclosure dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* First-run privacy consent banner. Cookie-consent-style: anchored to the
+   bottom-right of the viewport, prominent but non-blocking, equal-weight
+   accept / decline pair via the existing 2-cell seg-control. Reuses the
+   same typography + radii + shadow as the rest of the panels. */
+.privacy-consent-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  /* Below modal backdrops; App.tsx hides the banner while Settings is open. */
+  z-index: 90;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.privacy-consent-banner .seg-control {
+  pointer-events: auto;
+}
+
+.privacy-consent-banner-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.privacy-consent-banner-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.privacy-consent-banner-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.privacy-consent-banner-lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.privacy-consent-banner-footer {
+  margin: 2px 0 6px;
 }
 
 /* ============================================================

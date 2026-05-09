@@ -52,6 +52,7 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   redactSecrets,
   testAgentConnection,
@@ -1054,6 +1055,22 @@ function sendApiError(res, status, code, message, init = {}) {
   return res
     .status(status)
     .json(createCompatApiErrorResponse(code, message, init));
+}
+
+const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+
+export function shouldReportRunCompletedFromMessage(saved, body = {}) {
+  return Boolean(
+    saved &&
+      saved.runId &&
+      typeof saved.runStatus === 'string' &&
+      TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
+      body?.telemetryFinalized === true,
+  );
+}
+
+export function telemetryPromptFromRunRequest(message, currentPrompt) {
+  return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -2809,6 +2826,31 @@ export async function startServer({
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
+    // Forward to Langfuse only on the explicit final message write. The web
+    // stream can persist a terminal runStatus before onDone has flushed the
+    // final assistant content and produced-file manifest; telemetryFinalized
+    // marks the later PUT that is safe for the bridge's SQLite read.
+    if (
+      shouldReportRunCompletedFromMessage(saved, m) &&
+      !reportedRuns.has(saved.runId)
+    ) {
+      const run = design.runs.get(saved.runId);
+      if (run) {
+        reportedRuns.add(saved.runId);
+        // Auto-evict so the Set doesn't accumulate forever in long-running
+        // daemons. Same TTL as the runs map cleanup in runs.ts.
+        setTimeout(() => reportedRuns.delete(saved.runId), 30 * 60 * 1000).unref?.();
+        void reportRunCompletedFromDaemon({
+          db,
+          dataDir: RUNTIME_DATA_DIR,
+          run,
+          persistedRunStatus: saved.runStatus,
+          persistedEndedAt:
+            typeof saved.endedAt === 'number' ? saved.endedAt : undefined,
+          appVersion: cachedAppVersion,
+        });
+      }
+    }
     res.json({ message: saved });
   });
 
@@ -4741,6 +4783,26 @@ export async function startServer({
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
 
+  // Tracks runs whose completion has already been forwarded to Langfuse so
+  // that repeated PUT /messages/:id calls (web buffers + retries) only emit
+  // one trace per run. Entries are scrubbed when the run's TTL window
+  // expires (30 min, mirrors runs.ts).
+  const reportedRuns = new Set();
+
+  // App-version snapshot read once at server start. Used as static metadata
+  // on every Langfuse trace so we can correlate behaviour with releases
+  // without paying the package.json read cost per turn. Updates require a
+  // daemon restart, which is fine — version doesn't change in-process.
+  let cachedAppVersion = null;
+  void (async () => {
+    try {
+      cachedAppVersion = await readCurrentAppVersionInfo();
+    } catch {
+      // Telemetry is best-effort; running with appVersion === null just
+      // omits the field from the trace.
+    }
+  })();
+
   const composeDaemonSystemPrompt = async ({
     agentId,
     projectId,
@@ -4886,6 +4948,7 @@ export async function startServer({
     const {
       agentId,
       message,
+      currentPrompt,
       systemPrompt,
       imagePaths = [],
       projectId,
@@ -4908,6 +4971,17 @@ export async function startServer({
     if (typeof clientRequestId === 'string' && clientRequestId)
       run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+    // Stash the original user prompt + per-turn config so the
+    // langfuse-bridge report path can include them without reaching back
+    // into chatBody across the createChatRunService boundary. Each field
+    // is optional and only set when the chat body actually carried it.
+    const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
+    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (typeof model === 'string' && model) run.model = model;
+    if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
+    if (typeof skillId === 'string' && skillId) run.skillId = skillId;
+    if (typeof designSystemId === 'string' && designSystemId)
+      run.designSystemId = designSystemId;
     const def = getAgentDef(agentId);
     if (!def)
       return design.runs.fail(
@@ -6021,6 +6095,16 @@ export async function startServer({
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const run = design.runs.create(req.body || {});
+    // Capture which front-end carrier started the run (Electron desktop
+    // shell vs. plain browser). Web sets this header explicitly; falls
+    // back to a UA sniff if header is absent. Used as a telemetry tag.
+    const declared = String(req.get('x-od-client') ?? '').toLowerCase();
+    if (declared === 'desktop' || declared === 'web') {
+      run.clientType = declared;
+    } else {
+      const ua = String(req.get('user-agent') ?? '');
+      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
+    }
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
     res.status(202).json(body);
@@ -6089,13 +6173,13 @@ export async function startServer({
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google',
+            'protocol must be one of anthropic|openai|azure|google|ollama',
           );
         }
         if (
@@ -6300,6 +6384,44 @@ export async function startServer({
 
     const tail = buffer.trim();
     if (tail) await onFrame(collectSseFrame(tail));
+  };
+
+  // Ollama Cloud streams NDJSON (newline-delimited JSON) — each line is a
+  // complete JSON object. Parse per-line and dispatch parsed objects.
+  const streamUpstreamNdjson = async (response, onFrame) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (await onFrame({ data })) return;
+        } catch {
+          // skip unparseable lines
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        const data = JSON.parse(tail);
+        await onFrame({ data });
+      } catch {
+        // skip
+      }
+    }
   };
 
   const extractOpenAIText = (data) => {
@@ -6749,6 +6871,98 @@ export async function startServer({
       sse.end();
     } catch (err) {
       console.error(`[proxy:google] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
+  app.post('/api/proxy/ollama/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const url = `${clean}/api/chat`;
+    console.log(
+      `[proxy:ollama] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const payload = {
+      model,
+      messages: payloadMessages,
+      stream: true,
+    };
+    if (typeof maxTokens === 'number' && maxTokens > 0) {
+      payload.options = { num_predict: maxTokens };
+    }
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamNdjson(response, ({ data }) => {
+        if (!data) return false;
+        if (data.done) {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        const content = data.message?.content;
+        if (typeof content === 'string' && content) {
+          sse.send('delta', { delta: content });
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:ollama] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
     }

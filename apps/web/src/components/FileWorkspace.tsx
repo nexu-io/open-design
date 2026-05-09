@@ -621,7 +621,28 @@ export function FileWorkspace({
         ) : null}
       </div>
       <div className="ws-body">
-        {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
+        {/* Keep the failure banner visible across tab switches so the
+            partial-success case (some files succeed and auto-open while
+            others fail) doesn't silently drop the failure signal. The
+            banner now carries an explicit dismiss button so the user
+            can clear the stale message themselves, which is what #786
+            was really asking for: a way to drop the message rather than
+            have it pinned above an unrelated file preview forever. The
+            next upload also clears it via setUploadError(null) at the
+            top of uploadFiles(). */}
+        {uploadError ? (
+          <div className="viewer-empty viewer-empty-dismissible">
+            <span>{uploadError}</span>
+            <button
+              type="button"
+              className="ghost"
+              aria-label={t('common.close')}
+              onClick={() => setUploadError(null)}
+            >
+              {t('common.close')}
+            </button>
+          </div>
+        ) : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}

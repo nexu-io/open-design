@@ -37,6 +37,8 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ExecMode,
   SkillSummary,
 } from '../types';
@@ -47,6 +49,7 @@ import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
+import { PrivacySection } from './PrivacySection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
@@ -73,6 +76,7 @@ export type SettingsSection =
   | 'notifications'
   | 'pet'
   | 'library'
+  | 'privacy'
   | 'about';
 
 interface Props {
@@ -156,6 +160,47 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2',
     'mimo-v2.5-pro',
   ],
+  ollama: [
+    'cogito-2.1:671b',
+    'deepseek-v3.1:671b',
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'devstral-2:123b',
+    'devstral-small-2:24b',
+    'gemini-3-flash-preview',
+    'gemma3:4b',
+    'gemma3:12b',
+    'gemma3:27b',
+    'gemma4:31b',
+    'glm-4.6',
+    'glm-4.7',
+    'glm-5',
+    'glm-5.1',
+    'gpt-oss:20b',
+    'gpt-oss:120b',
+    'kimi-k2:1t',
+    'kimi-k2-thinking',
+    'kimi-k2.5',
+    'kimi-k2.6',
+    'minimax-m2',
+    'minimax-m2.1',
+    'minimax-m2.5',
+    'minimax-m2.7',
+    'ministral-3:3b',
+    'ministral-3:8b',
+    'ministral-3:14b',
+    'mistral-large-3:675b',
+    'nemotron-3-nano:30b',
+    'nemotron-3-super',
+    'qwen3-coder:480b',
+    'qwen3-coder-next',
+    'qwen3-next:80b',
+    'qwen3-vl:235b',
+    'qwen3-vl:235b-instruct',
+    'qwen3.5:397b',
+    'rnj-1:8b',
+  ],
   azure: [
     'gpt-4o',
     'gpt-4o-mini',
@@ -176,6 +221,7 @@ const API_PROTOCOL_TABS: Array<{
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure OpenAI' },
   { id: 'google', title: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud' },
 ];
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -183,6 +229,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   openai: 'OpenAI API',
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
+  ollama: 'Ollama Cloud API',
 };
 
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -190,6 +237,7 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   openai: 'sk-...',
   azure: 'azure key',
   google: 'AIza...',
+  ollama: 'Ollama API key',
 };
 
 type RescanNotice =
@@ -1014,6 +1062,7 @@ export function SettingsDialog({
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
+    privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
@@ -1234,6 +1283,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.library')}</strong>
                 <small>{t('settings.libraryHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
+              onClick={() => setActiveSection('privacy')}
+            >
+              <Icon name="eye" size={18} />
+              <span>
+                <strong>{t('settings.privacy')}</strong>
+                <small>{t('settings.privacyHint')}</small>
               </span>
             </button>
             <button
@@ -1935,6 +1995,10 @@ export function SettingsDialog({
             <LibrarySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
+          {activeSection === 'privacy' ? (
+            <PrivacySection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
           {activeSection === 'about' ? (
             <section className="settings-section">
               <div className="section-head">
@@ -2394,22 +2458,6 @@ function ConnectorSection({
   );
 }
 
-interface OrbitRunSummary {
-  id?: string;
-  startedAt?: string;
-  completedAt: string;
-  trigger?: 'manual' | 'scheduled';
-  connectorsChecked: number;
-  connectorsSucceeded: number;
-  connectorsFailed: number;
-  connectorsSkipped: number;
-  artifactId?: string | null;
-  artifactProjectId?: string | null;
-  /** Identifier of the daemon run that produced this summary. Useful for log correlation. */
-  agentRunId?: string | null;
-  markdown: string;
-}
-
 interface OrbitRunStartResponse {
   projectId: string;
   agentRunId: string;
@@ -2439,12 +2487,6 @@ export function configForManualOrbitRun(config: AppConfig): AppConfig {
 
 export function isOrbitRunDisabled(isBusy: boolean, connectedCount: number | null): boolean {
   return isBusy || connectedCount === null || connectedCount === 0;
-}
-
-interface OrbitStatusResponse {
-  running?: boolean;
-  nextRunAt?: string | null;
-  lastRun?: OrbitRunSummary | null;
 }
 
 function formatRelative(
@@ -2492,6 +2534,9 @@ function OrbitSection({
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [legacyLastRunTemplateSkillId, setLegacyLastRunTemplateSkillId] = useState<string | null>(null);
+  const legacyLastRunIdentity = status?.lastRun?.id
+    ?? `${status?.lastRun?.completedAt ?? ''}:${status?.lastRun?.agentRunId ?? ''}:${status?.lastRun?.markdown ?? ''}`;
   // Orbit-scenario skill templates fetched from /api/skills. We fetch on mount
   // and keep three states for graceful UX: `null` = still loading, `[]` =
   // loaded with no orbit templates available, `SkillSummary[]` = ready. If
@@ -2601,6 +2646,17 @@ function OrbitSection({
   // were on the default. Manual runs persist this effective value before
   // launching so the daemon uses the same template the UI displays.
   const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+  const supportsTemplateScopedHistory = status?.lastRunsByTemplate !== undefined;
+
+  useEffect(() => {
+    const hasTemplateScopedHistory = Object.keys(status?.lastRunsByTemplate ?? {}).length > 0;
+    const hasLegacyUnscopedLastRun = Boolean(status?.lastRun && !status.lastRun.templateSkillId);
+    if (!hasLegacyUnscopedLastRun || hasTemplateScopedHistory) {
+      setLegacyLastRunTemplateSkillId(null);
+      return;
+    }
+    setLegacyLastRunTemplateSkillId((current) => current ?? (effectiveTemplateSkillId || null));
+  }, [effectiveTemplateSkillId, legacyLastRunIdentity, status]);
 
   const selectedTemplate = useMemo(() => {
     if (!effectiveTemplateSkillId || !orbitTemplates) return null;
@@ -2638,7 +2694,18 @@ function OrbitSection({
     })();
   };
 
-  const lastRun = status?.lastRun ?? null;
+  const templateScopedLastRun = effectiveTemplateSkillId
+    ? status?.lastRunsByTemplate?.[effectiveTemplateSkillId] ?? null
+    : null;
+  const hasLegacyUnscopedLastRun = Boolean(
+    status?.lastRun
+    && !status.lastRun.templateSkillId
+    && legacyLastRunTemplateSkillId
+    && legacyLastRunTemplateSkillId === effectiveTemplateSkillId,
+  );
+  const lastRun = supportsTemplateScopedHistory
+    ? (templateScopedLastRun ?? (hasLegacyUnscopedLastRun ? status?.lastRun ?? null : null))
+    : status?.lastRun ?? null;
   const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);

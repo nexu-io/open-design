@@ -10,6 +10,7 @@ import type { ProxySseEvent } from './sse/proxy';
 export const exampleChatRequest: ChatRequest = {
   agentId: 'claude',
   message: '## user\nCreate a design',
+  currentPrompt: 'Create a design',
   systemPrompt: 'Design carefully.',
   projectId: 'project_1',
   attachments: ['brief.pdf'],

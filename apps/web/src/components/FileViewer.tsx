@@ -3197,6 +3197,58 @@ function HtmlViewer({
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
   }, [inspectMode, srcDoc]);
 
+  // Mirror the bridge's `od:comment-targets` broadcast into
+  // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
+  // active. The boardMode-only useEffect below still handles its
+  // own comment-specific events (hover / click target / pod), but
+  // the targets list itself is mode-agnostic — it's just "which
+  // elements on the page carry data-od-id / data-screen-label".
+  // Without this listener Inspect mode never learns the artifact's
+  // annotation count, and the empty-state hint added for #890 would
+  // misfire (always firing in Inspect mode, even on annotated
+  // artifacts) because the comment-mode listener short-circuits on
+  // `!boardMode`. Issue #890.
+  useEffect(() => {
+    if (!inspectMode && !boardMode) {
+      setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      return;
+    }
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as
+        | {
+            type?: string;
+            targets?: Array<Partial<PreviewCommentSnapshot>>;
+          }
+        | null;
+      if (data?.type !== 'od:comment-targets' || !Array.isArray(data.targets)) return;
+      const next = new Map<string, PreviewCommentSnapshot>();
+      data.targets.forEach((item) => {
+        const elementId = String(item?.elementId || '');
+        if (!elementId) return;
+        next.set(elementId, {
+          filePath: file.name,
+          elementId,
+          selector: String(item?.selector || ''),
+          label: String(item?.label || ''),
+          text: String(item?.text || ''),
+          position: {
+            x: clampBridgeCoordinate(item?.position?.x),
+            y: clampBridgeCoordinate(item?.position?.y),
+            width: clampBridgeCoordinate(item?.position?.width),
+            height: clampBridgeCoordinate(item?.position?.height),
+          },
+          htmlHint: String(item?.htmlHint || ''),
+          selectionKind: 'element',
+          memberCount: undefined,
+        });
+      });
+      setLiveCommentTargets(next);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [inspectMode, boardMode, file.name]);
+
   useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
@@ -4629,19 +4681,59 @@ function HtmlViewer({
                 error={inspectError}
               />
             ) : null}
-            {inspectMode && openHintBox && !activeInspectTarget ? (
+            {/*
+              Hint banner for Inspect / Picker modes. The bridge in
+              `apps/web/src/runtime/srcdoc.ts` posts `od:comment-targets`
+              with every element annotated with `data-od-id` /
+              `data-screen-label`, so `liveCommentTargets.size` is the
+              authoritative annotation count for the current artifact.
+
+              Two states:
+              - "has targets": the existing copy ("Click any element with
+                `data-od-id` to tune its style.") for users who just don't
+                see the crosshair cursor.
+              - "no targets" (issue #890): a freeform-generated artifact
+                (e.g. PRD → HTML through a Claude-Code-compatible CLI
+                without a skill) ships zero `data-od-id` annotations. The
+                bridge's click handler walks up to <html>, finds nothing,
+                and bails — clicks no-op silently. The static copy made
+                this look broken; the empty-state copy explains what's
+                missing and how to fix it. Mirrored across Inspect and
+                Picker because the failure surface is identical.
+            */}
+            {(inspectMode || (boardMode && boardTool === 'inspect'))
+              && openHintBox
+              && !activeInspectTarget
+              && !activeCommentTarget ? (
               <div className="inspect-empty-hint-container">
-                <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
-                Click any element with <code>data-od-id</code> to tune its style.
-              </div>
-               <button
-                type="button"
-                title="Close Inspect Hint"
-                aria-label="Close Inspect Hint"
-                onClick={() => setOpenHintBox(false)}
-                className="orbit-artifact-ghost">
-                 <Icon className='' name='close' size={12} />
-               </button>
+                {liveCommentTargets.size === 0 ? (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint-no-targets"
+                  >
+                    This artifact has no <code>data-od-id</code>{' '}
+                    annotations yet — ask the agent to add them to the
+                    sections you want to{' '}
+                    {inspectMode ? 'inspect' : 'comment on'}.
+                  </div>
+                ) : (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint"
+                  >
+                    Click any element with <code>data-od-id</code> to{' '}
+                    {inspectMode ? 'tune its style' : 'leave a comment'}.
+                  </div>
+                )}
+                <button
+                  type="button"
+                  title="Close Inspect Hint"
+                  aria-label="Close Inspect Hint"
+                  onClick={() => setOpenHintBox(false)}
+                  className="orbit-artifact-ghost"
+                >
+                  <Icon className="" name="close" size={12} />
+                </button>
               </div>
             ) : null}
           </div>

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import type { AppConfig } from '../../src/types';
 import {
+  fetchDaemonConfig,
   fetchComposioConfigFromDaemon,
   loadConfig,
   mergeDaemonConfig,
@@ -126,6 +127,7 @@ vi.mock('../../src/state/config', async () => {
     loadConfig: vi.fn(),
     mergeDaemonConfig: vi.fn(),
     saveConfig: vi.fn(),
+    fetchDaemonConfig: vi.fn().mockResolvedValue({}),
     syncConfigToDaemon: vi.fn().mockResolvedValue(undefined),
     syncComposioConfigToDaemon: vi.fn().mockResolvedValue(true),
     fetchComposioConfigFromDaemon: vi.fn().mockResolvedValue(null),
@@ -140,6 +142,7 @@ const mockedFetchPromptTemplates = vi.mocked(fetchPromptTemplates);
 const mockedFetchSkills = vi.mocked(fetchSkills);
 const mockedListProjects = vi.mocked(listProjects);
 const mockedListTemplates = vi.mocked(listTemplates);
+const mockedFetchDaemonConfig = vi.mocked(fetchDaemonConfig);
 const mockedFetchComposioConfigFromDaemon = vi.mocked(fetchComposioConfigFromDaemon);
 const mockedLoadConfig = vi.mocked(loadConfig);
 const mockedMergeDaemonConfig = vi.mocked(mergeDaemonConfig);
@@ -176,6 +179,7 @@ describe('App connectors settings flows', () => {
     mockedFetchAppVersionInfo.mockResolvedValue(null);
     mockedListProjects.mockResolvedValue([]);
     mockedListTemplates.mockResolvedValue([]);
+    mockedFetchDaemonConfig.mockResolvedValue({});
     mockedFetchComposioConfigFromDaemon.mockResolvedValue(null);
     mockedMergeDaemonConfig.mockImplementation((local) => local);
     mockedLoadConfig.mockReturnValue({ ...baseConfig });
@@ -207,6 +211,43 @@ describe('App connectors settings flows', () => {
     await waitFor(() => {
       expect(screen.getByText('Composio tail: uQEg')).toBeTruthy();
     });
+  });
+
+  it('does not show first-run privacy consent until daemon config hydration finishes', async () => {
+    let resolveDaemonConfig: (value: Record<string, never>) => void = () => {};
+    mockedFetchDaemonConfig.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDaemonConfig = resolve;
+      }),
+    );
+
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchDaemonConfig).toHaveBeenCalled();
+    });
+    expect(container.querySelector('.privacy-consent-banner')).toBeNull();
+
+    resolveDaemonConfig({});
+
+    await waitFor(() => {
+      expect(container.querySelector('.privacy-consent-banner')).toBeTruthy();
+    });
+  });
+
+  it('hides first-run privacy consent while settings is open', async () => {
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.privacy-consent-banner')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open connectors settings' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
+    });
+    expect(container.querySelector('.privacy-consent-banner')).toBeNull();
   });
 
   it('normalizes local persistence but sends the raw replacement key to the daemon on save', async () => {

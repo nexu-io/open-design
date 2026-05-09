@@ -54,6 +54,7 @@ import {
   patchProject,
   saveMessage,
   saveTabs,
+  type SaveMessageOptions,
 } from '../state/projects';
 import type {
   AgentEvent,
@@ -651,19 +652,19 @@ export function ProjectView({
   ]);
 
   const persistMessage = useCallback(
-    (m: ChatMessage) => {
+    (m: ChatMessage, options?: SaveMessageOptions) => {
       if (!activeConversationId) return;
-      void saveMessage(project.id, activeConversationId, m);
+      void saveMessage(project.id, activeConversationId, m, options);
     },
     [project.id, activeConversationId],
   );
 
   const persistMessageById = useCallback(
-    (messageId: string) => {
+    (messageId: string, options?: SaveMessageOptions) => {
       if (!activeConversationId) return;
       setMessages((curr) => {
         const found = curr.find((m) => m.id === messageId);
-        if (found) void saveMessage(project.id, activeConversationId, found);
+        if (found) void saveMessage(project.id, activeConversationId, found, options);
         return curr;
       });
     },
@@ -671,7 +672,12 @@ export function ProjectView({
   );
 
   const updateMessageById = useCallback(
-    (messageId: string, updater: (message: ChatMessage) => ChatMessage, persist = false) => {
+    (
+      messageId: string,
+      updater: (message: ChatMessage) => ChatMessage,
+      persist = false,
+      persistOptions?: SaveMessageOptions,
+    ) => {
       setMessages((curr) => {
         let saved: ChatMessage | null = null;
         const next = curr.map((m) => {
@@ -681,7 +687,7 @@ export function ProjectView({
           return updated;
         });
         if (persist && saved && activeConversationId) {
-          void saveMessage(project.id, activeConversationId, saved);
+          void saveMessage(project.id, activeConversationId, saved, persistOptions);
         }
         return next;
       });
@@ -842,13 +848,13 @@ export function ProjectView({
             persistMessageById(message.id);
           }, 500);
         };
-        const persistNow = () => {
+        const persistNow = (options?: SaveMessageOptions) => {
           if (persistTimer) {
             clearTimeout(persistTimer);
             persistTimer = null;
           }
           textBuffer.flush();
-          persistMessageById(message.id);
+          persistMessageById(message.id, options);
         };
         const textBuffer = createBufferedTextUpdates({
           updateMessage: (updater) => updateMessageById(message.id, updater),
@@ -886,7 +892,7 @@ export function ProjectView({
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
-              persistNow();
+              persistNow({ telemetryFinalized: true });
               void refreshProjectFiles();
               onProjectsRefresh();
             },
@@ -907,7 +913,7 @@ export function ProjectView({
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
-              persistNow();
+              persistNow({ telemetryFinalized: true });
             },
           },
           onRunStatus: (runStatus) => {
@@ -930,7 +936,7 @@ export function ProjectView({
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
-              persistNow();
+              persistNow({ telemetryFinalized: true });
             }
           },
           onRunEventId: (lastRunEventId) => {
@@ -948,6 +954,7 @@ export function ProjectView({
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
                 true,
+                { telemetryFinalized: true },
               );
             }
           })
@@ -1215,13 +1222,11 @@ export function ProjectView({
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
-                  ? produced.length > 0
-                    ? { ...m, producedFiles: produced }
-                    : m
+                  ? { ...m, producedFiles: produced }
                   : m,
               );
               const finalized = updated.find((m) => m.id === assistantId);
-              if (finalized) persistMessage(finalized);
+              if (finalized) persistMessage(finalized, { telemetryFinalized: true });
               return updated;
             });
           });
@@ -1248,7 +1253,7 @@ export function ProjectView({
           cancelRef.current = null;
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
-            if (finalized) persistMessage(finalized);
+            if (finalized) persistMessage(finalized, { telemetryFinalized: true });
             return curr;
           });
           void refreshProjectFiles();
@@ -1290,6 +1295,7 @@ export function ProjectView({
                 endedAt: isTerminalRunStatus(runStatus) ? prev.endedAt ?? Date.now() : prev.endedAt,
               }),
               true,
+              runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
           },
           onRunEventId: (lastRunEventId) => {
@@ -1496,7 +1502,7 @@ export function ProjectView({
         }
         return m;
       });
-      for (const message of finalized) persistMessage(message);
+      for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
       return next;
     });
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);

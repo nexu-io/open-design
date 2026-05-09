@@ -2,6 +2,8 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 
+import type { OrbitRunSummary, OrbitStatusResponse } from '@open-design/contracts/api/orbit';
+
 import type { OrbitConfigPrefs } from './app-config.js';
 
 export interface OrbitConnectorRunResult {
@@ -15,11 +17,12 @@ export interface OrbitConnectorRunResult {
   error?: string;
 }
 
-export interface OrbitActivitySummary {
+export interface OrbitActivitySummary extends OrbitRunSummary {
   id: string;
   startedAt: string;
   completedAt: string;
   trigger: 'manual' | 'scheduled';
+  templateSkillId?: string | null;
   connectorsChecked: number;
   connectorsSucceeded: number;
   connectorsFailed: number;
@@ -87,11 +90,12 @@ function formatLocalOrbitPromptTimestamp(date: Date): string {
 
 export type OrbitTemplateResolver = (skillId: string) => Promise<OrbitTemplateSelection | null>;
 
-export interface OrbitStatus {
+export interface OrbitStatus extends OrbitStatusResponse {
   config: OrbitConfigPrefs;
   running: boolean;
   nextRunAt: string | null;
   lastRun: OrbitActivitySummary | null;
+  lastRunsByTemplate: Record<string, OrbitActivitySummary>;
 }
 
 export const DEFAULT_ORBIT_CONFIG: OrbitConfigPrefs = {
@@ -105,6 +109,11 @@ export const DEFAULT_ORBIT_CONFIG: OrbitConfigPrefs = {
 };
 
 const SUMMARY_FILE = 'activity-summary.json';
+
+interface OrbitSummaryStore {
+  lastRun: OrbitActivitySummary | null;
+  lastRunsByTemplate: Record<string, OrbitActivitySummary>;
+}
 
 function isValidOrbitTime(time: string): boolean {
   const match = /^(\d{2}):(\d{2})$/.exec(time);
@@ -140,28 +149,97 @@ function summaryFile(dataDir: string): string {
 }
 
 async function readLastSummary(dataDir: string): Promise<OrbitActivitySummary | null> {
+  return (await readSummaryStore(dataDir)).lastRun;
+}
+
+function isOrbitRunSummary(value: unknown): value is OrbitActivitySummary {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Partial<OrbitActivitySummary>;
+  return (
+    typeof obj.completedAt === 'string' &&
+    typeof obj.connectorsChecked === 'number' &&
+    typeof obj.connectorsSucceeded === 'number' &&
+    typeof obj.connectorsFailed === 'number' &&
+    typeof obj.connectorsSkipped === 'number' &&
+    typeof obj.markdown === 'string'
+  );
+}
+
+function normalizeSummaryStore(raw: unknown): OrbitSummaryStore {
+  if (isOrbitRunSummary(raw)) {
+    const templateSkillId = typeof raw.templateSkillId === 'string' && raw.templateSkillId.trim()
+      ? raw.templateSkillId.trim()
+      : null;
+    return {
+      lastRun: templateSkillId ? { ...raw, templateSkillId } : raw,
+      lastRunsByTemplate: templateSkillId ? { [templateSkillId]: { ...raw, templateSkillId } } : {},
+    };
+  }
+  if (!raw || typeof raw !== 'object') {
+    return { lastRun: null, lastRunsByTemplate: {} };
+  }
+  const obj = raw as {
+    lastRun?: unknown;
+    lastRunsByTemplate?: Record<string, unknown>;
+  };
+  const lastRun = isOrbitRunSummary(obj.lastRun) ? obj.lastRun : null;
+  const lastRunsByTemplate: Record<string, OrbitActivitySummary> = {};
+  for (const [templateSkillId, summary] of Object.entries(obj.lastRunsByTemplate ?? {})) {
+    if (!templateSkillId || !isOrbitRunSummary(summary)) continue;
+    lastRunsByTemplate[templateSkillId] = {
+      ...summary,
+      templateSkillId,
+    };
+  }
+  if (lastRun && typeof lastRun.templateSkillId === 'string' && lastRun.templateSkillId.trim()) {
+    const templateSkillId = lastRun.templateSkillId.trim();
+    if (!lastRunsByTemplate[templateSkillId]) {
+      lastRunsByTemplate[templateSkillId] = { ...lastRun, templateSkillId };
+    }
+  }
+  return { lastRun, lastRunsByTemplate };
+}
+
+async function readSummaryStore(dataDir: string): Promise<OrbitSummaryStore> {
   let raw: string;
   try {
     raw = await readFile(summaryFile(dataDir), 'utf8');
   } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return null;
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return { lastRun: null, lastRunsByTemplate: {} };
+    }
     throw error;
   }
 
   try {
-    const parsed = JSON.parse(raw) as OrbitActivitySummary;
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    return normalizeSummaryStore(JSON.parse(raw) as unknown);
   } catch {
-    return null;
+    return { lastRun: null, lastRunsByTemplate: {} };
   }
 }
 
 async function writeLastSummary(dataDir: string, summary: OrbitActivitySummary): Promise<void> {
+  const store = await readSummaryStore(dataDir);
   const dir = orbitDir(dataDir);
   await mkdir(dir, { recursive: true });
   const target = summaryFile(dataDir);
   const tmp = `${target}.${randomBytes(4).toString('hex')}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+  const templateSkillId = typeof summary.templateSkillId === 'string' && summary.templateSkillId.trim()
+    ? summary.templateSkillId.trim()
+    : null;
+  const nextStore: OrbitSummaryStore = {
+    lastRun: summary,
+    lastRunsByTemplate: templateSkillId
+      ? {
+          ...store.lastRunsByTemplate,
+          [templateSkillId]: {
+            ...summary,
+            templateSkillId,
+          },
+        }
+      : store.lastRunsByTemplate,
+  };
+  await writeFile(tmp, `${JSON.stringify(nextStore, null, 2)}\n`, 'utf8');
   await rename(tmp, target);
 }
 
@@ -314,11 +392,13 @@ export class OrbitService {
   }
 
   async status(): Promise<OrbitStatus> {
+    const summaryStore = await readSummaryStore(this.dataDir);
     return {
       config: this.config,
       running: this.starting !== null || this.inflight !== null,
       nextRunAt: this.nextRunAtValue?.toISOString() ?? null,
-      lastRun: await readLastSummary(this.dataDir),
+      lastRun: summaryStore.lastRun,
+      lastRunsByTemplate: summaryStore.lastRunsByTemplate,
     };
   }
 
@@ -340,8 +420,9 @@ export class OrbitService {
 
     const startedAt = new Date().toISOString();
     const runId = `orbit-${randomUUID()}`;
-    const template = this.config.templateSkillId && this.templateResolver
-      ? await this.templateResolver(this.config.templateSkillId).catch(() => null)
+    const configuredTemplateSkillId = this.config.templateSkillId ?? null;
+    const template = configuredTemplateSkillId && this.templateResolver
+      ? await this.templateResolver(configuredTemplateSkillId).catch(() => null)
       : null;
     const now = new Date(startedAt);
     const prompt = buildOrbitPrompt(now, template);
@@ -369,6 +450,7 @@ export class OrbitService {
           startedAt,
           completedAt,
           trigger,
+          templateSkillId: template?.id ?? configuredTemplateSkillId,
           connectorsChecked: connectorsSucceeded + connectorsFailed + connectorsSkipped,
           connectorsSucceeded,
           connectorsFailed,

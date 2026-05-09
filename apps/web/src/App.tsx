@@ -8,6 +8,7 @@ import {
   SettingsDialog,
   type SettingsSection,
 } from './components/SettingsDialog';
+import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
@@ -181,6 +182,8 @@ export function App() {
   // {active:false} if this hasn't run.
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
   const activeFileName = route.kind === 'project' ? route.fileName : null;
+  const showPrivacyConsent =
+    daemonConfigLoaded && config.privacyDecisionAt == null && !settingsOpen;
   useEffect(() => {
     const body = activeProjectId
       ? { projectId: activeProjectId, fileName: activeFileName }
@@ -317,8 +320,10 @@ export function App() {
 
           // Pop the onboarding modal only on the first run. Once the user
           // has saved or skipped past it once, we trust their stored config
-          // and let them re-open Settings explicitly via the env pill.
-          if (!next.onboardingCompleted) {
+          // and let them re-open Settings explicitly via the env pill. Hold
+          // the welcome modal until the privacy decision is resolved; the
+          // installation id can rotate later without re-opening the banner.
+          if (!next.onboardingCompleted && next.privacyDecisionAt != null) {
             setSettingsWelcome(true);
             setSettingsOpen(true);
           }
@@ -853,6 +858,49 @@ export function App() {
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
         />
       ) : null}
+      {/* First-run privacy consent banner. It waits for daemon config
+          hydration because privacyDecisionAt is daemon-owned and stripped
+          from localStorage. It also yields while Settings is open so the
+          floating banner never intercepts modal interactions. */}
+      {showPrivacyConsent ? (
+        <PrivacyConsentModal
+          onShare={() => {
+            const installationId = generateInstallationIdSafe();
+            void handleConfigPersist({
+              ...latestPersistedConfigRef.current,
+              installationId,
+              privacyDecisionAt: Date.now(),
+              telemetry: { metrics: true, content: true, artifactManifest: false },
+            });
+            // Hand the foreground over to the welcome modal now that the
+            // privacy decision is recorded — bootstrap deferred opening
+            // it while consent was pending.
+            if (!latestPersistedConfigRef.current.onboardingCompleted) {
+              setSettingsWelcome(true);
+              setSettingsOpen(true);
+            }
+          }}
+          onDecline={() => {
+            void handleConfigPersist({
+              ...latestPersistedConfigRef.current,
+              installationId: null,
+              privacyDecisionAt: Date.now(),
+              telemetry: { metrics: false, content: false, artifactManifest: false },
+            });
+            if (!latestPersistedConfigRef.current.onboardingCompleted) {
+              setSettingsWelcome(true);
+              setSettingsOpen(true);
+            }
+          }}
+        />
+      ) : null}
     </>
   );
+}
+
+function generateInstallationIdSafe(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
