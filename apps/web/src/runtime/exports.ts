@@ -274,8 +274,8 @@ export async function exportAsPdf(
   if (desktopApi?.printPdf) {
     if (sandboxedPreview) {
       doc = buildSandboxedPreviewDocument(doc, title);
-      doc = injectParentPrintReadyCache(doc);
     }
+    doc = injectParentPrintReadyCache(doc);
     try {
       await desktopApi.printPdf(doc);
     } catch {

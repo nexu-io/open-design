@@ -347,4 +347,29 @@ describe('sandboxed preview Blob exports', () => {
     // trigger a second print dialog.
     expect(htmlArg).not.toContain('window.print()');
   });
+
+  it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: () => mockWin,
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    await exportAsPdf('<main>Trusted local document</main>', 'Trusted', {
+      sandboxedPreview: false,
+    });
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // No sandbox wrapper — the document is passed through directly.
+    expect(htmlArg).not.toContain('sandbox="allow-scripts"');
+    expect(htmlArg).toContain('<main>Trusted local document</main>');
+    // The readiness handshake must still be injected.
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // The cache must be present so waitForPrintReadyHandshake never hangs.
+    expect(htmlArg).toContain('__odPrintReady');
+    // No window.print() since the desktop bridge handles printing natively.
+    expect(htmlArg).not.toContain('window.print()');
+  });
 });
