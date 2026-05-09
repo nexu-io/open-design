@@ -15,6 +15,7 @@ interface Props {
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
   onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
+  onRenameFile: (from: string, to: string) => Promise<ProjectFile | null> | ProjectFile | null;
   onDeleteFile: (name: string) => void;
   onDeleteFiles: (names: string[]) => Promise<void> | void;
   onUpload: () => void;
@@ -33,6 +34,7 @@ export function DesignFilesPanel({
   onRefreshFiles,
   onOpenFile,
   onOpenLiveArtifact,
+  onRenameFile,
   onDeleteFile,
   onDeleteFiles,
   onUpload,
@@ -46,7 +48,7 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
-  const MENU_ESTIMATED_HEIGHT = 115;
+  const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,6 +56,7 @@ export function DesignFilesPanel({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
+  const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
 
   const sortedFiles = useMemo(() => {
     return [...files].sort((a, b) => {
@@ -195,6 +198,37 @@ export function DesignFilesPanel({
     const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
 
     setMenuPos({ name, top, left });
+  }
+
+  function startRename(name: string) {
+    setMenuPos(null);
+    setPreview(name);
+    setRenaming({ name, draft: name, saving: false });
+  }
+
+  async function commitRename(name: string, draft: string) {
+    const nextName = draft.trim();
+    if (!nextName || nextName === name) {
+      setRenaming(null);
+      return;
+    }
+    setRenaming({ name, draft, saving: true });
+    try {
+      const renamed = await onRenameFile(name, nextName);
+      if (!renamed) throw new Error('Rename failed');
+      setPreview((curr) => (curr === name ? renamed.name : curr));
+      setSelected((prev) => {
+        if (!prev.has(name)) return prev;
+        const next = new Set(prev);
+        next.delete(name);
+        next.add(renamed.name);
+        return next;
+      });
+      setRenaming(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+      setRenaming({ name, draft, saving: false });
+    }
   }
 
   async function handleBatchDelete() {
@@ -468,6 +502,7 @@ export function DesignFilesPanel({
                       {pageFiles.map((f) => {
                         const active = preview === f.name;
                         const isHovered = hover === f.name;
+                        const renameState = renaming?.name === f.name ? renaming : null;
                         return (
                           <tr
                             key={f.name}
@@ -497,42 +532,92 @@ export function DesignFilesPanel({
                                 {selected.has(f.name) ? '\u2611' : '\u2610'}
                               </span>
                             </td>
-                            <td className="df-cell-icon">
+                            <td
+                              className="df-cell-icon df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
                               <span className="df-row-icon" data-kind={f.kind} aria-hidden>
                                 {kindGlyph(f.kind)}
                               </span>
                             </td>
-                            <td className="df-cell-name">
-                              <button
-                                type="button"
-                                className="df-row-name-btn"
-                                onClick={() => setPreview(f.name)}
-                                onDoubleClick={() => onOpenFile(f.name)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    const now = Date.now();
-                                    const last = lastKeyPress.current.get(f.name) ?? 0;
-                                    if (now - last < 300) {
-                                      lastKeyPress.current.delete(f.name);
-                                      onOpenFile(f.name);
-                                    } else {
-                                      lastKeyPress.current.set(f.name, now);
-                                      setPreview(f.name);
-                                    }
+                            <td
+                              className="df-cell-name df-cell-openable"
+                              onClick={() => {
+                                if (!renameState) setPreview(f.name);
+                              }}
+                              onDoubleClick={() => {
+                                if (!renameState) onOpenFile(f.name);
+                              }}
+                            >
+                              {renameState ? (
+                                <input
+                                  autoFocus
+                                  className="df-rename-input"
+                                  value={renameState.draft}
+                                  disabled={renameState.saving}
+                                  onChange={(e) =>
+                                    setRenaming({ ...renameState, draft: e.target.value })
                                   }
-                                }}
-                              >
-                                <span className="df-row-name-wrap">
-                                  <span className="df-row-name">{f.name}</span>
-                                  <span className="df-row-sub">{humanBytes(f.size)}</span>
-                                </span>
-                              </button>
+                                  onClick={(e) => e.stopPropagation()}
+                                  onDoubleClick={(e) => e.stopPropagation()}
+                                  onBlur={(e) => {
+                                    if (e.currentTarget.dataset.skipRenameCommit === '1') return;
+                                    void commitRename(f.name, renameState.draft);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      e.currentTarget.dataset.skipRenameCommit = '1';
+                                      void commitRename(f.name, renameState.draft);
+                                    } else if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      e.currentTarget.dataset.skipRenameCommit = '1';
+                                      setRenaming(null);
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="df-row-name-btn"
+                                  onClick={() => setPreview(f.name)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      const now = Date.now();
+                                      const last = lastKeyPress.current.get(f.name) ?? 0;
+                                      if (now - last < 300) {
+                                        lastKeyPress.current.delete(f.name);
+                                        onOpenFile(f.name);
+                                      } else {
+                                        lastKeyPress.current.set(f.name, now);
+                                        setPreview(f.name);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <span className="df-row-name-wrap">
+                                    <span className="df-row-name">{f.name}</span>
+                                    <span className="df-row-sub">{humanBytes(f.size)}</span>
+                                  </span>
+                                </button>
+                              )}
                             </td>
-                            <td className="df-cell-kind">
+                            <td
+                              className="df-cell-kind df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
                               <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
                             </td>
-                            <td className="df-cell-time">{relativeTime(f.mtime, t)}</td>
+                            <td
+                              className="df-cell-time df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
+                              {relativeTime(f.mtime, t)}
+                            </td>
                             <td className="df-cell-menu">
                               <span
                                 data-testid={`design-file-menu-${f.name}`}
@@ -652,6 +737,15 @@ export function DesignFilesPanel({
             }}
           >
             {t('designFiles.openInTab')}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              startRename(menuPos.name);
+            }}
+          >
+            {t('common.rename')}
           </button>
           <a
             href={projectFileUrl(projectId, menuPos.name)}

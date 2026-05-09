@@ -32,22 +32,26 @@ function generateFiles(count: number): ProjectFile[] {
 }
 
 function renderPanel(files: ProjectFile[]) {
-  return render(
+  const onOpenFile = vi.fn();
+  const onDeleteFiles = vi.fn();
+  const result = render(
     <DesignFilesPanel
       projectId="test-project"
       files={files}
       liveArtifacts={[]}
       onRefreshFiles={vi.fn()}
-      onOpenFile={vi.fn()}
+      onOpenFile={onOpenFile}
       onOpenLiveArtifact={vi.fn()}
+      onRenameFile={vi.fn()}
       onDeleteFile={vi.fn()}
-      onDeleteFiles={vi.fn()}
+      onDeleteFiles={onDeleteFiles}
       onUpload={vi.fn()}
       onUploadFiles={vi.fn()}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
     />,
   );
+  return { ...result, onDeleteFiles, onOpenFile };
 }
 
 function getPageInfo(container: HTMLElement): string {
@@ -142,6 +146,60 @@ describe('DesignFilesPanel large-list regression', () => {
     fireEvent.click(btns[1]!);
 
     expect(getPageInfo(container)).toContain('31–60 of 500');
+  });
+
+  it('uses non-control table cells as file row click targets', () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files);
+    const row = container.querySelector('.df-file-row')!;
+
+    fireEvent.click(row.querySelector('.df-cell-icon')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.click(row.querySelector('.df-cell-kind')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.click(row.querySelector('.df-cell-name')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.doubleClick(row.querySelector('.df-cell-name')!);
+    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+    onOpenFile.mockClear();
+
+    fireEvent.doubleClick(row.querySelector('.df-cell-time')!);
+    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+  });
+
+  it('does not preview or open files from row controls', () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files);
+    const row = container.querySelector('.df-file-row')!;
+
+    fireEvent.click(row.querySelector('.df-row-check')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
+    expect(onOpenFile).not.toHaveBeenCalled();
+
+    fireEvent.click(row.querySelector('.df-row-menu')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('passes every selected file to batch delete', () => {
+    const files = generateFiles(3);
+    const { container, onDeleteFiles } = renderPanel(files);
+    const rows = Array.from(container.querySelectorAll('.df-file-row'));
+
+    fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
+    fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
+    fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
+
+    expect(onDeleteFiles).toHaveBeenCalledWith(['file-1.html', 'file-2.png']);
   });
 
   it('renders 500 files within a reasonable time', () => {

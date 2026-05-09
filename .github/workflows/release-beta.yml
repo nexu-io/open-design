@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: true
+      enable_mac_intel:
+        description: "Build and publish macOS Intel x64 (unsigned) beta artifacts."
+        required: true
+        type: boolean
+        default: false
       enable_linux:
         description: "Build and publish Linux x64 AppImage/checksum to R2 only; no updater feed is published yet."
         required: true
@@ -55,7 +60,7 @@ jobs:
       - name: Validate beta publish inputs
         run: |
           set -euo pipefail
-          if [ "${{ inputs.enable_mac }}" != "true" ] && [ "${{ inputs.enable_win }}" != "true" ] && [ "${{ inputs.enable_linux }}" != "true" ]; then
+          if [ "${{ inputs.enable_mac }}" != "true" ] && [ "${{ inputs.enable_win }}" != "true" ] && [ "${{ inputs.enable_mac_intel }}" != "true" ] && [ "${{ inputs.enable_linux }}" != "true" ]; then
             echo "release-beta requires at least one platform to be enabled" >&2
             exit 1
           fi
@@ -295,6 +300,59 @@ jobs:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets
 
+  build_mac_intel:
+    name: Build beta mac x64
+    needs: metadata
+    if: ${{ inputs.enable_mac_intel }}
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply beta package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
+
+      - name: Build beta mac intel artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-beta-intel \
+            --portable \
+            --mac-compression maximum \
+            --to all \
+            --json
+
+      - name: Prepare beta mac intel assets
+        id: assets
+        env:
+          ASSET_VERSION_SUFFIX: .unsigned
+          RELEASE_CHANNEL: beta
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_NAMESPACE: release-beta-intel
+        run: bash .github/scripts/release/assets/mac-intel.sh
+
+      - name: Upload mac intel release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets
+
   build_win:
     name: Build beta win x64
     needs: metadata
@@ -515,6 +573,7 @@ jobs:
     needs:
       - metadata
       - build_mac
+      - build_mac_intel
       - build_win
       - build_linux
     if: >-
@@ -522,8 +581,9 @@ jobs:
         always() &&
         !cancelled() &&
         needs.metadata.result == 'success' &&
-        (inputs.enable_mac || inputs.enable_win || inputs.enable_linux) &&
+        (inputs.enable_mac || inputs.enable_win || inputs.enable_mac_intel || inputs.enable_linux) &&
         (!inputs.enable_mac || needs.build_mac.result == 'success') &&
+        (!inputs.enable_mac_intel || needs.build_mac_intel.result == 'success') &&
         (!inputs.enable_win || needs.build_win.result == 'success') &&
         (!inputs.enable_linux || needs.build_linux.result == 'success')
       }}
@@ -543,10 +603,12 @@ jobs:
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
       ENABLE_LINUX: ${{ inputs.enable_linux }}
       ENABLE_MAC: ${{ inputs.enable_mac }}
+      ENABLE_MAC_INTEL: ${{ inputs.enable_mac_intel }}
       ENABLE_WIN: ${{ inputs.enable_win }}
       GITHUB_RELEASE_ENABLED: "false"
       LINUX_ASSET_SUFFIX: .unsigned
       MAC_ARTIFACT_MODE: dmg-only
+      MAC_INTEL_ASSET_SUFFIX: .unsigned
       RELEASE_CHANNEL: beta
       RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
       RELEASE_SIGNED: "true"
@@ -565,6 +627,13 @@ jobs:
         with:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Download mac intel release bundle
+        if: ${{ inputs.enable_mac_intel }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets/mac-intel
 
       - name: Download windows release bundle
         if: ${{ inputs.enable_win }}
@@ -608,6 +677,8 @@ jobs:
           R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
           R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
           R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
           R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
           R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
@@ -620,6 +691,8 @@ jobs:
           R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
           R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
           R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
           R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
           R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}

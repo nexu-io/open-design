@@ -12,6 +12,10 @@ export interface AgentInfo {
   version?: string | null;
   models?: AgentModelOption[];
   reasoningOptions?: AgentModelOption[];
+  /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
+  installUrl?: string;
+  /** Optional HTTPS URL for configuration / auth / usage docs. */
+  docsUrl?: string;
 }
 
 export interface AgentsResponse {

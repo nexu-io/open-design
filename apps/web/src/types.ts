@@ -45,6 +45,7 @@ import type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  RenameProjectFileResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
@@ -144,6 +145,8 @@ export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
   model?: string;
+  apiKeyConfigured?: boolean;
+  apiKeyTail?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -423,6 +426,7 @@ export type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  RenameProjectFileResponse,
   ProviderTestRequest,
   CodexPetSummary,
   CodexPetsResponse,

@@ -312,15 +312,6 @@ export function clearConnectorAuthorizationPending(
 }
 
 export function getConnectorDisplayToolCount(connector: ConnectorDetail): number {
-  // Prefer the hand-curated catalog subset so the card/header badge stays
-  // stable across Composio hydration: `toolCount` is sourced from the
-  // provider's totalItems (a GitHub-style toolkit jumps from 2 to 48 once an
-  // API key is configured), and `tools.length` shifts the same way after
-  // hydration. `curatedToolNames` is fixed at the catalog and is what the
-  // "N tools" badge is meant to reflect (issue #748).
-  if (connector.curatedToolNames && connector.curatedToolNames.length > 0) {
-    return connector.curatedToolNames.length;
-  }
   return connector.toolCount ?? connector.tools.length;
 }
 

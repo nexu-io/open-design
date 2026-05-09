@@ -9,6 +9,7 @@ import { useT } from '../i18n';
 import {
   deleteProjectFile,
   fetchProjectFileText,
+  renameProjectFile,
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
@@ -404,6 +405,37 @@ export function FileWorkspace({
     }
   }
 
+  async function handleRename(oldName: string, nextName: string): Promise<ProjectFile | null> {
+    const hasPendingSketchConflict = Object.entries(sketches).some(
+      ([name, sketch]) => !sketch.persisted && sameFileName(name, nextName),
+    );
+    if (nextName !== oldName && hasPendingSketchConflict) {
+      throw new Error(
+        `A pending sketch named "${nextName}" is already open. Save or close it before renaming.`,
+      );
+    }
+
+    const result = await renameProjectFile(projectId, oldName, nextName);
+    const renamed = result.file;
+    await onRefreshFiles();
+
+    const nextTabs = persistedTabs.map((name) => (name === oldName ? renamed.name : name));
+    const nextActive = tabsState.active === oldName ? renamed.name : tabsState.active;
+    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+    if (activeTab === oldName) setActiveTab(renamed.name);
+
+    setSketches((curr) => {
+      const entry = curr[oldName];
+      if (!entry) return curr;
+      const next = { ...curr };
+      delete next[oldName];
+      next[renamed.name] = entry;
+      return next;
+    });
+
+    return renamed;
+  }
+
   function startNewSketch() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const name = `sketch-${stamp}.sketch.json`;
@@ -514,6 +546,19 @@ export function FileWorkspace({
   return (
     <div className="workspace" data-testid="file-workspace">
       <div className="ws-tabs-shell">
+        {onFocusModeChange && focusMode ? (
+          <button
+            type="button"
+            className="icon-only ws-focus-expand"
+            data-testid="workspace-focus-toggle"
+            aria-pressed={focusMode}
+            title={t('workspace.showChat')}
+            aria-label={t('workspace.showChat')}
+            onClick={() => onFocusModeChange(false)}
+          >
+            <Icon name="chevron-right" size={15} />
+          </button>
+        ) : null}
         <div
           ref={tabsBarRef}
           className="ws-tabs-bar"
@@ -604,21 +649,6 @@ export function FileWorkspace({
             );
           })}
         </div>
-        {onFocusModeChange ? (
-          <div className="ws-tabs-actions">
-            <button
-              type="button"
-              className="ws-focus-toggle"
-              data-testid="workspace-focus-toggle"
-              aria-pressed={focusMode}
-              title={focusMode ? t('workspace.showChat') : t('workspace.focusMode')}
-              onClick={() => onFocusModeChange(!focusMode)}
-            >
-              <Icon name={focusMode ? 'comment' : 'zoom-in'} size={13} />
-              <span>{focusMode ? t('workspace.showChat') : t('workspace.focusMode')}</span>
-            </button>
-          </div>
-        ) : null}
       </div>
       <div className="ws-body">
         {/* Keep the failure banner visible across tab switches so the
@@ -652,6 +682,7 @@ export function FileWorkspace({
             onRefreshFiles={onRefreshFiles}
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
+            onRenameFile={handleRename}
             onDeleteFile={(name) => void handleDelete(name)}
             onDeleteFiles={handleDeleteMany}
             onUpload={() => fileInputRef.current?.click()}
@@ -892,6 +923,10 @@ function kindIconName(
 
 function isSketchName(name: string): boolean {
   return name.endsWith('.sketch.json');
+}
+
+function sameFileName(a: string, b: string): boolean {
+  return a === b || a.toLocaleLowerCase() === b.toLocaleLowerCase();
 }
 
 function isLiveArtifactImplementationPath(name: string): boolean {

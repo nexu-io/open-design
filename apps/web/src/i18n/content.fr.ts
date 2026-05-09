@@ -236,6 +236,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   kraken: 'Trading crypto. UI sombre avec accent violet, dashboards riches en données.',
   lamborghini: 'Marque supercar. Surfaces noir profond, accents or, typographie uppercase dramatique.',
   'linear-app': 'Project management. Ultraminimal, précis, accent violet.',
+  loom: 'Messagerie vidéo asynchrone. Primary violet, accent framboise, UI claire et lumineuse, surfaces blanches pour la communication vidéo.',
   lovable: 'Builder full-stack IA. Gradients ludiques, esthétique dev amicale.',
   mastercard: 'Réseau global de paiement. Canvas papier chaud, formes pill orbitales, chaleur éditoriale.',
   meta: 'Tech retail store. Centré photographie, surfaces clair/dark binaires, CTA Meta Blue.',
@@ -273,6 +274,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   theverge:
     'Média tech éditorial. Accents acid mint et ultraviolet, display Manuka, story tiles façon rave flyer.',
   'together-ai': 'Infrastructure IA open-source. Technique, design proche blueprint.',
+  'trading-terminal': 'Interface de trading financier. Terminal data-dense style Bloomberg, UI dark-only.',
   uber: 'Plateforme de mobilité. Noir et blanc francs, type serrée, énergie urbaine.',
   vercel: 'Déploiement frontend. Précision noir et blanc, Geist Font.',
   vodafone: 'Marque télécom globale. Typographie display uppercase monumentale, bandes Vodafone Red.',
@@ -316,6 +318,7 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
@@ -366,13 +369,20 @@ export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
+  '8-bit-orbit-video-template',
+  'digits-fintech-swiss-template',
+  'field-notes-editorial-template',
+  'html-ppt-retro-quarterly-review',
+  'swiss-user-research-video-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'swiss-creative-mode-template',
   'github-dashboard',
+  'after-hours-editorial-template',
 ] as const;
 
 export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
@@ -414,6 +424,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'glassmorphism',
   'gradient',
   'huggingface',
+  'hud',
   'levels',
   'lingo',
   'luxury',

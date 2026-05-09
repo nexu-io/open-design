@@ -32,6 +32,7 @@ import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
   ProjectFile,
+  RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,
@@ -351,7 +352,6 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       if (useExternalBrowser) {
         const opened = await openExternal(json.auth.redirectUrl);
         if (!opened) {
-          void cancelConnectorAuthorization(connectorId);
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       } else if (authWindow) {
@@ -359,7 +359,6 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       } else {
         const redirected = window.open(json.auth.redirectUrl, '_blank');
         if (!redirected) {
-          void cancelConnectorAuthorization(connectorId);
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       }
@@ -554,6 +553,13 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
 
 export type SkillExampleResult =
   | { html: string }
+  // The skill declares a non-HTML preview surface (image / markdown / …)
+  // and the daemon's `/example` endpoint only ships HTML, so calling it
+  // would 404 into a misleading "failed to fetch" state. The modal
+  // renders a calm "no shipped preview" affordance instead. The `kind`
+  // is the raw `od.preview.type` from SKILL.md so future preview kinds
+  // can be picked up by name without a registry change. Issue #897.
+  | { unavailable: true; kind: string }
   | { error: string };
 
 // Returns a discriminated result so callers can distinguish a real
@@ -561,7 +567,18 @@ export type SkillExampleResult =
 // load. Previously this collapsed every failure into `null`, which
 // left the example preview modal stuck at its loading state with no
 // recovery affordance. Issue #860.
-export async function fetchSkillExample(id: string): Promise<SkillExampleResult> {
+//
+// `previewType` is the skill's `od.preview.type` (defaults to `'html'`
+// daemon-side). Anything other than `'html'` short-circuits to an
+// `unavailable` result so we don't fire a network call against a
+// daemon endpoint that only resolves HTML files. Issue #897.
+export async function fetchSkillExample(
+  id: string,
+  previewType: string = 'html',
+): Promise<SkillExampleResult> {
+  if (previewType !== 'html') {
+    return { unavailable: true, kind: previewType };
+  }
   try {
     const resp = await fetch(`/api/skills/${encodeURIComponent(id)}/example`);
     if (!resp.ok) {
@@ -1196,6 +1213,23 @@ export async function deleteProjectFile(
   } catch {
     return false;
   }
+}
+
+export async function renameProjectFile(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<RenameProjectFileResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!resp.ok) {
+    const errorBody = await readApiErrorBody(resp);
+    throw new Error(errorBody.message);
+  }
+  return (await resp.json()) as RenameProjectFileResponse;
 }
 
 export async function openFolderDialog(): Promise<string | null> {

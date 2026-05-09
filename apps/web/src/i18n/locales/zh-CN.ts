@@ -82,6 +82,15 @@ export const zhCN: Dict = {
   'settings.testAgentMissing': '{agentName} 未安装，或不在 PATH 中。',
   'settings.testAgentSpawn': '无法启动 {agentName}：{detail}。',
   'settings.testUnknown': '测试失败：{detail}',
+  'settings.agentInstall.install': '安装',
+  'settings.agentInstall.docs': '文档',
+  'settings.agentInstall.pathHint':
+    '如果你通过 npm 或 Homebrew 安装了 CLI，但仍显示为未安装，请确认该工具的 bin 目录已加入 Open Design daemon 继承的 PATH（在 macOS 上，Terminal 与 GUI 应用的 PATH 可能不同）。请参阅 QUICKSTART.md（“Local agent CLI and PATH” 章节）。',
+  'settings.agentInstall.stepOpenLinks': '在目标代理卡片上打开“安装”或“文档”链接。',
+  'settings.agentInstall.stepAuth':
+    '返回 Open Design 之前，请先在对应 CLI 中完成认证（登录或添加 API 凭据）。',
+  'settings.agentInstall.stepRescan': '在此区域点击“重新扫描”。',
+  'settings.agentInstall.stepSelect': '当代理显示为已安装后，选择该代理卡片。',
   'settings.noAgentsDetected':
     '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen 或 GitHub Copilot CLI 中的一个，然后点击「重新扫描」。',
   'settings.apiSection': 'Anthropic API',
@@ -145,6 +154,10 @@ export const zhCN: Dict = {
   'settings.mediaProviderClearConfirm': '清除已保存的 {name} 设置？您需要再次输入才能使用 {name}。',
   'settings.mediaProviderPlaceholder': '粘贴 API key',
   'settings.mediaProviderBaseUrlPlaceholder': '覆盖默认 Base URL',
+  'settings.mediaProviderReload': '从本地守护进程重新加载',
+  'settings.mediaProviderReloadError': '无法从本地守护进程重新加载媒体提供方设置。',
+  'settings.mediaProviderReloadSuccess': '已从本地守护进程重新加载媒体提供方设置。',
+  'settings.mediaProviderLoadError': '无法从本地守护进程加载媒体提供方设置。当前将使用浏览器中保存的设置。',
   'settings.privacy': '隐私',
   'settings.privacyHint': '与 Open Design 团队共享哪些数据',
   'settings.privacyConsentKicker': '帮助我们改进 Open Design',
@@ -172,6 +185,53 @@ export const zhCN: Dict = {
   'settings.runtimePackaged': '已打包应用',
   'settings.runtimeDevelopment': '开发环境',
   'settings.versionUnavailable': '守护进程离线时无法获取版本详情。',
+
+  // MCP server settings
+  'settings.mcpTitle': 'MCP server',
+  'settings.mcpHint':
+    '让其他仓库中的编码助手（Claude Code、Cursor、VS Code、Antigravity、Zed、Windsurf）读取你的 Open Design 项目。无需先导出 zip，即可将设计拉取到你的应用中。',
+  'settings.mcpDaemonError':
+    '无法连接到本地守护进程以解析安装路径（{error}）。请确保 Open Design 正在运行，然后重新打开此面板。',
+  'settings.mcpBuildDaemon': '请先构建守护进程。',
+  'settings.mcpNodeMissing': 'Node 二进制文件缺失。',
+  'settings.mcpBuildHint':
+    'apps/daemon/dist/cli.js 缺失。请运行 `pnpm --filter @open-design/daemon build` 并刷新。',
+  'settings.mcpMethodCli': 'CLI 命令',
+  'settings.mcpInstructionCli': '在你的终端中运行此命令。',
+  'settings.mcpMethodToml': 'TOML 配置',
+  'settings.mcpInstructionCodex':
+    '将以下配置追加到 {path}。Codex CLI 与 Codex IDE 扩展共享同一配置。',
+  'settings.mcpMethodOneClick': '一键安装',
+  'settings.mcpInstructionCursor':
+    '点击"在 Cursor 中安装"以通过确认对话框安装，或将此 JSON 合并到 {path}。',
+  'settings.mcpDeeplinkInstallCursor': '在 Cursor 中安装',
+  'settings.mcpMethodJson': 'JSON 配置',
+  'settings.mcpInstructionCopilot':
+    '打开命令面板（{shortcut}），运行 "MCP: Open User Configuration"，然后合并此 JSON。Copilot Chat 必须处于 Agent 模式，工具才会显示。',
+  'settings.mcpInstructionAntigravity':
+    '在 Antigravity 中：Agent 面板 "..." 菜单 → MCP Servers → Manage MCP Servers → View raw config。合并此 JSON。',
+  'settings.mcpInstructionZed':
+    '打开 Zed Settings（{shortcut}），然后将此配置合并到顶层对象中。Zed 使用 "context_servers"，而非 "mcpServers"。',
+  'settings.mcpInstructionWindsurf':
+    '打开 {path}（或在 Cascade 中使用 MCPs 图标 → Configure）并合并：',
+  'settings.mcpCopyAria': '复制 MCP 配置片段',
+  'settings.mcpResolvingFailed': '# 解析路径失败，请查看上方错误',
+  'settings.mcpLoadingPaths': '# 正在从本地守护进程加载安装路径…',
+  'settings.mcpCopied': '已复制',
+  'settings.mcpCopy': '复制',
+  'settings.mcpCursorApproval': 'Cursor 会在写入配置前弹出确认对话框。',
+  'settings.mcpRestartNote': '重启客户端以加载新 server。',
+  'settings.mcpRestartDetail':
+    '大多数编辑器仅在启动时加载 MCP server。在 Cursor / VS Code / Antigravity / Windsurf 中，你可以在命令面板中运行 `Developer: Reload Window`，无需完全重启。Zed 和 Claude Code 需要退出并重新打开。',
+  'settings.mcpCapabilitiesTitle': '你的助手可以做什么',
+  'settings.mcpCapabilityRead':
+    '读取或搜索项目中的任意文件（HTML、JSX、CSS、JSON、SVG、Markdown）。',
+  'settings.mcpCapabilityPull':
+    '一次调用拉取设计包：入口文件及其引用的所有 CSS 变量、组件和字体。',
+  'settings.mcpCapabilityDefault':
+    '默认使用你在 Open Design 中打开的项目和文件，因此你可以直接说"在我的应用中构建这个"，无需重复说明是哪个设计。',
+  'settings.mcpRunningNote':
+    'Open Design 必须处于运行状态，MCP 工具调用才能成功。如果你在打开 Open Design 之前启动了编码助手，请重启助手以便它能连接到正在运行的守护进程。',
 
   'entry.tabDesigns': '我的设计',
   'entry.tabExamples': '示例',
@@ -464,6 +524,8 @@ export const zhCN: Dict = {
   'examples.previewModalTitle': '在弹窗中查看完整预览',
   'examples.shareTitle': '分享此示例',
   'examples.shareLoadFirst': '请先悬停以加载预览',
+  'examples.unavailablePlaceholder': '此技能未附带 {kind} 预览样例 — 打开查看详情',
+  'examples.shareUnavailable': '此技能未附带 {kind} 预览样例可分享',
   'examples.shareMenu': '分享 ▾',
   'examples.exportPdfAllSlides': '导出为 PDF（全部幻灯片）',
   'examples.exportPptxLocked': '导出为 PPTX…（请先打开模板）',
@@ -593,6 +655,8 @@ export const zhCN: Dict = {
   'preview.errorTitle': '无法加载此示例。',
   'preview.errorBody': '示例 HTML 加载失败。请确认 Open Design 正在运行后重试。',
   'preview.retry': '重试',
+  'preview.unavailableTitle': '此技能暂未附带预览样例。',
+  'preview.unavailableBody': '此技能用于生成 {kind} 产物 — 请在对话中运行此 Prompt 来生成。',
   'preview.showSidebar': '展开{label}',
   'preview.hideSidebar': '收起{label}',
 

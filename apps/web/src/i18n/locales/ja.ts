@@ -85,6 +85,15 @@ export const ja: Dict = {
   'settings.testAgentMissing': '{agentName} がインストールされていないか、PATH にありません。',
   'settings.testAgentSpawn': '{agentName} を起動できませんでした: {detail}。',
   'settings.testUnknown': 'テストに失敗しました: {detail}',
+  'settings.agentInstall.install': 'インストール',
+  'settings.agentInstall.docs': 'ドキュメント',
+  'settings.agentInstall.pathHint':
+    'npm または Homebrew で CLI をインストールしたのに未インストールのまま表示される場合は、Open Design daemon が引き継ぐ PATH にツールの bin ディレクトリが含まれていることを確認してください（macOS では Terminal と GUI アプリで PATH が異なる場合があります）。QUICKSTART.md（"Local agent CLI and PATH" セクション）を参照してください。',
+  'settings.agentInstall.stepOpenLinks': '利用したいエージェントの「インストール」または「ドキュメント」を開きます。',
+  'settings.agentInstall.stepAuth':
+    'Open Design に戻る前に、ベンダー CLI で認証（サインインまたは API 資格情報の追加）を行います。',
+  'settings.agentInstall.stepRescan': 'このセクションで「再スキャン」をクリックします。',
+  'settings.agentInstall.stepSelect': 'インストール済みとして表示されたらエージェントカードを選択します。',
   'settings.noAgentsDetected':
     'エージェントが検出されませんでした。Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen、または GitHub Copilot CLI のいずれかをインストールして、再スキャンをクリックしてください。',
   'settings.apiSection': 'Anthropic API',
@@ -128,7 +137,7 @@ export const ja: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'カスタム（下に入力）…',
@@ -149,6 +158,10 @@ export const ja: Dict = {
   'settings.mediaProviderClearConfirm': '保存された {name} の設定を削除しますか？{name} を使うには再度入力する必要があります。',
   'settings.mediaProviderPlaceholder': 'APIキーを貼り付け',
   'settings.mediaProviderBaseUrlPlaceholder': 'デフォルトのベース URL を上書き',
+  'settings.mediaProviderReload': 'デーモンから再読み込み',
+  'settings.mediaProviderReloadError': 'ローカルデーモンからメディアプロバイダー設定を再読み込みできませんでした。',
+  'settings.mediaProviderReloadSuccess': 'ローカルデーモンからメディアプロバイダー設定を再読み込みしました。',
+  'settings.mediaProviderLoadError': 'ローカルデーモンからメディアプロバイダー設定を読み込めませんでした。今のところブラウザーに保存された設定を使用します。',
   'settings.privacy': 'Privacy',
   'settings.privacyHint': 'What data is shared with the Open Design team',
   'settings.privacyConsentKicker': 'Help us improve Open Design',
@@ -346,6 +359,8 @@ export const ja: Dict = {
   'examples.previewModalTitle': 'フルプレビューを開く（モーダル）',
   'examples.shareTitle': 'このサンプルを共有',
   'examples.shareLoadFirst': 'プレビューを読み込むためにホバーしてください',
+  'examples.unavailablePlaceholder': '{kind} プレビューは同梱されていません — 詳細は開いて確認',
+  'examples.shareUnavailable': '共有できる {kind} プレビューは同梱されていません',
   'examples.shareMenu': '共有 ▾',
   'examples.exportPdfAllSlides': 'PDFとしてエクスポート（全スライド）',
   'examples.exportPptxLocked': 'PPTXとしてエクスポート…（先にテンプレートを開いてください）',
@@ -478,6 +493,8 @@ export const ja: Dict = {
   'preview.errorTitle': 'この例を読み込めませんでした。',
   'preview.errorBody': '例の HTML を取得できませんでした。Open Design が起動していることを確認して再試行してください。',
   'preview.retry': '再試行',
+  'preview.unavailableTitle': 'このスキルにはプレビューが同梱されていません。',
+  'preview.unavailableBody': 'このスキルは {kind} 出力を生成します — チャットでプロンプトを実行して生成してください。',
   'preview.showSidebar': '{label} を表示',
   'preview.hideSidebar': '{label} を非表示',
 

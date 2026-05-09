@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { useT } from '../i18n';
 
 interface Props {
@@ -14,9 +13,10 @@ interface Props {
  * Anchored to the bottom-right of the viewport (cookie-consent style)
  * so it's prominently visible without blocking the underlying app —
  * the user can move around and read while deciding. The two action
- * buttons share an equal-prominence seg-control so the reject path
- * is not visually de-emphasised, the EDPB equal-prominence requirement
- * under GDPR.
+ * buttons share equal visual prominence so the reject path is not
+ * de-emphasised, matching the EDPB equal-prominence requirement
+ * under GDPR. Neither button is rendered as selected before the user
+ * chooses.
  *
  * Stays mounted until the user picks Share or Don't share — there is
  * no dismiss-without-choice button on purpose. Telemetry decisions
@@ -48,16 +48,15 @@ export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element 
       <p className="hint privacy-consent-banner-footer">{t('settings.privacyConsentFooter')}</p>
 
       <div
-        className="seg-control"
+        className="privacy-consent-actions"
         role="group"
         aria-label={t('settings.privacyConsentKicker')}
-        style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
       >
-        <button type="button" className="seg-btn active" onClick={onShare}>
-          <span className="seg-title">{t('settings.privacyConsentShare')}</span>
+        <button type="button" className="privacy-consent-action" onClick={onShare}>
+          {t('settings.privacyConsentShare')}
         </button>
-        <button type="button" className="seg-btn" onClick={onDecline}>
-          <span className="seg-title">{t('settings.privacyConsentDecline')}</span>
+        <button type="button" className="privacy-consent-action" onClick={onDecline}>
+          {t('settings.privacyConsentDecline')}
         </button>
       </div>
     </div>

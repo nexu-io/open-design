@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { en } from './en';
 
 export const id: Dict = {
+  ...en,
   'common.cancel': 'Batal',
   'common.save': 'Simpan',
   'common.close': 'Tutup',
@@ -82,6 +84,15 @@ export const id: Dict = {
   'settings.testAgentMissing': '{agentName} tidak terpasang atau tidak ada di PATH.',
   'settings.testAgentSpawn': 'Tidak dapat memulai {agentName}: {detail}.',
   'settings.testUnknown': 'Tes gagal: {detail}',
+  'settings.agentInstall.install': 'Instal',
+  'settings.agentInstall.docs': 'Dokumentasi',
+  'settings.agentInstall.pathHint':
+    'Jika Anda memasang CLI dengan npm atau Homebrew tetapi masih tampil sebagai belum terpasang, pastikan direktori bin alat ada di PATH yang diwarisi daemon Open Design (PATH Terminal dan aplikasi GUI bisa berbeda di macOS). Lihat QUICKSTART.md (bagian "Local agent CLI and PATH").',
+  'settings.agentInstall.stepOpenLinks': 'Buka Instal atau Dokumentasi untuk agen pilihan Anda.',
+  'settings.agentInstall.stepAuth':
+    'Lakukan autentikasi di CLI vendor (masuk atau tambahkan kredensial API) sebelum kembali ke Open Design.',
+  'settings.agentInstall.stepRescan': 'Klik Pindai ulang di bagian ini.',
+  'settings.agentInstall.stepSelect': 'Pilih kartu agen setelah statusnya terpasang.',
   'settings.noAgentsDetected':
     'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
   'settings.apiSection': 'Anthropic API',
@@ -145,6 +156,10 @@ export const id: Dict = {
   'settings.mediaProviderClearConfirm': 'Hapus pengaturan {name} yang tersimpan? Anda perlu memasukkannya lagi untuk menggunakan {name}.',
   'settings.mediaProviderPlaceholder': 'Tempel API key',
   'settings.mediaProviderBaseUrlPlaceholder': 'Timpa base URL default',
+  'settings.mediaProviderReload': 'Muat ulang dari daemon',
+  'settings.mediaProviderReloadError': 'Tidak dapat memuat ulang pengaturan penyedia media dari daemon lokal.',
+  'settings.mediaProviderReloadSuccess': 'Pengaturan penyedia media berhasil dimuat ulang dari daemon lokal.',
+  'settings.mediaProviderLoadError': 'Tidak dapat memuat pengaturan penyedia media dari daemon lokal. Untuk sementara menggunakan pengaturan yang tersimpan di browser.',
   'settings.privacy': 'Privacy',
   'settings.privacyHint': 'What data is shared with the Open Design team',
   'settings.privacyConsentKicker': 'Help us improve Open Design',
@@ -563,6 +578,8 @@ export const id: Dict = {
   'examples.previewModalTitle': 'Buka pratinjau penuh',
   'examples.shareTitle': 'Bagikan contoh ini',
   'examples.shareLoadFirst': 'Arahkan kursor dulu untuk memuat pratinjau',
+  'examples.unavailablePlaceholder': 'Tidak ada pratinjau {kind} bawaan — buka untuk lihat detail',
+  'examples.shareUnavailable': 'Tidak ada pratinjau {kind} bawaan untuk dibagikan',
   'examples.shareMenu': 'Bagikan',
   'examples.exportPdfAllSlides': 'Ekspor PDF (semua slide)',
   'examples.exportPptxLocked': 'Ekspor PPTX... (buka templat dulu)',
@@ -690,6 +707,8 @@ export const id: Dict = {
   'preview.errorTitle': 'Tidak dapat memuat contoh ini.',
   'preview.errorBody': 'Pengambilan HTML contoh gagal. Pastikan Open Design berjalan, lalu coba lagi.',
   'preview.retry': 'Coba lagi',
+  'preview.unavailableTitle': 'Tidak ada pratinjau bawaan untuk skill ini.',
+  'preview.unavailableBody': 'Skill ini menghasilkan keluaran {kind} — jalankan prompt di chat untuk membuatnya.',
   'preview.showSidebar': 'Tampilkan {label}',
   'preview.hideSidebar': 'Sembunyikan {label}',
 

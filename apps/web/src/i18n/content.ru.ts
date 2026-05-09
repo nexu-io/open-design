@@ -236,6 +236,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   kraken: 'Криптотрейдинг. Темный UI с фиолетовым акцентом, насыщенные данными дашборды.',
   lamborghini: 'Бренд суперкаров. Абсолютно черные поверхности, золотые акценты, драматичная капительная типографика.',
   'linear-app': 'Управление проектами. Ультраминимализм, точность, фиолетовый акцент.',
+  loom: 'Асинхронные видеосообщения. Фиолетовый primary, малиновый акцент, светлый UI с белыми поверхностями для видеосвязи.',
   lovable: 'AI-конструктор full-stack-продуктов. Игривые градиенты, дружелюбная эстетика для разработчиков.',
   mastercard: 'Глобальная платежная сеть. Теплое кремовое полотно, орбитальные pill-формы, редакционное тепло.',
   meta: 'Тех-ритейл. Опора на фотографию, бинарные светлые/темные поля, CTA в Meta Blue.',
@@ -273,6 +274,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   theverge:
     'Тех-издание. Акценты acid mint и ultraviolet, display Manuka, карточки сюжетов в духе rave-flyer.',
   'together-ai': 'Open-source AI-инфраструктура. Технический язык, дизайн в духе blueprint.',
+  'trading-terminal': 'Финансовый терминал. Data-dense интерфейс в стиле Bloomberg, только темный режим.',
   uber: 'Платформа мобильности. Сильный черно-белый контраст, узкая типографика, городская энергия.',
   vercel: 'Frontend-деплой. Черно-белая точность, шрифт Geist.',
   vodafone: 'Глобальный телеком-бренд. Монументальная display-типографика в верхнем регистре, красные chapter bands Vodafone.',
@@ -316,6 +318,7 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
@@ -366,13 +369,20 @@ export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
   // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
+  '8-bit-orbit-video-template',
+  'digits-fintech-swiss-template',
+  'field-notes-editorial-template',
+  'html-ppt-retro-quarterly-review',
+  'swiss-user-research-video-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'swiss-creative-mode-template',
   'github-dashboard',
+  'after-hours-editorial-template',
 ] as const;
 
 export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
@@ -414,6 +424,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'glassmorphism',
   'gradient',
   'huggingface',
+  'hud',
   'levels',
   'lingo',
   'luxury',

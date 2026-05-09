@@ -13,6 +13,7 @@ declare global {
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
+import { isStoredMediaProviderEntryPresent } from '../state/config';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -1755,7 +1756,8 @@ function MediaModelCards({
     const provider = findProvider(model.provider);
     const providerId = provider?.id ?? model.provider;
     const entry = mediaProviders?.[providerId];
-    const configured = provider?.credentialsRequired === false || Boolean(entry?.apiKey.trim() || entry?.baseUrl.trim());
+    const configured = provider?.credentialsRequired === false
+      || isStoredMediaProviderEntryPresent(entry);
     let group = groups.find((g) => g.providerId === providerId);
     if (!group) {
       group = {
