@@ -316,6 +316,7 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',

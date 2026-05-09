@@ -365,6 +365,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
