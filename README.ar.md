@@ -45,7 +45,7 @@
 
 يرتكز OD على أربعة مشاريع مفتوحة المصدر:
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — بوصلة فلسفة التصميم. سير عمل Junior-Designer، بروتوكول الأصول البصرية المؤلف من 5 خطوات، checklist مكافحة AI-slop، التقييم الذاتي خماسي الأبعاد، وفكرة "5 مدارس × 20 فلسفة تصميم" خلف منتقي الاتجاه — كل ذلك مكثّف في [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts).
+- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — بوصلة فلسفة التصميم. سير عمل Junior-Designer، بروتوكول الأصول البصرية المؤلف من 5 خطوات، checklist مكافحة AI-slop، التقييم الذاتي خماسي الأبعاد، وفكرة "5 مدارس × 20 فلسفة تصميم" خلف منتقي الاتجاه — كل ذلك مكثّف في [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts).
 - [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — وضع الـ deck. مُضمَّن حرفياً تحت [`skills/guizang-ppt/`](skills/guizang-ppt/) مع الحفاظ على LICENSE الأصلية؛ تخطيطات بأسلوب المجلّات، WebGL hero، و checklist بمستويات P0/P1/P2.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — نجم UX الشمالي وأقرب أقراننا. أوّل بديل مفتوح المصدر لـ Claude-Design. اقتبسنا منه حلقة الـ artifact المُتدفّق، نمط معاينة iframe المعزول (مع React 18 + Babel مضمّنين)، لوحة الوكيل الحيّة (todos + tool calls + إمكانية المقاطعة)، وقائمة التصدير بخمسة صيغ (HTML / PDF / PPTX / ZIP / Markdown). تعمّدنا التباعد في الشكل العام — هم تطبيق سطح مكتب Electron يضمّ [`pi-ai`][piai]، ونحن تطبيق ويب + daemon محلي يفوّض المهمة لـ CLI الموجودة لديك.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — معمارية الـ daemon ومنظومة التشغيل. اكتشاف الوكلاء بمسح `PATH`، والـ daemon المحلي بوصفه العملية المميَّزة الوحيدة، ورؤية "الوكيل كزميل فريق".
@@ -59,7 +59,7 @@
 | **أنظمة تصميم مدمجة** | **129** — 2 starters مكتوبة يدوياً + 70 نظاماً للمنتجات (Linear، Stripe، Vercel، Airbnb، Tesla، Notion، Anthropic، Apple، Cursor، Supabase، Figma، Xiaohongshu، …) من [`awesome-design-md`][acd2]، إضافة إلى 57 design skill من [`awesome-design-skills`][ads] أُضيفت مباشرة تحت `design-systems/` |
 | **Skills مدمجة** | **31** — 27 في وضع `prototype` (web-prototype، saas-landing، dashboard، mobile-app، gamified-app، social-carousel، magazine-poster، dating-web، sprite-animation، motion-frames، critique، tweaks، wireframe-sketch، pm-spec، eng-runbook، finance-report، hr-onboarding، invoice، kanban-board، team-okrs، …) + 4 في وضع `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). مُجمَّعة في الـ picker حسب `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **توليد الوسائط** | تشتغل أسطح الصورة والفيديو والصوت بالتوازي مع حلقة التصميم. **gpt-image-2** (Azure / OpenAI) للملصقات والصور الرمزية والإنفوغرافيك وخرائط المدن المرسومة · **Seedance 2.0** (ByteDance) لـ 15 ثانية t2v + i2v بطابع سينمائي · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) لتحويل HTML→MP4 (إعلانات منتجات، طباعة حركية، رسومات بيانية، بطاقات اجتماعية، Logo outros). معرض **93** برومبت جاهزة للاستنساخ — 43 لـ gpt-image-2 + 39 لـ Seedance + 11 لـ HyperFrames — تحت [`prompt-templates/`](prompt-templates/) مع صور معاينة وبيانات المصدر. نفس واجهة الـ chat كما في الكود؛ المخرجات ملفات `.mp4` / `.png` حقيقية تنزل في مساحة عمل المشروع. |
-| **الاتجاهات البصرية** | 5 مدارس منتقاة (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — كل واحدة تأتي بلوحة OKLch حتميّة + font stack ([`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)) |
+| **الاتجاهات البصرية** | 5 مدارس منتقاة (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — كل واحدة تأتي بلوحة OKLch حتميّة + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **إطارات الأجهزة** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — دقيقة على مستوى البكسل، مُشتركة عبر الـ skills تحت [`assets/frames/`](assets/frames/) |
 | **Agent runtime** | الـ daemon المحلي يُشغّل CLI داخل مجلد مشروعك — يحصل الوكيل على أدوات `Read` / `Write` / `Bash` / `WebFetch` حقيقية على نظام ملفات حقيقي، مع fallbacks على Windows لتجاوز قيود `ENAMETOOLONG` (stdin / ملف برومبت مؤقت) في كل adapter |
 | **الاستيراد** | اسحب ملف ZIP مُصدَّر من [Claude Design][cd] إلى مربّع الترحيب — `POST /api/import/claude-design` يفكّه إلى مشروع حقيقي ليُكمل وكيلك من حيث توقّف Anthropic |
@@ -256,7 +256,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
 ```
 
-كل طبقة قابلة للتركيب. كل طبقة ملف يمكنك تعديله. اقرأ [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) و [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) لرؤية العقد الحقيقي.
+كل طبقة قابلة للتركيب. كل طبقة ملف يمكنك تعديله. اقرأ [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) و [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) لرؤية العقد الحقيقي.
 
 ## المعمارية
 
@@ -567,7 +567,7 @@ open-design/
 | Brutalist | خشن، طباعة عملاقة، بدون ظلال، تفاصيل قاسية | Bloomberg Businessweek · Achtung |
 | Soft warm | كريم، تباين منخفض، ألوان خوخية محايدة | Notion marketing · Apple Health |
 
-المواصفات الكاملة → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts).
+المواصفات الكاملة → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts).
 
 ## توليد الوسائط
 
@@ -657,7 +657,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 
 ## ميكانيكا مكافحة AI-slop
 
-كل المنظومة أدناه هي playbook الخاص بـ [`huashu-design`](https://github.com/alchaincyf/huashu-design)، نُقل إلى مكدّس برومبت OD وأصبح قابلاً للإنفاذ لكل skill عبر pre-flight لملفات side. اقرأ [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) للاطّلاع على الصياغة الحيّة:
+كل المنظومة أدناه هي playbook الخاص بـ [`huashu-design`](https://github.com/alchaincyf/huashu-design)، نُقل إلى مكدّس برومبت OD وأصبح قابلاً للإنفاذ لكل skill عبر pre-flight لملفات side. اقرأ [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) للاطّلاع على الصياغة الحيّة:
 
 - **نموذج الأسئلة أوّلاً.** الجولة الأولى `<question-form>` فقط — لا تفكير، لا أدوات، لا سرد. يختار المستخدم الافتراضيات بسرعة الـ radio.
 - **استخراج brand-spec.** حين يُرفق المستخدم لقطة شاشة أو URL، يُجري الوكيل بروتوكولاً من خمس خطوات (locate · download · grep hex · تدوين `brand-spec.md` · vocalise) قبل كتابة CSS. **لا يخمّن ألوان الهوية من الذاكرة أبداً.**
@@ -732,7 +732,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 | المشروع | الدور هنا |
 |---|---|
 | [`Claude Design`][cd] | المنتج المغلق المصدر الذي يُمثّل هذا المستودع البديل المفتوح له. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | نواة فلسفة التصميم. سير عمل Junior-Designer، بروتوكول الأصول البصرية المؤلف من 5 خطوات، checklist مكافحة AI-slop، التقييم الذاتي خماسي الأبعاد، ومكتبة "5 مدارس × 20 فلسفة تصميم" خلف منتقي الاتجاه — كلّها مكثّفة في [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) و [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts). |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | نواة فلسفة التصميم. سير عمل Junior-Designer، بروتوكول الأصول البصرية المؤلف من 5 خطوات، checklist مكافحة AI-slop، التقييم الذاتي خماسي الأبعاد، ومكتبة "5 مدارس × 20 فلسفة تصميم" خلف منتقي الاتجاه — كلّها مكثّفة في [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) و [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | skill Magazine-web-PPT المضمَّن حرفياً تحت [`skills/guizang-ppt/`](skills/guizang-ppt/) مع الحفاظ على LICENSE الأصلية. الافتراضي لوضع deck. ثقافة checklist بمستويات P0/P1/P2 مستعارة لكل skill أخرى. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | معمارية الـ daemon + adapter. اكتشاف الوكلاء بمسح PATH، الـ daemon المحلي بوصفه العملية المميَّزة الوحيدة، ورؤية "الوكيل كزميل فريق". نتبنّى النموذج، لا نضمّ الكود. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | أوّل بديل مفتوح المصدر لـ Claude-Design، وأقرب أقراننا. أنماط UX المُتبنّاة: حلقة الـ artifact المتدفّقة، معاينة iframe المعزولة (مع React 18 + Babel مضمّنين)، لوحة الوكيل الحيّة (todos + tool calls + قابلة للمقاطعة)، قائمة التصدير بخمس صيغ (HTML/PDF/PPTX/ZIP/Markdown)، مركز تخزين محلي أوّلاً، حقن الذوق عبر `SKILL.md`، والتمرير الأوّل لتعليقات comment-mode على المعاينة. أنماط UX لا تزال على roadmap لدينا: موثوقية surgical-edit الكاملة ولوحة tweaks يطلقها الذكاء. **نتعمّد عدم ضمّ [`pi-ai`][piai]** — open-codesign يحزمه كـ agent runtime؛ نحن نفوّض لأيّ CLI لدى المستخدم. |
@@ -789,7 +789,7 @@ Issues و PRs و skills جديدة وأنظمة تصميم جديدة، كلّه
 شكراً لكلّ من ساعد في دفع Open Design للأمام — بكود، بوثائق، بملاحظات، بـ skills جديدة، بأنظمة تصميم جديدة، أو حتى بـ issue حادّة. كلّ مساهمة حقيقية تهمّ، والجدار أدناه أسهل طريقة لقول ذلك علناً.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-09" alt="Open Design contributors" />
 </a>
 
 إن شحنت أوّل PR — مرحباً. تصنيف [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) هو نقطة الدخول.
@@ -806,9 +806,9 @@ Issues و PRs و skills جديدة وأنظمة تصميم جديدة، كلّه
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-09" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
   </picture>
 </a>
 

@@ -476,17 +476,34 @@ function renderConnectorConnectedHtml(connectorId: string): string {
           closeButton.textContent = 'Close this tab manually';
           hint.textContent = 'Your browser blocked automatic closing. You can close this tab and return to Open Design.';
         }
+        function hasLiveOpener() {
+          try {
+            return Boolean(window.opener) && !window.opener.closed;
+          } catch {
+            return false;
+          }
+        }
         function requestClose() {
+          // window.close() is silently rejected by browsers when the tab
+          // was not opened by a script (no opener), so trying it from a
+          // direct navigation always looks like the button "did nothing".
+          // Skip the no-op call and surface the manual-close instructions
+          // immediately so the click visibly produces feedback. Issue #669.
+          if (!hasLiveOpener()) {
+            showManualCloseHint();
+            return;
+          }
           try {
             window.close();
           } finally {
-            window.setTimeout(() => {
-              if (document.visibilityState === 'visible') showManualCloseHint();
-            }, 250);
+            // If the page is still alive after the close attempt, the
+            // browser blocked it. Update the hint unconditionally; if
+            // close did succeed the page is unloading and this never runs.
+            window.setTimeout(showManualCloseHint, 400);
           }
         }
         try {
-          if (window.opener && !window.opener.closed) {
+          if (hasLiveOpener()) {
             window.opener.postMessage(message, '*');
             window.setTimeout(requestClose, 900);
           } else {
@@ -527,7 +544,10 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
       const refresh = typeof req.query.refresh === 'string'
         ? ['1', 'true', 'yes'].includes(req.query.refresh.toLowerCase())
         : false;
-      res.json(await service.listConnectorDiscovery({ refresh }));
+      const hydrateTools = typeof req.query.hydrateTools === 'string'
+        ? ['1', 'true', 'yes'].includes(req.query.hydrateTools.toLowerCase())
+        : false;
+      res.json(await service.listConnectorDiscovery({ refresh, hydrateTools }));
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
     }
@@ -545,7 +565,33 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
+      const hydrateTools = typeof req.query.hydrateTools === 'string'
+        ? ['1', 'true', 'yes'].includes(req.query.hydrateTools.toLowerCase())
+        : false;
+      if (hydrateTools) {
+        const parsedLimit = typeof req.query.toolsLimit === 'string' ? Number.parseInt(req.query.toolsLimit, 10) : 50;
+        const toolsLimit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 1000) : 50;
+        const toolsCursor = typeof req.query.toolsCursor === 'string' && req.query.toolsCursor.trim().length > 0 ? req.query.toolsCursor : undefined;
+        res.json({ connector: await service.getPreviewConnector(connectorId, { toolsLimit, ...(toolsCursor === undefined ? {} : { toolsCursor }) }) });
+        return;
+      }
       res.json({ connector: await service.getConnector(connectorId) });
+    } catch (err) {
+      sendConnectorRouteError(res, err, options.sendApiError);
+    }
+  });
+
+  app.post('/api/connectors/auth-configs/prepare', requireLocalDaemonRequest, async (req: Request, res: Response) => {
+    try {
+      const body = isPlainObject(req.body) ? req.body : {};
+      const connectorIds = Array.isArray(body.connectorIds)
+        ? body.connectorIds.filter((connectorId): connectorId is string => typeof connectorId === 'string')
+        : [];
+      if (connectorIds.length === 0) {
+        options.sendApiError(res, 400, 'VALIDATION_FAILED', 'connectorIds must contain at least one connector id');
+        return;
+      }
+      res.json(await service.prepareAuthConfigs(connectorIds));
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
     }
@@ -562,7 +608,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
         options.sendApiError(res, 400, 'VALIDATION_FAILED', 'credentials must be an object');
         return;
       }
-      const definition = await service.getDefinition(connectorId);
+      const definition = service.getFastDefinition(connectorId) ?? await service.getDefinition(connectorId);
       if (definition?.authentication === 'composio' && credentials !== undefined) {
         options.sendApiError(res, 400, 'VALIDATION_FAILED', 'Composio connector credentials can only be stored through OAuth callback completion');
         return;
@@ -595,6 +641,16 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       await service.completeComposioConnection({ connectorId, state, ...(providerConnectionId === undefined ? {} : { providerConnectionId }), ...(status === undefined ? {} : { status }) });
       res.type('html').send(renderConnectorConnectedHtml(connectorId));
+    } catch (err) {
+      sendConnectorRouteError(res, err, options.sendApiError);
+    }
+  });
+
+  app.post('/api/connectors/:connectorId/authorization/cancel', requireLocalDaemonRequest, async (req: Request, res: Response) => {
+    try {
+      const connectorId = req.params.connectorId;
+      if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
+      res.json({ connector: await service.cancelPendingAuthorization(connectorId) });
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
     }

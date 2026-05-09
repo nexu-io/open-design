@@ -71,6 +71,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   CLICK: "click",
   CONSOLE: "console",
   EVAL: "eval",
+  EXPORT_PDF: "export-pdf",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
   STATUS: "status",
@@ -157,12 +158,28 @@ export type DesktopClickResult = {
   found: boolean;
 };
 
+export type DesktopExportPdfInput = {
+  baseHref?: string;
+  deck: boolean;
+  defaultFilename: string;
+  html: string;
+  title: string;
+};
+
+export type DesktopExportPdfResult = {
+  canceled?: boolean;
+  error?: string;
+  ok: boolean;
+  path?: string;
+};
+
 export type SidecarStatusMessage = { type: typeof SIDECAR_MESSAGES.STATUS };
 export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
 export type DesktopClickMessage = { input: DesktopClickInput; type: typeof SIDECAR_MESSAGES.CLICK };
+export type DesktopExportPdfMessage = { input: DesktopExportPdfInput; type: typeof SIDECAR_MESSAGES.EXPORT_PDF };
 
 export type DaemonSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
@@ -172,7 +189,8 @@ export type DesktopSidecarMessage =
   | DesktopEvalMessage
   | DesktopScreenshotMessage
   | DesktopConsoleMessage
-  | DesktopClickMessage;
+  | DesktopClickMessage
+  | DesktopExportPdfMessage;
 
 export type ShutdownResult = {
   accepted: true;
@@ -336,6 +354,23 @@ function normalizeDesktopClickInput(input: unknown): DesktopClickInput {
   return { selector: normalizeNonEmptyString(value.selector, "desktop click selector") };
 }
 
+function normalizeBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
+  return value;
+}
+
+function normalizeDesktopExportPdfInput(input: unknown): DesktopExportPdfInput {
+  const value = assertObject(input, "desktop PDF export input");
+  assertKnownKeys(value, ["baseHref", "deck", "defaultFilename", "html", "title"], "desktop PDF export input");
+  return {
+    ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop PDF export baseHref") }),
+    deck: normalizeBoolean(value.deck, "desktop PDF export deck"),
+    defaultFilename: normalizeNonEmptyString(value.defaultFilename, "desktop PDF export defaultFilename"),
+    html: normalizeNonEmptyString(value.html, "desktop PDF export html"),
+    title: normalizeNonEmptyString(value.title, "desktop PDF export title"),
+  };
+}
+
 function normalizeMessageType(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, `${label} type must be a non-empty string`);
@@ -381,6 +416,9 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.CLICK:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopClickInput(value.input), type };
+    case SIDECAR_MESSAGES.EXPORT_PDF:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopExportPdfInput(value.input), type };
     default:
       throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown desktop sidecar message: ${type}`);
   }

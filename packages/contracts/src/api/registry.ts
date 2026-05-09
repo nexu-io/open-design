@@ -52,7 +52,7 @@ export interface SkillSummary {
   // resolves the parent for system-prompt composition and "Use this
   // prompt" fast-create on a derived card still composes the parent's
   // SKILL.md body.
-  aggregatesExamples?: boolean;
+  aggregatesExamples: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {

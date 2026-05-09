@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Design-system registry. Scans <projectRoot>/design-systems/* for DESIGN.md
 // files. Title comes from the first H1. Category comes from a
 // `> Category: <name>` blockquote line beneath the H1. Summary is the first
@@ -7,8 +6,22 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-export async function listDesignSystems(root) {
-  const out = [];
+export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
+
+export type DesignSystemSummary = {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  swatches: string[];
+  surface: DesignSystemSurface;
+  body: string;
+};
+
+type ColorToken = { name: string; value: string };
+
+export async function listDesignSystems(root: string): Promise<DesignSystemSummary[]> {
+  const out: DesignSystemSummary[] = [];
   let entries = [];
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -40,7 +53,7 @@ export async function listDesignSystems(root) {
   return out;
 }
 
-export async function readDesignSystem(root, id) {
+export async function readDesignSystem(root: string, id: string): Promise<string | null> {
   const file = path.join(root, id, 'DESIGN.md');
   try {
     return await readFile(file, 'utf8');
@@ -49,7 +62,7 @@ export async function readDesignSystem(root, id) {
   }
 }
 
-function summarize(raw) {
+function summarize(raw: string): string {
   const lines = raw.split(/\r?\n/);
   const firstH1 = lines.findIndex((l) => /^#\s+/.test(l));
   if (firstH1 === -1) return '';
@@ -64,23 +77,27 @@ function summarize(raw) {
   return window.split(/\n\n/)[0]?.slice(0, 240) ?? '';
 }
 
-function extractCategory(raw) {
+function extractCategory(raw: string): string | undefined {
   const m = /^>\s*Category:\s*(.+?)\s*$/im.exec(raw);
   return m?.[1];
 }
 
-const KNOWN_SURFACES = new Set(['web', 'image', 'video', 'audio']);
-function extractSurface(raw) {
+const KNOWN_SURFACES = new Set<DesignSystemSurface>(['web', 'image', 'video', 'audio']);
+function extractSurface(raw: string): DesignSystemSurface {
   const m = /^>\s*Surface:\s*(.+?)\s*$/im.exec(raw);
   if (!m) return 'web';
-  const v = m[1].trim().toLowerCase();
-  return KNOWN_SURFACES.has(v) ? v : 'web';
+  const v = m[1]?.trim().toLowerCase();
+  return isDesignSystemSurface(v) ? v : 'web';
+}
+
+function isDesignSystemSurface(value: string | undefined): value is DesignSystemSurface {
+  return value !== undefined && KNOWN_SURFACES.has(value as DesignSystemSurface);
 }
 
 // Strip boilerplate like "Design System Inspired by Cohere" → "Cohere" so
 // the picker dropdown reads cleanly. Hand-authored titles that don't match
 // the pattern (e.g. "Neutral Modern") pass through unchanged.
-function cleanTitle(raw) {
+function cleanTitle(raw: string): string {
   return raw
     .replace(/^Design System (Inspired by|for)\s+/i, '')
     .trim();
@@ -99,10 +116,10 @@ function cleanTitle(raw) {
  * @param {string} raw  Markdown body of DESIGN.md
  * @returns {string[]}  Up to 4 hex strings; [] if extraction fails.
  */
-function extractSwatches(raw) {
-  const colors = [];
-  const seen = new Set();
-  function push(name, value) {
+function extractSwatches(raw: string): string[] {
+  const colors: ColorToken[] = [];
+  const seen = new Set<string>();
+  function push(name: string, value: string): void {
     const cleanName = name.replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
     const v = normalizeHex(value);
     if (!v || cleanName.length > 60) return;
@@ -117,20 +134,20 @@ function extractSwatches(raw) {
   // either position around the closing `**`.
   const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
   let m;
-  while ((m = reA.exec(raw)) !== null) push(m[1], m[2]);
+  while ((m = reA.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
   // Form B: "**Stripe Purple** (`#533afd`)"
   const reB = /\*\*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\*\*\s*\(?\s*`?(#[0-9a-fA-F]{3,8})/g;
-  while ((m = reB.exec(raw)) !== null) push(m[1], m[2]);
+  while ((m = reB.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
   if (colors.length === 0) return [];
 
-  function pick(hints) {
+  function pick(hints: string[]): string | null {
     for (const h of hints) {
       const found = colors.find((c) => c.name.includes(h));
       if (found) return found.value;
     }
     return null;
   }
-  function isNeutral(hex) {
+  function isNeutral(hex: string): boolean {
     if (!/^#[0-9a-f]{6}$/.test(hex)) return false;
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -159,11 +176,11 @@ function extractSwatches(raw) {
   return [bg, support, fg, accent];
 }
 
-function normalizeHex(raw) {
+function normalizeHex(raw: string): string | null {
   if (typeof raw !== 'string') return null;
   const m = /^#([0-9a-fA-F]{3,8})$/.exec(raw.trim());
   if (!m) return null;
-  let hex = m[1];
+  let hex = m[1] ?? '';
   if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
   if (hex.length === 4) hex = hex.split('').map((c) => c + c).join('').slice(0, 8);
   return '#' + hex.toLowerCase();

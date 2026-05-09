@@ -1,4 +1,3 @@
-// @ts-nocheck
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,7 +29,26 @@ interface InstallInfoOpts {
   dataDir: string;
 }
 
-function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpts) {
+interface InstallInfoPayload {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  daemonUrl: string | null;
+  platform: NodeJS.Platform;
+  cliExists: boolean;
+  nodeExists: boolean;
+  buildHint: string | null;
+}
+
+interface InstallInfoApp extends express.Express {
+  _resolveCalls: () => number;
+}
+
+async function readInstallInfo(res: Response): Promise<InstallInfoPayload> {
+  return (await res.json()) as InstallInfoPayload;
+}
+
+function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpts): InstallInfoApp {
   const app = express();
 
   const TTL_MS = 5000;
@@ -80,12 +98,13 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
   });
 
   // Test-only escape hatch so assertions can prove the cache cold-paths.
-  (app as any)._resolveCalls = () => resolveCalls;
-  return app;
+  const typedApp = app as InstallInfoApp;
+  typedApp._resolveCalls = () => resolveCalls;
+  return typedApp;
 }
 
 interface Harness {
-  app: express.Express;
+  app: InstallInfoApp;
   server: http.Server;
   port: number;
   baseUrl: string;
@@ -118,7 +137,7 @@ describe('GET /api/mcp/install-info', () => {
   let dataDir: string;
   // Tests share the tmpDir but each top-level case spins its own
   // app instance so different env configurations stay isolated.
-  let nonSidecar: { server: http.Server; port: number; app: express.Express };
+  let nonSidecar: { server: http.Server; port: number; app: InstallInfoApp };
 
   beforeAll(
     () =>
@@ -161,7 +180,7 @@ describe('GET /api/mcp/install-info', () => {
     const { port } = nonSidecar;
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await readInstallInfo(res);
     expect(body.command).toBe(process.execPath);
     // Direct `od` launches have no IPC socket; the snippet bakes the
     // URL so the spawned `od mcp` reaches the right port without any
@@ -180,7 +199,7 @@ describe('GET /api/mcp/install-info', () => {
   it('pins OD_DATA_DIR in the env so IDE-spawned MCP processes write to the daemon data dir (issue #848)', async () => {
     const { port } = nonSidecar;
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
-    const body = await res.json();
+    const body = await readInstallInfo(res);
     expect(body.env).toBeDefined();
     expect(body.env.OD_DATA_DIR).toBe(dataDir);
   });
@@ -221,11 +240,11 @@ describe('GET /api/mcp/install-info', () => {
 
   it('caches the payload across rapid calls', async () => {
     const { port, app } = nonSidecar;
-    const before = (app as any)._resolveCalls();
+    const before = app._resolveCalls();
     await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
     await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
     await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
-    const after = (app as any)._resolveCalls();
+    const after = app._resolveCalls();
     // 3 rapid calls add at most 1 fresh resolve, not 3.
     expect(after - before).toBeLessThanOrEqual(1);
   });
@@ -241,7 +260,7 @@ describe('GET /api/mcp/install-info', () => {
     );
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
-      const body = await res.json();
+      const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
       // Default namespace + default IPC base means the spawned `od mcp`
       // can derive the right socket without any sidecar env hints. The
@@ -263,7 +282,7 @@ describe('GET /api/mcp/install-info', () => {
     );
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
-      const body = await res.json();
+      const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
       // Without this propagation the MCP client would launch `od mcp`
       // with no namespace env, fall back to "default", and miss the
@@ -289,7 +308,7 @@ describe('GET /api/mcp/install-info', () => {
     );
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
-      const body = await res.json();
+      const body = await readInstallInfo(res);
       expect(body.env).toEqual({
         OD_DATA_DIR: dataDir,
         [SIDECAR_ENV.NAMESPACE]: 'foo',

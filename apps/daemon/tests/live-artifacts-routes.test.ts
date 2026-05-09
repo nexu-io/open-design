@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -10,18 +9,33 @@ import { startServer } from '../src/server.js';
 import { connectorService, ConnectorServiceError } from '../src/connectors/service.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../src/tool-tokens.js';
 
+type StartedServer = { server: http.Server; url: string };
+type JsonObject = Record<string, any>;
+type JsonFetchResult<TBody extends JsonObject = JsonObject> = { status: number; body: TBody };
+type TextFetchResult = { status: number; headers: Headers; body: string };
+type RawHttpJsonFetchResult<TBody extends JsonObject = JsonObject> = {
+  status: number | undefined;
+  headers: http.IncomingHttpHeaders;
+  body: TBody;
+};
+type ProjectEvent = { event: string; data: any };
+type ProjectEventStream = {
+  waitFor(predicate: (event: ProjectEvent) => boolean, timeoutMs?: number): Promise<ProjectEvent>;
+  close(): Promise<void>;
+};
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
 const serverRuntimeDataRoot = process.env.OD_DATA_DIR
   ? path.resolve(projectRoot, process.env.OD_DATA_DIR)
   : path.join(projectRoot, '.od');
 
-let server;
-let baseUrl;
-const projectIds = [];
+let server: http.Server | undefined;
+let baseUrl: string;
+const projectIds: string[] = [];
 
 beforeEach(async () => {
-  const started = await startServer({ port: 0, returnServer: true });
+  const started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
   server = started.server;
   baseUrl = started.url;
 });
@@ -30,7 +44,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await new Promise((resolve, reject) => {
     if (!server) return resolve(undefined);
-    server.close((error) => (error ? reject(error) : resolve(undefined)));
+    server.close((error?: Error) => (error ? reject(error) : resolve(undefined)));
   });
   server = undefined;
   toolTokenRegistry.clear();
@@ -48,6 +62,10 @@ function uniqueProjectId() {
   return id;
 }
 
+function readAutoSafety(reason = 'test read-only connector fixture') {
+  return { sideEffect: 'read' as const, approval: 'auto' as const, reason };
+}
+
 function validCreateInput(title = 'Tool Route Live Artifact') {
   return {
     title,
@@ -62,26 +80,29 @@ function validCreateInput(title = 'Tool Route Live Artifact') {
   };
 }
 
-async function jsonFetch(url, init) {
+async function jsonFetch<TBody extends JsonObject = JsonObject>(url: string | URL, init?: RequestInit): Promise<JsonFetchResult<TBody>> {
   const response = await fetch(url, init);
-  return { status: response.status, body: await response.json() };
+  return { status: response.status, body: (await response.json()) as TBody };
 }
 
-async function textFetch(url, init) {
+async function textFetch(url: string | URL, init?: RequestInit): Promise<TextFetchResult> {
   const response = await fetch(url, init);
   return { status: response.status, headers: response.headers, body: await response.text() };
 }
 
-async function createProject(projectId) {
+async function createProject(projectId: string): Promise<JsonFetchResult> {
   const response = await fetch(`${baseUrl}/api/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: projectId, name: projectId }),
   });
-  return { status: response.status, body: await response.json() };
+  return { status: response.status, body: (await response.json()) as JsonObject };
 }
 
-async function rawHttpJsonFetch(url, { headers = {}, method = 'GET' } = {}) {
+async function rawHttpJsonFetch<TBody extends JsonObject = JsonObject>(
+  url: string,
+  { headers = {}, method = 'GET' }: { headers?: http.OutgoingHttpHeaders; method?: string } = {},
+): Promise<RawHttpJsonFetchResult<TBody>> {
   const parsed = new URL(url);
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -100,7 +121,7 @@ async function rawHttpJsonFetch(url, { headers = {}, method = 'GET' } = {}) {
         });
         res.on('end', () => {
           try {
-            resolve({ status: res.statusCode, headers: res.headers, body: JSON.parse(body) });
+            resolve({ status: res.statusCode, headers: res.headers, body: JSON.parse(body) as TBody });
           } catch (error) {
             reject(error);
           }
@@ -112,9 +133,9 @@ async function rawHttpJsonFetch(url, { headers = {}, method = 'GET' } = {}) {
   });
 }
 
-async function writeProjectJson(projectId, name, value) {
+async function writeProjectJson(projectId: string, name: string, value: JsonObject): Promise<void> {
   const candidates = [path.join(serverRuntimeDataRoot, 'projects', projectId)];
-  let lastError;
+  let lastError: unknown;
   let wrote = false;
   for (const dir of candidates) {
     try {
@@ -129,7 +150,7 @@ async function writeProjectJson(projectId, name, value) {
   throw lastError;
 }
 
-async function openProjectEvents(projectId) {
+async function openProjectEvents(projectId: string): Promise<ProjectEventStream> {
   const response = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}/events`, {
     headers: { Accept: 'text/event-stream' },
   });
@@ -140,7 +161,7 @@ async function openProjectEvents(projectId) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  const events = [];
+  const events: ProjectEvent[] = [];
 
   const pump = (async () => {
     while (true) {
@@ -153,7 +174,7 @@ async function openProjectEvents(projectId) {
         buffer = buffer.slice(boundary + 2);
         boundary = buffer.indexOf('\n\n');
         if (!raw.trim() || raw.startsWith(':')) continue;
-        const evt = { event: 'message', data: '' };
+        const evt: ProjectEvent = { event: 'message', data: '' };
         for (const line of raw.split('\n')) {
           if (line.startsWith('event: ')) evt.event = line.slice(7);
           if (line.startsWith('data: ')) evt.data += line.slice(6);
@@ -167,7 +188,7 @@ async function openProjectEvents(projectId) {
   })();
 
   return {
-    async waitFor(predicate, timeoutMs = 5_000) {
+    async waitFor(predicate: (event: ProjectEvent) => boolean, timeoutMs = 5_000) {
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         const match = events.find(predicate);
@@ -183,7 +204,7 @@ async function openProjectEvents(projectId) {
   };
 }
 
-function mintToolToken(projectId, runId, overrides = {}) {
+function mintToolToken(projectId: string, runId: string, overrides: Partial<Parameters<typeof toolTokenRegistry.mint>[0]> = {}) {
   return toolTokenRegistry.mint({
     projectId,
     runId,
@@ -243,14 +264,14 @@ describe('live artifact tool routes', () => {
         ok: true,
         connectorId: 'monet',
         toolName: 'monet.metrics',
-        safety: { sideEffect: 'read', approval: 'auto' },
+        safety: readAutoSafety(),
         output: { title: 'Open bugs', owner: '7' },
       })
       .mockResolvedValueOnce({
         ok: true,
         connectorId: 'monet',
         toolName: 'monet.metrics',
-        safety: { sideEffect: 'read', approval: 'auto' },
+        safety: readAutoSafety(),
         output: { title: 'Open bugs', owner: '8' },
       });
 
@@ -485,7 +506,7 @@ describe('live artifact tool routes', () => {
       ok: true,
       connectorId: 'monet',
       toolName: 'monet.metrics',
-      safety: { sideEffect: 'read', approval: 'auto' },
+      safety: readAutoSafety(),
       output: { title: 'Should not refresh', owner: '0' },
     });
 
@@ -534,7 +555,7 @@ describe('live artifact tool routes', () => {
       ok: true,
       connectorId: 'monet',
       toolName: 'monet.metrics',
-      safety: { sideEffect: 'read', approval: 'auto' },
+      safety: readAutoSafety(),
       output: { title: 'Default refresh', owner: '9' },
     });
 

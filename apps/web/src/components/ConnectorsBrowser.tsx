@@ -7,12 +7,14 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SyntheticEvent,
 } from 'react';
-import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
+  cancelConnectorAuthorization as cancelConnectorAuthorizationRequest,
   connectConnector,
   disconnectConnector,
+  fetchConnectorDetail,
   fetchConnectorDiscovery,
   fetchConnectors,
   fetchConnectorStatuses,
@@ -25,6 +27,16 @@ import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
 
 const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
+const CONNECTOR_AUTH_PENDING_STORAGE_KEY = 'od-connectors-authorization-pending';
+const CONNECTOR_AUTH_PENDING_POLL_MS = 2_000;
+const CONNECTOR_TOOL_PREVIEW_LIMIT = 50;
+const AUTHORIZATION_CANCEL_FAILED_MESSAGE = "Couldn't cancel authorization. Try again.";
+
+interface ConnectorAuthorizationPending {
+  expiresAt?: string;
+}
+
+type ConnectorAuthorizationPendingState = Record<string, ConnectorAuthorizationPending>;
 
 const COMPOSIO_LOGO_SLUG_OVERRIDES: Record<string, string> = {
   google_drive: 'googledrive',
@@ -201,6 +213,9 @@ function mergeConnectors(current: ConnectorDetail[], incoming: ConnectorDetail[]
       ...connector,
       ...next,
       tools: next.tools.length > 0 ? next.tools : connector.tools,
+      toolCount: next.toolCount ?? connector.toolCount,
+      toolsNextCursor: next.toolsNextCursor ?? connector.toolsNextCursor,
+      toolsHasMore: next.toolsHasMore ?? connector.toolsHasMore,
     };
   });
   const currentIds = new Set(current.map((connector) => connector.id));
@@ -208,6 +223,137 @@ function mergeConnectors(current: ConnectorDetail[], incoming: ConnectorDetail[]
     if (!currentIds.has(connector.id)) merged.push(connector);
   }
   return merged;
+}
+
+function loadConnectorAuthorizationPending(): ConnectorAuthorizationPendingState {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.sessionStorage.getItem(CONNECTOR_AUTH_PENDING_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const pending: ConnectorAuthorizationPendingState = {};
+    for (const [connectorId, state] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!connectorId) continue;
+      if (state && typeof state === 'object' && !Array.isArray(state)) {
+        const expiresAt = (state as Record<string, unknown>).expiresAt;
+        pending[connectorId] = typeof expiresAt === 'string' && expiresAt.trim() ? { expiresAt } : {};
+      } else {
+        pending[connectorId] = {};
+      }
+    }
+    return pruneConnectorAuthorizationPending(pending);
+  } catch {
+    return {};
+  }
+}
+
+function saveConnectorAuthorizationPending(pending: ConnectorAuthorizationPendingState): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (Object.keys(pending).length === 0) {
+      window.sessionStorage.removeItem(CONNECTOR_AUTH_PENDING_STORAGE_KEY);
+    } else {
+      window.sessionStorage.setItem(CONNECTOR_AUTH_PENDING_STORAGE_KEY, JSON.stringify(pending));
+    }
+  } catch {
+    /* Ignore unavailable sessionStorage. */
+  }
+}
+
+export function pruneConnectorAuthorizationPending(
+  pending: ConnectorAuthorizationPendingState,
+  nowMs = Date.now(),
+): ConnectorAuthorizationPendingState {
+  const next: ConnectorAuthorizationPendingState = {};
+  for (const [connectorId, state] of Object.entries(pending)) {
+    const expiresAtMs = state.expiresAt ? Date.parse(state.expiresAt) : Number.NaN;
+    if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) continue;
+    next[connectorId] = state.expiresAt ? { expiresAt: state.expiresAt } : {};
+  }
+  return next;
+}
+
+export function updateConnectorAuthorizationPendingFromConnectResponse(
+  pending: ConnectorAuthorizationPendingState,
+  response: ConnectorConnectResponse,
+  nowMs = Date.now(),
+): ConnectorAuthorizationPendingState {
+  const connectorId = response.connector.id;
+  const next = { ...pending };
+  if (response.auth?.kind === 'redirect_required' || response.auth?.kind === 'pending') {
+    next[connectorId] = response.auth.expiresAt ? { expiresAt: response.auth.expiresAt } : {};
+    return pruneConnectorAuthorizationPending(next, nowMs);
+  }
+  delete next[connectorId];
+  return pruneConnectorAuthorizationPending(next, nowMs);
+}
+
+export function updateConnectorAuthorizationPendingFromStatuses(
+  pending: ConnectorAuthorizationPendingState,
+  statuses: ConnectorStatusResponse['statuses'],
+  nowMs = Date.now(),
+): ConnectorAuthorizationPendingState {
+  const next = { ...pending };
+  for (const [connectorId, status] of Object.entries(statuses)) {
+    if (status.status === 'connected') delete next[connectorId];
+  }
+  return pruneConnectorAuthorizationPending(next, nowMs);
+}
+
+export function clearConnectorAuthorizationPending(
+  pending: ConnectorAuthorizationPendingState,
+  connectorId: string,
+): ConnectorAuthorizationPendingState {
+  if (pending[connectorId] === undefined) return pending;
+  const next = { ...pending };
+  delete next[connectorId];
+  return next;
+}
+
+export function getConnectorDisplayToolCount(connector: ConnectorDetail): number {
+  return connector.toolCount ?? connector.tools.length;
+}
+
+export function hasLoadedAllAdvertisedConnectorTools(connector: ConnectorDetail): boolean {
+  if (connector.toolsNextCursor) return false;
+  if (connector.toolCount === undefined) return connector.tools.length > 0;
+  return connector.tools.length >= connector.toolCount;
+}
+
+function mergeConnectorTools(current: ConnectorDetail['tools'], incoming: ConnectorDetail['tools']): ConnectorDetail['tools'] {
+  const seen = new Set<string>();
+  const merged: ConnectorDetail['tools'] = [];
+  for (const tool of [...current, ...incoming]) {
+    if (seen.has(tool.name)) continue;
+    seen.add(tool.name);
+    merged.push(tool);
+  }
+  return merged;
+}
+
+export function mergeConnectorToolPreview(current: ConnectorDetail, next: ConnectorDetail, append: boolean): ConnectorDetail {
+  const merged: ConnectorDetail = {
+    ...current,
+    ...next,
+    tools: append ? mergeConnectorTools(current.tools, next.tools) : next.tools,
+    toolCount: next.toolCount ?? current.toolCount,
+    toolsHasMore: next.toolsHasMore ?? false,
+    featuredToolNames: next.featuredToolNames ?? current.featuredToolNames,
+  };
+  if (next.toolsNextCursor !== undefined) return { ...merged, toolsNextCursor: next.toolsNextCursor };
+  const { toolsNextCursor: _toolsNextCursor, ...withoutCursor } = merged;
+  return withoutCursor;
+}
+
+export function mergeConnectorActionResult(current: ConnectorDetail, next: ConnectorDetail): ConnectorDetail {
+  return {
+    ...current,
+    ...next,
+    tools: next.tools.length > 0 ? next.tools : current.tools,
+    toolCount: next.toolCount ?? current.toolCount,
+    featuredToolNames: next.featuredToolNames ?? current.featuredToolNames,
+  };
 }
 
 function applyConnectorStatuses(
@@ -392,16 +538,36 @@ export function ConnectorsBrowser({
     connectorId: string;
     action: 'connect' | 'disconnect';
   } | null>(null);
+  const [connectorAuthorizationPending, setConnectorAuthorizationPending] = useState<ConnectorAuthorizationPendingState>(() => loadConnectorAuthorizationPending());
+  const [connectorAuthorizationCancelFailed, setConnectorAuthorizationCancelFailed] = useState<Record<string, boolean>>({});
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
+  const [toolPreviewLoadingIds, setToolPreviewLoadingIds] = useState<Record<string, boolean>>({});
+  const [toolPreviewFetchedIds, setToolPreviewFetchedIds] = useState<Record<string, boolean>>({});
+  const [toolPreviewFailedIds, setToolPreviewFailedIds] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string>(DEFAULT_PROVIDER_TAB_ID);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const logoTheme = useResolvedTheme();
+  const toolPreviewRetryToken = `${composioConfigured ? 'configured' : 'unconfigured'}:${String(catalogRefreshKey)}`;
 
   const reloadConnectorStatuses = useCallback(async () => {
     const statuses = await fetchConnectorStatuses();
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
+    setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
   }, []);
+
+  useEffect(() => {
+    saveConnectorAuthorizationPending(connectorAuthorizationPending);
+  }, [connectorAuthorizationPending]);
+
+  useEffect(() => {
+    if (Object.keys(connectorAuthorizationPending).length === 0) return;
+    const interval = window.setInterval(() => {
+      setConnectorAuthorizationPending((curr) => pruneConnectorAuthorizationPending(curr));
+      void reloadConnectorStatuses();
+    }, CONNECTOR_AUTH_PENDING_POLL_MS);
+    return () => window.clearInterval(interval);
+  }, [connectorAuthorizationPending, reloadConnectorStatuses]);
 
   // Initial catalog fetch — always loads the lightweight registry payload so
   // already-configured connectors render immediately.
@@ -502,7 +668,9 @@ export function ConnectorsBrowser({
 
   function updateConnector(next: ConnectorDetail | null) {
     if (!next) return;
-    setConnectors((curr) => curr.map((connector) => (connector.id === next.id ? next : connector)));
+    setConnectors((curr) => curr.map((connector) => (
+      connector.id === next.id ? mergeConnectorActionResult(connector, next) : connector
+    )));
   }
 
   async function runConnectorAction(connectorId: string, action: 'connect' | 'disconnect') {
@@ -510,9 +678,24 @@ export function ConnectorsBrowser({
     setPendingConnectorAction({ connectorId, action });
     try {
       if (action === 'connect') {
+        setConnectorAuthorizationCancelFailed((curr) => {
+          if (curr[connectorId] === undefined) return curr;
+          const next = { ...curr };
+          delete next[connectorId];
+          return next;
+        });
         const result = await connectConnector(connectorId);
         updateConnector(result.connector);
+        if (result.connector && !result.error) {
+          setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
+            connector: result.connector!,
+            ...(result.auth === undefined ? {} : { auth: result.auth }),
+          }));
+        } else {
+          setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+        }
       } else {
+        setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
         updateConnector(await disconnectConnector(connectorId));
       }
     } finally {
@@ -524,6 +707,73 @@ export function ConnectorsBrowser({
     () => (detailConnectorId ? connectors.find((c) => c.id === detailConnectorId) ?? null : null),
     [detailConnectorId, connectors],
   );
+
+  async function hydrateToolPreview(connectorId: string, cursor?: string) {
+    if (!composioConfigured) return;
+    if (toolPreviewLoadingIds[connectorId]) return;
+    setToolPreviewLoadingIds((curr) => ({ ...curr, [connectorId]: true }));
+    try {
+      const next = await fetchConnectorDetail(connectorId, {
+        hydrateTools: true,
+        toolsLimit: CONNECTOR_TOOL_PREVIEW_LIMIT,
+        ...(cursor === undefined ? {} : { toolsCursor: cursor }),
+      });
+      if (next) {
+        setConnectors((curr) => curr.map((connector) => (
+          connector.id === next.id ? mergeConnectorToolPreview(connector, next, cursor !== undefined) : connector
+        )));
+        setToolPreviewFetchedIds((curr) => ({ ...curr, [connectorId]: true }));
+        setToolPreviewFailedIds((curr) => {
+          if (curr[connectorId] === undefined) return curr;
+          const nextFailed = { ...curr };
+          delete nextFailed[connectorId];
+          return nextFailed;
+        });
+      } else {
+        setToolPreviewFailedIds((curr) => ({ ...curr, [connectorId]: toolPreviewRetryToken }));
+      }
+    } catch {
+      setToolPreviewFailedIds((curr) => ({ ...curr, [connectorId]: toolPreviewRetryToken }));
+    } finally {
+      setToolPreviewLoadingIds((curr) => ({ ...curr, [connectorId]: false }));
+    }
+  }
+
+  useEffect(() => {
+    if (!detailConnector) return;
+    if (!composioConfigured) return;
+    if (hasLoadedAllAdvertisedConnectorTools(detailConnector)) return;
+    if (toolPreviewFetchedIds[detailConnector.id]) return;
+    if (toolPreviewFailedIds[detailConnector.id] === toolPreviewRetryToken) return;
+    if (toolPreviewLoadingIds[detailConnector.id]) return;
+    void hydrateToolPreview(detailConnector.id);
+  }, [composioConfigured, detailConnector, toolPreviewFailedIds, toolPreviewFetchedIds, toolPreviewLoadingIds, toolPreviewRetryToken]);
+
+  function openConnectorDetails(connectorId: string) {
+    setToolPreviewFailedIds((curr) => {
+      if (curr[connectorId] === undefined) return curr;
+      const next = { ...curr };
+      delete next[connectorId];
+      return next;
+    });
+    setDetailConnectorId(connectorId);
+  }
+
+  async function cancelConnectorAuthorization(connectorId: string) {
+    const connector = await cancelConnectorAuthorizationRequest(connectorId);
+    if (connector) {
+      updateConnector(connector);
+      setConnectorAuthorizationCancelFailed((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+      return;
+    }
+    setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
+  }
 
   return (
     <div className="tab-panel connectors-panel connectors-panel-embedded">
@@ -639,12 +889,15 @@ export function ConnectorsBrowser({
                       ? pendingConnectorAction.action
                       : null
                   }
+                  authorizationPending={connectorAuthorizationPending[connector.id]}
+                  authorizationCancelFailed={connectorAuthorizationCancelFailed[connector.id] === true}
                   toolsLoading={toolsLoading}
                   toolsLoaded={toolsLoaded}
                   logoTheme={logoTheme}
                   onConnect={(connectorId) => runConnectorAction(connectorId, 'connect')}
                   onDisconnect={(connectorId) => runConnectorAction(connectorId, 'disconnect')}
-                  onOpenDetails={(connectorId) => setDetailConnectorId(connectorId)}
+                  onCancelAuthorization={cancelConnectorAuthorization}
+                  onOpenDetails={openConnectorDetails}
                 />
               ))}
             </div>
@@ -676,12 +929,21 @@ export function ConnectorsBrowser({
               ? pendingConnectorAction.action
               : null
           }
+          authorizationPending={connectorAuthorizationPending[detailConnector.id]}
+          authorizationCancelFailed={connectorAuthorizationCancelFailed[detailConnector.id] === true}
           toolsLoading={toolsLoading}
-          toolsLoaded={toolsLoaded}
+          toolsPreviewLoading={Boolean(toolPreviewLoadingIds[detailConnector.id])}
+          toolsLoaded={
+            Boolean(toolPreviewFetchedIds[detailConnector.id])
+            || toolPreviewFailedIds[detailConnector.id] === toolPreviewRetryToken
+            || hasLoadedAllAdvertisedConnectorTools(detailConnector)
+          }
           logoTheme={logoTheme}
           onClose={() => setDetailConnectorId(null)}
           onConnect={(connectorId) => runConnectorAction(connectorId, 'connect')}
           onDisconnect={(connectorId) => runConnectorAction(connectorId, 'disconnect')}
+          onCancelAuthorization={cancelConnectorAuthorization}
+          onLoadMoreTools={(connectorId, cursor) => hydrateToolPreview(connectorId, cursor)}
         />
       ) : null}
     </div>
@@ -692,32 +954,39 @@ function ConnectorCard({
   connector,
   disabled = false,
   pendingAction,
+  authorizationPending,
+  authorizationCancelFailed,
   toolsLoading: _toolsLoading,
   toolsLoaded,
   logoTheme,
   onConnect,
   onDisconnect,
+  onCancelAuthorization,
   onOpenDetails,
 }: {
   connector: ConnectorDetail;
   disabled?: boolean;
   pendingAction: 'connect' | 'disconnect' | null;
+  authorizationPending?: ConnectorAuthorizationPending;
+  authorizationCancelFailed: boolean;
   toolsLoading: boolean;
   toolsLoaded: boolean;
   logoTheme: 'light' | 'dark';
   onConnect: (connectorId: string) => Promise<void> | void;
   onDisconnect: (connectorId: string) => Promise<void> | void;
+  onCancelAuthorization: (connectorId: string) => void;
   onOpenDetails: (connectorId: string) => void;
 }) {
   const t = useT();
   const isConnecting = pendingAction === 'connect';
   const isDisconnecting = pendingAction === 'disconnect';
-  const isPending = pendingAction !== null;
   const isConnected = connector.status === 'connected';
+  const isAuthorizationPending = !isConnected && authorizationPending !== undefined;
+  const isPending = pendingAction !== null || isAuthorizationPending;
   const canConnect = !disabled && !isPending && connector.status === 'available';
   const canDisconnect = !disabled && !isPending && isConnected;
-  const toolCount = connector.tools.length;
-  const showToolsBadge = toolsLoaded && toolCount > 0;
+  const toolCount = getConnectorDisplayToolCount(connector);
+  const showToolsBadge = connector.toolCount !== undefined || connector.tools.length > 0 || toolsLoaded;
   const toolsBadgeLabel = formatToolsBadge(toolCount, t);
   const categoryLabel = connectorCategoryLabel(connector.category, t);
 
@@ -768,6 +1037,13 @@ function ConnectorCard({
                 title={statusLabel(connector.status, t)}
                 role="img"
               />
+            ) : isAuthorizationPending ? (
+              <span
+                className="connector-status-dot connector-card-title-dot status-pending"
+                aria-label={t('connectors.authorizationPending')}
+                title={t('connectors.authorizationPending')}
+                role="img"
+              />
             ) : null}
           </h3>
           {/* Two-row meta block. Splitting category and tools-badge onto
@@ -816,11 +1092,11 @@ function ConnectorCard({
           ) : (
             <button
               type="button"
-              className={`icon-only connector-action is-connect${isConnecting ? ' is-loading' : ''}`}
+              className={`icon-only connector-action is-connect${isConnecting || isAuthorizationPending ? ' is-loading' : ''}`}
               disabled={!canConnect}
-              aria-busy={isConnecting || undefined}
-              aria-label={t('connectors.connect')}
-              title={t('connectors.connect')}
+              aria-busy={isConnecting || isAuthorizationPending || undefined}
+              aria-label={isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}
+              title={isAuthorizationPending ? t('connectors.authorizationPendingHint') : t('connectors.connect')}
               tabIndex={disabled ? -1 : undefined}
               onMouseDown={stop}
               onKeyDown={stop}
@@ -829,9 +1105,25 @@ function ConnectorCard({
                 onConnect(connector.id);
               }}
             >
-              <Icon name={isConnecting ? 'spinner' : 'plus'} size={12} />
+              <Icon name={isConnecting || isAuthorizationPending ? 'spinner' : 'plus'} size={12} />
             </button>
           )}
+          {isAuthorizationPending ? (
+            <button
+              type="button"
+              className="icon-only connector-action is-cancel-authorization"
+              aria-label={t('connectors.cancelAuthorization')}
+              title={t('connectors.cancelAuthorization')}
+              onMouseDown={stop}
+              onKeyDown={stop}
+              onClick={(e) => {
+                stop(e);
+                onCancelAuthorization(connector.id);
+              }}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          ) : null}
           {connector.status === 'error' || connector.status === 'disabled' ? (
             <span className={`connector-status-pill status-${connector.status}`}>
               {statusLabel(connector.status, t)}
@@ -839,6 +1131,11 @@ function ConnectorCard({
           ) : null}
         </div>
       </div>
+      {authorizationCancelFailed ? (
+        <p className="connector-authorization-hint connector-authorization-error" role="alert">
+          {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
+        </p>
+      ) : null}
     </article>
   );
 }
@@ -872,34 +1169,47 @@ function ConnectorDetailDrawer({
   connector,
   disabled,
   pendingAction,
+  authorizationPending,
+  authorizationCancelFailed,
   toolsLoading,
+  toolsPreviewLoading,
   toolsLoaded,
   logoTheme,
   onClose,
   onConnect,
   onDisconnect,
+  onCancelAuthorization,
+  onLoadMoreTools,
 }: {
   connector: ConnectorDetail;
   disabled: boolean;
   pendingAction: 'connect' | 'disconnect' | null;
+  authorizationPending?: ConnectorAuthorizationPending;
+  authorizationCancelFailed: boolean;
   toolsLoading: boolean;
+  toolsPreviewLoading: boolean;
   toolsLoaded: boolean;
   logoTheme: 'light' | 'dark';
   onClose: () => void;
   onConnect: (connectorId: string) => Promise<void> | void;
   onDisconnect: (connectorId: string) => Promise<void> | void;
+  onCancelAuthorization: (connectorId: string) => void;
+  onLoadMoreTools: (connectorId: string, cursor: string) => Promise<void> | void;
 }) {
   const t = useT();
   const isConnected = connector.status === 'connected';
   const isConnecting = pendingAction === 'connect';
   const isDisconnecting = pendingAction === 'disconnect';
-  const isPending = pendingAction !== null;
+  const isAuthorizationPending = !isConnected && authorizationPending !== undefined;
+  const isPending = pendingAction !== null || isAuthorizationPending;
   const canConnect = !disabled && !isPending && connector.status === 'available';
   const canDisconnect = !disabled && !isPending && isConnected;
   const accountLabel = getDisplayableConnectorAccountLabel(connector);
-  const toolCount = connector.tools.length;
-  const isLoadingTools = !toolsLoaded || (toolsLoading && toolCount === 0);
-  const showToolsBadge = toolsLoaded && toolCount > 0;
+  const actualToolCount = connector.tools.length;
+  const toolCount = getConnectorDisplayToolCount(connector);
+  const isLoadingTools = toolsPreviewLoading || !toolsLoaded || (toolsLoading && actualToolCount === 0);
+  const toolDetailsUnavailable = toolsLoaded && actualToolCount === 0 && toolCount > 0;
+  const showToolsBadge = connector.toolCount !== undefined || actualToolCount > 0 || toolsLoaded;
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const categoryLabel = connectorCategoryLabel(connector.category, t);
 
@@ -920,7 +1230,7 @@ function ConnectorDetailDrawer({
     };
   }, [onClose]);
 
-  const statusTone = connector.status;
+  const statusTone = isAuthorizationPending ? 'pending' : connector.status;
 
   return (
     <div
@@ -950,7 +1260,7 @@ function ConnectorDetailDrawer({
             <div className="connector-drawer-status">
               <span className={`connector-status-pill status-${statusTone}`}>
                 <span className="connector-status-dot" aria-hidden />
-                {statusLabel(connector.status, t)}
+                {isAuthorizationPending ? t('connectors.authorizationPending') : statusLabel(connector.status, t)}
               </span>
               {showToolsBadge ? (
                 <span className="connector-tools-badge is-ready" title={formatToolsBadge(toolCount, t)}>
@@ -977,7 +1287,17 @@ function ConnectorDetailDrawer({
             <section className="connector-drawer-section">
               <h3 className="connector-drawer-section-title">{t('connectors.aboutLabel')}</h3>
               <p className="connector-drawer-description">{connector.description}</p>
+              {isAuthorizationPending ? (
+                <p className="connector-authorization-hint" role="status">
+                  {t('connectors.authorizationPendingHint')}
+                </p>
+              ) : null}
             </section>
+          ) : null}
+          {authorizationCancelFailed ? (
+            <p className="connector-authorization-hint connector-authorization-error" role="alert">
+              {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
+            </p>
           ) : null}
 
           <section className="connector-drawer-section">
@@ -1016,28 +1336,43 @@ function ConnectorDetailDrawer({
             </h3>
             {isLoadingTools ? (
               <p className="connector-drawer-empty"><Icon name="spinner" size={12} /> {t('connectors.toolsLoading')}</p>
-            ) : toolCount === 0 ? (
+            ) : toolDetailsUnavailable ? (
+              <p className="connector-drawer-empty">{t('connectors.toolDetailsUnavailable', { n: toolCount })}</p>
+            ) : actualToolCount === 0 ? (
               <p className="connector-drawer-empty">{t('connectors.noToolsAvailable')}</p>
             ) : (
-              <ul className="connector-drawer-tools">
-                {connector.tools.map((tool) => (
-                  <li key={tool.name} className="connector-drawer-tool">
-                    <div className="connector-drawer-tool-head">
-                      <span className="connector-drawer-tool-title">{tool.title || tool.name}</span>
-                      <span
-                        className={`connector-drawer-tool-badge side-${tool.safety.sideEffect}`}
-                        title={tool.safety.reason}
-                      >
-                        {tool.safety.sideEffect}
-                      </span>
-                    </div>
-                    {tool.description ? (
-                      <p className="connector-drawer-tool-desc">{tool.description}</p>
-                    ) : null}
-                    <code className="connector-drawer-tool-name">{tool.name}</code>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="connector-drawer-tools">
+                  {connector.tools.map((tool) => (
+                    <li key={tool.name} className="connector-drawer-tool">
+                      <div className="connector-drawer-tool-head">
+                        <span className="connector-drawer-tool-title">{tool.title || tool.name}</span>
+                        <span
+                          className={`connector-drawer-tool-badge side-${tool.safety.sideEffect}`}
+                          title={tool.safety.reason}
+                        >
+                          {tool.safety.sideEffect}
+                        </span>
+                      </div>
+                      {tool.description ? (
+                        <p className="connector-drawer-tool-desc">{tool.description}</p>
+                      ) : null}
+                      <code className="connector-drawer-tool-name">{tool.name}</code>
+                    </li>
+                  ))}
+                </ul>
+                {connector.toolsNextCursor ? (
+                  <button
+                    type="button"
+                    className="ghost connector-drawer-load-more"
+                    disabled={toolsPreviewLoading}
+                    onClick={() => onLoadMoreTools(connector.id, connector.toolsNextCursor!)}
+                  >
+                    {toolsPreviewLoading ? <Icon name="spinner" size={12} /> : null}
+                    <span>{t('connectors.loadMoreTools')}</span>
+                  </button>
+                ) : null}
+              </>
             )}
           </section>
         </div>
@@ -1057,15 +1392,24 @@ function ConnectorDetailDrawer({
           ) : (
             <button
               type="button"
-              className={`primary connector-action is-connect${isConnecting ? ' is-loading' : ''}`}
+              className={`primary connector-action is-connect${isConnecting || isAuthorizationPending ? ' is-loading' : ''}`}
               disabled={!canConnect}
-              aria-busy={isConnecting || undefined}
+              aria-busy={isConnecting || isAuthorizationPending || undefined}
               onClick={() => onConnect(connector.id)}
             >
-              {isConnecting ? <Icon name="spinner" size={12} /> : null}
-              <span>{t('connectors.connect')}</span>
+              {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={12} /> : null}
+              <span>{isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}</span>
             </button>
           )}
+          {isAuthorizationPending ? (
+            <button
+              type="button"
+              className="ghost connector-action is-cancel-authorization"
+              onClick={() => onCancelAuthorization(connector.id)}
+            >
+              <span>{t('connectors.cancelAuthorization')}</span>
+            </button>
+          ) : null}
         </footer>
       </aside>
     </div>

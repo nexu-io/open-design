@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import type { ProjectFile } from '../../src/types';
+import type { ProjectFile, ProjectFileKind } from '../../src/types';
+
+function extForKind(kind: ProjectFileKind): string {
+  if (kind === 'html') return 'html';
+  if (kind === 'image') return 'png';
+  if (kind === 'sketch') return 'svg';
+  if (kind === 'text') return 'txt';
+  if (kind === 'code') return 'ts';
+  if (kind === 'pdf') return 'pdf';
+  return 'bin';
+}
 
 function file(overrides: Partial<ProjectFile> & Pick<ProjectFile, 'name'>): ProjectFile {
   return {
@@ -18,31 +28,62 @@ function file(overrides: Partial<ProjectFile> & Pick<ProjectFile, 'name'>): Proj
   };
 }
 
+function generateFiles(count: number): ProjectFile[] {
+  const kinds: ProjectFileKind[] = ['html', 'image', 'sketch', 'text', 'code', 'pdf'];
+  return Array.from({ length: count }, (_, i) => {
+    const kind = kinds[i % kinds.length]!;
+    return file({
+      name: `file-${i + 1}.${extForKind(kind)}`,
+      kind,
+      size: 1024 * (i + 1),
+      mtime: Date.now() - i * 60_000,
+      mime: 'text/plain',
+    });
+  });
+}
+
 function renderPanel(files: ProjectFile[]) {
-  return render(
+  const onOpenFile = vi.fn();
+  const onDeleteFiles = vi.fn();
+  const result = render(
     <DesignFilesPanel
-      projectId="project-1"
+      projectId="test-project"
       files={files}
       liveArtifacts={[]}
       onRefreshFiles={vi.fn()}
-      onOpenFile={vi.fn()}
+      onOpenFile={onOpenFile}
       onOpenLiveArtifact={vi.fn()}
       onDeleteFile={vi.fn()}
-      onDeleteFiles={vi.fn()}
+      onDeleteFiles={onDeleteFiles}
       onUpload={vi.fn()}
       onUploadFiles={vi.fn()}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
     />,
   );
+  return { ...result, onDeleteFiles, onOpenFile };
 }
 
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-});
+function getPageInfo(container: HTMLElement): string {
+  const el = container.querySelector('.df-page-info');
+  return el?.textContent?.trim() ?? '';
+}
+
+/** page-btn order: top-Prev=0, top-Next=1, bottom-Prev=2, bottom-Next=3 */
+function getPageBtns(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>('.df-page-btn'));
+}
+
+function getSelects(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLSelectElement>('select'));
+}
 
 describe('DesignFilesPanel grouping', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   it('does not show grouping controls when only live artifacts are available', () => {
     render(
       <DesignFilesPanel
@@ -80,17 +121,17 @@ describe('DesignFilesPanel grouping', () => {
     expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
   });
 
-  it('keeps kind grouping as the default view', () => {
+  it('keeps the ungrouped table view as the default view', () => {
     renderPanel([
       file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
       file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
     ]);
 
-    expect(screen.getByRole('button', { name: 'Kind' }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
-    expect(screen.getByText('Pages')).toBeTruthy();
-    expect(screen.getByText('Images')).toBeTruthy();
+    const groupControls = screen.getByRole('group', { name: 'Group by' });
+    const kindGroupButton = within(groupControls).getByRole('button', { name: 'Kind' });
+    expect(kindGroupButton.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Name')).toBeTruthy();
+    expect(document.querySelector('.df-th-kind')?.textContent).toContain('Kind');
     expect(screen.queryByText('Today')).toBeNull();
   });
 
@@ -104,7 +145,6 @@ describe('DesignFilesPanel grouping', () => {
       file({ name: 'yesterday.html', mtime: new Date(2026, 4, 8, 12).getTime() }),
     ]);
 
-    expect(screen.getByText('Pages')).toBeTruthy();
     expect(screen.queryByText('Today')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
@@ -199,7 +239,7 @@ describe('DesignFilesPanel grouping', () => {
     expect(screen.getByTestId('design-file-row-archive.html')).toBeTruthy();
   });
 
-  it('keeps modified groups paginated and expandable', () => {
+  it('groups only the current page so large file lists stay paginated', () => {
     const now = new Date(2026, 4, 9, 12).getTime();
     vi.useFakeTimers();
     vi.setSystemTime(now);
@@ -214,29 +254,149 @@ describe('DesignFilesPanel grouping', () => {
 
     expect(screen.getByTestId('design-file-row-today-01.html')).toBeTruthy();
     expect(screen.queryByTestId('design-file-row-today-31.html')).toBeNull();
+    expect(getPageInfo(document.body)).toContain('1–30 of 31');
+  });
+});
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show +1 more' }));
-
-    expect(screen.getByTestId('design-file-row-today-31.html')).toBeTruthy();
+describe('DesignFilesPanel large-list regression', () => {
+  it('renders only the default page size (30) rows with 500 files', () => {
+    const files = generateFiles(500);
+    const { container } = renderPanel(files);
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
   });
 
-  it('can select and clear an entire modified group', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
+  it('shows all 500 rows when page size is set to All', () => {
+    const files = generateFiles(500);
+    const { container } = renderPanel(files);
 
-    renderPanel([
-      file({ name: 'today-a.html', mtime: new Date(2026, 4, 9, 11).getTime() }),
-      file({ name: 'today-b.html', mtime: new Date(2026, 4, 9, 10).getTime() }),
-    ]);
+    const selects = getSelects(container);
+    fireEvent.change(selects[0]!, { target: { value: 'all' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    expect(container.querySelectorAll('.df-file-row').length).toBe(500);
+  });
 
-    expect(screen.getByTitle('Download 2 as ZIP')).toBeTruthy();
+  it('shows 60 rows when page size is changed to 60', () => {
+    const files = generateFiles(500);
+    const { container } = renderPanel(files);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    const selects = getSelects(container);
+    fireEvent.change(selects[0]!, { target: { value: '60' } });
 
-    expect(screen.queryByTitle('Download 2 as ZIP')).toBeNull();
+    expect(container.querySelectorAll('.df-file-row').length).toBe(60);
+  });
+
+  it('navigates pages with Next button and updates row content', () => {
+    const files = generateFiles(500);
+    const { container } = renderPanel(files);
+
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
+    expect(container.querySelector('.df-file-row')!.textContent).toContain('file-1');
+
+    const btns = getPageBtns(container);
+    fireEvent.click(btns[1]!);
+
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
+    expect(container.querySelector('.df-file-row')!.textContent).toContain('file-31');
+  });
+
+  it('shows disabled Previous on first page and Next on last page', () => {
+    const files = generateFiles(45);
+    const { container } = renderPanel(files);
+
+    const btns = getPageBtns(container);
+    expect(btns[0]!.disabled).toBe(true);
+    expect(btns[1]!.disabled).toBe(false);
+
+    fireEvent.click(btns[1]!);
+    const btns2 = getPageBtns(container);
+    expect(btns2[0]!.disabled).toBe(false);
+
+    fireEvent.click(getPageBtns(container)[1]!);
+    fireEvent.click(getPageBtns(container)[1]!);
+    expect(getPageBtns(container)[1]!.disabled).toBe(true);
+  });
+
+  it('jumps to a specific page via page dropdown at bottom', () => {
+    const files = generateFiles(200);
+    const { container } = renderPanel(files);
+
+    const selects = getSelects(container);
+    fireEvent.change(selects[1]!, { target: { value: '3' } });
+
+    expect(container.querySelector('.df-file-row')!.textContent).toContain('file-91');
+  });
+
+  it('updates page info text when navigating', () => {
+    const files = generateFiles(500);
+    const { container } = renderPanel(files);
+
+    expect(getPageInfo(container)).toContain('1–30 of 500');
+
+    const btns = getPageBtns(container);
+    fireEvent.click(btns[1]!);
+
+    expect(getPageInfo(container)).toContain('31–60 of 500');
+  });
+
+  it('uses non-control table cells as file row click targets', () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files);
+    const row = container.querySelector('.df-file-row')!;
+
+    fireEvent.click(row.querySelector('.df-cell-icon')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.click(row.querySelector('.df-cell-kind')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.click(row.querySelector('.df-cell-name')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.doubleClick(row.querySelector('.df-cell-name')!);
+    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+    onOpenFile.mockClear();
+
+    fireEvent.doubleClick(row.querySelector('.df-cell-time')!);
+    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+  });
+
+  it('does not preview or open files from row controls', () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files);
+    const row = container.querySelector('.df-file-row')!;
+
+    fireEvent.click(row.querySelector('.df-row-check')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
+    expect(onOpenFile).not.toHaveBeenCalled();
+
+    fireEvent.click(row.querySelector('.df-row-menu')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('passes every selected file to batch delete', () => {
+    const files = generateFiles(3);
+    const { container, onDeleteFiles } = renderPanel(files);
+    const rows = Array.from(container.querySelectorAll('.df-file-row'));
+
+    fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
+    fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
+    fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
+
+    expect(onDeleteFiles).toHaveBeenCalledWith(['file-1.html', 'file-2.png']);
+  });
+
+  it('renders 500 files within a reasonable time', () => {
+    const files = generateFiles(500);
+    const start = performance.now();
+    renderPanel(files);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(2000);
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -33,6 +34,8 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ExecMode,
   SkillSummary,
 } from '../types';
@@ -43,6 +46,7 @@ import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { LibrarySection } from './LibrarySection';
+import { PrivacySection } from './PrivacySection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
@@ -69,6 +73,7 @@ export type SettingsSection =
   | 'notifications'
   | 'pet'
   | 'library'
+  | 'privacy'
   | 'about';
 
 interface Props {
@@ -150,6 +155,47 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2',
     'mimo-v2.5-pro',
   ],
+  ollama: [
+    'cogito-2.1:671b',
+    'deepseek-v3.1:671b',
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'devstral-2:123b',
+    'devstral-small-2:24b',
+    'gemini-3-flash-preview',
+    'gemma3:4b',
+    'gemma3:12b',
+    'gemma3:27b',
+    'gemma4:31b',
+    'glm-4.6',
+    'glm-4.7',
+    'glm-5',
+    'glm-5.1',
+    'gpt-oss:20b',
+    'gpt-oss:120b',
+    'kimi-k2:1t',
+    'kimi-k2-thinking',
+    'kimi-k2.5',
+    'kimi-k2.6',
+    'minimax-m2',
+    'minimax-m2.1',
+    'minimax-m2.5',
+    'minimax-m2.7',
+    'ministral-3:3b',
+    'ministral-3:8b',
+    'ministral-3:14b',
+    'mistral-large-3:675b',
+    'nemotron-3-nano:30b',
+    'nemotron-3-super',
+    'qwen3-coder:480b',
+    'qwen3-coder-next',
+    'qwen3-next:80b',
+    'qwen3-vl:235b',
+    'qwen3-vl:235b-instruct',
+    'qwen3.5:397b',
+    'rnj-1:8b',
+  ],
   azure: [
     'gpt-4o',
     'gpt-4o-mini',
@@ -170,6 +216,7 @@ const API_PROTOCOL_TABS: Array<{
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure OpenAI' },
   { id: 'google', title: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud' },
 ];
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -177,6 +224,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   openai: 'OpenAI API',
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
+  ollama: 'Ollama Cloud API',
 };
 
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -184,6 +232,7 @@ const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   openai: 'sk-...',
   azure: 'azure key',
   google: 'AIza...',
+  ollama: 'Ollama API key',
 };
 
 type RescanNotice =
@@ -345,95 +394,8 @@ function applyApiProtocolConfig(
 export function isValidApiBaseUrl(value: string): boolean {
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return false;
-  try {
-    const url = new URL(trimmed);
-    const hostname = url.hostname.toLowerCase();
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') &&
-      Boolean(url.hostname) &&
-      (isLoopbackApiHost(hostname) || !isBlockedInternalApiHost(hostname))
-    );
-  } catch {
-    return false;
-  }
-}
-
-function normalizeBracketedIpv6(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1).toLowerCase()
-    : hostname.toLowerCase();
-}
-
-function parseIpv4(hostname: string): [number, number, number, number] | null {
-  const parts = hostname.split('.');
-  if (parts.length !== 4) return null;
-  const parsed = parts.map((part) => {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const value = Number(part);
-    return value >= 0 && value <= 255 ? value : null;
-  });
-  if (parsed.some((part) => part === null)) return null;
-  return parsed as [number, number, number, number];
-}
-
-function isLoopbackIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  return Boolean(parts && parts[0] === 127);
-}
-
-function isPrivateIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  if (!parts) return false;
-  const [a, b] = parts;
-  return (
-    (a === 169 && b === 254) ||
-    a === 10 ||
-    (a === 192 && b === 168) ||
-    (a === 172 && b >= 16 && b <= 31)
-  );
-}
-
-function ipv4MappedToDotted(hostname: string): string | null {
-  const host = normalizeBracketedIpv6(hostname);
-  const mapped = /^::ffff:(.+)$/i.exec(host)?.[1];
-  if (!mapped) return null;
-  if (parseIpv4(mapped.toLowerCase())) return mapped.toLowerCase();
-  const hexParts = mapped.split(':');
-  if (
-    hexParts.length !== 2 ||
-    !hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
-  ) {
-    return null;
-  }
-  const hi = hexParts[0];
-  const lo = hexParts[1];
-  if (!hi || !lo) return null;
-  const value =
-    (Number.parseInt(hi, 16) << 16) |
-    Number.parseInt(lo, 16);
-  return [
-    (value >>> 24) & 255,
-    (value >>> 16) & 255,
-    (value >>> 8) & 255,
-    value & 255,
-  ].join('.');
-}
-
-function isLoopbackApiHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (host === 'localhost' || host === '::1') return true;
-  if (isLoopbackIpv4(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isLoopbackIpv4(mapped));
-}
-
-function isBlockedInternalApiHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (isPrivateIpv4(host)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
-  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isPrivateIpv4(mapped));
+  const result = validateBaseUrl(trimmed);
+  return Boolean(result.parsed && !result.error);
 }
 
 export function updateCurrentApiProtocolConfig(
@@ -1093,6 +1055,7 @@ export function SettingsDialog({
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
+    privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
@@ -1313,6 +1276,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.library')}</strong>
                 <small>{t('settings.libraryHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
+              onClick={() => setActiveSection('privacy')}
+            >
+              <Icon name="eye" size={18} />
+              <span>
+                <strong>{t('settings.privacy')}</strong>
+                <small>{t('settings.privacyHint')}</small>
               </span>
             </button>
             <button
@@ -2012,6 +1986,10 @@ export function SettingsDialog({
             <LibrarySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
+          {activeSection === 'privacy' ? (
+            <PrivacySection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
           {activeSection === 'about' ? (
             <section className="settings-section">
               <div className="section-head">
@@ -2471,22 +2449,6 @@ function ConnectorSection({
   );
 }
 
-interface OrbitRunSummary {
-  id?: string;
-  startedAt?: string;
-  completedAt: string;
-  trigger?: 'manual' | 'scheduled';
-  connectorsChecked: number;
-  connectorsSucceeded: number;
-  connectorsFailed: number;
-  connectorsSkipped: number;
-  artifactId?: string | null;
-  artifactProjectId?: string | null;
-  /** Identifier of the daemon run that produced this summary. Useful for log correlation. */
-  agentRunId?: string | null;
-  markdown: string;
-}
-
 interface OrbitRunStartResponse {
   projectId: string;
   agentRunId: string;
@@ -2516,12 +2478,6 @@ export function configForManualOrbitRun(config: AppConfig): AppConfig {
 
 export function isOrbitRunDisabled(isBusy: boolean, connectedCount: number | null): boolean {
   return isBusy || connectedCount === null || connectedCount === 0;
-}
-
-interface OrbitStatusResponse {
-  running?: boolean;
-  nextRunAt?: string | null;
-  lastRun?: OrbitRunSummary | null;
 }
 
 function formatRelative(
@@ -2569,6 +2525,9 @@ function OrbitSection({
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [legacyLastRunTemplateSkillId, setLegacyLastRunTemplateSkillId] = useState<string | null>(null);
+  const legacyLastRunIdentity = status?.lastRun?.id
+    ?? `${status?.lastRun?.completedAt ?? ''}:${status?.lastRun?.agentRunId ?? ''}:${status?.lastRun?.markdown ?? ''}`;
   // Orbit-scenario skill templates fetched from /api/skills. We fetch on mount
   // and keep three states for graceful UX: `null` = still loading, `[]` =
   // loaded with no orbit templates available, `SkillSummary[]` = ready. If
@@ -2586,8 +2545,15 @@ function OrbitSection({
   // Once the user clicks Generate we close Settings and navigate away. The ref
   // lets late-arriving handlers no-op without React warnings.
   const isMountedRef = useRef(true);
-  useEffect(() => () => {
-    isMountedRef.current = false;
+  useEffect(() => {
+    // React Strict Mode replays mount effects in development. Reset the ref on
+    // each setup so the synthetic cleanup from the first pass does not leave
+    // async Orbit status / connector refreshes permanently thinking the panel
+    // has unmounted.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {
@@ -2678,6 +2644,17 @@ function OrbitSection({
   // were on the default. Manual runs persist this effective value before
   // launching so the daemon uses the same template the UI displays.
   const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+  const supportsTemplateScopedHistory = status?.lastRunsByTemplate !== undefined;
+
+  useEffect(() => {
+    const hasTemplateScopedHistory = Object.keys(status?.lastRunsByTemplate ?? {}).length > 0;
+    const hasLegacyUnscopedLastRun = Boolean(status?.lastRun && !status.lastRun.templateSkillId);
+    if (!hasLegacyUnscopedLastRun || hasTemplateScopedHistory) {
+      setLegacyLastRunTemplateSkillId(null);
+      return;
+    }
+    setLegacyLastRunTemplateSkillId((current) => current ?? (effectiveTemplateSkillId || null));
+  }, [effectiveTemplateSkillId, legacyLastRunIdentity, status]);
 
   const selectedTemplate = useMemo(() => {
     if (!effectiveTemplateSkillId || !orbitTemplates) return null;
@@ -2715,7 +2692,18 @@ function OrbitSection({
     })();
   };
 
-  const lastRun = status?.lastRun ?? null;
+  const templateScopedLastRun = effectiveTemplateSkillId
+    ? status?.lastRunsByTemplate?.[effectiveTemplateSkillId] ?? null
+    : null;
+  const hasLegacyUnscopedLastRun = Boolean(
+    status?.lastRun
+    && !status.lastRun.templateSkillId
+    && legacyLastRunTemplateSkillId
+    && legacyLastRunTemplateSkillId === effectiveTemplateSkillId,
+  );
+  const lastRun = supportsTemplateScopedHistory
+    ? (templateScopedLastRun ?? (hasLegacyUnscopedLastRun ? status?.lastRun ?? null : null))
+    : status?.lastRun ?? null;
   const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
@@ -3441,7 +3429,23 @@ function MediaProvidersSection({
                   type="button"
                   className="ghost"
                   disabled={!clearable}
-                  onClick={() => updateProvider(provider, { apiKey: '', baseUrl: '', model: '' })}
+                  onClick={() => {
+                    // Match the existing window.confirm guard the rest of
+                    // the app uses for destructive actions (conversation
+                    // delete, design delete, file delete in FileWorkspace).
+                    // Without this a stray click on the row's Clear button
+                    // wipes the saved key with no recovery. Issue #737.
+                    if (
+                      !confirm(
+                        t('settings.mediaProviderClearConfirm', {
+                          name: provider.label,
+                        }),
+                      )
+                    ) {
+                      return;
+                    }
+                    updateProvider(provider, { apiKey: '', baseUrl: '', model: '' });
+                  }}
                 >
                   {t('settings.mediaProviderClear')}
                 </button>

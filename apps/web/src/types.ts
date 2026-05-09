@@ -27,6 +27,8 @@ import type {
   LiveArtifactStatus,
   LiveArtifactSummary,
   MediaAspect,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ProjectDeploymentsResponse,
   ProviderTestRequest,
   PersistedAgentEvent,
@@ -56,12 +58,14 @@ export type {
   CloudflarePagesDeploySelection,
   CloudflarePagesDeploymentInfo,
   CloudflarePagesZonesResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
+export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
 
 export type LiveArtifactTabId = `live:${string}`;
 export type ProjectWorkspaceTabId = string | LiveArtifactTabId;
@@ -301,6 +305,25 @@ export interface AppConfig {
   // IDs of skills/design-systems the user has explicitly disabled.
   disabledSkills?: string[];
   disabledDesignSystems?: string[];
+  // Anonymous install identifier for telemetry. Generated locally the first
+  // time a user opts in via Settings → Privacy. `null` after the user
+  // explicitly opts out (or rotates "Delete my data"); `undefined` when the
+  // daemon has not assigned an anonymous id yet.
+  installationId?: string | null;
+  // Unix-millis timestamp recording that the first-run privacy prompt was
+  // resolved. This is independent from installationId so Delete my data can
+  // rotate or clear the anonymous id without re-opening the consent banner.
+  privacyDecisionAt?: number | null;
+  // Privacy preferences governing what (if anything) is shipped to the
+  // Langfuse-backed telemetry endpoint. All three default to off until the
+  // user makes an explicit choice.
+  telemetry?: TelemetryConfig;
+}
+
+export interface TelemetryConfig {
+  metrics?: boolean;
+  content?: boolean;
+  artifactManifest?: boolean;
 }
 
 export interface ComposioSettings {

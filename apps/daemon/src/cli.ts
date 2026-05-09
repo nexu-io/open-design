@@ -134,7 +134,43 @@ for (let i = 0; i < argv.length; i++) {
   }
 }
 
-startServer({ port, host }).then(url => {
+startServer({ port, host, returnServer: true }).then((started) => {
+  const { url, server, shutdown } = started;
+  const closeTimeoutMs = 5_000;
+  const closeServer = () => new Promise((resolve) => {
+    let resolved = false;
+    const resolveOnce = () => {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+    const idleTimer = setTimeout(() => {
+      server.closeIdleConnections?.();
+    }, Math.min(1_000, closeTimeoutMs));
+    const hardTimer = setTimeout(() => {
+      server.closeAllConnections?.();
+      resolveOnce();
+    }, closeTimeoutMs);
+    idleTimer.unref?.();
+    hardTimer.unref?.();
+    server.close(() => resolveOnce());
+  }).finally(() => {
+    server.closeIdleConnections?.();
+  });
+  let shuttingDown = false;
+  const stop = () => {
+    if (shuttingDown) {
+      process.exit(0);
+    }
+    shuttingDown = true;
+    const closePromise = closeServer();
+    const shutdownPromise = Promise.resolve().then(() => shutdown?.());
+    void Promise.resolve()
+      .then(() => Promise.allSettled([shutdownPromise, closePromise]))
+      .finally(() => process.exit(0));
+  };
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
   console.log(`[od] listening on ${url}`);
   if (open) {
     const opener = process.platform === 'darwin' ? 'open'
@@ -464,6 +500,14 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart) {
       console.error(`task failed: ${msg}`);
       process.stdout.write(
         JSON.stringify({ taskId, status: 'failed', error: snap.error || {} }) + '\n',
+      );
+      process.exit(snap.error?.status || 5);
+    }
+    if (snap.status === 'interrupted') {
+      const msg = snap.error?.message || 'task interrupted';
+      console.error(`task interrupted: ${msg}`);
+      process.stdout.write(
+        JSON.stringify({ taskId, status: 'interrupted', error: snap.error || {} }) + '\n',
       );
       process.exit(snap.error?.status || 5);
     }

@@ -870,7 +870,6 @@ describe('cloudflare pages deploys', () => {
     dnsCreateAlreadyExists?: boolean;
     dnsCreateRejectsComment?: boolean;
     pagesDomains?: Array<Record<string, unknown>>;
-    pagesDomainPages?: Array<Array<Record<string, unknown>>>;
     customHeadStatus?: number;
   } = {}) {
     const indexHash = cloudflarePagesAssetHash({
@@ -974,19 +973,21 @@ describe('cloudflare pages deploys', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (url.includes('/pages/projects/demo-pages/domains?') && method === 'GET') {
-        const requestUrl = new URL(url);
-        const page = Number(requestUrl.searchParams.get('page') || '1');
-        const domainPages = options.pagesDomainPages;
-        const result = domainPages ? domainPages[page - 1] ?? [] : options.pagesDomains ?? [];
+      if (url.endsWith('/pages/projects/demo-pages/domains/demo.example.com') && method === 'GET') {
+        const result = (options.pagesDomains ?? [])
+          .find((domain) => domain.name === 'demo.example.com');
+        if (!result) {
+          return new Response(JSON.stringify({
+            success: false,
+            errors: [{ message: 'Custom domain not found' }],
+          }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
         return new Response(JSON.stringify({
           success: true,
           result,
-          result_info: {
-            page,
-            per_page: 100,
-            total_pages: domainPages?.length || 1,
-          },
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -1637,9 +1638,12 @@ describe('cloudflare pages deploys', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (url.includes('/pages/projects/demo-pages/domains?') && method === 'GET') {
-        return new Response(JSON.stringify({ success: true, result: [] }), {
-          status: 200,
+      if (url.endsWith('/pages/projects/demo-pages/domains/demo.example.com') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: false,
+          errors: [{ message: 'Custom domain not found' }],
+        }), {
+          status: 404,
           headers: { 'content-type': 'application/json' },
         });
       }
@@ -1776,12 +1780,9 @@ describe('cloudflare pages deploys', () => {
     expect(calls.filter((call) => call.url.endsWith('/zones/zone-1/dns_records') && call.method === 'POST')).toHaveLength(1);
   });
 
-  it('finds existing Cloudflare Pages custom domains beyond the first page', async () => {
+  it('reads an existing Cloudflare Pages custom domain without unsupported list pagination', async () => {
     const { calls, fetchMock } = createCustomDomainDeployMock({
-      pagesDomainPages: [
-        [{ name: 'other.example.com', status: 'active' }],
-        [{ name: 'demo.example.com', status: 'active' }],
-      ],
+      pagesDomains: [{ name: 'demo.example.com', status: 'active' }],
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -1798,9 +1799,12 @@ describe('cloudflare pages deploys', () => {
       },
     });
     const domainLookupUrls = calls
-      .filter((call) => call.url.includes('/pages/projects/demo-pages/domains?') && call.method === 'GET')
-      .map((call) => new URL(call.url).searchParams.get('page'));
-    expect(domainLookupUrls).toEqual(['1', '2']);
+      .filter((call) => call.url.includes('/pages/projects/demo-pages/domains/') && call.method === 'GET')
+      .map((call) => call.url);
+    expect(domainLookupUrls).toEqual([
+      'https://api.cloudflare.com/client/v4/accounts/account_123/pages/projects/demo-pages/domains/demo.example.com',
+    ]);
+    expect(domainLookupUrls.every((url) => !url.includes('?'))).toBe(true);
     expect(calls.some((call) => call.url.endsWith('/pages/projects/demo-pages/domains') && call.method === 'POST')).toBe(false);
   });
 
@@ -2112,9 +2116,12 @@ describe('cloudflare pages deploys', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (url.includes('/pages/projects/demo-pages/domains?') && method === 'GET') {
-        return new Response(JSON.stringify({ success: true, result: [] }), {
-          status: 200,
+      if (url.endsWith('/pages/projects/demo-pages/domains/demo.example.com') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: false,
+          errors: [{ message: 'Custom domain not found' }],
+        }), {
+          status: 404,
           headers: { 'content-type': 'application/json' },
         });
       }
@@ -2293,6 +2300,6 @@ describe('deployment link readiness', () => {
       server: 'Vercel',
       'set-cookie': '_vercel_sso_nonce=test',
     });
-    expect(isVercelProtectedResponse({ headers }, 'Authentication Required')).toBe(true);
+    expect(isVercelProtectedResponse(new Response(null, { headers }), 'Authentication Required')).toBe(true);
   });
 });

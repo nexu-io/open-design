@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
@@ -51,17 +52,25 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
+  redactSecrets,
   testAgentConnection,
   testProviderConnection,
   validateBaseUrl,
 } from './connectionTest.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
+import {
+  finalizeDesignPackage,
+  FinalizePackageLockedError,
+  FinalizeUpstreamError,
+} from './finalize-design.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
+import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
@@ -75,6 +84,15 @@ import {
   VIDEO_MODELS,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
+import {
+  deleteMediaTask,
+  getMediaTask,
+  insertMediaTask,
+  listMediaTasksByProject,
+  listRecentMediaTasks,
+  reconcileMediaTasksOnBoot,
+  updateMediaTask,
+} from './media-tasks.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -106,6 +124,7 @@ import {
   deleteProjectFile,
   detectEntryFile,
   ensureProject,
+  isSafeId,
   listFiles,
   mimeFor,
   projectDir,
@@ -755,8 +774,22 @@ export function resolveDataDir(raw, projectRoot) {
     fs.accessSync(resolved, fs.constants.W_OK);
   } catch (err) {
     const e = err;
+    const currentUser = (() => {
+      try {
+        return os.userInfo().username;
+      } catch {
+        return process.env.USER ?? process.env.LOGNAME ?? 'unknown';
+      }
+    })();
+    const parentDir = path.dirname(resolved);
     throw new Error(
-      `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+      [
+        `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+        `Current user: ${currentUser}`,
+        `Check whether the folder or one of its parents is owned by another user, is a symlink to a protected location, or was previously created with sudo.`,
+        `Try: ls -ld "${parentDir}" "${resolved}"`,
+        `If the folder should belong to you, fix ownership/permissions, for example: sudo chown -R "${currentUser}":staff "${parentDir}" && chmod -R u+rwX "${parentDir}"`,
+      ].join(' '),
     );
   }
   return resolved;
@@ -1036,6 +1069,22 @@ function sendApiError(res, status, code, message, init = {}) {
   return res
     .status(status)
     .json(createCompatApiErrorResponse(code, message, init));
+}
+
+const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+
+export function shouldReportRunCompletedFromMessage(saved, body = {}) {
+  return Boolean(
+    saved &&
+      saved.runId &&
+      typeof saved.runStatus === 'string' &&
+      TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
+      body?.telemetryFinalized === true,
+  );
+}
+
+export function telemetryPromptFromRunRequest(message, currentPrompt) {
+  return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -1586,6 +1635,7 @@ function sendMulterError(res, err) {
       LIMIT_FIELD_KEY: 400,
       LIMIT_FIELD_VALUE: 400,
       LIMIT_FIELD_COUNT: 400,
+      MISSING_FIELD_NAME: 400,
     };
     const errorByCode = {
       LIMIT_FILE_SIZE: 'file too large',
@@ -1595,6 +1645,7 @@ function sendMulterError(res, err) {
       LIMIT_FIELD_KEY: 'field name too long',
       LIMIT_FIELD_VALUE: 'field value too long',
       LIMIT_FIELD_COUNT: 'too many form fields',
+      MISSING_FIELD_NAME: 'missing field name',
     };
     const status = statusByCode[code] ?? 400;
     const message = errorByCode[code] ?? 'upload failed';
@@ -1616,8 +1667,34 @@ function sendMulterError(res, err) {
 
 const mediaTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
+const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
 
-function createMediaTask(taskId, projectId, info = {}) {
+function hydrateMediaTask(row) {
+  const task = {
+    id: row.id,
+    projectId: row.projectId,
+    status: row.status,
+    surface: row.surface,
+    model: row.model,
+    progress: Array.isArray(row.progress) ? row.progress.slice() : [],
+    file: row.file ?? null,
+    error: row.error ?? null,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    waiters: new Set(),
+  };
+  mediaTasks.set(task.id, task);
+  return task;
+}
+
+function getLiveMediaTask(db, taskId) {
+  const cached = mediaTasks.get(taskId);
+  if (cached) return cached;
+  const row = getMediaTask(db, taskId);
+  return row ? hydrateMediaTask(row) : null;
+}
+
+function createMediaTask(db, taskId, projectId, info = {}) {
   const task = {
     id: taskId,
     projectId,
@@ -1632,15 +1709,41 @@ function createMediaTask(taskId, projectId, info = {}) {
     waiters: new Set(),
   };
   mediaTasks.set(taskId, task);
+  insertMediaTask(db, {
+    id: taskId,
+    projectId,
+    status: task.status,
+    surface: task.surface,
+    model: task.model,
+    progress: task.progress,
+    file: task.file,
+    error: task.error,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+  });
   return task;
 }
 
-function appendTaskProgress(task, line) {
-  task.progress.push(line);
-  notifyTaskWaiters(task);
+function persistMediaTask(db, task) {
+  updateMediaTask(db, task.id, {
+    status: task.status,
+    surface: task.surface,
+    model: task.model,
+    progress: task.progress,
+    file: task.file,
+    error: task.error,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+  });
 }
 
-function notifyTaskWaiters(task) {
+function appendTaskProgress(db, task, line) {
+  task.progress.push(line);
+  persistMediaTask(db, task);
+  notifyTaskWaiters(db, task);
+}
+
+function notifyTaskWaiters(db, task) {
   const wakers = Array.from(task.waiters);
   for (const w of wakers) {
     try {
@@ -1650,14 +1753,33 @@ function notifyTaskWaiters(task) {
     }
   }
   if (
-    (task.status === 'done' || task.status === 'failed') &&
+    MEDIA_TERMINAL_STATUSES.has(task.status) &&
     !task._gcScheduled
   ) {
     task._gcScheduled = true;
     setTimeout(() => {
-      if (task.waiters.size === 0) mediaTasks.delete(task.id);
+      if (task.waiters.size === 0) {
+        mediaTasks.delete(task.id);
+        deleteMediaTask(db, task.id);
+      }
     }, TASK_TTL_AFTER_DONE_MS).unref?.();
   }
+}
+
+function mediaTaskSnapshot(task, since = 0) {
+  const snapshot = {
+    taskId: task.id,
+    status: task.status,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+    progress: task.progress.slice(since),
+    nextSince: task.progress.length,
+  };
+  if (task.status === 'done') snapshot.file = task.file;
+  if (task.status === 'failed' || task.status === 'interrupted') {
+    snapshot.error = task.error;
+  }
+  return snapshot;
 }
 
 export function createSseResponse(
@@ -1697,11 +1819,15 @@ export function createSseResponse(
 
   return {
     /** @param {ChatSseEvent['event'] | ProxySseEvent['event'] | string} event */
-    send(event, data, id = null) {
+    send(event, data, id: string | number | null | undefined = null) {
       if (!canWrite()) return false;
-      if (id !== null && id !== undefined) res.write(`id: ${id}\n`);
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      // Assemble the full SSE event into a single write so id/event/data land
+      // in one TCP chunk. Three separate writes would let `event: <type>` flush
+      // ahead of the `data:` payload, which produces partial events for
+      // consumers that read chunk-by-chunk (e.g. tests using a Response body
+      // reader with a substring marker).
+      const idLine = id !== null && id !== undefined ? `id: ${id}\n` : '';
+      res.write(`${idLine}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       return true;
     },
     writeKeepAlive,
@@ -1715,14 +1841,44 @@ export function createSseResponse(
   };
 }
 
+export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+
+export interface StartServerOptions {
+  desktopPdfExporter?: DesktopPdfExporter | null;
+  host?: string;
+  port?: number;
+  returnServer?: boolean;
+}
+
+const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return 2 * 60 * 1000;
+  // This watchdog observes child stdout/stderr/SSE activity, not real CPU or
+  // filesystem progress. Keep the default long enough for agents that spend
+  // several minutes silently writing large artifacts.
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+  // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
+  // makes an oversized override fail almost immediately while reporting a huge
+  // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+function resolveChatRunShutdownGraceMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
+  if (!Number.isFinite(raw)) return 3_000;
   return Math.max(0, Math.floor(raw));
 }
 
-export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST || '127.0.0.1', returnServer = false } = {}) {
+export async function startServer({
+  port = 7456,
+  host = process.env.OD_BIND_HOST || '127.0.0.1',
+  returnServer = false,
+  desktopPdfExporter = null,
+}: StartServerOptions = {}) {
   let resolvedPort = port;
+  let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -1796,6 +1952,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const reconciledStaleRuns = reconcileStaleRuns(db, { staleAfterMs: critiqueCfg.totalTimeoutMs });
   if (reconciledStaleRuns > 0) {
     console.warn(`[critique] reconcileStaleRuns flipped ${reconciledStaleRuns} stale running row(s) to interrupted`);
+  }
+  const mediaReconcile = reconcileMediaTasksOnBoot(db, {
+    terminalTtlMs: TASK_TTL_AFTER_DONE_MS,
+  });
+  if (mediaReconcile.interrupted > 0 || mediaReconcile.deleted > 0) {
+    console.warn(
+      `[media] reconcileMediaTasksOnBoot interrupted ${mediaReconcile.interrupted} task(s), ` +
+        `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
+    );
+  }
+  mediaTasks.clear();
+  for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
+    hydrateMediaTask(row);
   }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
@@ -2680,6 +2849,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
+    // Forward to Langfuse only on the explicit final message write. The web
+    // stream can persist a terminal runStatus before onDone has flushed the
+    // final assistant content and produced-file manifest; telemetryFinalized
+    // marks the later PUT that is safe for the bridge's SQLite read.
+    if (
+      shouldReportRunCompletedFromMessage(saved, m) &&
+      !reportedRuns.has(saved.runId)
+    ) {
+      const run = design.runs.get(saved.runId);
+      if (run) {
+        reportedRuns.add(saved.runId);
+        // Auto-evict so the Set doesn't accumulate forever in long-running
+        // daemons. Same TTL as the runs map cleanup in runs.ts.
+        setTimeout(() => reportedRuns.delete(saved.runId), 30 * 60 * 1000).unref?.();
+        void reportRunCompletedFromDaemon({
+          db,
+          dataDir: RUNTIME_DATA_DIR,
+          run,
+          persistedRunStatus: saved.runStatus,
+          persistedEndedAt:
+            typeof saved.endedAt === 'number' ? saved.endedAt : undefined,
+          appVersion: cachedAppVersion,
+        });
+      }
+    }
     res.json({ message: saved });
   });
 
@@ -3768,6 +3962,101 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+    try {
+      // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
+      // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
+      // the char-class regex and resolve to the parent directory under
+      // path.join. Express decodes percent-encoded `%2e%2e` to `..` before
+      // we see it, so this check covers both URL-supplied and stored-row
+      // attack vectors.
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
+      if (typeof apiKey !== 'string' || !apiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      }
+      if (baseUrl !== undefined) {
+        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
+        }
+        const validated = validateExternalApiBaseUrl(baseUrl);
+        if (validated.error) {
+          return sendApiError(
+            res,
+            validated.forbidden ? 403 : 400,
+            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+            validated.error,
+          );
+        }
+      }
+      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      }
+
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      const result = await finalizeDesignPackage(
+        db,
+        PROJECTS_DIR,
+        DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { apiKey, baseUrl, model, maxTokens },
+      );
+      res.json(result);
+    } catch (err) {
+      // Concurrent finalize - the lockfile was already held by another
+      // call. Caller can retry after a short wait; not a client error.
+      // Maps to the shared CONFLICT code per @lefarcen P2 on PR #832.
+      if (err instanceof FinalizePackageLockedError) {
+        return sendApiError(res, 409, 'CONFLICT', err.message);
+      }
+
+      // Upstream Anthropic error - status-aware mapping using shared
+      // ApiErrorCode values. Run the raw upstream body through
+      // redactSecrets so the API key cannot leak even if Anthropic
+      // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
+      // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
+      if (err instanceof FinalizeUpstreamError) {
+        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const init = safeDetails ? { details: safeDetails } : {};
+        if (err.status === 401) {
+          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
+        }
+        if (err.status === 429) {
+          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+        }
+        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
+      }
+
+      // The blocking call hit our 120s AbortController timeout - or the
+      // caller passed an already-aborted signal. Either way, surface as
+      // 503 with the shared UPSTREAM_UNAVAILABLE code (no dedicated
+      // TIMEOUT code in the contracts ApiErrorCode union).
+      const errName =
+        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
+      if (errName === 'AbortError') {
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'finalize timed out');
+      }
+
+      // Unexpected runtime failure (file IO, db access, prompt build).
+      // Log via console.error per the daemon convention; client sees a
+      // generic 500 with the shared INTERNAL_ERROR code. Run the message
+      // through redactSecrets defensively.
+      console.error('[finalize/anthropic]', err);
+      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
+    }
+  });
+
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
     async (req, res) => {
@@ -3983,6 +4272,41 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err),
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/export/pdf', async (req, res) => {
+    if (typeof desktopPdfExporter !== 'function') {
+      return sendApiError(
+        res,
+        501,
+        'UPSTREAM_UNAVAILABLE',
+        'desktop PDF export is only available in the desktop runtime',
+      );
+    }
+    try {
+      const { fileName, title, deck } = req.body || {};
+      if (typeof fileName !== 'string' || fileName.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      const input = await buildDesktopPdfExportInput({
+        daemonUrl,
+        deck: deck === true,
+        fileName,
+        projectId: req.params.id,
+        projectsRoot: PROJECTS_DIR,
+        title: typeof title === 'string' ? title : undefined,
+      });
+      const result = await desktopPdfExporter(input);
+      res.json(result);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
       );
     }
   });
@@ -4267,7 +4591,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (!project) return res.status(404).json({ error: 'project not found' });
 
       const taskId = randomUUID();
-      const task = createMediaTask(taskId, projectId, {
+      const task = createMediaTask(db, taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
       });
@@ -4279,6 +4603,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
 
       task.status = 'running';
+      persistMediaTask(db, task);
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -4299,13 +4624,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         language: typeof req.body?.language === 'string' ? req.body.language : undefined,
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
-        onProgress: (line) => appendTaskProgress(task, line),
+        onProgress: (line) => appendTaskProgress(db, task, line),
       })
         .then((meta) => {
           task.status = 'done';
           task.file = meta;
           task.endedAt = Date.now();
-          notifyTaskWaiters(task);
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
           console.error(
             `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
               `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
@@ -4319,7 +4645,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             code: err?.code,
           };
           task.endedAt = Date.now();
-          notifyTaskWaiters(task);
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
           console.error(
             `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
               `message=${(task.error.message || '').slice(0, 240)}`,
@@ -4381,7 +4708,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
-    const task = mediaTasks.get(taskId);
+    const task = getLiveMediaTask(db, taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
@@ -4392,22 +4719,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
     const respond = () => {
       if (res.writableEnded) return;
-      const snapshot = {
-        taskId,
-        status: task.status,
-        startedAt: task.startedAt,
-        endedAt: task.endedAt,
-        progress: task.progress.slice(since),
-        nextSince: task.progress.length,
-      };
-      if (task.status === 'done') snapshot.file = task.file;
-      if (task.status === 'failed') snapshot.error = task.error;
-      res.json(snapshot);
+      res.json(mediaTaskSnapshot(task, since));
     };
 
     if (
-      task.status === 'done' ||
-      task.status === 'failed' ||
+      MEDIA_TERMINAL_STATUSES.has(task.status) ||
       task.progress.length > since
     ) {
       return respond();
@@ -4433,25 +4749,21 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const projectId = req.params.id;
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = [];
-    for (const t of mediaTasks.values()) {
-      if (t.projectId !== projectId) continue;
-      const isTerminal = t.status === 'done' || t.status === 'failed';
-      if (isTerminal && !includeDone) continue;
-      tasks.push({
-        taskId: t.id,
-        status: t.status,
-        startedAt: t.startedAt,
-        endedAt: t.endedAt,
-        elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
-        surface: t.surface,
-        model: t.model,
-        progress: t.progress.slice(-3),
-        progressCount: t.progress.length,
-        ...(t.status === 'done' ? { file: t.file } : {}),
-        ...(t.status === 'failed' ? { error: t.error } : {}),
-      });
-    }
+    const tasks = listMediaTasksByProject(db, projectId, {
+      includeTerminal: includeDone,
+    }).map((t) => ({
+      taskId: t.id,
+      status: t.status,
+      startedAt: t.startedAt,
+      endedAt: t.endedAt,
+      elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
+      surface: t.surface,
+      model: t.model,
+      progress: t.progress.slice(-3),
+      progressCount: t.progress.length,
+      ...(t.status === 'done' ? { file: t.file } : {}),
+      ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
+    }));
     tasks.sort((a, b) => b.startedAt - a.startedAt);
     res.json({ tasks });
   });
@@ -4493,6 +4805,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   const design = {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
   };
+
+  // Tracks runs whose completion has already been forwarded to Langfuse so
+  // that repeated PUT /messages/:id calls (web buffers + retries) only emit
+  // one trace per run. Entries are scrubbed when the run's TTL window
+  // expires (30 min, mirrors runs.ts).
+  const reportedRuns = new Set();
+
+  // App-version snapshot read once at server start. Used as static metadata
+  // on every Langfuse trace so we can correlate behaviour with releases
+  // without paying the package.json read cost per turn. Updates require a
+  // daemon restart, which is fine — version doesn't change in-process.
+  let cachedAppVersion = null;
+  void (async () => {
+    try {
+      cachedAppVersion = await readCurrentAppVersionInfo();
+    } catch {
+      // Telemetry is best-effort; running with appVersion === null just
+      // omits the field from the trace.
+    }
+  })();
 
   const composeDaemonSystemPrompt = async ({
     agentId,
@@ -4639,6 +4971,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const {
       agentId,
       message,
+      currentPrompt,
       systemPrompt,
       imagePaths = [],
       projectId,
@@ -4661,6 +4994,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (typeof clientRequestId === 'string' && clientRequestId)
       run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+    // Stash the original user prompt + per-turn config so the
+    // langfuse-bridge report path can include them without reaching back
+    // into chatBody across the createChatRunService boundary. Each field
+    // is optional and only set when the chat body actually carried it.
+    const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
+    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (typeof model === 'string' && model) run.model = model;
+    if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
+    if (typeof skillId === 'string' && skillId) run.skillId = skillId;
+    if (typeof designSystemId === 'string' && designSystemId)
+      run.designSystemId = designSystemId;
     const def = getAgentDef(agentId);
     if (!def)
       return design.runs.fail(
@@ -5307,6 +5651,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
+    // Reset the inactivity watchdog on every raw stdout byte so that
+    // structured adapters that buffer partial lines (Codex item.completed,
+    // pi-rpc session/prompt, ACP agent messages) and models that spend a
+    // long time in non-streamed reasoning still keep the run alive.
+    child.stdout.on('data', () => noteAgentActivity());
+
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
     // Adapters that emit structured wrappers (claude-stream-json,
@@ -5764,7 +6114,20 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   app.post('/api/runs', (req, res) => {
+    if (daemonShuttingDown) {
+      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
+    }
     const run = design.runs.create(req.body || {});
+    // Capture which front-end carrier started the run (Electron desktop
+    // shell vs. plain browser). Web sets this header explicitly; falls
+    // back to a UA sniff if header is absent. Used as a telemetry tag.
+    const declared = String(req.get('x-od-client') ?? '').toLowerCase();
+    if (declared === 'desktop' || declared === 'web') {
+      run.clientType = declared;
+    } else {
+      const ua = String(req.get('user-agent') ?? '');
+      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
+    }
     /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
     const body = { runId: run.id };
     res.status(202).json(body);
@@ -5801,6 +6164,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   });
 
   app.post('/api/chat', (req, res) => {
+    if (daemonShuttingDown) {
+      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
+    }
     const run = design.runs.create();
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
@@ -5830,13 +6196,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google',
+            'protocol must be one of anthropic|openai|azure|google|ollama',
           );
         }
         if (
@@ -6043,6 +6409,44 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     if (tail) await onFrame(collectSseFrame(tail));
   };
 
+  // Ollama Cloud streams NDJSON (newline-delimited JSON) — each line is a
+  // complete JSON object. Parse per-line and dispatch parsed objects.
+  const streamUpstreamNdjson = async (response, onFrame) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (await onFrame({ data })) return;
+        } catch {
+          // skip unparseable lines
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        const data = JSON.parse(tail);
+        await onFrame({ data });
+      } catch {
+        // skip
+      }
+    }
+  };
+
   const extractOpenAIText = (data) => {
     const choices = data?.choices;
     if (!Array.isArray(choices) || choices.length === 0) return '';
@@ -6145,6 +6549,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -6240,6 +6645,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -6306,15 +6712,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       );
     }
 
+    const url = new URL(baseUrl);
+    const basePath = url.pathname.replace(/\/+$/, '');
+    const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
     const version =
       typeof apiVersion === 'string' && apiVersion.trim()
         ? apiVersion.trim()
-        : '2024-10-21';
-    const url = new URL(baseUrl);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
-    url.searchParams.set('api-version', version);
+        : usesVersionedOpenAIPath
+          ? ''
+          : '2024-10-21';
+    url.pathname = usesVersionedOpenAIPath
+      ? `${basePath}/chat/completions`
+      : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+    if (usesVersionedOpenAIPath && !version) {
+      url.searchParams.delete('api-version');
+    }
+    if (version) {
+      url.searchParams.set('api-version', version);
+    }
     console.log(
-      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version}`,
+      `[proxy:azure] ${req.method} ${validated.parsed.hostname} deployment=${model} api-version=${version || 'omitted'}`,
     );
 
     const payloadMessages = Array.isArray(messages) ? [...messages] : [];
@@ -6323,6 +6740,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const payload = {
+      ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
       max_tokens:
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
@@ -6339,6 +6757,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           'api-key': apiKey,
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -6436,6 +6855,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify(payload),
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -6479,17 +6899,116 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  app.post('/api/proxy/ollama/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const url = `${clean}/api/chat`;
+    console.log(
+      `[proxy:ollama] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const payload = {
+      model,
+      messages: payloadMessages,
+      stream: true,
+    };
+    if (typeof maxTokens === 'number' && maxTokens > 0) {
+      payload.options = { num_predict: maxTokens };
+    }
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamNdjson(response, ({ data }) => {
+        if (!data) return false;
+        if (data.done) {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        const content = data.message?.content;
+        if (typeof content === 'string' && content) {
+          sse.send('delta', { delta: content });
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:ollama] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
   // needs to advertise the port to a parent process before any request
   // can flow. Three callers depend on this contract:
-  //   - `apps/daemon/src/cli.ts`            → expects a `url` string
+  //   - `apps/daemon/src/cli.ts`            → expects `{ url, server, shutdown }`
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
+    let daemonShutdownStarted = false;
     const cleanupDaemonBackgroundWork = () => {
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
+    };
+    const shutdownDaemonRuns = async () => {
+      if (daemonShutdownStarted) return;
+      daemonShutdownStarted = true;
+      daemonShuttingDown = true;
+      await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
     };
     let server;
     try {
@@ -6519,14 +7038,16 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           console.log(`[od] daemon listening on ${url}`);
         }
         daemonUrl = url;
-        resolve(returnServer ? { url, server } : url);
+        resolve(returnServer ? { url, server, shutdown: shutdownDaemonRuns } : url);
       });
     } catch (error) {
       cleanupDaemonBackgroundWork();
       reject(error);
       return;
     }
-    server.once('close', cleanupDaemonBackgroundWork);
+    server.once('close', () => {
+      void shutdownDaemonRuns().finally(cleanupDaemonBackgroundWork);
+    });
     // `app.listen` throws synchronously when the port is already in use on
     // some Node versions, but emits an `error` event on others (and for
     // EACCES / EADDRNOTAVAIL even on the same Node). Wire the event so the

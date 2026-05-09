@@ -342,6 +342,43 @@ const timer = setInterval(() => {
     }
   });
 
+  it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+setTimeout(() => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'done' } }));
+  process.exit(0);
+}, 50);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
   it('marks stalled runs failed even when the child ignores SIGTERM', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
@@ -387,6 +424,61 @@ setInterval(() => {}, 1000);
   });
 });
 
+describe('daemon run creation during shutdown', () => {
+  it('rejects new run creation while shutdown cleanup is still in flight', async () => {
+    const previousGrace = process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+    process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = '100';
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+      shutdown: () => Promise<void>;
+    };
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const activeResponse = await fetch(`${started.url}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'hello' }),
+          });
+          expect(activeResponse.status).toBe(202);
+          const { runId } = await activeResponse.json() as { runId: string };
+          await waitForRunStatus(started.url, runId, (status) => status === 'running');
+
+          const shutdownPromise = started.shutdown();
+
+          const runResponse = await fetch(`${started.url}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'late run' }),
+          });
+          const chatResponse = await fetch(`${started.url}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'late chat' }),
+          });
+
+          expect(runResponse.status).toBe(503);
+          expect(chatResponse.status).toBe(503);
+          await shutdownPromise;
+        },
+      );
+    } finally {
+      if (previousGrace == null) {
+        delete process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+      } else {
+        process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = previousGrace;
+      }
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
+  });
+});
+
 async function readSseUntil(response: Response, marker: string): Promise<string> {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
@@ -400,14 +492,18 @@ async function readSseUntil(response: Response, marker: string): Promise<string>
   return body;
 }
 
-async function waitForRunStatus(baseUrl: string, runId: string): Promise<{ status: string }> {
+async function waitForRunStatus(
+  baseUrl: string,
+  runId: string,
+  done: (status: string) => boolean = (status) => status !== 'queued' && status !== 'running',
+): Promise<{ status: string }> {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
     const statusBody = await statusResponse.json() as { status: string };
-    if (statusBody.status !== 'queued' && statusBody.status !== 'running') return statusBody;
+    if (done(statusBody.status)) return statusBody;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('run did not finish');
+  throw new Error('run did not reach expected status');
 }
 
 describe('chat prompt helpers', () => {

@@ -191,6 +191,53 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     models: ['mimo-v2.5-pro'],
   },
   {
+    label: 'Ollama Cloud',
+    protocol: 'ollama',
+    baseUrl: 'https://ollama.com',
+    model: 'gpt-oss:120b',
+    models: [
+      'cogito-2.1:671b',
+      'deepseek-v3.1:671b',
+      'deepseek-v3.2',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'devstral-2:123b',
+      'devstral-small-2:24b',
+      'gemini-3-flash-preview',
+      'gemma3:4b',
+      'gemma3:12b',
+      'gemma3:27b',
+      'gemma4:31b',
+      'glm-4.6',
+      'glm-4.7',
+      'glm-5',
+      'glm-5.1',
+      'gpt-oss:20b',
+      'gpt-oss:120b',
+      'kimi-k2:1t',
+      'kimi-k2-thinking',
+      'kimi-k2.5',
+      'kimi-k2.6',
+      'minimax-m2',
+      'minimax-m2.1',
+      'minimax-m2.5',
+      'minimax-m2.7',
+      'ministral-3:3b',
+      'ministral-3:8b',
+      'ministral-3:14b',
+      'mistral-large-3:675b',
+      'nemotron-3-nano:30b',
+      'nemotron-3-super',
+      'qwen3-coder:480b',
+      'qwen3-coder-next',
+      'qwen3-next:80b',
+      'qwen3-vl:235b',
+      'qwen3-vl:235b-instruct',
+      'qwen3.5:397b',
+      'rnj-1:8b',
+    ],
+  },
+  {
     label: 'MiMo (Xiaomi) — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
@@ -233,6 +280,11 @@ function isValidOrbitTime(time: string): boolean {
 
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
+    const normalized = (baseUrl || '').toLowerCase();
+    // Any config pointing at ollama.com should resolve to the new ollama
+    // protocol so both chat and the connection test hit the native Ollama
+    // proxy instead of the Anthropic or OpenAI paths.
+    if (normalized.includes('ollama.com')) return 'ollama';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is
@@ -254,6 +306,13 @@ export function loadConfig(): AppConfig {
       };
     }
     const parsed = JSON.parse(raw) as Partial<AppConfig>;
+    // Strip daemon-owned privacy fields if a stale localStorage payload
+    // still carries them. Older builds wrote these to localStorage; we
+    // now treat the daemon as authoritative so the user can rotate /
+    // revoke without leaving residue in browser storage.
+    for (const key of DAEMON_OWNED_KEYS) {
+      delete (parsed as Record<string, unknown>)[key];
+    }
     const parsedHasApiProtocol = Object.prototype.hasOwnProperty.call(
       parsed,
       'apiProtocol',
@@ -279,6 +338,14 @@ export function loadConfig(): AppConfig {
       // legacy config can be migrated when it is loaded.
       if (!parsedHasApiProtocol) {
         merged.apiProtocol = inferApiProtocol(merged.model, merged.baseUrl);
+        // Ollama Cloud legacy configs may carry a base URL that includes
+        // /api or /api/ — normalize to the host root so the daemon's own
+        // /api/chat appending doesn't double up.
+        if (merged.apiProtocol === 'ollama') {
+          merged.baseUrl = merged.baseUrl
+            .replace(/\/api\/?$/, '')
+            .replace(/\/+$/, '');
+        }
         // Also set apiProviderBaseUrl so setApiProtocol() can correctly identify
         // whether the user is on a known provider and switch defaults appropriately.
         // null means "custom/unknown provider" so the protocol switch won't override
@@ -341,8 +408,23 @@ export async function syncComposioConfigToDaemon(
   }
 }
 
+// Privacy-sensitive fields the user can revoke. We deliberately keep
+// these out of localStorage so the daemon remains the single source of
+// truth: clearing app-config.json (or rotating via "Delete my data")
+// fully resets the install identity, with no residual cohort key
+// silently sitting in browser storage where the user can't see it.
+const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
+  'installationId',
+  'telemetry',
+  'privacyDecisionAt',
+]);
+
 export function saveConfig(config: AppConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  const sanitized: AppConfig = { ...config };
+  for (const key of DAEMON_OWNED_KEYS) {
+    delete (sanitized as unknown as Record<string, unknown>)[key];
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }
 
 export function mergeDaemonConfig(
@@ -379,6 +461,23 @@ export function mergeDaemonConfig(
   }
   if (daemonConfig.orbit !== undefined) {
     next.orbit = normalizeOrbit(daemonConfig.orbit);
+  }
+  if (daemonConfig.installationId !== undefined) {
+    next.installationId = daemonConfig.installationId;
+  }
+  if (daemonConfig.telemetry !== undefined) {
+    next.telemetry = { ...daemonConfig.telemetry };
+  }
+  if (daemonConfig.privacyDecisionAt !== undefined) {
+    next.privacyDecisionAt = daemonConfig.privacyDecisionAt;
+  } else if (
+    daemonConfig.installationId !== undefined ||
+    daemonConfig.telemetry !== undefined
+  ) {
+    // One-shot migration for configs created before privacyDecisionAt
+    // existed. If the daemon already has an id or telemetry prefs, the user
+    // has resolved the first-run prompt and should not see it again.
+    next.privacyDecisionAt = Date.now();
   }
   return next;
 }
@@ -435,6 +534,9 @@ export async function syncConfigToDaemon(
     disabledSkills: config.disabledSkills,
     disabledDesignSystems: config.disabledDesignSystems,
     orbit: normalizeOrbit(config.orbit),
+    installationId: config.installationId,
+    telemetry: config.telemetry,
+    privacyDecisionAt: config.privacyDecisionAt,
   };
   try {
     const response = await fetch('/api/app-config', {

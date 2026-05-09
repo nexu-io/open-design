@@ -275,6 +275,11 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
     return ordered;
   }, [scenarioCounts]);
 
+  const scenarioAllCount = useMemo(
+    () => [...scenarioCounts.values()].reduce((total, count) => total + count, 0),
+    [scenarioCounts],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const matched = skills.filter((s) => {
@@ -381,7 +386,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
               onClick={() => setScenarioFilter('all')}
             >
               {t('examples.modeAll')}
-              <span className="filter-pill-count">{filtered.length}</span>
+              <span className="filter-pill-count">{scenarioAllCount}</span>
             </button>
             {scenarioOptions.map((tag) => (
               <button
@@ -670,6 +675,9 @@ function ExampleCard({
 }
 
 function tagForSkill(skill: SkillSummary, t: TranslateFn): string {
+  if (skill.mode === 'image' || skill.surface === 'image') return t('examples.tagImage');
+  if (skill.mode === 'video' || skill.surface === 'video') return t('examples.tagVideo');
+  if (skill.mode === 'audio' || skill.surface === 'audio') return t('examples.tagAudio');
   if (skill.mode === 'deck') return t('examples.tagSlideDeck');
   if (skill.mode === 'template') return t('examples.tagTemplate');
   if (skill.mode === 'design-system') return t('examples.tagDesignSystem');

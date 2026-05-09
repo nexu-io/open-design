@@ -21,6 +21,7 @@ export function renderModelOptions(models: AgentModelOption[]) {
     arr.push(m);
     groups.set(provider, arr);
   }
+  flat.sort((a, b) => (a.id === 'default' ? -1 : b.id === 'default' ? 1 : 0));
   if (groups.size === 0) {
     return (
       <>
@@ -64,7 +65,7 @@ export function isCustomModel(
   modelId: string | null | undefined,
   models: AgentModelOption[],
 ): boolean {
-  if (modelId == null) return false;
+  if (!modelId) return false;
   return !models.some((m) => m.id === modelId);
 }
 

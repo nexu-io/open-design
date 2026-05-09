@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Parses Qoder CLI's `--output-format stream-json` JSONL stream into the
  * small event set consumed by the chat UI. Qoder's top-level records are
@@ -6,8 +5,19 @@
  * fields, so keep this parser separate from Claude/Codex-compatible streams.
  */
 
-function stringifyContent(value) {
+import { Buffer } from 'node:buffer';
+
+type JsonRecord = Record<string, unknown>;
+type QoderEvent = Record<string, unknown>;
+type QoderEventSink = (event: QoderEvent) => void;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function stringifyContent(value: unknown): string {
   if (typeof value === 'string') return value;
+  if (Buffer.isBuffer(value)) return value.toString('utf8');
   if (value == null) return '';
   try {
     return JSON.stringify(value);
@@ -16,26 +26,25 @@ function stringifyContent(value) {
   }
 }
 
-function textFromContentBlock(block) {
-  if (!block || typeof block !== 'object') return '';
+function textFromContentBlock(block: unknown): string {
+  if (!isRecord(block)) return '';
   if (block.type === 'text' && typeof block.text === 'string') return block.text;
   if (typeof block.text === 'string') return block.text;
   return '';
 }
 
-function messageFromError(error) {
-  if (error && typeof error === 'object' && typeof error.message === 'string') {
+function messageFromError(error: unknown): string {
+  if (isRecord(error) && typeof error.message === 'string') {
     return error.message;
   }
   if (typeof error === 'string' && error.length > 0) return error;
   return 'Unknown Qoder error';
 }
 
-function messageFromResult(obj) {
+function messageFromResult(obj: JsonRecord): string {
   if (typeof obj.error === 'string' && obj.error.length > 0) return obj.error;
   if (
-    obj.error &&
-    typeof obj.error === 'object' &&
+    isRecord(obj.error) &&
     typeof obj.error.message === 'string' &&
     obj.error.message.length > 0
   ) {
@@ -50,12 +59,12 @@ function messageFromResult(obj) {
   return 'Qoder run failed';
 }
 
-export function createQoderStreamHandler(onEvent) {
+export function createQoderStreamHandler(onEvent: QoderEventSink) {
   let buffer = '';
   let emittedThinkingStart = false;
 
-  function handleObject(obj, rawLine) {
-    if (!obj || typeof obj !== 'object') return;
+  function handleObject(obj: unknown, rawLine: string) {
+    if (!isRecord(obj)) return;
 
     if (obj.type === 'system' && obj.subtype === 'init') {
       onEvent({
@@ -71,7 +80,7 @@ export function createQoderStreamHandler(onEvent) {
       return;
     }
 
-    if (obj.type === 'assistant' && obj.message) {
+    if (obj.type === 'assistant' && isRecord(obj.message)) {
       const content = Array.isArray(obj.message.content)
         ? obj.message.content
         : [];
@@ -84,8 +93,7 @@ export function createQoderStreamHandler(onEvent) {
           continue;
         }
         if (
-          block &&
-          typeof block === 'object' &&
+          isRecord(block) &&
           block.type === 'thinking' &&
           typeof block.thinking === 'string' &&
           block.thinking.length > 0
@@ -135,7 +143,7 @@ export function createQoderStreamHandler(onEvent) {
     onEvent({ type: 'raw', line: rawLine });
   }
 
-  function handleLine(line) {
+  function handleLine(line: string) {
     try {
       handleObject(JSON.parse(line), line);
     } catch {
@@ -143,7 +151,7 @@ export function createQoderStreamHandler(onEvent) {
     }
   }
 
-  function feed(chunk) {
+  function feed(chunk: unknown) {
     buffer += stringifyContent(chunk);
     let nl;
     while ((nl = buffer.indexOf('\n')) !== -1) {

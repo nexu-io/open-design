@@ -1,13 +1,11 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
-import { resolveMacPaths } from "../src/mac/paths.js";
-import { resolveSeededAppConfigPaths, seedPackagedAppConfig } from "../src/mac/index.js";
-import * as macLifecycle from "../src/mac/lifecycle.js";
+import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
@@ -135,34 +133,43 @@ describe("seedPackagedAppConfig", () => {
   });
 });
 
-describe("prepareMacLaunchConfig", () => {
-  it("injects the runtime namespace base root for portable mac starts", async () => {
+describe("writeLaunchPackagedConfig", () => {
+  it("injects the tools-pack runtime namespace root without mutating the packaged app config", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const config = makeConfig(root, { portable: true });
-      const paths = resolveMacPaths(config);
-      await mkdir(join(paths.installedAppPath, "Contents", "Resources"), { recursive: true });
-      await mkdir(config.roots.runtime.namespaceRoot, { recursive: true });
+      const config = makeConfig(root, { namespace: "release-beta", portable: true });
+      const appPath = join(root, "Open Design.app");
+      const embeddedConfigPath = join(appPath, "Contents", "Resources", "open-design-config.json");
+      await mkdir(dirname(embeddedConfigPath), { recursive: true });
       await writeFile(
-        join(paths.installedAppPath, "Contents", "Resources", "open-design-config.json"),
-        `${JSON.stringify({
-          appVersion: "1.2.3",
-          daemonCliEntryRelative: "open-design/bin/od",
-          namespace: config.namespace,
-          nodeCommandRelative: "open-design/bin/node",
-        }, null, 2)}\n`,
+        embeddedConfigPath,
+        `${JSON.stringify(
+          {
+            appVersion: "0.5.1-beta.2",
+            namespace: "packaged-default",
+            nodeCommandRelative: "open-design/bin/node",
+            webOutputMode: "standalone",
+          },
+          null,
+          2,
+        )}\n`,
         "utf8",
       );
 
-      const launchConfigPath = await (macLifecycle as {
-        prepareMacLaunchConfig?: (input: ToolPackConfig, appPath: string) => Promise<string | null>;
-      }).prepareMacLaunchConfig?.(config, paths.installedAppPath);
+      const launchConfigPath = await writeLaunchPackagedConfig(config, appPath);
+      const launchConfig = JSON.parse(await readFile(launchConfigPath, "utf8")) as Record<string, unknown>;
+      const embeddedConfig = JSON.parse(await readFile(embeddedConfigPath, "utf8")) as Record<string, unknown>;
 
-      expect(launchConfigPath).toBe(join(config.roots.runtime.namespaceRoot, "open-design-config.json"));
-      await expect(readFile(String(launchConfigPath), "utf8")).resolves.toContain(
-        `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
-      );
-      await expect(readFile(String(launchConfigPath), "utf8")).resolves.toContain('"appVersion": "1.2.3"');
+      expect(launchConfigPath).toBe(join(config.roots.runtime.namespaceRoot, "runtime", "open-design-config.json"));
+      expect(launchConfig).toMatchObject({
+        appVersion: "0.5.1-beta.2",
+        namespace: "release-beta",
+        namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+        nodeCommandRelative: "open-design/bin/node",
+        webOutputMode: "standalone",
+      });
+      expect(embeddedConfig).not.toHaveProperty("namespaceBaseRoot");
+      expect(embeddedConfig.namespace).toBe("packaged-default");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

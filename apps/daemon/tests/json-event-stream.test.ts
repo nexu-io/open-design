@@ -1,11 +1,17 @@
-// @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createJsonEventStreamHandler } from '../src/json-event-stream.js';
 
+type JsonStreamEvent = Record<string, unknown>;
+
+function collectEvents(kind: string) {
+  const events: JsonStreamEvent[] = [];
+  const handler = createJsonEventStreamHandler(kind, (event) => events.push(event));
+  return { events, handler };
+}
+
 test('opencode json stream emits text and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   handler.feed(
     '{"type":"step_start","sessionID":"ses-1","part":{"type":"step-start"}}\n' +
@@ -31,8 +37,7 @@ test('opencode json stream emits text and usage events', () => {
 });
 
 test('opencode json stream emits tool events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   handler.feed(
     JSON.stringify({
@@ -56,8 +61,7 @@ test('opencode json stream emits tool events', () => {
 });
 
 test('opencode json stream emits structured errors as error events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   const errorLine = JSON.stringify({
     type: 'error',
@@ -71,8 +75,7 @@ test('opencode json stream emits structured errors as error events', () => {
 });
 
 test('opencode json stream preserves nested error messages', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   const errorLine = JSON.stringify({
     type: 'error',
@@ -86,8 +89,7 @@ test('opencode json stream preserves nested error messages', () => {
 });
 
 test('opencode json stream falls back to error name when data has no message', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   const errorLine = JSON.stringify({
     type: 'error',
@@ -101,8 +103,7 @@ test('opencode json stream falls back to error name when data has no message', (
 });
 
 test('unknown json stream lines become raw events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   handler.feed('not-json\n');
   handler.flush();
@@ -118,8 +119,7 @@ test('unknown json stream lines become raw events', () => {
 // which the chat UI doesn't render — the run looked like a fast clean
 // success while the user actually got nothing back.
 test('opencode json stream surfaces error frames as proper error events (regression of #691)', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   const errorLine = JSON.stringify({
     type: 'error',
@@ -140,8 +140,7 @@ test('opencode json stream surfaces error frames as proper error events (regress
 });
 
 test('opencode json stream falls back to error.name when error.data.message is absent', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   const errorLine = JSON.stringify({
     type: 'error',
@@ -159,8 +158,7 @@ test('opencode json stream falls back to error.name when error.data.message is a
 });
 
 test('opencode json stream falls back to a generic message when error has no usable detail', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   const errorLine = JSON.stringify({ type: 'error', error: {} });
   handler.feed(errorLine + '\n');
@@ -175,8 +173,7 @@ test('opencode json stream falls back to a generic message when error has no usa
 });
 
 test('gemini stream emits init text and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('gemini', (event) => events.push(event));
+  const { events, handler } = collectEvents('gemini');
 
   handler.feed(
     JSON.stringify({ type: 'init', session_id: 'gm-1', model: 'gemini-3-flash-preview' }) + '\n' +
@@ -201,8 +198,7 @@ test('gemini stream emits init text and usage events', () => {
 });
 
 test('cursor stream emits partial text once and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('cursor-agent', (event) => events.push(event));
+  const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
     JSON.stringify({ type: 'system', subtype: 'init', model: 'GPT-5 Mini' }) + '\n' +
@@ -244,8 +240,7 @@ test('cursor stream emits partial text once and usage events', () => {
 });
 
 test('cursor stream emits suffix when final assistant extends partial text', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('cursor-agent', (event) => events.push(event));
+  const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
     JSON.stringify({
@@ -268,8 +263,7 @@ test('cursor stream emits suffix when final assistant extends partial text', () 
 });
 
 test('cursor stream de-duplicates cumulative timestamped assistant chunks', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('cursor-agent', (event) => events.push(event));
+  const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
     JSON.stringify({
@@ -299,8 +293,7 @@ test('cursor stream de-duplicates cumulative timestamped assistant chunks', () =
 });
 
 test('codex json stream emits status text and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(
     JSON.stringify({ type: 'thread.started', thread_id: 'thr-1' }) + '\n' +
@@ -326,8 +319,7 @@ test('codex json stream emits status text and usage events', () => {
 });
 
 test('codex json stream emits structured errors once', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(
     JSON.stringify({
@@ -353,8 +345,7 @@ test('codex json stream emits structured errors once', () => {
 });
 
 test('codex json stream emits command execution tool events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(
     JSON.stringify({
@@ -400,8 +391,7 @@ test('codex json stream emits command execution tool events', () => {
 });
 
 test('unhandled structured events fall back to raw', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(JSON.stringify({ type: 'unhandled.event', foo: 'bar' }) + '\n');
 

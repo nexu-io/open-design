@@ -1066,7 +1066,6 @@ function ToolsImportPanel({
   return (
     <div className="composer-tools-list">
       <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
-      <ImportItem icon="link" label={t('chat.importGitHub')} t={t} />
       <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
       <ImportItem
         icon="folder"

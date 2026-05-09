@@ -2,7 +2,7 @@
 
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ProjectView } from '../../src/components/ProjectView';
+import { ProjectView, resolveSucceededRunStatus } from '../../src/components/ProjectView';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -164,5 +164,13 @@ describe('ProjectView daemon cleanup', () => {
     if (!seenSignal || !seenCancelSignal) throw new Error('Expected reattach signals to be captured');
     expect((seenSignal as any).aborted).toBe(true);
     expect((seenCancelSignal as any).aborted).toBe(false);
+  });
+
+  it('marks successful daemon completion as succeeded even before runId reaches message state', () => {
+    expect(resolveSucceededRunStatus('running')).toBe('succeeded');
+    expect(resolveSucceededRunStatus('queued')).toBe('succeeded');
+    expect(resolveSucceededRunStatus(undefined)).toBe('succeeded');
+    expect(resolveSucceededRunStatus('failed')).toBe('failed');
+    expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
   });
 });
