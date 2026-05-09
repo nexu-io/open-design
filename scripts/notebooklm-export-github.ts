@@ -131,8 +131,16 @@ function mdEscape(s: string): string {
   return s.replace(/\r/g, "").trim();
 }
 
+function escapeMdLinkText(s: string): string {
+  // Escape characters that can break Markdown link text, especially `[` and `]`.
+  // We also escape backslashes first to avoid double-escaping.
+  return s.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+}
+
 function makeToc(items: { anchor: string; title: string }[]): string {
-  return items.map((i) => `- [${i.title}](#${i.anchor})`).join("\n");
+  return items
+    .map((i) => `- [${escapeMdLinkText(i.title)}](#${i.anchor})`)
+    .join("\n");
 }
 
 function anchorFor(prefix: string, n: number, title: string): string {
