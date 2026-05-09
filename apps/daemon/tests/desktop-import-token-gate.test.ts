@@ -7,6 +7,8 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  isDesktopAuthGateActive,
+  resetDesktopAuthForTests,
   setDesktopAuthSecret,
   signDesktopImportToken,
   startServer,
@@ -38,11 +40,11 @@ describe('desktop-import-token gate', () => {
   beforeEach(() => {
     // Each test starts in "no secret registered" mode unless it
     // explicitly registers one — keeps tests independent.
-    setDesktopAuthSecret(null);
+    resetDesktopAuthForTests();
   });
 
   afterEach(() => {
-    setDesktopAuthSecret(null);
+    resetDesktopAuthForTests();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -54,7 +56,7 @@ describe('desktop-import-token gate', () => {
     // shared across vitest test files in the same pool, so a
     // lingering secret would silently 403 every other suite's
     // /api/import/folder call (#974).
-    setDesktopAuthSecret(null);
+    resetDesktopAuthForTests();
     return new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
@@ -192,6 +194,54 @@ describe('desktop-import-token gate', () => {
       { 'x-od-desktop-import-token': token },
     );
     expect(replayResp.status).toBe(403);
+  });
+
+  // Round-4 (lefarcen P1): the gate must NOT fail open when the secret
+  // is cleared after a desktop has registered. The sticky flag keeps
+  // the gate active for the lifetime of the daemon process even if the
+  // secret bytes are forgotten (production never clears the secret;
+  // tests do).
+  it('stays fail-closed (503 DESKTOP_AUTH_PENDING) after a registered secret is cleared', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '');
+    setDesktopAuthSecret(randomBytes(32));
+    expect(isDesktopAuthGateActive()).toBe(true);
+    setDesktopAuthSecret(null);
+    // Sticky: even with a null secret, the gate stays active because a
+    // desktop has paired with this daemon process at least once.
+    expect(isDesktopAuthGateActive()).toBe(true);
+    const resp = await importFolder({ baseDir: folder });
+    expect(resp.status).toBe(503);
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('DESKTOP_AUTH_PENDING');
+  });
+
+  // Round-4 (lefarcen P3): the desktop signs the exact picker output;
+  // the daemon must verify the same string. A previous version trimmed
+  // the request body's baseDir before HMAC verification, which would
+  // have rejected legitimate paths whose final component carried
+  // leading/trailing whitespace.
+  it('verifies the exact request-body baseDir, not a trimmed version', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '');
+    const secret = randomBytes(32);
+    setDesktopAuthSecret(secret);
+    const exp = new Date(Date.now() + 30_000).toISOString();
+    const nonce = 'whitespace-binding-nonce';
+    // Sign the trailing-space version (what the desktop would mint
+    // if the picker handed back a path with edge whitespace).
+    const padded = `${folder} `;
+    const token = signDesktopImportToken(secret, padded, { nonce, exp });
+    const resp = await importFolder(
+      { baseDir: padded },
+      { 'x-od-desktop-import-token': token },
+    );
+    // Either the realpath() step rejects it because the OS doesn't
+    // accept the padded path (400 BAD_REQUEST: "folder not found"),
+    // or it succeeds. What MUST NOT happen is a 403 token rejection
+    // — that would mean the daemon HMAC-verified a different string
+    // than the desktop signed.
+    expect(resp.status).not.toBe(403);
   });
 });
 

@@ -258,10 +258,35 @@ const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 // the requested baseDir. The desktop main process is the only entity that
 // can mint such a token — it owns the picker dialog and the secret — so
 // renderer JS can no longer name an arbitrary baseDir even indirectly
-// through project creation. When no secret has been registered (web-only
-// deployments, daemon spawned alone), the gate is dormant and the route
-// behaves exactly as before.
+// through project creation.
+//
+// Round-4 P1 (lefarcen): the gate must NOT fail open. The original
+// "secret == null → accept (web-only mode)" branch let a renderer bypass
+// when the daemon restarted mid-session (new daemon boots tokenless;
+// secret in main-process memory is now stale; renderer fetches the import
+// route directly). Two coordinated mechanisms close that:
+//
+// (1) Sticky in-process flag. Once a secret has ever been registered
+//     with this daemon process, the gate stays active for the rest of
+//     the process lifetime. A `setDesktopAuthSecret(null)` call (used
+//     by tests for cleanup) does NOT relax the gate — the flag is
+//     one-way. This closes the "secret cleared but daemon kept running"
+//     branch.
+//
+// (2) Orchestrator-pinned mode via `OD_REQUIRE_DESKTOP_AUTH=1` env var.
+//     Set by `tools-dev` / `tools-pack` / `apps/packaged` whenever the
+//     daemon is spawned in a desktop-bundled flow. Daemon reads the
+//     env at module-load time. With the flag set, the gate is active
+//     from request 0 — a renderer that races to call /api/import/folder
+//     before the desktop main process has registered its secret gets
+//     a 503 transient (retry shortly), not a free pass. Closes the
+//     daemon-restart-mid-session branch.
+//
+// In standalone-daemon (web-only) deployments where neither mechanism
+// fires, the gate stays dormant and /api/import/folder behaves exactly
+// as before.
 let desktopAuthSecret: Buffer | null = null;
+let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
 
 // Replay protection. Each successful import token consumes its nonce; the
 // nonce stays in this map until its expiry passes, at which point the next
@@ -273,11 +298,32 @@ const DESKTOP_IMPORT_TOKEN_HEADER = 'x-od-desktop-import-token';
 
 export function setDesktopAuthSecret(secret: Buffer | null): void {
   desktopAuthSecret = secret;
+  if (secret != null) {
+    desktopAuthEverRegistered = true;
+  }
   consumedImportNonces.clear();
 }
 
 export function isDesktopAuthRegistered(): boolean {
   return desktopAuthSecret != null;
+}
+
+export function isDesktopAuthGateActive(): boolean {
+  return desktopAuthEverRegistered;
+}
+
+/**
+ * Test-only helper. Round-4 added a sticky-once-set flag that survives
+ * `setDesktopAuthSecret(null)` so production code can never silently
+ * relax the gate, but daemon test files share a single HTTP server
+ * across `describe` blocks and a leaked flag would 403 every other
+ * suite's `/api/import/folder` call. This resets both bits together
+ * and is intentionally not exposed in any production boot path.
+ */
+export function resetDesktopAuthForTests(): void {
+  desktopAuthSecret = null;
+  desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+  consumedImportNonces.clear();
 }
 
 function pruneExpiredImportNonces(now: number): void {
@@ -2674,17 +2720,47 @@ export async function startServer({
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      // Token-gate is dormant when no desktop secret has been registered
-      // (web-only deployments and standalone daemon runs are unaffected).
+      // PR #974 round-4 P1: the gate is fail-CLOSED, not fail-open.
+      //
+      // Three branches:
+      //   1. Gate inactive (web-only daemon, no secret ever registered,
+      //      no env-var pinning): accept request as before.
+      //   2. Gate active but secret unavailable (env-var-pinned daemon
+      //      that has not yet received REGISTER_DESKTOP_AUTH, OR a
+      //      daemon-restart edge where the desktop main process holds
+      //      a secret the new daemon process doesn't know about): 503
+      //      "desktop auth required; secret not yet registered". The
+      //      renderer cannot bypass by hitting the route directly during
+      //      the desktop's startup window or after a daemon crash, and
+      //      the desktop's own pickAndImport flow can retry.
+      //   3. Gate active with secret registered: require + verify HMAC
+      //      bound to the EXACT raw baseDir (no `.trim()` here — the
+      //      desktop signs the picker output as-is, so the daemon must
+      //      verify the same string. Empty-input validation already
+      //      happened above; whitespace-edged paths that are otherwise
+      //      valid still HMAC-verify, and realpath() below is the
+      //      authoritative path normalizer for fs operations).
       let trustedPickerImport = false;
-      if (desktopAuthSecret != null) {
+      if (desktopAuthEverRegistered) {
+        if (desktopAuthSecret == null) {
+          return sendApiError(
+            res,
+            503,
+            'DESKTOP_AUTH_PENDING',
+            'desktop auth required but secret not yet registered',
+            {
+              details: { hint: 'restart desktop or wait for sidecar registration' },
+              retryable: true,
+            },
+          );
+        }
         const headerValue = req.get(DESKTOP_IMPORT_TOKEN_HEADER);
         const token = typeof headerValue === 'string' ? headerValue : '';
         const now = Date.now();
         pruneExpiredImportNonces(now);
         const verification = verifyDesktopImportToken(
           desktopAuthSecret,
-          baseDir.trim(),
+          baseDir,
           token,
           now,
           consumedImportNonces,
