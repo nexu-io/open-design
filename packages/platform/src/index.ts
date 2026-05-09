@@ -24,7 +24,7 @@ export type ProcessStampContract<
   TCriteria extends Partial<TStamp> = Partial<TStamp>,
 > = {
   normalizeStamp(input: unknown): TStamp;
-  normalizeStampCriteria(input?: unknown): TCriteria;
+  normalizeStampCriteria(input?: unknown): TCriteria;.fnm
   stampFields: readonly ProcessStampField<TStamp>[];
   stampFlags: { readonly [K in ProcessStampField<TStamp>]: string };
 };
@@ -522,6 +522,10 @@ export function wellKnownUserToolchainBins(
     },
     {
       root: join(home, ".local", "share", "fnm", "node-versions"),
+      segments: ["installation", "bin"],
+    },
+    {
+      root: join(home, ".fnm", "node-versions"),
       segments: ["installation", "bin"],
     },
   ]) {
