@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
@@ -604,7 +604,9 @@ export function LiveArtifactViewer({
 
   return (
     <div className={`viewer html-viewer live-artifact-viewer${inTabPresent ? ' is-tab-present' : ''}`}>
-      {chromeActionsHost ? createPortal((
+      {((node: ReactNode) => (
+        chromeActionsHost ? createPortal(node, chromeActionsHost) : node
+      ))(
         <div className="present-wrap chrome-present-wrap" ref={presentWrapRef}>
           <button
             className="chrome-action chrome-action-secondary present-trigger"
@@ -633,7 +635,7 @@ export function LiveArtifactViewer({
             </div>
           ) : null}
         </div>
-      ), chromeActionsHost) : null}
+      )}
       {inTabPresent ? (
         <button
           type="button"
@@ -4494,13 +4496,11 @@ function HtmlViewer({
           >
             <Icon name="plus" size={14} />
           </button>
-          {chromeActionsHost ? null : (
-            <span className="viewer-divider chrome-actions-fallback" aria-hidden />
-          )}
         </div>
       </div>
-      {chromeActionsHost ? createPortal((
-        <>
+      {((filePrimaryActions: ReactNode) => (
+        chromeActionsHost ? createPortal(filePrimaryActions, chromeActionsHost) : filePrimaryActions
+      ))(<>
           {showPresent ? (
             <div className="present-wrap chrome-present-wrap">
               <button
@@ -4691,8 +4691,7 @@ function HtmlViewer({
               ) : null}
             </div>
           ) : null}
-        </>
-      ), chromeActionsHost) : null}
+        </>)}
       <div className="viewer-body" ref={previewBodyRef}>
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
