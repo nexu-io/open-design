@@ -98,6 +98,7 @@ interface Props {
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   researchAvailable?: boolean;
+  onCollapse?: () => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -136,6 +137,7 @@ export function ChatPane({
   projectMetadata,
   onProjectMetadataChange,
   researchAvailable,
+  onCollapse,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -415,6 +417,18 @@ export function ChatPane({
           >
             <Icon name="plus" size={16} />
           </button>
+          {onCollapse ? (
+            <button
+              type="button"
+              className="icon-only"
+              data-testid="chat-collapse"
+              title={t('workspace.focusMode')}
+              aria-label={t('workspace.focusMode')}
+              onClick={onCollapse}
+            >
+              <Icon name="chevron-left" size={15} />
+            </button>
+          ) : null}
         </div>
       </div>
       {tab === 'chat' ? (

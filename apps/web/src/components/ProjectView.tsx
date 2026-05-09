@@ -1869,6 +1869,7 @@ export function ProjectView({
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
               }}
+              onCollapse={() => setWorkspaceFocused(true)}
             />
           ) : (
             <div className="pane" data-testid="chat-pane-loading">

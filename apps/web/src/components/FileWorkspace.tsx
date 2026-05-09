@@ -514,6 +514,19 @@ export function FileWorkspace({
   return (
     <div className="workspace" data-testid="file-workspace">
       <div className="ws-tabs-shell">
+        {onFocusModeChange && focusMode ? (
+          <button
+            type="button"
+            className="icon-only ws-focus-expand"
+            data-testid="workspace-focus-toggle"
+            aria-pressed={focusMode}
+            title={t('workspace.showChat')}
+            aria-label={t('workspace.showChat')}
+            onClick={() => onFocusModeChange(false)}
+          >
+            <Icon name="chevron-right" size={15} />
+          </button>
+        ) : null}
         <div
           ref={tabsBarRef}
           className="ws-tabs-bar"
@@ -604,21 +617,6 @@ export function FileWorkspace({
             );
           })}
         </div>
-        {onFocusModeChange ? (
-          <div className="ws-tabs-actions">
-            <button
-              type="button"
-              className="ws-focus-toggle"
-              data-testid="workspace-focus-toggle"
-              aria-pressed={focusMode}
-              title={focusMode ? t('workspace.showChat') : t('workspace.focusMode')}
-              onClick={() => onFocusModeChange(!focusMode)}
-            >
-              <Icon name={focusMode ? 'comment' : 'zoom-in'} size={13} />
-              <span>{focusMode ? t('workspace.showChat') : t('workspace.focusMode')}</span>
-            </button>
-          </div>
-        ) : null}
       </div>
       <div className="ws-body">
         {/* Keep the failure banner visible across tab switches so the
