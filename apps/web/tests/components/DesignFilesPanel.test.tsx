@@ -42,6 +42,7 @@ function renderPanel(files: ProjectFile[]) {
       onRefreshFiles={vi.fn()}
       onOpenFile={onOpenFile}
       onOpenLiveArtifact={vi.fn()}
+      onRenameFile={vi.fn()}
       onDeleteFile={vi.fn()}
       onDeleteFiles={onDeleteFiles}
       onUpload={vi.fn()}

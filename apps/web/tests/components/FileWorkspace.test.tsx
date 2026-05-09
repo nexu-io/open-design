@@ -291,8 +291,8 @@ describe('FileWorkspace design file rename', () => {
     const pendingSketchTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((tab) =>
       tab.textContent?.includes('.sketch.json'),
     );
-    expect(pendingSketchTab).toBeTruthy();
-    const pendingSketchName = pendingSketchTab!.textContent!.replace(' •', '');
+    if (!pendingSketchTab) throw new Error('Could not find pending sketch tab');
+    const pendingSketchName = pendingSketchTab.textContent!.replace(' •', '');
 
     act(() => designFilesTab.click());
     const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
