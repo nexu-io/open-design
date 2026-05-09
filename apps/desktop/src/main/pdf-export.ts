@@ -135,7 +135,7 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
   // injectParentPrintReadyCache in apps/web/src/runtime/exports.ts).
   // Check the cache first to avoid missing a message that fired before
   // this listener was attached.
-  await webContents.executeJavaScript(
+  const handshake = webContents.executeJavaScript(
     `(function() {
       if (window.__odPrintReady) return Promise.resolve(true);
       return new Promise(function(resolve) {
@@ -150,6 +150,14 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
     })()`,
     true,
   );
+
+  // Prevent indefinite hangs if the document is malformed or the
+  // injected handshake script was blocked (e.g. by a CSP violation).
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Print handshake timed out')), 30_000),
+  );
+
+  await Promise.race([handshake, timeout]);
 }
 
 async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
