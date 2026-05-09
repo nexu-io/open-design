@@ -497,17 +497,24 @@ export function DesignFilesPanel({
                                 {selected.has(f.name) ? '\u2611' : '\u2610'}
                               </span>
                             </td>
-                            <td className="df-cell-icon">
+                            <td
+                              className="df-cell-icon df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
                               <span className="df-row-icon" data-kind={f.kind} aria-hidden>
                                 {kindGlyph(f.kind)}
                               </span>
                             </td>
-                            <td className="df-cell-name">
+                            <td
+                              className="df-cell-name df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
                               <button
                                 type="button"
                                 className="df-row-name-btn"
                                 onClick={() => setPreview(f.name)}
-                                onDoubleClick={() => onOpenFile(f.name)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault();
@@ -529,10 +536,20 @@ export function DesignFilesPanel({
                                 </span>
                               </button>
                             </td>
-                            <td className="df-cell-kind">
+                            <td
+                              className="df-cell-kind df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
                               <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
                             </td>
-                            <td className="df-cell-time">{relativeTime(f.mtime, t)}</td>
+                            <td
+                              className="df-cell-time df-cell-openable"
+                              onClick={() => setPreview(f.name)}
+                              onDoubleClick={() => onOpenFile(f.name)}
+                            >
+                              {relativeTime(f.mtime, t)}
+                            </td>
                             <td className="df-cell-menu">
                               <span
                                 data-testid={`design-file-menu-${f.name}`}

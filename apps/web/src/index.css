@@ -7090,7 +7090,8 @@ button.connector-action.is-loading {
   transition: background 120ms ease;
 }
 .df-file-row:hover { background: var(--bg-subtle); }
-.df-file-row.active { background: var(--blue-bg); }
+.df-file-row.active:not(.selected) { background: var(--bg-subtle); }
+.df-file-row.active.selected { background: var(--blue-bg); }
 .df-file-row.active .df-row-name { color: var(--text-strong); }
 .df-file-row.selected { background: var(--blue-bg); }
 
@@ -7106,6 +7107,9 @@ button.connector-action.is-loading {
   padding: 10px 12px 10px 0;
   vertical-align: middle;
 }
+.df-cell-openable {
+  cursor: pointer;
+}
 .df-row-name-btn {
   all: unset;
   cursor: pointer;
@@ -7113,6 +7117,10 @@ button.connector-action.is-loading {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+.df-row-name-btn:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
 }
 .df-row-name-btn:focus-visible {
   outline: 2px solid var(--accent);
