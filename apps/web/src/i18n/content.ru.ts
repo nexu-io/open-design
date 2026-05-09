@@ -271,10 +271,10 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   supabase: 'Open-source-альтернатива Firebase. Темная изумрудная тема, code-first.',
   superhuman: 'Быстрый почтовый клиент. Премиальный темный UI, keyboard-first, фиолетовое свечение.',
   tesla: 'Электромобили. Радикальная редукция, полноэкранная фотография, почти отсутствие UI.',
-  'trading-terminal': 'Финансовый терминал. Data-dense интерфейс в стиле Bloomberg, только темный режим.',
   theverge:
     'Тех-издание. Акценты acid mint и ultraviolet, display Manuka, карточки сюжетов в духе rave-flyer.',
   'together-ai': 'Open-source AI-инфраструктура. Технический язык, дизайн в духе blueprint.',
+  'trading-terminal': 'Финансовый терминал. Data-dense интерфейс в стиле Bloomberg, только темный режим.',
   uber: 'Платформа мобильности. Сильный черно-белый контраст, узкая типографика, городская энергия.',
   vercel: 'Frontend-деплой. Черно-белая точность, шрифт Geist.',
   vodafone: 'Глобальный телеком-бренд. Монументальная display-типографика в верхнем регистре, красные chapter bands Vodafone.',

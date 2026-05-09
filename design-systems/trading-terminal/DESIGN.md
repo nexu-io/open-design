@@ -1,14 +1,23 @@
 # Trading Terminal Design System
 
 > Category: Themed & Unique
+> Bloomberg-style financial trading terminal. Dark-only, data-dense, cyan/coral buy/sell signals. Everything readable at a glance from two meters away.
 
-## 1. Concept & Vision
+## 1. Visual Theme & Atmosphere
 
 A professional-grade financial data terminal. Dense, information-rich layouts designed for traders who need to monitor multiple markets simultaneously. Dark surfaces reduce eye strain during long sessions. Cyan accent (#00D4AA) signals positive/buy, coral (#FF4757) signals negative/sell. Everything readable at a glance from two meters away.
 
-## 2. Design Language
+- **Visual style:** dense, data-first, professional
+- **Color stance:** dark surfaces with high-contrast data colors
+- **Design intent:** keep outputs recognizable to this style family while preserving usability and readability
 
-### Color Palette
+### Prior Art
+
+Bloomberg Terminal, Refinitiv Eikon, FactSet, TradingView Pro. All share: dark-only surfaces, monospace data fonts, tabular layouts with no decorative spacing, and color-coded buy/sell signals.
+
+## 2. Color
+
+### Surface Palette
 
 | Token | Hex | Usage |
 |-------|-----|-------|
@@ -16,15 +25,19 @@ A professional-grade financial data terminal. Dense, information-rich layouts de
 | Surface | `#141414` | Elevated panels, cards |
 | Surface Hover | `#1A1A1A` | Hover state for panels |
 | Border | `#2A2A2A` | Panel separation |
+
+### Data Palette
+
+| Token | Hex | Usage |
+|-------|-----|-------|
 | Primary | `#00D4AA` | Positive values, buy signals, success |
-| Secondary | `#AAAAAA` | Labels, metadata, standby values |
-| Tertiary | `#828282` | Timestamps, grid labels |
 | Gain | `#00D4AA` | Positive price movement |
 | Loss | `#FF4757` | Negative price movement |
-| Neutral | `#808086` | Unchanged, secondary data |
 | Warning | `#FFB800` | Caution alerts, margin warnings |
+| Neutral | `#808086` | Unchanged, secondary data |
 | Text Primary | `#FFFFFF` | High-contrast primary text |
 | Text Secondary | `#AAAAAA` | Labels, metadata |
+| Text Tertiary | `#828282` | Timestamps, grid labels |
 
 ### Dark Mode
 
@@ -46,7 +59,7 @@ Default and only mode. Trading terminals operate in dim environments for focus.
 }
 ```
 
-### Typography
+## 3. Typography
 
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
@@ -67,7 +80,7 @@ Micro: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consola
 Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 ```
 
-### Spacing
+## 4. Spacing
 
 4px baseline grid for maximum density.
 
@@ -78,11 +91,15 @@ Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas
 }
 ```
 
-## 3. Layout & Structure
+## 5. Layout & Composition
 
 Grid-based dense layout. Multiple data columns visible simultaneously. Panels share borders, not gaps. No rounded corners — sharp edges communicate precision. The layout is tabular: rows of data, columns of similar data.
 
-## 4. Components
+### Responsive Behavior
+
+Terminal layouts target desktop-first (1280px+). On narrower viewports, columns collapse from rightmost to leftmost, prioritizing price and change data. Below 768px, single-column stack with horizontal scroll for overflow data. No breakpoints alter the dark-only constraint.
+
+## 6. Components
 
 ### Order Book Row
 
@@ -145,23 +162,40 @@ Horizontal scrolling single-line ticker for market overview.
 }
 ```
 
-## 5. Motion
+## 7. Motion & Interaction
 
 Functional only. No decorative animation.
 
-- Price updates: 100ms fade (no jarring jumps)
-- Panel hover: 150ms background-color transition
-- Tooltip: 100ms fade-in
+| Animation | Duration | Easing | Effect |
+|-----------|----------|--------|--------|
+| Price updates | 100ms | linear | Fade (no jarring jumps) |
+| Panel hover | 150ms | ease-out | Background-color change |
+| Tooltip | 100ms | ease-out | Fade in |
 
-## 6. Accessibility
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+## 8. Voice & Brand
+
+Numeric and transactional. All labels are uppercase. No decorative copy — every word is a data point or a system label. Language is terse: PRICE, CHANGE, VOLUME, BID, ASK. No marketing language.
+
+### Accessibility
 
 - Text Primary (#FFFFFF) on #0D0D0D: 19.5:1 (WCAG AAA)
 - Text Secondary (#AAAAAA) on #0D0D0D: ~4.7:1 (WCAG AA)
 - Gain (#00D4AA) on #0D0D0D: 9.2:1 (WCAG AA)
 - Loss (#FF4757) on #0D0D0D: 5.9:1 (WCAG AA)
 - All data changes retain old value briefly before swapping to prevent flash blindness
+- All interactive elements have a visible focus-visible state
+- Touch targets minimum 44×44px
 
-## 7. Anti-patterns
+## 9. Anti-patterns
 
 - Do not use color alone to signal buy/sell — always pair with a directional icon or label
 - Do not animate data values decoratively — traders need instant, stable reads

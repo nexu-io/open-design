@@ -1,20 +1,30 @@
 # Loom Design System
 
 > Category: Themed & Unique
+> Loom async video. Purple primary, friendly surfaces, video-first layout. Clean and professional without being corporate.
 
-## 1. Concept & Vision
+## 1. Visual Theme & Atmosphere
 
 A friendly, fast video-first async communication tool. Loom's design feels like a well-made productivity app — approachable, clean, and professional without being corporate. Purple accent (#625DF5) signals creativity and video without being loud. Information density is moderate, with generous whitespace that lets content breathe.
 
-## 2. Design Language
+- **Visual style:** clean, friendly, content-first
+- **Color stance:** bright surfaces with purple accent
+- **Design intent:** keep outputs recognizable to this style family while preserving usability and readability
 
-### Color Palette
+## 2. Color
+
+### Surface Palette
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| Background | `#FFFFFF` | Primary canvas (light mode) |
+| Background | `#FFFFFF` | Primary canvas |
 | Surface | `#F7F7F8` | Cards, sidebars, elevated panels |
 | Border | `#E4E4E7` | Dividers, input borders |
+
+### Data Palette
+
+| Token | Hex | Usage |
+|-------|-----|-------|
 | Primary | `#625DF5` | CTAs, active states, video progress |
 | Primary Hover | `#5048E5` | Button hover state |
 | Text | `#1F1F23` | All text |
@@ -53,7 +63,7 @@ Default. A content-first tool used in bright office environments.
 }
 ```
 
-### Typography
+## 3. Typography
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
@@ -80,7 +90,7 @@ Micro: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
 Mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 ```
 
-### Spacing
+## 4. Spacing
 
 8px baseline grid. The 8px unit balances density for information-heavy layouts (video metadata, comment panels) against the generous whitespace Loom's brand conveys.
 
@@ -92,11 +102,15 @@ Mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
 }
 ```
 
-## 3. Layout & Composition
+## 5. Layout & Composition
 
 Video-first layout. The video thumbnail dominates; metadata and actions cluster below. Clean horizontal rhythm with consistent 16px gaps between elements. Cards use 8px radius for a friendly but professional feel.
 
-## 4. Components
+### Responsive Behavior
+
+Video-first responsive layout. At narrower breakpoints, the video thumbnail stacks above metadata and actions. At ≥768px, a side-by-side layout (video left, actions right) activates. Touch targets minimum 44×44px at all breakpoints.
+
+## 6. Components
 
 ### Video Thumbnail Card
 
@@ -175,7 +189,7 @@ Video-first layout. The video thumbnail dominates; metadata and actions cluster 
 }
 ```
 
-## 5. Motion
+## 7. Motion & Interaction
 
 | Animation | Duration | Easing | Effect |
 |-----------|----------|--------|--------|
@@ -184,22 +198,27 @@ Video-first layout. The video thumbnail dominates; metadata and actions cluster 
 | Overlay open | 200ms | ease-out | fade + scale(0.95→1) |
 | Skeleton shimmer | 1.5s | ease-in-out | background-position sweep |
 
-## 6. Shadows
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
 
-All `--shadow-*` tokens are defined in the Color section's `:root` block. Reference them with `var(--shadow-card)`, etc.
-
-## 7. Voice & Brand
+## 8. Voice & Brand
 
 ### Iconography
 
 Phosphor Icons (regular weight, 20px default) — single-stroke geometric style. 20px for inline, 24px for standalone. Violet `#625DF5` for active icons; gray `#6B6D76` for inactive.
 
-## 8. Accessibility
+### Accessibility
 
 - Primary text on white: 13.8:1 (WCAG AAA)
 - Secondary text (#6B6D76) on white: 4.8:1 (WCAG AA)
-- Tertiary text (#9B9CA3) on white: 3.2:1 — use for timestamps/metadata only, not body
-- Error (#D64770) on white: 5.2:1 (WCAG AA)
+- Tertiary text (#9B9CA3) on white: 2.74:1 — use for timestamps/metadata only, not body
+- Error (#D64770) on white: 4.97:1 (WCAG AA for large text; 3.96:1 for normal text — use white text on error background for small text)
 - All interactive elements have a visible focus-visible state
 - Touch targets minimum 44×44px
 

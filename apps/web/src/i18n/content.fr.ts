@@ -271,10 +271,10 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   supabase: 'Alternative Firebase open-source. Thème dark émeraude, code-first.',
   superhuman: 'Client email rapide. UI dark premium, keyboard-first, glow violet.',
   tesla: 'Automobile électrique. Réduction radicale, photographie full-viewport, presque aucune UI.',
-  'trading-terminal': 'Interface de trading financier. Terminal data-dense style Bloomberg, UI dark-only.',
   theverge:
     'Média tech éditorial. Accents acid mint et ultraviolet, display Manuka, story tiles façon rave flyer.',
   'together-ai': 'Infrastructure IA open-source. Technique, design proche blueprint.',
+  'trading-terminal': 'Interface de trading financier. Terminal data-dense style Bloomberg, UI dark-only.',
   uber: 'Plateforme de mobilité. Noir et blanc francs, type serrée, énergie urbaine.',
   vercel: 'Déploiement frontend. Précision noir et blanc, Geist Font.',
   vodafone: 'Marque télécom globale. Typographie display uppercase monumentale, bandes Vodafone Red.',
