@@ -302,6 +302,14 @@ export async function startPackagedSidecars(
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: "0",
         ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
+        // PR #974 round-4 P1: packaged builds always pair a desktop with
+        // the daemon, so the daemon's import-folder gate is pinned ON
+        // from request 0 — a renderer that races to call
+        // /api/import/folder before desktop has registered its HMAC
+        // secret gets DESKTOP_AUTH_PENDING (transient retry), not a
+        // free pass. Closes the daemon-restart-mid-session bypass that
+        // a runtime-only handshake left open.
+        OD_REQUIRE_DESKTOP_AUTH: "1",
         // Packaged daemon managed paths are deliberately delivered through
         // the sidecar launch environment. The daemon may keep its own default
         // fallback, but packaged runtime must not rely on path inference from
