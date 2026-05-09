@@ -257,8 +257,11 @@ function main() {
   // To avoid starving later selections (e.g. `--prs merged` yielding zero PRs
   // because issues consumed the whole budget), we fetch small batches for each
   // selected bucket and then interleave them round-robin up to the total limit.
-  const bucketCount = issueStates.length + prStates.length;
-  const perBucketFetch = Math.max(1, Math.ceil(limit / Math.max(1, bucketCount)));
+  //
+  // NOTE: We intentionally over-fetch up to `limit` from each selected bucket.
+  // This avoids under-filling the snapshot when some buckets are empty/small.
+  // (Example: issues disabled but `--issues all` was requested.)
+  const perBucketFetch = limit;
 
   const issuesByState: Record<IssueStateFlag, GhItem[]> = { open: [], closed: [] };
   for (const st of issueStates) {
