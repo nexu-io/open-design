@@ -29,7 +29,7 @@ export async function listDesignSystems(root: string): Promise<DesignSystemSumma
     return out;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const designPath = path.join(root, entry.name, 'DESIGN.md');
     try {
       const stats = await stat(designPath);

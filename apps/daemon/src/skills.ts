@@ -100,7 +100,7 @@ export async function listSkills(skillsRoot: string): Promise<SkillInfo[]> {
     return out;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const dir = path.join(skillsRoot, entry.name);
     const skillPath = path.join(dir, "SKILL.md");
     try {

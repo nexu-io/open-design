@@ -739,19 +739,9 @@ const CRAFT_DIR = resolveDaemonResourceDir(
   'craft',
   path.join(PROJECT_ROOT, 'craft'),
 );
-// User-installed skills and design systems live under ~/.open-design/.
-// The daemon scans both built-in and user directories, merging results
-// with built-in taking priority on ID collisions.
-const USER_SKILLS_DIR = path.join(os.homedir(), '.open-design', 'skills');
-const USER_DESIGN_SYSTEMS_DIR = path.join(
-  os.homedir(),
-  '.open-design',
-  'design-systems',
-);
-// Ensure user directories exist on startup.
-for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR]) {
-  fs.mkdirSync(dir, { recursive: true });
-}
+// User-installed skills and design systems live under the runtime data dir
+// so they respect OD_DATA_DIR overrides (test isolation, packaged runs).
+// Defined after RUNTIME_DATA_DIR is resolved below.
 const FRAMES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'frames',
@@ -818,7 +808,12 @@ migrateLegacyDataDirSync({
 });
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
+const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
+const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
