@@ -344,7 +344,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           model,
-          max_tokens: PROVIDER_MAX_TOKENS,
+          max_completion_tokens: PROVIDER_MAX_TOKENS,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
         },
@@ -377,7 +377,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           ...(usesVersionedOpenAIPath ? { model } : {}),
-          max_tokens: PROVIDER_MAX_TOKENS,
+          max_completion_tokens: PROVIDER_MAX_TOKENS,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
         },

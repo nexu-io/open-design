@@ -7023,7 +7023,7 @@ export async function startServer({
     const payload = {
       model,
       messages: payloadMessages,
-      max_tokens:
+      max_completion_tokens:
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
     };
@@ -7135,7 +7135,7 @@ export async function startServer({
     const payload = {
       ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
-      max_tokens:
+      max_completion_tokens:
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
       stream: true,
     };
