@@ -152,6 +152,9 @@ function renderItems(section: "Issue" | "PR", state: StateFlag, items: GhItem[])
   for (const it of items) {
     const t = mdEscape(it.title ?? "(no title)");
     const anchor = anchorFor(section.toLowerCase(), it.number, t);
+    // Explicit anchor so the generated TOC links work in common Markdown renderers.
+    // (Relying on renderer-specific heading slug rules is fragile.)
+    lines.push(`<a id="${anchor}"></a>`);
     lines.push(`### #${it.number} ${t}`);
     lines.push("");
     lines.push(`- Link: ${it.url}`);
@@ -170,9 +173,6 @@ function renderItems(section: "Issue" | "PR", state: StateFlag, items: GhItem[])
     } else {
       lines.push("Body: (empty)");
     }
-    lines.push("");
-    // Add an explicit anchor hint for viewers that don’t auto-generate anchors.
-    lines.push(`<!-- anchor: ${anchor} -->`);
     lines.push("");
     lines.push("---");
     lines.push("");
