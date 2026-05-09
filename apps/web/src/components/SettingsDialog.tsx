@@ -2545,8 +2545,15 @@ function OrbitSection({
   // Once the user clicks Generate we close Settings and navigate away. The ref
   // lets late-arriving handlers no-op without React warnings.
   const isMountedRef = useRef(true);
-  useEffect(() => () => {
-    isMountedRef.current = false;
+  useEffect(() => {
+    // React Strict Mode replays mount effects in development. Reset the ref on
+    // each setup so the synthetic cleanup from the first pass does not leave
+    // async Orbit status / connector refreshes permanently thinking the panel
+    // has unmounted.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {

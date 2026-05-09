@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { StrictMode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorDetail } from '@open-design/contracts';
@@ -127,6 +128,44 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
     expect(screen.getByRole('button', { name: 'Run it now' }).hasAttribute('disabled')).toBe(true);
 
     fireEvent.focus(window);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('orbit-config-gate')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Run it now' }).hasAttribute('disabled')).toBe(false);
+    });
+  });
+
+  it('enables Run it now after connector load in StrictMode', async () => {
+    vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/orbit/status') {
+        return new Response(JSON.stringify({
+          running: false,
+          nextRunAt: null,
+          lastRun: null,
+          lastRunsByTemplate: {},
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    render(
+      <StrictMode>
+        <SettingsDialog
+          initial={baseConfig}
+          agents={[]}
+          daemonLive
+          appVersionInfo={null}
+          initialSection="orbit"
+          onPersist={vi.fn()}
+          onPersistComposioKey={vi.fn()}
+          onClose={vi.fn()}
+          onRefreshAgents={vi.fn()}
+        />
+      </StrictMode>,
+    );
 
     await waitFor(() => {
       expect(screen.queryByTestId('orbit-config-gate')).toBeNull();
