@@ -3381,11 +3381,8 @@ code {
 .entry-side {
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
-  padding: 28px 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
 }
 
 .entry-brand {
@@ -3445,21 +3442,21 @@ code {
 
 /* New project panel */
 .newproj {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-xs);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .newproj-tabs-shell {
   position: relative;
-  border-bottom: 1px solid var(--border);
   overflow: hidden;
+  padding: 0 24px;
+  flex: 0 0 auto;
 }
 .newproj-tabs {
   display: flex;
-  padding: 4px 4px 0;
+  padding: 0 4px;
   gap: 2px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -3528,7 +3525,7 @@ code {
   border: none;
   background: transparent;
   font-size: 12px;
-  border-radius: 6px 6px 0 0;
+  border-radius: 0;
   color: var(--text-muted);
   border-bottom: 2px solid transparent;
   font-weight: 500;
@@ -3539,10 +3536,13 @@ code {
   border-bottom-color: var(--text);
 }
 .newproj-body {
-  padding: 18px;
+  padding: 18px 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .newproj-title {
   margin: 0;
@@ -3860,10 +3860,11 @@ code {
   opacity: 0.7;
 }
 .newproj-footer {
-  padding: 0 18px 16px;
+  padding: 0 24px 16px;
   font-size: 11px;
   color: var(--text-muted);
   text-align: center;
+  flex: 0 0 auto;
 }
 
 /* -------- Fidelity cards (prototype tab) ---------------------------- */
@@ -4478,7 +4479,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 16px;
+  padding: 16px 24px 20px;
 }
 .entry-side-foot .foot-pill {
   display: inline-flex;
@@ -11036,6 +11037,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   position: relative;
   min-width: 280px;
   max-width: 560px;
+  min-height: 0;
 }
 .entry-side-resizer {
   position: absolute;
