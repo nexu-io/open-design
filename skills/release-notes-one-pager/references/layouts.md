@@ -191,6 +191,24 @@ Editorial layout for a list of dated entries. Date in mono on the left, title + 
 </section>
 ```
 
+### Layout 7 note — Release-note sections (Added, Fixed, Breaking, Known issues)
+
+When Layout 7 is used for release-note Added/Fixed/Breaking/Known issues sections, **remove the header CTA row** (the `row-between` div with "View all" button). Release-note sections typically have no per-section destination; leaving a placeholder violates SKILL.md Step 2. Replace the entire row:
+
+```html
+<!-- REMOVE THIS from Layout 7 when used in release notes: -->
+<div class="row-between" style="margin-bottom: 32px;">
+  <h2>Recent changes</h2>
+  <a class="btn btn-ghost btn-arrow" href="REPLACE_WITH_REAL_URL">View all</a>
+</div>
+
+<!-- WITH THIS: -->
+<h2 style="margin-bottom: 32px;">Added</h2>
+<!-- or Fixed, Breaking changes, Known issues -->
+```
+
+---
+
 ## List block — Known issues / Upgrade note
 
 Use `.list` for itemized issue rows or step-by-step upgrade guidance. Keep the list clear, short, and factual; avoid long prose inside each bullet.
