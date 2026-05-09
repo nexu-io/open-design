@@ -14,6 +14,9 @@ import type {
   ChatAttachment,
   CodexPetSummary,
   CodexPetsResponse,
+  InstallDesignSystemResponse,
+  InstallInput,
+  InstallSkillResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   PreviewComment,
@@ -1226,5 +1229,69 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
     return await resp.text();
   } catch {
     return null;
+  }
+}
+
+export async function installSkill(
+  input: InstallInput,
+): Promise<{ skill: SkillSummary } | { error: string }> {
+  try {
+    const resp = await fetch('/api/skills/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    return json as InstallSkillResponse;
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function uninstallSkill(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
+    return { ok: true };
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function installDesignSystem(
+  input: InstallInput,
+): Promise<{ designSystem: DesignSystemSummary } | { error: string }> {
+  try {
+    const resp = await fetch('/api/design-systems/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    return json as InstallDesignSystemResponse;
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function uninstallDesignSystem(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
+    return { ok: true };
+  } catch {
+    return { error: 'Network error' };
   }
 }

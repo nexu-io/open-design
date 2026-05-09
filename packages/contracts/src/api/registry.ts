@@ -53,6 +53,7 @@ export interface SkillSummary {
   // prompt" fast-create on a derived card still composes the parent's
   // SKILL.md body.
   aggregatesExamples: boolean;
+  source?: 'built-in' | 'installed';
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -74,6 +75,7 @@ export interface DesignSystemSummary {
   summary: string;
   swatches?: string[];
   surface?: 'web' | 'image' | 'video' | 'audio';
+  source?: 'built-in' | 'installed';
 }
 
 export interface DesignSystemDetail extends DesignSystemSummary {
@@ -148,4 +150,20 @@ export interface SyncCommunityPetsResponse {
   rootDir: string;
   // Up to ~10 surfaced error messages (the daemon log keeps the rest).
   errors: string[];
+}
+
+export type InstallInput =
+  | { source: 'github'; url: string }
+  | { source: 'local'; path: string };
+
+export interface InstallSkillResponse {
+  skill: SkillSummary;
+}
+
+export interface InstallDesignSystemResponse {
+  designSystem: DesignSystemSummary;
+}
+
+export interface UninstallResponse {
+  ok: true;
 }

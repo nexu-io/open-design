@@ -13874,6 +13874,126 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   padding: 32px 0;
 }
 
+/* Library install UI */
+
+.library-toolbar-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.library-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.library-install-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.library-install-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  margin-top: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+.library-install-form .seg-control {
+  width: fit-content;
+}
+
+.library-install-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.library-install-row .library-search {
+  flex: 1;
+}
+
+.library-install-submit {
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.library-install-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.library-install-error {
+  color: #e55;
+  font-size: 12px;
+  margin: 0;
+}
+
+.library-source-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.library-source-badge.installed {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.library-uninstall-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.library-uninstall-btn:hover {
+  background: color-mix(in srgb, #e55 12%, transparent);
+  color: #e55;
+}
+
+.library-ds-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.library-ds-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Toggle switch */
 
 .toggle-switch {

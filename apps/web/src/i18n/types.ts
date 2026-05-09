@@ -191,6 +191,15 @@ export interface Dict {
   'settings.libraryEnabled': string;
   'settings.libraryDisabled': string;
   'settings.libraryToggleLabel': string;
+  'settings.libraryInstall': string;
+  'settings.libraryInstallGithub': string;
+  'settings.libraryInstallLocal': string;
+  'settings.libraryInstallUrl': string;
+  'settings.libraryInstallPath': string;
+  'settings.libraryInstallButton': string;
+  'settings.libraryUninstall': string;
+  'settings.libraryBuiltIn': string;
+  'settings.libraryInstalled': string;
   'settings.connectorsNavHint': string;
   'settings.connectorsHint': string;
   'settings.connectorsComposioApiKey': string;

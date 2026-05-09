@@ -33,6 +33,7 @@ import {
 import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import { findSkillById, listSkills, splitDerivedSkillId } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
+import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
@@ -738,6 +739,19 @@ const CRAFT_DIR = resolveDaemonResourceDir(
   'craft',
   path.join(PROJECT_ROOT, 'craft'),
 );
+// User-installed skills and design systems live under ~/.open-design/.
+// The daemon scans both built-in and user directories, merging results
+// with built-in taking priority on ID collisions.
+const USER_SKILLS_DIR = path.join(os.homedir(), '.open-design', 'skills');
+const USER_DESIGN_SYSTEMS_DIR = path.join(
+  os.homedir(),
+  '.open-design',
+  'design-systems',
+);
+// Ensure user directories exist on startup.
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 const FRAMES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'frames',
@@ -1842,6 +1856,43 @@ export async function startServer({
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
   app.use(express.json({ limit: '4mb' }));
+
+  // Multi-directory scanning: merge built-in and user-installed skills/DS.
+  // Built-in items win on ID collisions (higher priority per skills-protocol.md).
+  async function listAllSkills() {
+    const builtIn = (await listSkills(SKILLS_DIR)).map((s) => ({
+      ...s,
+      source: 'built-in',
+    }));
+    let installed = [];
+    try {
+      installed = (await listSkills(USER_SKILLS_DIR)).map((s) => ({
+        ...s,
+        source: 'installed',
+      }));
+    } catch {
+      // User directory may not exist yet or be unreadable.
+    }
+    const seen = new Set(builtIn.map((s) => s.id));
+    return [...builtIn, ...installed.filter((s) => !seen.has(s.id))];
+  }
+
+  async function listAllDesignSystems() {
+    const builtIn = (await listDesignSystems(DESIGN_SYSTEMS_DIR)).map((s) => ({
+      ...s,
+      source: 'built-in',
+    }));
+    let installed = [];
+    try {
+      installed = (await listDesignSystems(USER_DESIGN_SYSTEMS_DIR)).map(
+        (s) => ({ ...s, source: 'installed' }),
+      );
+    } catch {
+      // User directory may not exist yet or be unreadable.
+    }
+    const seen = new Set(builtIn.map((s) => s.id));
+    return [...builtIn, ...installed.filter((s) => !seen.has(s.id))];
+  }
 
   // Chrome may strip the port from the Origin header on same-origin GET
   // requests. Only use this as a fallback for safe, idempotent GET requests;
@@ -2997,7 +3048,7 @@ export async function startServer({
 
   app.get('/api/skills', async (_req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
@@ -3013,7 +3064,7 @@ export async function startServer({
 
   app.get('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
@@ -3099,7 +3150,7 @@ export async function startServer({
 
   app.get('/api/design-systems', async (_req, res) => {
     try {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems();
       res.json({
         designSystems: systems.map(({ body, ...rest }) => rest),
       });
@@ -3110,7 +3161,9 @@ export async function startServer({
 
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
       if (body === null)
         return res.status(404).json({ error: 'design system not found' });
       res.json({ id: req.params.id, body });
@@ -3151,7 +3204,9 @@ export async function startServer({
   // file shows up on the next view, no rebuild needed.
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
@@ -3166,7 +3221,9 @@ export async function startServer({
   // /preview: built at request time, no caching.
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
@@ -3205,7 +3262,7 @@ export async function startServer({
   //      a real preview on its parent card instead of returning 404.
   app.get('/api/skills/:id/example', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
 
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
@@ -3327,7 +3384,7 @@ export async function startServer({
   // contributors can preview `example.html` straight from disk.
   app.get('/api/skills/:id/assets/*', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
@@ -3350,6 +3407,71 @@ export async function startServer({
       res.type(mimeFor(target)).sendFile(target);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
+    }
+  });
+
+  // Install a skill from a GitHub URL or local path.
+  app.post('/api/skills/install', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await installFromTarget(req.body, USER_SKILLS_DIR, 'skill');
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      const skills = await listAllSkills();
+      const skill = findSkillById(skills, req.body.source === 'github'
+        ? sanitizeRepoName(req.body.url)
+        : path.basename(fs.realpathSync.native(req.body.path)));
+      res.json({ skill: skill ? { ...skill, dir: undefined, body: undefined, hasBody: typeof skill.body === 'string' && skill.body.length > 0 } : null });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Uninstall a user-installed skill.
+  app.delete('/api/skills/:id', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await uninstallById(req.params.id, USER_SKILLS_DIR, SKILLS_DIR, 'skill');
+      if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Install a design system from a GitHub URL or local path.
+  app.post('/api/design-systems/install', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await installFromTarget(req.body, USER_DESIGN_SYSTEMS_DIR, 'design-system');
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      const systems = await listAllDesignSystems();
+      const dsId = req.body.source === 'github'
+        ? sanitizeRepoName(req.body.url)
+        : path.basename(fs.realpathSync.native(req.body.path));
+      const ds = systems.find((s) => s.id === dsId);
+      res.json({ designSystem: ds || null });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Uninstall a user-installed design system.
+  app.delete('/api/design-systems/:id', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await uninstallById(req.params.id, USER_DESIGN_SYSTEMS_DIR, DESIGN_SYSTEMS_DIR, 'design-system');
+      if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 
@@ -4768,7 +4890,7 @@ export async function startServer({
     let activeSkillDir = null;
     if (effectiveSkillId) {
       const skill = findSkillById(
-        await listSkills(SKILLS_DIR),
+        await listAllSkills(),
         effectiveSkillId,
       );
       if (skill) {
@@ -4794,11 +4916,12 @@ export async function startServer({
     let designSystemBody;
     let designSystemTitle;
     if (effectiveDesignSystemId) {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems();
       const summary = systems.find((s) => s.id === effectiveDesignSystemId);
       designSystemTitle = summary?.title;
       designSystemBody =
         (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         undefined;
     }
 
@@ -6003,7 +6126,7 @@ export async function startServer({
   });
 
   orbitService.setTemplateResolver(async (skillId) => {
-    const skills = await listSkills(SKILLS_DIR);
+    const skills = await listAllSkills();
     const skill = findSkillById(skills, skillId);
     if (!skill || skill.scenario !== 'orbit') return null;
     return {

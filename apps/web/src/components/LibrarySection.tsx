@@ -2,13 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
-import type { AppConfig } from '../types';
+import type { AppConfig, InstallInput } from '../types';
 import type { SkillSummary, DesignSystemSummary } from '@open-design/contracts';
 import {
   fetchSkills,
   fetchDesignSystems,
   fetchSkill,
   fetchDesignSystem,
+  installSkill,
+  uninstallSkill,
+  installDesignSystem,
+  uninstallDesignSystem,
 } from '../providers/registry';
 
 type Tab = 'skills' | 'design-systems';
@@ -40,10 +44,22 @@ export function LibrarySection({ cfg, setCfg }: Props) {
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  useEffect(() => {
+  // Install state
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installTab, setInstallTab] = useState<'github' | 'local'>('github');
+  const [installUrl, setInstallUrl] = useState('');
+  const [installPath, setInstallPath] = useState('');
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  const reloadData = useCallback(() => {
     fetchSkills().then(setSkills);
     fetchDesignSystems().then(setDesignSystems);
   }, []);
+
+  useEffect(() => {
+    reloadData();
+  }, [reloadData]);
 
   const categories = useMemo(() => {
     const cats = new Set(designSystems.map((d) => d.category));
@@ -151,6 +167,43 @@ export function LibrarySection({ cfg, setCfg }: Props) {
     });
   }
 
+  async function handleInstall() {
+    setInstallError(null);
+    setInstalling(true);
+    const input: InstallInput =
+      installTab === 'github'
+        ? { source: 'github', url: installUrl.trim() }
+        : { source: 'local', path: installPath.trim() };
+
+    const result =
+      tab === 'skills'
+        ? await installSkill(input)
+        : await installDesignSystem(input);
+
+    setInstalling(false);
+    if ('error' in result) {
+      setInstallError(result.error);
+      return;
+    }
+    setInstallOpen(false);
+    setInstallUrl('');
+    setInstallPath('');
+    setInstallError(null);
+    reloadData();
+  }
+
+  async function handleUninstallSkill(id: string) {
+    const result = await uninstallSkill(id);
+    if ('error' in result) return;
+    reloadData();
+  }
+
+  async function handleUninstallDS(id: string) {
+    const result = await uninstallDesignSystem(id);
+    if ('error' in result) return;
+    reloadData();
+  }
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -198,13 +251,77 @@ export function LibrarySection({ cfg, setCfg }: Props) {
       </div>
 
       <div className="library-toolbar">
-        <input
-          type="search"
-          className="library-search"
-          placeholder={t('settings.librarySearch')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="library-toolbar-row">
+          <input
+            type="search"
+            className="library-search"
+            placeholder={t('settings.librarySearch')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button
+            type="button"
+            className="library-install-btn"
+            onClick={() => setInstallOpen((v) => !v)}
+          >
+            <Icon name="plus" size={14} />
+            {t('settings.libraryInstall')}
+          </button>
+        </div>
+
+        {installOpen && (
+          <div className="library-install-form">
+            <div className="seg-control" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                className={`seg-btn${installTab === 'github' ? ' active' : ''}`}
+                onClick={() => setInstallTab('github')}
+              >
+                {t('settings.libraryInstallGithub')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`seg-btn${installTab === 'local' ? ' active' : ''}`}
+                onClick={() => setInstallTab('local')}
+              >
+                {t('settings.libraryInstallLocal')}
+              </button>
+            </div>
+            <div className="library-install-row">
+              {installTab === 'github' ? (
+                <input
+                  type="url"
+                  className="library-search"
+                  placeholder={t('settings.libraryInstallUrl')}
+                  value={installUrl}
+                  onChange={(e) => setInstallUrl(e.target.value)}
+                />
+              ) : (
+                <input
+                  type="text"
+                  className="library-search"
+                  placeholder={t('settings.libraryInstallPath')}
+                  value={installPath}
+                  onChange={(e) => setInstallPath(e.target.value)}
+                />
+              )}
+              <button
+                type="button"
+                className="library-install-submit"
+                disabled={installing}
+                onClick={handleInstall}
+              >
+                {installing ? t('settings.libraryLoading') : t('settings.libraryInstallButton')}
+              </button>
+            </div>
+            {installError && (
+              <p className="library-install-error">{installError}</p>
+            )}
+          </div>
+        )}
+
         {tab === 'skills' ? (
           <div className="library-filters">
             <button
@@ -273,6 +390,13 @@ export function LibrarySection({ cfg, setCfg }: Props) {
                       <div className="library-card-title-row">
                         <span className="library-card-name">{skill.name}</span>
                         <span className="library-card-badge">{skill.previewType}</span>
+                        <span
+                          className={`library-source-badge${skill.source === 'installed' ? ' installed' : ''}`}
+                        >
+                          {skill.source === 'installed'
+                            ? t('settings.libraryInstalled')
+                            : t('settings.libraryBuiltIn')}
+                        </span>
                       </div>
                       <div className="library-card-desc">{skill.description}</div>
                     </div>
@@ -287,6 +411,16 @@ export function LibrarySection({ cfg, setCfg }: Props) {
                         size={14}
                       />
                     </button>
+                    {skill.source === 'installed' && (
+                      <button
+                        type="button"
+                        className="library-uninstall-btn"
+                        title={t('settings.libraryUninstall')}
+                        onClick={() => handleUninstallSkill(skill.id)}
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    )}
                     <label className="toggle-switch" title={t('settings.libraryToggleLabel')}>
                       <input
                         type="checkbox"
@@ -336,17 +470,38 @@ export function LibrarySection({ cfg, setCfg }: Props) {
                             ))}
                           </div>
                         )}
-                        <div className="library-ds-title">{ds.title}</div>
+                        <div className="library-ds-title-row">
+                          <span className="library-ds-title">{ds.title}</span>
+                          <span
+                            className={`library-source-badge${ds.source === 'installed' ? ' installed' : ''}`}
+                          >
+                            {ds.source === 'installed'
+                              ? t('settings.libraryInstalled')
+                              : t('settings.libraryBuiltIn')}
+                          </span>
+                        </div>
                         <div className="library-ds-summary">{ds.summary}</div>
                       </div>
-                      <label className="toggle-switch toggle-switch-sm" title={t('settings.libraryToggleLabel')}>
-                        <input
-                          type="checkbox"
-                          checked={!disabledDS.has(ds.id)}
-                          onChange={(e) => toggleDSDisabled(ds.id, !e.target.checked)}
-                        />
-                        <span className="toggle-slider" />
-                      </label>
+                      <div className="library-ds-card-actions">
+                        {ds.source === 'installed' && (
+                          <button
+                            type="button"
+                            className="library-uninstall-btn"
+                            title={t('settings.libraryUninstall')}
+                            onClick={() => handleUninstallDS(ds.id)}
+                          >
+                            <Icon name="trash" size={14} />
+                          </button>
+                        )}
+                        <label className="toggle-switch toggle-switch-sm" title={t('settings.libraryToggleLabel')}>
+                          <input
+                            type="checkbox"
+                            checked={!disabledDS.has(ds.id)}
+                            onChange={(e) => toggleDSDisabled(ds.id, !e.target.checked)}
+                          />
+                          <span className="toggle-slider" />
+                        </label>
+                      </div>
                     </div>
                   ))}
                 </div>
