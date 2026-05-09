@@ -459,6 +459,8 @@ export const ar: Dict = {
   'examples.previewModalTitle': 'فتح المعاينة الكاملة (نافذة)',
   'examples.shareTitle': 'مشاركة هذا المثال',
   'examples.shareLoadFirst': 'حوم لتحميل المعاينة أولاً',
+  'examples.unavailablePlaceholder': 'لا توجد معاينة {kind} مرفقة — افتح لمعرفة المزيد',
+  'examples.shareUnavailable': 'لا توجد معاينة {kind} مرفقة للمشاركة',
   'examples.shareMenu': 'مشاركة ▾',
   'examples.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',
   'examples.exportPptxLocked': 'تصدير كـ PPTX... (افتح القالب أولاً)',
@@ -591,6 +593,8 @@ export const ar: Dict = {
   'preview.errorTitle': 'تعذّر تحميل هذا المثال.',
   'preview.errorBody': 'فشل جلب HTML الخاص بالمثال. تأكد من تشغيل Open Design ثم أعد المحاولة.',
   'preview.retry': 'إعادة المحاولة',
+  'preview.unavailableTitle': 'لا توجد معاينة مرفقة لهذه المهارة.',
+  'preview.unavailableBody': 'هذه المهارة تنتج مستند {kind} — شغّل الأمر في المحادثة لإنشاء واحد.',
   'preview.showSidebar': 'إظهار {label}',
   'preview.hideSidebar': 'إخفاء {label}',
 

@@ -459,6 +459,8 @@ export const ko: Dict = {
   'examples.previewModalTitle': '전체 미리보기 열기 (모달)',
   'examples.shareTitle': '이 예제 공유하기',
   'examples.shareLoadFirst': '마우스를 올려 미리보기를 먼저 로드하세요',
+  'examples.unavailablePlaceholder': '함께 제공된 {kind} 미리보기 없음 — 자세히 보려면 열기',
+  'examples.shareUnavailable': '공유할 {kind} 미리보기가 함께 제공되지 않음',
   'examples.shareMenu': '공유 ▾',
   'examples.exportPdfAllSlides': 'PDF로 내보내기 (모든 슬라이드)',
   'examples.exportPptxLocked': 'PPTX로 내보내기… (템플릿을 먼저 여세요)',
@@ -591,6 +593,8 @@ export const ko: Dict = {
   'preview.errorTitle': '이 예제를 불러오지 못했습니다.',
   'preview.errorBody': '예제 HTML을 가져오지 못했습니다. Open Design이 실행 중인지 확인하고 다시 시도하세요.',
   'preview.retry': '다시 시도',
+  'preview.unavailableTitle': '이 스킬에는 함께 제공되는 미리보기가 없습니다.',
+  'preview.unavailableBody': '이 스킬은 {kind} 문서를 생성합니다 — 채팅에서 프롬프트를 실행해 생성하세요.',
   'preview.showSidebar': '{label} 표시',
   'preview.hideSidebar': '{label} 숨기기',
 

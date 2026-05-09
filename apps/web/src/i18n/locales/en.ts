@@ -470,6 +470,8 @@ export const en: Dict = {
   'examples.previewModalTitle': 'Open full preview (modal)',
   'examples.shareTitle': 'Share this example',
   'examples.shareLoadFirst': 'Hover to load preview first',
+  'examples.unavailablePlaceholder': 'No shipped {kind} preview — open to learn more',
+  'examples.shareUnavailable': 'No shipped {kind} preview to share',
   'examples.shareMenu': 'Share ▾',
   'examples.exportPdfAllSlides': 'Export as PDF (all slides)',
   'examples.exportPptxLocked': 'Export as PPTX… (open template first)',
@@ -602,6 +604,8 @@ export const en: Dict = {
   'preview.errorTitle': 'Couldn\'t load this example.',
   'preview.errorBody': 'The example HTML failed to fetch. Make sure Open Design is running and try again.',
   'preview.retry': 'Retry',
+  'preview.unavailableTitle': 'No shipped preview for this skill.',
+  'preview.unavailableBody': 'This skill produces a {kind} document — run the prompt in chat to generate one.',
   'preview.showSidebar': 'Show {label}',
   'preview.hideSidebar': 'Hide {label}',
 

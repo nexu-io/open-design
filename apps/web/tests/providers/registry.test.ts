@@ -12,6 +12,7 @@ import {
   fetchConnectorDetail,
   fetchConnectorDiscovery,
   fetchProjectFileText,
+  fetchSkillExample,
   isDeployProviderId,
   updateDeployConfig,
   uploadProjectFiles,
@@ -47,6 +48,64 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('fetchSkillExample', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // Regression coverage for nexu-io/open-design#897. Skills declared with
+  // a non-html `od.preview.type` ship no fetchable HTML — the daemon's
+  // /example endpoint only resolves HTML files and 404s for everything
+  // else, which left the gallery stuck on a misleading "Couldn't load
+  // this example. The example HTML failed to fetch." state. The dispatch
+  // now short-circuits at the data layer so the modal can render a calm
+  // "no shipped preview" placeholder without firing a doomed network
+  // call.
+  it('short-circuits without a fetch when previewType is not html', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('hatch-pet', 'image')).resolves.toEqual({
+      unavailable: true,
+      kind: 'image',
+    });
+    await expect(
+      fetchSkillExample('dcf-valuation', 'markdown'),
+    ).resolves.toEqual({ unavailable: true, kind: 'markdown' });
+
+    // The doomed-call is the bug we're fixing — assert no network call
+    // was made for either non-html dispatch.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to html fetch when previewType is omitted (legacy callers)', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('<html><body>ok</body></html>', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('blog-post')).resolves.toEqual({
+      html: '<html><body>ok</body></html>',
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/blog-post/example');
+  });
+
+  it('forwards the html fetch and returns a discriminated error on non-2xx', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('design-brief', 'html')).resolves.toEqual({
+      error: 'HTTP 404',
+    });
+    // Confirm the dispatch did call through to the daemon for the html
+    // path (i.e. the short-circuit above only catches non-html types).
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
   });
 });
 

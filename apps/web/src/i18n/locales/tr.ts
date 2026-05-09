@@ -452,6 +452,8 @@ export const tr: Dict = {
   'examples.previewModalTitle': 'Tam önizlemeyi aç (modal)',
   'examples.shareTitle': 'Bu örneği paylaş',
   'examples.shareLoadFirst': 'önizlemek için önce fareyi üzerine getirin',
+  'examples.unavailablePlaceholder': 'Birlikte gelen {kind} önizlemesi yok — ayrıntılar için aç',
+  'examples.shareUnavailable': 'Paylaşılacak {kind} önizlemesi gelmiyor',
   'examples.shareMenu': 'Paylaş ▾',
   'examples.exportPdfAllSlides': 'PDF olarak dışa aktar (tüm slaytlar)',
   'examples.exportPptxLocked': 'PPTX olarak dışa aktar… (Önce şablon açın)',
@@ -584,6 +586,8 @@ export const tr: Dict = {
   'preview.errorTitle': 'Bu örnek yüklenemedi.',
   'preview.errorBody': 'Örnek HTML\'i alınamadı. Open Design\'ın çalıştığından emin olup tekrar deneyin.',
   'preview.retry': 'Tekrar dene',
+  'preview.unavailableTitle': 'Bu yetenek için birlikte gelen bir önizleme yok.',
+  'preview.unavailableBody': 'Bu yetenek bir {kind} belgesi üretir — bir tane oluşturmak için sohbette istemini çalıştırın.',
   'preview.showSidebar': '{label} göster',
   'preview.hideSidebar': '{label} gizle',
 

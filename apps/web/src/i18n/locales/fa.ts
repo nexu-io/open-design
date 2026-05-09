@@ -470,6 +470,8 @@ export const fa: Dict = {
   'examples.previewModalTitle': 'باز کردن پیش‌نمایش کامل (modal)',
   'examples.shareTitle': 'اشتراک‌گذاری این نمونه',
   'examples.shareLoadFirst': 'ابتدا برای بارگذاری پیش‌نمایش هاور کنید',
+  'examples.unavailablePlaceholder': 'پیش‌نمایش {kind} همراه ندارد — برای جزئیات باز کنید',
+  'examples.shareUnavailable': 'پیش‌نمایش {kind} برای اشتراک‌گذاری همراه ندارد',
   'examples.shareMenu': 'اشتراک‌گذاری ▾',
   'examples.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
   'examples.exportPptxLocked': 'صادرکردن به PPTX… (ابتدا قالب را باز کنید)',
@@ -602,6 +604,8 @@ export const fa: Dict = {
   'preview.errorTitle': 'بارگیری این نمونه ممکن نشد.',
   'preview.errorBody': 'دریافت HTML نمونه با خطا مواجه شد. مطمئن شوید Open Design در حال اجراست و دوباره تلاش کنید.',
   'preview.retry': 'تلاش دوباره',
+  'preview.unavailableTitle': 'برای این مهارت پیش‌نمایش همراهی وجود ندارد.',
+  'preview.unavailableBody': 'این مهارت سند {kind} تولید می‌کند — برای ساخت یکی، پرامپت را در گفتگو اجرا کنید.',
   'preview.showSidebar': 'نمایش {label}',
   'preview.hideSidebar': 'پنهان کردن {label}',
 

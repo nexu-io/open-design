@@ -348,6 +348,8 @@ export const esES: Dict = {
   'examples.previewModalTitle': 'Abrir vista previa completa (modal)',
   'examples.shareTitle': 'Compartir este ejemplo',
   'examples.shareLoadFirst': 'Pasa el cursor para cargar primero la vista previa',
+  'examples.unavailablePlaceholder': 'Sin vista previa {kind} incluida — abre para saber más',
+  'examples.shareUnavailable': 'Sin vista previa {kind} incluida para compartir',
   'examples.shareMenu': 'Compartir ▾',
   'examples.exportPdfAllSlides': 'Exportar como PDF (todas las diapositivas)',
   'examples.exportPptxLocked': 'Exportar como PPTX… (abre primero la plantilla)',
@@ -480,6 +482,8 @@ export const esES: Dict = {
   'preview.errorTitle': 'No se pudo cargar este ejemplo.',
   'preview.errorBody': 'No se pudo obtener el HTML del ejemplo. Asegúrate de que Open Design esté en ejecución e inténtalo de nuevo.',
   'preview.retry': 'Reintentar',
+  'preview.unavailableTitle': 'No hay vista previa incluida para esta skill.',
+  'preview.unavailableBody': 'Esta skill genera un documento {kind} — ejecuta el prompt en el chat para crear uno.',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 

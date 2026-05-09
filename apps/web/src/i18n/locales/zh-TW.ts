@@ -464,6 +464,8 @@ export const zhTW: Dict = {
   'examples.previewModalTitle': '在彈窗中檢視完整預覽',
   'examples.shareTitle': '分享此範例',
   'examples.shareLoadFirst': '請先懸停以載入預覽',
+  'examples.unavailablePlaceholder': '此技能未附帶 {kind} 預覽範例 — 開啟查看詳情',
+  'examples.shareUnavailable': '此技能未附帶 {kind} 預覽範例可分享',
   'examples.shareMenu': '分享 ▾',
   'examples.exportPdfAllSlides': '匯出為 PDF（全部投影片）',
   'examples.exportPptxLocked': '匯出為 PPTX…（請先開啟範本）',
@@ -593,6 +595,8 @@ export const zhTW: Dict = {
   'preview.errorTitle': '無法載入此範例。',
   'preview.errorBody': '範例 HTML 載入失敗。請確認 Open Design 正在執行後重試。',
   'preview.retry': '重試',
+  'preview.unavailableTitle': '此技能尚未附帶預覽範例。',
+  'preview.unavailableBody': '此技能用於產生 {kind} 文件 — 請在對話中執行此 Prompt 來產生。',
   'preview.showSidebar': '展開{label}',
   'preview.hideSidebar': '收合{label}',
 

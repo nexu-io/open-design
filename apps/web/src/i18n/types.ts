@@ -622,6 +622,12 @@ export interface Dict {
   'examples.previewModalTitle': string;
   'examples.shareTitle': string;
   'examples.shareLoadFirst': string;
+  // Card placeholder + share-button hint for skills whose
+  // `od.preview.type` is not `html` (image / markdown / …) so the
+  // gallery doesn't sit on a forever "Loading preview…" shimmer for
+  // skills that ship no fetchable artifact. Issue #897.
+  'examples.unavailablePlaceholder': string;
+  'examples.shareUnavailable': string;
   'examples.shareMenu': string;
   'examples.exportPdfAllSlides': string;
   'examples.exportPptxLocked': string;
@@ -751,6 +757,13 @@ export interface Dict {
   'preview.errorTitle': string;
   'preview.errorBody': string;
   'preview.retry': string;
+  // Friendly placeholder copy for skills whose `od.preview.type` is not
+  // `html` — they ship no fetchable example artifact, so the loading /
+  // error states are misleading. Issue #897.
+  'preview.unavailableTitle': string;
+  // Body copy uses the `{kind}` placeholder (raw `od.preview.type`
+  // token, e.g. "markdown" or "image") so each kind reads naturally.
+  'preview.unavailableBody': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 

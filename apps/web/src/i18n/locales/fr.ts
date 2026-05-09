@@ -459,6 +459,8 @@ export const fr: Dict = {
   'examples.previewModalTitle': 'Ouvrir l\'aperçu complet (modale)',
   'examples.shareTitle': 'Partager cet exemple',
   'examples.shareLoadFirst': 'Survolez pour charger l\'aperçu d\'abord',
+  'examples.unavailablePlaceholder': 'Pas d\'aperçu {kind} fourni — ouvrez pour en savoir plus',
+  'examples.shareUnavailable': 'Pas d\'aperçu {kind} fourni à partager',
   'examples.shareMenu': 'Partager ▾',
   'examples.exportPdfAllSlides': 'Exporter en PDF (toutes les diapos)',
   'examples.exportPptxLocked': 'Exporter en PPTX… (ouvrez d\'abord le modèle)',
@@ -591,6 +593,8 @@ export const fr: Dict = {
   'preview.errorTitle': 'Impossible de charger cet exemple.',
   'preview.errorBody': 'Le chargement du HTML de l\'exemple a échoué. Vérifiez qu\'Open Design est en cours d\'exécution et réessayez.',
   'preview.retry': 'Réessayer',
+  'preview.unavailableTitle': 'Aucun aperçu fourni pour cette compétence.',
+  'preview.unavailableBody': 'Cette compétence produit un document {kind} — exécutez le prompt dans le chat pour en générer un.',
   'preview.showSidebar': 'Afficher {label}',
   'preview.hideSidebar': 'Masquer {label}',
 

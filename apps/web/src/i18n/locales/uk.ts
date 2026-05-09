@@ -470,6 +470,8 @@ export const uk: Dict = {
   'examples.previewModalTitle': 'Відкрити повний попередній перегляд (модальне вікно)',
   'examples.shareTitle': 'Поділитися цим прикладом',
   'examples.shareLoadFirst': 'Спочатку наведіть мишею, щоб завантажити попередній перегляд',
+  'examples.unavailablePlaceholder': 'Немає вбудованого попереднього перегляду {kind} — відкрийте, щоб дізнатися більше',
+  'examples.shareUnavailable': 'Немає вбудованого попереднього перегляду {kind} для надсилання',
   'examples.shareMenu': 'Поділитися ▾',
   'examples.exportPdfAllSlides': 'Експортувати як PDF (усі слайди)',
   'examples.exportPptxLocked': 'Експортувати як PPTX… (спочатку відкрийте шаблон)',
@@ -602,6 +604,8 @@ export const uk: Dict = {
   'preview.errorTitle': 'Не вдалося завантажити цей приклад.',
   'preview.errorBody': 'Не вдалося отримати HTML прикладу. Переконайтеся, що Open Design запущено, і повторіть спробу.',
   'preview.retry': 'Повторити',
+  'preview.unavailableTitle': 'Для цієї навички немає вбудованого попереднього перегляду.',
+  'preview.unavailableBody': 'Ця навичка створює документ {kind} — запустіть підказку в чаті, щоб його згенерувати.',
   'preview.showSidebar': 'Показати {label}',
   'preview.hideSidebar': 'Приховати {label}',
 

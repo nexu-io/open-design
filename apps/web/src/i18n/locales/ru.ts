@@ -469,6 +469,8 @@ export const ru: Dict = {
   'examples.previewModalTitle': 'Открыть полный предпросмотр (модально)',
   'examples.shareTitle': 'Поделиться этим примером',
   'examples.shareLoadFirst': 'Сначала наведите для загрузки предпросмотра',
+  'examples.unavailablePlaceholder': 'Нет встроенного предпросмотра {kind} — откройте, чтобы узнать больше',
+  'examples.shareUnavailable': 'Нет встроенного предпросмотра {kind} для отправки',
   'examples.shareMenu': 'Поделиться ▾',
   'examples.exportPdfAllSlides': 'Экспорт в PDF (все слайды)',
   'examples.exportPptxLocked': 'Экспорт в PPTX… (сначала откройте шаблон)',
@@ -601,6 +603,8 @@ export const ru: Dict = {
   'preview.errorTitle': 'Не удалось загрузить этот пример.',
   'preview.errorBody': 'Не удалось получить HTML примера. Убедитесь, что Open Design запущен, и повторите попытку.',
   'preview.retry': 'Повторить',
+  'preview.unavailableTitle': 'Для этого навыка нет встроенного предпросмотра.',
+  'preview.unavailableBody': 'Этот навык создаёт документ {kind} — запустите запрос в чате, чтобы сгенерировать его.',
   'preview.showSidebar': 'Показать {label}',
   'preview.hideSidebar': 'Скрыть {label}',
 

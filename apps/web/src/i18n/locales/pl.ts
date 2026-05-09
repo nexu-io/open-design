@@ -459,6 +459,8 @@ export const pl: Dict = {
   'examples.previewModalTitle': 'Pełny podgląd (okno)',
   'examples.shareTitle': 'Udostępnij ten przykład',
   'examples.shareLoadFirst': 'Najedź, aby najpierw załadować podgląd',
+  'examples.unavailablePlaceholder': 'Brak dołączonego podglądu {kind} — otwórz, aby dowiedzieć się więcej',
+  'examples.shareUnavailable': 'Brak dołączonego podglądu {kind} do udostępnienia',
   'examples.shareMenu': 'Udostępnij ▾',
   'examples.exportPdfAllSlides': 'Eksportuj jako PDF (wszystkie slajdy)',
   'examples.exportPptxLocked': 'Eksportuj jako PPTX… (najpierw otwórz szablon)',
@@ -591,6 +593,8 @@ export const pl: Dict = {
   'preview.errorTitle': 'Nie udało się załadować tego przykładu.',
   'preview.errorBody': 'Nie udało się pobrać kodu HTML przykładu. Upewnij się, że Open Design jest uruchomiony, i spróbuj ponownie.',
   'preview.retry': 'Spróbuj ponownie',
+  'preview.unavailableTitle': 'Brak dołączonego podglądu dla tej umiejętności.',
+  'preview.unavailableBody': 'Ta umiejętność tworzy dokument {kind} — uruchom prompt w czacie, aby go wygenerować.',
   'preview.showSidebar': 'Pokaż {label}',
   'preview.hideSidebar': 'Ukryj {label}',
 

@@ -469,6 +469,8 @@ export const ptBR: Dict = {
   'examples.previewModalTitle': 'Abrir prévia completa (modal)',
   'examples.shareTitle': 'Compartilhar este exemplo',
   'examples.shareLoadFirst': 'Passe o cursor para carregar a prévia primeiro',
+  'examples.unavailablePlaceholder': 'Sem prévia {kind} incluída — abra para saber mais',
+  'examples.shareUnavailable': 'Sem prévia {kind} incluída para compartilhar',
   'examples.shareMenu': 'Compartilhar ▾',
   'examples.exportPdfAllSlides': 'Exportar como PDF (todos os slides)',
   'examples.exportPptxLocked': 'Exportar como PPTX… (abra o template primeiro)',
@@ -601,6 +603,8 @@ export const ptBR: Dict = {
   'preview.errorTitle': 'Não foi possível carregar este exemplo.',
   'preview.errorBody': 'A obtenção do HTML do exemplo falhou. Verifique se o Open Design está em execução e tente novamente.',
   'preview.retry': 'Tentar novamente',
+  'preview.unavailableTitle': 'Nenhuma prévia incluída para esta skill.',
+  'preview.unavailableBody': 'Esta skill produz um documento {kind} — execute o prompt no chat para gerar um.',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 
