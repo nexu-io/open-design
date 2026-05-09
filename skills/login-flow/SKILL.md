@@ -1,65 +1,49 @@
 ---
 name: login-flow
-description: |
-  A mobile-first login/authentication screen — email + password, social SSO
-  buttons, or phone verification. Use when the brief mentions "login",
-  "sign-in", "authentication", "log in", "注册登录", or "登录页面".
-triggers:
-  - "login"
-  - "sign in"
-  - "sign-in"
-  - "authentication"
-  - "log in"
-  - "注册登录"
-  - "登录页面"
-  - "phone verification"
-  - "sso"
+description: Mobile login and authentication flow screens
 od:
   mode: prototype
   platform: mobile
-  scenario: design
-  preview:
-    type: html
-    entry: index.html
-  design_system:
-    requires: true
-    sections: [color, typography, layout, components]
-  example_prompt: "Design a mobile login screen for a fintech app — phone verification with country picker and social login options."
+triggers:
+  - login
+  - sign in
+  - 注册登录
+  - 登录注册
+  - 手机号登录
+  - 验证码登录
+  - 密码登录
 ---
 
 # Login Flow Skill
 
-Produce a single mobile login/authentication screen as a self-contained HTML prototype.
+A skill for generating mobile-first login and authentication screens. Use this when the user wants a sign-in experience for a mobile app, including phone + SMS verification, password-based login, and social SSO options.
 
 ## Workflow
 
-1. Read the active DESIGN.md to understand color, typography, and component tokens.
-2. Identify the app type and audience (fintech needs trust signals, social app needs simplicity).
-3. Layout: centered form on phone frame with:
-   - App logo / wordmark at top
-   - Welcome headline + subtitle
-   - Primary auth input (email/phone) with country picker if phone
-   - Password field with show/hide toggle
-   - "Forgot password" link
-   - Primary CTA (Sign In / Log In)
-   - Divider: "or continue with"
-   - Social SSO buttons (Apple, Google, etc.)
-   - "Don't have an account? Sign up" footer
-4. Status bar, input validation states, loading state for button.
-5. Strong typography hierarchy, accessible contrast on all interactive elements.
+1. **Read reference files first** (see below)
+2. **Clarify auth method**: phone/SMS, password, or social SSO
+3. **Checklist gate** — verify P0 items before emitting `<artifact>`
+4. **Build the HTML prototype** with proper states (default, loading, error)
+5. **Wrap in `<artifact>` tag** referencing the output file
 
-## Output contract
+## Side Files
 
-```
-<artifact identifier="login-flow-name" type="text/html" title="Login Flow">
-<!doctype html>...</artifact>
-```
+- `assets/template.html` — optional seed with class system
+- `references/checklist.md` — P0/P1 acceptance criteria
 
-## Hard rules
+## Output
 
-- Input fields: clear labels above, not inside (never placeholder-only)
-- Password toggle: show/hide icon inside the field
-- Social buttons: realistic icons, not emoji
-- Loading state: button shows spinner, disabled during submission
-- Error state: inline field errors in red below each field
-- Accessible: 44px minimum touch targets, WCAG AA contrast
+A single standalone HTML file implementing the login screen with:
+- Labels above inputs (never placeholder-only)
+- Password field with show/hide toggle
+- Social SSO buttons with SVG icons
+- Error states below fields
+- Loading spinner in primary CTA
+- Touch targets minimum 44px
+
+## Mobile-First Constraints
+
+- Viewport: 375px wide (iPhone standard)
+- No horizontal scroll
+- Safe area insets for notched devices
+- Input keyboards: `tel` for phone, `password` for password fields
