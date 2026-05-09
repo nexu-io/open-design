@@ -142,18 +142,53 @@ function partsInTimezone(timezone: string, atUtc: Date): {
   };
 }
 
-// Convert wall-clock (Y-M-D h:m in `timezone`) to a UTC Date. Builds two
-// candidate instants from the wall fields — one using the offset Intl
-// reports at the tentative wall-as-UTC stamp, one using the offset at the
-// first candidate. On non-transition days both converge; on a fall-back
-// transition the second pass picks the post-transition instance; on a
-// spring-forward gap neither candidate round-trips because the requested
-// wall time does not exist that day. In the gap case we return the later
-// candidate, which has crossed the transition and renders as the first
-// valid post-gap wall time, so a routine still fires today instead of
-// firing an hour early before the gap. Returns null if `timezone` is
-// invalid.
-function tzWallToUtc(
+// Returns every UTC instant at which the wall clock in `timezone` reads
+// the requested Y-M-D h:m, sorted ascending. Most days have exactly one
+// match. On a fall-back transition day the requested time inside the
+// repeated hour has two matches (one before the transition, one after);
+// outside that hour it still has one. On a spring-forward gap the
+// requested time inside the gap has zero matches — callers fall back to
+// `tzWallToUtcGapFallback` to land on a post-gap instant the same day.
+// Probes offsets at three reference points across the day so that both
+// pre- and post-transition offsets are sampled regardless of which side
+// of the transition `tentative` happens to land on. Returns [] if
+// `timezone` is invalid.
+function tzWallToUtcCandidates(
+  timezone: string,
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): Date[] {
+  try {
+    const tentative = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const probeOffsetsMs = [-12, 0, 12].map((h) => h * 60 * 60_000);
+    const seen = new Set<number>();
+    const out: Date[] = [];
+    for (const dms of probeOffsetsMs) {
+      const off = tzOffsetMinutes(timezone, new Date(tentative + dms));
+      const cand = new Date(tentative - off * 60_000);
+      const t = cand.getTime();
+      if (seen.has(t)) continue;
+      if (matchesWallClock(timezone, cand, year, month, day, hour, minute)) {
+        seen.add(t);
+        out.push(cand);
+      }
+    }
+    return out.sort((a, b) => a.getTime() - b.getTime());
+  } catch {
+    return [];
+  }
+}
+
+// Spring-forward gap fallback: when the requested wall time doesn't
+// exist in `timezone` on this day (clocks jumped over it), return the
+// later of the two probe candidates. That instant has crossed the
+// transition and renders as the first valid post-gap wall time, so a
+// routine still fires today instead of firing an hour early before the
+// gap. Returns null if `timezone` is invalid.
+function tzWallToUtcGapFallback(
   timezone: string,
   year: number,
   month: number,
@@ -167,12 +202,6 @@ function tzWallToUtc(
     const candidate1 = new Date(tentative - t1 * 60_000);
     const t2 = tzOffsetMinutes(timezone, candidate1);
     const candidate2 = new Date(tentative - t2 * 60_000);
-    if (matchesWallClock(timezone, candidate2, year, month, day, hour, minute)) {
-      return candidate2;
-    }
-    if (matchesWallClock(timezone, candidate1, year, month, day, hour, minute)) {
-      return candidate1;
-    }
     return candidate1.getTime() > candidate2.getTime() ? candidate1 : candidate2;
   } catch {
     return null;
@@ -239,9 +268,25 @@ function nextWallTimeMatching(
     const probe = new Date(now.getTime() + offset * 24 * 60 * 60_000);
     const parts = partsInTimezone(timezone, probe);
     if (!predicate(parts.weekday)) continue;
-    const candidate = tzWallToUtc(timezone, parts.year, parts.month, parts.day, hour, minute);
-    if (!candidate) return null;
-    if (candidate.getTime() > now.getTime()) return candidate;
+    const candidates = tzWallToUtcCandidates(
+      timezone, parts.year, parts.month, parts.day, hour, minute,
+    );
+    if (candidates.length === 0) {
+      // Spring-forward gap: no valid wall instant exists today; pick the
+      // synthesized post-gap fallback so the routine still fires today.
+      const fallback = tzWallToUtcGapFallback(
+        timezone, parts.year, parts.month, parts.day, hour, minute,
+      );
+      if (!fallback) return null;
+      if (fallback.getTime() > now.getTime()) return fallback;
+      continue;
+    }
+    // Iterate candidates in ascending order so that on a fall-back overlap
+    // day, when `now` already passed the first occurrence (EDT), we still
+    // pick the second one (EST) before walking to the next day.
+    for (const candidate of candidates) {
+      if (candidate.getTime() > now.getTime()) return candidate;
+    }
   }
   return null;
 }
