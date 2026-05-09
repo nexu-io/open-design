@@ -17,7 +17,7 @@ A **black terminal canvas** (`#000000`) with **market green** (`#00D26A`) and **
 | Loss | `#FF4757` | Price down, negative values |
 | Neutral | `#808086` | Unchanged, secondary data |
 | Text Primary | `#FFFFFF` | High-contrast primary text |
-| Text Secondary | `#A0A0A0` | Labels, metadata |
+| Text Secondary | `#AAAAAA` | Labels, metadata |
 
 *"If you need more than 3 words to explain a color in a trading UI, something is wrong."*
 
@@ -63,7 +63,7 @@ All data colors on `#0D0D0D` pass WCAG AA (minimum 4.5:1).
 | Token | Hex | Usage |
 |-------|-----|-------|
 | Primary | `#FFFFFF` | Readable at distance, primary content |
-| Secondary | `#A0A0A0` | Labels, descriptors |
+| Secondary | `#AAAAAA` | Labels, descriptors |
 | Tertiary | `#828282` | Timestamps, grid labels |
 
 ### Token Definitions
@@ -82,7 +82,7 @@ All data colors on `#0D0D0D` pass WCAG AA (minimum 4.5:1).
   --color-neutral: #808086;
   --color-warning: #FFB800;
   --color-text: #FFFFFF;
-  --color-text-secondary: #A0A0A0;
+  --color-text-secondary: #AAAAAA;
   --color-text-tertiary: #828282;
 }
 ```
@@ -98,7 +98,7 @@ Dark mode is the native mode. Trading terminals run exclusively on dark backgrou
   --color-surface-hover: #1A1A1A;
   --color-border: #2A2A2A;
   --color-text: #FFFFFF;
-  --color-text-secondary: #A0A0A0;
+  --color-text-secondary: #AAAAAA;
 }
 ```
 
