@@ -838,6 +838,7 @@ code {
 .chat-log {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -852,6 +853,8 @@ code {
   border: none;
   white-space: normal;
   word-wrap: break-word;
+  min-width: 0;
+  max-width: 100%;
 }
 .msg .role {
   display: flex;
@@ -9316,6 +9319,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 .prose-block { line-height: 1.6; color: var(--text); }
 .prose-block .md-p { margin: 0; }
