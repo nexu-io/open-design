@@ -194,7 +194,9 @@ export function ChatPane({
         const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
         if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
           scrolledToFormRef.current.add(formEl.dataset.formId!);
-          el.scrollTop = formEl.offsetTop;
+          const formRect = formEl.getBoundingClientRect();
+          const containerRect = el.getBoundingClientRect();
+          el.scrollTop += formRect.top - containerRect.top;
           pinnedToBottomRef.current = false;
           setScrolledFromBottom(true);
           return;
@@ -246,11 +248,11 @@ export function ChatPane({
         // Form tag in content but the DOM element isn't ready yet (partial
         // stream) — skip bottom-scroll to avoid a jarring jump that gets
         // undone when the form finishes rendering.
-        return;
+        if (streaming) return;
       }
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, error]);
+  }, [messages, error, streaming]);
 
   // Saved chat-log scroll state, preserved across tab switches. The
   // chat-log <div> is conditionally rendered so it unmounts when the
