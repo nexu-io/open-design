@@ -3628,10 +3628,10 @@ code {
 .newproj-tabs-shell.can-right::after {
   opacity: 1;
 }
-.newproj-tabs-shell.can-left .newproj-tabs {
+.newproj-tabs-shell.can-left {
   padding-left: 40px;
 }
-.newproj-tabs-shell.can-right .newproj-tabs {
+.newproj-tabs-shell.can-right {
   padding-right: 40px;
 }
 .newproj-tabs-arrow {
