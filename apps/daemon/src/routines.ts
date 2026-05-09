@@ -142,12 +142,17 @@ function partsInTimezone(timezone: string, atUtc: Date): {
   };
 }
 
-// Convert wall-clock (Y-M-D h:m in `timezone`) to a UTC Date. Uses a
-// two-pass approach: build a tentative UTC stamp from the wall fields,
-// figure out the offset Intl reports for that instant in `timezone`, then
-// adjust. Two passes are enough across DST transitions because the offset
-// only depends on the instant, and the second pass uses the corrected
-// instant. Returns null if `timezone` is invalid.
+// Convert wall-clock (Y-M-D h:m in `timezone`) to a UTC Date. Builds two
+// candidate instants from the wall fields — one using the offset Intl
+// reports at the tentative wall-as-UTC stamp, one using the offset at the
+// first candidate. On non-transition days both converge; on a fall-back
+// transition the second pass picks the post-transition instance; on a
+// spring-forward gap neither candidate round-trips because the requested
+// wall time does not exist that day. In the gap case we return the later
+// candidate, which has crossed the transition and renders as the first
+// valid post-gap wall time, so a routine still fires today instead of
+// firing an hour early before the gap. Returns null if `timezone` is
+// invalid.
 function tzWallToUtc(
   timezone: string,
   year: number,
@@ -159,12 +164,38 @@ function tzWallToUtc(
   try {
     const tentative = Date.UTC(year, month - 1, day, hour, minute, 0);
     const t1 = tzOffsetMinutes(timezone, new Date(tentative));
-    const adjusted = tentative - t1 * 60_000;
-    const t2 = tzOffsetMinutes(timezone, new Date(adjusted));
-    return new Date(tentative - t2 * 60_000);
+    const candidate1 = new Date(tentative - t1 * 60_000);
+    const t2 = tzOffsetMinutes(timezone, candidate1);
+    const candidate2 = new Date(tentative - t2 * 60_000);
+    if (matchesWallClock(timezone, candidate2, year, month, day, hour, minute)) {
+      return candidate2;
+    }
+    if (matchesWallClock(timezone, candidate1, year, month, day, hour, minute)) {
+      return candidate1;
+    }
+    return candidate1.getTime() > candidate2.getTime() ? candidate1 : candidate2;
   } catch {
     return null;
   }
+}
+
+function matchesWallClock(
+  timezone: string,
+  at: Date,
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): boolean {
+  const p = partsInTimezone(timezone, at);
+  return (
+    p.year === year &&
+    p.month === month &&
+    p.day === day &&
+    p.hour === hour &&
+    p.minute === minute
+  );
 }
 
 // Minutes east of UTC for `timezone` at instant `at`. e.g. Asia/Shanghai
