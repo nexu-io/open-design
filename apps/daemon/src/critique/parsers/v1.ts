@@ -1,5 +1,6 @@
 import type { PanelEvent, PanelistRole } from '@open-design/contracts/critique';
 import { MalformedBlockError, MissingArtifactError, OversizeBlockError } from '../errors.js';
+import type { ShipArtifactCallback } from '../parser.js';
 
 const KNOWN_ROLES: ReadonlySet<string> = new Set(['designer', 'critic', 'brand', 'a11y', 'copy']);
 
@@ -36,6 +37,10 @@ interface State {
   shipSeen: boolean;
   designerArtifactInRound1: boolean;
   lastAdvance: number;
+  /** Optional side-channel; see ShipArtifactCallback in ../parser.ts.
+   *  Spelled `| undefined` (rather than `?:`) so the State literal can
+   *  explicitly assign `undefined` under `exactOptionalPropertyTypes`. */
+  onArtifact: ShipArtifactCallback | undefined;
 }
 
 export async function* parseV1(
@@ -46,6 +51,7 @@ export async function* parseV1(
     parserMaxBlockBytes: number;
     projectId?: string;
     artifactId?: string;
+    onArtifact?: ShipArtifactCallback;
   },
 ): AsyncIterable<PanelEvent> {
   const state: State = {
@@ -64,6 +70,7 @@ export async function* parseV1(
     shipSeen: false,
     designerArtifactInRound1: false,
     lastAdvance: 0,
+    onArtifact: opts.onArtifact,
   };
 
   for await (const chunk of source) {
@@ -322,7 +329,12 @@ function* drain(state: State): Generator<PanelEvent> {
           state.consumed + cursor,
         );
       }
-      const closeIdx = slice.indexOf('</SHIP>');
+      // Look up `</SHIP>` while skipping over any `<![CDATA[ ... ]]>` spans
+      // inside the body. A naive `indexOf` would match a literal `</SHIP>`
+      // string sitting inside a JS / HTML payload wrapped in CDATA and
+      // truncate the SHIP block early, dropping the real `</ARTIFACT>` and
+      // `</SUMMARY>` siblings (lefarcen P2 on PR #1085).
+      const closeIdx = indexOfOutsideCdata(slice, '</SHIP>');
       if (closeIdx < 0) break;
       const blockText = slice.slice(0, closeIdx + '</SHIP>'.length);
       const blockBytes = Buffer.byteLength(blockText, 'utf8');
@@ -357,15 +369,44 @@ function* drain(state: State): Generator<PanelEvent> {
       const attrs = parseAttrs(slice.slice('<SHIP'.length, headEnd));
       const inner = slice.slice(headEnd + 1, closeIdx);
 
-      // Validate that a non-empty <ARTIFACT> block is present inside <SHIP>.
-      const artifactMatch = inner.match(/<ARTIFACT\b[^>]*>([\s\S]*?)<\/ARTIFACT>/);
-      if (!artifactMatch || artifactMatch[1] === undefined || artifactMatch[1].trim().length === 0) {
+      // Validate that a non-empty <ARTIFACT> block is present inside <SHIP>
+      // and capture its head + body so the orchestrator can persist the bytes
+      // to disk via the side-channel callback. The body must NOT be added to
+      // the ship PanelEvent itself, since that event is also the SSE wire
+      // shape; broadcasting megabytes of HTML to every SSE subscriber would
+      // ruin the bus. The orchestrator pulls the body off `onArtifact` and
+      // emits only the small `artifactRef` on the wire.
+      const artifactExtraction = extractArtifactBlock(inner);
+      if (
+        artifactExtraction === null
+        || artifactExtraction.body.trim().length === 0
+      ) {
         throw new MissingArtifactError(
           `<SHIP> at position ${state.consumed + cursor} contains no <ARTIFACT> block or the block is empty`,
         );
       }
 
-      const summary = (inner.match(/<SUMMARY>([\s\S]*?)<\/SUMMARY>/)?.[1] ?? '').trim();
+      const artifactAttrs = parseAttrs(artifactExtraction.attrText);
+      const artifactMime = artifactAttrs['mime'] ?? '';
+      // CDATA-wrapped bodies are unwrapped inside `extractArtifactBlock`,
+      // which scans for `]]></ARTIFACT>` (with optional whitespace) so a
+      // legitimate JS / HTML payload that contains a literal `</ARTIFACT>`
+      // sentinel inside a string or comment does not truncate the body
+      // (mrcfps follow-up on PR #1085).
+      const artifactBody = artifactExtraction.body;
+
+      // Scope the SUMMARY scan to bytes that come AFTER the artifact's
+      // closing tag. Searching the full SHIP `inner` would let an artifact
+      // body that contains a literal `<SUMMARY>...</SUMMARY>` pair (for
+      // example a CDATA-wrapped HTML fragment) hijack the ship summary
+      // before the real sibling tag is reached, so rerun / history would
+      // display artifact bytes as the summary text (mrcfps follow-up on
+      // PR #1085).
+      const summary = (
+        inner
+          .slice(artifactExtraction.blockEnd)
+          .match(/<SUMMARY>([\s\S]*?)<\/SUMMARY>/)?.[1] ?? ''
+      ).trim();
 
       const rawStatus = attrs['status'] ?? '';
       const validStatuses = ['shipped', 'below_threshold', 'timed_out', 'interrupted'] as const;
@@ -375,10 +416,23 @@ function* drain(state: State): Generator<PanelEvent> {
           : 'shipped'
       ) as 'shipped' | 'below_threshold' | 'timed_out' | 'interrupted';
 
+      const shipRound = Number(attrs['round'] ?? '0');
+
+      // Side-channel hand-off BEFORE the ship event yields, so the
+      // orchestrator can write artifact.<ext> and pin artifactPath on the
+      // run row before any consumer of the ship event reacts to it.
+      if (state.onArtifact) {
+        state.onArtifact({
+          round: shipRound,
+          mime: artifactMime,
+          body: artifactBody,
+        });
+      }
+
       yield {
         type: 'ship',
         runId: state.runId,
-        round: Number(attrs['round'] ?? '0'),
+        round: shipRound,
         composite: Number(attrs['composite'] ?? '0'),
         status,
         artifactRef: { projectId: state.projectId, artifactId: state.artifactId },
@@ -490,6 +544,124 @@ function parseAttrs(s: string): Record<string, string> {
     if (key != null) out[key] = m[2] ?? '';
   }
   return out;
+}
+
+/**
+ * Find the first occurrence of `needle` in `source` that is NOT inside a
+ * `<![CDATA[ ... ]]>` span. The wire protocol uses sibling tags (`</SHIP>`,
+ * `</ARTIFACT>`, `<SUMMARY>`) that an agent could legitimately ship inside
+ * an HTML / JS payload wrapped in CDATA — a naive `indexOf` would match
+ * those sentinels, slicing the wrong block out and corrupting both the
+ * extraction and the surrounding parser state. CDATA forbids the literal
+ * `]]>` inside its content per the XML spec, so once we open one we can
+ * always find its terminator and resume scanning afterward.
+ *
+ * Returns -1 when no out-of-CDATA match exists, including the case where
+ * an unterminated CDATA span runs to the end of the source. Streaming
+ * callers should treat that as "not enough bytes yet" and break.
+ */
+export function indexOfOutsideCdata(
+  source: string,
+  needle: string,
+  startOffset: number = 0,
+): number {
+  let i = startOffset;
+  while (i < source.length) {
+    if (source.startsWith('<![CDATA[', i)) {
+      const cdataEnd = source.indexOf(']]>', i + '<![CDATA['.length);
+      if (cdataEnd < 0) {
+        // Unterminated CDATA: the rest of the buffer is opaque. The
+        // streaming SHIP path treats this the same as `indexOf` returning
+        // -1 and waits for more bytes; the post-SHIP-close artifact path
+        // treats it as malformed (since the SHIP closer was already found
+        // outside CDATA, every CDATA inside `inner` should be terminated).
+        return -1;
+      }
+      i = cdataEnd + ']]>'.length;
+      continue;
+    }
+    if (source.startsWith(needle, i)) return i;
+    i += 1;
+  }
+  return -1;
+}
+
+/**
+ * Locate the `<ARTIFACT ...>` block inside the SHIP body and return its
+ * attribute string + decoded payload. CDATA-aware: when the artifact body
+ * starts with `<![CDATA[`, the function scans for the matching
+ * `]]></ARTIFACT>` pair (allowing whitespace between `]]>` and `</ARTIFACT>`)
+ * rather than the first bare `</ARTIFACT>`, so a payload containing a
+ * literal `</ARTIFACT>` inside a JS string or comment is delivered intact.
+ *
+ * `blockEnd` is the offset in `source` immediately after the closing
+ * `</ARTIFACT>` tag, so callers that need to scan SHIP-level sibling tags
+ * (`<SUMMARY>`, etc.) can do so on `source.slice(blockEnd)` instead of the
+ * full SHIP inner — otherwise an artifact body that contains a literal
+ * `<SUMMARY>...</SUMMARY>` pair would be misread as the ship summary
+ * (mrcfps follow-up on PR #1085).
+ *
+ * Returns `null` if no `<ARTIFACT>` opener exists, no closing tag matches,
+ * or the body decodes to an empty string.
+ */
+export function extractArtifactBlock(
+  source: string,
+): { attrText: string; body: string; blockEnd: number } | null {
+  const openerMatch = source.match(/<ARTIFACT\b([^>]*)>/);
+  if (
+    !openerMatch
+    || openerMatch.index === undefined
+    || openerMatch[1] === undefined
+  ) {
+    return null;
+  }
+  const attrText = openerMatch[1];
+  const bodyStart = openerMatch.index + openerMatch[0].length;
+  const remainder = source.slice(bodyStart);
+
+  // CDATA-wrapped path: scan for `]]>` followed by optional whitespace then
+  // `</ARTIFACT>`. The `]]>` MUST come from the CDATA terminator, never from
+  // body text, so this is safe even when the body itself contains the bytes
+  // `</ARTIFACT>` inside a string or comment. CDATA forbids the literal
+  // sequence `]]>` inside its content per the XML spec, so the first match
+  // is always the real terminator.
+  const trimmed = remainder.trimStart();
+  const leadingWs = remainder.length - trimmed.length;
+  if (trimmed.startsWith('<![CDATA[')) {
+    // `cdataInnerStart` is an offset into `remainder` (the slice of
+    // `source` that begins right after the `<ARTIFACT ...>` opener), so
+    // every subsequent slice must be against `remainder` too — slicing
+    // `source` here would shift by `bodyStart` and chop off the leading
+    // bytes of the body.
+    const cdataInnerStart = leadingWs + '<![CDATA['.length;
+    // Allow whitespace between `]]>` and `</ARTIFACT>` so authors can
+    // pretty-print. CDATA forbids the literal `]]>` inside its content
+    // per the XML spec, so the first match is always the real terminator.
+    const tailRe = /\]\]>\s*<\/ARTIFACT>/;
+    const tailMatch = remainder.slice(cdataInnerStart).match(tailRe);
+    if (!tailMatch || tailMatch.index === undefined || tailMatch[0] === undefined) {
+      // Open CDATA without a CDATA-terminated closer: malformed.
+      return null;
+    }
+    const body = remainder.slice(
+      cdataInnerStart,
+      cdataInnerStart + tailMatch.index,
+    );
+    const blockEnd = bodyStart + cdataInnerStart + tailMatch.index + tailMatch[0].length;
+    return { attrText, body, blockEnd };
+  }
+
+  // Inline (non-CDATA) path: stop at the first `</ARTIFACT>` that is not
+  // itself nested inside a stray CDATA span. Bodies that need to embed
+  // `</ARTIFACT>` literally must wrap themselves in CDATA; that contract
+  // matches the v1 spec's recommended emitter, but if the body happens to
+  // open a CDATA span before its real `</ARTIFACT>` terminator we still
+  // skip past it for safety.
+  const closeIdx = indexOfOutsideCdata(remainder, '</ARTIFACT>');
+  if (closeIdx < 0) return null;
+  const body = remainder.slice(0, closeIdx);
+  const blockEnd = bodyStart + closeIdx + '</ARTIFACT>'.length;
+  return { attrText, body, blockEnd };
 }
 
 // Score range and clamp now respect the run's declared scale (captured from

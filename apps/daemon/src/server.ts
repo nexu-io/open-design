@@ -46,6 +46,7 @@ import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
+import { handleCritiqueArtifact } from './critique/artifact-handler.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
@@ -838,6 +839,13 @@ migrateLegacyDataDirSync({
   dataDir: RUNTIME_DATA_DIR,
 });
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
+// Critique Theater artifacts intentionally live OUTSIDE the static
+// `/artifacts` tree (which is mounted via express.static below). The
+// per-run artifact endpoint is the only sanctioned read path so the
+// project-membership / cross-project leak / size / CSP guards in
+// handleCritiqueArtifact cannot be bypassed by a caller that guesses
+// `/artifacts/<projectId>/<runId>/artifact.html`. Codex P1 on PR #1085.
+const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
@@ -845,6 +853,7 @@ fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
+fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 let routineService = null;
 
@@ -6227,7 +6236,7 @@ export async function startServer({
         // same project from overwriting each other's transcript or final HTML.
         // Spec: artifacts/<projectId>/<runId>/transcript.ndjson(.gz).
         const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
-        const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
+        const critiqueArtifactDir = path.join(CRITIQUE_ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
@@ -6904,6 +6913,24 @@ export async function startServer({
   app.post(
     '/api/projects/:projectId/critique/:runId/interrupt',
     handleCritiqueInterrupt(db, critiqueRunRegistry),
+  );
+
+  // GET /api/projects/:projectId/critique/:runId/artifact
+  // Streams the SHIP <ARTIFACT> body the orchestrator persisted, with
+  // mime derived from the file extension on disk. Cross-project leak
+  // guard mirrors the interrupt route. The web layer fetches this as
+  // the logical artifact handle so it never sees daemon paths.
+  //
+  // Response cap is threaded from cfg.parserMaxBlockBytes so a row that
+  // the orchestrator + writer accepted is always retrievable; without
+  // this, raising OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES above the
+  // hard-coded ceiling would 404 a valid artifact (codex P2 on PR #1085).
+  app.get(
+    '/api/projects/:projectId/critique/:runId/artifact',
+    handleCritiqueArtifact(db, {
+      artifactsRoot: CRITIQUE_ARTIFACTS_DIR,
+      responseCapBytes: critiqueCfg.parserMaxBlockBytes,
+    }),
   );
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
