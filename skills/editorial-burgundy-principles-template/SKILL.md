@@ -12,8 +12,9 @@ triggers:
   - "酒红粉金编辑风模板"
 od:
   mode: template
+  surface: video
+  type: hyperframes
   platform: desktop
-  scenario: live-artifacts
   preview:
     type: html
     entry: index.html

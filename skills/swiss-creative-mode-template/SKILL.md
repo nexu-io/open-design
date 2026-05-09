@@ -15,8 +15,9 @@ triggers:
   - "高级设计语言模板"
 od:
   mode: template
+  surface: video
+  type: hyperframes
   platform: desktop
-  scenario: live-artifacts
   preview:
     type: html
     entry: index.html

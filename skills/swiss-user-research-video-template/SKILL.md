@@ -15,8 +15,9 @@ triggers:
   - "高级调性研究汇报"
 od:
   mode: template
+  surface: video
+  type: hyperframes
   platform: desktop
-  scenario: live-artifacts
   preview:
     type: html
     entry: index.html

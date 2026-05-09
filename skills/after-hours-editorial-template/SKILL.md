@@ -14,8 +14,9 @@ triggers:
   - "高定杂志风动效"
 od:
   mode: template
+  surface: video
+  type: hyperframes
   platform: desktop
-  scenario: live-artifacts
   preview:
     type: html
     entry: index.html
