@@ -353,8 +353,21 @@ fronted by an HMAC gate when the daemon is paired with a desktop:
 - **Daemon restart edge.** If the daemon is restarted while desktop
   keeps running, the new daemon process will be in `OD_REQUIRE_DESKTOP_AUTH`
   mode (orchestrator env survives restart) but has no secret registered
-  yet, so imports get `503 DESKTOP_AUTH_PENDING` until the desktop
-  re-registers — restart desktop to recover.
+  yet, so the first import after the restart returns `503
+  DESKTOP_AUTH_PENDING`. The desktop runtime catches that response in
+  `dialog:pick-and-import`, re-invokes its registration callback to
+  re-handshake with the new daemon, mints a fresh token (new nonce + new
+  exp — replay protection still works), and retries once. A persistent
+  failure (daemon truly down, IPC socket missing) surfaces in the
+  renderer toast instead of silently dropping. No desktop restart needed.
+- **Headless packaged mode.** The headless entrypoint
+  (`apps/packaged/src/headless.ts`) starts daemon + web only — no
+  Electron, no `shell.openPath` surface, no desktop main process to
+  register a secret. It calls `startPackagedSidecars(...)` with
+  `requireDesktopAuth: false`, which keeps the daemon's gate dormant
+  for that deployment. The Electron entry
+  (`apps/packaged/src/index.ts`) passes `true` because it does start
+  desktop main alongside the daemon.
 
 Shared API contract types live in [`packages/contracts/src`](../packages/contracts/src).
 

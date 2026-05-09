@@ -1,7 +1,7 @@
 import type http from 'node:http';
 import { createHmac, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -216,32 +216,59 @@ describe('desktop-import-token gate', () => {
     expect(body.error?.code).toBe('DESKTOP_AUTH_PENDING');
   });
 
-  // Round-4 (lefarcen P3): the desktop signs the exact picker output;
-  // the daemon must verify the same string. A previous version trimmed
-  // the request body's baseDir before HMAC verification, which would
-  // have rejected legitimate paths whose final component carried
-  // leading/trailing whitespace.
-  it('verifies the exact request-body baseDir, not a trimmed version', async () => {
+  // Round-5 (lefarcen P3): HMAC binding ↔ imported path divergence.
+  // The desktop now trims the picker output ONCE before signing AND
+  // before POSTing, so the daemon-verified string, the request body,
+  // and the realpath() input are all the SAME canonical string. A
+  // padded path that the desktop trims to a real folder must succeed
+  // end-to-end: HMAC verifies, realpath resolves, project is created
+  // with metadata.baseDir equal to the realpath of the trimmed input.
+  it('binds HMAC to the same trimmed string the desktop POSTs and the daemon imports', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '');
     const secret = randomBytes(32);
     setDesktopAuthSecret(secret);
     const exp = new Date(Date.now() + 30_000).toISOString();
-    const nonce = 'whitespace-binding-nonce';
-    // Sign the trailing-space version (what the desktop would mint
-    // if the picker handed back a path with edge whitespace).
-    const padded = `${folder} `;
-    const token = signDesktopImportToken(secret, padded, { nonce, exp });
+    const nonce = 'round5-binding-nonce';
+    // Mirror the desktop side: trim the (hypothetically) padded picker
+    // output, then both sign and POST the trimmed string.
+    const padded = `   ${folder}   `;
+    const trimmed = padded.trim();
+    const token = signDesktopImportToken(secret, trimmed, { nonce, exp });
+    const resp = await importFolder(
+      { baseDir: trimmed },
+      { 'x-od-desktop-import-token': token },
+    );
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      project: { metadata?: { baseDir?: string; fromTrustedPicker?: boolean } };
+    };
+    expect(body.project.metadata?.fromTrustedPicker).toBe(true);
+    // Daemon realpath()s the trimmed input, so metadata.baseDir is
+    // the canonical realpath of the trimmed string — never the padded
+    // version, never a divergent canonicalization step.
+    expect(body.project.metadata?.baseDir).toBe(await realpath(trimmed));
+  });
+
+  // Round-5 (lefarcen P3) — defensive: a request whose body baseDir is
+  // un-trimmed but whose token was signed against the trimmed value
+  // must be rejected as a 403 token-mismatch, NOT silently coerced.
+  // This pins the "no daemon-side re-trim before HMAC verify" contract.
+  it('rejects 403 when desktop signed the trimmed string but POSTed the padded one', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '');
+    const secret = randomBytes(32);
+    setDesktopAuthSecret(secret);
+    const exp = new Date(Date.now() + 30_000).toISOString();
+    const nonce = 'round5-mismatch-nonce';
+    const trimmed = folder;
+    const padded = `${folder}   `;
+    const token = signDesktopImportToken(secret, trimmed, { nonce, exp });
     const resp = await importFolder(
       { baseDir: padded },
       { 'x-od-desktop-import-token': token },
     );
-    // Either the realpath() step rejects it because the OS doesn't
-    // accept the padded path (400 BAD_REQUEST: "folder not found"),
-    // or it succeeds. What MUST NOT happen is a 403 token rejection
-    // — that would mean the daemon HMAC-verified a different string
-    // than the desktop signed.
-    expect(resp.status).not.toBe(403);
+    expect(resp.status).toBe(403);
   });
 });
 

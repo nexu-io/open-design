@@ -40,13 +40,20 @@ export { isAllowedChildWindowUrl, isHttpUrl } from "./runtime.js";
 // Re-export the path-validation helpers for the same reason (#974).
 // shell.openPath is privileged main-process behaviour; pinning the
 // validation gate via tests is worth the extra surface.
+//
+// Round-5 (lefarcen P1, mrcfps) adds `pickAndImportFolder` and its
+// types so the lazy-retry-on-DESKTOP_AUTH_PENDING flow is testable in
+// the packaged workspace without booting Electron.
 export {
   validateExistingDirectory,
   fetchResolvedProjectDir,
   isOpenPathAllowedForProject,
   signDesktopImportToken,
+  pickAndImportFolder,
   type PathValidationResult,
   type ResolvedProjectDirContext,
+  type PickAndImportFolderDeps,
+  type PickAndImportFolderResult,
 } from "./runtime.js";
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -162,22 +169,35 @@ export async function runDesktopMain(
   // `POST /api/import/folder`. Doing this before the window load is
   // load-bearing: it closes the race where a compromised renderer
   // races to call /api/import/folder with an arbitrary baseDir before
-  // the gate is armed. If the registration fails (daemon down, slow
-  // sibling startup), we still proceed but the runtime treats imports
-  // as untrusted (pickAndImport refuses), so a partial-failure mode
-  // never silently relaxes the gate.
+  // the gate is armed.
+  //
+  // Round-5 (lefarcen P1, mrcfps): if the initial registration fails
+  // (daemon slow to listen, missed startup window, or daemon restarted
+  // mid-session), we still pass the secret to the runtime so the lazy
+  // re-registration path inside `dialog:pick-and-import` can recover.
+  // The runtime's first import attempt under a daemon that doesn't yet
+  // know the secret gets a `503 DESKTOP_AUTH_PENDING`, the runtime
+  // re-invokes the registration callback below, and the import retries
+  // once with a fresh token. A persistent failure surfaces in the
+  // renderer toast rather than silently dropping forever.
   const desktopAuthSecret = randomBytes(32);
   const registered = await registerDesktopAuthWithDaemon(runtime, desktopAuthSecret);
   if (!registered) {
     console.warn(
-      "[open-design desktop] failed to register import-token secret with daemon; " +
-        "Continue in CLI / Finalize design package buttons will refuse new imports until restart",
+      "[open-design desktop] initial import-token handshake with daemon did not complete; " +
+        "first folder-import attempt will lazily retry registration before failing",
     );
   }
 
   const desktop = await createDesktopRuntime({
-    desktopAuthSecret: registered ? desktopAuthSecret : null,
+    desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
+    // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
+    // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
+    // (after a daemon restart, or after a missed startup window). The
+    // runtime then mints a FRESH token (new nonce + new exp — replay
+    // protection still works) and POSTs once more.
+    registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
   });
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;

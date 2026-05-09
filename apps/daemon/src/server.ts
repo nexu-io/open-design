@@ -2734,12 +2734,15 @@ export async function startServer({
       //      the desktop's startup window or after a daemon crash, and
       //      the desktop's own pickAndImport flow can retry.
       //   3. Gate active with secret registered: require + verify HMAC
-      //      bound to the EXACT raw baseDir (no `.trim()` here — the
-      //      desktop signs the picker output as-is, so the daemon must
-      //      verify the same string. Empty-input validation already
-      //      happened above; whitespace-edged paths that are otherwise
-      //      valid still HMAC-verify, and realpath() below is the
-      //      authoritative path normalizer for fs operations).
+      //      bound to the EXACT request-body baseDir (no `.trim()` here).
+      //      Round-5 (lefarcen P3) closes the binding gap by trimming on
+      //      the DESKTOP side before signing and POSTing, so the desktop-
+      //      signed string, the request body, the HMAC-verified string,
+      //      and the realpath() input are all the same. The daemon side
+      //      retains a defensive `baseDir.trim()` below for *web-mode*
+      //      callers (no HMAC, no desktop trim) where a user-typed path
+      //      with edge whitespace would otherwise fail isAbsolute(); for
+      //      desktop traffic the trim is provably a no-op.
       let trustedPickerImport = false;
       if (desktopAuthEverRegistered) {
         if (desktopAuthSecret == null) {
@@ -2777,6 +2780,11 @@ export async function startServer({
         consumedImportNonces.set(verification.nonce, verification.exp);
         trustedPickerImport = true;
       }
+      // Round-5 (lefarcen P3): defensive trim for *web-mode* callers
+      // where the request body baseDir may carry edge whitespace
+      // (path.isAbsolute("  /foo  ") returns false). Desktop callers
+      // already trim picker output before signing so this is a no-op
+      // for them and HMAC-binding is preserved end-to-end.
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');

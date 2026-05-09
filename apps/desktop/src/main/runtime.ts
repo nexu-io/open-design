@@ -265,21 +265,145 @@ export type DesktopRuntime = {
 export type DesktopRuntimeOptions = {
   // Per-process secret shared with the daemon at startup (over its
   // sidecar IPC) so the main process can mint HMAC tokens for the
-  // `dialog:pick-and-import` flow. When omitted (e.g. unit tests, or
-  // future runtimes that don't ship the trusted picker), the runtime
-  // falls back to refusing every `dialog:pick-and-import` call —
-  // renderer-driven imports cannot proceed without main-process trust.
+  // `dialog:pick-and-import` flow. The secret stays in main-process
+  // memory for the runtime lifetime even if the initial registration
+  // missed its window — round-5 (lefarcen P1, mrcfps) added a lazy
+  // re-registration path on `DESKTOP_AUTH_PENDING` that needs the same
+  // secret to mint a fresh token after re-handshaking with the daemon.
   desktopAuthSecret?: Buffer | null;
   discoverUrl(): Promise<string | null>;
+  /**
+   * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
+   * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
+   * daemon-restart-mid-session, or a missed startup-window race, no
+   * longer permanently breaks folder import. Returns `true` when
+   * registration succeeded so the runtime can mint a fresh token and
+   * retry once. Optional so test runtimes and web-only deployments can
+   * skip it (the lazy retry then collapses into a single attempt).
+   */
+  registerDesktopAuthWithDaemon?: () => Promise<boolean>;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
-function mintImportToken(secret: Buffer, baseDir: string): string {
+export function mintImportToken(secret: Buffer, baseDir: string): string {
   const nonce = randomBytes(16).toString("base64url");
   const exp = new Date(Date.now() + DESKTOP_IMPORT_TOKEN_TTL_MS).toISOString();
   return signDesktopImportToken(secret, baseDir, { nonce, exp });
+}
+
+/**
+ * Pure helper for the `dialog:pick-and-import` IPC handler. Extracted
+ * from `createDesktopRuntime` so vitest can pin the round-5 lazy-retry
+ * branch (lefarcen P1, mrcfps) without booting Electron. Mirrors the
+ * pattern of `fetchResolvedProjectDir` next door — the IPC wrapper
+ * stays a thin adapter that supplies the picker output and forwards
+ * the structured result to the renderer.
+ *
+ * Round-5 contract:
+ *   - Always pass `desktopAuthSecret` (no early-return on null secret).
+ *     A startup registration that missed its window keeps the secret in
+ *     memory; the first user-initiated import triggers the lazy retry.
+ *   - On `503 DESKTOP_AUTH_PENDING` from the daemon, call the injected
+ *     `registerDesktopAuth()` once. If it succeeds, mint a FRESH token
+ *     (new nonce, new exp — replay protection still works) and POST
+ *     once more. Single retry only, no infinite loop.
+ *   - On any other failure (4xx, network error, second 503), return the
+ *     structured failure to the renderer. The Toast surfaces the reason.
+ */
+export type PickAndImportFolderDeps = {
+  baseDir: string;
+  desktopAuthSecret: Buffer;
+  fetchImpl?: typeof globalThis.fetch;
+  init?: { name?: string; skillId?: string | null; designSystemId?: string | null };
+  /** Round-5: lazy re-registration hook. Called once on 503. */
+  registerDesktopAuth?: () => Promise<boolean>;
+  /** Injected for tests; defaults to the production HMAC mint. */
+  mintToken?: (secret: Buffer, baseDir: string) => string;
+  webUrl: string;
+};
+
+export type PickAndImportFolderResult =
+  | { ok: true; response: unknown }
+  | { ok: false; canceled?: boolean; details?: unknown; reason?: string };
+
+export async function pickAndImportFolder(
+  deps: PickAndImportFolderDeps,
+): Promise<PickAndImportFolderResult> {
+  const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
+  const mint = deps.mintToken ?? mintImportToken;
+  const importUrl = `${deps.webUrl.replace(/\/+$/, "")}/api/import/folder`;
+  const requestBody = JSON.stringify({
+    baseDir: deps.baseDir,
+    ...(deps.init?.name == null ? {} : { name: deps.init.name }),
+    ...(deps.init?.skillId === undefined ? {} : { skillId: deps.init.skillId }),
+    ...(deps.init?.designSystemId === undefined ? {} : { designSystemId: deps.init.designSystemId }),
+  });
+
+  async function postOnce(): Promise<Response | { ok: false; reason: string }> {
+    const token = mint(deps.desktopAuthSecret, deps.baseDir);
+    try {
+      return await fetchImpl(importUrl, {
+        body: requestBody,
+        headers: {
+          "Content-Type": "application/json",
+          [DESKTOP_IMPORT_TOKEN_HEADER]: token,
+        },
+        method: "POST",
+      });
+    } catch (err) {
+      return { ok: false, reason: `daemon fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  let resp = await postOnce();
+  if ("reason" in resp) {
+    return { ok: false, reason: resp.reason };
+  }
+
+  // Round-5 (lefarcen P1, mrcfps): lazy retry on DESKTOP_AUTH_PENDING.
+  // Daemon body shape from server.ts sendApiError: `{ error: { code,
+  // message, details, retryable } }`. The daemon-import-token-gate test
+  // pins `body.error?.code === 'DESKTOP_AUTH_PENDING'` (line 215-216),
+  // so we read the same path here — no new wire shape.
+  if (resp.status === 503 && deps.registerDesktopAuth != null) {
+    let body: unknown;
+    try {
+      body = await resp.clone().json();
+    } catch {
+      body = null;
+    }
+    const code =
+      body != null && typeof body === "object" && "error" in body && body.error != null && typeof body.error === "object" && "code" in body.error
+        ? (body.error as { code?: unknown }).code
+        : undefined;
+    if (code === "DESKTOP_AUTH_PENDING") {
+      const reregistered = await deps.registerDesktopAuth();
+      if (reregistered) {
+        const retry = await postOnce();
+        if ("reason" in retry) {
+          return { ok: false, reason: retry.reason };
+        }
+        resp = retry;
+      }
+    }
+  }
+
+  let body: unknown;
+  try {
+    body = await resp.json();
+  } catch {
+    body = null;
+  }
+  if (!resp.ok) {
+    return {
+      ok: false,
+      reason: `daemon returned HTTP ${resp.status}`,
+      ...(body == null ? {} : { details: body }),
+    };
+  }
+  return { ok: true, response: body };
 }
 
 const MAC_WINDOW_CHROME =
@@ -519,6 +643,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.handle(
     "dialog:pick-and-import",
     async (_event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+      // Defensive failsafe for non-production runtimes (test harnesses
+      // that construct createDesktopRuntime without a secret). Round-5
+      // production wiring in runDesktopMain ALWAYS passes the per-process
+      // secret regardless of whether the startup handshake succeeded —
+      // the lazy retry inside pickAndImportFolder is the recovery
+      // mechanism for the "startup registration missed its window"
+      // case (lefarcen P1, mrcfps), not this branch.
       if (options.desktopAuthSecret == null) {
         return { ok: false, reason: "desktop auth secret not registered" };
       }
@@ -530,40 +661,24 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
-      const baseDir = result.filePaths[0];
-      const token = mintImportToken(options.desktopAuthSecret, baseDir);
-      let resp: Response;
-      try {
-        resp = await fetch(`${webUrl.replace(/\/+$/, "")}/api/import/folder`, {
-          body: JSON.stringify({
-            baseDir,
-            ...(init?.name == null ? {} : { name: init.name }),
-            ...(init?.skillId === undefined ? {} : { skillId: init.skillId }),
-            ...(init?.designSystemId === undefined ? {} : { designSystemId: init.designSystemId }),
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            [DESKTOP_IMPORT_TOKEN_HEADER]: token,
-          },
-          method: "POST",
-        });
-      } catch (err) {
-        return { ok: false, reason: `daemon fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+      // PR #974 round-5 (lefarcen P3): trim ONCE on the desktop side so the
+      // HMAC and the request body bind to the exact same string the daemon
+      // realpath()s. The daemon used to verify raw `baseDir` and then trim
+      // before resolution — a `/tmp/foo ` selection could authorize an
+      // import of `/tmp/foo`. Doing the trim here keeps desktop as the
+      // source of truth for the canonical path it picked, signs that, and
+      // sends that — daemon then verifies and imports the same string.
+      const baseDir = result.filePaths[0].trim();
+      if (baseDir.length === 0) {
+        return { ok: false, reason: "picker returned an empty path" };
       }
-      let body: unknown;
-      try {
-        body = await resp.json();
-      } catch {
-        body = null;
-      }
-      if (!resp.ok) {
-        return {
-          ok: false,
-          reason: `daemon returned HTTP ${resp.status}`,
-          ...(body == null ? {} : { details: body }),
-        };
-      }
-      return { ok: true, response: body };
+      return await pickAndImportFolder({
+        baseDir,
+        desktopAuthSecret: options.desktopAuthSecret,
+        init,
+        registerDesktopAuth: options.registerDesktopAuthWithDaemon,
+        webUrl,
+      });
     },
   );
   // shell.openPath opens an absolute filesystem path in the OS file
