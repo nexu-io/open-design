@@ -17,7 +17,7 @@ The `mode` and `featured` flags in each skill's `SKILL.md` decide where it shows
 ```bash
 # Browse the registry from the CLI:
 ls skills/
-# 54+ skills across prototype, deck, template, and design-system modes
+# 54+ skills across prototype, deck, template, design-system, image, video, and audio modes
 ```
 
 ## License

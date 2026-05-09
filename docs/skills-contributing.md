@@ -32,7 +32,8 @@ cp -r skills/dating-web skills/<your-skill-name>
 # 4. Run the dev loop and verify the picker
 pnpm tools-dev run web
 # Open the URL it prints (typically http://127.0.0.1:5173).
-# Switch to the mode you set in od.mode (Prototype / Deck / Template).
+# Switch to the mode you set in od.mode — see "Skill modes" below for the
+# full list (Prototype / Deck / Template / Design system / Image / Video / Audio).
 # Your skill's name should appear in the picker. Click it, send the example_prompt.
 
 # 5. Open a PR
@@ -55,6 +56,9 @@ A skill is a **recipe for producing one kind of artifact**. Not a feature, not a
 - "A single-screen consumer dashboard with stats, charts, and a community ticker" → prototype-skill
 - "A populated copy of our PM-spec template with the brief filled in" → template-skill
 - "A `DESIGN.md` for the Linear brand sampled from their site" → design-system-skill
+- "A 9:16 short-form video reel from a script + b-roll prompts" → video-skill
+- "A square poster from a one-line brief" → image-skill
+- "A 30-second jingle from a mood description" → audio-skill
 
 **No:**
 - A wrapper around a third-party API (Stripe, Alipay, Slack API, GitHub API). That's a feature; submit it via the agent / daemon path, not as a skill.
@@ -98,7 +102,7 @@ triggers:
   - "中文触发词"
 
 od:
-  mode: prototype           # prototype | deck | template | design-system
+  mode: prototype           # prototype | deck | template | design-system | image | video | audio
   platform: desktop         # desktop | mobile
   scenario: marketing       # free-form tag for grouping in the picker
   featured: 1               # any positive integer surfaces under "Showcase examples"
@@ -140,7 +144,8 @@ pnpm tools-dev run web
 #    (chokidar watches skills/). If it doesn't, restart with the same command above.
 
 # 4. Verify your skill end-to-end:
-#    - Switch to the mode you set in od.mode (Prototype / Deck / Template / Design system)
+#    - Switch to the mode you set in od.mode (Prototype / Deck / Template /
+#      Design system / Image / Video / Audio)
 #    - Find your skill in the picker
 #    - Click it, paste the example_prompt
 #    - Watch the artifact stream into .od/artifacts/<run-id>/
@@ -163,7 +168,7 @@ We hold skill PRs to a higher bar than feature PRs because skills are the user-f
 - [ ] **`example.html` is hand-built.** Opens straight from disk, looks like something a designer would actually deliver. No lorem ipsum, no `<svg><rect/></svg>` placeholder hero. If you can't build the example yourself, the skill probably isn't ready.
 - [ ] **No AI slop in the example.** No purple gradients, no generic emoji icons (📊 💡 🚀), no rounded card with a left-border accent, no Inter as a *display* face, no invented stats ("10× faster", "users save 4 hours/week"). Read the **Anti-AI-slop machinery** section of the README for the full list.
 - [ ] **Honest placeholders.** When the agent doesn't have a real number, the skill body should instruct it to write `—` or a labelled grey block, not fabricate one.
-- [ ] **`references/checklist.md` exists** with at least P0 gates (the rules the agent has to pass before emitting `<artifact>`). Lift the format from [`skills/guizang-ppt/references/checklist.md`](../skills/guizang-ppt/references/checklist.md) or [`skills/dating-web/references/checklist.md`](../skills/dating-web/references/checklist.md).
+- [ ] **`references/checklist.md` exists** with at least P0 gates (the rules the agent has to pass before emitting `<artifact>`). Lift the format from [`skills/guizang-ppt/references/checklist.md`](../skills/guizang-ppt/references/checklist.md) or [`skills/web-prototype/references/checklist.md`](../skills/web-prototype/references/checklist.md).
 - [ ] **`example_prompt` actually works.** Run it locally end-to-end before submitting. If you wouldn't paste this prompt in front of a stranger to demo the skill, rewrite it.
 - [ ] **Triggers are concrete.** "design something cool" is not a trigger. "investor pitch deck", "saas landing page", "约会应用" are.
 
@@ -195,7 +200,7 @@ Copy-paste this into your PR body and fill it in. Reviewers spend 80% of their f
 ```markdown
 ## Skill: <name>
 
-**Mode:** prototype | deck | template | design-system
+**Mode:** prototype | deck | template | design-system | image | video | audio
 **Platform:** desktop | mobile
 **Surface:** one sentence on what artifact this produces
 
@@ -251,6 +256,7 @@ Pick the closest one to your idea and read its `SKILL.md` body before writing yo
 - **Multi-frame mobile flow:** [`skills/mobile-onboarding/`](../skills/mobile-onboarding/), [`skills/gamified-app/`](../skills/gamified-app/)
 - **Document / template (no design system required):** [`skills/pm-spec/`](../skills/pm-spec/), [`skills/weekly-update/`](../skills/weekly-update/)
 - **Deck mode:** [`skills/guizang-ppt/`](../skills/guizang-ppt/) (bundled verbatim from [op7418/guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill)) and [`skills/simple-deck/`](../skills/simple-deck/)
+- **Media skills (image / video / audio):** [`skills/image-poster/`](../skills/image-poster/), [`skills/video-shortform/`](../skills/video-shortform/), [`skills/audio-jingle/`](../skills/audio-jingle/)
 
 ### Spec & supporting docs
 
