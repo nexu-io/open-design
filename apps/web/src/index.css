@@ -14318,9 +14318,35 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
 }
 
+.privacy-consent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.privacy-consent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.privacy-consent-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
 /* First-run privacy consent banner. Cookie-consent-style: anchored to the
-   bottom-right of the viewport, prominent but non-blocking, equal-weight
-   accept / decline pair via the existing 2-cell seg-control. Reuses the
+   bottom-right of the viewport, prominent but non-blocking. Reuses the
    same typography + radii + shadow as the rest of the panels. */
 .privacy-consent-banner {
   position: fixed;
@@ -14341,7 +14367,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   pointer-events: none;
 }
 
-.privacy-consent-banner .seg-control {
+.privacy-consent-banner .privacy-consent-actions {
   pointer-events: auto;
 }
 
