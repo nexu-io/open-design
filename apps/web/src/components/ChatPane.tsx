@@ -566,7 +566,11 @@ export function ChatPane({
             onEnsureProject={onEnsureProject}
             commentAttachments={commentsToAttachments(attachedComments)}
             onRemoveCommentAttachment={onDetachComment}
-            onSend={onSend}
+            onSend={(prompt, attachments, commentAttachments, meta) => {
+              pinnedToBottomRef.current = true;
+              scrolledToFormRef.current = new Set();
+              onSend(prompt, attachments, commentAttachments, meta);
+            }}
             onStop={onStop}
             onOpenSettings={onOpenSettings}
             onOpenMcpSettings={onOpenMcpSettings}
