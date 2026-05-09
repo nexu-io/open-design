@@ -56,6 +56,8 @@ Default and only mode. Trading terminals operate in dim environments for focus.
   --color-text: #FFFFFF;
   --color-text-secondary: #AAAAAA;
   --color-text-tertiary: #828282;
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-6: 24px; --space-8: 32px; --space-12: 48px;
 }
 ```
 
