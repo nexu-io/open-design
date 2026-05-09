@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in ENABLE_LINUX ENABLE_MAC ENABLE_WIN R2_METADATA_URL RELEASE_CHANNEL RELEASE_VERSION RUNNER_TEMP; do
+for name in ENABLE_LINUX ENABLE_MAC ENABLE_MAC_INTEL ENABLE_WIN R2_METADATA_URL RELEASE_CHANNEL RELEASE_VERSION RUNNER_TEMP; do
   if [ -z "${!name:-}" ]; then
     echo "$name is required" >&2
     exit 1
@@ -119,6 +119,17 @@ if [ "$ENABLE_WIN" = "true" ]; then
   require_report_file "win/screenshots/open-design-win-smoke.png"
   require_report_file "win/tools-pack.json"
   require_report_file "win/vitest.log"
+fi
+
+if [ "$ENABLE_MAC_INTEL" = "true" ]; then
+  for name in R2_MAC_INTEL_DMG_URL R2_MAC_INTEL_ZIP_URL; do
+    if [ -z "${!name:-}" ]; then
+      echo "$name is required when ENABLE_MAC_INTEL=true" >&2
+      exit 1
+    fi
+  done
+  curl -fsSI "$R2_MAC_INTEL_DMG_URL" >/dev/null
+  curl -fsSI "$R2_MAC_INTEL_ZIP_URL" >/dev/null
 fi
 
 if [ "$ENABLE_LINUX" = "true" ]; then

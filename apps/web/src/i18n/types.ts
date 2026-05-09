@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr';
+export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th';
 
-export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr'];
+export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -21,7 +21,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'hu': 'Magyar',
   'fr': 'Français',
   'uk': 'Українська',
-  'tr': 'Türkçe'
+  'tr': 'Türkçe',
+  'th': 'ภาษาไทย'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -175,6 +176,27 @@ export interface Dict {
   'settings.mediaProviderClearConfirm': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
+  'settings.mediaProviderReload': string;
+  'settings.mediaProviderReloadError': string;
+  'settings.mediaProviderReloadSuccess': string;
+  'settings.mediaProviderLoadError': string;
+  'settings.privacy': string;
+  'settings.privacyHint': string;
+  'settings.privacyConsentKicker': string;
+  'settings.privacyConsentLead': string;
+  'settings.privacyConsentFooter': string;
+  'settings.privacyConsentShare': string;
+  'settings.privacyConsentDecline': string;
+  'settings.privacyMetrics': string;
+  'settings.privacyMetricsHint': string;
+  'settings.privacyContent': string;
+  'settings.privacyContentHint': string;
+  'settings.privacyArtifacts': string;
+  'settings.privacyArtifactsHint': string;
+  'settings.privacyInstallationId': string;
+  'settings.privacyOptedOut': string;
+  'settings.privacyDataDeletion': string;
+  'settings.privacyDataDeletionHint': string;
   'settings.about': string;
   'settings.aboutHint': string;
   'settings.appVersion': string;
@@ -289,6 +311,39 @@ export interface Dict {
   'settings.orbit.gateLoading': string;
   'settings.orbit.controlsLockedBadge': string;
   'settings.orbit.controlsLockedHint': string;
+
+  // MCP server settings
+  'settings.mcpTitle': string;
+  'settings.mcpHint': string;
+  'settings.mcpDaemonError': string;
+  'settings.mcpBuildDaemon': string;
+  'settings.mcpNodeMissing': string;
+  'settings.mcpBuildHint': string;
+  'settings.mcpMethodCli': string;
+  'settings.mcpInstructionCli': string;
+  'settings.mcpMethodToml': string;
+  'settings.mcpInstructionCodex': string;
+  'settings.mcpMethodOneClick': string;
+  'settings.mcpInstructionCursor': string;
+  'settings.mcpDeeplinkInstallCursor': string;
+  'settings.mcpMethodJson': string;
+  'settings.mcpInstructionCopilot': string;
+  'settings.mcpInstructionAntigravity': string;
+  'settings.mcpInstructionZed': string;
+  'settings.mcpInstructionWindsurf': string;
+  'settings.mcpCopyAria': string;
+  'settings.mcpResolvingFailed': string;
+  'settings.mcpLoadingPaths': string;
+  'settings.mcpCopied': string;
+  'settings.mcpCopy': string;
+  'settings.mcpCursorApproval': string;
+  'settings.mcpRestartNote': string;
+  'settings.mcpRestartDetail': string;
+  'settings.mcpCapabilitiesTitle': string;
+  'settings.mcpCapabilityRead': string;
+  'settings.mcpCapabilityPull': string;
+  'settings.mcpCapabilityDefault': string;
+  'settings.mcpRunningNote': string;
 
   // Notifications (settings + system notifications)
   'settings.notifications': string;
@@ -777,6 +832,7 @@ export interface Dict {
   'designFiles.downloadSelected': string;
   'designFiles.deleteSelected': string;
   'designFiles.clearSelection': string;
+  'designFiles.selectPage': string;
   'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
   'designFiles.dropDesc': string;
@@ -806,6 +862,15 @@ export interface Dict {
   'designFiles.kindSpreadsheet': string;
   'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
+  'designFiles.colName': string;
+  'designFiles.colKind': string;
+  'designFiles.colModified': string;
+  'designFiles.perPage': string;
+  'designFiles.all': string;
+  'designFiles.prev': string;
+  'designFiles.next': string;
+  'designFiles.jumpToPage': string;
+  'designFiles.pageInfo': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
@@ -1252,6 +1317,7 @@ export interface Dict {
   'sketch.undo': string;
   'sketch.clear': string;
   'sketch.close': string;
+  'sketch.closeConfirm': string;
   'sketch.textPrompt': string;
   'sketch.textModalTitle': string;
 }

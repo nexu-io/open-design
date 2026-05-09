@@ -287,7 +287,7 @@ describe('connectConnector', () => {
       error: 'Popup blocked. Allow popups for Open Design and try again.',
     });
     expect(open).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
       method: 'POST',
     });
   });
@@ -350,7 +350,7 @@ describe('connectConnector', () => {
     });
     expect(open).not.toHaveBeenCalled();
     expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
-    expect(fetchMock).toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
       method: 'POST',
     });
   });

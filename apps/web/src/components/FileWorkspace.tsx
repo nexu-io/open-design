@@ -168,7 +168,10 @@ export function FileWorkspace({
   }
 
   function closeTab(name: string) {
-    const isPending = sketches[name] && !sketches[name]!.persisted;
+    const sketchEntry = sketches[name];
+    const isPending = sketchEntry && !sketchEntry.persisted;
+    const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
+    if (hasUnsavedStrokes && !confirm(t('sketch.closeConfirm'))) return;
     if (isPending) {
       setSketches((curr) => {
         const next = { ...curr };
@@ -282,6 +285,36 @@ export function FileWorkspace({
     tabBar.addEventListener('wheel', onWheel, { passive: false });
     return () => tabBar.removeEventListener('wheel', onWheel);
   }, []);
+
+  // Browser-style tab bar: when the active tab changes (open from a chat
+  // file chip, switch via Cmd+P, etc.), scroll it into view so the user
+  // can always see what they have selected even when the strip overflows.
+  // The Design Files entry is already sticky-pinned, so we only scroll
+  // for real workspace tabs. Issue #775.
+  useEffect(() => {
+    if (activeTab === DESIGN_FILES_TAB) return;
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+    const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
+    if (!el) return;
+    // The Design Files tab is sticky-pinned to the scrollport's left
+    // edge (index.css:.ws-tab.design-files-tab), so a naive scrollIntoView
+    // with inline: 'nearest' would slide a leftward-jumped active tab
+    // flush with that edge and leave it hidden underneath the sticky
+    // panel. Compute scrollLeft manually instead, treating the sticky
+    // tab's right edge as the effective visible-left boundary.
+    const tabRect = el.getBoundingClientRect();
+    const barRect = tabBar.getBoundingClientRect();
+    const stickyEl = tabBar.querySelector<HTMLElement>('.ws-tab.design-files-tab');
+    const stickyWidth = stickyEl ? stickyEl.getBoundingClientRect().width : 0;
+    const visibleLeft = barRect.left + stickyWidth;
+    const visibleRight = barRect.right;
+    if (tabRect.left < visibleLeft) {
+      tabBar.scrollLeft += tabRect.left - visibleLeft;
+    } else if (tabRect.right > visibleRight) {
+      tabBar.scrollLeft += tabRect.right - visibleRight;
+    }
+  }, [activeTab]);
 
   // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
   // so we beat the browser's default print dialog. Platform-gated so on
@@ -481,6 +514,19 @@ export function FileWorkspace({
   return (
     <div className="workspace" data-testid="file-workspace">
       <div className="ws-tabs-shell">
+        {onFocusModeChange && focusMode ? (
+          <button
+            type="button"
+            className="icon-only ws-focus-expand"
+            data-testid="workspace-focus-toggle"
+            aria-pressed={focusMode}
+            title={t('workspace.showChat')}
+            aria-label={t('workspace.showChat')}
+            onClick={() => onFocusModeChange(false)}
+          >
+            <Icon name="chevron-right" size={15} />
+          </button>
+        ) : null}
         <div
           ref={tabsBarRef}
           className="ws-tabs-bar"
@@ -571,24 +617,30 @@ export function FileWorkspace({
             );
           })}
         </div>
-        {onFocusModeChange ? (
-          <div className="ws-tabs-actions">
+      </div>
+      <div className="ws-body">
+        {/* Keep the failure banner visible across tab switches so the
+            partial-success case (some files succeed and auto-open while
+            others fail) doesn't silently drop the failure signal. The
+            banner now carries an explicit dismiss button so the user
+            can clear the stale message themselves, which is what #786
+            was really asking for: a way to drop the message rather than
+            have it pinned above an unrelated file preview forever. The
+            next upload also clears it via setUploadError(null) at the
+            top of uploadFiles(). */}
+        {uploadError ? (
+          <div className="viewer-empty viewer-empty-dismissible">
+            <span>{uploadError}</span>
             <button
               type="button"
-              className="ws-focus-toggle"
-              data-testid="workspace-focus-toggle"
-              aria-pressed={focusMode}
-              title={focusMode ? t('workspace.showChat') : t('workspace.focusMode')}
-              onClick={() => onFocusModeChange(!focusMode)}
+              className="ghost"
+              aria-label={t('common.close')}
+              onClick={() => setUploadError(null)}
             >
-              <Icon name={focusMode ? 'comment' : 'zoom-in'} size={13} />
-              <span>{focusMode ? t('workspace.showChat') : t('workspace.focusMode')}</span>
+              {t('common.close')}
             </button>
           </div>
         ) : null}
-      </div>
-      <div className="ws-body">
-        {uploadError ? <div className="viewer-empty">{uploadError}</div> : null}
         {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}

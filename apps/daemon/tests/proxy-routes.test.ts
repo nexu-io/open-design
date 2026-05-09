@@ -358,6 +358,88 @@ describe('API proxy routes', () => {
     expect(upstreamInit?.redirect).toBe('error');
   });
 
+  it('keeps the default Azure api-version for deployment URLs when the field is blank', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://resource.openai.azure.com/openai/deployments/deployment-one/chat/completions?api-version=2024-10-21',
+    );
+  });
+
+  it('omits Azure api-version for OpenAI-compatible v1 paths when the field is blank', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deployment-one',
+    });
+  });
+
+  it('removes copied Azure api-version query params for OpenAI-compatible v1 paths when the field is blank', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl:
+          'https://resource.services.ai.azure.com/api/projects/project/openai/v1?api-version=2024-10-21',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+  });
+
   it('surfaces Gemini safety blocks as proxy errors', async () => {
     vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);

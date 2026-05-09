@@ -11,11 +11,12 @@ import {
   resolveAppIpcPath,
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
-import { app } from "electron";
+import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import {
+  PackagedPathAccessError,
   applyPackagedElectronPathOverrides,
   ensurePackagedNamespacePaths,
 } from "./launch.js";
@@ -105,6 +106,13 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
+  if (error instanceof PackagedPathAccessError) {
+    try {
+      dialog.showErrorBox(error.title, error.message);
+    } catch {
+      // Fall through to console logging + process exit.
+    }
+  }
   packagedLogger?.error("packaged runtime failed", { error });
   console.error("packaged runtime failed", error);
   process.exit(1);

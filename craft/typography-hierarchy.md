@@ -94,6 +94,12 @@ The following are explicitly allowed when the three core contracts are met:
 | No heading-level element visible | Hierarchy is emergent from layout/spacing alone |
 | Primary-level spacing applied to secondary element | Creates deliberate tension while maintaining information flow |
 
+**"Information flow remains intact" safeguards:**
+- DOM/reading order still matches content meaning (no layout inversion breaks narrative)
+- Proximity groups the inverted element with its parent/context
+- Only one primary exists in the visual region (no competing co-primaries)
+- A quick scan can identify entry point / support / incidental roles without rereading
+
 ---
 
 ## Spacing as hierarchy
@@ -116,7 +122,7 @@ Most surfaces can be mapped to three functional levels:
 
 | Level | Role | Typical vectors |
 |---|---|---|
-| **Primary** | Entry point. One at a time on compressed surfaces; one per surface on long-form. | Scale, spacing, or alignment break |
+| **Primary** | Entry point. One at a time per visual region; long-form surfaces may re-establish at intentional pacing resets. | Scale, spacing, or alignment break |
 | **Secondary** | Structure. Subdivides or supports primary. | Weight, scale step, or tracking shift |
 | **Tertiary** | Incidental. Labels, captions, metadata. | Scale reduction, weight reduction, or positive tracking |
 
@@ -152,8 +158,8 @@ two simultaneous primaries within the same visual region.
 - [ ] One element is unambiguously dominant above the fold.
 - [ ] At least two hierarchy vectors are active on the dominant element.
 - [ ] No two adjacent levels share the same scale, weight, AND spacing.
-- [ ] Spacing between levels varies — at least one gap is meaningfully larger
-      than the others.
+- [ ] Spacing between levels varies — at least one gap is ≥1.5× the others or
+      represents one typographic scale step (e.g. one token unit like `gap-md` vs `gap-sm`). (guidance)
 - [ ] Semantic/visual role inversions remain structurally readable.
 - [ ] Flat hierarchy: scale steps between levels are ≥1.25× apart OR compensated by a weight or spacing jump. (guidance)
 - [ ] Noise hierarchy: no more than one element reads as primary above the fold.

@@ -476,17 +476,34 @@ function renderConnectorConnectedHtml(connectorId: string): string {
           closeButton.textContent = 'Close this tab manually';
           hint.textContent = 'Your browser blocked automatic closing. You can close this tab and return to Open Design.';
         }
+        function hasLiveOpener() {
+          try {
+            return Boolean(window.opener) && !window.opener.closed;
+          } catch {
+            return false;
+          }
+        }
         function requestClose() {
+          // window.close() is silently rejected by browsers when the tab
+          // was not opened by a script (no opener), so trying it from a
+          // direct navigation always looks like the button "did nothing".
+          // Skip the no-op call and surface the manual-close instructions
+          // immediately so the click visibly produces feedback. Issue #669.
+          if (!hasLiveOpener()) {
+            showManualCloseHint();
+            return;
+          }
           try {
             window.close();
           } finally {
-            window.setTimeout(() => {
-              if (document.visibilityState === 'visible') showManualCloseHint();
-            }, 250);
+            // If the page is still alive after the close attempt, the
+            // browser blocked it. Update the hint unconditionally; if
+            // close did succeed the page is unloading and this never runs.
+            window.setTimeout(showManualCloseHint, 400);
           }
         }
         try {
-          if (window.opener && !window.opener.closed) {
+          if (hasLiveOpener()) {
             window.opener.postMessage(message, '*');
             window.setTimeout(requestClose, 900);
           } else {

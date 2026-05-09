@@ -351,7 +351,6 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       if (useExternalBrowser) {
         const opened = await openExternal(json.auth.redirectUrl);
         if (!opened) {
-          void cancelConnectorAuthorization(connectorId);
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       } else if (authWindow) {
@@ -359,7 +358,6 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       } else {
         const redirected = window.open(json.auth.redirectUrl, '_blank');
         if (!redirected) {
-          void cancelConnectorAuthorization(connectorId);
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BASE_VERSION BRANCH_NAME CLOUDFLARE_R2_RELEASES_BUCKET CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN CLOUDFLARE_R2_RELEASES_URL ENABLE_LINUX ENABLE_MAC ENABLE_WIN GITHUB_OUTPUT RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION RUNNER_TEMP STATE_SOURCE; do
+for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BASE_VERSION BRANCH_NAME CLOUDFLARE_R2_RELEASES_BUCKET CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN CLOUDFLARE_R2_RELEASES_URL ENABLE_LINUX ENABLE_MAC ENABLE_MAC_INTEL ENABLE_WIN GITHUB_OUTPUT RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION RUNNER_TEMP STATE_SOURCE; do
   if [ -z "${!name:-}" ]; then
     echo "$name is required" >&2
     exit 1
@@ -9,6 +9,7 @@ for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BASE_VERSION BRANCH_NAME CLO
 done
 
 asset_version_suffix="${ASSET_VERSION_SUFFIX:-}"
+mac_intel_asset_suffix="${MAC_INTEL_ASSET_SUFFIX:-$asset_version_suffix}"
 win_asset_suffix="${WIN_ASSET_SUFFIX:-$asset_version_suffix}"
 linux_asset_suffix="${LINUX_ASSET_SUFFIX:-$asset_version_suffix}"
 mac_artifact_mode="${MAC_ARTIFACT_MODE:-dmg-and-zip}"
@@ -105,6 +106,8 @@ upload_report_zip() {
 
 mac_dmg="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.dmg"
 mac_zip="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.zip"
+mac_intel_dmg="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.dmg"
+mac_intel_zip="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.zip"
 win_installer="open-design-$RELEASE_VERSION$win_asset_suffix-win-x64-setup.exe"
 linux_appimage="open-design-$RELEASE_VERSION$linux_asset_suffix-linux-x64.AppImage"
 metadata_path="$release_root/metadata.json"
@@ -138,6 +141,17 @@ if [ "$ENABLE_WIN" = "true" ]; then
   } >> "$GITHUB_OUTPUT"
 fi
 
+if [ "$ENABLE_MAC_INTEL" = "true" ]; then
+  upload "$release_root/mac-intel/$mac_intel_dmg" "$version_prefix/$mac_intel_dmg" "application/x-apple-diskimage" "public, max-age=31536000, immutable"
+  upload "$release_root/mac-intel/$mac_intel_zip" "$version_prefix/$mac_intel_zip" "application/zip" "public, max-age=31536000, immutable"
+  upload "$release_root/mac-intel/$mac_intel_dmg.sha256" "$version_prefix/$mac_intel_dmg.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
+  upload "$release_root/mac-intel/$mac_intel_zip.sha256" "$version_prefix/$mac_intel_zip.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
+  {
+    echo "mac_intel_dmg_url=$public_origin/$version_prefix/$mac_intel_dmg"
+    echo "mac_intel_zip_url=$public_origin/$version_prefix/$mac_intel_zip"
+  } >> "$GITHUB_OUTPUT"
+fi
+
 if [ "$ENABLE_LINUX" = "true" ]; then
   upload "$release_root/linux/$linux_appimage" "$version_prefix/$linux_appimage" "application/octet-stream" "public, max-age=31536000, immutable"
   upload "$release_root/linux/$linux_appimage.sha256" "$version_prefix/$linux_appimage.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
@@ -160,6 +174,8 @@ REPORT_MODE="$report_mode" \
 REPORT_ZIP_PATH="$report_zip_path" \
 MAC_DMG="$mac_dmg" \
 MAC_ZIP="$mac_zip" \
+MAC_INTEL_DMG="$mac_intel_dmg" \
+MAC_INTEL_ZIP="$mac_intel_zip" \
 WIN_INSTALLER="$win_installer" \
 LINUX_APPIMAGE="$linux_appimage" \
 MAC_ARTIFACT_MODE="$mac_artifact_mode" \
@@ -242,6 +258,18 @@ if (enabled("ENABLE_LINUX")) {
     signed: false,
     artifacts: {
       appImage: fileEntry("linux", env.LINUX_APPIMAGE, "application/octet-stream"),
+    },
+  };
+}
+if (enabled("ENABLE_MAC_INTEL")) {
+  platforms.macIntel = {
+    arch: "x64",
+    enabled: true,
+    feed: null,
+    signed: false,
+    artifacts: {
+      dmg: fileEntry("mac-intel", env.MAC_INTEL_DMG, "application/x-apple-diskimage"),
+      zip: fileEntry("mac-intel", env.MAC_INTEL_ZIP, "application/zip"),
     },
   };
 }

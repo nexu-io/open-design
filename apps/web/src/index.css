@@ -355,6 +355,141 @@ code {
   gap: 6px;
   flex-shrink: 0;
 }
+.app-chrome-file-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.app-chrome-file-actions:not(:empty) + .app-chrome-actions {
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.chrome-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.chrome-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.chrome-action-secondary {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.chrome-action-secondary:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--text-muted);
+}
+.chrome-action-primary {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--bg);
+}
+.chrome-action-primary:hover:not(:disabled) {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.chrome-share-menu .share-menu-popover,
+.chrome-present-wrap .present-menu {
+  top: calc(100% + 6px);
+  right: 0;
+}
+.zoom-menu { position: relative; display: inline-block; }
+.zoom-menu .zoom-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.zoom-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  min-width: 110px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.zoom-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.zoom-menu-item:hover { background: var(--bg-subtle); }
+.zoom-menu-item.active { color: var(--accent-strong); font-weight: 600; }
+@media (max-width: 880px) {
+  .chrome-action-secondary span { display: none; }
+  .chrome-action-secondary { padding: 0 10px; }
+}
+@media (max-width: 720px) {
+  .app-chrome-content { display: none; }
+}
+.viewer.is-tab-present .viewer-toolbar,
+.viewer.is-tab-present .live-artifact-refresh-notice {
+  display: none;
+}
+.viewer.is-tab-present .viewer-body {
+  inset: 0;
+}
+.viewer .present-exit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+}
+.viewer .present-exit-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.live-artifact-preview-frame-host {
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+.live-artifact-preview-frame-host:fullscreen {
+  background: var(--bg);
+}
 .app-project-title {
   display: flex;
   flex-direction: column;
@@ -1082,6 +1217,7 @@ code {
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1090,6 +1226,7 @@ code {
 }
 .modal {
   background: var(--bg-elevated);
+  -webkit-app-region: no-drag;
   border-radius: var(--radius-lg);
   padding: 22px;
   width: 520px;
@@ -3150,9 +3287,20 @@ code {
   text-align: left;
   color: var(--text);
 }
-.settings-language-option:hover,
-.settings-language-option.active { background: var(--bg-subtle); }
-.settings-language-option.active { color: var(--accent); }
+/* Differentiate hover, selected, and keyboard-focus states so the
+   currently-selected language is visually distinct even when the
+   pointer is hovering a different row. Issue #628. */
+.settings-language-option:hover { background: var(--bg-subtle); }
+.settings-language-option.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+.settings-language-option.active:hover { background: var(--accent-soft); }
+.settings-language-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .empty-card {
   padding: 16px;
   border: 1px dashed var(--border);
@@ -4502,7 +4650,14 @@ code {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
   padding-top: 16px;
+}
+.entry-side-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .entry-side-foot .foot-pill {
   display: inline-flex;
@@ -4517,6 +4672,19 @@ code {
   align-self: flex-start;
   cursor: pointer;
   text-decoration: none;
+}
+.entry-side-foot-row .foot-pill {
+  min-width: 0;
+}
+.entry-side-foot-row .foot-pill-follow {
+  flex: 0 1 auto;
+}
+.entry-side-foot-row .foot-pill-follow-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .entry-side-foot .foot-pill:hover { background: var(--bg-panel); border-color: var(--border-strong); color: var(--text); }
 .entry-side-foot .foot-pill .ico { font-size: 12px; opacity: 0.7; }
@@ -7061,6 +7229,187 @@ button.connector-action.is-loading {
   font-weight: 500;
   letter-spacing: 0;
 }
+/* --- file list table --- */
+.df-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.df-table thead { border-bottom: 1px solid var(--border); }
+.df-th-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.df-th-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.df-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 12px 20px 6px;
+  text-align: left;
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+.df-th-sortable:hover { color: var(--text); }
+.df-th-check, .df-cell-check { width: 28px; padding: 10px 0 10px 20px; }
+.df-th-icon, .df-cell-icon { width: 36px; padding: 10px 0; }
+.df-th-name { width: auto; }
+.df-th-kind { width: 110px; }
+.df-th-time { width: 100px; }
+.df-th-menu, .df-cell-menu { width: 32px; padding: 10px 20px 10px 0; }
+.df-sort-arrow { font-size: 10px; }
+
+.df-file-row {
+  transition: background 120ms ease;
+}
+.df-file-row:hover { background: var(--bg-subtle); }
+.df-file-row.active:not(.selected) { background: var(--bg-subtle); }
+.df-file-row.active.selected { background: var(--blue-bg); }
+.df-file-row.active .df-row-name { color: var(--text-strong); }
+.df-file-row.selected { background: var(--blue-bg); }
+
+.df-cell-check {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-cell-icon {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-cell-name {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+}
+.df-cell-openable {
+  cursor: pointer;
+}
+.df-row-name-btn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.df-row-name-btn:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.df-row-name-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.df-cell-kind {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+}
+.df-cell-time {
+  padding: 10px 12px 10px 0;
+  vertical-align: middle;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.df-cell-menu {
+  text-align: center;
+  vertical-align: middle;
+}
+.df-kind-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- pagination --- */
+.df-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.df-pagination-start {
+  justify-content: flex-start;
+}
+.df-pagination-center {
+  justify-content: center;
+}
+.df-pagination-end {
+  justify-content: flex-end;
+}
+.df-pagination-right {
+  margin-left: auto;
+}
+.df-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.df-pagination select {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.df-pagination select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.df-page-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.df-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.df-page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.df-page-info {
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
 .df-row {
   display: grid;
   grid-template-columns: 28px 36px 1fr auto auto;
@@ -7102,16 +7451,20 @@ button.connector-action.is-loading {
 .df-row-check:hover { background: var(--border); color: var(--text); }
 .df-row-check[aria-checked="true"] { color: var(--accent-strong); }
 
+.df-select-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .df-select-all {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-faint);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
   font-weight: 500;
-  margin-left: auto;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -7169,6 +7522,7 @@ button.connector-action.is-loading {
   transition: opacity 120ms ease;
 }
 .df-row:hover .df-row-menu { opacity: 1; }
+.df-row-menu:focus { opacity: 1; }
 .df-row-menu:hover { background: var(--border); color: var(--text); }
 .df-section-more {
   margin: 6px 20px 10px;
@@ -8538,6 +8892,17 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text-muted);
   font-size: 13px;
 }
+/* Compact horizontal variant for the upload-failure banner: the message
+   sits inline next to a dismiss button so the user can clear the stale
+   notice without changing tabs. Issue #786. */
+.viewer-empty.viewer-empty-dismissible {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
 .document-preview {
   max-width: 860px;
   margin: 0 auto;
@@ -9402,6 +9767,19 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   width: min(760px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   overflow: auto;
+}
+/* Add a few extra pixels above the deploy dialog's primary action so
+   it does not crowd the divider. The shared .modal-foot uses 12px
+   vertical padding which is fine for shorter dialogs but reads as
+   cramped here because the deploy form ends in dense token / domain
+   config rows that push content right up to the border. Scoped to the
+   deploy dialog only (the template-save dialog also carries the
+   .deploy-modal class on its root, which is why we key off the
+   purpose-specific .deploy-flow-modal hook instead). 16px matches the
+   bump proposed for the global rule in #957 so the rhythm stays close
+   to the rest of the app. Issue #913. */
+.deploy-flow-modal .modal-foot {
+  padding-top: 16px;
 }
 .deploy-form {
   display: flex;
@@ -10387,6 +10765,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   z-index: 900;
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(2px);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -10396,6 +10775,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   width: 100%;
   max-width: 1320px;
   background: var(--bg);
+  -webkit-app-region: no-drag;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -11480,23 +11860,42 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   padding: 24px;
 }
 .prompt-template-modal {
+  position: relative;
   background: var(--bg-panel);
   border-radius: 14px;
   width: min(820px, 100%);
-  max-height: 90vh;
+  max-height: calc(100vh - 48px);
+  max-height: min(90vh, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border: 1px solid var(--border);
   overflow: hidden;
   box-shadow: 0 32px 80px rgba(0, 0, 0, 0.25);
 }
 .prompt-template-modal-head {
+  flex: 0 0 auto;
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 18px 18px 0;
+  min-height: 56px;
+  padding: 18px 66px 0 18px;
+  background: var(--bg-panel);
 }
 .prompt-template-modal-titles { flex: 1; min-width: 0; }
+.prompt-template-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 20;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
 .prompt-template-modal-titles h2 {
   font-size: 17px;
   margin: 0 0 6px 0;
@@ -11509,12 +11908,15 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   line-height: 1.45;
 }
 .prompt-template-modal-tags {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding: 10px 18px 0;
 }
 .prompt-template-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -11669,6 +12071,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   overflow: auto;
 }
 .prompt-template-modal-foot {
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -14106,6 +14509,124 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   white-space: pre-wrap;
 }
 
+/* Privacy panel layout. The toggle row stack reuses .toggle-row (the
+   iOS-style switch from NewProjectPanel); we only need to space the rows
+   apart. The disclosure list inside the consent card is purely a typography
+   block — no chrome of its own. */
+.settings-privacy-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-privacy-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.settings-privacy-disclosure > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-privacy-disclosure dt {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-privacy-disclosure dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.privacy-consent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.privacy-consent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.privacy-consent-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
+/* First-run privacy consent banner. Cookie-consent-style: anchored to the
+   bottom-right of the viewport, prominent but non-blocking. Reuses the
+   same typography + radii + shadow as the rest of the panels. */
+.privacy-consent-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  /* Below modal backdrops; App.tsx hides the banner while Settings is open. */
+  z-index: 90;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.privacy-consent-banner .privacy-consent-actions {
+  pointer-events: auto;
+}
+
+.privacy-consent-banner-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.privacy-consent-banner-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.privacy-consent-banner-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.privacy-consent-banner-lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.privacy-consent-banner-footer {
+  margin: 2px 0 6px;
+}
+
 /* ============================================================
    External MCP servers — Settings panel
    ------------------------------------------------------------
@@ -14690,3 +15211,255 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .mcp-oauth-fallback .md-link:hover {
   text-decoration-thickness: 2px;
 }
+
+/* ---------------- Routines (Settings → Routines) ---------------- */
+
+.routines-section .section-head { align-items: flex-start; }
+
+.routines-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.routines-form { margin-top: 4px; }
+
+.routines-empty {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+}
+.routines-empty strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 14px; }
+.routines-empty p { margin: 0; font-size: 13px; }
+.routines-empty em { color: var(--text); font-style: normal; font-weight: 600; }
+
+.routines-field { display: flex; flex-direction: column; gap: 6px; }
+.routines-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.routines-field input[type="text"],
+.routines-field input[type="time"],
+.routines-field input[type="number"],
+.routines-field input:not([type]),
+.routines-field textarea,
+.routines-field select,
+.routines-project-select {
+  appearance: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.routines-field input:focus,
+.routines-field textarea:focus,
+.routines-field select:focus,
+.routines-project-select:focus {
+  outline: none;
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px rgba(26, 25, 22, 0.08);
+}
+.routines-field textarea { resize: vertical; min-height: 80px; }
+
+.routines-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.routines-fieldrow { display: flex; gap: 12px; flex-wrap: wrap; }
+.routines-fieldrow > .routines-field { flex: 1 1 180px; min-width: 0; }
+.routines-fieldrow-2col > .routines-field { flex: 1 1 240px; }
+
+.routines-schedule-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+}
+
+.routines-kind-pills { align-self: flex-start; }
+
+.routines-weekday-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.routines-weekday {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.routines-weekday:hover { color: var(--text); border-color: var(--text-soft); }
+.routines-weekday.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+.routines-schedule-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.routines-fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.routines-fieldset legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 6px;
+}
+.routines-radio {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 120ms ease;
+  align-items: flex-start;
+}
+.routines-radio:hover { background: var(--bg-subtle); }
+.routines-radio input { margin-top: 3px; }
+.routines-radio span { display: flex; flex-direction: column; gap: 2px; }
+.routines-radio strong { font-size: 14px; color: var(--text); font-weight: 600; }
+.routines-radio small { font-size: 12px; color: var(--text-muted); }
+
+.routines-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+/* List of existing routines */
+.routines-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.routines-item.is-disabled { opacity: 0.7; }
+
+.routines-item-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.routines-item-main { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.routines-item-title { display: flex; align-items: center; gap: 8px; }
+.routines-item-title strong { font-size: 15px; color: var(--text); font-weight: 600; }
+.routines-item-line { font-size: 13px; color: var(--text); }
+.routines-item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.routines-tag {
+  font-size: 11px;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.routines-item-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+.routines-item-history {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.routines-history { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.routines-history-empty { font-size: 12px; color: var(--text-muted); padding: 6px 0; }
+.routines-history-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.routines-history-row:hover { background: var(--bg-subtle); }
+.routines-history-time { color: var(--text); }
+.routines-history-trigger {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.routines-history-link {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.routines-history-link:hover { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+.routines-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+.routines-status-running { background: #f3eddc; color: #8a6a1a; }
+.routines-status-queued { background: #ece9e2; color: var(--text-muted); }
+.routines-status-succeeded { background: #e3efe6; color: #2e7d5b; }
+.routines-status-failed { background: #f6dfdc; color: #b3382b; }
+.routines-status-canceled { background: #ece9e2; color: var(--text-muted); }

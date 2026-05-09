@@ -11,6 +11,8 @@ export type ChatRole = 'user' | 'assistant';
 export interface ChatRequest {
   agentId: string;
   message: string;
+  /** The latest user turn only, used for per-turn telemetry content. */
+  currentPrompt?: string;
   systemPrompt?: string;
   projectId?: string | null;
   conversationId?: string | null;
@@ -126,4 +128,10 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  /**
+   * Request-only marker for the final assistant-message persistence pass.
+   * The daemon does not store or return this field; it only uses it to
+   * avoid telemetry reads before content and producedFiles are finalized.
+   */
+  telemetryFinalized?: boolean;
 }

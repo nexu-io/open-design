@@ -1157,12 +1157,13 @@ async function runDesignFilesUploadFlow(
     hasText: 'moodboard.png',
   });
   await expect(fileRow).toBeVisible();
-  await fileRow.click();
+  const nameBtn = fileRow.getByRole('button').first();
+  await nameBtn.click();
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
 
-  await fileRow.dblclick();
+  await nameBtn.dblclick();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
 }
 
