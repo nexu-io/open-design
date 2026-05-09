@@ -248,7 +248,10 @@ export function ChatPane({
         // undone when the form finishes rendering.
         if (streaming) return;
       }
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      // Streaming bottom-pin must be instant — smooth scrollTo emits
+      // intermediate scroll events that flip pinnedToBottomRef to false,
+      // breaking auto-follow for subsequent chunks.
+      el.scrollTop = el.scrollHeight;
     }
   }, [messages, error, streaming]);
 
