@@ -97,11 +97,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve Playwright version
+        id: playwright_version
+        run: |
+          version="$(pnpm -C e2e exec playwright --version | awk '{print $2}')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Restore Playwright browser cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}
           restore-keys: |
             playwright-${{ runner.os }}-
 
