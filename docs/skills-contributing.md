@@ -67,6 +67,8 @@ A skill is a **recipe for producing one kind of artifact**. Not a feature, not a
 - A duplicate of an existing skill with marginal differentiation. Before opening, search `skills/` and read the descriptions of the closest 2–3 — if you can't articulate the differentiator in one sentence, fold your work into the existing skill instead.
 - A skill whose only output is a screenshot or a video. The artifact has to be something the agent generates from a prompt, not a static asset shipped in `assets/`.
 
+**Third option: ship as an external skill bundle.** If your workflow is genuinely a recipe (not a daemon feature) but is too vendor-specific or audience-narrow to land in-tree, the skills protocol supports user-global skills via `~/.claude/skills/` (see [`skills-protocol.md` §3](skills-protocol.md#3-skill-discovery--precedence)). Publishing your bundle as a standalone repo lets users `git clone` or `od skill add` it without us taking on the maintenance surface. This is the right path for payment-provider workflows, regional marketplace integrations, in-house design systems, and similar — not a rejection, just a different distribution channel.
+
 If you're not sure your idea fits, **open a discussion first** ([github.com/nexu-io/open-design/discussions](https://github.com/nexu-io/open-design/discussions)) — we'd rather spend 5 minutes redirecting than have you build the wrong thing for a week.
 
 ---
@@ -140,8 +142,11 @@ pnpm tools-dev run web
 # Note the URL it prints — usually http://127.0.0.1:5173 for web,
 # http://127.0.0.1:7456 for daemon.
 
-# 3. After editing SKILL.md, the daemon picks up the change automatically
-#    (chokidar watches skills/). If it doesn't, restart with the same command above.
+# 3. After editing SKILL.md, refresh the picker — the daemon re-scans skills/
+#    on every /api/skills request, so reopening the picker (or refreshing the
+#    web tab) picks up your edit without a restart. If frontmatter parsing
+#    fails or the new skill never shows up, restart pnpm tools-dev run web
+#    and check the daemon stderr for the parse error.
 
 # 4. Verify your skill end-to-end:
 #    - Switch to the mode you set in od.mode (Prototype / Deck / Template /
@@ -174,18 +179,27 @@ We hold skill PRs to a higher bar than feature PRs because skills are the user-f
 
 ### Shape
 
-- [ ] **Single self-contained folder.** Everything the skill needs lives under `skills/<your-skill>/`. No edits to `apps/`, `packages/`, `tools/`, `apps/web/src/i18n/`, or anywhere else in the same PR.
+- [ ] **Single self-contained folder + the i18n fallback line.** Everything the skill needs lives under `skills/<your-skill>/`. The **only** outside edit is adding your skill id to the `*_SKILL_IDS_WITH_EN_FALLBACK` arrays — see "i18n coverage" below. No edits to `apps/daemon/`, `packages/`, `tools/`, etc. in the same PR.
 - [ ] **No CDN imports** beyond what other skills already use. If you need a new font CDN, GSAP, three.js, etc., raise it in your PR description.
 - [ ] **No images larger than ~250 KB.** If your example genuinely needs a hero photo, run it through an optimizer first. No raw PNG screenshots.
 - [ ] **No fonts you didn't license.** System font stack is always safe; Google Fonts and Adobe Fonts free tier are also safe; anything else needs a license file in `references/`.
 - [ ] **Slug is ASCII, kebab-case.** `your-skill-name`, not `YourSkillName` or `your_skill_name` or `你的技能`.
+
+### i18n coverage (every skill, not just featured)
+
+The `e2e/tests/localized-content.test.ts` test enforces that every directory under `skills/` with a `SKILL.md` is represented in the localized content metadata for de / ru / fr — otherwise CI fails on the `skills display copy` assertion.
+
+For a non-featured skill, the cheap path is to declare your id falls back to English:
+
+- [ ] **Add your skill id to all three `*_SKILL_IDS_WITH_EN_FALLBACK` arrays** in `apps/web/src/i18n/content.ts` (DE), `apps/web/src/i18n/content.fr.ts` (FR), and `apps/web/src/i18n/content.ru.ts` (RU). Just the bare id on its own line, sorted alphabetically — **no `TODO:` comment**, no inline note. The fallback marker IS the note.
+- [ ] **Run `pnpm --filter @open-design/web test`** locally before pushing. The localized-content test catches missing entries; failing it earns a "please add the fallback line" comment.
 
 ### Featured skills (optional path)
 
 If you set `od.featured: 1`, also:
 
 - [ ] **Add a screenshot** at `docs/screenshots/skills/<skill>.png`. PNG, ~1024×640 retina, captured from the real `example.html` at zoomed-out browser scale.
-- [ ] **Update `apps/web/src/i18n/content.ts`** to add display metadata (English + German at minimum) for the picker. `pnpm --filter @open-design/web test` will fail if German display coverage drifts. (This is the **only** exception to "no edits outside `skills/<your-skill>/`".)
+- [ ] **Replace the fallback id with full localized display copy** in `content.ts` (DE), `content.fr.ts` (FR), `content.ru.ts` (RU) — title, summary, scenario tag. The featured row in the picker uses this copy; the bare fallback path renders English everywhere.
 
 ### Forking
 
@@ -220,7 +234,8 @@ they don't cover this case. If you can't, fold into the existing skill instead.
 - [ ] Sent the `example_prompt` end-to-end and confirmed the artifact rendered
 - [ ] Verified export works (PPTX / PDF / etc.) if the mode supports it
 - [ ] Ran `pnpm typecheck`
-- [ ] Ran `pnpm --filter @open-design/web test` (only required if you touched `i18n/content.ts`)
+- [ ] Added the skill id to all three `*_SKILL_IDS_WITH_EN_FALLBACK` arrays (or full localized copy if featured) — **required for every skill**
+- [ ] Ran `pnpm --filter @open-design/web test` and the `localized-content` suite is green
 
 ## Screenshot
 (Required if `od.featured` is set. Otherwise nice-to-have.)
