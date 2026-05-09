@@ -535,6 +535,12 @@ export function SettingsDialog({
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  // Scroll the right-hand content pane back to the top whenever the user
+  // picks a different settings section. Without this, switching from a
+  // long section the user had scrolled (e.g. Library) into a short one
+  // (About) keeps the previous scrollTop, so the new section's header
+  // can land out of view and the panel reads as half-loaded. Issue #634.
+  const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
@@ -560,6 +566,10 @@ export function SettingsDialog({
   useEffect(() => {
     setActiveSection(initialSection);
   }, [initialSection]);
+  useEffect(() => {
+    const el = settingsContentRef.current;
+    if (el) el.scrollTop = 0;
+  }, [activeSection]);
 
   // Tests pin a result against the unsaved draft. Once the user edits any
   // field that feeds into the test, the result is no longer trustworthy —
@@ -1241,7 +1251,7 @@ export function SettingsDialog({
               </span>
             </button>
           </aside>
-          <div className="settings-content">
+          <div className="settings-content" ref={settingsContentRef}>
           {activeSection === 'execution' ? (
             <>
               <div
