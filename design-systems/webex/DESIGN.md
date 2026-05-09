@@ -89,12 +89,21 @@ Use these as secondary collaboration accents: avatars, presence markers, workspa
 - Hover: `#0353a8`
 - Active: `#063a75`
 
-**Secondary Outline / Ghost**
+**Secondary Outline / Ghost on Light**
 - Background: transparent or white
 - Text: `#1170cf`
-- Border: subtle dark or alpha border depending on surface
+- Border: subtle dark or blue-tinted alpha border
 - Radius: pill
-- Purpose: secondary CTA without visual noise
+- Purpose: secondary CTA on white or light product surfaces
+
+**Secondary Outline / Ghost on Dark**
+- Background: transparent or `#1a1a1a`
+- Text: `#64b4fa` or white for the strongest emphasis
+- Border: 1px white-alpha or Accent Light Blue (`#64b4fa`) depending on emphasis
+- Radius: pill
+- Hover: soft blue-tinted dark fill with the text color preserved
+- Focus ring: 2px Accent Light Blue halo
+- Purpose: dark-surface secondary CTA without dropping below contrast targets
 
 ### Cards & Containers
 - Light cards: white fill with subtle outline
@@ -111,6 +120,29 @@ Use these as secondary collaboration accents: avatars, presence markers, workspa
 - Use team-spectrum colors for presence chips, avatar backgrounds, workspace badges, or lightweight categorization
 - Do not assign them to all primary buttons or all large surfaces
 
+### Brand-Specific Recipes
+
+**Meeting Card**
+- Anatomy: title, time block, participant count, host avatar, device or room status, primary join action
+- States: upcoming, live, ended, recording, muted-device warning
+- Brand behavior: primary action stays blue; meeting state uses subtle chips rather than full-surface color fills
+
+**Presence Chip**
+- Anatomy: avatar or initials, user name, compact status dot/chip, optional location/device label
+- Sizes: 24px compact, 32px default, 40px prominent
+- States: available, presenting, in meeting, away, do-not-disturb
+- Color rule: use collaboration colors as supporting identity accents, not as replacements for semantic status
+
+**Workspace Sidebar**
+- Anatomy: workspace switcher, search, primary nav groups, badge counts, pinned spaces, footer utilities
+- Behavior: keep hierarchy obvious and allow badge counts or unread state to read at a glance
+- States: selected item, unread, hovered, collapsed narrow mode
+
+**Roster Row**
+- Anatomy: avatar, display name, role label, mute/video state, hand-raise or reaction slot, overflow actions
+- States: speaking, muted, hand raised, spotlighted, disconnected
+- Density: support both meeting roster density and more spacious messaging/contact density
+
 ## 5. Layout Principles
 
 ### Spacing & Grid
@@ -118,12 +150,22 @@ Use these as secondary collaboration accents: avatars, presence markers, workspa
 - Common scale: 8px, 12px, 16px, 24px, 32px, 48px, 64px, 88px
 - Use clean marketing bands and product-story sections
 - Prefer simple grids with clear scanning order
+- Breakpoints: mobile up to 767px, tablet 768px-1199px, desktop 1200px and above
 
 ### Composition
 - White space is important; the UI should not feel cramped
 - Marketing layouts should balance clarity with product focus
 - Collaboration/product pages may mix white sections with dark embedded product surfaces
 - Blue should lead the eye; collaboration colors should support, not compete
+- On tablet, reduce multi-panel collaboration layouts to two primary regions and preserve a clear action rail
+- On mobile, stack sidebars beneath the main header, collapse meeting side-panels into drawers, and keep call controls centered in a single thumb-reachable row
+- Navigation should shift to a compact app bar plus drawer on smaller screens rather than shrinking labels until they wrap
+
+### Accessibility & Responsiveness
+- Minimum touch target: 44px by 44px for buttons, tabs, roster actions, and call controls
+- Maintain visible keyboard focus with an Accent Light Blue halo on both light and dark surfaces
+- Any hover-revealed affordance must also appear on focus and touch
+- Respect reduced-motion users by replacing staggered entrance motion with instant layout plus subtle opacity changes only
 
 ## 6. Motion & Interaction
 
@@ -131,6 +173,7 @@ Use these as secondary collaboration accents: avatars, presence markers, workspa
 - Use fade, slide, and soft stagger in the 160ms–280ms range
 - Hover and focus can use gentle blue glow or highlight
 - Avoid loud spring physics or excessive flourish
+- Under `prefers-reduced-motion`, remove stagger choreography and large panel slides; keep state feedback under 120ms with opacity or outline changes only
 
 ## 7. Voice & Brand
 

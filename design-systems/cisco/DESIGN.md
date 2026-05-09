@@ -1,6 +1,6 @@
 # Design System Inspired by Cisco
 
-> Category: Media & Consumer
+> Category: Backend & Data
 > Enterprise infrastructure brand. Dark trust surfaces, Cisco Blue signal, technical clarity.
 
 ## 1. Visual Theme & Atmosphere
@@ -23,9 +23,9 @@ What makes Cisco distinct is the combination of **deep infrastructure darkness**
 ## 2. Color Palette & Roles
 
 ### Primary
-- **Cisco Blue** (`#049fd9`): Primary CTA, active state, key link, high-signal accent.
-- **Status Blue** (`#64bbe3`): Hover state, secondary emphasis, focus halo, lightweight chart signal.
-- **Cisco Indigo** (`#005073`): Pressed state, dense accent, deeper data emphasis.
+- **Cisco Blue** (`#049fd9`): High-signal accent, outline CTA, active state, key link.
+- **Status Blue** (`#64bbe3`): Focus halo, secondary emphasis, lightweight chart signal.
+- **Cisco Indigo** (`#005073`): Filled primary CTA, dense accent, deeper data emphasis.
 - **Dark Blue** (`#2b5592`): Secondary brand accent for graphics, charts, and layered blue compositions.
 
 ### Neutral / Surface
@@ -77,13 +77,24 @@ What makes Cisco distinct is the combination of **deep infrastructure darkness**
 
 ### Buttons
 
-**Primary Signal Pill**
-- Background: Cisco Blue (`#049fd9`)
+**Primary Action Pill**
+- Background: Cisco Indigo (`#005073`)
 - Text: White (`#ffffff`)
 - Radius: full pill
 - Padding: generous horizontal padding, medium vertical height
-- Hover: Status Blue (`#64bbe3`)
-- Active: Cisco Indigo (`#005073`)
+- Hover: Dark Blue (`#2b5592`)
+- Active: a darker indigo tone around `#00364d`
+- Focus ring: 2px outer halo in Status Blue (`#64bbe3`) with a 1px white inner keyline on dark surfaces
+- Use case: high-priority submit, deploy, or "learn more" action on dark Cisco surfaces
+
+**Signal Outline Pill**
+- Background: transparent
+- Text: Cisco Blue (`#049fd9`) on dark surfaces, Cisco Indigo (`#005073`) on light surfaces
+- Border: 1.5px Cisco Blue (`#049fd9`)
+- Radius: full pill
+- Hover: blue-tinted surface fill with the text color preserved
+- Focus ring: same visible halo pairing as the primary button
+- Use case: brand-forward secondary action that keeps Cisco Blue prominent without sacrificing contrast
 
 **Secondary Dark Pill**
 - Background: transparent or dark surface
@@ -109,6 +120,24 @@ What makes Cisco distinct is the combination of **deep infrastructure darkness**
 - Use green/yellow/red only for actual operational meaning
 - Dense technical blocks should still preserve breathing room and hierarchy
 
+### Brand-Specific Recipes
+
+**Network Telemetry Card**
+- Anatomy: eyebrow label, large metric, delta chip, 12-24h sparkline, quiet footer metadata
+- Density: compact but not cramped; 16px-24px padding with clear alignment to chart axes
+- States: normal, selected, degraded, critical, loading skeleton
+- Brand behavior: use Cisco Blue for the selected edge or sparkline, and semantic colors only for health state
+
+**Topology / Product Diagram Module**
+- Anatomy: title, system canvas, node chips, connection lines, side legend
+- Visual rule: dark field first, blue path highlight second, all other nodes muted until active
+- States: idle overview, hovered path, selected node, degraded route
+
+**Dense Control Panel**
+- Anatomy: left nav rail, filter bar, split metric region, log/event table, contextual right rail
+- Control sizing: compact 36px inputs are acceptable on desktop, but action buttons remain 44px minimum height
+- States: quiet default, blue active filter, clear warning/error escalation
+
 ## 5. Layout Principles
 
 ### Spacing & Grid
@@ -116,11 +145,21 @@ What makes Cisco distinct is the combination of **deep infrastructure darkness**
 - Common scale: 8px, 12px, 16px, 24px, 32px, 48px, 64px, 96px
 - Prefer wide desktop containers and large sectional spacing
 - 12-column desktop layout with generous gutters works well for the brand
+- Breakpoints: mobile up to 767px, tablet 768px-1199px, desktop 1200px and above
 
 ### Composition
 - Alternate expansive hero/outcome sections with denser information bands
 - Use asymmetry where it serves product imagery or system diagrams
 - Large dark fields with one blue focal point are more on-brand than many small colorful fragments
+- On tablet, reduce wide split layouts to 2-column modules and keep telemetry cards in pairs
+- On mobile, collapse hero side-by-sides to a single column, stack data panels vertically, and convert dense control rows into progressive disclosure panels
+- Navigation should collapse from a full masthead to a compact menu button plus one primary CTA on tablet/mobile
+
+### Accessibility & Responsiveness
+- Minimum touch target: 44px by 44px for any tappable control
+- Keyboard focus must remain visible on every interactive element via the blue outer halo plus white inner keyline pairing
+- Do not rely on hover-only disclosure; show essential state and actions on focus and touch
+- Preserve readable line lengths on desktop and avoid more than 3 cards per row on tablet or 1 card per row on small phones
 
 ## 6. Motion & Interaction
 
@@ -128,6 +167,7 @@ What makes Cisco distinct is the combination of **deep infrastructure darkness**
 - Use fade, rise, subtle slide, and restrained glow
 - Interaction timing: roughly 160ms–260ms for control response, 320ms–500ms for larger section reveals
 - Avoid bouncy springs, elastic easing, or playful overshoot
+- Respect `prefers-reduced-motion`: remove parallax and staged reveals, keep only instant state swaps or short opacity transitions under 120ms
 
 ## 7. Voice & Brand
 
