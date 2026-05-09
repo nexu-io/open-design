@@ -101,6 +101,16 @@ const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-drag {
     -webkit-app-region: drag;
   }
+  .modal-backdrop,
+  .modal-backdrop *,
+  .modal,
+  .modal *,
+  .ds-modal-backdrop,
+  .ds-modal-backdrop *,
+  .ds-modal,
+  .ds-modal * {
+    -webkit-app-region: no-drag;
+  }
   .entry-brand,
   .entry-header {
     -webkit-app-region: drag;
@@ -115,10 +125,6 @@ const MAC_WINDOW_CHROME_CSS = `
   .viewer-toolbar *,
   .deck-nav,
   .deck-nav *,
-  .ds-modal-header,
-  .ds-modal-header *,
-  .ds-modal-actions,
-  .ds-modal-actions *,
   .share-menu-popover,
   .share-menu-popover *,
   .entry-side-resizer,

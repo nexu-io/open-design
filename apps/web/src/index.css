@@ -1082,6 +1082,7 @@ code {
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1090,6 +1091,7 @@ code {
 }
 .modal {
   background: var(--bg-elevated);
+  -webkit-app-region: no-drag;
   border-radius: var(--radius-lg);
   padding: 22px;
   width: 520px;
@@ -10565,6 +10567,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   z-index: 900;
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(2px);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -10574,6 +10577,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   width: 100%;
   max-width: 1320px;
   background: var(--bg);
+  -webkit-app-region: no-drag;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
