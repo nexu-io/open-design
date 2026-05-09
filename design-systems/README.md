@@ -68,6 +68,19 @@ Drop a new folder containing a `DESIGN.md` and it shows up on next refresh.
 Add a `> Category: <Group>` line to slot it under an existing group, or use
 any new label and it lands at the bottom of the dropdown.
 
+For packaged installs, prefer a user-writable folder so your templates
+survive app updates (the bundled `design-systems/` folder is overwritten on
+upgrade in packaged builds):
+
+```
+~/.open-design/design-systems/<your-template>/DESIGN.md
+```
+
+The daemon scans this folder in addition to the bundled one. If a user
+folder uses the same id as a bundled system, the user copy wins. Override
+the base path with the `OD_USER_STATE_DIR` env var (the same convention used
+by deploy credentials).
+
 ## Refreshing the bundled set
 
 The 70 product systems are pulled from the upstream npm package. To re-sync

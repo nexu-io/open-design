@@ -36,7 +36,11 @@ import { validateLinkedDirs } from './linked-dirs.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
-import { listDesignSystems, readDesignSystem } from './design-systems.js';
+import {
+  listAllDesignSystems,
+  readDesignSystemFromAny,
+  userDesignSystemsDir,
+} from './design-systems.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
@@ -733,6 +737,11 @@ const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
   'design-systems',
   path.join(PROJECT_ROOT, 'design-systems'),
 );
+// User-writable overlay so users can drop custom design systems somewhere
+// that survives app updates (the bundled DESIGN_SYSTEMS_DIR is overwritten
+// every release in packaged builds). Same convention as deployConfigPath():
+// OD_USER_STATE_DIR overrides ~/.open-design.
+const USER_DESIGN_SYSTEMS_DIR = userDesignSystemsDir();
 const CRAFT_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'craft',
@@ -3095,7 +3104,10 @@ export async function startServer({
 
   app.get('/api/design-systems', async (_req, res) => {
     try {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems(
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+      );
       res.json({
         designSystems: systems.map(({ body, ...rest }) => rest),
       });
@@ -3106,7 +3118,11 @@ export async function startServer({
 
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body = await readDesignSystemFromAny(
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+      );
       if (body === null)
         return res.status(404).json({ error: 'design system not found' });
       res.json({ id: req.params.id, body });
@@ -3147,7 +3163,11 @@ export async function startServer({
   // file shows up on the next view, no rebuild needed.
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body = await readDesignSystemFromAny(
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+      );
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
@@ -3162,7 +3182,11 @@ export async function startServer({
   // /preview: built at request time, no caching.
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body = await readDesignSystemFromAny(
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+      );
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
@@ -4790,12 +4814,18 @@ export async function startServer({
     let designSystemBody;
     let designSystemTitle;
     if (effectiveDesignSystemId) {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems(
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+      );
       const summary = systems.find((s) => s.id === effectiveDesignSystemId);
       designSystemTitle = summary?.title;
       designSystemBody =
-        (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
-        undefined;
+        (await readDesignSystemFromAny(
+          DESIGN_SYSTEMS_DIR,
+          USER_DESIGN_SYSTEMS_DIR,
+          effectiveDesignSystemId,
+        )) ?? undefined;
     }
 
     const template =
@@ -5157,7 +5187,12 @@ export async function startServer({
       codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
         codexGeneratedImagesDir,
         {
-          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
+          protectedDirs: [
+            SKILLS_DIR,
+            DESIGN_SYSTEMS_DIR,
+            USER_DESIGN_SYSTEMS_DIR,
+            ...linkedDirs,
+          ],
         },
       );
     }
@@ -5165,7 +5200,9 @@ export async function startServer({
       agentId,
       skillsDir: SKILLS_DIR,
       designSystemsDir: DESIGN_SYSTEMS_DIR,
-      linkedDirs,
+      // Piped through `linkedDirs` so the user overlay is allowlisted
+      // without changing resolveChatExtraAllowedDirs's signature.
+      linkedDirs: [USER_DESIGN_SYSTEMS_DIR, ...linkedDirs],
       codexGeneratedImagesDir,
     });
     const codexImagegenOverride = resolveGrantedCodexImagegenOverride({

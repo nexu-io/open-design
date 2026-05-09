@@ -33,7 +33,7 @@ import type {
   FinalizeArtifactRef,
 } from '@open-design/contracts/api/finalize';
 import { getProject } from './db.js';
-import { readDesignSystem } from './design-systems.js';
+import { readDesignSystemFromAny, userDesignSystemsDir } from './design-systems.js';
 import {
   listFiles,
   readProjectFile,
@@ -271,7 +271,11 @@ export async function finalizeDesignPackage(
         ? ((project as { designSystemId: string }).designSystemId)
         : null;
     const designSystemBody = designSystemId
-      ? await readDesignSystem(designSystemsRoot, designSystemId)
+      ? await readDesignSystemFromAny(
+          designSystemsRoot,
+          userDesignSystemsDir(),
+          designSystemId,
+        )
       : null;
 
     // Phase 5: current artifact (active tab → newest .artifact.json → null).

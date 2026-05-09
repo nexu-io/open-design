@@ -4,6 +4,7 @@
 // paragraph between the H1 and the next heading (Category line stripped).
 
 import { readdir, readFile, stat } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
@@ -19,6 +20,14 @@ export type DesignSystemSummary = {
 };
 
 type ColorToken = { name: string; value: string };
+
+// Mirrors the convention already used by deployConfigPath() — user-writable
+// state lives under ~/.open-design (OD_USER_STATE_DIR overrides the base).
+// Keeping it in this module so resource resolution stays alongside the loader.
+export function userDesignSystemsDir(): string {
+  const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+  return path.join(base, 'design-systems');
+}
 
 export async function listDesignSystems(root: string): Promise<DesignSystemSummary[]> {
   const out: DesignSystemSummary[] = [];
@@ -53,6 +62,28 @@ export async function listDesignSystems(root: string): Promise<DesignSystemSumma
   return out;
 }
 
+// User entries override bundled entries with the same id. The user list is
+// surfaced first so that picker iteration order is stable when a user
+// override shadows a bundled system.
+export function mergeDesignSystemLists(
+  user: DesignSystemSummary[],
+  bundled: DesignSystemSummary[],
+): DesignSystemSummary[] {
+  const userIds = new Set(user.map((d) => d.id));
+  return [...user, ...bundled.filter((d) => !userIds.has(d.id))];
+}
+
+export async function listAllDesignSystems(
+  bundledRoot: string,
+  userRoot: string,
+): Promise<DesignSystemSummary[]> {
+  const [bundled, user] = await Promise.all([
+    listDesignSystems(bundledRoot),
+    listDesignSystems(userRoot),
+  ]);
+  return mergeDesignSystemLists(user, bundled);
+}
+
 export async function readDesignSystem(root: string, id: string): Promise<string | null> {
   const file = path.join(root, id, 'DESIGN.md');
   try {
@@ -60,6 +91,18 @@ export async function readDesignSystem(root: string, id: string): Promise<string
   } catch {
     return null;
   }
+}
+
+// User folder takes precedence so a user-authored override of a bundled id
+// returns the user copy. Returns null if neither root has the design system.
+export async function readDesignSystemFromAny(
+  bundledRoot: string,
+  userRoot: string,
+  id: string,
+): Promise<string | null> {
+  const fromUser = await readDesignSystem(userRoot, id);
+  if (fromUser !== null) return fromUser;
+  return readDesignSystem(bundledRoot, id);
 }
 
 function summarize(raw: string): string {
