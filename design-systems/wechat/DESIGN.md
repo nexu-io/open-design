@@ -1,5 +1,6 @@
 # WeChat Design System
 
+> Category: Social & Messaging
 > Brand visual language for WeChat Mini Programs, official accounts, and open ecosystem extensions.
 
 ## Brand Identity
@@ -51,7 +52,7 @@ WeChat's identity is built on simplicity, cleanness, and trust — reflecting it
 ### Font Stack
 
 ```
--webkit-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
 ```
 
 ### Type Scale
