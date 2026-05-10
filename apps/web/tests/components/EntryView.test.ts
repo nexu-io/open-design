@@ -6,6 +6,7 @@ import {
   sortConnectorsForSearch,
 } from '../../src/components/EntryView';
 import {
+  clearConnectorAuthorizationErrorsForConnected,
   clearConnectorAuthorizationPending,
   getConnectorDisplayToolCount,
   mergeConnectorActionResult,
@@ -303,6 +304,25 @@ describe('connector authorization pending state', () => {
     }, nowMs);
 
     expect(pending).toEqual({});
+  });
+
+  it('clears stored auth errors for connectors observed as connected', () => {
+    const errors = clearConnectorAuthorizationErrorsForConnected(
+      { exist: 'Composio provider is not configured', airtable: 'Connection failed' },
+      { exist: { status: 'connected' }, airtable: { status: 'available' } },
+    );
+
+    expect(errors).toEqual({ airtable: 'Connection failed' });
+  });
+
+  it('returns the same errors object when no connector transitions to connected', () => {
+    const original = { exist: 'Composio provider is not configured' };
+    const errors = clearConnectorAuthorizationErrorsForConnected(
+      original,
+      { exist: { status: 'available' } },
+    );
+
+    expect(errors).toBe(original);
   });
 
   it('cancels pending authorization without changing other pending connectors', () => {

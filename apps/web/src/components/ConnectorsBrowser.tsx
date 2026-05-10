@@ -301,6 +301,21 @@ export function updateConnectorAuthorizationPendingFromStatuses(
   return pruneConnectorAuthorizationPending(next, nowMs);
 }
 
+export function clearConnectorAuthorizationErrorsForConnected(
+  errors: Record<string, string>,
+  statuses: ConnectorStatusResponse['statuses'],
+): Record<string, string> {
+  let mutated = false;
+  const next = { ...errors };
+  for (const [connectorId, status] of Object.entries(statuses)) {
+    if (status.status === 'connected' && next[connectorId] !== undefined) {
+      delete next[connectorId];
+      mutated = true;
+    }
+  }
+  return mutated ? next : errors;
+}
+
 export function clearConnectorAuthorizationPending(
   pending: ConnectorAuthorizationPendingState,
   connectorId: string,
@@ -555,6 +570,7 @@ export function ConnectorsBrowser({
     const statuses = await fetchConnectorStatuses();
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
     setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
+    setConnectorAuthorizationError((curr) => clearConnectorAuthorizationErrorsForConnected(curr, statuses));
   }, []);
 
   useEffect(() => {
