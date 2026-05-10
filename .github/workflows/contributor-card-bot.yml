@@ -1,0 +1,58 @@
+name: Contributor Card Bot
+
+on:
+  pull_request_target:
+    types: [closed]
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contributor-card-bot-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  recognize:
+    name: Render and post contributor card
+    if: |
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+      (github.event_name == 'issues' && github.event.action == 'opened') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout contributor bot
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: nexu-io/open-design-bot-sandbox
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install bot dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run contributor bot
+        env:
+          BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+          BOT_APP_INSTALLATION_ID: ${{ secrets.BOT_APP_INSTALLATION_ID }}
+          BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
+            GITHUB_EVENT_NAME=pull_request pnpm exec tsx scripts/action-handler.ts
+          else
+            pnpm exec tsx scripts/action-handler.ts
+          fi

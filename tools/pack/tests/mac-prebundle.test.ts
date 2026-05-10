@@ -133,6 +133,25 @@ describe("assertMacPrebundleMetafile", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("rejects a daemon metafile that bundled wasm-backed runtime dependencies", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-mac-prebundle-"));
+    const metafilePath = join(root, "unsafe-daemon.json");
+
+    try {
+      await writeFile(
+        metafilePath,
+        JSON.stringify({ inputs: { "/repo/node_modules/blake3-wasm/dist/node/index.js": {} } }),
+        "utf8",
+      );
+
+      await expect(
+        assertMacPrebundleMetafile({ metafilePath, policyName: "daemonSidecar" }),
+      ).rejects.toThrow(/daemon sidecar prebundle included forbidden inputs/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("renderMacPackagedMainEntry", () => {

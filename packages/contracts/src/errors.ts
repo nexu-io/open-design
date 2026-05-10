@@ -18,6 +18,12 @@ export const API_ERROR_CODES = [
   'ARTIFACT_NOT_FOUND',
   'UPSTREAM_UNAVAILABLE',
   'RATE_LIMITED',
+  // PR #974 round-4: desktop-paired daemon received an import request
+  // but the desktop main process has not yet registered its HMAC secret
+  // over sidecar IPC (startup race or daemon-restart-mid-session). The
+  // client should retry shortly; the desktop runtime will re-register
+  // on its existing retry schedule.
+  'DESKTOP_AUTH_PENDING',
   // Agent-facing tool endpoint authorization failures.
   'TOOL_TOKEN_MISSING',
   'TOOL_TOKEN_INVALID',

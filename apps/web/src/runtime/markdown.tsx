@@ -152,10 +152,16 @@ function renderBlock(block: Block, key: number): ReactNode {
 // span (which itself still gets autolink scanning).
 function renderInline(text: string): ReactNode {
   const out: ReactNode[] = [];
-  // Order matters: inline code first so its contents are not re-tokenized
-  // as bold/italic.
+  // Order matters:
+  //  1. inline code first so its contents are not re-tokenized as bold/italic.
+  //  2. explicit `[text](url)` markdown links before bare URL autolink so the
+  //     autolink does not greedily swallow the closing paren.
+  //  3. bare http(s) URL autolink BEFORE italic markers — chat output often
+  //     contains OAuth-style links with `_type=` / `_id=` query params, and
+  //     leaving italic to win turns the URL into an italic-fragmented mess.
+  //  4. bold (**a** / __a__) before italic (*a* / _a_).
   const re =
-    /(`[^`]+`)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)|\[([^\]]+)\]\(([^)\s]+)\)/g;
+    /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
   let lastIndex = 0;
   let m: RegExpExecArray | null;
   let key = 0;
@@ -169,26 +175,40 @@ function renderInline(text: string): ReactNode {
           {m[1].slice(1, -1)}
         </code>,
       );
-    } else if (m[2]) {
-      out.push(<strong key={key++}>{m[2].slice(2, -2)}</strong>);
-    } else if (m[3]) {
-      out.push(<strong key={key++}>{m[3].slice(2, -2)}</strong>);
-    } else if (m[4]) {
-      out.push(<em key={key++}>{m[4].slice(1, -1)}</em>);
-    } else if (m[5]) {
-      out.push(<em key={key++}>{m[5].slice(1, -1)}</em>);
-    } else if (m[6] && m[7]) {
+    } else if (m[2] && m[3]) {
       out.push(
         <a
           key={key++}
           className="md-link"
-          href={m[7]}
+          href={m[3]}
           target="_blank"
           rel="noreferrer noopener"
         >
-          {m[6]}
+          {m[2]}
         </a>,
       );
+    } else if (m[4]) {
+      // Bare URL — autolink with the URL as both href and visible text,
+      // matching the Markdown `<https://…>` autolink convention.
+      out.push(
+        <a
+          key={key++}
+          className="md-link md-link-bare"
+          href={m[4]}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          {m[4]}
+        </a>,
+      );
+    } else if (m[5]) {
+      out.push(<strong key={key++}>{m[5].slice(2, -2)}</strong>);
+    } else if (m[6]) {
+      out.push(<strong key={key++}>{m[6].slice(2, -2)}</strong>);
+    } else if (m[7]) {
+      out.push(<em key={key++}>{m[7].slice(1, -1)}</em>);
+    } else if (m[8]) {
+      out.push(<em key={key++}>{m[8].slice(1, -1)}</em>);
     }
     lastIndex = re.lastIndex;
   }

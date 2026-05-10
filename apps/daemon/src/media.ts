@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Media-generation dispatcher. The unifying contract is:
 //
 //   skills + metadata + system-prompt
@@ -45,6 +44,10 @@ import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
 import {
   AUDIO_DURATIONS_SEC,
+  type AudioKind,
+  type MediaModel,
+  type MediaProvider,
+  type MediaSurface,
   VIDEO_LENGTHS_SEC,
   findMediaModel,
   findProvider,
@@ -59,6 +62,38 @@ import {
 } from './projects.js';
 
 const execFile = promisify(execFileCb);
+type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
+type ProgressFn = (message: string) => void;
+type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
+type MediaContext = {
+  surface: MediaSurface;
+  model: string;
+  modelDef: MediaModel;
+  provider: MediaProvider | null;
+  prompt: string;
+  aspect: string | undefined;
+  length: number | undefined;
+  duration: number | undefined;
+  voice: string;
+  audioKind: AudioKind | undefined;
+  language: string;
+  compositionDir: string | null;
+  imageRef: ImageRef | null;
+};
+type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === 'object';
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorStringProp(err: unknown, key: string): string {
+  return isRecord(err) && typeof err[key] === 'string' ? err[key] : '';
+}
 const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
 // Verify the current Nano Banana / Gemini image model name against:
 // https://ai.google.dev/gemini-api/docs/models
@@ -81,13 +116,13 @@ const AUDIO_KINDS = new Set(['music', 'speech', 'sfx']);
 // behind OD_MEDIA_ALLOW_STUBS=1 and otherwise return a 503 (mapped from
 // the StubProviderDisabledError thrown below) with a clear message.
 class StubProviderDisabledError extends Error {
-  constructor(model) {
+  code = 'STUB_PROVIDER_DISABLED';
+  status = 503;
+  constructor(model: string) {
     super(
       `provider not configured: ${model}. Add your API key in Settings -> Media Providers to enable real generation.`,
     );
     this.name = 'StubProviderDisabledError';
-    this.code = 'STUB_PROVIDER_DISABLED';
-    this.status = 503;
   }
 }
 
@@ -105,7 +140,7 @@ function stubsAllowed() {
  * Without this guard, an agent (or a hallucinated arg) could ask the
  * daemon to upload `/etc/passwd` to a paid model.
  */
-async function resolveProjectImage(rel, projectDir) {
+async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
   if (typeof rel !== 'string' || !rel.trim()) return null;
   const projectRootResolved = path.resolve(projectDir);
   const abs = path.resolve(projectRootResolved, rel.trim());
@@ -161,14 +196,15 @@ async function resolveProjectImage(rel, projectDir) {
   };
 }
 
-function clampNumber(value, allowed) {
+function clampNumber(value: unknown, allowed: number[]): number | undefined {
   // Accept exact registry values; otherwise snap to the nearest allowed
   // bucket so a hallucinated `Number.MAX_SAFE_INTEGER` can't bill an
   // entire month of credits when real providers plug in.
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  if (allowed.length === 0) return undefined;
   if (allowed.includes(value)) return value;
-  let best = allowed[0];
-  let bestDiff = Math.abs(value - allowed[0]);
+  let best = allowed[0]!;
+  let bestDiff = Math.abs(value - best);
   for (const a of allowed) {
     const d = Math.abs(value - a);
     if (d < bestDiff) {
@@ -179,7 +215,7 @@ function clampNumber(value, allowed) {
   return best;
 }
 
-function clampWithWarning(value, allowed, flagName) {
+function clampWithWarning(value: unknown, allowed: number[], flagName: string): { value: number | undefined; warning: string | null } {
   const clamped = clampNumber(value, allowed);
   if (
     typeof value === 'number'
@@ -214,7 +250,11 @@ function clampWithWarning(value, allowed, flagName) {
  * @param {string} [args.language]
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
  */
-export async function generateMedia(args) {
+export async function generateMedia(args: {
+  projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
+  prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
+  audioKind?: AudioKind; language?: string; compositionDir?: string; image?: string; onProgress?: ProgressFn;
+}) {
   const {
     projectRoot,
     projectsRoot,
@@ -324,16 +364,16 @@ export async function generateMedia(args) {
 
   const credentials = await resolveProviderConfig(projectRoot, def.provider);
 
-  let bytes;
-  let providerNote;
-  let suggestedExt;
+  let bytes: Buffer;
+  let providerNote: string;
+  let suggestedExt: string | undefined;
   // Tracks whether the bytes came from a real provider call or from the
   // stub fallback. Surfaces in the response so the CLI/agent can tell a
   // legitimate placeholder ("provider not integrated yet") apart from a
   // silent failure ("API call blew up, here's a 67-byte PNG"). Without
   // this flag the chat agent narrates the stub as if it's the expected
   // output, and the user sees a blank file.
-  let providerError = null;
+  let providerError: string | null = null;
   let usedStubFallback = false;
   // True only when the dispatcher intentionally returned a stub because
   // no real renderer is wired up for this (provider, surface) pair.
@@ -433,7 +473,7 @@ export async function generateMedia(args) {
     }
     const stub = await renderStub(ctx, safeOut);
     bytes = stub.bytes;
-    const msg = err && err.message ? err.message : String(err);
+    const msg = errorMessage(err);
     providerNote = `[${def.provider} error → stub] ${msg}`;
     providerError = msg;
     usedStubFallback = true;
@@ -486,7 +526,7 @@ export async function generateMedia(args) {
   };
 }
 
-function autoOutputName(surface, model, audioKind) {
+function autoOutputName(surface: MediaSurface, model: string, audioKind?: AudioKind): string {
   const base = DEFAULT_OUTPUT_BY_SURFACE[surface] || 'artifact.bin';
   const stamp = Date.now().toString(36);
   // Slug the model id so the filename stays short and shell-safe.
@@ -498,7 +538,7 @@ function autoOutputName(surface, model, audioKind) {
   return `${stem}-${tag}-${stamp}${ext}`;
 }
 
-function defaultAspectFor(surface) {
+function defaultAspectFor(surface: MediaSurface): string | undefined {
   if (surface === 'image') return '1:1';
   if (surface === 'video') return '16:9';
   return undefined;
@@ -527,7 +567,7 @@ const openAIImageDispatcher = new UndiciAgent({
   bodyTimeout: OPENAI_IMAGE_BODY_TIMEOUT_MS,
 });
 
-async function renderOpenAIImage(ctx, credentials) {
+async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
   }
@@ -535,7 +575,7 @@ async function renderOpenAIImage(ctx, credentials) {
   const azure = detectAzureEndpoint(rawBase);
   const url = buildOpenAIImageUrl(rawBase, azure);
 
-  const body = {
+  const body: Record<string, unknown> = {
     prompt: ctx.prompt || 'A high-quality reference image.',
     n: 1,
     size: openaiSizeFor(ctx.model, ctx.aspect),
@@ -556,7 +596,7 @@ async function renderOpenAIImage(ctx, credentials) {
     body.quality = 'high';
   }
 
-  const headers = {
+  const headers: Record<string, string> = {
     'authorization': `Bearer ${credentials.apiKey}`,
     'content-type': 'application/json',
   };
@@ -572,14 +612,14 @@ async function renderOpenAIImage(ctx, credentials) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
-    dispatcher: openAIImageDispatcher,
+    dispatcher: openAIImageDispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
   });
   const text = await resp.text();
   if (!resp.ok) {
     const tag = azure ? 'azure-openai' : 'openai';
     throw new Error(`${tag} ${resp.status}: ${truncate(text, 240)}`);
   }
-  let data;
+  let data: any;
   try {
     data = JSON.parse(text);
   } catch {
@@ -619,7 +659,7 @@ async function renderOpenAIImage(ctx, credentials) {
  *     https://api.openai.com/v1
  *     http://localhost:8080/v1
  */
-function detectAzureEndpoint(baseUrl) {
+function detectAzureEndpoint(baseUrl: string): boolean {
   if (typeof baseUrl !== 'string' || !baseUrl) return false;
   if (/\.azure\.com\b/i.test(baseUrl)) return true;
   if (/\/openai\/deployments\//i.test(baseUrl)) return true;
@@ -632,7 +672,7 @@ function detectAzureEndpoint(baseUrl) {
  * appending the default api-version for Azure when the user didn't
  * specify one. Returns a string ready for `fetch`.
  */
-function buildOpenAIImageUrl(baseUrl, isAzure) {
+function buildOpenAIImageUrl(baseUrl: string, isAzure: boolean): string {
   let parsed;
   try {
     parsed = new URL(baseUrl);
@@ -649,7 +689,7 @@ function buildOpenAIImageUrl(baseUrl, isAzure) {
   return parsed.toString();
 }
 
-function openaiSizeFor(model, aspect) {
+function openaiSizeFor(model: string, aspect?: string): string {
   // gpt-image-1.5 / gpt-image-2 accept arbitrary sizes up to 4096; we
   // pick concrete ones tuned to common aspects so the API never
   // negotiates them down silently.
@@ -683,7 +723,7 @@ const OPENAI_TTS_VOICES = new Set([
   'verse',
 ]);
 
-function buildOpenAISpeechUrl(baseUrl, isAzure) {
+function buildOpenAISpeechUrl(baseUrl: string, isAzure: boolean): string {
   let parsed;
   try {
     parsed = new URL(baseUrl);
@@ -698,7 +738,7 @@ function buildOpenAISpeechUrl(baseUrl, isAzure) {
   return parsed.toString();
 }
 
-function openaiSpeechFormatFor(fileName) {
+function openaiSpeechFormatFor(fileName: string): string {
   const ext = path.extname(fileName).toLowerCase();
   if (ext === '.wav') return 'wav';
   if (ext === '.flac') return 'flac';
@@ -707,7 +747,7 @@ function openaiSpeechFormatFor(fileName) {
   return 'mp3';
 }
 
-async function renderOpenAISpeech(ctx, credentials, fileName) {
+async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
   }
@@ -731,7 +771,7 @@ async function renderOpenAISpeech(ctx, credentials, fileName) {
     }
   }
 
-  const body = {
+  const body: Record<string, unknown> = {
     input: text,
     voice: voiceId,
     response_format: format,
@@ -743,7 +783,7 @@ async function renderOpenAISpeech(ctx, credentials, fileName) {
     body.instructions = instructions;
   }
 
-  const headers = {
+  const headers: Record<string, string> = {
     authorization: `Bearer ${credentials.apiKey}`,
     'content-type': 'application/json',
   };
@@ -788,7 +828,7 @@ async function renderOpenAISpeech(ctx, credentials, fileName) {
 // project folder is required to keep them addressable.
 // ---------------------------------------------------------------------------
 
-async function renderVolcengineVideo(ctx, credentials, onProgress) {
+async function renderVolcengineVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
       'no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY',
@@ -803,7 +843,7 @@ async function renderVolcengineVideo(ctx, credentials, onProgress) {
   const durationSec = ctx.length || 5;
   const resolution = '720p';
   const promptText = (ctx.prompt && ctx.prompt.trim()) || 'A short cinematic clip.';
-  const suffixFlags = [];
+  const suffixFlags: string[] = [];
   if (!/--resolution\b/.test(promptText)) suffixFlags.push(`--resolution ${resolution}`);
   if (!/--duration\b/.test(promptText)) suffixFlags.push(`--duration ${durationSec}`);
   if (!/--ratio\b/.test(promptText)) suffixFlags.push(`--ratio ${ratio}`);
@@ -816,7 +856,7 @@ async function renderVolcengineVideo(ctx, credentials, onProgress) {
   // it as the first frame and animates from there. We pass the data
   // URL directly; the API does not require a public URL. When no
   // image is provided, this is a regular t2v call.
-  const content = [{ type: 'text', text: fullText }];
+  const content: Array<Record<string, unknown>> = [{ type: 'text', text: fullText }];
   if (ctx.imageRef && ctx.imageRef.dataUrl) {
     content.push({
       type: 'image_url',
@@ -841,7 +881,7 @@ async function renderVolcengineVideo(ctx, credentials, onProgress) {
   if (!taskResp.ok) {
     throw new Error(`volcengine task create ${taskResp.status}: ${truncate(taskText, 240)}`);
   }
-  let taskData;
+  let taskData: any;
   try {
     taskData = JSON.parse(taskText);
   } catch {
@@ -859,7 +899,7 @@ async function renderVolcengineVideo(ctx, credentials, onProgress) {
     Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
       ? configuredMaxMs
       : 12 * 60 * 1000;
-  let videoUrl = null;
+  let videoUrl: string | null = null;
   let lastStatus = '';
   // Emit a "task accepted" line right away so the agent's chat shows
   // something within the first second instead of going silent for the
@@ -880,7 +920,7 @@ async function renderVolcengineVideo(ctx, credentials, onProgress) {
     if (!pollResp.ok) {
       throw new Error(`volcengine poll ${pollResp.status}: ${truncate(pollText, 240)}`);
     }
-    let pollData;
+    let pollData: any;
     try {
       pollData = JSON.parse(pollText);
     } catch {
@@ -920,7 +960,7 @@ async function renderVolcengineVideo(ctx, credentials, onProgress) {
   };
 }
 
-function volcengineRatioFor(aspect) {
+function volcengineRatioFor(aspect?: string): string {
   // Seedance accepts a fixed list of ratios; map the OD vocabulary to
   // its canonical strings.
   if (!aspect) return '16:9';
@@ -932,7 +972,7 @@ function volcengineRatioFor(aspect) {
 
 // Volcengine Seedream / Seededit images. Same auth, different endpoint:
 // POST /api/v3/images/generations (OpenAI-compatible payload).
-async function renderVolcengineImage(ctx, credentials) {
+async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error('no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY');
   }
@@ -956,7 +996,7 @@ async function renderVolcengineImage(ctx, credentials) {
   if (!resp.ok) {
     throw new Error(`volcengine image ${resp.status}: ${truncate(text, 240)}`);
   }
-  let data;
+  let data: any;
   try {
     data = JSON.parse(text);
   } catch {
@@ -999,7 +1039,7 @@ async function renderVolcengineImage(ctx, credentials) {
 // declares the `audio` capability.
 // ---------------------------------------------------------------------------
 
-async function renderGrokImage(ctx, credentials) {
+async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
       'no xAI API key — configure it in Settings or set XAI_API_KEY',
@@ -1027,7 +1067,7 @@ async function renderGrokImage(ctx, credentials) {
   if (!resp.ok) {
     throw new Error(`grok image ${resp.status}: ${truncate(text, 240)}`);
   }
-  let data;
+  let data: any;
   try {
     data = JSON.parse(text);
   } catch {
@@ -1057,7 +1097,7 @@ async function renderGrokImage(ctx, credentials) {
   };
 }
 
-async function renderNanoBananaImage(ctx, credentials) {
+async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
       'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
@@ -1090,7 +1130,7 @@ async function renderNanoBananaImage(ctx, credentials) {
   if (!resp.ok) {
     throw new Error(`nano-banana image ${resp.status}: ${truncate(text, 240)}`);
   }
-  let data;
+  let data: any;
   try {
     data = JSON.parse(text);
   } catch {
@@ -1104,8 +1144,8 @@ async function renderNanoBananaImage(ctx, credentials) {
   };
 }
 
-function nanoBananaHeaders(baseUrl, apiKey) {
-  const headers = {
+function nanoBananaHeaders(baseUrl: string, apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
   if (usesOfficialGoogleApiKeyHeader(baseUrl)) {
@@ -1116,7 +1156,7 @@ function nanoBananaHeaders(baseUrl, apiKey) {
   return headers;
 }
 
-function usesOfficialGoogleApiKeyHeader(baseUrl) {
+function usesOfficialGoogleApiKeyHeader(baseUrl: string): boolean {
   try {
     const url = new URL(baseUrl);
     return url.hostname === 'generativelanguage.googleapis.com';
@@ -1125,7 +1165,7 @@ function usesOfficialGoogleApiKeyHeader(baseUrl) {
   }
 }
 
-function nanoBananaAspectFor(aspect) {
+function nanoBananaAspectFor(aspect?: string): string {
   if (
     aspect === '1:1'
     || aspect === '16:9'
@@ -1138,7 +1178,7 @@ function nanoBananaAspectFor(aspect) {
   return '1:1';
 }
 
-function inlineImageBytesFromGenerateContent(data) {
+function inlineImageBytesFromGenerateContent(data: any): Buffer {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
   for (const candidate of candidates) {
     const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
@@ -1152,7 +1192,7 @@ function inlineImageBytesFromGenerateContent(data) {
   throw new Error('nano-banana image response missing candidates[].content.parts[].inlineData.data');
 }
 
-function sniffImageExt(bytes) {
+function sniffImageExt(bytes: Buffer): string {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return '.jpg';
   }
@@ -1172,7 +1212,7 @@ function sniffImageExt(bytes) {
   return '.png';
 }
 
-async function renderGrokVideo(ctx, credentials, onProgress) {
+async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
       'no xAI API key — configure it in Settings or set XAI_API_KEY',
@@ -1187,7 +1227,7 @@ async function renderGrokVideo(ctx, credentials, onProgress) {
   const durationSec = Math.min(Math.max(requested, 1), 15);
   const aspectRatio = grokAspectFor(ctx.aspect);
 
-  const body = {
+  const body: Record<string, unknown> = {
     model: ctx.model,
     prompt: ctx.prompt || 'A short cinematic clip.',
     duration: durationSec,
@@ -1213,7 +1253,7 @@ async function renderGrokVideo(ctx, credentials, onProgress) {
   if (!submitResp.ok) {
     throw new Error(`grok video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
   }
-  let submitData;
+  let submitData: any;
   try {
     submitData = JSON.parse(submitText);
   } catch {
@@ -1248,7 +1288,7 @@ async function renderGrokVideo(ctx, credentials, onProgress) {
       if (!pollResp.ok) {
         throw new Error(`grok poll ${pollResp.status}: ${truncate(pollText, 240)}`);
       }
-      let pollData;
+      let pollData: any;
       try {
         pollData = JSON.parse(pollText);
       } catch {
@@ -1307,7 +1347,7 @@ async function renderGrokVideo(ctx, credentials, onProgress) {
   };
 }
 
-function grokAspectFor(aspect) {
+function grokAspectFor(aspect?: string): string {
   // xAI accepts a wide list (1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1,
   // 1:2, 19.5:9, 9:19.5, 20:9, 9:20, auto). Our MEDIA_ASPECTS subset
   // is a strict subset — pass through known values, otherwise 16:9.
@@ -1343,9 +1383,9 @@ const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimaxi.chat/v1';
 // internal naming.
 const MINIMAX_TTS_MODEL_MAP = {
   'minimax-tts': 'speech-02-turbo',
-};
+} as Record<string, string>;
 
-async function renderMinimaxTTS(ctx, credentials) {
+async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
       'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
@@ -1395,7 +1435,7 @@ async function renderMinimaxTTS(ctx, credentials) {
   if (!resp.ok) {
     throw new Error(`minimax tts ${resp.status}: ${truncate(respText, 240)}`);
   }
-  let data;
+  let data: any;
   try {
     data = JSON.parse(respText);
   } catch {
@@ -1446,9 +1486,9 @@ const FISHAUDIO_DEFAULT_BASE_URL = 'https://api.fish.audio';
 
 const FISHAUDIO_TTS_MODEL_MAP = {
   'fish-speech-2': 'speech-1.6',
-};
+} as Record<string, string>;
 
-async function renderFishAudioTTS(ctx, credentials) {
+async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
       'no FishAudio API key — configure it in Settings or set OD_FISHAUDIO_API_KEY',
@@ -1464,7 +1504,7 @@ async function renderFishAudioTTS(ctx, credentials) {
   // FishAudio's `reference_id` slot pins which voice the synth uses.
   // The agent passes it via --voice (carried in ctx.voice). Empty means
   // FishAudio falls back to its default voice for the chosen model.
-  const body = {
+  const body: Record<string, unknown> = {
     text,
     format: 'mp3',
     mp3_bitrate: 128,
@@ -1523,7 +1563,7 @@ async function renderFishAudioTTS(ctx, credentials) {
 
 const HYPERFRAMES_RENDER_TIMEOUT_MS = 5 * 60 * 1000;
 
-async function renderHyperFramesViaCli(ctx, projectDir, onProgress) {
+async function renderHyperFramesViaCli(ctx: MediaContext, projectDir: string, onProgress?: ProgressFn): Promise<RenderResult> {
   const compRel = ctx.compositionDir;
   if (typeof compRel !== 'string' || !compRel.trim()) {
     throw new Error(
@@ -1588,8 +1628,8 @@ async function renderHyperFramesViaCli(ctx, projectDir, onProgress) {
     };
   } catch (err) {
     const stderr =
-      err && typeof err.stderr === 'string' ? err.stderr.trim() : '';
-    const message = stderr || (err && err.message ? err.message : String(err));
+      errorStringProp(err, 'stderr').trim();
+    const message = stderr || errorMessage(err);
     throw new Error(`hyperframes render failed: ${truncate(message, 480)}`);
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });
@@ -1607,8 +1647,8 @@ async function renderHyperFramesViaCli(ctx, projectDir, onProgress) {
  * agent's chat tool shows a long quiet spinner — users can't tell
  * whether anything is happening.
  */
-function runHyperFramesRender(compAbs, tmpOutput, onProgress) {
-  return new Promise((resolve, reject) => {
+function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: ProgressFn): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const child = spawn(
       'npx',
       [
@@ -1634,10 +1674,10 @@ function runHyperFramesRender(compAbs, tmpOutput, onProgress) {
     // erases) for its pretty progress bar. Strip those before
     // forwarding so the agent's chat doesn't render a wall of `[2K`.
     // The regex covers CSI sequences (most of what HF emits).
-    const stripAnsi = (s) =>
+    const stripAnsi = (s: string): string =>
       s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b\[\?[0-9]+[hl]/g, '');
 
-    const emit = (chunk) => {
+    const emit = (chunk: Buffer): void => {
       if (typeof onProgress !== 'function') return;
       const text = stripAnsi(chunk.toString('utf8'));
       // HF refreshes a single progress line many times per second; split
@@ -1688,7 +1728,7 @@ function runHyperFramesRender(compAbs, tmpOutput, onProgress) {
       const tail = stderrTail.trim().split('\n').slice(-12).join('\n');
       const err = new Error(
         `hyperframes render exited ${reason}` + (tail ? `\n${tail}` : ''),
-      );
+      ) as Error & { stderr: string };
       err.stderr = tail;
       reject(err);
     });
@@ -1703,7 +1743,7 @@ function runHyperFramesRender(compAbs, tmpOutput, onProgress) {
 // downstream FileViewer round-trip works while the backend matures.
 // ---------------------------------------------------------------------------
 
-async function renderStub(ctx, fileName) {
+async function renderStub(ctx: MediaContext, fileName: string): Promise<RenderResult> {
   const note = ctx.provider && !ctx.provider.integrated
     ? `stub-${ctx.surface} · provider '${ctx.provider.id}' integration pending`
     : `stub-${ctx.surface} · model=${ctx.model}`;
@@ -1755,9 +1795,9 @@ async function renderStub(ctx, fileName) {
   };
 }
 
-function svgPlaceholder(ctx) {
+function svgPlaceholder(ctx: MediaContext): string {
   const [w, h] = aspectToBox(ctx.aspect, 800);
-  const safe = (s) =>
+  const safe = (s: unknown): string =>
     String(s || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -1770,14 +1810,14 @@ function svgPlaceholder(ctx) {
   ].join('');
 }
 
-function aspectToBox(aspect, base) {
+function aspectToBox(aspect: string | undefined, base: number): [number, number] {
   const [a, b] = String(aspect || '1:1').split(':').map(Number);
   if (!a || !b) return [base, base];
   if (a >= b) return [base, Math.round((base * b) / a)];
   return [Math.round((base * a) / b), base];
 }
 
-function silentWav(seconds) {
+function silentWav(seconds: number): Buffer {
   const sampleRate = 8000;
   const numSamples = Math.max(1, Math.round(sampleRate * seconds));
   const dataSize = numSamples * 2;
@@ -1798,12 +1838,12 @@ function silentWav(seconds) {
   return buf;
 }
 
-function truncate(s, n) {
+function truncate(s: unknown, n: number): string {
   const v = String(s || '');
   if (v.length <= n) return v;
   return v.slice(0, n - 1) + '…';
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

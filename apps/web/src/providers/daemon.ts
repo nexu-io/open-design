@@ -23,7 +23,32 @@ import type {
   SseErrorPayload,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
+
+/**
+ * Returns the front-end carrier that's about to send this request:
+ * - 'desktop' when running inside the Electron shell
+ * - 'web' when running in a regular browser
+ * - 'unknown' in non-browser test environments (jsdom without a UA)
+ *
+ * The daemon uses this to label telemetry traces. Cheap, called once per
+ * run so caching isn't worth the complexity.
+ */
+function detectClientType(): 'desktop' | 'web' | 'unknown' {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const ua = navigator.userAgent ?? '';
+  if (ua.includes('Electron/')) return 'desktop';
+  if (ua) return 'web';
+  return 'unknown';
+}
 import { parseSseFrame } from './sse';
+
+export function latestUserPromptFromHistory(history: ChatMessage[]): string {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (message?.role === 'user') return message.content;
+  }
+  return '';
+}
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
@@ -106,6 +131,7 @@ export async function streamViaDaemon({
   const request: ChatRequest = {
     agentId,
     message: transcript,
+    currentPrompt: latestUserPromptFromHistory(history),
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     assistantMessageId: assistantMessageId ?? null,
@@ -123,7 +149,14 @@ export async function streamViaDaemon({
   try {
     const createResp = await fetch('/api/runs', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // Tells the daemon which front-end carrier started the run so the
+        // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
+        // The daemon falls back to a User-Agent sniff when this header is
+        // absent (e.g. third-party clients), so omitting it in tests is OK.
+        'X-OD-Client': detectClientType(),
+      },
       body,
     });
 
@@ -345,6 +378,15 @@ function isChatRunStatus(value: unknown): value is ChatRunStatus {
   return value === 'queued' || value === 'running' || value === 'succeeded' || value === 'failed' || value === 'canceled';
 }
 
+function normalizeToolInput(input: unknown): unknown {
+  if (input == null || typeof input !== 'object') return input;
+  const obj = input as Record<string, unknown>;
+  if ('filePath' in obj && typeof obj.filePath === 'string') {
+    return { ...obj, file_path: obj.filePath };
+  }
+  return input;
+}
+
 // Translate a raw `agent` SSE payload (what apps/daemon/src/claude-stream.ts emits)
 // into the UI's AgentEvent union. Keep this liberal — unknown types just
 // return null so the UI ignores them instead of rendering garbage.
@@ -396,7 +438,7 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     };
   }
   if (t === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: data.input ?? null };
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizeToolInput(data.input) };
   }
   if (t === 'tool_result' && typeof data.toolUseId === 'string') {
     return {

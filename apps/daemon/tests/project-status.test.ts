@@ -1,5 +1,5 @@
-// @ts-nocheck
 import assert from 'node:assert/strict';
+import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,7 +16,7 @@ import {
 } from '../src/db.js';
 import { composeProjectDisplayStatus } from '../src/server.js';
 
-const tempDirs = [];
+const tempDirs: string[] = [];
 
 afterEach(() => {
   closeDatabase();
@@ -25,13 +25,13 @@ afterEach(() => {
   }
 });
 
-function createDb() {
+function createDb(): Database.Database {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-status-'));
   tempDirs.push(dir);
   return openDatabase(dir, { dataDir: path.join(dir, '.od') });
 }
 
-function seedProject(db, projectId, runStatus = 'succeeded') {
+function seedProject(db: Database.Database, projectId: string, runStatus = 'succeeded') {
   insertProject(db, {
     id: projectId,
     name: projectId,
@@ -56,7 +56,13 @@ function seedProject(db, projectId, runStatus = 'succeeded') {
   return `${projectId}-conversation`;
 }
 
-function addMessage(db, conversationId, id, role, content) {
+function addMessage(
+  db: Database.Database,
+  conversationId: string,
+  id: string,
+  role: 'user' | 'assistant',
+  content: string,
+) {
   upsertMessage(db, conversationId, { id, role, content });
 }
 

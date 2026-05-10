@@ -1,4 +1,5 @@
 import type {
+  ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
   ConnectorDiscoveryResponse,
@@ -13,6 +14,9 @@ import type {
   ChatAttachment,
   CodexPetSummary,
   CodexPetsResponse,
+  InstallDesignSystemResponse,
+  InstallInput,
+  InstallSkillResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   PreviewComment,
@@ -31,20 +35,14 @@ import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
   ProjectFile,
+  RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      openExternal?: (url: string) => Promise<boolean>;
-      pickFolder?: () => Promise<string | null>;
-    };
-  }
-}
+// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -278,8 +276,28 @@ export async function fetchConnectorDiscovery(options: { refresh?: boolean } = {
   return promise;
 }
 
+export async function fetchConnectorDetail(
+  connectorId: string,
+  options: { hydrateTools?: boolean; toolsLimit?: number; toolsCursor?: string } = {},
+): Promise<ConnectorDetail | null> {
+  try {
+    const params = new URLSearchParams();
+    if (options.hydrateTools) params.set('hydrateTools', 'true');
+    if (options.toolsLimit !== undefined) params.set('toolsLimit', String(options.toolsLimit));
+    if (options.toolsCursor) params.set('toolsCursor', options.toolsCursor);
+    const query = params.toString();
+    const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}${query ? `?${query}` : ''}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as ConnectorDetailResponse;
+    return json.connector ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ConnectorActionResult {
   connector: ConnectorDetail | null;
+  auth?: ConnectorConnectResponse['auth'];
   error?: string;
 }
 
@@ -303,14 +321,27 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
   try {
     if (!useExternalBrowser) {
       authWindow = window.open('about:blank', '_blank');
-      renderConnectorAuthLoading(authWindow);
+      renderConnectorAuthLoading(authWindow, {
+        title: 'Initializing auth config…',
+        body: 'Creating or reusing the Composio auth configuration for this app. This can take a moment the first time.',
+      });
     }
+    const prepare = await prepareConnectorAuthConfig(connectorId);
+    if (prepare.status !== 'ready') {
+      renderConnectorAuthError(authWindow, prepare.message);
+      return { connector: null, error: prepare.message };
+    }
+    renderConnectorAuthLoading(authWindow, {
+      title: 'Opening authorization…',
+      body: 'The auth config is ready. Preparing the provider authorization page.',
+    });
     const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/connect`, {
       method: 'POST',
     });
     if (!resp.ok) {
-      authWindow?.close();
-      return { connector: null, error: await decodeConnectorError(resp) };
+      const error = await decodeConnectorError(resp);
+      renderConnectorAuthError(authWindow, error);
+      return { connector: null, error };
     }
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
@@ -320,19 +351,32 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       } else if (authWindow) {
-        authWindow.location.href = json.auth.redirectUrl;
+        openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
         const redirected = window.open(json.auth.redirectUrl, '_blank');
         if (!redirected) {
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       }
+    } else if (json.auth?.kind === 'connected') {
+      renderConnectorAuthInfo(authWindow, {
+        title: 'Already connected',
+        body: 'This connector is already authorized. You can close this window.',
+      });
+    } else if (json.auth?.kind === 'pending') {
+      renderConnectorAuthInfo(authWindow, {
+        title: 'Authorization pending',
+        body: 'Authorization is in progress but no redirect URL was returned. Watch for an email confirmation, or open the Composio dashboard to continue.',
+      });
     } else {
-      authWindow?.close();
+      renderConnectorAuthInfo(authWindow, {
+        title: 'No authorization URL returned',
+        body: 'The connector responded without a redirect URL. If this seems wrong, retry from Settings → Connectors, and confirm your Composio API key.',
+      });
     }
-    return { connector: json.connector ?? null };
+    return { connector: json.connector ?? null, ...(json.auth === undefined ? {} : { auth: json.auth }) };
   } catch (err) {
-    authWindow?.close();
+    renderConnectorAuthError(authWindow, err instanceof Error && err.message ? err.message : 'Could not start connector authentication.');
     return {
       connector: null,
       error: err instanceof Error && err.message ? err.message : 'Could not start connector authentication.',
@@ -340,7 +384,38 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
   }
 }
 
-function renderConnectorAuthLoading(authWindow: Window | null): void {
+async function prepareConnectorAuthConfig(connectorId: string): Promise<{ status: 'ready' } | { status: 'error'; message: string }> {
+  const resp = await fetch('/api/connectors/auth-configs/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectorIds: [connectorId] }),
+  });
+  if (!resp.ok) {
+    return { status: 'error', message: await decodeConnectorError(resp) };
+  }
+  const json = (await resp.json()) as ConnectorAuthConfigPrepareResponse;
+  const result = json.results?.[connectorId];
+  if (!result) return { status: 'error', message: 'Auth config initialization did not return a result.' };
+  if (result.status === 'ready') return { status: 'ready' };
+  return { status: 'error', message: result.message };
+}
+
+function openConnectorAuthRedirect(authWindow: Window | null, redirectUrl: string): void {
+  if (authWindow) {
+    renderConnectorAuthRedirect(authWindow, redirectUrl);
+    try {
+      authWindow.location.replace(redirectUrl);
+      return;
+    } catch {
+      // Some embedded browsers block async popup navigation. Leave the
+      // clickable fallback in the popup so the user can continue.
+    }
+  }
+  const opened = window.open(redirectUrl, '_blank');
+  if (!opened) window.location.assign(redirectUrl);
+}
+
+function renderConnectorAuthLoading(authWindow: Window | null, copy: { title: string; body: string }): void {
   if (!authWindow) return;
   try {
     authWindow.document.title = 'Connecting…';
@@ -348,8 +423,8 @@ function renderConnectorAuthLoading(authWindow: Window | null): void {
       <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
         <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
           <div aria-hidden="true" style="width:28px;height:28px;border-radius:999px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;animation:od-spin .8s linear infinite;"></div>
-          <div style="font-size:15px;font-weight:600;">Connecting…</div>
-          <div style="max-width:280px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">Preparing the authorization flow. This window will redirect when the provider is ready.</div>
+          <div style="font-size:15px;font-weight:600;">${escapeHtmlText(copy.title)}</div>
+          <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
         </div>
         <style>@keyframes od-spin{to{transform:rotate(360deg)}}</style>
       </main>
@@ -359,10 +434,117 @@ function renderConnectorAuthLoading(authWindow: Window | null): void {
   }
 }
 
+function renderConnectorAuthInfo(authWindow: Window | null, copy: { title: string; body: string }): void {
+  if (!authWindow) return;
+  try {
+    authWindow.document.title = copy.title;
+    authWindow.document.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
+          <div style="font-size:15px;font-weight:600;">${escapeHtmlText(copy.title)}</div>
+          <div style="max-width:360px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
+        </div>
+      </main>
+    `;
+  } catch {
+    /* Popup may be unavailable or already navigated; ignore. */
+  }
+}
+
+function renderConnectorAuthRedirect(authWindow: Window, redirectUrl: string): void {
+  try {
+    authWindow.document.title = 'Continue authorization';
+    authWindow.document.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
+          <div style="font-size:15px;font-weight:600;">Continue authorization</div>
+          <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">If this window does not redirect automatically, use the button below.</div>
+          <a href="${escapeHtmlAttribute(redirectUrl)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:164px;border-radius:8px;padding:9px 14px;background:#df7b56;color:#fff;text-decoration:none;font-size:13px;font-weight:600;">Open Composio</a>
+        </div>
+      </main>
+    `;
+  } catch {
+    /* Popup may already be cross-origin; navigation fallback still runs. */
+  }
+}
+
+async function readConnectorApiErrorMessage(resp: Response): Promise<string> {
+  try {
+    const payload = await resp.json() as { error?: { message?: string }; message?: string };
+    return payload.error?.message ?? payload.message ?? `Connection failed (${resp.status})`;
+  } catch {
+    return `Connection failed (${resp.status})`;
+  }
+}
+
+function renderConnectorAuthError(authWindow: Window | null, message: string): void {
+  if (!authWindow) return;
+  try {
+    authWindow.document.title = 'Connection failed';
+    authWindow.document.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
+          <div style="font-size:15px;font-weight:600;">Connection failed</div>
+          <div style="max-width:360px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(message)}</div>
+        </div>
+      </main>
+    `;
+  } catch {
+    /* Popup may be unavailable or already navigated; ignore. */
+  }
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>]/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      default:
+        return char;
+    }
+  });
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
+}
+
 export async function disconnectConnector(connectorId: string): Promise<ConnectorDetail | null> {
   try {
     const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/connection`, {
       method: 'DELETE',
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as ConnectorDetailResponse;
+    return json.connector ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function cancelConnectorAuthorization(connectorId: string): Promise<ConnectorDetail | null> {
+  try {
+    const resp = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/authorization/cancel`, {
+      method: 'POST',
     });
     if (!resp.ok) return null;
     const json = (await resp.json()) as ConnectorDetailResponse;
@@ -397,6 +579,13 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
 
 export type SkillExampleResult =
   | { html: string }
+  // The skill declares a non-HTML preview surface (image / markdown / …)
+  // and the daemon's `/example` endpoint only ships HTML, so calling it
+  // would 404 into a misleading "failed to fetch" state. The modal
+  // renders a calm "no shipped preview" affordance instead. The `kind`
+  // is the raw `od.preview.type` from SKILL.md so future preview kinds
+  // can be picked up by name without a registry change. Issue #897.
+  | { unavailable: true; kind: string }
   | { error: string };
 
 // Returns a discriminated result so callers can distinguish a real
@@ -404,7 +593,18 @@ export type SkillExampleResult =
 // load. Previously this collapsed every failure into `null`, which
 // left the example preview modal stuck at its loading state with no
 // recovery affordance. Issue #860.
-export async function fetchSkillExample(id: string): Promise<SkillExampleResult> {
+//
+// `previewType` is the skill's `od.preview.type` (defaults to `'html'`
+// daemon-side). Anything other than `'html'` short-circuits to an
+// `unavailable` result so we don't fire a network call against a
+// daemon endpoint that only resolves HTML files. Issue #897.
+export async function fetchSkillExample(
+  id: string,
+  previewType: string = 'html',
+): Promise<SkillExampleResult> {
+  if (previewType !== 'html') {
+    return { unavailable: true, kind: previewType };
+  }
   try {
     const resp = await fetch(`/api/skills/${encodeURIComponent(id)}/example`);
     if (!resp.ok) {
@@ -1041,6 +1241,23 @@ export async function deleteProjectFile(
   }
 }
 
+export async function renameProjectFile(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<RenameProjectFileResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!resp.ok) {
+    const errorBody = await readApiErrorBody(resp);
+    throw new Error(errorBody.message);
+  }
+  return (await resp.json()) as RenameProjectFileResponse;
+}
+
 export async function openFolderDialog(): Promise<string | null> {
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
@@ -1069,5 +1286,69 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
     return await resp.text();
   } catch {
     return null;
+  }
+}
+
+export async function installSkill(
+  input: InstallInput,
+): Promise<{ skill: SkillSummary } | { error: string }> {
+  try {
+    const resp = await fetch('/api/skills/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    return json as InstallSkillResponse;
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function uninstallSkill(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
+    return { ok: true };
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function installDesignSystem(
+  input: InstallInput,
+): Promise<{ designSystem: DesignSystemSummary } | { error: string }> {
+  try {
+    const resp = await fetch('/api/design-systems/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    return json as InstallDesignSystemResponse;
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function uninstallDesignSystem(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
+    return { ok: true };
+  } catch {
+    return { error: 'Network error' };
   }
 }

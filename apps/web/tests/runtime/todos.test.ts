@@ -53,6 +53,42 @@ describe('todo event helpers', () => {
     ]);
   });
 
+  it('recognizes lowercase OpenCode todowrite events', () => {
+    const events: AgentEvent[] = [
+      {
+        kind: 'tool_use',
+        id: 'todo-1',
+        name: 'todowrite',
+        input: {
+          todos: [
+            { content: 'Self-check template', status: 'completed' },
+            { content: 'Emit single artifact', status: 'pending' },
+          ],
+        },
+      },
+    ];
+
+    expect(unfinishedTodosFromEvents(events)).toEqual([
+      { content: 'Emit single artifact', status: 'pending', activeForm: undefined },
+    ]);
+  });
+
+  it('uses lowercase todowrite as the latest todo truth over older TodoWrite events', () => {
+    const events: AgentEvent[] = [
+      { kind: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: firstTodoInput },
+      {
+        kind: 'tool_use',
+        id: 'todo-2',
+        name: 'todowrite',
+        input: { todos: [{ content: 'Emit single artifact', status: 'pending' }] },
+      },
+    ];
+
+    expect(latestTodosFromEvents(events)).toEqual([
+      { content: 'Emit single artifact', status: 'pending', activeForm: undefined },
+    ]);
+  });
+
   it('treats an empty latest TodoWrite event as authoritative', () => {
     const events: AgentEvent[] = [
       { kind: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: firstTodoInput },

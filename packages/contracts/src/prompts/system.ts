@@ -60,6 +60,9 @@ export interface ComposeInput {
   // Snapshot of HTML files that the agent should treat as a starting
   // reference rather than a fixed deliverable.
   template?: ProjectTemplate | undefined;
+  // When set to 'plain', suppresses tool_calls so API/BYOK-mode models
+  // only emit <artifact> blocks (they cannot execute tools).
+  streamFormat?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -70,6 +73,7 @@ export function composeSystemPrompt({
   designSystemTitle,
   metadata,
   template,
+  streamFormat,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -129,6 +133,16 @@ export function composeSystemPrompt({
     metadata?.kind === 'audio';
   if (isMediaSurface) {
     parts.push(MEDIA_GENERATION_CONTRACT);
+  }
+
+  // Suppress tool_calls in API/BYOK mode (streamFormat === 'plain').
+  // Only fires when the caller explicitly passes streamFormat='plain';
+  // does NOT fire when streamFormat is omitted, so non-plain (tool-using)
+  // adapters are unaffected and normal chat runs can still use tools.
+  if (streamFormat === 'plain') {
+    parts.push(
+      '\n\n## API mode rule\n\nDo not emit tool_calls. Output only <artifact> HTML blocks. Any tool description in your internal reasoning must not appear in the response.',
+    );
   }
 
   return parts.join('');

@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { EventEmitter } from 'node:events';
+import type { Response } from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createCompatApiErrorResponse, createSseResponse } from '../src/server.js';
@@ -11,7 +11,7 @@ afterEach(() => {
 describe('createSseResponse', () => {
   it('sets SSE headers and sends JSON app events', () => {
     const res = new FakeResponse();
-    const sse = createSseResponse(res, { keepAliveIntervalMs: 0 });
+    const sse = createSseResponse(res as unknown as Response, { keepAliveIntervalMs: 0 });
 
     expect(res.headers).toEqual({
       'Cache-Control': 'no-cache, no-transform',
@@ -27,7 +27,7 @@ describe('createSseResponse', () => {
 
   it('can attach SSE event ids for resumable streams', () => {
     const res = new FakeResponse();
-    const sse = createSseResponse(res, { keepAliveIntervalMs: 0 });
+    const sse = createSseResponse(res as unknown as Response, { keepAliveIntervalMs: 0 });
 
     expect(sse.send('stdout', { chunk: 'hello' }, 12)).toBe(true);
 
@@ -36,7 +36,7 @@ describe('createSseResponse', () => {
 
   it('emits heartbeat comments before real events', () => {
     const res = new FakeResponse();
-    const sse = createSseResponse(res, { keepAliveIntervalMs: 0 });
+    const sse = createSseResponse(res as unknown as Response, { keepAliveIntervalMs: 0 });
 
     expect(sse.writeKeepAlive()).toBe(true);
     expect(sse.send('end', {})).toBe(true);
@@ -46,7 +46,7 @@ describe('createSseResponse', () => {
   it('clears interval heartbeat on close', () => {
     vi.useFakeTimers();
     const res = new FakeResponse();
-    createSseResponse(res, { keepAliveIntervalMs: 10 });
+    createSseResponse(res as unknown as Response, { keepAliveIntervalMs: 10 });
 
     vi.advanceTimersByTime(10);
     expect(res.writes).toEqual([': keepalive\n\n']);
@@ -58,7 +58,7 @@ describe('createSseResponse', () => {
 
   it('skips writes after the response ends', () => {
     const res = new FakeResponse();
-    const sse = createSseResponse(res, { keepAliveIntervalMs: 0 });
+    const sse = createSseResponse(res as unknown as Response, { keepAliveIntervalMs: 0 });
 
     sse.end();
 
@@ -97,14 +97,14 @@ describe('createCompatApiErrorResponse', () => {
 });
 
 class FakeResponse extends EventEmitter {
-  headers = {};
-  writes = [];
+  headers: Record<string, string> = {};
+  writes: string[] = [];
   destroyed = false;
   writableEnded = false;
   flushed = false;
   ended = false;
 
-  setHeader(name, value) {
+  setHeader(name: string, value: string) {
     this.headers[name] = value;
   }
 
@@ -112,7 +112,7 @@ class FakeResponse extends EventEmitter {
     this.flushed = true;
   }
 
-  write(chunk) {
+  write(chunk: string) {
     this.writes.push(chunk);
     return true;
   }

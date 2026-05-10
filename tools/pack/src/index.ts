@@ -78,6 +78,7 @@ const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
 
 function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
   return command
+    .option("--app-version <version>", "override packaged app version for release artifacts")
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--signed", "build a signed/notarized mac artifact")
     .option("--to <target>", TO_HELP_BY_PLATFORM[platform]);

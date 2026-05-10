@@ -156,9 +156,13 @@ export async function deleteTemplate(id: string): Promise<boolean> {
   }
 }
 
+type ProjectPatch = Omit<Partial<Project>, 'pendingPrompt'> & {
+  pendingPrompt?: Project['pendingPrompt'] | null;
+};
+
 export async function patchProject(
   id: string,
-  patch: Partial<Project>,
+  patch: ProjectPatch,
 ): Promise<Project | null> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
@@ -278,18 +282,26 @@ export async function listMessages(
   }
 }
 
+export interface SaveMessageOptions {
+  telemetryFinalized?: boolean;
+}
+
 export async function saveMessage(
   projectId: string,
   conversationId: string,
   message: ChatMessage,
+  options: SaveMessageOptions = {},
 ): Promise<void> {
   try {
+    const body = options.telemetryFinalized
+      ? { ...message, telemetryFinalized: true }
+      : message;
     await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(message.id)}`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(message),
+        body: JSON.stringify(body),
       },
     );
   } catch {

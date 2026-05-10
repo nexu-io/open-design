@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { en } from '../../src/i18n/locales/en';
 
 const {
   playSoundMock,
@@ -14,6 +15,7 @@ const {
   fetchDesignSystemsMock,
   fetchSkillMock,
   fetchDesignSystemMock,
+  fetchProviderModelsMock,
 } = vi.hoisted(() => ({
   playSoundMock: vi.fn(),
   requestNotificationPermissionMock: vi.fn(),
@@ -25,6 +27,7 @@ const {
   fetchDesignSystemsMock: vi.fn(),
   fetchSkillMock: vi.fn(),
   fetchDesignSystemMock: vi.fn(),
+  fetchProviderModelsMock: vi.fn(),
 }));
 
 vi.mock('../../src/utils/notifications', async () => {
@@ -55,6 +58,10 @@ vi.mock('../../src/providers/registry', async () => {
     codexPetSpritesheetUrl: (pet: { spritesheetUrl: string }) => pet.spritesheetUrl,
   };
 });
+
+vi.mock('../../src/providers/provider-models', () => ({
+  fetchProviderModels: fetchProviderModelsMock,
+}));
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import type { SettingsSection } from '../../src/components/SettingsDialog';
@@ -261,6 +268,7 @@ beforeEach(() => {
   fetchDesignSystemsMock.mockReset();
   fetchSkillMock.mockReset();
   fetchDesignSystemMock.mockReset();
+  fetchProviderModelsMock.mockReset();
   notificationPermissionMock.mockReturnValue('default');
   requestNotificationPermissionMock.mockResolvedValue('granted');
   showCompletionNotificationMock.mockResolvedValue('shown');
@@ -286,6 +294,12 @@ beforeEach(() => {
     id,
     body: `design system body for ${id}`,
   }));
+  fetchProviderModelsMock.mockResolvedValue({
+    ok: true,
+    kind: 'success',
+    latencyMs: 1,
+    models: [],
+  });
 });
 
 describe('SettingsDialog execution settings BYOK interactions', () => {
@@ -483,6 +497,127 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       {},
     );
   });
+
+  it('enables model fetching only for supported BYOK provider drafts', () => {
+    renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    const fetchButton = screen.getByRole('button', { name: 'Fetch models' }) as HTMLButtonElement;
+    expect(fetchButton.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-openai' },
+    });
+    expect(fetchButton.disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Azure OpenAI' }));
+    expect((screen.getByRole('button', { name: 'Fetch models' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Automatic deployment discovery is not available/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Ollama Cloud' }));
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'ollama-key' },
+    });
+    expect((screen.getByRole('button', { name: 'Fetch models' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Model discovery is not available for this protocol.')).toBeTruthy();
+  });
+
+  it('fetches provider models, merges them into the picker, and preserves a custom current model', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'remote-alpha', label: 'Remote Alpha' },
+        { id: 'gpt-4o', label: 'gpt-4o' },
+      ],
+    });
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'custom-still-here',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe('custom-still-here');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch models' }));
+
+    expect(await screen.findByText('Fetched 2 models.')).toBeTruthy();
+    expect(fetchProviderModelsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-openai',
+      }),
+      expect.any(AbortSignal),
+    );
+    const select = screen.getByLabelText('Model') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(
+      expect.arrayContaining(['remote-alpha', 'gpt-4o', '__custom__']),
+    );
+    expect(
+      Array.from(select.options).some((o) =>
+        o.textContent === 'Remote Alpha (remote-alpha)',
+      ),
+    ).toBe(true);
+    expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe('custom-still-here');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch models' }));
+    expect(fetchProviderModelsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears stale fetched-model status when provider fields change', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [{ id: 'remote-alpha', label: 'Remote Alpha' }],
+    });
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch models' }));
+    expect(await screen.findByText('Fetched 1 models.')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Base URL'), {
+      target: { value: 'https://proxy.example.com/v1' },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Fetched 1 models.')).toBeNull();
+    });
+  });
+
+  it('renders provider model fetch failures inline', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: false,
+      kind: 'auth_failed',
+      latencyMs: 12,
+      status: 401,
+      detail: 'bad key',
+    });
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch models' }));
+
+    expect(await screen.findByText('Authentication failed. Check your API key.')).toBeTruthy();
+  });
 });
 
 describe('SettingsDialog execution settings Local CLI interactions', () => {
@@ -499,6 +634,8 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       available: false,
       version: null,
       models: [],
+      installUrl: 'https://github.com/google-gemini/gemini-cli',
+      docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
     };
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -509,8 +646,19 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(localCliTab);
 
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
-    const geminiCard = screen.getByRole('button', { name: /Gemini CLI/i }) as HTMLButtonElement;
-    expect(geminiCard.disabled).toBe(true);
+    const geminiGroup = screen.getByRole('group', { name: /Gemini CLI/i });
+    expect(
+      (within(geminiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
+    ).toBe(
+      'https://github.com/google-gemini/gemini-cli',
+    );
+    expect(
+      screen.getByText(en['settings.agentInstall.stepAuth']),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(en['settings.agentInstall.stepSelect']),
+    ).toBeTruthy();
+    expect(screen.getByText(en['settings.agentInstall.pathHint'])).toBeTruthy();
 
     fireEvent.click(codexCard);
     await waitForPersist(
@@ -602,7 +750,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    fireEvent.change(screen.getByLabelText('Claude Code config dir'), {
+    fireEvent.change(screen.getByLabelText('Claude Code config directory'), {
       target: { value: '  ~/.claude-qa  ' },
     });
     fireEvent.change(screen.getByLabelText('Codex home'), {
@@ -686,9 +834,15 @@ describe('SettingsDialog media providers interactions', () => {
       { initialSection: 'media' },
     );
 
+    // Issue #737 added a window.confirm guard on the Clear button so a
+    // stray click cannot wipe a saved API key. Auto-accept the prompt
+    // here so the test still exercises the cleared-payload path.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
     const clearButtons = screen.getAllByRole('button', { name: 'Clear' });
     fireEvent.click(clearButtons[0]!);
 
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect((screen.getByLabelText('OpenAI API key') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe('');
 
@@ -699,6 +853,38 @@ describe('SettingsDialog media providers interactions', () => {
       }),
       { forceMediaProviderSync: true },
     );
+
+    confirmSpy.mockRestore();
+  });
+
+  it('cancels Clear when the confirmation is dismissed (issue #737)', () => {
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        mediaProviders: {
+          openai: { apiKey: 'sk-media', baseUrl: 'https://custom.openai.example/v1' },
+        },
+      },
+      { initialSection: 'media' },
+    );
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const clearButtons = screen.getAllByRole('button', { name: 'Clear' });
+    fireEvent.click(clearButtons[0]!);
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    // Saved key + base URL must stay intact when the user dismisses
+    // the confirmation; without this guard a fat-fingered click on
+    // Clear would silently wipe the key. Autosave should never fire
+    // because nothing changed.
+    expect((screen.getByLabelText('OpenAI API key') as HTMLInputElement).value).toBe('sk-media');
+    expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe(
+      'https://custom.openai.example/v1',
+    );
+    expect(onPersist).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 
   it('supports persisting provider API key and base URL edits', async () => {
@@ -747,6 +933,10 @@ describe('SettingsDialog media providers interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'OpenAI Show key' }));
     expect(apiKeyInput.type).toBe('text');
 
+    // Issue #737 added a window.confirm guard on Clear; jsdom's
+    // unimplemented confirm() returns undefined, which would cancel
+    // the clear and leave this test asserting the wrong reveal state.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[0]!);
     expect(apiKeyInput.type).toBe('password');
 
@@ -755,6 +945,8 @@ describe('SettingsDialog media providers interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'OpenAI Show key' }));
     expect(apiKeyInput.type).toBe('text');
+
+    confirmSpy.mockRestore();
   });
 
   it('supports providers with a custom model override field', async () => {
@@ -1041,7 +1233,7 @@ describe('SettingsDialog MCP server interactions', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/mcp/install-info');
     });
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'MCP server' })).toBeTruthy();
+      expect(screen.getByRole('heading', { level: 3, name: 'MCP server' })).toBeTruthy();
     });
 
     expect(screen.getByText(/Run this in your terminal/i)).toBeTruthy();
@@ -1700,7 +1892,7 @@ describe('SettingsDialog about interactions', () => {
       },
     );
 
-    expect(screen.getByRole('heading', { name: 'About' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: 'About' })).toBeTruthy();
     expect(screen.getByText('Version')).toBeTruthy();
     expect(screen.getByText('0.4.1')).toBeTruthy();
     expect(screen.getByText('Channel')).toBeTruthy();

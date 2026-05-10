@@ -327,6 +327,7 @@ describe('NewProjectPanel design system defaults', () => {
         }),
       }),
     );
+    expect(templateOnCreate.mock.calls[0]?.[0]).not.toHaveProperty('pendingPrompt');
   });
 
   it('saves image creation with the selected aspect and trimmed style notes metadata', () => {
