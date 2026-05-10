@@ -1061,7 +1061,6 @@ export interface Dict {
   'fileViewer.cloudflarePagesProvider': string;
   'fileViewer.deployToProvider': string;
   'fileViewer.redeployToProvider': string;
-  'fileViewer.linkedPagesNotice': string;
   'fileViewer.deployingToProvider': string;
   'liveArtifact.viewer.tabPreview': string;
   'liveArtifact.viewer.tabCode': string;

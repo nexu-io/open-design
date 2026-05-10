@@ -953,7 +953,6 @@ export const fa: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'استقرار روی {provider}',
   'fileViewer.redeployToProvider': 'استقرار دوباره روی {provider}',
-  'fileViewer.linkedPagesNotice': 'شامل {count} صفحهٔ پیوندی: {pages}',
   'fileViewer.deployingToProvider': 'در حال استقرار روی {provider}…',
   'fileViewer.preparingPublicLink': 'در حال آماده‌سازی لینک عمومی…',
   'fileViewer.copyDeployLink': 'کپی لینک',

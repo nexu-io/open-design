@@ -717,7 +717,6 @@ export const de: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Auf {provider} deployen',
   'fileViewer.redeployToProvider': 'Erneut auf {provider} deployen',
-  'fileViewer.linkedPagesNotice': 'Enthält {count} verlinkte Seite(n): {pages}',
   'fileViewer.deployingToProvider': 'Deployment auf {provider}…',
   'fileViewer.preparingPublicLink': 'Öffentlicher Link wird vorbereitet…',
   'fileViewer.copyDeployLink': 'Link kopieren',

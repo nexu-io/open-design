@@ -243,7 +243,9 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   const entry = await readProjectFile(projectsRoot, projectId, entryPath, options.metadata);
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
-  const linkedPages = options.linkedPages ?? [];
+  const linkedPages = options.linkedPages && options.linkedPages.length > 0
+    ? options.linkedPages
+    : collectLinkedHtmlPages(html, entryBase);
   const deployHtml = injectDeployHookScript(
     rewriteEntryHtmlReferences(html, entryBase, linkedPages),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
@@ -1305,10 +1307,9 @@ export function collectLinkedHtmlPages(html: string, baseDir: string): LinkedPag
     if (!resolved) continue;
     const key = resolved.toLowerCase();
     if (pages.has(key)) continue;
-    const basename = path.posix.basename(resolved);
     pages.set(key, {
       path: resolved,
-      deployedName: basename,
+      deployedName: resolved,
     });
   }
   return Array.from(pages.values());
@@ -1661,7 +1662,9 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
               (lp) => lp.path.toLowerCase() === resolved.toLowerCase(),
             );
             if (match) {
-              const cleanPath = `/${path.posix.basename(resolved, path.posix.extname(resolved))}`;
+              let cleanPath = resolved.replace(/\.html?$/i, '');
+              cleanPath = cleanPath.replace(/\/index$/i, '');
+              cleanPath = '/' + cleanPath;
               const nextValue = `${cleanPath}${suffix}`;
               if (doubleQuoted !== undefined) return `${rawName}${equals}"${nextValue}"`;
               if (singleQuoted !== undefined) return `${rawName}${equals}'${nextValue}'`;

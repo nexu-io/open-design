@@ -861,7 +861,6 @@ export const ru: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Развернуть на {provider}',
   'fileViewer.redeployToProvider': 'Развернуть повторно на {provider}',
-  'fileViewer.linkedPagesNotice': 'Включает {count} связанных страниц: {pages}',
   'fileViewer.deployingToProvider': 'Развёртывание на {provider}…',
   'fileViewer.preparingPublicLink': 'Подготовка публичной ссылки…',
   'fileViewer.copyDeployLink': 'Скопировать ссылку',
