@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { McpClientSection } from '../../src/components/McpClientSection';
@@ -23,6 +25,13 @@ beforeAll(() => {
 describe('McpJsonHelper (production)', () => {
   it('renders helper toggles and opens the per-row panel with a unique id', async () => {
     render(<McpClientSection />);
+
+    const expandButtons = await screen.findAllByRole('button', {
+      name: /Expand this MCP server/i,
+    });
+    expect(expandButtons.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(expandButtons[0]!);
+    fireEvent.click(expandButtons[1]!);
 
     const toggles = await screen.findAllByRole('button', { name: /Need help\?/i });
     expect(toggles.length).toBeGreaterThanOrEqual(2);
