@@ -1043,15 +1043,20 @@ code {
   object-fit: cover;
 }
 .staged-comment {
-  max-width: 280px;
   border-radius: var(--radius-pill);
   padding: 4px 6px 4px 10px;
+}
+.user-attachment.staged-comment {
+  max-width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
 }
 .staged-comment .staged-name {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 .staged-comment .staged-name strong {
   color: var(--accent-strong);
@@ -1059,9 +1064,8 @@ code {
   flex: 0 0 auto;
 }
 .staged-comment .staged-name span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 .staged-comment button {
   width: 20px;
