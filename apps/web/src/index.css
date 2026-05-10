@@ -15429,6 +15429,196 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   text-decoration-thickness: 2px;
 }
 
+.mcp-json-helper {
+	margin-top: 10px;
+
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+
+	background: var(--bg-subtle);
+
+	overflow: hidden;
+}
+
+.mcp-json-helper-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.mcp-json-helper-toggle:hover {
+  color: var(--text);
+  background: transparent;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 30%, transparent);
+}
+
+.mcp-json-helper.is-open .mcp-json-helper-toggle {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.mcp-json-helper.is-open .mcp-json-helper-toggle:hover {
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.mcp-json-helper-toggle span:first-child {
+	text-align: left;
+}
+
+.mcp-json-helper-toggle-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	flex-shrink: 0;
+
+	color: var(--text-soft);
+}
+
+.mcp-json-helper-example {
+	display: flex;
+	flex-direction: column;
+}
+
+.mcp-json-helper-example-head {
+	padding: 10px 12px 0;
+
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+
+	color: var(--text-soft);
+}
+
+.mcp-json-helper-code {
+	margin: 0 12px 12px;
+
+	padding: 14px;
+
+	border: 1px solid var(--border);
+	border-radius: calc(var(--radius) - 4px);
+
+	background:
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--bg) 92%, black) 0%,
+			color-mix(in srgb, var(--bg) 86%, black) 100%
+		);
+
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.7;
+
+	color: var(--text);
+
+	overflow-x: auto;
+}
+
+.mcp-json-helper-code code {
+	background: transparent;
+	padding: 0;
+	border-radius: 0;
+}
+
+.json-key {
+	color: var(--accent);
+}
+
+.json-string {
+	color: var(--green);
+}
+
+.json-punctuation {
+	color: var(--text-soft);
+}
+
+.mcp-json-helper-conversion {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+
+	padding: 12px;
+
+	border-top: 1px solid var(--border);
+
+	background: transparent;
+}
+
+.mcp-json-helper-conversion div {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.mcp-json-helper-conversion strong {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+
+	color: var(--text-soft);
+}
+
+.mcp-json-helper-conversion code {
+	width: fit-content;
+}
+
+.mcp-json-helper-toggle-content {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+
+	min-width: 0;
+	flex: 1;
+}
+
+.mcp-json-helper-eye {
+	width: 22px;
+	height: 22px;
+
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	border-radius: 999px;
+
+	background: var(--accent-tint);
+
+	color: var(--accent);
+
+	flex-shrink: 0;
+}
+
+.mcp-json-helper-toggle-text {
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.5;
+
+	color: inherit;
+
+	text-align: left;
+}
+
 /* ----- Project actions toolbar (#451) ---------------------------------- */
 /* Project-scoped actions live in their own bar between the chrome header
  * and the chat/workspace split. File-scoped actions stay inside
