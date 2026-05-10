@@ -15,6 +15,7 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   cloudflarePagesAssetHash,
   cloudflarePagesProjectNameForProject,
+  collectLinkedHtmlPages,
   DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES,
   DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
   deploymentUrlCandidates,
@@ -848,6 +849,135 @@ describe('deploy plan and analyzer', () => {
     await expect(
       buildDeployFileSet(projectsRoot, projectId, 'index.html'),
     ).rejects.toMatchObject({ details: { missing: ['missing.png'] } });
+  });
+});
+
+describe('linked-page deploys', () => {
+  async function setupProject() {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-linked-pages-test-'));
+    const projectId = 'p1';
+    const dir = await ensureProject(path.join(root, 'projects'), projectId);
+    return { projectsRoot: path.join(root, 'projects'), projectId, dir };
+  }
+
+  it('discovers a directly linked .html page and rewrites its <a href> to a clean URL', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="about.html">About</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+
+    expect(plan.files.map((f) => f.file).sort()).toEqual(['about.html', 'index.html', 'vercel.json']);
+    const indexHtml = plan.files.find((f) => f.file === 'index.html')?.data.toString('utf8') ?? '';
+    expect(indexHtml).toContain('<a href="/about">');
+  });
+
+  it('preserves nested directory paths in linked pages and rewrites to /dir/name', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'docs'));
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="docs/about.html">Docs</a>',
+    );
+    await writeFile(path.join(dir, 'docs', 'about.html'), '<!doctype html><h1>Docs About</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+
+    expect(plan.files.map((f) => f.file).sort()).toEqual([
+      'docs/about.html',
+      'index.html',
+      'vercel.json',
+    ]);
+    const indexHtml = plan.files.find((f) => f.file === 'index.html')?.data.toString('utf8') ?? '';
+    expect(indexHtml).toContain('<a href="/docs/about">');
+  });
+
+  it('discovers transitively linked pages through multi-hop chains', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="about.html">About</a>',
+    );
+    await writeFile(
+      path.join(dir, 'about.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="pricing.html">Pricing</a>',
+    );
+    await writeFile(path.join(dir, 'pricing.html'), '<!doctype html><h1>Pricing</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+
+    expect(plan.files.map((f) => f.file).sort()).toEqual([
+      'about.html',
+      'index.html',
+      'pricing.html',
+      'vercel.json',
+    ]);
+  });
+
+  it('discovers linked pages from root-relative <a href="/..."> links', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="/pricing.html">Pricing</a>',
+    );
+    await writeFile(path.join(dir, 'pricing.html'), '<!doctype html><h1>Pricing</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+
+    expect(plan.files.map((f) => f.file).sort()).toEqual(['index.html', 'pricing.html', 'vercel.json']);
+    const indexHtml = plan.files.find((f) => f.file === 'index.html')?.data.toString('utf8') ?? '';
+    expect(indexHtml).toContain('<a href="/pricing">');
+  });
+
+  it('throws a DeployError when a linked page resolves to index.html', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'pages'));
+    await writeFile(
+      path.join(dir, 'pages', 'home.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="../index.html">Home</a>',
+    );
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Root</h1>');
+
+    await expect(
+      buildDeployFilePlan(projectsRoot, projectId, 'pages/home.html'),
+    ).rejects.toThrow(/Linked page .* resolves to the root index\.html/);
+  });
+
+  it('does not inject vercel.json for Cloudflare Pages deploys with linked pages', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="about.html">About</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html', {
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+    });
+
+    expect(plan.files.map((f) => f.file).sort()).toEqual(['about.html', 'index.html']);
+    expect(plan.files.find((f) => f.file === 'vercel.json')).toBeUndefined();
+  });
+
+  it('injects vercel.json with cleanUrls for Vercel deploys with linked pages', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><a href="about.html">About</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html', {
+      providerId: VERCEL_PROVIDER_ID,
+    });
+
+    expect(plan.files.map((f) => f.file).sort()).toEqual(['about.html', 'index.html', 'vercel.json']);
+    const vercelFile = plan.files.find((f) => f.file === 'vercel.json');
+    expect(vercelFile).toBeDefined();
+    expect(JSON.parse((vercelFile!).data.toString('utf8'))).toEqual({ cleanUrls: true });
   });
 });
 
