@@ -9673,12 +9673,34 @@ button.connector-action.is-loading {
   gap: 6px;
 }
 .board-pod-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 7px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 11px;
+}
+.board-pod-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  line-height: 1;
+}
+.board-pod-chip-remove:hover {
+  background: var(--red-bg);
+  color: var(--red);
 }
 .board-note-list {
   display: grid;

@@ -661,6 +661,7 @@ export const en: Dict = {
   'chat.comments.updateSend': 'Update & send',
   'chat.comments.removeAttachment': 'Remove comment attachment',
   'chat.comments.removeAttachmentAria': 'Remove comment attachment for {name}',
+  'chat.comments.removePodMember': 'Remove captured component',
   'chat.conversationsTitle': 'Conversations',
   'chat.conversationsAria': 'Conversation history',
   'chat.newConversation': 'New conversation',

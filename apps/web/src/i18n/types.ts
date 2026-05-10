@@ -920,6 +920,7 @@ export interface Dict {
   'chat.comments.updateSend': string;
   'chat.comments.removeAttachment': string;
   'chat.comments.removeAttachmentAria': string;
+  'chat.comments.removePodMember': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
