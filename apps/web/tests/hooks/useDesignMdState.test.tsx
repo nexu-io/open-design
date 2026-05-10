@@ -204,10 +204,14 @@ describe('useDesignMdState', () => {
 });
 
 describe('computeStale', () => {
-  it('returns fresh when generatedMs is null (no usable timestamp parsed)', () => {
+  // Round 7 (mrcfps @ useDesignMdState.ts:160): inverted from the
+  // pre-round-7 "fresh on null timestamp" behavior. A missing /
+  // malformed provenance timestamp now surfaces as the distinct
+  // 'unknown-provenance' degraded state instead of misleading fresh.
+  it('returns degraded unknown-provenance state when generatedMs is null (no usable timestamp parsed)', () => {
     expect(
       computeStale({ generatedMs: null, files: [], conversations: [] }),
-    ).toEqual({ isStale: false, staleReason: null });
+    ).toEqual({ isStale: true, staleReason: 'unknown-provenance' });
   });
 
   it('ignores DESIGN.md mtime when comparing file ages', () => {
@@ -220,5 +224,39 @@ describe('computeStale', () => {
         conversations: [],
       }),
     ).toEqual({ isStale: false, staleReason: null });
+  });
+});
+
+describe('useDesignMdState — malformed provenance', () => {
+  // Round 7 (mrcfps @ useDesignMdState.ts:160): end-to-end through
+  // compute() so a regression that re-pins fresh-on-null at the hook
+  // level (not just computeStale) fails fast.
+  it('reports unknown-provenance after a malformed ## Provenance section in DESIGN.md', async () => {
+    const malformedDesignMd = `# DESIGN.md
+
+## Provenance
+
+- Project ID: p1
+- Generated UTC timestamp: not-a-real-date
+`;
+    installFetchMock({
+      files: {
+        body: {
+          files: [
+            { name: 'DESIGN.md', size: 100, mtime: 1, kind: 'text', mime: 'text/markdown' },
+            { name: 'index.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
+          ],
+        },
+      },
+      designMd: { body: malformedDesignMd },
+      conversations: { body: { conversations: [] } },
+    });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.exists).toBe(true);
+    expect(result.current.isStale).toBe(true);
+    expect(result.current.staleReason).toBe('unknown-provenance');
   });
 });

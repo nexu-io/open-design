@@ -16,13 +16,22 @@
 // passed in as `onClick`. Disabled state short-circuits in the
 // component itself.
 
-import type { DesignMdState } from '../hooks/useDesignMdState';
+import type { DesignMdState, DesignMdStaleReason } from '../hooks/useDesignMdState';
 
 const STALE_CHIP_TEXT = 'Spec is stale — regenerate?';
+// Round 7 (mrcfps @ useDesignMdState.ts:160): malformed provenance
+// timestamps used to silently report fresh; they now surface as a
+// distinct chip so the user knows the freshness signal is degraded
+// rather than green.
+const UNKNOWN_PROVENANCE_CHIP_TEXT = 'Spec freshness unknown — regenerate to refresh signal';
 const DISABLED_TOOLTIP = 'Finalize the design package first.';
 
+function chipTextForReason(reason: DesignMdStaleReason): string {
+  return reason === 'unknown-provenance' ? UNKNOWN_PROVENANCE_CHIP_TEXT : STALE_CHIP_TEXT;
+}
+
 export interface ContinueInCliButtonProps {
-  designMdState: Pick<DesignMdState, 'exists' | 'isStale'>;
+  designMdState: Pick<DesignMdState, 'exists' | 'isStale' | 'staleReason'>;
   onClick: () => void | Promise<void>;
 }
 
@@ -69,7 +78,7 @@ export function ContinueInCliButton({ designMdState, onClick }: ContinueInCliBut
       </button>
       {designMdState.isStale ? (
         <span className="project-actions-chip" role="note" aria-label="Spec staleness">
-          {STALE_CHIP_TEXT}
+          {chipTextForReason(designMdState.staleReason)}
         </span>
       ) : null}
     </span>

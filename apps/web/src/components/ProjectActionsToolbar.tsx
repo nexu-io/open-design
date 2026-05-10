@@ -14,7 +14,7 @@ import type { DesignMdState } from '../hooks/useDesignMdState';
 import type { FinalizeStatus } from '../hooks/useFinalizeProject';
 
 export interface ProjectActionsToolbarProps {
-  designMdState: Pick<DesignMdState, 'exists' | 'isStale'>;
+  designMdState: Pick<DesignMdState, 'exists' | 'isStale' | 'staleReason'>;
   finalizeStatus: FinalizeStatus;
   onFinalize: () => void;
   onCancelFinalize: () => void;

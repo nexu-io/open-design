@@ -16,7 +16,16 @@ import { parseProvenance } from '../lib/parse-provenance';
 
 const DESIGN_MD = 'DESIGN.md';
 
-export type DesignMdStaleReason = 'files-newer' | 'conversations-newer' | null;
+// 'unknown-provenance' is the round-7 (mrcfps @ useDesignMdState.ts:160)
+// degraded state: the parser could not extract a comparison timestamp
+// from the `## Provenance` section, so the hook can't prove fresh OR
+// stale. It surfaces as a distinct chip rather than overloading
+// `'files-newer'` / `'conversations-newer'`.
+export type DesignMdStaleReason =
+  | 'files-newer'
+  | 'conversations-newer'
+  | 'unknown-provenance'
+  | null;
 
 export interface DesignMdState {
   exists: boolean;
@@ -168,10 +177,15 @@ export function computeStale({
   conversations,
 }: ComputeStaleInput): ComputeStaleResult {
   if (generatedMs === null) {
-    // No usable timestamp parsed → cannot prove stale; default to fresh
-    // so the user can still proceed with Continue in CLI. The button
-    // surface separately covers the "missing DESIGN.md" case.
-    return { isStale: false, staleReason: null };
+    // Round 7 (mrcfps @ useDesignMdState.ts:160): when the provenance
+    // timestamp is missing or malformed, the hook cannot compare
+    // DESIGN.md against newer files / conversations. Surface a distinct
+    // 'unknown-provenance' state instead of advertising fresh — failing
+    // open here was misleading because the user saw the "fresh" path
+    // precisely when parsing had become untrustworthy. The button stays
+    // enabled (no comparison data is not the same as broken state) so
+    // the user can still proceed; the chip is the signal.
+    return { isStale: true, staleReason: 'unknown-provenance' };
   }
 
   const maxFileMtime = files.reduce((acc, f) => {
