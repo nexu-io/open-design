@@ -901,7 +901,7 @@ export const ptBR: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Implantar em {provider}',
   'fileViewer.redeployToProvider': 'Implantar novamente em {provider}',
-  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
+  'fileViewer.linkedPagesNotice': 'Inclui {count} página(s) vinculada(s): {pages}',
   'fileViewer.deployingToProvider': 'Implantando em {provider}…',
   'fileViewer.preparingPublicLink': 'Preparando link público…',
   'fileViewer.copyDeployLink': 'Copiar link',

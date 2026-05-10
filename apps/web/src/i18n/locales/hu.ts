@@ -860,7 +860,7 @@ export const hu: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Telepítés ide: {provider}',
   'fileViewer.redeployToProvider': 'Újratelepítés ide: {provider}',
-  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
+  'fileViewer.linkedPagesNotice': '{count} linkelt oldal található: {pages}',
   'fileViewer.deployingToProvider': 'Telepítés ide: {provider}…',
   'fileViewer.preparingPublicLink': 'Nyilvános link előkészítése…',
   'fileViewer.copyDeployLink': 'Link másolása',

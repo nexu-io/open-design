@@ -747,7 +747,7 @@ export const ja: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': '{provider} にデプロイ',
   'fileViewer.redeployToProvider': '{provider} に再デプロイ',
-  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
+  'fileViewer.linkedPagesNotice': 'リンクされた {count} ページを含む: {pages}',
   'fileViewer.deployingToProvider': '{provider} にデプロイ中…',
   'fileViewer.preparingPublicLink': '公開リンクを準備中…',
   'fileViewer.copyDeployLink': 'リンクをコピー',
