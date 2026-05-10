@@ -24,7 +24,7 @@ export type ProcessStampContract<
   TCriteria extends Partial<TStamp> = Partial<TStamp>,
 > = {
   normalizeStamp(input: unknown): TStamp;
-  normalizeStampCriteria(input?: unknown): TCriteria;.fnm
+  normalizeStampCriteria(input?: unknown): TCriteria;
   stampFields: readonly ProcessStampField<TStamp>[];
   stampFlags: { readonly [K in ProcessStampField<TStamp>]: string };
 };
