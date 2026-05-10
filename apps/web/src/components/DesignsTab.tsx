@@ -8,8 +8,18 @@ import type {
 	ProjectDisplayStatus,
 	SkillSummary,
 } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
+
+type PendingDelete =
+	| { kind: "project"; projectId: string; projectName: string }
+	| {
+			kind: "artifact";
+			projectId: string;
+			artifactId: string;
+			artifactTitle: string;
+	  };
 
 type SubTab = "recent" | "yours";
 type ViewMode = "grid" | "kanban";
@@ -71,6 +81,7 @@ export function DesignsTab({
 	const [liveArtifactsByProject, setLiveArtifactsByProject] = useState<
 		Record<string, LiveArtifactSummary[]>
 	>({});
+	const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 	const [view, setView] = useState<ViewMode>(() => {
 		if (typeof window === "undefined") return "grid";
 		try {
@@ -172,19 +183,40 @@ export function DesignsTab({
 		skills.find((s) => s.id === id)?.name ?? "";
 	const dsName = (id: string | null) =>
 		designSystems.find((d) => d.id === id)?.title ?? "";
-	const handleDeleteLiveArtifact = async (
+	const requestDeleteLiveArtifact = (
 		projectId: string,
 		artifact: LiveArtifactSummary,
 	) => {
-		if (!confirm(`${t("common.delete")} "${artifact.title}"?`)) return;
-		const ok = await deleteLiveArtifact(projectId, artifact.id);
-		if (!ok) return;
-		setLiveArtifactsByProject((current) => ({
-			...current,
-			[projectId]: (current[projectId] ?? []).filter(
-				(candidate) => candidate.id !== artifact.id,
-			),
-		}));
+		setPendingDelete({
+			kind: "artifact",
+			projectId,
+			artifactId: artifact.id,
+			artifactTitle: artifact.title,
+		});
+	};
+
+	const requestDeleteProject = (projectId: string, projectName: string) => {
+		setPendingDelete({ kind: "project", projectId, projectName });
+	};
+
+	const commitPendingDelete = async () => {
+		if (!pendingDelete) return;
+		if (pendingDelete.kind === "artifact") {
+			const { projectId, artifactId } = pendingDelete;
+			setPendingDelete(null);
+			const ok = await deleteLiveArtifact(projectId, artifactId);
+			if (!ok) return;
+			setLiveArtifactsByProject((current) => ({
+				...current,
+				[projectId]: (current[projectId] ?? []).filter(
+					(candidate) => candidate.id !== artifactId,
+				),
+			}));
+			return;
+		}
+		const projectId = pendingDelete.projectId;
+		setPendingDelete(null);
+		onDelete(projectId);
 	};
 
 	return (
@@ -288,7 +320,7 @@ export function DesignsTab({
 										aria-label={`${t("common.delete")} ${artifact.title}`}
 										onClick={(e) => {
 											e.stopPropagation();
-											void handleDeleteLiveArtifact(p.id, artifact);
+											requestDeleteLiveArtifact(p.id, artifact);
 										}}
 									>
 										<Icon name="close" size={12} />
@@ -348,8 +380,7 @@ export function DesignsTab({
 									aria-label={t("designs.deleteAria", { name: p.name })}
 									onClick={(e) => {
 										e.stopPropagation();
-										if (confirm(t("designs.deleteConfirm", { name: p.name })))
-											onDelete(p.id);
+										requestDeleteProject(p.id, p.name);
 									}}
 								>
 									<Icon name="close" size={12} />
@@ -436,12 +467,7 @@ export function DesignsTab({
 														})}
 														onClick={(e) => {
 															e.stopPropagation();
-															if (
-																confirm(
-																	t("designs.deleteConfirm", { name: p.name }),
-																)
-															)
-																onDelete(p.id);
+															requestDeleteProject(p.id, p.name);
 														}}
 													>
 														<Icon name="close" size={12} />
@@ -475,6 +501,26 @@ export function DesignsTab({
 					})}
 				</div>
 			)}
+			<ConfirmDialog
+				open={pendingDelete !== null}
+				title={
+					pendingDelete?.kind === "artifact"
+						? t("common.delete")
+						: t("designs.deleteTitle")
+				}
+				message={
+					pendingDelete?.kind === "artifact"
+						? `${t("common.delete")} "${pendingDelete.artifactTitle}"?`
+						: pendingDelete?.kind === "project"
+							? t("designs.deleteConfirm", { name: pendingDelete.projectName })
+							: ""
+				}
+				confirmLabel={t("common.delete")}
+				cancelLabel={t("common.cancel")}
+				destructive
+				onConfirm={() => void commitPendingDelete()}
+				onCancel={() => setPendingDelete(null)}
+			/>
 		</div>
 	);
 }
