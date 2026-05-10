@@ -599,6 +599,7 @@ export const zhCN: Dict = {
   'chat.comments.placeholder': 'Comment on this element…',
   'chat.comments.addSend': 'Add & send',
   'chat.comments.updateSend': 'Update & send',
+  'chat.comments.removePodMember': 'Remove captured component',
   'chat.comments.removeAttachment': 'Remove comment attachment',
   'chat.comments.removeAttachmentAria': 'Remove comment attachment for {name}',
   'chat.conversationsTitle': '对话历史',
