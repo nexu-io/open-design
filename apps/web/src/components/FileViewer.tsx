@@ -1428,6 +1428,7 @@ function BoardComposerPopover({
   onDraft,
   onAddDraft,
   onRemoveQueuedNote,
+  onRemovePodMember,
   onClose,
   onSaveComment,
   onSendBatch,
@@ -1442,6 +1443,7 @@ function BoardComposerPopover({
   onDraft: (value: string) => void;
   onAddDraft: () => void;
   onRemoveQueuedNote: (index: number) => void;
+  onRemovePodMember: (elementId: string) => void;
   onClose: () => void;
   onSaveComment: () => void | Promise<void>;
   onSendBatch: () => void | Promise<void>;
@@ -1480,9 +1482,17 @@ function BoardComposerPopover({
         <div className="board-pod-summary">
           <strong>{target.memberCount || podMembers.length} captured items</strong>
           <div className="board-pod-members">
-            {podMembers.slice(0, 6).map((member) => (
+            {podMembers.map((member) => (
               <span key={member.elementId} className="board-pod-chip">
                 {summarizeMember(member)}
+                <button
+                  type="button"
+                  className="board-pod-chip-remove"
+                  title={t('chat.comments.removePodMember')}
+                  onClick={() => onRemovePodMember(member.elementId)}
+                >
+                  <Icon name="close" size={10} />
+                </button>
               </span>
             ))}
           </div>
@@ -4793,6 +4803,16 @@ function HtmlViewer({
                 onRemoveQueuedNote={(index) =>
                   setQueuedBoardNotes((current) => current.filter((_, currentIndex) => currentIndex !== index))
                 }
+                onRemovePodMember={(elementId) => {
+                  const current = activeCommentTarget;
+                  if (!current) return;
+                  const nextMembers = (current.podMembers ?? []).filter((m) => m.elementId !== elementId);
+                  if (nextMembers.length === 0) {
+                    clearBoardComposer();
+                  } else {
+                    setActiveCommentTarget({ ...current, podMembers: nextMembers, memberCount: nextMembers.length });
+                  }
+                }}
                 onClose={clearBoardComposer}
                 onSaveComment={savePersistentComment}
                 onSendBatch={sendBoardBatch}
