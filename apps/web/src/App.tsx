@@ -410,7 +410,7 @@ export function App() {
         p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
       ),
     );
-    void patchProject(projectId, { pendingPrompt: undefined });
+    void patchProject(projectId, { pendingPrompt: null });
   }, [route]);
 
   const handleTouchProject = useCallback(() => {

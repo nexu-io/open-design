@@ -306,7 +306,17 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
+    setConversations([]);
+    setActiveConversationId(null);
     setConversationLoadError(null);
+    setMessages([]);
+    setPreviewComments([]);
+    setAttachedComments([]);
+    setStreaming(false);
+    setError(null);
+    setArtifact(null);
+    savedArtifactRef.current = null;
+    pendingWritesRef.current.clear();
     (async () => {
       try {
         const list = await listConversations(project.id);
@@ -1733,25 +1743,29 @@ export function ProjectView({
     saveChatPanelWidth(next);
   }, [applyChatPanelWidth]);
 
-  // Hand the pending prompt to ChatPane exactly once. We snapshot the value
-  // into local state on mount so it survives the ChatPane remount triggered
-  // when `activeConversationId` resolves from `null` to a real id (the
-  // `key={activeConversationId}` on ChatPane otherwise wipes the freshly
-  // seeded composer draft). Once the conversation id is in place — meaning
-  // ChatPane has remounted with the seed still available — we clear both
-  // the local snapshot and the persisted pendingPrompt so future
-  // conversation switches don't keep re-seeding the composer.
-  const [initialDraft, setInitialDraft] = useState<string | undefined>(
-    project.pendingPrompt,
+  // Hand the pending prompt to ChatPane exactly once per project. The local
+  // project-scoped snapshot survives the conversation-id remount, while the
+  // persisted pendingPrompt is cleared so refreshes and later entries do not
+  // re-seed the composer.
+  const [initialDraft, setInitialDraft] = useState<
+    { projectId: string; value: string } | undefined
+  >(
+    project.pendingPrompt
+      ? { projectId: project.id, value: project.pendingPrompt }
+      : undefined,
   );
   useEffect(() => {
-    if (initialDraft && activeConversationId) {
-      setInitialDraft(undefined);
-    }
-  }, [initialDraft, activeConversationId]);
-  useEffect(() => {
-    if (project.pendingPrompt) onClearPendingPrompt();
-  }, [project.pendingPrompt, onClearPendingPrompt]);
+    const pendingPrompt = project.pendingPrompt;
+    if (!pendingPrompt) return;
+    setInitialDraft((current) =>
+      current?.projectId === project.id
+        ? current
+        : { projectId: project.id, value: pendingPrompt },
+    );
+    onClearPendingPrompt();
+  }, [project.id, project.pendingPrompt, onClearPendingPrompt]);
+  const chatInitialDraft =
+    initialDraft?.projectId === project.id ? initialDraft.value : undefined;
 
   return (
     <div className="app">
@@ -1811,7 +1825,7 @@ export function ProjectView({
             <ChatPane
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
-              key={activeConversationId ?? 'conversation-unavailable'}
+              key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}`}
               messages={messages}
               streaming={streaming}
               error={conversationLoadError ?? error}
@@ -1827,7 +1841,7 @@ export function ProjectView({
               onSend={handleSend}
               onStop={handleStop}
               onRequestOpenFile={requestOpenFile}
-              initialDraft={initialDraft}
+              initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
                 if (streaming) return;
                 void handleSend(text, [], []);
