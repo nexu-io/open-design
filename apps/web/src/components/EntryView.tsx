@@ -23,7 +23,6 @@ import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
 import { AppChromeHeader } from './AppChromeHeader';
 import { Icon } from './Icon';
-import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
 import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
 import {
@@ -503,6 +502,7 @@ export function EntryView({
             target="_blank"
             rel="noreferrer noopener"
             title="Follow @nexudotio on X for releases and milestones"
+            onClick={() => setAvatarMenuOpen(false)}
           >
             <span className="avatar-item-icon" aria-hidden>
               <Icon name="external-link" size={14} />

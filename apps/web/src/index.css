@@ -672,11 +672,16 @@ a.avatar-item:hover { background: var(--bg-subtle); }
   min-width: 0;
 }
 .avatar-item .avatar-item-meta {
+  margin-left: auto;
   font-size: 11px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .avatar-section-label {
   font-size: 10.5px;
