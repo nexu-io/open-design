@@ -164,6 +164,7 @@ import {
   removeProjectDir,
   sanitizeName,
   searchProjectFiles,
+  validateProjectPath,
   resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
@@ -2578,6 +2579,1980 @@ export async function startServer({
       res.status(400).json({ error: String((err && err.message) || err) });
     }
   });
+
+
+  // Install a design system from a GitHub URL or local path.
+  app.post('/api/design-systems/install', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await installFromTarget(req.body, USER_DESIGN_SYSTEMS_DIR, 'design-system');
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      const systems = await listAllDesignSystems();
+      const dsId = req.body.source === 'github'
+        ? sanitizeRepoName(req.body.url)
+        : path.basename(fs.realpathSync.native(req.body.path));
+      const ds = systems.find((s) => s.id === dsId);
+      res.json({ designSystem: ds || null });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Uninstall a user-installed design system.
+  app.delete('/api/design-systems/:id', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await uninstallById(req.params.id, USER_DESIGN_SYSTEMS_DIR, DESIGN_SYSTEMS_DIR, 'design-system');
+      if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/upload', upload.array('images', 8), (req, res) => {
+    const files = (req.files || []).map((f) => ({
+      name: f.originalname,
+      path: f.path,
+      size: f.size,
+    }));
+    res.json({ files });
+  });
+
+  // Persist a generated artifact (HTML) to disk so the user can re-open it
+  // in their browser or hand it off. Returns the on-disk path + a served URL.
+  // The body is also passed through the anti-slop linter; findings are
+  // returned alongside the path so the UI can render a P0/P1 badge and the
+  // chat layer can splice them into a system reminder for the agent.
+  app.post('/api/artifacts/save', (req, res) => {
+    try {
+      const { identifier, title, html } = req.body || {};
+      if (typeof html !== 'string' || html.length === 0) {
+        return res.status(400).json({ error: 'html required' });
+      }
+      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      const slug = sanitizeSlug(identifier || title || 'artifact');
+      const dir = path.join(ARTIFACTS_DIR, `${stamp}-${slug}`);
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'index.html');
+      fs.writeFileSync(file, html, 'utf8');
+      const findings = lintArtifact(html);
+      res.json({
+        path: file,
+        url: `/artifacts/${path.basename(dir)}/index.html`,
+        lint: findings,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Standalone lint endpoint — POST raw HTML, get findings back.
+  // The chat layer uses this to lint streamed-in artifacts without writing
+  // them to disk first, so a P0 issue can be surfaced before save.
+  app.post('/api/artifacts/lint', (req, res) => {
+    try {
+      const { html } = req.body || {};
+      if (typeof html !== 'string' || html.length === 0) {
+        return res.status(400).json({ error: 'html required' });
+      }
+      const findings = lintArtifact(html);
+      res.json({
+        findings,
+        agentMessage: renderFindingsForAgent(findings),
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/live-artifacts', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const artifacts = await listLiveArtifacts({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+      });
+      res.json({ artifacts });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.options('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, (_req, res) => {
+    res.status(204).end();
+  });
+
+  app.get('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
+      if (variant === 'template' || variant === 'rendered-source') {
+        const html = await readLiveArtifactCode({
+          projectsRoot: PROJECTS_DIR,
+          projectId,
+          artifactId: req.params.artifactId,
+          variant: variant === 'template' ? 'template' : 'rendered',
+        });
+        setLiveArtifactCodeHeaders(res);
+        return res.status(200).send(html);
+      }
+      if (variant !== 'rendered') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'variant must be rendered, template, or rendered-source');
+      }
+
+      const record = await ensureLiveArtifactPreview({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      setLiveArtifactPreviewHeaders(res);
+      res.status(200).send(record.html);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const record = await getLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/live-artifacts/:artifactId/refreshes', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const refreshes = await listLiveArtifactRefreshLogEntries({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      res.json({ refreshes });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/create', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:create');
+      if (!toolGrant) return;
+      const { projectId, input, templateHtml, provenanceJson, createdByRunId } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (requestRunOverride(createdByRunId, toolGrant.runId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'createdByRunId is derived from the tool token', {
+          details: { suppliedRunId: createdByRunId },
+        });
+      }
+
+      const record = await createLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+        input: input ?? {},
+        templateHtml,
+        provenanceJson,
+        createdByRunId: toolGrant.runId,
+      });
+      emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.get('/api/tools/live-artifacts/list', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:list');
+      if (!toolGrant) return;
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+
+      const artifacts = await listLiveArtifacts({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+      });
+      res.json({ artifacts });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/update', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:update');
+      if (!toolGrant) return;
+      const { projectId, artifactId, input, templateHtml, provenanceJson } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (typeof artifactId !== 'string' || artifactId.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
+      }
+
+      const record = await updateLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId: toolGrant.projectId,
+        artifactId,
+        input: input ?? {},
+        templateHtml,
+        provenanceJson,
+      });
+      emitLiveArtifactEvent(toolGrant, 'updated', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.post('/api/tools/live-artifacts/refresh', async (req, res) => {
+    try {
+      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:refresh');
+      if (!toolGrant) return;
+      const { projectId, artifactId } = req.body || {};
+      if (requestProjectOverride(projectId, toolGrant.projectId)) {
+        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
+          details: { suppliedProjectId: projectId },
+        });
+      }
+      if (typeof artifactId !== 'string' || artifactId.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
+      }
+
+      let result;
+      try {
+        result = await refreshLiveArtifact({
+          projectsRoot: PROJECTS_DIR,
+          projectId: toolGrant.projectId,
+          artifactId,
+          onStarted: ({ refreshId }) => {
+            emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
+          },
+        });
+      } catch (refreshErr) {
+        emitLiveArtifactRefreshEvent(toolGrant, {
+          phase: 'failed',
+          artifactId,
+          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        });
+        throw refreshErr;
+      }
+      emitLiveArtifactRefreshEvent(toolGrant, {
+        phase: 'succeeded',
+        artifactId,
+        refreshId: result.refresh.id,
+        title: result.artifact.title,
+        refreshedSourceCount: result.refresh.refreshedSourceCount,
+      });
+      res.json(result);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.patch('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const record = await updateLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+        input: req.body ?? {},
+      });
+      emitLiveArtifactEvent({ projectId }, 'updated', record.artifact);
+      res.json({ artifact: record.artifact });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.delete('/api/live-artifacts/:artifactId', async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      const existing = await getLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      await deleteLiveArtifact({
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        artifactId: req.params.artifactId,
+      });
+      updateProject(db, projectId, {});
+      emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
+      res.json({ ok: true });
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.options('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, (_req, res) => {
+    res.status(204).end();
+  });
+
+  app.post('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+      if (!projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      }
+
+      let result;
+      try {
+        result = await refreshLiveArtifact({
+          projectsRoot: PROJECTS_DIR,
+          projectId,
+          artifactId: req.params.artifactId,
+          onStarted: ({ refreshId }) => {
+            emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
+          },
+        });
+      } catch (refreshErr) {
+        emitLiveArtifactRefreshEvent({ projectId }, {
+          phase: 'failed',
+          artifactId: req.params.artifactId,
+          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        });
+        throw refreshErr;
+      }
+      emitLiveArtifactRefreshEvent({ projectId }, {
+        phase: 'succeeded',
+        artifactId: req.params.artifactId,
+        refreshId: result.refresh.id,
+        title: result.artifact.title,
+        refreshedSourceCount: result.refresh.refreshedSourceCount,
+      });
+      res.json(result);
+    } catch (err) {
+      sendLiveArtifactRouteError(res, err);
+    }
+  });
+
+  app.use('/artifacts', express.static(ARTIFACTS_DIR));
+
+  // ---- Deploy --------------------------------------------------------------
+
+  app.get('/api/deploy/config', async (req, res) => {
+    try {
+      const providerId =
+        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
+      /** @type {import('@open-design/contracts').DeployConfigResponse} */
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.put('/api/deploy/config', async (req, res) => {
+    try {
+      const input = req.body || {};
+      const providerId =
+        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
+      }
+      /** @type {import('@open-design/contracts').DeployConfigResponse} */
+      const body = await writeDeployConfig(providerId, input);
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
+  app.get('/api/deploy/cloudflare-pages/zones', async (_req, res) => {
+    try {
+      /** @type {import('@open-design/contracts').CloudflarePagesZonesResponse} */
+      const body = await listCloudflarePagesZones(await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID));
+      res.json(body);
+    } catch (err) {
+      const status = err instanceof DeployError ? err.status : 400;
+      const init =
+        err instanceof DeployError && err.details
+          ? { details: err.details }
+          : {};
+      sendApiError(res, status, 'BAD_REQUEST', String(err?.message || err), init);
+    }
+  });
+
+  app.get('/api/projects/:id/deployments', (req, res) => {
+    try {
+      /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
+      const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/deploy', async (req, res) => {
+    try {
+      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, linkedPages } = req.body || {};
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'unsupported deploy provider',
+        );
+      }
+      if (typeof fileName !== 'string' || !fileName.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+
+      const prior = getDeployment(db, req.params.id, fileName, providerId);
+      const deployProject = getProject(db, req.params.id);
+
+      // Resolve linked page paths into validated LinkedPageInfo records.
+      const linkedPagePaths = Array.isArray(linkedPages)
+        ? (linkedPages.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0))
+        : [];
+      const deployLinkedPages: { path: string; deployedName: string }[] = [];
+      for (const rawPath of linkedPagePaths) {
+        try {
+          const resolved = validateProjectPath(rawPath);
+          deployLinkedPages.push({
+            path: resolved,
+            deployedName: path.posix.basename(resolved),
+          });
+        } catch {
+          // Invalid paths are silently skipped — missing pages are
+          // caught by buildDeployFilePlan as missing entries.
+        }
+      }
+
+      const files = await buildDeployFileSet(
+        PROJECTS_DIR,
+        req.params.id,
+        fileName,
+        { metadata: deployProject?.metadata, linkedPages: deployLinkedPages },
+      );
+      const project = getProject(db, req.params.id);
+      const cloudflarePagesProjectName =
+        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
+          : '';
+      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? await deployToCloudflarePages({
+            config: {
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              projectName: cloudflarePagesProjectName,
+            },
+            files,
+            projectId: req.params.id,
+            cloudflarePages,
+            priorMetadata: prior?.providerMetadata,
+          })
+        : await deployToVercel({
+            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            files,
+            projectId: req.params.id,
+          });
+      const now = Date.now();
+      /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
+      const body = upsertDeployment(db, {
+        id: prior?.id ?? randomUUID(),
+        projectId: req.params.id,
+        fileName,
+        providerId,
+        url: result.url,
+        deploymentId: result.deploymentId,
+        deploymentCount: (prior?.deploymentCount ?? 0) + 1,
+        target: 'preview',
+        status: result.status,
+        statusMessage: result.statusMessage,
+        reachableAt: result.reachableAt,
+        cloudflarePages: result.cloudflarePages,
+        providerMetadata:
+          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
+            : prior?.providerMetadata,
+        createdAt: prior?.createdAt ?? now,
+        updatedAt: now,
+      });
+      res.json(publicDeployment(body));
+    } catch (err) {
+      const status = err instanceof DeployError ? err.status : 400;
+      const init =
+        err instanceof DeployError && err.details
+          ? { details: err.details }
+          : {};
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+        init,
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
+    try {
+      const { fileName, providerId = VERCEL_PROVIDER_ID, linkedPages } = req.body || {};
+      if (!isDeployProviderId(providerId)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'unsupported deploy provider',
+        );
+      }
+      if (typeof fileName !== 'string' || !fileName.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      const preflightProject = getProject(db, req.params.id);
+      const linkedPagePaths = Array.isArray(linkedPages)
+        ? (linkedPages.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0))
+        : [];
+      const deployLinkedPages = linkedPagePaths.map((p) => {
+        const resolved = validateProjectPath(p);
+        return { path: resolved, deployedName: path.posix.basename(resolved) };
+      });
+      /** @type {import('@open-design/contracts').DeployPreflightResponse} */
+      const body = await prepareDeployPreflight(
+        PROJECTS_DIR,
+        req.params.id,
+        fileName,
+        { metadata: preflightProject?.metadata, providerId, linkedPages: deployLinkedPages },
+      );
+      res.json(body);
+    } catch (err) {
+      // DeployError is a known/expected outcome (validation, missing file).
+      // Anything else points at a bug or an unexpected runtime state, so
+      // surface it in the daemon log without leaking internals to the
+      // client which still gets a generic 400.
+      if (!(err instanceof DeployError)) {
+        console.error('[deploy/preflight]', err);
+      }
+      const status = err instanceof DeployError ? err.status : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+    try {
+      // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
+      // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
+      // the char-class regex and resolve to the parent directory under
+      // path.join. Express decodes percent-encoded `%2e%2e` to `..` before
+      // we see it, so this check covers both URL-supplied and stored-row
+      // attack vectors.
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
+      if (typeof apiKey !== 'string' || !apiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      }
+      if (baseUrl !== undefined) {
+        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
+        }
+        const validated = validateExternalApiBaseUrl(baseUrl);
+        if (validated.error) {
+          return sendApiError(
+            res,
+            validated.forbidden ? 403 : 400,
+            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+            validated.error,
+          );
+        }
+      }
+      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      }
+
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      // Wire the request lifecycle into a server-side AbortController
+      // so that when the client cancels (browser fetch aborts) or
+      // disconnects, the in-flight Anthropic call inside
+      // finalizeDesignPackage is aborted instead of running to
+      // completion in the background and overwriting DESIGN.md after
+      // the UI has returned to idle. mrcfps PR #974 P1 review on
+      // server.ts:3831-3837. Note that an abort fired after the
+      // upstream response has been received but before the atomic
+      // write completes still allows the write to land — the SDK
+      // contract bounds the network round-trip, not the post-network
+      // disk handoff.
+      //
+      // We listen on `res.on('close')` because that is the canonical
+      // event that Express + Node's http server fires when the
+      // underlying socket is destroyed before the response is sent
+      // (undici fetch abort sends TCP RST). `req.on('close')` /
+      // `req.on('aborted')` are also wired as belt-and-braces but
+      // their behaviour varies by Node version when the request body
+      // has already been consumed.
+      const finalizeAbort = new AbortController();
+      const abortFromRequest = (): void => {
+        if (!finalizeAbort.signal.aborted) finalizeAbort.abort();
+      };
+      // `res.on('close')` fires when the response stream ends — either
+      // because `res.end()` was called by the success path or because
+      // the client disconnected before the response was sent. The
+      // alternative `req.on('close')` fires whenever the *request*
+      // stream finishes, which on POST routes happens as soon as
+      // Express body-parser drains the body — i.e. before the route
+      // does any work — so it cannot be used as a disconnect signal.
+      res.on('close', abortFromRequest);
+
+      let result;
+      try {
+        result = await finalizeDesignPackage(
+          db,
+          PROJECTS_DIR,
+          DESIGN_SYSTEMS_DIR,
+          req.params.id,
+          { apiKey, baseUrl, model, maxTokens, signal: finalizeAbort.signal },
+        );
+      } finally {
+        res.off('close', abortFromRequest);
+      }
+      res.json(result);
+    } catch (err) {
+      // Concurrent finalize - the lockfile was already held by another
+      // call. Caller can retry after a short wait; not a client error.
+      // Maps to the shared CONFLICT code per @lefarcen P2 on PR #832.
+      if (err instanceof FinalizePackageLockedError) {
+        return sendApiError(res, 409, 'CONFLICT', err.message);
+      }
+
+      // Upstream Anthropic error - status-aware mapping using shared
+      // ApiErrorCode values. Run the raw upstream body through
+      // redactSecrets so the API key cannot leak even if Anthropic
+      // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
+      // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
+      if (err instanceof FinalizeUpstreamError) {
+        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const init = safeDetails ? { details: safeDetails } : {};
+        if (err.status === 401) {
+          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
+        }
+        if (err.status === 429) {
+          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+        }
+        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
+      }
+
+      // The blocking call hit our 120s AbortController timeout - or the
+      // caller passed an already-aborted signal. Either way, surface as
+      // 503 with the shared UPSTREAM_UNAVAILABLE code (no dedicated
+      // TIMEOUT code in the contracts ApiErrorCode union).
+      const errName =
+        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
+      if (errName === 'AbortError') {
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'finalize timed out');
+      }
+
+      // Unexpected runtime failure (file IO, db access, prompt build).
+      // Log via console.error per the daemon convention; client sees a
+      // generic 500 with the shared INTERNAL_ERROR code. Run the message
+      // through redactSecrets defensively.
+      console.error('[finalize/anthropic]', err);
+      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
+    }
+  });
+
+  app.post(
+    '/api/projects/:id/deployments/:deploymentId/check-link',
+    async (req, res) => {
+      try {
+        const existing = getDeploymentById(
+          db,
+          req.params.id,
+          req.params.deploymentId,
+        );
+        if (!existing) {
+          return sendApiError(
+            res,
+            404,
+            'FILE_NOT_FOUND',
+            'deployment not found',
+          );
+        }
+        const stableCloudflareProjectName =
+          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? cloudflarePagesProjectNameFromDeployment(existing)
+            : '';
+        if (existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID && existing.cloudflarePages?.pagesDev?.url) {
+          const checked = await checkCloudflarePagesDeploymentLinks(existing);
+          const now = Date.now();
+          /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
+        const checkUrl = stableCloudflareProjectName
+          ? `https://${stableCloudflareProjectName}.pages.dev`
+          : existing.url;
+        const result = await checkDeploymentUrl(checkUrl);
+        const now = Date.now();
+        /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+        const body = upsertDeployment(db, {
+          ...existing,
+          url: checkUrl || existing.url,
+          status: result.reachable ? 'ready' : result.status || 'link-delayed',
+          statusMessage: result.reachable
+            ? 'Public link is ready.'
+            : result.statusMessage ||
+              'Vercel is still preparing the public link.',
+          reachableAt: result.reachable ? now : existing.reachableAt,
+          updatedAt: now,
+        });
+        res.json(publicDeployment(body));
+      } catch (err) {
+        sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+      }
+    },
+  );
+
+  // Shared device frames (iPhone, Android, iPad, MacBook, browser chrome).
+  // Skills can compose multi-screen / multi-device layouts by pointing at
+  // these files via `<iframe src="/frames/iphone-15-pro.html?screen=...">`.
+  // No mtime-based caching — frames are static and small.
+  app.use('/frames', express.static(FRAMES_DIR));
+
+  // Project files. Each project owns a flat folder under .od/projects/<id>/
+  // containing every file the user has uploaded, pasted, sketched, or that
+  // the agent has generated. Names are sanitized; paths are confined to the
+  // project's own folder (see apps/daemon/src/projects.ts).
+  app.get('/api/projects/:id/files', async (req, res) => {
+    try {
+      const since = Number(req.query?.since);
+      const project = getProject(db, req.params.id);
+      const files = await listFiles(PROJECTS_DIR, req.params.id, {
+        since: Number.isFinite(since) ? since : undefined,
+        metadata: project?.metadata,
+      });
+      /** @type {import('@open-design/contracts').ProjectFilesResponse} */
+      const body = { files };
+      res.json(body);
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects/:id/search', async (req, res) => {
+    try {
+      const query = String(req.query.q ?? '');
+      if (!query) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
+        return;
+      }
+      const pattern = req.query.pattern ? String(req.query.pattern) : null;
+      const max = Math.min(Number(req.query.max) || 200, 1000);
+      const searchProject = getProject(db, req.params.id);
+      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
+        pattern,
+        max,
+        metadata: searchProject?.metadata,
+      });
+      res.json({ query, matches });
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
+  // share menu can hand the user the actual files they uploaded — e.g. the
+  // imported `ui-design/` folder — instead of a one-file snapshot of the
+  // rendered HTML. `root` scopes the archive to a subdirectory; without
+  // it, the whole project is packed.
+  app.get('/api/projects/:id/archive', async (req, res) => {
+    try {
+      const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      const project = getProject(db, req.params.id);
+      const { buffer, baseName } = await buildProjectArchive(
+        PROJECTS_DIR,
+        req.params.id,
+        root,
+        project?.metadata,
+      );
+      const fallbackName = project?.name || req.params.id;
+      const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
+      const filename = `${fileSlug}.zip`;
+      // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
+      // `filename*=UTF-8''…` lets modern browsers pick up project names
+      // with non-ASCII characters (accents, CJK, etc.) without mojibake.
+      const asciiFallback =
+        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(buffer);
+    } catch (err) {
+      const code = err && err.code;
+      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  // Batch archive: accepts a list of file names and returns a ZIP of just
+  // those files. Used by the Design Files panel multi-select download.
+  app.post('/api/projects/:id/archive/batch', async (req, res) => {
+    try {
+      const { files } = req.body || {};
+      if (!Array.isArray(files) || files.length === 0) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
+        return;
+      }
+      const project = getProject(db, req.params.id);
+      const { buffer } = await buildBatchArchive(
+        PROJECTS_DIR,
+        req.params.id,
+        files,
+        project?.metadata,
+      );
+      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
+      const filename = `${fileSlug}.zip`;
+      const asciiFallback =
+        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(buffer);
+    } catch (err) {
+      const code = err && err.code;
+      const status = code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  // Preflight for the raw file route. Current artifact fetches are simple GETs
+  // (no preflight needed), but an explicit handler future-proofs the route if
+  // artifacts ever add custom request headers.
+  app.options('/api/projects/:id/raw/*', (req, res) => {
+    if (req.headers.origin === 'null') {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    res.sendStatus(204);
+  });
+
+  app.get('/api/projects/:id/raw/*', async (req, res) => {
+    try {
+      const relPath = req.params[0];
+      const project = getProject(db, req.params.id);
+
+      // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
+      // data: URIs, file://, and some sandboxed iframes also send null — all are
+      // local-only callers, so this is safe. Real cross-origin sites send a real
+      // origin and remain blocked by the browser's same-origin policy.
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+
+      // Stat the file first without buffering so we can choose the right path.
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        req.params.id,
+        relPath,
+        project?.metadata,
+      );
+
+      // Stream video/audio with HTTP 206 Partial Content support (RFC 7233).
+      // The inline VideoViewer and AudioViewer components fetch this route;
+      // browsers require Accept-Ranges + 206 responses to play and seek media.
+      if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Type', meta.mime);
+
+        if (meta.size === 0) {
+          res.setHeader('Content-Length', '0');
+          return res.status(200).end();
+        }
+
+        const range = parseByteRange(req.headers.range, meta.size);
+
+        if (range === 'unsatisfiable') {
+          res.setHeader('Content-Range', `bytes */${meta.size}`);
+          return res.status(416).end();
+        }
+
+        let start, end, statusCode;
+        if (range) {
+          ({ start, end } = range);
+          statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+        } else {
+          start = 0;
+          end = meta.size - 1;
+          statusCode = 200;
+          res.setHeader('Content-Length', String(meta.size));
+        }
+
+        res.status(statusCode);
+        const stream = fs.createReadStream(meta.filePath, { start, end });
+        stream.on('error', (streamErr) => {
+          if (!res.headersSent) {
+            sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
+          } else {
+            res.destroy(streamErr);
+          }
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      // Non-media files: read into buffer (existing behaviour).
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      res.type(file.mime).send(file.buffer);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/export/pdf', async (req, res) => {
+    if (typeof desktopPdfExporter !== 'function') {
+      return sendApiError(
+        res,
+        501,
+        'UPSTREAM_UNAVAILABLE',
+        'desktop PDF export is only available in the desktop runtime',
+      );
+    }
+    try {
+      const { fileName, title, deck } = req.body || {};
+      if (typeof fileName !== 'string' || fileName.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      const input = await buildDesktopPdfExportInput({
+        daemonUrl,
+        deck: deck === true,
+        fileName,
+        projectId: req.params.id,
+        projectsRoot: PROJECTS_DIR,
+        title: typeof title === 'string' ? title : undefined,
+      });
+      const result = await desktopPdfExporter(input);
+      res.json(result);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.delete('/api/projects/:id/raw/*', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0], project?.metadata);
+      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
+      const body = { ok: true };
+      res.json(body);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      const file = await readProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        req.params.name,
+        project?.metadata,
+      );
+      const preview = await buildDocumentPreview(file);
+      res.json(preview);
+    } catch (err) {
+      const status =
+        err && err.statusCode
+          ? err.statusCode
+          : err && err.code === 'ENOENT'
+            ? 404
+            : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        err?.message || 'preview unavailable',
+      );
+    }
+  });
+
+  app.get('/api/projects/:id/files/*', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+
+      // Resolve path + stat without reading content so we can decide whether
+      // to stream (media) or buffer (everything else).
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        req.params.id,
+        req.params[0],
+        project?.metadata,
+      );
+
+      // Stream video and audio with HTTP 206 Partial Content support (RFC 7233).
+      // Browsers require range responses to seek/scrub media; buffering the
+      // whole file into memory would also block the process on large videos.
+      if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Type', meta.mime);
+
+        // Empty file edge case: nothing to range over.
+        if (meta.size === 0) {
+          res.setHeader('Content-Length', '0');
+          return res.status(200).end();
+        }
+
+        const range = parseByteRange(req.headers.range, meta.size);
+
+        if (range === 'unsatisfiable') {
+          res.setHeader('Content-Range', `bytes */${meta.size}`);
+          return res.status(416).end();
+        }
+
+        let start, end, statusCode;
+        if (range) {
+          ({ start, end } = range);
+          statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+        } else {
+          start = 0;
+          end = meta.size - 1;
+          statusCode = 200;
+          res.setHeader('Content-Length', String(meta.size));
+        }
+
+        res.status(statusCode);
+        const stream = fs.createReadStream(meta.filePath, { start, end });
+        stream.on('error', (streamErr) => {
+          if (!res.headersSent) {
+            sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
+          } else {
+            res.destroy(streamErr);
+          }
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      // Non-media files: read into buffer (existing behaviour).
+      const file = await readProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        req.params[0],
+        project?.metadata,
+      );
+      res.type(file.mime).send(file.buffer);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  // Two ways to upload: multipart for binary files (images), and JSON
+  // {name, content, encoding} for sketches and pasted text. The frontend
+  // uses both depending on the file source.
+  app.post(
+    '/api/projects/:id/files',
+    (req, res, next) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) return sendMulterError(res, err);
+        next();
+      });
+    },
+    async (req, res) => {
+      try {
+        const uploadProject = getProject(db, req.params.id);
+        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
+        if (req.file) {
+          const buf = await fs.promises.readFile(req.file.path);
+          const desiredName = sanitizeName(
+            req.body?.name || req.file.originalname,
+          );
+          const meta = await writeProjectFile(
+            PROJECTS_DIR,
+            req.params.id,
+            desiredName,
+            buf,
+            {},
+            uploadProject?.metadata,
+          );
+          fs.promises.unlink(req.file.path).catch(() => {});
+          /** @type {import('@open-design/contracts').ProjectFileResponse} */
+          const body = { file: meta };
+          return res.json(body);
+        }
+        const { name, content, encoding, artifactManifest } = req.body || {};
+        if (typeof name !== 'string' || typeof content !== 'string') {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'name and content required',
+          );
+        }
+        if (artifactManifest !== undefined && artifactManifest !== null) {
+          const validated = validateArtifactManifestInput(
+            artifactManifest,
+            name,
+          );
+          if (!validated.ok) {
+            return sendApiError(
+              res,
+              400,
+              'BAD_REQUEST',
+              `invalid artifactManifest: ${validated.error}`,
+            );
+          }
+        }
+        const buf =
+          encoding === 'base64'
+            ? Buffer.from(content, 'base64')
+            : Buffer.from(content, 'utf8');
+        const meta = await writeProjectFile(
+          PROJECTS_DIR,
+          req.params.id,
+          name,
+          buf,
+          { artifactManifest },
+          uploadProject?.metadata,
+        );
+        /** @type {import('@open-design/contracts').ProjectFileResponse} */
+        const body = { file: meta };
+        res.json(body);
+      } catch (err) {
+        sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
+      }
+    },
+  );
+
+  app.post('/api/projects/:id/files/rename', async (req, res) => {
+    try {
+      const { from, to } = req.body || {};
+      if (typeof from !== 'string' || typeof to !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
+      }
+      const project = getProject(db, req.params.id);
+      const result = await renameProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        from,
+        to,
+        project?.metadata,
+      );
+      /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
+      const body = result;
+      res.json(body);
+    } catch (err) {
+      const code = err && err.code;
+      if (code === 'ENOENT') {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+      }
+      if (code === 'EEXIST') {
+        return sendApiError(res, 409, 'FILE_EXISTS', 'target file already exists');
+      }
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
+  app.delete('/api/projects/:id/files/:name', async (req, res) => {
+    try {
+      const delProject = getProject(db, req.params.id);
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
+      const body = { ok: true };
+      res.json(body);
+    } catch (err) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  app.get('/api/media/models', (_req, res) => {
+    res.json({
+      providers: MEDIA_PROVIDERS,
+      image: IMAGE_MODELS,
+      video: VIDEO_MODELS,
+      audio: AUDIO_MODELS_BY_KIND,
+      aspects: MEDIA_ASPECTS,
+      videoLengthsSec: VIDEO_LENGTHS_SEC,
+      audioDurationsSec: AUDIO_DURATIONS_SEC,
+    });
+  });
+
+  app.get('/api/media/config', async (_req, res) => {
+    try {
+      const cfg = await readMaskedConfig(PROJECT_ROOT);
+      res.json(cfg);
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.put('/api/media/config', async (req, res) => {
+    try {
+      const cfg = await writeConfig(PROJECT_ROOT, req.body);
+      res.json(cfg);
+    } catch (err) {
+      const status = typeof err?.status === 'number' ? err.status : 400;
+      res
+        .status(status)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get('/api/app-config', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      res.json({ config });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.put('/api/app-config', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
+      orbitService.configure(config.orbit);
+      res.json({ config });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get('/api/orbit/status', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      res.json(await orbitService.status());
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.post('/api/orbit/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      res.json(await orbitService.start('manual'));
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  // ---------- routines ----------
+
+  // Map a DB row to the Routine contract shape. Schedule lives in
+  // schedule_json (the canonical form); when missing (rows written before
+  // that column existed) we fall back to the legacy daily-only kind/value
+  // pair with UTC as a safe default timezone.
+  function routineDbRowToContract(row, latestRun) {
+    let schedule;
+    if (row.scheduleJson) {
+      try {
+        schedule = JSON.parse(row.scheduleJson);
+      } catch {
+        schedule = null;
+      }
+    }
+    if (!schedule) {
+      // Legacy fallback: daily HH:MM in UTC.
+      schedule = {
+        kind: row.scheduleKind || 'daily',
+        time: row.scheduleValue || '09:00',
+        timezone: 'UTC',
+      };
+    }
+    const target = row.projectMode === 'reuse' && row.projectId
+      ? { mode: 'reuse', projectId: row.projectId }
+      : { mode: 'create_each_run' };
+    let lastRun = null;
+    if (latestRun) {
+      lastRun = {
+        runId: latestRun.id,
+        status: latestRun.status,
+        trigger: latestRun.trigger,
+        startedAt: latestRun.startedAt,
+        ...(latestRun.completedAt == null ? {} : { completedAt: latestRun.completedAt }),
+        projectId: latestRun.projectId,
+        conversationId: latestRun.conversationId,
+        agentRunId: latestRun.agentRunId,
+        ...(latestRun.summary ? { summary: latestRun.summary } : {}),
+      };
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      prompt: row.prompt,
+      schedule,
+      target,
+      skillId: row.skillId ?? null,
+      agentId: row.agentId ?? null,
+      enabled: row.enabled === true || row.enabled === 1,
+      nextRunAt: null,
+      lastRun,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Serialize a schedule into the kind/value/json triple stored in SQLite.
+  // schedule_value carries a kind-specific stringified scalar (minute for
+  // hourly, "HH:MM" for time-of-day kinds) so existing simple queries keep
+  // working; schedule_json is the authoritative form.
+  function scheduleToDbCols(schedule) {
+    const json = JSON.stringify(schedule);
+    let value = '';
+    if (schedule.kind === 'hourly') value = String(schedule.minute);
+    else if (schedule.kind === 'weekly') value = `${schedule.weekday}:${schedule.time}`;
+    else value = schedule.time;
+    return { scheduleKind: schedule.kind, scheduleValue: value, scheduleJson: json };
+  }
+
+  function routineFromDb(id) {
+    const row = getRoutine(db, id);
+    if (!row) return null;
+    const latest = getLatestRoutineRun(db, id);
+    const contract = routineDbRowToContract(row, latest);
+    const nextDate = routineService?.nextRunAt(id) ?? null;
+    contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+    return contract;
+  }
+
+  function validateRoutineInput(body, partial) {
+    if (!body || typeof body !== 'object') {
+      throw new Error('Request body must be an object');
+    }
+    if (!partial || body.name !== undefined) {
+      if (typeof body.name !== 'string' || !body.name.trim()) {
+        throw new Error('name is required');
+      }
+    }
+    if (!partial || body.prompt !== undefined) {
+      if (typeof body.prompt !== 'string' || !body.prompt.trim()) {
+        throw new Error('prompt is required');
+      }
+    }
+    if (!partial || body.schedule !== undefined) {
+      validateRoutineSchedule(body.schedule);
+    }
+    if (!partial || body.target !== undefined) {
+      validateRoutineTarget(body.target);
+      if (body.target.mode === 'reuse') {
+        const proj = getProject(db, body.target.projectId);
+        if (!proj) throw new Error(`target project ${body.target.projectId} not found`);
+      }
+    }
+  }
+
+  // Each routine fire: resolve agent, mint (or reuse) project + a fresh
+  // conversation, prime the user/assistant message pair, and dispatch into
+  // startChatRun. Returns the in-flight handles so the service can persist
+  // the routine_run row and observe completion.
+  routineService.setRunHandler(async ({ routine, trigger, startedAt, runId }) => {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    let agentId = routine.agentId
+      || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
+    if (!agentId) {
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      agentId = agents.find((agent) => agent.available)?.id ?? null;
+    }
+    if (!agentId) {
+      throw new Error('No available agent is configured. Choose an agent in Settings first.');
+    }
+
+    const now = startedAt;
+    const stamp = formatLocalProjectTimestamp(new Date(now).toISOString());
+
+    let projectId;
+    let projectName;
+    if (routine.target.mode === 'reuse') {
+      const proj = getProject(db, routine.target.projectId);
+      if (!proj) throw new Error(`Routine target project ${routine.target.projectId} not found`);
+      projectId = proj.id;
+      projectName = proj.name;
+    } else {
+      projectId = `routine-${randomUUID()}`;
+      projectName = `${routine.name} · ${stamp}`;
+      insertProject(db, {
+        id: projectId,
+        name: projectName,
+        skillId: routine.skillId ?? null,
+        designSystemId: appConfig.designSystemId ?? null,
+        pendingPrompt: null,
+        metadata: { kind: 'other', intent: 'routine', routineId: routine.id, trigger },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const conversationId = `routine-conv-${randomUUID()}`;
+    const conversationTitle = routine.target.mode === 'reuse'
+      ? `${routine.name} · ${stamp}`
+      : projectName;
+    insertConversation(db, {
+      id: conversationId,
+      projectId,
+      title: conversationTitle,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const assistantMessageId = `routine-assistant-${randomUUID()}`;
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: `routine-${trigger}-${randomUUID()}`,
+      agentId,
+    });
+    upsertMessage(db, conversationId, {
+      id: `routine-user-${run.id}`,
+      role: 'user',
+      content: routine.prompt,
+    });
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId,
+      agentName: getAgentDef(agentId)?.name ?? agentId,
+      runId: run.id,
+      runStatus: 'queued',
+      startedAt: now,
+    });
+
+    const modelPrefs = appConfig.agentModels?.[agentId] ?? {};
+    design.runs.start(run, () => startChatRun({
+      agentId,
+      projectId,
+      conversationId: run.conversationId,
+      assistantMessageId: run.assistantMessageId,
+      clientRequestId: run.clientRequestId,
+      skillId: routine.skillId ?? null,
+      designSystemId: appConfig.designSystemId ?? null,
+      model: modelPrefs.model ?? null,
+      reasoning: modelPrefs.reasoning ?? null,
+      message: routine.prompt,
+      systemPrompt: [
+        `You are running an unattended scheduled routine named "${routine.name}".`,
+        'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. Pick reasonable defaults and finish the task.',
+      ].join('\n'),
+    }, run));
+
+    const completion = (async () => {
+      const finalStatus = await design.runs.wait(run);
+      db.prepare(`UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`)
+        .run(finalStatus.status, Date.now(), assistantMessageId);
+      return {
+        status: finalStatus.status,
+        summary: `Routine "${routine.name}" ${finalStatus.status}.`,
+      };
+    })();
+
+    return { projectId, conversationId, agentRunId: run.id, completion };
+  });
+
+  app.get('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const rows = listRoutines(db);
+      const routines = rows.map((row) => {
+        const latest = getLatestRoutineRun(db, row.id);
+        const contract = routineDbRowToContract(row, latest);
+        const nextDate = routineService?.nextRunAt(row.id) ?? null;
+        contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+        return contract;
+      });
+      res.json({ routines });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.post('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const body = req.body || {};
+      validateRoutineInput(body, false);
+      const id = `routine-${randomUUID()}`;
+      const now = Date.now();
+      const scheduleCols = scheduleToDbCols(body.schedule);
+      insertRoutine(db, {
+        id,
+        name: body.name.trim(),
+        prompt: body.prompt,
+        ...scheduleCols,
+        projectMode: body.target.mode,
+        projectId: body.target.mode === 'reuse' ? body.target.projectId : null,
+        skillId: body.skillId ?? null,
+        agentId: body.agentId ?? null,
+        enabled: body.enabled !== false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      routineService?.rescheduleOne(id);
+      const routine = routineFromDb(id);
+      res.status(201).json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const routine = routineFromDb(req.params.id);
+    if (!routine) return res.status(404).json({ error: 'routine not found' });
+    res.json({ routine });
+  });
+
+  app.patch('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const body = req.body || {};
+      validateRoutineInput(body, true);
+      const patch = {};
+      if (body.name !== undefined) patch.name = body.name.trim();
+      if (body.prompt !== undefined) patch.prompt = body.prompt;
+      if (body.schedule !== undefined) {
+        const cols = scheduleToDbCols(body.schedule);
+        patch.scheduleKind = cols.scheduleKind;
+        patch.scheduleValue = cols.scheduleValue;
+        patch.scheduleJson = cols.scheduleJson;
+      }
+      if (body.target !== undefined) {
+        patch.projectMode = body.target.mode;
+        patch.projectId = body.target.mode === 'reuse' ? body.target.projectId : null;
+      }
+      if (body.skillId !== undefined) patch.skillId = body.skillId ?? null;
+      if (body.agentId !== undefined) patch.agentId = body.agentId ?? null;
+      if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+      updateRoutine(db, req.params.id, patch);
+      routineService?.rescheduleOne(req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.delete('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    routineService?.unschedule(req.params.id);
+    const removed = dbDeleteRoutine(db, req.params.id);
+    if (!removed) return res.status(404).json({ error: 'routine not found' });
+    res.status(204).end();
+  });
+
+  app.post('/api/routines/:id/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      if (!routineService) throw new Error('routine service unavailable');
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const start = await routineService.runNow(req.params.id);
+      const latest = getLatestRoutineRun(db, req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.status(202).json({
+        routine,
+        run: latest,
+        projectId: start.projectId,
+        conversationId: start.conversationId,
+        agentRunId: start.agentRunId,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id/runs', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const existing = getRoutine(db, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'routine not found' });
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const runs = listRoutineRuns(db, req.params.id, limit);
+    res.json({ runs });
+  });
+
+  // Native OS folder picker dialog. Returns { path: string | null }.
+  app.post('/api/dialog/open-folder', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const selected = await openNativeFolderDialog();
+      res.json({ path: selected });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.post('/api/projects/:id/media/generate', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({
+        error:
+          'cross-origin request rejected: media generation is restricted to the local UI / CLI',
+      });
+    }
+
+    try {
+      const projectId = req.params.id;
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+
+      const taskId = randomUUID();
+      const task = createMediaTask(db, taskId, projectId, {
+        surface: req.body?.surface,
+        model: req.body?.model,
+      });
+      console.error(
+        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
+          `surface=${req.body?.surface} ` +
+          `image=${req.body?.image ? 'yes' : 'no'} ` +
+          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
+      );
+
+      task.status = 'running';
+      persistMediaTask(db, task);
+      generateMedia({
+        projectRoot: PROJECT_ROOT,
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        surface: req.body?.surface,
+        model: req.body?.model,
+        prompt: req.body?.prompt,
+        output: req.body?.output,
+        aspect: req.body?.aspect,
+        length:
+          typeof req.body?.length === 'number' ? req.body.length : undefined,
+        duration:
+          typeof req.body?.duration === 'number'
+            ? req.body.duration
+            : undefined,
+        voice: req.body?.voice,
+        audioKind: req.body?.audioKind,
+        language: typeof req.body?.language === 'string' ? req.body.language : undefined,
+        compositionDir: req.body?.compositionDir,
+        image: req.body?.image,
+        onProgress: (line) => appendTaskProgress(db, task, line),
+      })
+        .then((meta) => {
+          task.status = 'done';
+          task.file = meta;
+          task.endedAt = Date.now();
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
+          console.error(
+            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
+              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+          );
+        })
+        .catch((err) => {
+          task.status = 'failed';
+          task.error = {
+            message: String(err && err.message ? err.message : err),
+            status: typeof err?.status === 'number' ? err.status : 400,
+            code: err?.code,
+          };
+          task.endedAt = Date.now();
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
+          console.error(
+            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
+              `message=${(task.error.message || '').slice(0, 240)}`,
+          );
+        });
+
+      res.status(202).json({
+        taskId,
+        status: task.status,
+        startedAt: task.startedAt,
+      });
+    } catch (err) {
+      const status = typeof err?.status === 'number' ? err.status : 400;
+      const code = err?.code;
+      const body = { error: String(err && err.message ? err.message : err) };
+      if (code) body.code = code;
+      res.status(status).json(body);
+    }
+  });
+
+  app.post('/api/research/search', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({
+        error:
+          'cross-origin request rejected: research search is restricted to the local UI / CLI',
+      });
+    }
+
+    try {
+      const result = await searchResearch({
+        projectRoot: PROJECT_ROOT,
+        query: req.body?.query,
+        maxSources:
+          typeof req.body?.maxSources === 'number'
+            ? req.body.maxSources
+            : undefined,
+        providers: Array.isArray(req.body?.providers)
+          ? req.body.providers
+          : undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      if (err instanceof ResearchError) {
+        return res.status(err.status).json({
+          error: { code: err.code, message: err.message },
+        });
+      }
+      res.status(500).json({
+        error: {
+          code: 'RESEARCH_FAILED',
+          message: String(err && err.message ? err.message : err),
+        },
+      });
+    }
+  });
+
+  app.post('/api/media/tasks/:id/wait', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const taskId = req.params.id;
+    const task = getLiveMediaTask(db, taskId);
+    if (!task) return res.status(404).json({ error: 'task not found' });
+
+    const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
+    const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
+      ? Number(req.body.timeoutMs)
+      : 25_000;
+    const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);
+
+    const respond = () => {
+      if (res.writableEnded) return;
+      res.json(mediaTaskSnapshot(task, since));
+    };
+
+    if (
+      MEDIA_TERMINAL_STATUSES.has(task.status) ||
+      task.progress.length > since
+    ) {
+      return respond();
+    }
+
+    let resolved = false;
+    const wake = () => {
+      if (resolved) return;
+      resolved = true;
+      task.waiters.delete(wake);
+      clearTimeout(timer);
+      respond();
+    };
+    task.waiters.add(wake);
+    const timer = setTimeout(wake, timeoutMs);
+    res.on('close', wake);
+  });
+
+  app.get('/api/projects/:id/media/tasks', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const projectId = req.params.id;
+    const includeDone =
+      req.query.includeDone === '1' || req.query.includeDone === 'true';
+    const tasks = listMediaTasksByProject(db, projectId, {
+      includeTerminal: includeDone,
+    }).map((t) => ({
+      taskId: t.id,
+      status: t.status,
+      startedAt: t.startedAt,
+      endedAt: t.endedAt,
+      elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
+      surface: t.surface,
+      model: t.model,
+      progress: t.progress.slice(-3),
+      progressCount: t.progress.length,
+      ...(t.status === 'done' ? { file: t.file } : {}),
+      ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
+    }));
+    tasks.sort((a, b) => b.startedAt - a.startedAt);
+    res.json({ tasks });
+  });
+
+  // Multi-file upload that the chat composer uses for paste/drop/picker.
+  // Files land flat in the project folder; the response carries the same
+  // metadata as listFiles so the client can stage them as ChatAttachments
+  // without a separate refetch.
+  app.post(
+    '/api/projects/:id/upload',
+    handleProjectUpload,
+    async (req, res) => {
+      try {
+        const incoming = Array.isArray(req.files) ? req.files : [];
+        const out = [];
+        for (const f of incoming) {
+          try {
+            const stat = await fs.promises.stat(f.path);
+            out.push({
+              name: f.filename,
+              path: f.filename,
+              size: stat.size,
+              mtime: stat.mtimeMs,
+              originalName: f.originalname,
+            });
+          } catch {
+            // skip files that vanished mid-flight
+          }
+        }
+        /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
+        const body = { files: out };
+        res.json(body);
+      } catch (err) {
+        sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
+      }
+    },
+  );
+
 
   const design = {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),

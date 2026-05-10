@@ -29,7 +29,8 @@ type CloudflarePagesConfigHints = {
 };
 type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
 type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
-type DeployOptions = { metadata?: unknown; hookScriptUrl?: string; providerId?: DeployProviderId };
+type LinkedPageInfo = { path: string; deployedName: string };
+type DeployOptions = { metadata?: unknown; hookScriptUrl?: string; providerId?: DeployProviderId; linkedPages?: LinkedPageInfo[] };
 type CloudflarePagesDeploySelection = { zoneId: string; zoneName: string; domainPrefix: string; hostname: string };
 type CloudflareDnsRecord = JsonObject & { id?: string; type?: string; name?: string; content?: string; comment?: string };
 type DeployLinkStatus = 'ready' | 'protected' | 'failed' | 'link-delayed';
@@ -242,8 +243,9 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   const entry = await readProjectFile(projectsRoot, projectId, entryPath, options.metadata);
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
+  const linkedPages = options.linkedPages ?? [];
   const deployHtml = injectDeployHookScript(
-    rewriteEntryHtmlReferences(html, entryBase),
+    rewriteEntryHtmlReferences(html, entryBase, linkedPages),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
   );
   const files = new Map<string, DeployFile>();
@@ -274,6 +276,46 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     : [];
   for (const manifestRef of supportingFiles) {
     pending.push({ ref: manifestRef, base: entryBase });
+  }
+
+  // Read each linked page now and push its asset references into the
+  // pending queue so the BFS naturally deduplicates shared assets.
+  // Deploy-ready HTML is written after the BFS so we only pay the
+  // rewrite cost once per page.
+  const linkedPageMetas: { info: LinkedPageInfo; deployHtml: string; mime: string }[] = [];
+  for (const page of linkedPages) {
+    if (visited.has(page.path)) continue;
+    visited.add(page.path);
+
+    let pageFile;
+    try {
+      pageFile = await readProjectFile(projectsRoot, projectId, page.path, options.metadata);
+    } catch (err) {
+      if (isErrnoException(err) && err.code === 'ENOENT') {
+        missing.push(page.path);
+        continue;
+      }
+      invalid.push(page.path);
+      continue;
+    }
+    const pageHtml = pageFile.buffer.toString('utf8');
+    const pageBase = path.posix.dirname(page.path);
+
+    linkedPageMetas.push({
+      info: page,
+      deployHtml: injectDeployHookScript(
+        rewriteEntryHtmlReferences(pageHtml, pageBase, linkedPages),
+        options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
+      ),
+      mime: pageFile.mime,
+    });
+
+    for (const ref of extractHtmlReferences(pageHtml)) {
+      pending.push({ ref, base: pageBase });
+    }
+    for (const ref of extractInlineCssReferences(pageHtml)) {
+      pending.push({ ref, base: pageBase });
+    }
   }
 
   while (pending.length > 0) {
@@ -315,6 +357,33 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
       for (const ref of extractCssReferences(projectFile.buffer.toString('utf8'))) {
         pending.push({ ref, base: cssBase });
       }
+    }
+  }
+
+  // Write each linked page into the file set with its own deployed
+  // name (not renamed to index.html). The entry page is already
+  // registered above.
+  for (const meta of linkedPageMetas) {
+    files.set(meta.info.deployedName, {
+      file: meta.info.deployedName,
+      data: Buffer.from(meta.deployHtml, 'utf8'),
+      contentType: meta.mime,
+      sourcePath: meta.info.path,
+    });
+  }
+
+  // When linked pages are present, include a vercel.json that
+  // enables clean URLs so /pricing resolves pricing.html without
+  // the extension. Only added for Vercel deploys — Cloudflare Pages
+  // handles clean URLs differently.
+  if (linkedPages.length > 0) {
+    const existing = files.get('vercel.json');
+    if (!existing) {
+      files.set('vercel.json', {
+        file: 'vercel.json',
+        data: Buffer.from(JSON.stringify({ cleanUrls: true }), 'utf8'),
+        contentType: 'application/json',
+      });
     }
   }
 
@@ -1214,7 +1283,38 @@ export function resolveReferencedPath(raw: unknown, baseDir: string) {
   return path.posix.normalize(path.posix.join(baseDir || '.', withoutQuery));
 }
 
-export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
+
+// Find <a href> links pointing to local .html / .htm files in the
+// project. Skips external URLs, anchors, javascript:, mailto:, and
+// absolute paths. Returns deduplicated LinkedPageInfo records so the
+// deploy planner can include those pages and rewrite their
+// navigation links to clean URLs.
+export function collectLinkedHtmlPages(html: string, baseDir: string): LinkedPageInfo[] {
+  const pages = new Map<string, LinkedPageInfo>();
+  for (const tag of parseHtmlTags(String(html))) {
+    if (tag.name !== 'a') continue;
+    const attrs = parseHtmlAttributes(tag.attrs);
+    const href = attrs.get('href');
+    if (!href || typeof href !== 'string') continue;
+    const hrefStr: string = href;
+    if (isExternalUrl(hrefStr)) continue;
+    if (hrefStr.startsWith('#') || hrefStr.startsWith('javascript:') || hrefStr.startsWith('mailto:')) continue;
+    if (hrefStr.startsWith('/')) continue;
+    if (!/\.html?$/i.test(hrefStr.split('?')[0]?.split('#')[0] ?? '')) continue;
+    const resolved = resolveReferencedPath(hrefStr, baseDir);
+    if (!resolved) continue;
+    const key = resolved.toLowerCase();
+    if (pages.has(key)) continue;
+    const basename = path.posix.basename(resolved);
+    pages.set(key, {
+      path: resolved,
+      deployedName: basename,
+    });
+  }
+  return Array.from(pages.values());
+}
+
+export function rewriteEntryHtmlReferences(html: string, baseDir: string, linkedPages?: LinkedPageInfo[]) {
   const source = String(html);
   // Compute raw-text ranges against the input first so the style-block
   // pre-pass can skip `<style>...</style>` text that lives inside a
@@ -1238,7 +1338,7 @@ export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
     if (isOffsetInRanges(offset, rawTextRanges)) return tag;
     const tagName = String(rawName).toLowerCase();
     const attrs = parseHtmlAttributes(rawAttrs);
-    return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir)}>`;
+    return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir, linkedPages)}>`;
   });
 }
 
@@ -1533,7 +1633,7 @@ function parseHtmlAttributes(rawAttrs: string) {
   return attrs;
 }
 
-function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string) {
+function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string, linkedPages?: LinkedPageInfo[]) {
   const shouldRewriteHref = shouldCollectHref(tagName, attrs);
   return String(rawAttrs).replace(
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
@@ -1548,7 +1648,29 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
       ) {
         return full;
       }
-      if (name === 'href' && !shouldRewriteHref) return full;
+      if (name === 'href' && !shouldRewriteHref) {
+        // Treat <a href> navigation links to linked pages as deploy
+        // references so they get rewritten to clean URLs.
+        if (tagName === 'a' && linkedPages && linkedPages.length > 0) {
+          const aHref = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
+          const cleanHref = aHref.split('?')[0].split('#')[0];
+          const suffix = aHref.slice(cleanHref.length);
+          const resolved = resolveReferencedPath(cleanHref, baseDir);
+          if (resolved) {
+            const match = linkedPages.find(
+              (lp) => lp.path.toLowerCase() === resolved.toLowerCase(),
+            );
+            if (match) {
+              const cleanPath = `/${path.posix.basename(resolved, path.posix.extname(resolved))}`;
+              const nextValue = `${cleanPath}${suffix}`;
+              if (doubleQuoted !== undefined) return `${rawName}${equals}"${nextValue}"`;
+              if (singleQuoted !== undefined) return `${rawName}${equals}'${nextValue}'`;
+              return `${rawName}${equals}${nextValue}`;
+            }
+          }
+        }
+        return full;
+      }
 
       const value = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
       let nextValue;
