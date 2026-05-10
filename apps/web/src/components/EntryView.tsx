@@ -504,7 +504,7 @@ export function EntryView({
                     : '🐾'
                   : '🐾'}
               </span>
-              <span>
+              <span className="foot-pill-pet-label">
                 {config.pet?.adopted
                   ? t('pet.changePet')
                   : t('pet.adoptCallout')}

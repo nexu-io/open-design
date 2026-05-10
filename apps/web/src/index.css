@@ -4701,6 +4701,7 @@ code {
 .entry-side-foot-row .foot-pill-follow {
   flex: 0 1 auto;
 }
+.entry-side-foot-row .foot-pill-pet-label,
 .entry-side-foot-row .foot-pill-follow-label {
   flex: 1 1 auto;
   min-width: 0;
