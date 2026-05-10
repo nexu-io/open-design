@@ -554,12 +554,28 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const languageRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
   // single Save button at the bottom instead of hunting for the inner one.
   useEffect(() => {
     setActiveSection(initialSection);
   }, [initialSection]);
+
+  useEffect(() => {
+    const node = contentRef.current;
+    if (node) {
+      node.scrollTop = 0;
+      node.scrollLeft = 0;
+    }
+    const activeItem = sidebarRef.current?.querySelector<HTMLElement>(
+      '.settings-nav-item.active',
+    );
+    if (activeItem && typeof activeItem.scrollIntoView === 'function') {
+      activeItem.scrollIntoView({ block: 'nearest' });
+    }
+  }, [activeSection]);
 
   // Tests pin a result against the unsaved draft. Once the user edits any
   // field that feeds into the test, the result is no longer trustworthy —
@@ -1107,7 +1123,7 @@ export function SettingsDialog({
         </header>
 
         <div className="modal-body">
-          <aside className="settings-sidebar" aria-label="Settings sections">
+          <aside ref={sidebarRef} className="settings-sidebar" aria-label="Settings sections">
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
@@ -1241,7 +1257,7 @@ export function SettingsDialog({
               </span>
             </button>
           </aside>
-          <div className="settings-content">
+          <div ref={contentRef} className="settings-content">
           {activeSection === 'execution' ? (
             <>
               <div
