@@ -97,6 +97,18 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toMatch(/only when this turn wrote a new canonical HTML/i);
       expect(prompt).toMatch(/only edited an existing HTML file/i);
     });
+
+    it('also keeps deck-mode prompts free of the unconditional emit line (DECK_FRAMEWORK_DIRECTIVE only stacks for deck projects)', () => {
+      // The plain composeSystemPrompt({}) call does NOT include
+      // DECK_FRAMEWORK_DIRECTIVE; that directive only stacks when
+      // `skillMode === 'deck'` or `metadata.kind === 'deck'`. So if
+      // deck-framework.ts:327 ever regresses back to "Emit single <artifact>",
+      // a no-args negative assertion is a false negative — exercise the deck
+      // path explicitly here.
+      const deckPrompt = composeSystemPrompt({ skillMode: 'deck' });
+      expect(deckPrompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
+      expect(deckPrompt).toMatch(/Emit single <artifact> if a new canonical deck HTML/i);
+    });
   });
 
   describe('connectedExternalMcp directive', () => {
