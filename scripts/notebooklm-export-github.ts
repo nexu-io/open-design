@@ -101,7 +101,8 @@ function runGhIssueJson(repo: string, state: IssueStateFlag, limit: number): GhI
 
   try {
     const out = execFileSync("gh", [...baseArgs, "--json", jsonFields.join(",")], {
-      encoding: "utf8"
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
     });
     const parsed = JSON.parse(out) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -111,6 +112,7 @@ function runGhIssueJson(repo: string, state: IssueStateFlag, limit: number): GhI
     // exports to continue by treating issues as an empty bucket.
     const stderr = (e?.stderr ? String(e.stderr) : "") + (e?.message ? `\n${String(e.message)}` : "");
     if (/disabled issues/i.test(stderr) || /has disabled issues/i.test(stderr)) return [];
+    if (e?.stderr) process.stderr.write(String(e.stderr));
     throw e;
   }
 }
