@@ -262,11 +262,18 @@ export function ProjectView({
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
+  // bumps on file-changed SSE events, live_artifact* events, and the
+  // chat streaming-completion edge so the staleness chip stays in sync
+  // with the underlying mtimes / conversation updatedAt as the user
+  // keeps working post-finalize. The hook treats it as a dep and
+  // recomputes whenever it changes.
+  const [designMdRefreshKey, setDesignMdRefreshKey] = useState(0);
   // ----- Continue in CLI / Finalize design package wiring (#451) -----
   // The toast surface is shared between Finalize errors and the
   // success/fallback toasts emitted from handleContinueInCli.
   const projectDetail = useProjectDetail(project.id);
-  const designMdState = useDesignMdState(project.id);
+  const designMdState = useDesignMdState(project.id, designMdRefreshKey);
   const finalize = useFinalizeProject(project.id);
   const terminalLauncher = useTerminalLaunch();
   const [projectActionsToast, setProjectActionsToast] = useState<{
@@ -451,6 +458,12 @@ export function ProjectView({
     prevStreamingRef.current = streaming;
     if (!(wasStreaming && !streaming)) return;
 
+    // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
+    // settled — conversation updatedAt almost certainly moved, so
+    // recompute DESIGN.md staleness even when the turn produced no
+    // file mutations or live artifacts.
+    setDesignMdRefreshKey((n) => n + 1);
+
     const last = [...messages].reverse().find((m) => m.role === 'assistant');
     if (!last) return;
     const status = last.runStatus;
@@ -565,6 +578,10 @@ export function ProjectView({
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
       setFilesRefresh((n) => n + 1);
+      // Round 7 (mrcfps): file mutations are the dominant staleness
+      // signal post-finalize — bump the refresh key so DESIGN.md
+      // staleness recomputes against the new mtimes.
+      setDesignMdRefreshKey((n) => n + 1);
       return;
     }
     const agentEvent = projectEventToAgentEvent(evt);
@@ -572,6 +589,9 @@ export function ProjectView({
     setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
     void refreshLiveArtifacts();
     onProjectsRefresh();
+    // Live artifact events come from chat-turn-emitted artifacts; they
+    // also imply the conversation transcript changed.
+    setDesignMdRefreshKey((n) => n + 1);
   }, [onProjectsRefresh, refreshLiveArtifacts]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 

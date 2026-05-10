@@ -47,7 +47,17 @@ const INITIAL: Omit<DesignMdState, 'refresh'> = {
   error: null,
 };
 
-export function useDesignMdState(projectId: string): DesignMdState {
+/**
+ * @param projectId — the active project to inspect.
+ * @param refreshKey — bumps from the caller cause `compute()` to re-run
+ *   without an explicit `refresh()` call. Round 7 (mrcfps @ line 131):
+ *   ProjectView wires this to a counter that ticks on file-changed SSE
+ *   events, live_artifact* events, and the streaming-completion edge so
+ *   the staleness chip stays in sync with the underlying mtimes /
+ *   conversation updatedAt as the user keeps working post-finalize.
+ *   Defaults to 0 so call sites that don't need invalidation can omit it.
+ */
+export function useDesignMdState(projectId: string, refreshKey: number = 0): DesignMdState {
   const [state, setState] = useState<Omit<DesignMdState, 'refresh'>>(INITIAL);
 
   const compute = useCallback(
@@ -123,7 +133,11 @@ export function useDesignMdState(projectId: string): DesignMdState {
         }));
       }
     },
-    [projectId],
+    // refreshKey is intentionally a dep so caller-driven invalidation
+    // (file-changed events, chat-turn completion) re-runs compute without
+    // forcing the caller to drill `refresh()` through props. Round 7
+    // (mrcfps @ useDesignMdState.ts:131).
+    [projectId, refreshKey],
   );
 
   useEffect(() => {

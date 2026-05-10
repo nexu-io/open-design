@@ -146,6 +146,61 @@ describe('useDesignMdState', () => {
     expect(result.current.isStale).toBe(true);
     expect(result.current.staleReason).toBe('conversations-newer');
   });
+
+  // Round 7 (mrcfps @ useDesignMdState.ts:131): the hook used to only
+  // recompute on mount or explicit refresh(). ProjectView now bumps a
+  // counter on file-changed / live_artifact / streaming-completion
+  // events; the hook accepts that counter as a `refreshKey` arg and
+  // recomputes when it changes, no remount required.
+  it('flips stale state after a refreshKey bump without remounting', async () => {
+    const olderMs = FRESH_GENERATED_MS - 60_000;
+    const newerMs = FRESH_GENERATED_MS + 60_000;
+
+    let fileMtime = olderMs;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.endsWith('/files')) {
+        return new Response(
+          JSON.stringify({
+            files: [
+              { name: 'DESIGN.md', size: 100, mtime: FRESH_GENERATED_MS, kind: 'text', mime: 'text/markdown' },
+              { name: 'index.html', size: 10, mtime: fileMtime, kind: 'html', mime: 'text/html' },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/conversations')) {
+        return new Response(JSON.stringify({ conversations: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/files/DESIGN.md')) {
+        return new Response(FRESH_DESIGN_MD, {
+          status: 200,
+          headers: { 'content-type': 'text/markdown' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const { result, rerender } = renderHook(
+      ({ refreshKey }) => useDesignMdState('p1', refreshKey),
+      { initialProps: { refreshKey: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isStale).toBe(false);
+
+    // Simulate a post-finalize file mutation: index.html mtime moves
+    // past generatedAt, then ProjectView bumps the refresh key.
+    fileMtime = newerMs;
+    rerender({ refreshKey: 1 });
+
+    await waitFor(() => expect(result.current.isStale).toBe(true));
+    expect(result.current.staleReason).toBe('files-newer');
+  });
 });
 
 describe('computeStale', () => {
