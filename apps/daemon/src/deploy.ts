@@ -1301,7 +1301,6 @@ export function collectLinkedHtmlPages(html: string, baseDir: string): LinkedPag
     const hrefStr: string = href;
     if (isExternalUrl(hrefStr)) continue;
     if (hrefStr.startsWith('#') || hrefStr.startsWith('javascript:') || hrefStr.startsWith('mailto:')) continue;
-    if (hrefStr.startsWith('/')) continue;
     if (!/\.html?$/i.test(hrefStr.split('?')[0]?.split('#')[0] ?? '')) continue;
     const resolved = resolveReferencedPath(hrefStr, baseDir);
     if (!resolved) continue;
