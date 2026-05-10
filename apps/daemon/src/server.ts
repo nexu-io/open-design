@@ -1819,7 +1819,7 @@ export interface StartServerOptions {
   returnServer?: boolean;
 }
 
-const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
