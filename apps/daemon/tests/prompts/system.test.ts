@@ -77,6 +77,26 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toMatch(/complete `?<!doctype html>`?/i);
       expect(prompt).toMatch(/summar(y|ies)|prose|file path/i);
     });
+
+    it('does not carry unconditional "Emit single <artifact>" / "emit a single <artifact>" lines anywhere in the composed prompt', () => {
+      const prompt = composeSystemPrompt({});
+      // Discovery layer used to carry hard-rule unconditional emit instructions
+      // (plan template step 9, default arc Turn 3+ recap, deck workflow step 7).
+      // Those must be conditional now — otherwise the no-emit exception in the
+      // base prompt is overridden by the higher-priority discovery layer.
+      expect(prompt).not.toMatch(/^- 9\.\s+Emit single <artifact>\s*$/m);
+      expect(prompt).not.toMatch(/emit a single `?<artifact>`?\.\s*$/m);
+      expect(prompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
+    });
+
+    it('declares artifact-emission conditionality at the dominant discovery layer', () => {
+      const prompt = composeSystemPrompt({});
+      // The base prompt's "When NOT to emit" section is at lower precedence than
+      // DISCOVERY_AND_PHILOSOPHY, so the exception itself must be stated once at
+      // the dominant layer (near RULE 3) — not only back-pointed.
+      expect(prompt).toMatch(/only when this turn wrote a new canonical HTML/i);
+      expect(prompt).toMatch(/only edited an existing HTML file/i);
+    });
   });
 
   describe('connectedExternalMcp directive', () => {
