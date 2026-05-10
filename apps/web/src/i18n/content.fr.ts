@@ -285,6 +285,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   wise: 'Transfert d’argent. Accent vert lumineux, amical et clair.',
   'x-ai': 'Lab IA d’Elon Musk. Look monochrome strict, minimalisme futuriste.',
   xiaohongshu: 'Plateforme social lifestyle UGC. Rouge de marque singulier, radius généreux, content-first.',
+  wechat: 'Mini programmes WeChat. Vert frais (#07C160), PingFang SC, UI à bulle de chat, barre d’onglets.',
   zapier: 'Plateforme d’automatisation. Orange chaud, amical, porté par l’illustration.',
 };
 
@@ -304,6 +305,7 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Fintech & Crypto': 'Fintech & crypto',
   'E-Commerce & Retail': 'E-commerce & retail',
   'Media & Consumer': 'Médias & grand public',
+  'Social & Messaging': 'Réseaux sociaux & messageries',
   Automotive: 'Automobile',
   'Editorial & Print': 'Éditorial & print',
   'Editorial · Studio': 'Éditorial · Studio',
@@ -316,6 +318,7 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
@@ -367,13 +370,20 @@ export const FR_SKILL_IDS_WITH_EN_FALLBACK = [
   // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
+  '8-bit-orbit-video-template',
+  'digits-fintech-swiss-template',
+  'field-notes-editorial-template',
+  'html-ppt-retro-quarterly-review',
+  'swiss-user-research-video-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'swiss-creative-mode-template',
   'github-dashboard',
+  'after-hours-editorial-template',
 ] as const;
 
 export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
@@ -447,6 +457,7 @@ export const FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'urdu',
   'vibrant',
   'vintage',
+  'wechat',
   'webex',
 ] as const;
 

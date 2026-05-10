@@ -285,6 +285,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   wise: 'Денежные переводы. Яркий зеленый акцент, дружелюбно и ясно.',
   'x-ai': 'AI-лаборатория Илона Маска. Строгий монохром, футуристический минимализм.',
   xiaohongshu: 'Lifestyle UGC-соцсеть. Единый фирменный красный, щедрый радиус, content-first.',
+  wechat: 'Мини-программы WeChat. Свежий зелёный (#07C160), PingFang SC, UI с чат-пузырями, панель вкладок.',
   zapier: 'Платформа автоматизации. Теплый оранжевый, дружелюбная иллюстративная подача.',
 };
 
@@ -304,6 +305,7 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Fintech & Crypto': 'Финтех и крипто',
   'E-Commerce & Retail': 'Электронная коммерция и ритейл',
   'Media & Consumer': 'Медиа и потребительские',
+  'Social & Messaging': 'Социальные сети и мессенджеры',
   Automotive: 'Автомобили',
   'Editorial & Print': 'Редакционные и печатные',
   'Editorial · Studio': 'Редакционная студия',
@@ -316,6 +318,7 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
@@ -367,13 +370,20 @@ export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
   // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
+  '8-bit-orbit-video-template',
+  'digits-fintech-swiss-template',
+  'field-notes-editorial-template',
+  'html-ppt-retro-quarterly-review',
+  'swiss-user-research-video-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'swiss-creative-mode-template',
   'github-dashboard',
+  'after-hours-editorial-template',
 ] as const;
 
 export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
@@ -447,6 +457,7 @@ export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'urdu',
   'vibrant',
   'vintage',
+  'wechat',
   'webex',
 ] as const;
 
