@@ -1,0 +1,253 @@
+:root {
+    --canvas: #0a0a0a;
+    --paper: #f5f0e8;
+    --fire: #FF4F1A;
+    --fire-dim: rgba(255, 79, 26, 0.15);
+    --ink: #1a1a1a;
+    --muted: rgba(245, 240, 232, 0.45);
+    --font-display: 'Playfair Display', 'Noto Serif SC', Georgia, serif;
+    --font-body: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap');
+
+body, html {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100vh;
+    background-color: var(--canvas);
+    color: var(--paper);
+    font-family: var(--font-body);
+    overflow: hidden;
+}
+
+/* ── Deck & Slide scaffold ────────── */
+.phantom-deck { width: 100%; height: 100%; position: relative; }
+
+.phantom-slide {
+    width: 100%; height: 100%;
+    position: absolute; top: 0; left: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center; align-items: flex-start;
+    padding: 6rem 8rem;
+    box-sizing: border-box;
+}
+.phantom-slide.active { display: flex; }
+
+/* ── Typography: editorial serif hierarchy ────── */
+h1 {
+    font-family: var(--font-display);
+    font-size: 6rem;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -2px;
+    color: var(--paper);
+    margin: 0 0 1.5rem 0;
+    max-width: 70%;
+}
+h1 em {
+    font-style: italic;
+    color: var(--fire);
+}
+
+h2 {
+    font-family: var(--font-display);
+    font-size: 3.2rem;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--paper);
+    margin: 0 0 1.5rem 0;
+}
+
+h3 {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--fire);
+    margin: 0 0 1rem 0;
+}
+
+p, .body-text {
+    font-size: 1.15rem;
+    font-weight: 300;
+    line-height: 1.75;
+    color: var(--muted);
+    max-width: 600px;
+}
+
+/* ── The fire-orange horizontal rule (signature element) ── */
+.fire-rule {
+    width: 60px; height: 4px;
+    background: var(--fire);
+    border: none;
+    margin: 2rem 0;
+    box-shadow: 0 0 20px rgba(255, 79, 26, 0.4);
+}
+
+/* ── Broadside banner: full-width newspaper headline lockup ── */
+.broadside-banner {
+    width: 100%;
+    border-top: 3px solid var(--paper);
+    border-bottom: 1px solid rgba(245, 240, 232, 0.15);
+    padding: 1.5rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 3rem;
+}
+.broadside-banner .edition {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.broadside-banner .date {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 0.9rem;
+    color: var(--fire);
+}
+
+/* ── Pull-quote (big italic serif) ── */
+.pull-quote {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 2.8rem;
+    line-height: 1.3;
+    color: var(--paper);
+    border-left: 4px solid var(--fire);
+    padding-left: 2rem;
+    margin: 2rem 0;
+    max-width: 700px;
+}
+.pull-quote .attribution {
+    display: block;
+    font-family: var(--font-body);
+    font-style: normal;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 1rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* ── Stat lockup (huge number + label) ── */
+.stat-row {
+    display: flex;
+    gap: 4rem;
+    margin: 2rem 0;
+}
+.stat-item { text-align: left; }
+.stat-item .number {
+    font-family: var(--font-display);
+    font-size: 5rem;
+    font-weight: 900;
+    color: var(--fire);
+    line-height: 1;
+}
+.stat-item .label {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--muted);
+    margin-top: 0.5rem;
+}
+
+/* ── Two-column layout ── */
+.col-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    width: 100%;
+}
+
+/* ── Bilingual text (EN big, CN small) ── */
+.bilingual-label {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 0.5rem;
+}
+
+/* ── Image / 3D model slot ── */
+.hero-asset {
+    max-width: 100%; height: 280px;
+    object-fit: contain;
+    margin: 1.5rem 0;
+    cursor: pointer;
+    mix-blend-mode: screen;
+}
+
+/* ── Chart container ── */
+.chart-container {
+    margin: 2rem 0;
+    border: 1px solid rgba(245, 240, 232, 0.08);
+    border-radius: 4px;
+    padding: 1.5rem;
+}
+
+/* ── Editable indicators ── */
+.editable-text { cursor: text; outline: none; border-bottom: 1px solid transparent; transition: border-color 0.3s; }
+.editable-text:hover { border-bottom-color: var(--fire); }
+.editable-img { cursor: pointer; transition: filter 0.3s; }
+.editable-img:hover { filter: brightness(1.15) drop-shadow(0 0 15px rgba(255,79,26,0.3)); }
+
+/* ── Page counter ── */
+.page-counter {
+    position: fixed;
+    bottom: 2rem; right: 3rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    z-index: 100;
+}
+
+/* ── Navigation ── */
+.nav-btn {
+    position: fixed; top: 50%; z-index: 100;
+    background: none; border: 1px solid rgba(245,240,232,0.2);
+    color: var(--paper); font-size: 1.5rem;
+    width: 48px; height: 48px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex; align-items: center; justify-content: center;
+}
+.nav-btn:hover { border-color: var(--fire); color: var(--fire); background: var(--fire-dim); }
+.nav-prev { left: 1.5rem; }
+.nav-next { right: 1.5rem; }
+
+/* ── Export button ── */
+.export-btn {
+    position: fixed; bottom: 2rem; left: 3rem; z-index: 100;
+    background: transparent;
+    border: 1px solid rgba(245, 240, 232, 0.2);
+    color: var(--paper);
+    padding: 0.5rem 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.export-btn:hover { border-color: var(--fire); color: var(--fire); }
+
+/* ── Footer branding ── */
+.footer-brand {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%; transform: translateX(-50%);
+    font-size: 0.65rem;
+    color: rgba(245,240,232,0.25);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    z-index: 50;
+}

@@ -11,7 +11,7 @@
   python3 bgm-generate.py --topic "主题" --duration 60 --output-dir ./output/
 """
 
-import argparse, base64, json, os, sys, time
+import argparse, base64, json, os, sys, time, subprocess
 from pathlib import Path
 
 try:
@@ -52,13 +52,13 @@ def auto_mood(topic):
             return mood
     return "epic"
 
-def gen_silent_wav(dur, path):
-    import wave
-    sr = 44100
-    frames = int(sr * dur)
-    with wave.open(path, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
-        w.writeframes(b"\x00\x00" * frames)
+def gen_silent_mp3(dur, path):
+    """使用 ffmpeg 生成静默 mp3"""
+    cmd = [
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", 
+        "-t", str(dur), "-c:a", "libmp3lame", "-b:a", "128k", path
+    ]
+    subprocess.run(cmd, capture_output=True)
 
 def call_google_lyria(prompt, duration, api_key):
     """调用 Google Lyria (lyria-3-pro-preview)"""
@@ -201,9 +201,9 @@ def main():
             f.write(audio_bytes)
         print(f"✅ BGM 已就位: {bgm_path.name}")
     else:
-        bgm_path = out / "bgm.wav"
-        gen_silent_wav(a.duration, str(bgm_path))
-        print("❌ 已回退至静默音频")
+        bgm_path = out / "bgm.mp3"
+        gen_silent_mp3(a.duration, str(bgm_path))
+        print("❌ 已回退至静默音频 (bgm.mp3)")
 
     with open(out / "bgm_b64.txt", "w") as f:
         f.write(base64.b64encode(audio_bytes if audio_bytes else b"").decode())

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, os, subprocess, json, threading, socket, http.server
+import argparse, os, subprocess, json, threading, socket, http.server, shutil
 from pathlib import Path
 import time
 
@@ -17,9 +17,11 @@ def main():
     html_path = os.path.abspath(a.html)
     output_path = os.path.abspath(a.output)
     temp_dir = Path(output_path).parent / "frames"
+    
+    # 安全删除旧帧目录
     if temp_dir.exists():
-        subprocess.run(["rm", "-rf", str(temp_dir)])
-    temp_dir.mkdir(exist_ok=True)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. 启动本地代理 (确保根目录能覆盖到 HTML 与 node_modules 资源)
     port = find_free_port()
@@ -95,7 +97,7 @@ module.paths.push('SKILL_DIR/node_modules');
     for (let i = 0; i < totalFrames; i++) {
         const currentTime = i / fps;
         await page.evaluate((t) => {
-            if (window.renderOneFrame) window.renderOneFrame(t);
+            if (window.renderFrame) window.renderFrame(t);
         }, currentTime);
         
         const framePath = path.join(outputDir, `frame_${String(i).padStart(5, '0')}.png`);
@@ -117,7 +119,7 @@ module.paths.push('SKILL_DIR/node_modules');
     try:
         subprocess.run(["node", str(recorder_js), target_url, str(duration), str(temp_dir)], check=True)
         
-        # 5. FFmpeg 合成
+        # 5. FFmpeg 合成 (补回 TTS 3s 偏移量)
         print(f"🚀 正在进行音画合成...")
         tts_path = Path(root_dir) / "audio" / "merged_tts.wav"
         bgm_path = Path(root_dir) / "audio" / "bgm.mp3"
@@ -128,7 +130,7 @@ module.paths.push('SKILL_DIR/node_modules');
             "-i", str(temp_dir / "frame_%05d.png"),
             "-i", str(tts_path),
             "-i", str(bgm_path),
-            "-filter_complex", "[1:a]volume=1.0[v1]; [2:a]volume=0.4[v2]; [v1][v2]amix=inputs=2:duration=first[a]",
+            "-filter_complex", "[1:a]adelay=3000|3000[v1]; [2:a]volume=0.4[v2]; [v1][v2]amix=inputs=2:duration=first[a]",
             "-map", "0:v", "-map", "[a]",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
             "-shortest",

@@ -83,9 +83,10 @@ def generate_single_tts(
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
-            "audioConfig": {
-                "voice": cfg["voice_name"],
-                "audioEncoding": "PCM_48000"
+            "speechConfig": {
+                "voiceConfig": {
+                    "predefinedVoice": cfg["voice_name"]
+                }
             }
         },
     }

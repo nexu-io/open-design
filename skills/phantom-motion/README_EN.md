@@ -13,7 +13,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-8.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/Version-9.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
     <img src="https://img.shields.io/badge/License-Apache_2.0-success.svg?style=for-the-badge" alt="License">
     <img src="https://img.shields.io/badge/AI_Agent-Claude_Code_/_Gemini-blue.svg?style=for-the-badge" alt="AI Agent">
     <img src="https://img.shields.io/badge/Stack-Three.js_|_GSAP-black.svg?style=for-the-badge" alt="Stack">
@@ -22,7 +22,7 @@
 </div>
 
 <div align="center">
-  <img src="./assets/phantom-motion-poster.jpg" width="100%" alt="Phantom Motion Poster">
+  <img src="./assets/phantom-motion-poster-v2.jpg" width="100%" alt="Phantom Motion Poster">
 </div>
 
 ---
@@ -31,10 +31,13 @@
 
 Code animations on the market are often "stiff element translations" with "highly robotic narration." **Phantom Motion** was born to end this by combining directorial restraint with graphics perfection in an AI agent:
 
-- **🎙️ Audio-First Engine**: Generates sound before drawing visuals. Utilizes TTS to obtain an absolute timeline, enabling GSAP `Duck & Swell` (BGM automatically yielding to vocals) for microsecond audio-visual synchronization.
+- **🎙️ Audio-First Engine**: Generates sound before drawing visuals. Utilizes TTS to obtain an absolute timeline, enabling GSAP `Duck & Swell` (BGM automatically yielding to vocals) for microsecond audio-visual synchronization. Supports Gemini 3.1 Flash TTS latest API schema.
 - **🎥 Script-Driven Cinematic Camera Rig**: Strictly prohibits random camera flying! Built-in classic cinematic camera movements. The LLM schedules the 3D camera precisely using GSAP tracking proxy technology based on script emotion.
-- **🏛️ 3D Heritage & Hologram Engine**: Directly supports GLTF/GLB high-poly PBR model loading and one-click switching to `Hologram Mode` (purple glowing mesh perspective), perfectly deducing the collision of cultural heritage and modern technology.
+- **🏛️ 3D Heritage & Hologram Engine**: Directly supports GLTF/GLB high-poly PBR model loading and one-click switching to `Hologram Mode` (glowing mesh perspective). Supports precision 30FPS/60FPS physical-grade frame recording.
 - **📊 Advanced Data Visualization Engine**: Discards frame-dropping chart libraries, using `D3.js + GSAP` to map real data into high-end smooth curves (Spline) with dynamic growth animations synchronized with narration.
+- **🏷️ SVGL Brand Library Integration**: Native integration with SVGL API. By just providing a well-known brand name (like GitHub, OpenAI), AI automatically downloads and inlines its HD vector SVG Logo.
+- **✨ AetherViz Interactive Architecture (V9.0)**: Newly introduced hybrid coordinate system and glass-morphism control panels, enabling seamless transition from static presentation to a 3D interactive lab mode with draggable parameters.
+- **📚 Haute Couture Deck Templates (V9.0)**: Built-in 6 Phantom Deck templates matching top-tier commercial aesthetics (including Neo-Brutalist, Dark Editorial styles), perfectly covering scenarios from academic defenses to Silicon Valley pitches.
 - **🚫 0 Copyright & Legal Risks**: All core effects are composed of native WebGL, Three.js Shaders, and open-source libraries. Refusing any closed-source paid plugins, the generated MP4 videos belong 100% to the creators.
 
 ---
@@ -48,7 +51,7 @@ phantom-motion/
 ├── scripts/                # Core engine scripts (TTS generation, BGM generation, HTML assembly)
 ├── tests/                  
 │   └── xingji/             # "Qian Xuesen Trajectory" complete animation example & static assets
-├── SKILL.md                # Core agent logic system instruction library (System Prompt V6.0)
+├── SKILL.md                # Core agent logic system instruction library (System Prompt V9.0)
 ├── logo.svg                # Dynamic SVG Logo
 ├── README.md               # Chinese Documentation
 └── README_EN.md            # English Documentation
@@ -95,7 +98,7 @@ Phantom Motion is designed as an extremely elegant CLI agent Skill. It can be mo
 
 ## 🎬 Showcase: Masterpiece Prompts
 
-If you want to experience the extreme power of the V6.0 engine, directly copy the following 5 **"God-level Director Prompts"** to your agent:
+If you want to experience the extreme power of the V9.0 engine, directly copy the following 5 **"God-level Director Prompts"** to your agent:
 
 <details>
 <summary><b>♟️ Script 01: "God's Move" (30s · Fast-paced & Epic)</b></summary>
@@ -129,15 +132,14 @@ If you want to experience the extreme power of the V6.0 engine, directly copy th
 > **[Last 3s] Outro**: Line peaks into highlight, then linearly fades to black."
 </details>
 
-<details>
+<details open>
 <summary><b>🪐 Script 04: "Sky Orbit: Qian Xuesen Trajectory" (90s · Hardcore Sci-Fi)</b></summary>
 
 <div align="center">
-  <a href="https://github.com/Pixelxzen/phantom-motion/blob/main/tests/xingji/output_1080p_16_9_SD.mp4">
-    <img src="./tests/xingji/xingji-cover.png" alt="Sky Orbit 1080P Demo" width="100%">
-  </a>
+  <video src="https://github.com/user-attachments/assets/8c353bea-9410-4e16-80dc-2528f7ce583d" width="100%" poster="./tests/xingji/xingji-cover.png" controls muted loop playsinline autoplay>
+  </video>
   <br>
-  <p><i>(Official 1080P Landscape Render. Click the cover image above to go to the playback page and experience the epic texture of GPGPU particles and Charon's voice)</i></p>
+  <p><i>(Official 1080P Landscape Render. Experience the epic texture of GPGPU particles and Charon's voice)</i></p>
 </div>
 
 > "Call max scientific computation, create a 90s hardcore popular science of Qian Xuesen trajectory (Boost-glide).

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Phantom Deck - Minimal Academic</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div class="phantom-deck">
+    
+    <!-- Slide 1: Title -->
+    <div class="phantom-slide">
+        <div class="editorial-panel">
+            <h1 class="slide-title">The Structure of<br>Information</h1>
+            <p class="slide-subtitle">A synthesis of user research, synthesis, and longform academic formatting for the modern presenter.</p>
+        </div>
+    </div>
+
+    <!-- Slide 2: 2D Line Chart (D3) -->
+    <div class="phantom-slide">
+        <h2 class="slide-heading">Empirical Findings</h2>
+        <div class="chart-container" id="chart-academic" style="width: 800px; height: 400px; position: relative;"></div>
+    </div>
+
+    <!-- Slide 3: 3D Wireframe Bar Chart (Three.js) -->
+    <div class="phantom-slide" style="align-items: center; text-align: center; padding-top: 10%;">
+        <div class="chart-container-3d" id="chart-3d-wireframe" style="width: 100vw; height: 100vh; position: absolute; top:0; left:0; z-index:-1;"></div>
+        <div class="editorial-panel" style="border: none; background: rgba(252, 251, 248, 0.9); padding: 2rem;">
+            <h2 class="slide-heading">Volumetric Analysis</h2>
+            <p class="slide-text">Three-dimensional topology of abstract data sets.</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- GSAP Animations Configuration -->
+<script>
+window.slideAnimations = window.slideAnimations || {};
+
+// Slide 0: Title Animation
+window.slideAnimations[0] = {
+    create: function() {
+        const tl = gsap.timeline();
+        tl.from(".slide-title", { y: 30, opacity: 0, duration: 1.2, ease: "power2.out" })
+          .from(".slide-subtitle", { y: 20, opacity: 0, duration: 1.2, ease: "power2.out" }, "-=0.8")
+          .from(".editorial-panel", { borderLeftColor: "transparent", duration: 1 }, 0);
+        return tl;
+    }
+};
+
+// Slide 1: D3 Line Chart Animation (Minimalist Ink)
+window.slideAnimations[1] = {
+    create: function() {
+        const tl = gsap.timeline();
+        const data = [10, 25, 40, 20, 60, 45, 90, 80, 110];
+        const container = document.getElementById('chart-academic');
+        if(!container) return tl;
+        container.innerHTML = ''; 
+        
+        const width = 800, height = 400;
+        const margin = {top: 20, right: 20, bottom: 30, left: 40};
+        const innerWidth = width - margin.left - margin.right;
+        const innerHeight = height - margin.top - margin.bottom;
+        
+        const x = d3.scaleLinear().domain([0, data.length - 1]).range([0, innerWidth]);
+        const y = d3.scaleLinear().domain([0, d3.max(data)]).range([innerHeight, 0]);
+        
+        // Add axes
+        const svg = d3.select(container).append("svg").attr("width", width).attr("height", height).append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+        
+        svg.append("g")
+           .attr("transform", `translate(0,${innerHeight})`)
+           .call(d3.axisBottom(x).ticks(data.length).tickFormat(i => `Q${i+1}`))
+           .attr("opacity", 0)
+           .attr("class", "x-axis");
+           
+        svg.append("g")
+           .call(d3.axisLeft(y).ticks(5))
+           .attr("opacity", 0)
+           .attr("class", "y-axis");
+
+        const lineGen = d3.line().x((d, i) => x(i)).y(d => y(d)).curve(d3.curveMonotoneX);
+            
+        const linePath = svg.append("path").datum(data).attr("class", "chart-line").attr("fill", "none").attr("stroke", "var(--accent-color)").attr("stroke-width", 2).attr("d", lineGen);
+            
+        const totalLength = linePath.node().getTotalLength();
+        linePath.attr("stroke-dasharray", totalLength).attr("stroke-dashoffset", totalLength);
+                
+        tl.to([".x-axis", ".y-axis"], { opacity: 1, duration: 1, ease: "power1.inOut" })
+          .to(linePath.node(), { strokeDashoffset: 0, duration: 2.5, ease: "power2.inOut" }, "-=0.5");
+        
+        return tl;
+    }
+};
+
+// Slide 2: Three.js 3D Wireframe Chart
+window.slideAnimations[2] = {
+    create: function() {
+        const tl = gsap.timeline();
+        const container = document.getElementById('chart-3d-wireframe');
+        if(!container) return tl;
+        container.innerHTML = ''; 
+        
+        const scene = new THREE.Scene();
+        // White background instead of transparent to match the theme
+        scene.background = new THREE.Color(0xfcfbf8);
+        scene.fog = new THREE.Fog(0xfcfbf8, 20, 60);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(20, 15, 30);
+        camera.lookAt(0, 0, 0);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Very soft lighting
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+        
+        const data = [15, 30, 10, 45, 20];
+        const spacing = 4;
+        const startX = -((data.length - 1) * spacing) / 2;
+        
+        // Minimalist Wireframe Material
+        const material = new THREE.MeshBasicMaterial({ color: 0x0047AB, wireframe: true, wireframeLinewidth: 1 });
+        const bars = [];
+        
+        data.forEach((val, i) => {
+            const geometry = new THREE.BoxGeometry(2, 0.1, 2);
+            // Add subtle segments to make wireframe more academic/architectural
+            const boxGeo = new THREE.BoxGeometry(2, 0.1, 2, 2, 1, 2);
+            const bar = new THREE.Mesh(boxGeo, material);
+            bar.position.set(startX + i * spacing, 0, 0);
+            scene.add(bar);
+            bars.push({ mesh: bar, targetHeight: val });
+        });
+        
+        const gridHelper = new THREE.GridHelper(50, 50, 0xdddddd, 0xeeeeee);
+        gridHelper.position.y = -0.05;
+        scene.add(gridHelper);
+        
+        const animProps = data.map(() => ({ scaleY: 0.01 }));
+        
+        bars.forEach((barObj, i) => {
+            tl.to(animProps[i], {
+                scaleY: barObj.targetHeight, duration: 2, ease: "power2.out",
+                onUpdate: () => {
+                    barObj.mesh.scale.y = animProps[i].scaleY * 10;
+                    barObj.mesh.position.y = (0.1 * animProps[i].scaleY * 10) / 2;
+                }
+            }, i * 0.1);
+        });
+        
+        tl.to(camera.position, { x: 30, duration: 8, ease: "none" }, 0);
+        tl.to(camera, { onUpdate: () => { camera.lookAt(0,0,0); } }, 0);
+        
+        const renderLoop = () => { renderer.render(scene, camera); };
+        gsap.ticker.add(renderLoop);
+        
+        tl.eventCallback("onComplete", () => {}); 
+        
+        return tl;
+    }
+};
+
+</script>
+
+</body>
+</html>

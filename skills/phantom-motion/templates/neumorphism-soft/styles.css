@@ -1,0 +1,101 @@
+:root {
+    --bg-color: #e0e5ec;
+    --text-primary: #4a5568;
+    --text-secondary: #718096;
+    --accent-color: #3182ce;
+    --shadow-light: #ffffff;
+    --shadow-dark: #a3b1c6;
+    --font-heading: 'Nunito', sans-serif;
+    --font-body: 'Nunito', sans-serif;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    overflow: hidden;
+}
+
+.phantom-deck {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.phantom-slide {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 5rem;
+    box-sizing: border-box;
+}
+
+/* Neumorphic Extruded Panel */
+.neu-panel {
+    background: var(--bg-color);
+    border-radius: 24px;
+    padding: 3rem 4rem;
+    box-shadow: 
+        9px 9px 16px var(--shadow-dark),
+        -9px -9px 16px var(--shadow-light);
+    text-align: center;
+}
+
+/* Neumorphic Inset Panel */
+.neu-inset {
+    background: var(--bg-color);
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 
+        inset 6px 6px 10px var(--shadow-dark),
+        inset -6px -6px 10px var(--shadow-light);
+}
+
+h1 {
+    font-family: var(--font-heading);
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    letter-spacing: -1px;
+}
+
+.apple-logo { width: 60px; height: 60px; margin: 0 auto 1rem auto; display: block; fill: var(--text-primary); cursor: pointer; transition: filter 0.3s; }
+.apple-logo:hover { filter: brightness(1.2); }
+
+h2 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+}
+
+p {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    max-width: 700px;
+    line-height: 1.6;
+    margin: 0 auto 1.5rem auto;
+}
+
+.chart-container {
+    margin-top: 2rem;
+}
+
+/* 2D Line Chart specific */
+.chart-line {
+    filter: drop-shadow(4px 4px 6px rgba(163, 177, 198, 0.6)) drop-shadow(-4px -4px 6px rgba(255, 255, 255, 0.8));
+}
+.chart-area {
+    fill: var(--accent-color);
+}

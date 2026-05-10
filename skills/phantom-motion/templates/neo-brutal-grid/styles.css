@@ -1,0 +1,208 @@
+:root {
+    --bone: #F5F0E6;
+    --ink: #1A1A1A;
+    --rose: #F472B6;
+    --sage: #86EFAC;
+    --amber: #FCD34D;
+    --border: 4px;
+    --shadow-offset: 6px;
+    --font-display: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
+    --font-body: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap');
+
+body, html {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100vh;
+    background-color: var(--bone);
+    color: var(--ink);
+    font-family: var(--font-body);
+    overflow: hidden;
+}
+
+/* ── Deck / Slide ── */
+.phantom-deck { width: 100%; height: 100%; position: relative; }
+
+.phantom-slide {
+    width: 100%; height: 100%;
+    position: absolute; top: 0; left: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center; align-items: flex-start;
+    padding: 4rem 5rem;
+    box-sizing: border-box;
+}
+.phantom-slide.active { display: flex; }
+
+/* ── Typography ── */
+h1 {
+    font-family: var(--font-display);
+    font-size: 5rem;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -1px;
+    margin: 0 0 1rem 0;
+    text-transform: uppercase;
+}
+
+h2 {
+    font-family: var(--font-display);
+    font-size: 2.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin: 0 0 1rem 0;
+}
+
+h3 {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--ink);
+    margin: 0 0 0.8rem 0;
+    opacity: 0.5;
+}
+
+p, .body-text {
+    font-size: 1.1rem;
+    font-weight: 400;
+    line-height: 1.7;
+    color: rgba(26, 26, 26, 0.65);
+    max-width: 560px;
+}
+
+/* ── Brutalist Card (signature component) ── */
+.brutal-card {
+    background: white;
+    border: var(--border) solid var(--ink);
+    padding: 2rem 2.5rem;
+    position: relative;
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.brutal-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: calc(var(--shadow-offset) + 2px) calc(var(--shadow-offset) + 2px) 0 var(--ink);
+}
+
+/* Color variants */
+.brutal-card--rose { background: var(--rose); color: var(--ink); }
+.brutal-card--sage { background: var(--sage); color: var(--ink); }
+.brutal-card--amber { background: var(--amber); color: var(--ink); }
+.brutal-card--ink { background: var(--ink); color: var(--bone); }
+
+/* ── Highlight text marker ── */
+.marker-rose { background: var(--rose); padding: 0 6px; display: inline; }
+.marker-sage { background: var(--sage); padding: 0 6px; display: inline; }
+.marker-amber { background: var(--amber); padding: 0 6px; display: inline; }
+
+/* ── Grid layouts ── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; width: 100%; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; width: 100%; }
+
+/* ── Stat block ── */
+.stat-block {
+    text-align: left;
+}
+.stat-block .num {
+    font-family: var(--font-display);
+    font-size: 4rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.stat-block .lbl {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    opacity: 0.5;
+    margin-top: 0.3rem;
+}
+
+/* ── Pill tag ── */
+.pill {
+    display: inline-block;
+    padding: 0.35rem 1rem;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 0.3rem 0.3rem 0 0;
+}
+
+/* ── Divider ── */
+.brutal-divider {
+    width: 100%; height: var(--border);
+    background: var(--ink);
+    margin: 2rem 0;
+}
+
+/* ── Chart ── */
+.chart-container {
+    border: var(--border) solid var(--ink);
+    padding: 1.5rem;
+    background: white;
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+}
+
+/* ── Image slot ── */
+.hero-asset {
+    max-width: 100%; height: 240px;
+    object-fit: contain;
+    margin: 1rem 0;
+    cursor: pointer;
+}
+
+/* ── Editable ── */
+.editable-text { cursor: text; outline: none; border-bottom: 2px solid transparent; transition: border-color 0.2s; }
+.editable-text:hover { border-bottom-color: var(--rose); }
+
+/* ── Page counter ── */
+.page-counter {
+    position: fixed; bottom: 1.5rem; right: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem; color: rgba(26,26,26,0.35);
+    letter-spacing: 2px; z-index: 100;
+}
+
+/* ── Navigation ── */
+.nav-btn {
+    position: fixed; top: 50%; z-index: 100;
+    background: var(--bone);
+    border: var(--border) solid var(--ink);
+    color: var(--ink); font-size: 1.4rem;
+    width: 48px; height: 48px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: all 0.15s;
+}
+.nav-btn:hover { background: var(--rose); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+.nav-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+.nav-prev { left: 1rem; }
+.nav-next { right: 1rem; }
+
+/* ── Export ── */
+.export-btn {
+    position: fixed; bottom: 1.5rem; left: 2rem; z-index: 100;
+    background: var(--ink); color: var(--bone);
+    border: var(--border) solid var(--ink);
+    padding: 0.5rem 1.2rem;
+    font-family: var(--font-mono); font-size: 0.75rem;
+    letter-spacing: 2px; text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--rose);
+    transition: all 0.15s;
+}
+.export-btn:hover { box-shadow: 5px 5px 0 var(--rose); transform: translate(-2px, -2px); }
+
+/* ── Footer ── */
+.footer-brand {
+    position: fixed; bottom: 1.5rem;
+    left: 50%; transform: translateX(-50%);
+    font-size: 0.6rem; color: rgba(26,26,26,0.25);
+    letter-spacing: 3px; text-transform: uppercase; z-index: 50;
+}

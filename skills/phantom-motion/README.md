@@ -13,7 +13,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-8.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/Version-9.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
     <img src="https://img.shields.io/badge/License-Apache_2.0-success.svg?style=for-the-badge" alt="License">
     <img src="https://img.shields.io/badge/AI_Agent-Claude_Code_/_Gemini-blue.svg?style=for-the-badge" alt="AI Agent">
     <img src="https://img.shields.io/badge/Stack-Three.js_|_GSAP-black.svg?style=for-the-badge" alt="Stack">
@@ -22,7 +22,7 @@
 </div>
 
 <div align="center">
-  <img src="./assets/phantom-motion-poster.jpg" width="100%" alt="Phantom Motion Poster">
+  <img src="./assets/phantom-motion-poster-v2.jpg" width="100%" alt="Phantom Motion Poster">
 </div>
 
 ---
@@ -31,10 +31,15 @@
 
 市面上的代码动画往往是“生硬的元素平移”和“机器感极强的旁白”。**Phantom Motion** 的诞生是为了终结这一切，我们将导演的克制与图形学的极致结合到了 AI 智能体中：
 
-- **🎙️ Audio-First (音频优先) 引擎**：先生成声音，再画画面。利用 TTS 获取绝对时间轴，实现 GSAP `Duck & Swell`（BGM 随人声自动避让烘托），做到微秒级的音画同步。
+- **🎙️ Audio-First (音频优先) 引擎**：先生成声音，再画画面。利用 TTS 获取绝对时间轴，实现 GSAP `Duck & Swell`（BGM 随人声自动避让烘托），做到微秒级的音画同步。支持 Gemini 3.1 Flash TTS 最新 API 架构。
 - **🎥 剧本驱动的电影级 Camera Rig**：严禁摄像机乱飞！内置四大经典运镜（静态悬浮、深渊拉近、史诗环绕、焦点拉扯）。大模型根据剧本情感，通过 GSAP 轨道车替身技术，精确调度 3D 机位。
-- **🏛️ 3D 非遗与全息引擎**：直接支持 GLTF/GLB 外部高精 PBR 模型加载，并能一键切换至 `Hologram Mode`（紫苏色发光网格透视），完美演绎非遗与现代科技的碰撞。
+- **🏛️ 3D 非遗与全息引擎**：直接支持 GLTF/GLB 外部高精 PBR 模型加载，并能一键切换至 `Hologram Mode`（发光网格透视），支持精准的 30FPS/60FPS 物理级帧录制。
 - **📊 高级数据可视化引擎**：摒弃掉帧的传统图表库，采用 `D3.js + GSAP`，将真实数据映射为极具东方美学的高级平滑曲线（Spline），伴随旁白做动态生长动画。
+- **🏷️ SVGL 品牌库集成**：原生集成 SVGL 接口，支持只需提供知名品牌名称（如 GitHub, OpenAI），AI 即可自动下载并内联其高清矢量 SVG Logo。
+- **✨ AetherViz 交互架构 (V9.0)**：全新引入混合坐标系统与玻璃拟态控制面板，支持将静态展示无缝切换为具有 3D 拖拽、参数调节的交互式实验室模式。
+- **📚 高定幻灯片库 (V9.0)**：内置 10+ 套对标顶级商业美学的 Phantom Deck 模板（如新野兽派、极简虚空、赛博终端等），完美覆盖从学术答辩到硅谷路演的全部场景。
+- **✨ WYSIWYG 交互套件 (Phantom Edit)**：**[核心卖点]** 每一套 Phantom Deck 模板都原生支持“所见即所得”编辑。用户只需**双击任意文本**即可立即修改内容，且系统会根据当前模板风格提供差异化的视觉反馈（如发光边框、像素高亮等），失焦后自动保存，完美兼容 GSAP 动画时间轴。
+
 - **🚫 0 版权法务风险**：所有核心特效全部由原生 WebGL、Three.js Shader 和 开源协议库构成，拒绝任何闭源付费插件，生成的 MP4 视频 100% 归创作者所有。
 
 ---
@@ -48,7 +53,7 @@ phantom-motion/
 ├── scripts/                # 核心引擎脚本（TTS生成、BGM生成、HTML拼装等）
 ├── tests/                  
 │   └── xingji/             # 《苍穹之轨：钱学森弹道》 完整动画示例与静态资源
-├── SKILL.md                # 核心智能体底层逻辑系统指令库 (System Prompt V6.0)
+├── SKILL.md                # 核心智能体底层逻辑系统指令库 (System Prompt V9.0)
 ├── logo.svg                # 动态 SVG 徽标
 ├── README.md               # 中文文档
 └── README_EN.md            # 英文文档
@@ -95,7 +100,7 @@ Phantom Motion 被设计为一个极其优雅的 CLI 智能体 Skill。它可以
 
 ## 🎬 Showcase: 终极性能阅兵剧本库 (Masterpiece Prompts)
 
-如果你想体验 V6.0 引擎的极限威力，请直接复制以下 5 个**「神级导演提示词」**喂给你的智能体：
+如果你想体验 V9.0 引擎的极限威力，请直接复制以下 5 个**「神级导演提示词」**喂给你的智能体：
 
 <details>
 <summary><b>♟️ 剧本 01：《神之一手》（30秒 · 极速高燃）</b></summary>
@@ -129,15 +134,14 @@ Phantom Motion 被设计为一个极其优雅的 CLI 智能体 Skill。它可以
 > **[最后 3 秒] 极简片尾**：折线攀升至顶点化作高光，随后一切线性淡出至黑幕。"
 </details>
 
-<details>
+<details open>
 <summary><b>🪐 剧本 04：《苍穹之轨：钱学森弹道》（90秒 · 极致硬核科幻）</b></summary>
 
 <div align="center">
-  <a href="https://github.com/Pixelxzen/phantom-motion/blob/main/tests/xingji/output_1080p_16_9_SD.mp4">
-    <img src="./tests/xingji/xingji-cover.png" alt="苍穹之轨：钱学森弹道 1080P 演示" width="100%">
-  </a>
+  <video src="https://github.com/user-attachments/assets/8c353bea-9410-4e16-80dc-2528f7ce583d" width="100%" poster="./tests/xingji/xingji-cover.png" controls muted loop playsinline autoplay>
+  </video>
   <br>
-  <p><i>（官方 1080P 横屏渲染实测，点击上方封面图前往播放页面，感受 GPGPU 粒子与 Charon 音色的史诗质感）</i></p>
+  <p><i>（官方 1080P 横屏渲染实测，感受 GPGPU 粒子与 Charon 音色的史诗质感）</i></p>
 </div>
 
 > "调用最大科学算力，制作 90 秒的钱学森弹道（Boost-glide）硬核科普。

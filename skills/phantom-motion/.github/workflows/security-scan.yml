@@ -1,0 +1,53 @@
+name: "Security Scan & PR Check"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    # 针对其他网友的 PR 提交触发安全扫描
+    branches: [ "main" ]
+
+jobs:
+  security-audit:
+    name: Security & Malware Audit
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 1. 扫描硬编码的密钥和 API Keys
+    - name: Secret Scanning (TruffleHog)
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event.repository.default_branch }}
+        head: HEAD
+        extra_args: --debug --only-verified
+
+    # 2. 基础的 Node.js 依赖安全扫描
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: NPM Audit
+      run: npm audit --audit-level=high
+
+    # 3. 基础的 Python 依赖安全扫描
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Check Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+        # 使用 Bandit 扫描 Python 脚本中的潜在安全隐患
+        bandit -r scripts/ tests/ -ll -ii
+
+    - name: Final Approval Reminder
+      run: echo "自动安全扫描通过。请维护者 (紫苏子ACG) 进一步人工 Review 代码逻辑是否含有害/恶意行为，确认无误后方可 Merge。"

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Phantom Deck - Neumorphism Soft</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        .hero-asset { max-width: 100%; max-height: 400px; object-fit: contain; margin-bottom: 2rem; }
+    </style>
+</head>
+<body>
+
+<div class="phantom-deck">
+    
+    <!-- Slide 1: Title -->
+    <div class="phantom-slide">
+        <div class="neu-panel">
+            <h1 class="slide-title">Soft UI Dynamics</h1>
+            <p class="slide-subtitle">A playful, tactile, and thoroughly modern presentation experience.</p>
+        </div>
+    </div>
+
+    <!-- Slide 2: 2D Line Chart (D3) -->
+    <div class="phantom-slide">
+        <div class="neu-panel" style="padding: 2rem 3rem;">
+            <h2 class="slide-heading">User Growth</h2>
+            <div class="chart-container neu-inset" id="chart-neumorph" style="width: 700px; height: 350px; position: relative;"></div>
+        </div>
+    </div>
+
+    <!-- Slide 3: 3D Rubber Bar Chart (Three.js) -->
+    <div class="phantom-slide">
+        <div class="chart-container-3d" id="chart-3d-rubber" style="width: 100vw; height: 100vh; position: absolute; top:0; left:0; z-index:-1;"></div>
+        <div class="neu-panel" style="position: absolute; bottom: 8%; right: 8%; padding: 2rem; border-radius: 16px;">
+            <h2 class="slide-heading" style="font-size: 1.8rem; margin-bottom: 0.5rem;">Tangible Data</h2>
+            <p class="slide-text" style="font-size: 1rem; margin: 0;">Data structures extruded from the surface.</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- GSAP Animations Configuration -->
+<script>
+window.slideAnimations = window.slideAnimations || {};
+
+// Slide 0: Title Animation
+window.slideAnimations[0] = {
+    create: function() {
+        const tl = gsap.timeline();
+        tl.from(".neu-panel", { scale: 0.9, opacity: 0, duration: 1, ease: "back.out(1.5)" })
+          .from(".slide-title", { y: 20, opacity: 0, duration: 0.8, ease: "power2.out" }, "-=0.5")
+          .from(".slide-subtitle", { y: 20, opacity: 0, duration: 0.8, ease: "power2.out" }, "-=0.6");
+        return tl;
+    }
+};
+
+// Slide 1: D3 Line Chart Animation (Neumorphic)
+window.slideAnimations[1] = {
+    create: function() {
+        const tl = gsap.timeline();
+        const data = [10, 25, 15, 45, 30, 60, 45, 80, 90];
+        const container = document.getElementById('chart-neumorph');
+        if(!container) return tl;
+        container.innerHTML = ''; 
+        
+        const width = 700, height = 350;
+        const margin = {top: 20, right: 20, bottom: 20, left: 20};
+        const innerWidth = width - margin.left - margin.right;
+        const innerHeight = height - margin.top - margin.bottom;
+        
+        const x = d3.scaleLinear().domain([0, data.length - 1]).range([0, innerWidth]);
+        const y = d3.scaleLinear().domain([0, d3.max(data)]).range([innerHeight, 0]);
+        
+        const svg = d3.select(container).append("svg").attr("width", width).attr("height", height).append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+        
+        // Very soft area gradient
+        const defs = svg.append("defs");
+        const gradient = defs.append("linearGradient").attr("id", "area-grad").attr("x1", "0%").attr("y1", "0%").attr("x2", "0%").attr("y2", "100%");
+        gradient.append("stop").attr("offset", "0%").attr("stop-color", "var(--accent-color)").attr("stop-opacity", 0.2);
+        gradient.append("stop").attr("offset", "100%").attr("stop-color", "var(--accent-color)").attr("stop-opacity", 0);
+
+        const lineGen = d3.line().x((d, i) => x(i)).y(d => y(d)).curve(d3.curveCatmullRom.alpha(0.5));
+        const areaGen = d3.area().x((d, i) => x(i)).y0(innerHeight).y1(d => y(d)).curve(d3.curveCatmullRom.alpha(0.5));
+            
+        const areaPath = svg.append("path").datum(data).attr("class", "chart-area").attr("fill", "url(#area-grad)").attr("d", areaGen).attr("opacity", 0);
+        const linePath = svg.append("path").datum(data).attr("class", "chart-line").attr("fill", "none").attr("stroke", "var(--bg-color)").attr("stroke-width", 6).attr("d", lineGen);
+            
+        const totalLength = linePath.node().getTotalLength();
+        linePath.attr("stroke-dasharray", totalLength).attr("stroke-dashoffset", totalLength);
+                
+        // Animate panel first, then chart
+        tl.from(container.parentNode, { y: 30, opacity: 0, duration: 0.8, ease: "power2.out" })
+          .to(linePath.node(), { strokeDashoffset: 0, duration: 2.5, ease: "power3.inOut" }, "-=0.2")
+          .to(areaPath.node(), { opacity: 1, duration: 1.5, ease: "power2.out" }, "-=1.5");
+        
+        return tl;
+    }
+};
+
+// Slide 2: Three.js 3D Extruded Rubber Chart
+window.slideAnimations[2] = {
+    create: function() {
+        const tl = gsap.timeline();
+        const container = document.getElementById('chart-3d-rubber');
+        if(!container) return tl;
+        container.innerHTML = ''; 
+        
+        const scene = new THREE.Scene();
+        // Background matches exactly the neumorphic base color
+        scene.background = new THREE.Color(0xe0e5ec);
+        scene.fog = new THREE.Fog(0xe0e5ec, 30, 80);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(0, 25, 40);
+        camera.lookAt(0, 0, 0);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        // Soft shadows
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+        
+        // Lighting is critical for neumorphism: one bright light (top-left), one dark ambient
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(-20, 30, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // A secondary blueish light to simulate sky/environment reflection
+        const fillLight = new THREE.DirectionalLight(0xa3b1c6, 0.4);
+        fillLight.position.set(20, 10, -20);
+        scene.add(fillLight);
+        
+        const data = [15, 30, 10, 45, 20];
+        const spacing = 4;
+        const startX = -((data.length - 1) * spacing) / 2;
+        
+        // Rubber/Matte Plastic Material (same color as background)
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0xe0e5ec, 
+            roughness: 0.9,
+            metalness: 0.1 
+        });
+        
+        const bars = [];
+        
+        data.forEach((val, i) => {
+            // Rounded corners would be better but cylinder is an easy proxy for soft shapes
+            const geometry = new THREE.CylinderGeometry(1.5, 1.5, 0.1, 32);
+            const bar = new THREE.Mesh(geometry, material);
+            bar.castShadow = true;
+            bar.receiveShadow = true;
+            bar.position.set(startX + i * spacing, 0, 0);
+            scene.add(bar);
+            bars.push({ mesh: bar, targetHeight: val });
+        });
+        
+        // Floor that receives shadow
+        const floorGeo = new THREE.PlaneGeometry(200, 200);
+        const floor = new THREE.Mesh(floorGeo, material);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.05;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        const animProps = data.map(() => ({ scaleY: 0.01 }));
+        
+        // Animate Panel First
+        tl.from(".neu-panel", { y: 20, opacity: 0, duration: 1, ease: "power2.out" });
+
+        // Then bars
+        bars.forEach((barObj, i) => {
+            tl.to(animProps[i], {
+                scaleY: barObj.targetHeight, duration: 2.5, ease: "elastic.out(1, 0.6)",
+                onUpdate: () => {
+                    barObj.mesh.scale.y = animProps[i].scaleY * 10;
+                    barObj.mesh.position.y = (0.1 * animProps[i].scaleY * 10) / 2;
+                }
+            }, i * 0.15 + 0.5);
+        });
+        
+        // Gentle pan
+        tl.to(camera.position, { x: 15, z: 45, duration: 10, ease: "sine.inOut" }, 0);
+        tl.to(camera, { onUpdate: () => { camera.lookAt(0,0,0); } }, 0);
+        
+        const renderLoop = () => { renderer.render(scene, camera); };
+        gsap.ticker.add(renderLoop);
+        
+        tl.eventCallback("onComplete", () => {}); 
+        
+        return tl;
+    }
+};
+
+</script>
+
+</body>
+</html>

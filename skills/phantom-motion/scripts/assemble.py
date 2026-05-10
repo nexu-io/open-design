@@ -237,8 +237,9 @@ def main():
         f'<audio id="phantom-bgm" preload="auto" loop src="{bgm_uri}"></audio>\n'
     )
 
-    # 构建播放器脚本
-    player = PLAYER_JS.replace("__TIMINGS_JSON__", json.dumps(timings, ensure_ascii=False))
+    # 构建播放器脚本 (转义 </script> 以防止 XSS)
+    timings_json = json.dumps(timings, ensure_ascii=False).replace("</script>", "<\\/script>")
+    player = PLAYER_JS.replace("__TIMINGS_JSON__", timings_json)
 
     # 注入到 HTML
     if "</body>" in html:

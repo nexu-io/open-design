@@ -1,0 +1,267 @@
+:root {
+    --cream: #FBF7F0;
+    --ink: #1a1a2e;
+    --red: #E63946;
+    --sky: #4EA8DE;
+    --lemon: #FFD166;
+    --sakura: #FFB5C2;
+    --mint: #95D5B2;
+    --violet: #9B5DE5;
+    --stripe-width: 28px;
+    --font-display: 'Anton', 'Noto Sans SC', Impact, sans-serif;
+    --font-body: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400&display=swap');
+
+body, html {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100vh;
+    background-color: var(--cream);
+    color: var(--ink);
+    font-family: var(--font-body);
+    overflow: hidden;
+    /* subtle paper grain */
+    background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* ── Deck & Slide ────── */
+.phantom-deck { width: 100%; height: 100%; position: relative; }
+
+.phantom-slide {
+    width: 100%; height: 100%;
+    position: absolute; top: 0; left: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 4rem 5rem;
+    box-sizing: border-box;
+}
+.phantom-slide.active { display: flex; }
+
+/* ── Diagonal Rainbow Ribbon (signature visual) ── */
+.ribbon-stripe {
+    position: absolute;
+    width: var(--stripe-width);
+    height: 150%;
+    transform: rotate(-35deg);
+    z-index: 0;
+    opacity: 0.7;
+}
+.ribbon-stripe:nth-child(1) { background: var(--red); left: 5%; top: -20%; }
+.ribbon-stripe:nth-child(2) { background: var(--lemon); left: calc(5% + var(--stripe-width) + 4px); top: -20%; }
+.ribbon-stripe:nth-child(3) { background: var(--mint); left: calc(5% + (var(--stripe-width) + 4px) * 2); top: -20%; }
+.ribbon-stripe:nth-child(4) { background: var(--sky); left: calc(5% + (var(--stripe-width) + 4px) * 3); top: -20%; }
+.ribbon-stripe:nth-child(5) { background: var(--violet); left: calc(5% + (var(--stripe-width) + 4px) * 4); top: -20%; }
+
+/* ── Typography: bold condensed + playful body ── */
+h1 {
+    font-family: var(--font-display);
+    font-size: 5.5rem;
+    text-transform: uppercase;
+    line-height: 1;
+    letter-spacing: 2px;
+    color: var(--ink);
+    margin: 0 0 1rem 0;
+    position: relative;
+    z-index: 2;
+}
+
+h2 {
+    font-family: var(--font-display);
+    font-size: 3rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--ink);
+    margin: 0 0 1rem 0;
+    z-index: 2;
+    position: relative;
+}
+
+h3 {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--red);
+    z-index: 2;
+    position: relative;
+    margin: 0 0 0.8rem 0;
+}
+
+p, .body-text {
+    font-size: 1.05rem;
+    font-weight: 400;
+    line-height: 1.7;
+    color: rgba(26, 26, 46, 0.7);
+    max-width: 560px;
+    text-align: center;
+    z-index: 2;
+    position: relative;
+}
+
+/* ── JIS-style spec checkbox (signature element) ── */
+.spec-list {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0;
+    z-index: 2;
+    position: relative;
+}
+.spec-list li {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed rgba(26, 26, 46, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+.spec-list li::before {
+    content: '☑';
+    font-size: 1rem;
+    color: var(--red);
+}
+
+/* ── Cassette label card ── */
+.cassette-card {
+    background: white;
+    border: 3px solid var(--ink);
+    border-radius: 12px;
+    padding: 2.5rem 3rem;
+    position: relative;
+    z-index: 2;
+    box-shadow: 6px 6px 0 var(--ink);
+    max-width: 680px;
+    width: 100%;
+}
+.cassette-card .type-label {
+    position: absolute;
+    top: -12px; left: 24px;
+    background: var(--red);
+    color: white;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    padding: 4px 16px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+/* ── Color dot tags ── */
+.color-tags {
+    display: flex;
+    gap: 0.6rem;
+    margin: 1rem 0;
+    z-index: 2;
+    position: relative;
+}
+.color-tag {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+}
+
+/* ── Stat strip (horizontal number parade) ── */
+.stat-strip {
+    display: flex;
+    gap: 3rem;
+    z-index: 2;
+    position: relative;
+    margin: 2rem 0;
+}
+.stat-strip .item { text-align: center; }
+.stat-strip .item .num {
+    font-family: var(--font-display);
+    font-size: 3.5rem;
+    color: var(--red);
+}
+.stat-strip .item .lbl {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(26,26,46,0.5);
+}
+
+/* ── Image / hero slot ── */
+.hero-asset {
+    max-width: 100%; height: 240px;
+    object-fit: contain;
+    margin: 1.5rem 0;
+    cursor: pointer;
+    z-index: 2;
+    position: relative;
+}
+
+/* ── Chart container ── */
+.chart-container {
+    margin: 1.5rem 0;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 1.5rem;
+    background: white;
+    z-index: 2;
+    position: relative;
+}
+
+/* ── Editable ── */
+.editable-text { cursor: text; outline: none; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
+.editable-text:hover { border-bottom-color: var(--red); }
+.editable-img { cursor: pointer; transition: transform 0.3s; }
+.editable-img:hover { transform: scale(1.03) rotate(-1deg); }
+
+/* ── Page counter ── */
+.page-counter {
+    position: fixed;
+    bottom: 1.5rem; right: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: rgba(26,26,46,0.4);
+    letter-spacing: 2px;
+    z-index: 100;
+}
+
+/* ── Navigation ── */
+.nav-btn {
+    position: fixed; top: 50%; z-index: 100;
+    background: white;
+    border: 3px solid var(--ink);
+    color: var(--ink);
+    font-size: 1.4rem;
+    width: 48px; height: 48px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 3px 3px 0 var(--ink);
+}
+.nav-btn:hover { background: var(--lemon); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+.nav-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+.nav-prev { left: 1rem; }
+.nav-next { right: 1rem; }
+
+/* ── Export ── */
+.export-btn {
+    position: fixed; bottom: 1.5rem; left: 2rem; z-index: 100;
+    background: var(--red); color: white;
+    border: 3px solid var(--ink);
+    padding: 0.5rem 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: all 0.2s;
+}
+.export-btn:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+
+/* ── Footer ── */
+.footer-brand {
+    position: fixed; bottom: 1.5rem;
+    left: 50%; transform: translateX(-50%);
+    font-size: 0.6rem;
+    color: rgba(26,26,46,0.3);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    z-index: 50;
+}

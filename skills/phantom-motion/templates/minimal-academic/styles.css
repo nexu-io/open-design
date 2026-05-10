@@ -1,0 +1,103 @@
+:root {
+    --bg-color: #fcfbf8;
+    --text-primary: #111111;
+    --text-secondary: #555555;
+    --accent-color: #0047AB; /* Deep Cobalt Blue */
+    --grid-color: rgba(0, 0, 0, 0.04);
+    --font-heading: 'Cormorant Garamond', serif;
+    --font-body: 'Inter', sans-serif;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    overflow: hidden;
+    /* Subtle paper texture / ledger grid */
+    background-image: 
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 60px 60px;
+}
+
+.phantom-deck {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.phantom-slide {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 6rem 12%;
+    box-sizing: border-box;
+    /* Adding a clean solid border mask effect typical in editorial layouts */
+}
+
+/* Minimal Panel / Wrapper */
+.editorial-panel {
+    border-left: 2px solid var(--accent-color);
+    padding-left: 2rem;
+    max-width: 800px;
+}
+
+h1 {
+    font-family: var(--font-heading);
+    font-size: 4.5rem;
+    font-weight: 600;
+    line-height: 1.1;
+    margin-bottom: 1.5rem;
+    letter-spacing: -1px;
+}
+
+h2 {
+    font-family: var(--font-heading);
+    font-size: 3rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2rem;
+}
+
+p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    line-height: 1.8;
+    margin-bottom: 1rem;
+}
+
+.chart-container {
+    margin-top: 3rem;
+    width: 100%;
+}
+
+/* 2D Line Chart specific (override generic) */
+.chart-line {
+    /* No glow, just pure ink */
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Axis styling */
+.domain {
+    stroke: #ccc;
+    stroke-width: 1;
+}
+.tick line {
+    stroke: #eee;
+}
+.tick text {
+    fill: #888;
+    font-family: var(--font-body);
+    font-size: 12px;
+}
