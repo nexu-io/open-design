@@ -55,6 +55,30 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('The first output should be a live artifact/dashboard/report');
   });
 
+  describe('artifact handoff no-emit clauses (#1143)', () => {
+    it('drops the absolute "non-negotiable" framing in favor of conditional language', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).not.toContain('non-negotiable output rule');
+    });
+
+    it('includes the "When NOT to emit <artifact>" sub-section', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toContain('When NOT to emit `<artifact>`');
+    });
+
+    it('forbids wrapping in-place-edit-only turns in an artifact block', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toMatch(/in-place|Edit-only|already-existing/i);
+      expect(prompt).toMatch(/do not (emit|wrap|send) (a |an )?`?<artifact/i);
+    });
+
+    it('forbids putting prose / summaries / paths inside an artifact block', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toMatch(/complete `?<!doctype html>`?/i);
+      expect(prompt).toMatch(/summar(y|ies)|prose|file path/i);
+    });
+  });
+
   describe('connectedExternalMcp directive', () => {
     it('omits the directive when no servers are passed', () => {
       const prompt = composeSystemPrompt({});
