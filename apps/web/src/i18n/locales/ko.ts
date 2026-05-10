@@ -860,7 +860,6 @@ export const ko: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': '{provider}에 배포',
   'fileViewer.redeployToProvider': '{provider}에 다시 배포',
-  'fileViewer.linkedPagesNotice': '연결된 {count}개 페이지 포함: {pages}',
   'fileViewer.deployingToProvider': '{provider}에 배포 중…',
   'fileViewer.preparingPublicLink': '공개 링크 준비 중…',
   'fileViewer.copyDeployLink': '링크 복사',

@@ -3062,7 +3062,7 @@ export async function startServer({
           const resolved = validateProjectPath(rawPath);
           deployLinkedPages.push({
             path: resolved,
-            deployedName: path.posix.basename(resolved),
+            deployedName: resolved,
           });
         } catch {
           // Invalid paths are silently skipped — missing pages are
@@ -3156,7 +3156,7 @@ export async function startServer({
         : [];
       const deployLinkedPages = linkedPagePaths.map((p) => {
         const resolved = validateProjectPath(p);
-        return { path: resolved, deployedName: path.posix.basename(resolved) };
+        return { path: resolved, deployedName: resolved };
       });
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(

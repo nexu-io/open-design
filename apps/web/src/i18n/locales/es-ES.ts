@@ -749,7 +749,6 @@ export const esES: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Desplegar en {provider}',
   'fileViewer.redeployToProvider': 'Volver a desplegar en {provider}',
-  'fileViewer.linkedPagesNotice': 'Incluye {count} página(s) enlazada(s): {pages}',
   'fileViewer.deployingToProvider': 'Desplegando en {provider}…',
   'fileViewer.preparingPublicLink': 'Preparando enlace público…',
   'fileViewer.copyDeployLink': 'Copiar enlace',
