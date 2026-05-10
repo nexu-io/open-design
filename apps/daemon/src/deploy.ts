@@ -325,6 +325,16 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
       linkedPages.push(tp);
     }
 
+    // Guard against a linked page that resolves to the root
+    // index.html — it would overwrite the selected entry page
+    // later when linkedPageMetas are written to the file set.
+    if (page.deployedName === 'index.html') {
+      throw new DeployError(
+        `Linked page '${page.path}' resolves to the root index.html and would overwrite the selected entry page. Choose a different entry file or rename the linked page to a non-conflicting name.`,
+        400,
+      );
+    }
+
     linkedPageMetas.push({
       info: page,
       deployHtml: injectDeployHookScript(
