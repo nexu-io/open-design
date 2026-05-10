@@ -14979,6 +14979,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 8px;
 }
 .mcp-picker-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   font-size: 14px;
