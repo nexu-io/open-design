@@ -872,7 +872,7 @@ function UserMessage({
             <span key={a.id} className="user-attachment staged-comment">
               <span className="staged-name">
                 <strong>{a.elementId}</strong>
-                <span>{a.comment}</span>
+                <span title={a.comment}>{a.comment}</span>
               </span>
             </span>
           ))}

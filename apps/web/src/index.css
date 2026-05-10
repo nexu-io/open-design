@@ -1046,7 +1046,7 @@ code {
   object-fit: cover;
 }
 .staged-comment {
-  max-width: 280px;
+  max-width: 100%;
   border-radius: var(--radius-pill);
   padding: 4px 6px 4px 10px;
 }
@@ -1062,9 +1062,8 @@ code {
   flex: 0 0 auto;
 }
 .staged-comment .staged-name span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 .staged-comment button {
   width: 20px;
