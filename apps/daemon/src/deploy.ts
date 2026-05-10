@@ -295,6 +295,7 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   while (linkedPageIdx < linkedPages.length) {
     const page = linkedPages[linkedPageIdx];
     linkedPageIdx++;
+    if (!page) break;
     if (visited.has(page.path)) continue;
     visited.add(page.path);
 
