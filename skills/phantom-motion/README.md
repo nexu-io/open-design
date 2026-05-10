@@ -13,7 +13,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-9.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/Version-10.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
     <img src="https://img.shields.io/badge/License-Apache_2.0-success.svg?style=for-the-badge" alt="License">
     <img src="https://img.shields.io/badge/AI_Agent-Claude_Code_/_Gemini-blue.svg?style=for-the-badge" alt="AI Agent">
     <img src="https://img.shields.io/badge/Stack-Three.js_|_GSAP-black.svg?style=for-the-badge" alt="Stack">
@@ -37,7 +37,8 @@
 - **📊 高级数据可视化引擎**：摒弃掉帧的传统图表库，采用 `D3.js + GSAP`，将真实数据映射为极具东方美学的高级平滑曲线（Spline），伴随旁白做动态生长动画。
 - **🏷️ SVGL 品牌库集成**：原生集成 SVGL 接口，支持只需提供知名品牌名称（如 GitHub, OpenAI），AI 即可自动下载并内联其高清矢量 SVG Logo。
 - **✨ AetherViz 交互架构 (V9.0)**：全新引入混合坐标系统与玻璃拟态控制面板，支持将静态展示无缝切换为具有 3D 拖拽、参数调节的交互式实验室模式。
-- **📚 高定幻灯片库 (V9.0)**：内置 10+ 套对标顶级商业美学的 Phantom Deck 模板（如新野兽派、极简虚空、赛博终端等），完美覆盖从学术答辩到硅谷路演的全部场景。
+- **📚 Monocle 旗舰级版式引擎 (V10.0)**：**[全新发布]** 深度融合《Monocle》杂志人文美学，内置 30+ 套非对称网格、Playfair 衬线字体组合与旗舰级视觉叙事模板。
+- **🏷️ 1500+ SVGL 品牌资产 (V10.0)**：原生集成全球最大的开源 SVG Logo 库，支持 1500+ 知名品牌 Logo（如 GitHub, OpenAI, Tesla）的一键调用与 3D 全息渲染。
 - **✨ WYSIWYG 交互套件 (Phantom Edit)**：**[核心卖点]** 每一套 Phantom Deck 模板都原生支持“所见即所得”编辑。用户只需**双击任意文本**即可立即修改内容，且系统会根据当前模板风格提供差异化的视觉反馈（如发光边框、像素高亮等），失焦后自动保存，完美兼容 GSAP 动画时间轴。
 
 - **🚫 0 版权法务风险**：所有核心特效全部由原生 WebGL、Three.js Shader 和 开源协议库构成，拒绝任何闭源付费插件，生成的 MP4 视频 100% 归创作者所有。
@@ -53,7 +54,7 @@ phantom-motion/
 ├── scripts/                # 核心引擎脚本（TTS生成、BGM生成、HTML拼装等）
 ├── tests/                  
 │   └── xingji/             # 《苍穹之轨：钱学森弹道》 完整动画示例与静态资源
-├── SKILL.md                # 核心智能体底层逻辑系统指令库 (System Prompt V9.0)
+├── SKILL.md                # 核心智能体底层逻辑系统指令库 (System Prompt V10.0)
 ├── logo.svg                # 动态 SVG 徽标
 ├── README.md               # 中文文档
 └── README_EN.md            # 英文文档
@@ -100,7 +101,7 @@ Phantom Motion 被设计为一个极其优雅的 CLI 智能体 Skill。它可以
 
 ## 🎬 Showcase: 终极性能阅兵剧本库 (Masterpiece Prompts)
 
-如果你想体验 V9.0 引擎的极限威力，请直接复制以下 5 个**「神级导演提示词」**喂给你的智能体：
+如果你想体验 V10.0 引擎的极致威力，请直接将以下 5 个 **“导演级提示词”** 复制给你的智能体：
 
 <details>
 <summary><b>♟️ 剧本 01：《神之一手》（30秒 · 极速高燃）</b></summary>

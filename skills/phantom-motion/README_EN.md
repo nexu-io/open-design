@@ -13,7 +13,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-9.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/Version-10.0.0-8A64B7.svg?style=for-the-badge" alt="Version">
     <img src="https://img.shields.io/badge/License-Apache_2.0-success.svg?style=for-the-badge" alt="License">
     <img src="https://img.shields.io/badge/AI_Agent-Claude_Code_/_Gemini-blue.svg?style=for-the-badge" alt="AI Agent">
     <img src="https://img.shields.io/badge/Stack-Three.js_|_GSAP-black.svg?style=for-the-badge" alt="Stack">
@@ -37,7 +37,9 @@ Code animations on the market are often "stiff element translations" with "highl
 - **📊 Advanced Data Visualization Engine**: Discards frame-dropping chart libraries, using `D3.js + GSAP` to map real data into high-end smooth curves (Spline) with dynamic growth animations synchronized with narration.
 - **🏷️ SVGL Brand Library Integration**: Native integration with SVGL API. By just providing a well-known brand name (like GitHub, OpenAI), AI automatically downloads and inlines its HD vector SVG Logo.
 - **✨ AetherViz Interactive Architecture (V9.0)**: Newly introduced hybrid coordinate system and glass-morphism control panels, enabling seamless transition from static presentation to a 3D interactive lab mode with draggable parameters.
-- **📚 Haute Couture Deck Templates (V9.0)**: Built-in 6 Phantom Deck templates matching top-tier commercial aesthetics (including Neo-Brutalist, Dark Editorial styles), perfectly covering scenarios from academic defenses to Silicon Valley pitches.
+- **📚 Monocle Flagship Layout Engine (V10.0)**: **[New Release]** Deeply integrated with *Monocle* magazine aesthetic, featuring 30+ asymmetric grid templates, Playfair Serif typography, and elite visual storytelling decks.
+- **🏷️ 1500+ SVGL Brand Assets (V10.0)**: Native integration with the world's largest open-source SVG Logo library, supporting one-click 3D holographic rendering of 1500+ famous brands (e.g., GitHub, OpenAI, Tesla).
+- **✨ WYSIWYG Interaction Suite (Phantom Edit)**: **[Core Selling Point]** Every Phantom Deck template natively supports "What You See Is What You Get" editing. Double-click any text to modify it instantly with real-time visual feedback (e.g., glow, pixel highlights), with automatic saving and GSAP timeline compatibility.
 - **🚫 0 Copyright & Legal Risks**: All core effects are composed of native WebGL, Three.js Shaders, and open-source libraries. Refusing any closed-source paid plugins, the generated MP4 videos belong 100% to the creators.
 
 ---
@@ -51,7 +53,7 @@ phantom-motion/
 ├── scripts/                # Core engine scripts (TTS generation, BGM generation, HTML assembly)
 ├── tests/                  
 │   └── xingji/             # "Qian Xuesen Trajectory" complete animation example & static assets
-├── SKILL.md                # Core agent logic system instruction library (System Prompt V9.0)
+├── SKILL.md                # Core agent logic system instruction library (System Prompt V10.0)
 ├── logo.svg                # Dynamic SVG Logo
 ├── README.md               # Chinese Documentation
 └── README_EN.md            # English Documentation
@@ -98,7 +100,7 @@ Phantom Motion is designed as an extremely elegant CLI agent Skill. It can be mo
 
 ## 🎬 Showcase: Masterpiece Prompts
 
-If you want to experience the extreme power of the V9.0 engine, directly copy the following 5 **"God-level Director Prompts"** to your agent:
+If you want to experience the extreme power of the V10.0 engine, directly copy the following 5 **"God-level Director Prompts"** to your agent:
 
 <details>
 <summary><b>♟️ Script 01: "God's Move" (30s · Fast-paced & Epic)</b></summary>
