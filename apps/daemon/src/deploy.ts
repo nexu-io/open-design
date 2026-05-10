@@ -246,6 +246,7 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   const linkedPages = options.linkedPages && options.linkedPages.length > 0
     ? options.linkedPages
     : collectLinkedHtmlPages(html, entryBase);
+  const discoveredLinkedPaths = new Set(linkedPages.map((p) => p.path.toLowerCase()));
   const deployHtml = injectDeployHookScript(
     rewriteEntryHtmlReferences(html, entryBase, linkedPages),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
@@ -284,8 +285,16 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   // pending queue so the BFS naturally deduplicates shared assets.
   // Deploy-ready HTML is written after the BFS so we only pay the
   // rewrite cost once per page.
+  //
+  // The loop is iterative: as each page is read we scan its own
+  // <a href> links for more .html files and append them to the
+  // linkedPages array. This handles transitive chains like
+  // index.html -> about.html -> pricing.html.
   const linkedPageMetas: { info: LinkedPageInfo; deployHtml: string; mime: string }[] = [];
-  for (const page of linkedPages) {
+  let linkedPageIdx = 0;
+  while (linkedPageIdx < linkedPages.length) {
+    const page = linkedPages[linkedPageIdx];
+    linkedPageIdx++;
     if (visited.has(page.path)) continue;
     visited.add(page.path);
 
@@ -302,6 +311,18 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     }
     const pageHtml = pageFile.buffer.toString('utf8');
     const pageBase = path.posix.dirname(page.path);
+
+    // Discover transitively linked HTML pages from this page's
+    // own <a href> links. Newly discovered pages extend the
+    // linkedPages array and will be processed by the next
+    // iteration of this loop.
+    const transitive = collectLinkedHtmlPages(pageHtml, pageBase);
+    for (const tp of transitive) {
+      const tpKey = tp.path.toLowerCase();
+      if (discoveredLinkedPaths.has(tpKey)) continue;
+      discoveredLinkedPaths.add(tpKey);
+      linkedPages.push(tp);
+    }
 
     linkedPageMetas.push({
       info: page,
