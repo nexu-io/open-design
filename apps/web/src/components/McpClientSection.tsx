@@ -868,7 +868,6 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             </>
           )}
 
-          {/* Helper outside both branches — visible for all transports */}
           <div className={`mcp-json-helper ${showMcpExample ? 'is-open' : ''}`}>
             <button
               type="button"
