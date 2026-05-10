@@ -147,6 +147,7 @@ import {
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
+import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   deleteConversation,
@@ -5059,6 +5060,16 @@ export async function startServer({
         const body = { file: meta };
         res.json(body);
       } catch (err) {
+        if (err instanceof ArtifactRegressionError) {
+          return sendApiError(res, 422, 'ARTIFACT_REGRESSION', err.message, {
+            details: {
+              identifier: err.identifier,
+              newSize: err.newSize,
+              priorSize: err.priorSize,
+              priorName: err.priorName,
+            },
+          });
+        }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
