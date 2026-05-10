@@ -4330,7 +4330,7 @@ export async function startServer({
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: deployProject?.metadata, linkedPages: deployLinkedPages },
+        { metadata: deployProject?.metadata, providerId, linkedPages: deployLinkedPages },
       );
       const project = getProject(db, req.params.id);
       const cloudflarePagesProjectName =

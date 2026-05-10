@@ -378,7 +378,7 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   // enables clean URLs so /pricing resolves pricing.html without
   // the extension. Only added for Vercel deploys — Cloudflare Pages
   // handles clean URLs differently.
-  if (linkedPages.length > 0) {
+  if (linkedPages.length > 0 && options.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) {
     const existing = files.get('vercel.json');
     if (!existing) {
       files.set('vercel.json', {
