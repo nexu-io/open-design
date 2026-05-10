@@ -2994,8 +2994,13 @@ export async function startServer({
         const existingMeta = existing?.metadata;
         // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`
         // is. Reject any attempt to acquire or flip it through PATCH; the
-        // import-folder route is the single source of truth.
-        if ('fromTrustedPicker' in patch.metadata) {
+        // import-folder route is the single source of truth. Allow PATCH
+        // bodies that re-spread the existing `true` marker (the linked-
+        // folder UI does that whenever it edits linkedDirs) — only reject
+        // when the incoming value differs from the persisted one. Per
+        // round-7 lefarcen P2.
+        if ('fromTrustedPicker' in patch.metadata
+            && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
           return sendApiError(
             res, 400, 'BAD_REQUEST',
             'fromTrustedPicker can only be set via POST /api/import/folder',

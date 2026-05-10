@@ -196,6 +196,81 @@ describe('desktop-import-token gate', () => {
     expect(replayResp.status).toBe(403);
   });
 
+  // Round-7 (lefarcen P2 @ server.ts:2998): PATCH /api/projects/:id used
+  // to reject any metadata containing `fromTrustedPicker`, including the
+  // unchanged `true` marker that the linked-folder UI re-spreads when
+  // editing `linkedDirs`. Trusted imports must be able to PATCH other
+  // metadata fields without 400-ing on their own marker.
+  it('allows PATCH preserving the existing fromTrustedPicker:true marker', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '');
+    const secret = randomBytes(32);
+    setDesktopAuthSecret(secret);
+    const exp = new Date(Date.now() + 30_000).toISOString();
+    const token = signDesktopImportToken(secret, folder, { nonce: 'round7-patch-allow', exp });
+    const importResp = await importFolder(
+      { baseDir: folder },
+      { 'x-od-desktop-import-token': token },
+    );
+    expect(importResp.status).toBe(200);
+    const importBody = (await importResp.json()) as {
+      project: { id: string; metadata?: { fromTrustedPicker?: boolean; kind?: string } };
+    };
+    const projectId = importBody.project.id;
+    expect(importBody.project.metadata?.fromTrustedPicker).toBe(true);
+
+    // Re-spread the existing metadata exactly the way the linked-folder
+    // UI does — fromTrustedPicker:true is included unchanged.
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          ...importBody.project.metadata,
+          linkedDirs: [folder],
+        },
+      }),
+    });
+    expect(patchResp.status).toBe(200);
+    const patchBody = (await patchResp.json()) as {
+      project: { metadata?: { fromTrustedPicker?: boolean; linkedDirs?: string[] } };
+    };
+    expect(patchBody.project.metadata?.fromTrustedPicker).toBe(true);
+    expect(patchBody.project.metadata?.linkedDirs).toEqual([folder]);
+  });
+
+  it('rejects PATCH that flips fromTrustedPicker on a trusted project', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '');
+    const secret = randomBytes(32);
+    setDesktopAuthSecret(secret);
+    const exp = new Date(Date.now() + 30_000).toISOString();
+    const token = signDesktopImportToken(secret, folder, { nonce: 'round7-patch-flip', exp });
+    const importResp = await importFolder(
+      { baseDir: folder },
+      { 'x-od-desktop-import-token': token },
+    );
+    expect(importResp.status).toBe(200);
+    const importBody = (await importResp.json()) as { project: { id: string } };
+    const projectId = importBody.project.id;
+
+    // The schema only permits `true | undefined`, but a malicious or
+    // confused client could submit `false`. The handler must still
+    // reject because the persisted value (`true`) differs from the
+    // incoming value (`false`).
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: { kind: 'prototype', fromTrustedPicker: false as unknown as true },
+      }),
+    });
+    expect(patchResp.status).toBe(400);
+    const body = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/fromTrustedPicker/i);
+  });
+
   // Round-4 (lefarcen P1): the gate must NOT fail open when the secret
   // is cleared after a desktop has registered. The sticky flag keeps
   // the gate active for the lifetime of the daemon process even if the
