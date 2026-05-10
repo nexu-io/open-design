@@ -342,10 +342,8 @@ test('change pet opens pet settings and updates the custom companion draft', asy
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 
-  await page
-    .locator('.entry-side-foot')
-    .getByRole('button', { name: /change pet/i })
-    .click();
+  await page.getByRole('button', { name: /open settings/i }).click();
+  await page.getByRole('menuitem', { name: /change pet/i }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
