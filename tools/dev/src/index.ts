@@ -695,11 +695,19 @@ async function startApp(
         stopApp: async (app) => {
           await stopApp(config, app);
         },
-        startDaemonGated: async () => {
-          await startDaemon(config, options, { requireDesktopAuth: true });
+        // Round 7 (lefarcen P2): preserve the running daemon/web ports
+        // across the hardening restart. Without this, a stack started
+        // with `--daemon-port`/`--web-port` would silently drift to
+        // random ports during the restart, breaking pinned browsers.
+        startDaemonGated: async ({ port }) => {
+          const portedOptions: CliOptions =
+            port != null ? { ...options, daemonPort: port } : options;
+          await startDaemon(config, portedOptions, { requireDesktopAuth: true });
         },
-        startWeb: async () => {
-          await startWeb(config, options);
+        startWeb: async ({ port }) => {
+          const portedOptions: CliOptions =
+            port != null ? { ...options, webPort: port } : options;
+          await startWeb(config, portedOptions);
         },
         log: (msg) => process.stderr.write(`${msg}\n`),
       });

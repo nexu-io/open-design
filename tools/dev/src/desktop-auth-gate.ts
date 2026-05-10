@@ -36,10 +36,35 @@ export type EnsureDaemonGateDeps = {
   inspectDaemon: () => Promise<DaemonStatusSnapshot | null>;
   inspectWeb: () => Promise<WebStatusSnapshot | null>;
   stopApp: (app: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB) => Promise<void>;
-  startDaemonGated: () => Promise<void>;
-  startWeb: () => Promise<void>;
+  /**
+   * Round 7 (lefarcen P2 @ tools/dev/src/index.ts:699): the hardening
+   * restart preserves the running daemon's port so a stack started with
+   * `--daemon-port <N>` does not get silently moved to a random port.
+   * `port` is null when the running daemon's URL did not expose a port
+   * (e.g. an IPC-only mode); in that case the closure must fall back to
+   * whatever port the original CLI options carried.
+   */
+  startDaemonGated: (opts: { port: number | null }) => Promise<void>;
+  /** Symmetric to `startDaemonGated` for the web restart leg. */
+  startWeb: (opts: { port: number | null }) => Promise<void>;
   log: (msg: string) => void;
 };
+
+/**
+ * Extract the TCP port encoded in a runtime URL, or null when the URL
+ * is missing, malformed, or does not include an explicit port.
+ */
+function extractRuntimePort(url: string | null | undefined): number | null {
+  if (url == null || url.length === 0) return null;
+  try {
+    const port = new URL(url).port;
+    if (port.length === 0) return null;
+    const parsed = Number(port);
+    return Number.isInteger(parsed) && parsed > 0 && parsed <= 65_535 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function ensureDaemonGateForDesktop(deps: EnsureDaemonGateDeps): Promise<void> {
   const daemon = await deps.inspectDaemon();
@@ -49,8 +74,10 @@ export async function ensureDaemonGateForDesktop(deps: EnsureDaemonGateDeps): Pr
     "[tools-dev] daemon is running without desktop-auth gate; restarting daemon (and web, if running) before desktop start",
   );
   const web = await deps.inspectWeb();
+  const daemonPort = extractRuntimePort(daemon.url);
+  const webPort = extractRuntimePort(web?.url);
   if (web != null) await deps.stopApp(APP_KEYS.WEB);
   await deps.stopApp(APP_KEYS.DAEMON);
-  await deps.startDaemonGated();
-  if (web != null) await deps.startWeb();
+  await deps.startDaemonGated({ port: daemonPort });
+  if (web != null) await deps.startWeb({ port: webPort });
 }
