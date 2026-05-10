@@ -1,10 +1,13 @@
-const { access, cp, lstat, mkdir, readFile, readdir, rm, stat, symlink, writeFile } = require("node:fs/promises");
+const { execFile } = require("node:child_process");
+const { access, cp, lstat, mkdir, readFile, readlink, readdir, realpath, rm, stat, symlink, writeFile } = require("node:fs/promises");
 const { createRequire } = require("node:module");
 const path = require("node:path");
+const { promisify } = require("node:util");
 
 const CONFIG_ENV = "OD_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
 const STANDALONE_RESOURCE_NAME = "open-design-web-standalone";
 const REQUIRED_MODULES = ["next/package.json", "react/package.json", "react-dom/package.json", "styled-jsx/package.json"];
+const execFileAsync = promisify(execFile);
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -26,6 +29,15 @@ function requireBoolean(record, key) {
   return value;
 }
 
+function optionalBoolean(record, key, fallback) {
+  const value = record[key];
+  if (value == null) return fallback;
+  if (typeof value !== "boolean") {
+    throw new Error(`[tools-pack web-standalone] config.${key} must be a boolean`);
+  }
+  return value;
+}
+
 function requireAbsolutePath(record, key) {
   const value = requireString(record, key);
   if (!path.isAbsolute(value)) {
@@ -37,6 +49,11 @@ function requireAbsolutePath(record, key) {
 function isWithin(parent, child) {
   const relative = path.relative(parent, child);
   return relative.length === 0 || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function isWithinPhysicalPath(parent, child) {
+  const [realParent, realChild] = await Promise.all([realpath(parent), realpath(child)]);
+  return isWithin(realParent, realChild);
 }
 
 async function pathExists(filePath) {
@@ -89,6 +106,7 @@ async function readHookConfig() {
 
   return {
     auditReportPath,
+    macAdhocBundleSign: optionalBoolean(raw, "macAdhocBundleSign", false),
     pruneCopiedSharp: requireBoolean(raw, "pruneCopiedSharp"),
     pruneRootNext: requireBoolean(raw, "pruneRootNext"),
     pruneRootSharp: requireBoolean(raw, "pruneRootSharp"),
@@ -228,6 +246,14 @@ async function installStandaloneResource(config, resourcesRoot, platformName) {
   await copyRequired(path.join(sourceWebRoot, ".next"), path.join(destinationWebRoot, ".next"));
   const copiedStatic = await copyOptional(config.webStaticSourceRoot, path.join(destinationWebRoot, ".next", "static"));
   const copiedPublic = await copyOptional(config.webPublicSourceRoot, path.join(destinationWebRoot, "public"));
+  const rewrittenSymlinks = platformName === "win32"
+    ? []
+    : await rewriteCopiedStandaloneSymlinks({
+      destinationRoot,
+      destinationWebRoot,
+      sourceWebRoot,
+      standaloneSourceRoot: config.standaloneSourceRoot,
+    });
 
   return {
     copiedNestedNodeModules,
@@ -236,8 +262,81 @@ async function installStandaloneResource(config, resourcesRoot, platformName) {
     destinationRoot,
     destinationWebRoot,
     linkedHoistEntries,
+    rewrittenSymlinks,
     sourceWebRoot,
   };
+}
+
+async function rewriteCopiedStandaloneSymlinks(options) {
+  const mappings = [
+    {
+      destinationRoot: path.join(options.destinationWebRoot, "node_modules"),
+      sourceRoot: path.join(options.sourceWebRoot, "node_modules"),
+    },
+    {
+      destinationRoot: path.join(options.destinationRoot, "node_modules"),
+      sourceRoot: path.join(options.standaloneSourceRoot, "node_modules"),
+    },
+    {
+      destinationRoot: options.destinationWebRoot,
+      sourceRoot: options.sourceWebRoot,
+    },
+    {
+      destinationRoot: options.destinationRoot,
+      sourceRoot: options.standaloneSourceRoot,
+    },
+  ];
+  const rewrittenSymlinks = [];
+
+  function mapPath(pathToMap, fromKey, toKey) {
+    for (const mapping of mappings) {
+      if (!isWithin(mapping[fromKey], pathToMap)) continue;
+      return path.join(mapping[toKey], path.relative(mapping[fromKey], pathToMap));
+    }
+    return null;
+  }
+
+  async function visit(current) {
+    let metadata;
+    try {
+      metadata = await lstat(current);
+    } catch {
+      return;
+    }
+
+    if (metadata.isSymbolicLink()) {
+      const copiedSourcePath = mapPath(current, "destinationRoot", "sourceRoot");
+      if (copiedSourcePath == null) return;
+
+      const currentTarget = await readlink(current);
+      const sourceTarget = path.resolve(path.dirname(copiedSourcePath), currentTarget);
+      const destinationTarget = mapPath(sourceTarget, "sourceRoot", "destinationRoot");
+      // External source-tree symlinks are not rewritten; the closure audit below
+      // reports them as externalSymlink and fails the package instead.
+      if (destinationTarget == null) return;
+
+      const nextTarget = path.relative(path.dirname(current), destinationTarget) || ".";
+      if (nextTarget === currentTarget) return;
+
+      await rm(current, { force: true, recursive: true });
+      await symlink(nextTarget, current);
+      rewrittenSymlinks.push({
+        path: current,
+        target: nextTarget,
+      });
+      return;
+    }
+
+    if (!metadata.isDirectory()) return;
+
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      await visit(path.join(current, entry.name));
+    }
+  }
+
+  await visit(options.destinationRoot);
+  return rewrittenSymlinks;
 }
 
 async function removePathAndRecord(targetPath, reason, removedPaths) {
@@ -409,7 +508,12 @@ function isForbiddenCopiedEntry(relativePath, platformName) {
   );
 }
 
-async function collectClosureStats(root, current = root, stats = { brokenSymlinks: [], forbiddenEntries: [], symlinks: 0 }, platformName = process.platform) {
+async function collectClosureStats(
+  root,
+  current = root,
+  stats = { brokenSymlinks: [], externalSymlinks: [], forbiddenEntries: [], symlinks: 0 },
+  platformName = process.platform,
+) {
   let metadata;
   try {
     metadata = await lstat(current);
@@ -426,6 +530,9 @@ async function collectClosureStats(root, current = root, stats = { brokenSymlink
     stats.symlinks += 1;
     try {
       await stat(current);
+      if (!(await isWithinPhysicalPath(root, current))) {
+        stats.externalSymlinks.push(relativePath.split(path.sep).join("/"));
+      }
     } catch {
       stats.brokenSymlinks.push(relativePath.split(path.sep).join("/"));
     }
@@ -441,8 +548,47 @@ async function collectClosureStats(root, current = root, stats = { brokenSymlink
   return stats;
 }
 
-function assertResolvedInside(root, moduleName, resolvedPath) {
-  if (!isWithin(root, resolvedPath)) {
+function isMacCodeBundle(name) {
+  return name.endsWith(".app") || name.endsWith(".framework");
+}
+
+async function collectMacAdhocSignTargets(appPath) {
+  const frameworksRoot = path.join(appPath, "Contents", "Frameworks");
+  const targets = [];
+
+  async function visit(current) {
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = path.join(current, entry.name);
+      if (isMacCodeBundle(entry.name)) {
+        targets.push(entryPath);
+        continue;
+      }
+      await visit(entryPath);
+    }
+  }
+
+  await visit(frameworksRoot);
+  targets.push(appPath);
+  return targets;
+}
+
+async function signMacAdhocBundle(appPath) {
+  const targets = await collectMacAdhocSignTargets(appPath);
+  for (const target of targets) {
+    await execFileAsync("codesign", ["--force", "--sign", "-", "--timestamp=none", target], {
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  }
+  await execFileAsync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], {
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  return targets;
+}
+
+async function assertResolvedInside(root, moduleName, resolvedPath) {
+  if (!(await isWithinPhysicalPath(root, resolvedPath))) {
     throw new Error(`[tools-pack web-standalone] ${moduleName} resolved outside copied standalone: ${resolvedPath}`);
   }
 }
@@ -466,13 +612,16 @@ async function auditCopiedStandalone(config, installResult, platformName) {
   const resolvedModules = {};
   for (const moduleName of REQUIRED_MODULES) {
     const resolvedPath = localRequire.resolve(moduleName);
-    assertResolvedInside(installResult.destinationRoot, moduleName, resolvedPath);
+    await assertResolvedInside(installResult.destinationRoot, moduleName, resolvedPath);
     resolvedModules[moduleName] = resolvedPath;
   }
 
   const closureStats = await collectClosureStats(installResult.destinationRoot, installResult.destinationRoot, undefined, platformName);
   if (closureStats.brokenSymlinks.length > 0) {
     throw new Error(`[tools-pack web-standalone] copied standalone has broken symlinks: ${closureStats.brokenSymlinks.join(", ")}`);
+  }
+  if (closureStats.externalSymlinks.length > 0) {
+    throw new Error(`[tools-pack web-standalone] copied standalone has external symlinks: ${closureStats.externalSymlinks.join(", ")}`);
   }
   if (closureStats.forbiddenEntries.length > 0) {
     throw new Error(`[tools-pack web-standalone] copied standalone has forbidden entries: ${closureStats.forbiddenEntries.join(", ")}`);
@@ -483,6 +632,7 @@ async function auditCopiedStandalone(config, installResult, platformName) {
     bytes: await sizePathBytes(installResult.destinationRoot),
     destinationRoot: installResult.destinationRoot,
     destinationWebRoot: installResult.destinationWebRoot,
+    externalSymlinks: closureStats.externalSymlinks,
     forbiddenEntries: closureStats.forbiddenEntries,
     nodeModulesBytes: await sizePathBytes(nodeModulesRoot),
     resolvedModules,
@@ -519,7 +669,7 @@ async function auditCopiedStandaloneNextDedupe(installResult, platformName) {
   }
 
   const resolvedNextPackagePath = createRequire(serverPath).resolve("next/package.json");
-  if (!isWithin(retainedNextRoot, resolvedNextPackagePath)) {
+  if (!(await isWithinPhysicalPath(retainedNextRoot, resolvedNextPackagePath))) {
     throw new Error(
       `[tools-pack web-standalone] copied standalone next resolved outside retained app-local next: ${resolvedNextPackagePath}`,
     );
@@ -709,6 +859,9 @@ async function runWebStandaloneAfterPack(context) {
     appNodeModulesRoot,
     "root app node_modules",
   );
+  const macAdhocBundleSign = context.electronPlatformName === "darwin" && config.macAdhocBundleSign
+    ? await signMacAdhocBundle(appPath)
+    : [];
   const report = {
     appPath,
     brokenSymlinkPrune,
@@ -718,6 +871,7 @@ async function runWebStandaloneAfterPack(context) {
     copiedNextDedupeAudit,
     copiedPrune,
     generatedAt: new Date().toISOString(),
+    macAdhocBundleSign,
     platformName: context.electronPlatformName,
     resourcesRoot,
     rootBuildResiduePrune,

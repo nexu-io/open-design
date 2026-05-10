@@ -19,7 +19,14 @@ interface Props {
   onUsePrompt: (skill: SkillSummary) => void;
 }
 
-type ModeFilter = 'all' | 'prototype-desktop' | 'prototype-mobile' | 'deck' | 'document' | 'orbit';
+type ModeFilter =
+  | 'all'
+  | 'prototype-desktop'
+  | 'prototype-mobile'
+  | 'deck'
+  | 'document'
+  | 'orbit'
+  | 'live';
 type SurfaceFilter = 'all' | Surface;
 type ScenarioFilter = string;
 
@@ -38,6 +45,7 @@ const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'deck', labelKey: 'examples.modeDeck' },
   { value: 'document', labelKey: 'examples.modeDocument' },
   { value: 'orbit', labelKey: 'examples.modeOrbit' },
+  { value: 'live', labelKey: 'examples.modeLive' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {
@@ -87,6 +95,12 @@ function matchesMode(skill: SkillSummary, filter: ModeFilter): boolean {
     return skill.mode === 'prototype' && skill.platform === 'mobile';
   if (filter === 'document') return skill.mode === 'template';
   if (filter === 'orbit') return skill.scenario === 'orbit';
+  // Live artifacts ride on the prototype mode but want their own bucket so
+  // refreshable / connector-backed samples are easy to find without
+  // scrolling through every desktop prototype. The parent live-artifact
+  // skill and every derived `live-artifact:<example>` card share the
+  // `live` scenario, so they all light up here together.
+  if (filter === 'live') return skill.scenario === 'live';
   return true;
 }
 
@@ -104,10 +118,38 @@ function quotePrompt(locale: string, text: string): string {
   return locale === 'de' ? `„${text}“` : `“${text}”`;
 }
 
-export function ExamplesTab({ skills, onUsePrompt }: Props) {
+export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
   const { locale, t } = useI18n();
+  // Skills tagged `aggregatesExamples: true` are containers whose preview
+  // would just duplicate one of their derived `<parent>:<child>` cards
+  // (e.g. live-artifact ships a sample gallery under `examples/`). Drop
+  // them up front so every count, filter, and rendered card downstream
+  // sees only the user-facing entries. The full listing is still passed
+  // through for `findSkillById` lookups elsewhere in the app.
+  const skills = useMemo(
+    () => rawSkills.filter((s) => !s.aggregatesExamples),
+    [rawSkills],
+  );
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  // Track per-skill fetch failures separately so the preview modal can show
+  // an actionable error / retry state instead of staying stuck at "loading".
+  // Issue #860.
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
+  // Track per-skill "no shipped preview" results separately from errors so
+  // the modal can render a calm placeholder for skills whose
+  // `od.preview.type` isn't `html` (image / markdown / …) without the
+  // generic "Couldn't load this example." copy. Value is the raw preview
+  // kind so future copy can specialise per-kind. Issue #897.
+  const [previewUnavailable, setPreviewUnavailable] = useState<
+    Record<string, string>
+  >({});
+  // Synchronous in-flight set: state updates are batched, so two parallel
+  // loadPreview calls (e.g. card hover firing simultaneously with modal
+  // open) could both pass the "is anything cached?" check before either
+  // setState landed. The ref check happens before any await so the second
+  // caller sees the first one already running and exits early.
+  const inFlightRef = useRef<Set<string>>(new Set());
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>('all');
@@ -119,12 +161,90 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
 
   const loadPreview = useCallback(
     async (id: string) => {
-      if (previews[id] !== undefined) return;
-      const html = await fetchSkillExample(id);
-      setPreviews((prev) => ({ ...prev, [id]: html }));
+      // Race guard: synchronous check before any state read so two parallel
+      // calls (hover + modal open) cannot both fall through.
+      if (inFlightRef.current.has(id)) return;
+      // Skip the fetch when we already hold a terminal result for this
+      // skill. A prior error must not short-circuit (we want Retry); a
+      // prior successful html or "no shipped preview" verdict can — the
+      // verdict is metadata-driven and won't change between renders.
+      if (
+        previews[id] !== undefined &&
+        previewErrors[id] === undefined
+      )
+        return;
+      if (previewUnavailable[id] !== undefined) return;
+      const skill = rawSkills.find((s) => s.id === id);
+      const previewType = skill?.previewType ?? 'html';
+      inFlightRef.current.add(id);
+      try {
+        // Reset all three branches before firing so a retry from the
+        // error UI immediately swaps to "loading" instead of flashing
+        // the old error / unavailable state.
+        setPreviewErrors((prev) => {
+          if (prev[id] === undefined) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setPreviewUnavailable((prev) => {
+          if (prev[id] === undefined) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setPreviews((prev) => ({ ...prev, [id]: null }));
+        const result = await fetchSkillExample(id, previewType);
+        if ('html' in result) {
+          setPreviews((prev) => ({ ...prev, [id]: result.html }));
+        } else if ('unavailable' in result) {
+          setPreviewUnavailable((prev) => ({ ...prev, [id]: result.kind }));
+          setPreviews((prev) => {
+            if (prev[id] === undefined) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        } else {
+          setPreviewErrors((prev) => ({ ...prev, [id]: result.error }));
+          setPreviews((prev) => {
+            if (prev[id] === undefined) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }
+      } finally {
+        inFlightRef.current.delete(id);
+      }
     },
-    [previews],
+    [previews, previewErrors, previewUnavailable, rawSkills],
   );
+
+  // Keep a ref to the latest loadPreview so the onView handler passed to
+  // PreviewModal can have a stable identity. Without this, the inline
+  // `() => loadPreview(...)` arrow rebuilds on every state change and
+  // PreviewModal's `useEffect(() => onView?.(activeId), [activeId, onView])`
+  // re-fires on each render, turning a persistent fetch failure into an
+  // automatic retry loop that flashes past the error UI.
+  const loadPreviewRef = useRef(loadPreview);
+  useEffect(() => {
+    loadPreviewRef.current = loadPreview;
+  }, [loadPreview]);
+  // Mirror the active skill id into a ref so onPreviewView can fetch the
+  // selected skill instead of the modal's internal view id. PreviewModal
+  // calls onView(activeId), where activeId is the modal-local view id
+  // ('preview' in this component); forwarding that id straight into
+  // fetchSkillExample would request /api/skills/preview/example instead
+  // of the user's selected skill, leaving Retry unable to recover.
+  const activeSkillIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeSkillIdRef.current = previewSkillId;
+  }, [previewSkillId]);
+  const onPreviewView = useCallback(() => {
+    const skillId = activeSkillIdRef.current;
+    if (skillId !== null) void loadPreviewRef.current(skillId);
+  }, []);
 
   // Open the modal for a card. We always trigger a preview fetch even if
   // the card hasn't been hovered yet — the modal needs the HTML.
@@ -150,6 +270,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       deck: 0,
       document: 0,
       orbit: 0,
+      live: 0,
     };
     for (const s of surfaceScoped) {
       if (matchesMode(s, 'prototype-desktop')) c['prototype-desktop']++;
@@ -157,6 +278,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
       if (matchesMode(s, 'deck')) c.deck++;
       if (matchesMode(s, 'document')) c.document++;
       if (matchesMode(s, 'orbit')) c.orbit++;
+      if (matchesMode(s, 'live')) c.live++;
     }
     return c;
   }, [skills, surfaceFilter]);
@@ -184,6 +306,11 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
     for (const k of [...have].sort()) if (!ordered.includes(k)) ordered.push(k);
     return ordered;
   }, [scenarioCounts]);
+
+  const scenarioAllCount = useMemo(
+    () => [...scenarioCounts.values()].reduce((total, count) => total + count, 0),
+    [scenarioCounts],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -291,7 +418,7 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
               onClick={() => setScenarioFilter('all')}
             >
               {t('examples.modeAll')}
-              <span className="filter-pill-count">{filtered.length}</span>
+              <span className="filter-pill-count">{scenarioAllCount}</span>
             </button>
             {scenarioOptions.map((tag) => (
               <button
@@ -316,31 +443,49 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
             key={skill.id}
             skill={skill}
             html={previews[skill.id]}
+            unavailableKind={previewUnavailable[skill.id]}
             onLoad={() => void loadPreview(skill.id)}
             onUsePrompt={() => onUsePrompt(skill)}
             onOpenPreview={() => openPreview(skill.id)}
           />
         ))
       )}
-      {previewSkill ? (
-        <PreviewModal
-          title={previewSkill.name}
-          subtitle={
-            localizeSkillPrompt(locale, previewSkill)
-            ?? localizeSkillDescription(locale, previewSkill).slice(0, 160)
-          }
-          views={[
-            {
-              id: 'preview',
-              label: t('examples.previewLabel'),
-              html: previews[previewSkill.id],
-              deck: previewSkill.mode === 'deck',
-            },
-          ]}
-          exportTitleFor={() => previewSkill.name}
-          onClose={() => setPreviewSkillId(null)}
-        />
-      ) : null}
+      {(() => {
+        if (!previewSkill) return null;
+        const unavailableKind = previewUnavailable[previewSkill.id];
+        return (
+          <PreviewModal
+            title={previewSkill.name}
+            subtitle={
+              localizeSkillPrompt(locale, previewSkill)
+              ?? localizeSkillDescription(locale, previewSkill).slice(0, 160)
+            }
+            views={[
+              {
+                id: 'preview',
+                label: t('examples.previewLabel'),
+                html: previews[previewSkill.id],
+                error: previewErrors[previewSkill.id] ?? null,
+                // Skills declared with a non-html `od.preview.type` ship
+                // no fetchable example; route the kind into the modal so
+                // it can render a calm "no shipped preview" placeholder
+                // instead of bouncing through the error state. Issue #897.
+                unavailable: unavailableKind
+                  ? { kind: unavailableKind }
+                  : null,
+                deck: previewSkill.mode === 'deck',
+              },
+            ]}
+            // Stable identity (see onPreviewView definition) so PreviewModal's
+            // mount-time onView effect doesn't re-fire on every state update;
+            // the Retry button reaches loadPreview through the same handler.
+            // Issue #860.
+            onView={onPreviewView}
+            exportTitleFor={() => previewSkill.name}
+            onClose={() => setPreviewSkillId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -348,12 +493,19 @@ export function ExamplesTab({ skills, onUsePrompt }: Props) {
 function ExampleCard({
   skill,
   html,
+  unavailableKind,
   onLoad,
   onUsePrompt,
   onOpenPreview,
 }: {
   skill: SkillSummary;
   html: string | null | undefined;
+  // When set, the card iframe stays empty and the placeholder copy
+  // explains there's no shipped HTML preview for this skill (the
+  // `od.preview.type` is image / markdown / …) — the user gets a
+  // Use-this-prompt CTA instead of a loading shimmer that never
+  // resolves. Issue #897.
+  unavailableKind?: string | undefined;
   onLoad: () => void;
   onUsePrompt: () => void;
   onOpenPreview: () => void;
@@ -456,6 +608,18 @@ function ExampleCard({
               {t('examples.openPreview')}
             </span>
           </>
+        ) : unavailableKind ? (
+          // Non-HTML preview kinds (image / markdown / …) ship no
+          // fetchable artifact today — show a quiet "no preview"
+          // placeholder so the user doesn't keep hovering waiting for
+          // a render that won't come, and steer them at "Use this
+          // prompt" via the card CTA. Issue #897.
+          <div
+            className="example-preview-placeholder example-preview-placeholder-unavailable"
+            data-testid={`example-card-unavailable-${skill.id}`}
+          >
+            {t('examples.unavailablePlaceholder', { kind: unavailableKind })}
+          </div>
         ) : (
           <div className="example-preview-placeholder">
             {hovered || intersected
@@ -503,6 +667,8 @@ function ExampleCard({
               title={
                 html
                   ? t('examples.shareTitle')
+                  : unavailableKind
+                  ? t('examples.shareUnavailable', { kind: unavailableKind })
                   : t('examples.shareLoadFirst')
               }
               onClick={() => setShareOpen((v) => !v)}
@@ -574,6 +740,9 @@ function ExampleCard({
 }
 
 function tagForSkill(skill: SkillSummary, t: TranslateFn): string {
+  if (skill.mode === 'image' || skill.surface === 'image') return t('examples.tagImage');
+  if (skill.mode === 'video' || skill.surface === 'video') return t('examples.tagVideo');
+  if (skill.mode === 'audio' || skill.surface === 'audio') return t('examples.tagAudio');
   if (skill.mode === 'deck') return t('examples.tagSlideDeck');
   if (skill.mode === 'template') return t('examples.tagTemplate');
   if (skill.mode === 'design-system') return t('examples.tagDesignSystem');

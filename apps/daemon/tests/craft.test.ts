@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,7 +5,7 @@ import path from 'node:path';
 
 import { loadCraftSections } from '../src/craft.js';
 
-let craftDir;
+let craftDir: string;
 
 beforeAll(async () => {
   craftDir = await mkdtemp(path.join(tmpdir(), 'od-craft-test-'));

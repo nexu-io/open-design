@@ -6,10 +6,23 @@ import { buildSrcdoc } from '../runtime/srcdoc';
 export interface PreviewView {
   id: string;
   label: string;
-  // Null means "still loading" — modal renders the loading affordance.
-  // Undefined means "not yet requested" — parent should react to onView and
-  // begin a fetch. Both states keep the iframe blank.
+  // Null means "still loading", undefined means "not yet requested".
+  // Both states keep the iframe blank. The parent should react to
+  // onView and begin a fetch.
   html: string | null | undefined;
+  // When set, the modal renders an error affordance with a Retry
+  // button that re-fires onView for this view id, instead of sitting
+  // at the loading state forever. Issue #860.
+  error?: string | null;
+  // Set when the underlying skill ships no HTML preview at all (its
+  // `od.preview.type` is `image`, `markdown`, etc.). The modal renders
+  // a calm "no shipped preview" placeholder instead of the loading or
+  // error states — fetching `/api/skills/:id/example` for those skills
+  // returns 404 today and the resulting "Couldn't load this example."
+  // copy is misleading. `kind` carries the raw preview-type token so
+  // copy can be shaped per kind ("markdown document", "image asset",
+  // …). Mutually exclusive with `html` and `error`. Issue #897.
+  unavailable?: { kind: string } | null;
   // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
   // print-all-slides behavior survive the sandboxed export path.
   deck?: boolean;
@@ -200,6 +213,8 @@ export function PreviewModal({
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];
   const activeHtml = activeView?.html ?? null;
+  const activeError = activeView?.error ?? null;
+  const activeUnavailable = activeView?.unavailable ?? null;
   const activeDeck = activeView?.deck ?? false;
   const srcDoc = useMemo(
     () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck }) : ''),
@@ -377,7 +392,50 @@ export function PreviewModal({
           ref={stageRef}
         >
           <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
-            {activeHtml === null || activeHtml === undefined ? (
+            {activeUnavailable ? (
+              // Skills declared as `image` / `markdown` / etc. ship no
+              // HTML preview, so the daemon's `/example` endpoint would
+              // 404 into the generic "Couldn't load this example." copy
+              // — misleading, since nothing failed: there's just no
+              // preview to render. Show a calm placeholder pointing the
+              // user at "Use this prompt" instead. Issue #897.
+              <div
+                className="ds-modal-empty ds-modal-unavailable"
+                data-testid="preview-unavailable"
+              >
+                <div className="ds-modal-unavailable-title">
+                  {t('preview.unavailableTitle')}
+                </div>
+                <div className="ds-modal-unavailable-body">
+                  {t('preview.unavailableBody', {
+                    kind: activeUnavailable.kind || 'preview',
+                  })}
+                </div>
+              </div>
+            ) : activeError ? (
+              // Distinct error state so a fetch failure stops looking
+              // like an indefinite "Loading…". The Retry button re-fires
+              // onView for this view id; the caller is responsible for
+              // clearing the error state and re-running the fetch.
+              // Issue #860.
+              <div className="ds-modal-empty ds-modal-error">
+                <div className="ds-modal-error-title">
+                  {t('preview.errorTitle')}
+                </div>
+                <div className="ds-modal-error-body">
+                  {t('preview.errorBody')}
+                </div>
+                {onView && activeView ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => onView(activeView.id)}
+                  >
+                    {t('preview.retry')}
+                  </button>
+                ) : null}
+              </div>
+            ) : activeHtml === null || activeHtml === undefined ? (
               <div className="ds-modal-empty">
                 {t('preview.loading', {
                   label:
@@ -389,7 +447,7 @@ export function PreviewModal({
                 <iframe
                   key={activeView?.id ?? 'view'}
                   title={`${title} ${activeView?.label ?? ''}`}
-                  sandbox="allow-scripts"
+                  sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                   srcDoc={srcDoc}
                 />
               </div>

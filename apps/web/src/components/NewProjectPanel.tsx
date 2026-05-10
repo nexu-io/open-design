@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
+
+// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
+// so the new openPath + pickAndImport methods (#451 / PR #974) and
+// existing openExternal stay in one place. PR #974 deleted the raw
+// `pickFolder` bridge: the renderer no longer receives a filesystem
+// path from the main process, only the daemon's import response.
+
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
+import { isStoredMediaProviderEntryPresent } from '../state/config';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -29,6 +37,37 @@ import {
 } from '../media/models';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
+import { Toast } from './Toast';
+
+/**
+ * Best-effort flattening of the `details` field that the
+ * pickAndImport main-process handler attaches when the daemon returned
+ * a structured error envelope (PR #974 round-4 mrcfps). Daemon errors
+ * carry `error.message` and sometimes nested `error.details.reason`;
+ * we surface the most operator-actionable string we can find without
+ * over-coupling to any particular error code.
+ */
+function formatPickAndImportErrorDetails(details: unknown): string | undefined {
+  if (typeof details === 'string' && details.length > 0) return details;
+  if (details == null || typeof details !== 'object') return undefined;
+  const record = details as Record<string, unknown>;
+  const error = record.error;
+  if (error != null && typeof error === 'object') {
+    const errRecord = error as Record<string, unknown>;
+    const message = errRecord.message;
+    const nestedDetails = errRecord.details;
+    if (typeof message === 'string' && message.length > 0) {
+      if (nestedDetails != null && typeof nestedDetails === 'object') {
+        const nestedReason = (nestedDetails as Record<string, unknown>).reason;
+        if (typeof nestedReason === 'string' && nestedReason.length > 0) {
+          return `${message} (${nestedReason})`;
+        }
+      }
+      return message;
+    }
+  }
+  return undefined;
+}
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -57,6 +96,17 @@ interface Props {
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  // Web fallback: the user types an absolute baseDir into the manual
+  // input and the renderer POSTs `/api/import/folder` itself. Browser
+  // builds have no `shell.openPath` surface, so the renderer naming a
+  // path here cannot escalate (PR #974 trust model).
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  // Electron flow: the desktop main process owns the picker dialog and
+  // the import call atomically (`pickAndImport` IPC). The renderer
+  // never sees the path or the HMAC token; it only receives the
+  // daemon's import response and forwards it here so App-level state
+  // can update without a second fetch.
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -105,6 +155,8 @@ export function NewProjectPanel({
   promptTemplates,
   onCreate,
   onImportClaudeDesign,
+  onImportFolder,
+  onImportFolderResponse,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -114,6 +166,16 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [baseDir, setBaseDir] = useState('');
+  const [importingFolder, setImportingFolder] = useState(false);
+  // PR #974 round-4 (mrcfps): pickAndImport now returns structured
+  // failure shapes (`desktop auth secret not registered`, `web sidecar
+  // URL not available`, `daemon returned HTTP X`) — surfacing them
+  // gives the user a recovery hint instead of a silent no-op.
+  // Shape: `{ message, details? }`. `null` means no toast.
+  const [importFolderError, setImportFolderError] = useState<
+    { message: string; details?: string } | null
+  >(null);
   const [tab, setTab] = useState<CreateTab>('prototype');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
@@ -169,11 +231,12 @@ export function NewProjectPanel({
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
-  // Some skills (e.g. the Orbit briefings) ship their own complete visual
-  // language baked into example.html and explicitly opt out of DESIGN.md
-  // injection via `od.design_system.requires: false`. When such a skill is
-  // the active default for the current tab, hide the picker entirely so
-  // the user isn't asked to attach a brand we'll then ignore.
+  // Orbit briefings ship their own complete visual language baked into
+  // example.html and explicitly opt out of DESIGN.md injection via
+  // `od.design_system.requires: false`. Hide the picker only for those
+  // Orbit scenario skills; the general prototype creation surface should
+  // still honor the user's configured default design system even when a
+  // non-Orbit default skill does not require one.
   const tabDefaultSkillForcesNoDs = useMemo(() => {
     const tabSkillId = ((): string | null => {
       if (tab === 'prototype' || tab === 'live-artifact') {
@@ -190,7 +253,9 @@ export function NewProjectPanel({
     })();
     if (!tabSkillId) return false;
     const s = skills.find((x) => x.id === tabSkillId);
-    return s ? s.designSystemRequired === false : false;
+    return s
+      ? s.scenario === 'orbit' && s.designSystemRequired === false
+      : false;
   }, [tab, skills]);
   const showDesignSystemPicker =
     tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
@@ -353,6 +418,61 @@ export function NewProjectPanel({
       await onImportClaudeDesign(file);
     } finally {
       setImporting(false);
+    }
+  }
+
+  // PR #974: the bridge no longer exposes `pickFolder` (raw path
+  // crossing to the renderer). The Electron flow now uses
+  // `pickAndImport`, which performs the picker + the HMAC-gated import
+  // atomically in the main process and returns the daemon response.
+  // The web fallback continues to use the manual baseDir input —
+  // browser builds have no `shell.openPath` surface so a renderer-named
+  // path cannot escalate.
+  const hasElectronPickAndImport =
+    typeof window !== 'undefined' && typeof window.electronAPI?.pickAndImport === 'function';
+
+  async function handleOpenFolder() {
+    if (hasElectronPickAndImport) {
+      if (!onImportFolderResponse) return;
+      setImportFolderError(null);
+      setImportingFolder(true);
+      try {
+        const result = await window.electronAPI!.pickAndImport!();
+        if (!result) return;
+        if (result.ok === true) {
+          await onImportFolderResponse(result.response);
+          return;
+        }
+        // Round-4 (mrcfps #2): every non-OK shape used to fall through
+        // a silent `return`. Reserve silent for the explicit cancel
+        // case; surface the structured reason for everything else
+        // (auth-not-registered, web-sidecar-down, daemon HTTP errors,
+        // network errors). The pickAndImport handler already pre-shapes
+        // these into a `{ ok: false, reason, details? }` envelope.
+        if ('canceled' in result && result.canceled === true) return;
+        const reason = 'reason' in result && typeof result.reason === 'string'
+          ? result.reason
+          : 'unknown failure';
+        const details = 'details' in result && result.details != null
+          ? formatPickAndImportErrorDetails(result.details)
+          : undefined;
+        setImportFolderError({
+          message: `Open folder failed: ${reason}`,
+          ...(details ? { details } : {}),
+        });
+      } finally {
+        setImportingFolder(false);
+      }
+      return;
+    }
+    if (!onImportFolder) return;
+    const trimmed = baseDir.trim();
+    if (!trimmed) return;
+    setImportingFolder(true);
+    try {
+      await onImportFolder(trimmed);
+    } finally {
+      setImportingFolder(false);
     }
   }
 
@@ -567,8 +687,40 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
+        {(hasElectronPickAndImport ? onImportFolderResponse : onImportFolder) ? (
+          <div className="newproj-open-folder">
+            {!hasElectronPickAndImport ? (
+              <input
+                type="text"
+                className="newproj-folder-input"
+                placeholder="/path/to/project"
+                value={baseDir}
+                onChange={(e) => setBaseDir(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
+                disabled={importingFolder}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="ghost newproj-import"
+              disabled={(!hasElectronPickAndImport && !baseDir.trim()) || importingFolder}
+              onClick={() => void handleOpenFolder()}
+            >
+              <Icon name="folder" size={13} />
+              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
+      {importFolderError ? (
+        <Toast
+          message={importFolderError.message}
+          details={importFolderError.details ?? null}
+          ttlMs={6000}
+          onDismiss={() => setImportFolderError(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -607,8 +759,8 @@ function FidelityPicker({
    - Lists configured connectors as compact chips so the user can
      see at a glance what data sources this artifact can pull from.
    - When no connector is configured (or the list hasn't loaded yet
-     and ended up empty), shows a guidance card that, on click, pops
-     the entry-tab-connectors tab in the main view.
+     and ended up empty), shows a guidance card that, on click, opens
+     the Settings → Connectors surface (the new home of the catalog).
    ============================================================ */
 function ConnectorsSection({
   connectors,
@@ -1366,7 +1518,7 @@ function DesignSystemPicker({
               </button>
             </div>
           </div>
-          <div className="ds-picker-list">
+          <div className="ds-picker-list ds-picker-list-design-systems">
             <DsPickerItem
               active={selectedIds.length === 0}
               multi={multi}
@@ -1691,7 +1843,8 @@ function MediaModelCards({
     const provider = findProvider(model.provider);
     const providerId = provider?.id ?? model.provider;
     const entry = mediaProviders?.[providerId];
-    const configured = provider?.credentialsRequired === false || Boolean(entry?.apiKey.trim() || entry?.baseUrl.trim());
+    const configured = provider?.credentialsRequired === false
+      || isStoredMediaProviderEntryPresent(entry);
     let group = groups.find((g) => g.providerId === providerId);
     if (!group) {
       group = {

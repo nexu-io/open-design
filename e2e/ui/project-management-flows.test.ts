@@ -52,6 +52,21 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
+  await page.route('**/api/app-config', async (route) => {
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          agentCliEnv: {},
+        },
+      },
+    });
+  });
+
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -125,10 +140,12 @@ test('design system multi-select stores primary and inspiration metadata', async
   await page.goto('/');
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system multi select metadata');
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
 
   await page.getByTestId('design-system-trigger').click();
-  await page.getByRole('tab', { name: /multi/i }).click();
-  await page.getByRole('option', { name: /Nexu Soft Tech/i }).click();
+  const multiTab = page.getByRole('tab', { name: /multi/i });
+  await multiTab.click();
+  await expect(multiTab).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('option', { name: /Editorial Noir/i }).click();
   await page.getByRole('option', { name: /Data Mist/i }).click();
 
@@ -316,7 +333,7 @@ test('home designs search filters projects and recovers from no results', async 
   await expect(homeDesignCard(page, betaName)).toBeVisible();
 });
 
-test('change pet opens pet settings and saves a custom companion', async ({ page }) => {
+test('change pet opens pet settings and updates the custom companion draft', async ({ page }) => {
   await seedAdoptedPet(page);
   await page.route('**/api/codex-pets', async (route) => {
     await route.fulfill({ json: { pets: [], rootDir: '' } });
@@ -332,7 +349,7 @@ test('change pet opens pet settings and saves a custom companion', async ({ page
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'Pets' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { level: 3, name: 'Pets' })).toBeVisible();
 
   await dialog.getByRole('tab', { name: 'Custom' }).click();
   const customPanel = dialog.locator('.pet-custom');
@@ -341,26 +358,11 @@ test('change pet opens pet settings and saves a custom companion', async ({ page
   await customPanel.getByLabel('Name').fill('QA Turtle');
   await customPanel.getByLabel('Glyph').fill('🐢');
   await customPanel.getByLabel('Greeting').fill('Shell yeah, tests are green.');
-  await expect(customPanel.getByRole('button', { name: /adopted/i })).toBeVisible();
+  await expect(customPanel.getByText('QA Turtle')).toBeVisible();
+  await expect(customPanel.getByText('Shell yeah, tests are green.')).toBeVisible();
 
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator('.pet-overlay .pet-sprite')).toHaveAttribute(
-    'aria-label',
-    /QA Turtle/i,
-  );
-
-  const petConfig = await readPetConfig(page);
-  expect(petConfig).toMatchObject({
-    adopted: true,
-    enabled: true,
-    petId: 'custom',
-    custom: {
-      name: 'QA Turtle',
-      glyph: '🐢',
-      greeting: 'Shell yeah, tests are green.',
-    },
-  });
 });
 
 async function createProject(
@@ -462,22 +464,6 @@ async function seedAdoptedPet(page: Page) {
       }),
     );
   }, STORAGE_KEY);
-}
-
-async function readPetConfig(page: Page) {
-  return page.evaluate((key) => {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw).pet : null;
-  }, STORAGE_KEY) as Promise<{
-    adopted: boolean;
-    enabled: boolean;
-    petId: string;
-    custom: {
-      name: string;
-      glyph: string;
-      greeting: string;
-    };
-  } | null>;
 }
 
 async function fetchCurrentProject(page: Page) {

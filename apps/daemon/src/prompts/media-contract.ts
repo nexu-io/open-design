@@ -87,6 +87,7 @@ Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
   [--duration <seconds>]            # audio only
   [--audio-kind music|speech|sfx]   # audio only
   [--voice <provider-voice-id>]     # audio:speech only; omit to use provider default
+  [--language <lang>]               # audio:speech only; language boost (e.g. Chinese,Yue for Cantonese)
 \`\`\`
 
 Always quote the prompt value. Use \`--prompt "<full prompt>"\` (or the
@@ -255,13 +256,15 @@ substitution. Do not silently fall back.
 ### Workflow rules
 
 1. **Read project metadata first.** The "Project metadata" block above
-   tells you the user's pre-selected model, aspect, length, voice, audio
-   kind, etc. Treat those as authoritative defaults — only override if
-   the user's chat message explicitly contradicts them.
-   For \`minimax-tts\`, \`voice\` must be a valid MiniMax \`voice_id\`
-   (example: \`male-qn-qingse\`). Do not pass natural-language voice
-   descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
-   flag instead unless you have a real id.
+    tells you the user's pre-selected model, aspect, length, voice, audio
+    kind, etc. Treat those as authoritative defaults — only override if
+    the user's chat message explicitly contradicts them.
+    For \`minimax-tts\`, \`voice\` must be a valid MiniMax \`voice_id\`
+    (example: \`male-qn-qingse\`). Do not pass natural-language voice
+    descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
+    flag instead unless you have a real id.
+    \`language\` enables pronunciation boost for specific languages
+    (e.g. \`Chinese,Yue\` for Cantonese, \`Chinese\` for Mandarin).
 2. **One discovery turn before generating.** Even with metadata defaults
    present, restate what you're about to make and ask one targeted
    question if anything is ambiguous (subject, mood, brand, voice). The

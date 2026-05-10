@@ -54,7 +54,7 @@ export function ToolCard({
   }
   const ctx: FileToolCtx = { projectFileNames, onRequestOpenFile };
   if (name === 'TodoWrite' || name === 'todowrite') return <TodoCard input={use.input} />;
-  if (name === 'Write' || name === 'create_file')
+  if (name === 'Write' || name === 'write' || name === 'create_file')
     return <FileWriteCard input={use.input} result={result} ctx={ctx} />;
   if (name === 'Edit' || name === 'str_replace_edit')
     return <FileEditCard input={use.input} result={result} ctx={ctx} />;
@@ -134,8 +134,8 @@ function FileWriteCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
-  const obj = (input ?? {}) as { file_path?: string; path?: string; content?: string };
-  const file = obj.file_path ?? obj.path ?? '(unnamed)';
+  const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string; content?: string };
+  const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
   const lines = typeof obj.content === 'string' ? obj.content.split('\n').length : null;
   return (
     <div className="op-card op-file">
@@ -165,12 +165,13 @@ function FileEditCard({
   const t = useT();
   const obj = (input ?? {}) as {
     file_path?: string;
+    filePath?: string;
     path?: string;
     old_string?: string;
     new_string?: string;
     edits?: { old_string?: string; new_string?: string }[];
   };
-  const file = obj.file_path ?? obj.path ?? '(unnamed)';
+  const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
   const editCount = Array.isArray(obj.edits) ? obj.edits.length : 1;
   return (
     <div className="op-card op-file">
@@ -198,8 +199,8 @@ function FileReadCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
-  const obj = (input ?? {}) as { file_path?: string; path?: string };
-  const file = obj.file_path ?? obj.path ?? '(unnamed)';
+  const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string };
+  const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
   return (
     <div className="op-card op-file">
       <div className="op-card-head">

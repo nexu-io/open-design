@@ -75,6 +75,10 @@ function toDockerMountPath(value: string): string {
   return value.replaceAll("\\", "/");
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export function buildDockerArgs(
   config: ToolPackConfig,
   user: DockerUserMapping,
@@ -99,8 +103,8 @@ export function buildDockerArgs(
   //   - config.to is enum-validated by resolveToolPackBuildOutput() in config.ts
   //     to one of "all" | "appimage" | "dir"
   //   - config.portable is a boolean
-  // None of these values can contain shell metacharacters, so direct
-  // interpolation into the inner command string is safe.
+  //   - config.appVersion is shell-quoted below because release versions can
+  //     carry punctuation that is not part of the namespace / target enums.
   //
   // We can't rely on `corepack pnpm` here: although Node 16.10+ ships corepack,
   // the `electronuserland/builder:base` image strips the corepack binary, so
@@ -124,6 +128,9 @@ export function buildDockerArgs(
   ];
   if (config.portable) {
     innerArgs.push("--portable");
+  }
+  if (config.appVersion != null) {
+    innerArgs.push(`--app-version ${shellQuote(config.appVersion)}`);
   }
   const innerCommand = `${pnpmCmd} install --frozen-lockfile && ` + innerArgs.join(" ");
 
@@ -271,6 +278,7 @@ async function runNpmInstall(appRoot: string): Promise<void> {
 }
 
 async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
+  if (config.appVersion != null) return config.appVersion;
   const packageJsonPath = join(config.workspaceRoot, "apps", "packaged", "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
@@ -891,7 +899,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   // launches as `unmanaged`, which on uninstall would also remove the
   // AppImage/desktop/icon files out from under the still-running app.
   // Accept either TOOLS_PACK (CLI start) or PACKAGED (menu launch). Mirrors
-  // the dual-source acceptance pattern in mac.ts:709-714.
+  // the dual-source acceptance pattern in mac/lifecycle.ts.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -932,7 +940,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
     };
   }
 
-  // Try graceful shutdown via IPC first. mac.ts's pattern: best-effort SHUTDOWN
+  // Try graceful shutdown via IPC first. mac/lifecycle.ts's pattern: best-effort SHUTDOWN
   // request with a short timeout so Electron renderers + sidecars get a chance
   // to flush state (SQLite WAL, logs) before SIGTERM.
   let gracefulRequested = false;

@@ -32,7 +32,7 @@ import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 
 const require = createRequire(import.meta.url);
-const PACKAGED_CHILD_ENV_ALLOWLIST = ["HOME", "LANG", "LC_ALL", "LOGNAME", "TMPDIR", "USER"] as const;
+const PACKAGED_CHILD_ENV_ALLOWLIST = ["HOME", "LANG", "LC_ALL", "LOGNAME", "TMPDIR", "USER", "VP_HOME"] as const;
 
 function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = false): boolean {
   return (
@@ -173,7 +173,7 @@ function extractPort(url: string): string {
 // resolver and this PATH builder cannot drift again. See issue #442.
 const PACKAGED_POSIX_SYSTEM_BINS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
-function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
+export function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
   const candidates = [
     ...basePath.split(delimiter),
     ...wellKnownUserToolchainBins(),
@@ -182,7 +182,10 @@ function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
   return [...new Set(candidates.filter((entry) => entry.length > 0))].join(delimiter);
 }
 
-function resolvePackagedChildBaseEnv(env: NodeJS.ProcessEnv = process.env,includeProviderSecrets = false,): NodeJS.ProcessEnv {
+export function resolvePackagedChildBaseEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  includeProviderSecrets = false,
+): NodeJS.ProcessEnv {
   const baseEnv: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(env)) {
     if (value != null && value.length > 0 && shouldForwardPackagedChildEnv(key, includeProviderSecrets)) {
@@ -198,6 +201,61 @@ function createPackagedDaemonManagedPathEnv(
   return {
     OD_DATA_DIR: paths.dataRoot,
     OD_RESOURCE_ROOT: paths.resourceRoot,
+  };
+}
+
+export type PackagedDaemonSpawnEnvOptions = {
+  appVersion: string | null;
+  daemonCliEntry: string | null;
+  /**
+   * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
+   * gate ON when the desktop runtime is actually being started in the
+   * same packaged process group. Headless packaged deployments
+   * (`tools-pack linux start --headless`) have no `shell.openPath`
+   * surface, so leaving the gate dormant avoids the impossible-auth
+   * state where the daemon waits forever for a registration that the
+   * headless runtime can never deliver.
+   */
+  requireDesktopAuth: boolean;
+  legacyDataDir?: string | null;
+};
+
+/**
+ * Pure helper: assemble the daemon spawn env for a packaged sidecar.
+ * Extracted from `startPackagedSidecars` so vitest can pin both
+ * branches of `requireDesktopAuth` without spinning up a real child
+ * process.
+ */
+export function buildPackagedDaemonSpawnEnv(
+  paths: PackagedNamespacePaths,
+  options: PackagedDaemonSpawnEnvOptions,
+): NodeJS.ProcessEnv {
+  return {
+    [SIDECAR_ENV.DAEMON_PORT]: "0",
+    ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
+    // PR #974 round-4 P1 + round-5 P2: pinned ON when a desktop is
+    // being started, OFF for headless. The daemon-side flag refuses
+    // tokenless imports even before the desktop main process has
+    // finished registering, closing the daemon-restart-mid-session
+    // bypass that a runtime-only handshake left open. Headless skips
+    // it because there is no privileged shell.openPath surface and
+    // no client to register a secret.
+    ...(options.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+    // Packaged daemon managed paths are deliberately delivered through
+    // the sidecar launch environment. The daemon may keep its own default
+    // fallback, but packaged runtime must not rely on path inference from
+    // Electron userData, bundle names, or ports.
+    ...createPackagedDaemonManagedPathEnv(paths),
+    ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+    // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
+    // upgrading from 0.3.x .od/ layouts. The daemon's startup
+    // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
+    // for packaged children would otherwise drop it. Forward only
+    // when set so we do not invent an empty string and trigger the
+    // daemon's "env set but path invalid" error path.
+    ...(options.legacyDataDir == null || options.legacyDataDir.length === 0
+      ? {}
+      : { OD_LEGACY_DATA_DIR: options.legacyDataDir }),
   };
 }
 
@@ -273,7 +331,20 @@ export async function startPackagedSidecars(
   paths: PackagedNamespacePaths,
   options: {
     appVersion: string | null;
+    daemonCliEntry: string | null;
+    daemonSidecarEntry: string | null;
     nodeCommand: string | null;
+    /**
+     * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
+     * runtime is being started in this packaged process group. The
+     * Electron entry passes `true`; `headless.ts` passes `false` so the
+     * daemon's import-folder gate stays dormant in headless mode where
+     * there is no `shell.openPath` surface and no client to register a
+     * secret. Required (no default) so a future packaged caller cannot
+     * silently regress the gate by omitting it.
+     */
+    requireDesktopAuth: boolean;
+    webSidecarEntry: string | null;
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
   },
@@ -292,25 +363,13 @@ export async function startPackagedSidecars(
   try {
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: resolveSidecarEntry("@open-design/daemon", "sidecar"),
-      env: {
-        [SIDECAR_ENV.DAEMON_PORT]: "0",
-        // Packaged daemon managed paths are deliberately delivered through
-        // the sidecar launch environment. The daemon may keep its own default
-        // fallback, but packaged runtime must not rely on path inference from
-        // Electron userData, bundle names, or ports.
-        ...createPackagedDaemonManagedPathEnv(paths),
-        ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
-        // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
-        // upgrading from 0.3.x .od/ layouts. The daemon's startup
-        // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
-        // for packaged children would otherwise drop it. Forward only
-        // when set so we do not invent an empty string and trigger the
-        // daemon's "env set but path invalid" error path.
-        ...(process.env.OD_LEGACY_DATA_DIR == null || process.env.OD_LEGACY_DATA_DIR.length === 0
-          ? {}
-          : { OD_LEGACY_DATA_DIR: process.env.OD_LEGACY_DATA_DIR }),
-      },
+      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      env: buildPackagedDaemonSpawnEnv(paths, {
+        appVersion: options.appVersion,
+        daemonCliEntry: options.daemonCliEntry,
+        legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+        requireDesktopAuth: options.requireDesktopAuth,
+      }),
       nodeCommand: options.nodeCommand,
       paths,
       runtime,
@@ -331,7 +390,7 @@ export async function startPackagedSidecars(
 
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",

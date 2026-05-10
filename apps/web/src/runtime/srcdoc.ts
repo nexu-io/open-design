@@ -105,13 +105,39 @@ function injectManualEditBridge(doc: string): string {
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${payload}</head>`);
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* DOMParser failed; fall through to string path */ }
+  }
+  // String fallback: find the real </head> (last one before <body>)
+  // to skip </head> literals inside <script>/<style> in <head>.
+  const lower = doc.toLowerCase();
+  const bodyStart = lower.indexOf('<body');
+  const limit = bodyStart >= 0 ? bodyStart : lower.length;
+  const idx = lower.lastIndexOf('</head>', limit - 1);
+  if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
   return payload + doc;
 }
 
 function injectBeforeBodyEnd(doc: string, payload: string): string {
-  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${payload}</body>`);
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* DOMParser failed; fall through to string path */ }
+  }
+  // String fallback: find the real </body> (last one before </html>)
+  // to skip </body> literals inside <script>/<style> in <body>.
+  const lower = doc.toLowerCase();
+  const htmlEnd = lower.lastIndexOf('</html>');
+  const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
+  const idx = lower.lastIndexOf('</body>', limit - 1);
+  if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
   return doc + payload;
 }
 
@@ -143,6 +169,10 @@ function escapeAttr(value: string): string {
 // becomes a static, unnavigable preview. We install a same-origin
 // in-memory shim BEFORE any user script runs so those decks degrade
 // gracefully (position just doesn't persist across reloads).
+// allow-popups and allow-popups-to-escape-sandbox are needed for 
+// links with target="_blank" to work in the sandboxed preview.
+// Empty hrefs and hash only hrefs will be intercepted and ignored.
+// hrefs leading to an id on the page will be scrolled into view.
 function injectSandboxShim(doc: string): string {
   const shim = `<script data-od-sandbox-shim>(function(){
   function makeStore(){
@@ -167,6 +197,40 @@ function injectSandboxShim(doc: string): string {
   }
   tryShim('localStorage');
   tryShim('sessionStorage');
+  document.addEventListener('click', (e) => {
+    if (!e.target || !(e.target instanceof Element)) return;
+    var link = e.target.closest('a[href]');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (href === null) return;
+    var isAnchor = href.startsWith('#') || href === '';
+    if (isAnchor) {
+      e.preventDefault();
+      if (href === '' || href === '#') {
+        window.scrollTo({ top: 0 });
+        history.replaceState(null, '', ' ');
+      } else {
+        var targetId = href.slice(1);
+        var target = targetId ? document.getElementById(targetId) : null;
+        if (target) {
+          target.scrollIntoView();
+          location.hash === href && history.replaceState(null, '', ' ');
+          location.hash = href;
+        }
+      }
+    } else if (link.getAttribute('target') === '_blank') {
+      e.preventDefault();
+      let safe = false;
+      try {
+        var url = new URL(href, location.href);
+        safe =
+          url.protocol === 'http:' ||
+          url.protocol === 'https:' ||
+          url.protocol === 'mailto:';
+      } catch (_) {}
+      safe && window.open(href, '_blank', 'noopener,noreferrer');
+    }
+  });
 })();</script>`;
   if (/<head[^>]*>/i.test(doc))
     return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
@@ -631,13 +695,7 @@ html[data-od-comment-mode] body * { cursor: crosshair !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
 </style>`;
-  const withStyle = /<\/head>/i.test(doc)
-    ? doc.replace(/<\/head>/i, style + '</head>')
-    : /<head[^>]*>/i.test(doc)
-      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
-      : style + doc;
-  if (/<\/body>/i.test(withStyle)) return withStyle.replace(/<\/body>/i, script + '</body>');
-  return withStyle + script;
+  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }
 
 // The deck bridge supports three deck conventions found across our skills
@@ -670,16 +728,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const styleFix = `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
-  const docWithStyle = /<\/head>/i.test(doc)
-    ? doc.replace(/<\/head>/i, styleFix + "</head>")
-    : /<head[^>]*>/i.test(doc)
-    ? doc.replace(/<head[^>]*>/i, (m) => m + styleFix)
-    : styleFix + doc;
-  doc = docWithStyle;
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
-  function slides(){ return document.querySelectorAll('.slide'); }
+  function slides(){ return document.querySelectorAll('.deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide'); }
   function scroller(){
     if (document.body && document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
     return document.scrollingElement || document.documentElement;
@@ -834,11 +886,19 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   function report(){
     try {
       var list = slides();
+      var i = activeIndex(list);
+      var count = list.length;
       window.parent.postMessage({
         type: 'od:slide-state',
-        active: activeIndex(list),
-        count: list.length,
+        active: i,
+        count: count,
       }, '*');
+      document.querySelectorAll('.slide-number').forEach(function(el){
+        el.setAttribute('data-current',i+1); el.setAttribute('data-total',count);
+      });
+      document.querySelectorAll('.progress-bar>span').forEach(function(el){
+        el.style.width=(count?((i+1)/count*100)+'%':'0');
+      });
     } catch (e) {}
   }
   function restoreInitialSlide(){
@@ -925,7 +985,5 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   }
   observeSlides();
 })();</script>`;
-  if (/<\/body>/i.test(doc))
-    return doc.replace(/<\/body>/i, `${script}</body>`);
-  return doc + script;
+  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
 }

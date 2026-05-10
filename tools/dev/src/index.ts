@@ -60,6 +60,7 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
+import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 
 type CliOptions = ToolDevOptions & {
   expr?: string;
@@ -402,7 +403,11 @@ async function spawnSidecarRuntime(request: {
   return { pid: spawned.pid };
 }
 
-async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
+async function spawnDaemonRuntime(
+  config: ToolDevConfig,
+  options: CliOptions,
+  spawnOptions: { requireDesktopAuth?: boolean } = {},
+): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
@@ -410,6 +415,16 @@ async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): P
   try {
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
+    if (spawnOptions.requireDesktopAuth) {
+      // PR #974 round-4 P1: when this daemon is being spawned in a
+      // desktop-bundled flow, hand it the env var that pins the
+      // import-folder gate ON from request 0. The daemon-side flag
+      // refuses tokenless imports even before the desktop main
+      // process has finished registering, closing the
+      // daemon-restart-mid-session bypass that the runtime-only
+      // handshake left open.
+      await logHandle.write(`[tools-dev] requiring desktop auth on /api/import/folder\n`);
+    }
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
       config,
@@ -417,6 +432,7 @@ async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): P
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+        ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
       },
       logHandle,
     });
@@ -556,7 +572,11 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
   }
 }
 
-async function startDaemon(config: ToolDevConfig, options: CliOptions) {
+async function startDaemon(
+  config: ToolDevConfig,
+  options: CliOptions,
+  startOptions: { requireDesktopAuth?: boolean } = {},
+) {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const existing = await inspectDaemonRuntime(runtimeLookup(config));
   if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
@@ -567,7 +587,16 @@ async function startDaemon(config: ToolDevConfig, options: CliOptions) {
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.DAEMON);
 
-  const spawned = await spawnDaemonRuntime(config, options);
+  // PR #974 round-4 P1: pin the import-auth gate on the daemon when
+  // this spawn is part of a desktop-bundled flow OR a desktop runtime
+  // is already alive (revival case where the daemon died mid-session
+  // and the user is bringing it back up while desktop kept running).
+  // Both branches close the daemon-restart bypass.
+  const desktopAlreadyRunning = await inspectDesktopRuntime(runtimeLookup(config));
+  const requireDesktopAuth =
+    (startOptions.requireDesktopAuth ?? false) || desktopAlreadyRunning != null;
+
+  const spawned = await spawnDaemonRuntime(config, options, { requireDesktopAuth });
   try {
     const status = await waitForDaemonRuntime(runtimeLookup(config));
     return {
@@ -637,13 +666,51 @@ async function startDesktop(config: ToolDevConfig, options: CliOptions) {
   }
 }
 
-async function startApp(config: ToolDevConfig, appName: ToolDevAppName, options: CliOptions) {
+async function startApp(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+  options: CliOptions,
+  context: { targets?: readonly ToolDevAppName[] } = {},
+) {
   switch (appName) {
     case APP_KEYS.DAEMON:
-      return await startDaemon(config, options);
+      return await startDaemon(config, options, {
+        // PR #974 round-4 P1: when daemon is being spawned alongside
+        // desktop in the same orchestrator invocation, pin the import-
+        // auth gate via env var so the daemon refuses tokenless imports
+        // before desktop has had a chance to register. The introspection
+        // case (desktop already running) is handled inside startDaemon.
+        requireDesktopAuth: context.targets?.includes(APP_KEYS.DESKTOP) === true,
+      });
     case APP_KEYS.WEB:
       return await startWeb(config, options);
     case APP_KEYS.DESKTOP:
+      // PR #974 round 6 (mrcfps): if a daemon is already running but
+      // ungated (split-start dev flow `start daemon` -> `start desktop`),
+      // restart it with the gate armed BEFORE launching desktop main —
+      // see `ensureDaemonGateForDesktop` above for the rationale.
+      await ensureDaemonGateForDesktop({
+        inspectDaemon: () => inspectDaemonRuntime(runtimeLookup(config)),
+        inspectWeb: () => inspectWebRuntime(runtimeLookup(config)),
+        stopApp: async (app) => {
+          await stopApp(config, app);
+        },
+        // Round 7 (lefarcen P2): preserve the running daemon/web ports
+        // across the hardening restart. Without this, a stack started
+        // with `--daemon-port`/`--web-port` would silently drift to
+        // random ports during the restart, breaking pinned browsers.
+        startDaemonGated: async ({ port }) => {
+          const portedOptions: CliOptions =
+            port != null ? { ...options, daemonPort: port } : options;
+          await startDaemon(config, portedOptions, { requireDesktopAuth: true });
+        },
+        startWeb: async ({ port }) => {
+          const portedOptions: CliOptions =
+            port != null ? { ...options, webPort: port } : options;
+          await startWeb(config, portedOptions);
+        },
+        log: (msg) => process.stderr.write(`${msg}\n`),
+      });
       return await startDesktop(config, options);
   }
 }
@@ -697,7 +764,17 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     const status = await inspectDaemonRuntime(runtimeLookup(config));
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
-    return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies DaemonStatusSnapshot;
+    return {
+      // PR #974 round 6: synthetic snapshot when the IPC is unreachable
+      // — daemon is starting or idle, so the gate is definitionally not
+      // active yet. The desktop-auth-gate helper treats this branch as
+      // "no daemon running" via the null check, but the type contract
+      // still requires the field.
+      desktopAuthGateActive: false,
+      pid: active.rootPids[0] ?? null,
+      state: active.pids.length > 0 ? "starting" : "idle",
+      url: null,
+    } satisfies DaemonStatusSnapshot;
   }
   if (appName === APP_KEYS.WEB) {
     const status = await inspectWebRuntime(runtimeLookup(config));
@@ -734,7 +811,7 @@ async function restartTargets(config: ToolDevConfig, appName: string | undefined
   const startTargets = resolveStartApps(appName);
   return {
     stop: await runSequential(stopTargets, (target) => stopApp(config, target)),
-    start: await runSequential(startTargets, (target) => startApp(config, target, options)),
+    start: await runSequential(startTargets, (target) => startApp(config, target, options, { targets: startTargets })),
   };
 }
 
@@ -849,7 +926,10 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
 async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
   if (appName === APP_KEYS.DAEMON) {
     if (target != null && target !== "status") throw new Error(`unsupported daemon inspect target: ${target}`);
-    return (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle", url: null } satisfies DaemonStatusSnapshot);
+    return (
+      (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ??
+      ({ desktopAuthGateActive: false, state: "idle", url: null } satisfies DaemonStatusSnapshot)
+    );
   }
   if (appName === APP_KEYS.WEB) {
     if (target != null && target !== "status") throw new Error(`unsupported web inspect target: ${target}`);
@@ -873,7 +953,7 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
 async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
-  const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions));
+  const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions, { targets }));
   printRunForegroundResult(started, options);
 
   let shuttingDown = false;
@@ -918,7 +998,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
   async (appName: string | undefined, options: CliOptions) => {
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
-    const result = await runSequential(targets, (target) => startApp(config, target, options));
+    const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
     printStartResult(result, options);
   },
 );

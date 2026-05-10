@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -18,22 +18,44 @@ import {
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
+export const projectFileRenameTestHooks = {
+  beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
+};
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
   return path.join(projectsRoot, projectId);
 }
 
-export async function ensureProject(projectsRoot, projectId) {
-  const dir = projectDir(projectsRoot, projectId);
-  await mkdir(dir, { recursive: true });
+// Returns the folder a project's files live in. For git-linked projects
+// (metadata.baseDir set), this is the user's own folder. Otherwise falls
+// back to the standard computed path under projectsRoot.
+export function resolveProjectDir(projectsRoot, projectId, metadata?) {
+  if (typeof metadata?.baseDir === 'string') {
+    const p = path.normalize(metadata.baseDir);
+    if (path.isAbsolute(p)) return p;
+  }
+  if (!isSafeId(projectId)) throw new Error('invalid project id');
+  return path.join(projectsRoot, projectId);
+}
+
+export async function ensureProject(projectsRoot, projectId, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  // Git-linked folders already exist; skip mkdir to avoid side-effects.
+  if (typeof metadata?.baseDir !== 'string') {
+    await mkdir(dir, { recursive: true });
+  }
   return dir;
 }
 
 export async function listFiles(projectsRoot, projectId, opts = {}) {
-  const dir = projectDir(projectsRoot, projectId);
+  const metadata = opts?.metadata;
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const out = [];
-  await collectFiles(dir, '', out);
+  // Skip build/install dirs for linked folders so node_modules doesn't stall
+  // the walk on large repos.
+  const skipDirs = metadata?.baseDir ? SKIP_DIRS : undefined;
+  await collectFiles(dir, '', out, skipDirs);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
   const since = Number(opts.since);
@@ -43,7 +65,34 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   return out;
 }
 
-async function collectFiles(dir, relDir, out) {
+// Build/install dirs that should be hidden from the file panel when a
+// project is rooted at metadata.baseDir (the user's own folder). Without
+// this, the listing would be dominated by node_modules, lockfiles, and
+// build output that have no design value.
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.turbo',
+  '.cache', '.output', 'out', 'coverage', '__pycache__', '.venv',
+  'vendor', 'target', '.od', '.tmp',
+]);
+
+// Best-effort entry-file detector — looks for index.html at the root,
+// then any *.html file. Returns null if nothing obvious is found, in
+// which case the project simply opens to the file panel with no
+// auto-selected tab.
+export async function detectEntryFile(dir: string): Promise<string | null> {
+  try {
+    await stat(path.join(dir, 'index.html'));
+    return 'index.html';
+  } catch { /* not found */ }
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const htmlFile = entries.find((e) => e.isFile() && /\.html?$/i.test(e.name));
+    if (htmlFile) return htmlFile.name;
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function collectFiles(dir, relDir, out, skipDirs?: Set<string>) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -56,7 +105,8 @@ async function collectFiles(dir, relDir, out) {
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      await collectFiles(full, rel, out);
+      if (skipDirs && skipDirs.has(e.name)) continue;
+      await collectFiles(full, rel, out, skipDirs);
       continue;
     }
     if (!e.isFile()) continue;
@@ -83,12 +133,18 @@ async function collectFiles(dir, relDir, out) {
 // the user sees in the file panel. Used by the "Download as .zip" share
 // menu item, which exports the user's actual project tree (e.g. the
 // uploaded `ui-design/` folder), not just the rendered HTML.
-export async function buildProjectArchive(projectsRoot, projectId, root) {
-  const projectRoot = projectDir(projectsRoot, projectId);
+export async function buildProjectArchive(projectsRoot, projectId, root, metadata?) {
+  const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   let archiveRoot = projectRoot;
   let archiveBaseName = '';
   if (typeof root === 'string' && root.trim().length > 0) {
-    archiveRoot = resolveSafe(projectRoot, root);
+    // Use the symlink-aware resolver so that an imported folder containing
+    // e.g. `docs -> /Users/me/.ssh` cannot exfiltrate via
+    // GET /api/projects/:id/archive?root=docs. resolveSafe()'s string
+    // prefix check would let the literal path stay under projectRoot, then
+    // collectArchiveEntries() / readFile() would follow the symlink at
+    // open() time and zip files outside the project tree.
+    archiveRoot = await resolveSafeReal(projectRoot, root);
     archiveBaseName = path.basename(archiveRoot);
   }
 
@@ -141,8 +197,8 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
   return { buffer, baseName: archiveBaseName };
 }
 
-export async function buildBatchArchive(projectsRoot, projectId, fileNames) {
-  const projectRoot = projectDir(projectsRoot, projectId);
+export async function buildBatchArchive(projectsRoot, projectId, fileNames, metadata?) {
+  const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   const zip = new JSZip();
   let packed = 0;
   const rejected = [];
@@ -281,9 +337,9 @@ async function collectArchiveEntries(dir, relDir, out) {
   }
 }
 
-export async function readProjectFile(projectsRoot, projectId, name) {
-  const dir = projectDir(projectsRoot, projectId);
-  const file = resolveSafe(dir, name);
+export async function readProjectFile(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
   const st = await stat(file);
   const rel = toProjectPath(path.relative(dir, file));
@@ -301,16 +357,34 @@ export async function readProjectFile(projectsRoot, projectId, name) {
   };
 }
 
+// Like readProjectFile but skips loading the file content into memory.
+// Used by the media streaming endpoint so large video files are never buffered.
+export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const file = await resolveSafeReal(dir, name);
+  const st = await stat(file);
+  const rel = toProjectPath(path.relative(dir, file));
+  return {
+    filePath: file,
+    name: rel,
+    size: st.size,
+    mtime: st.mtimeMs,
+    mime: mimeFor(rel),
+    kind: kindFor(rel),
+  };
+}
+
 export async function writeProjectFile(
   projectsRoot,
   projectId,
   name,
   body,
   { overwrite = true, artifactManifest = null } = {},
+  metadata?,
 ) {
-  const dir = await ensureProject(projectsRoot, projectId);
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
-  const target = resolveSafe(dir, safeName);
+  const target = await resolveSafeReal(dir, safeName);
   if (!overwrite) {
     try {
       await stat(target);
@@ -323,7 +397,7 @@ export async function writeProjectFile(
   await writeFile(target, body);
   if (artifactManifest && typeof artifactManifest === 'object') {
     const manifestFileName = artifactManifestNameFor(safeName);
-    const manifestTarget = resolveSafe(dir, manifestFileName);
+    const manifestTarget = await resolveSafeReal(dir, manifestFileName);
     const validated = validateArtifactManifestInput(artifactManifest, safeName);
     if (validated.ok && validated.value) {
       const nextManifest = validated.value;
@@ -366,10 +440,173 @@ function parseManifest(raw) {
   return parsePersistedManifest(raw, '');
 }
 
-export async function deleteProjectFile(projectsRoot, projectId, name) {
-  const dir = projectDir(projectsRoot, projectId);
-  const file = resolveSafe(dir, name);
+export async function deleteProjectFile(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const file = await resolveSafeReal(dir, name);
   await unlink(file);
+}
+
+export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const oldName = validateProjectPath(fromName);
+  const newName = sanitizePath(toName);
+  const source = await resolveSafeReal(dir, oldName);
+  const sourceStat = await stat(source);
+  if (!sourceStat.isFile()) {
+    const err = new Error('source is not a regular file');
+    err.code = 'EISDIR';
+    throw err;
+  }
+
+  if (oldName === newName) {
+    const manifest = await readManifestForPath(dir, oldName);
+    return {
+      file: {
+        name: oldName,
+        path: oldName,
+        size: sourceStat.size,
+        mtime: sourceStat.mtimeMs,
+        kind: kindFor(oldName),
+        mime: mimeFor(oldName),
+        artifactKind: manifest?.kind,
+        artifactManifest: manifest,
+      },
+      oldName,
+      newName: oldName,
+    };
+  }
+
+  const target = await resolveSafeReal(dir, newName);
+  const targetPath = source === target ? resolveSafe(dir, newName) : target;
+
+  if (source !== target) {
+    try {
+      await stat(target);
+      const err = new Error('target file already exists');
+      err.code = 'EEXIST';
+      throw err;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+
+  const manifestRename = await prepareArtifactManifestRename(dir, oldName, newName);
+
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await projectFileRenameTestHooks.beforeCommit?.({ source, target: targetPath });
+  await renameFilePath(source, targetPath, { noOverwrite: true });
+  await commitArtifactManifestRename(manifestRename, newName);
+
+  const st = await stat(targetPath);
+  const manifest = await readManifestForPath(dir, newName);
+  return {
+    file: {
+      name: newName,
+      path: newName,
+      size: st.size,
+      mtime: st.mtimeMs,
+      kind: kindFor(newName),
+      mime: mimeFor(newName),
+      artifactKind: manifest?.kind,
+      artifactManifest: manifest,
+    },
+    oldName,
+    newName,
+  };
+}
+
+async function renameFilePath(source, target, opts = {}) {
+  const { noOverwrite = false } = opts;
+  if (source === target) return;
+  const temp = await uniqueRenameTempPath(source);
+  await rename(source, temp);
+  try {
+    if (noOverwrite) {
+      await link(temp, target);
+      try {
+        await unlink(temp);
+      } catch {
+        // Preserve the target file even if cleanup of the temp link fails.
+      }
+    } else {
+      await rename(temp, target);
+    }
+  } catch (err) {
+    try {
+      await rename(temp, source);
+    } catch {
+      // Preserve the original rename error even if restoring the source path fails.
+    }
+    throw err;
+  }
+}
+
+async function uniqueRenameTempPath(source) {
+  const dir = path.dirname(source);
+  const base = path.basename(source);
+  for (let i = 0; i < 10; i++) {
+    const temp = path.join(dir, `.od-rename-${process.pid}-${Date.now()}-${i}-${base}.tmp`);
+    try {
+      await stat(temp);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return temp;
+      throw err;
+    }
+  }
+  const err = new Error('could not allocate temporary rename path');
+  err.code = 'EEXIST';
+  throw err;
+}
+
+async function prepareArtifactManifestRename(dir, oldName, newName) {
+  const oldManifestName = artifactManifestNameFor(oldName);
+  const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch((err) => {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  });
+  if (!oldManifestPath) return null;
+
+  let raw = null;
+  try {
+    raw = await readFile(oldManifestPath, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+
+  const newManifestName = artifactManifestNameFor(newName);
+  const newManifestPath = await resolveSafeReal(dir, newManifestName);
+  const targetManifestPath = oldManifestPath === newManifestPath
+    ? resolveSafe(dir, newManifestName)
+    : newManifestPath;
+  if (oldManifestPath !== newManifestPath) {
+    try {
+      await stat(newManifestPath);
+      const err = new Error('target artifact manifest already exists');
+      err.code = 'EEXIST';
+      throw err;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+
+  return { oldManifestPath, newManifestPath: targetManifestPath, raw };
+}
+
+async function commitArtifactManifestRename(manifestRename, newName) {
+  if (!manifestRename) return;
+  const { oldManifestPath, newManifestPath, raw } = manifestRename;
+  await mkdir(path.dirname(newManifestPath), { recursive: true });
+  const parsed = parseManifest(raw);
+  if (parsed) {
+    const validated = validateArtifactManifestInput(parsed, newName);
+    if (validated.ok && validated.value) {
+      await writeFile(oldManifestPath, JSON.stringify(validated.value, null, 2));
+      await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
+      return;
+    }
+  }
+  await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
 }
 
 export async function removeProjectDir(projectsRoot, projectId) {
@@ -384,6 +621,49 @@ function resolveSafe(dir, name) {
     throw new Error('path escapes project dir');
   }
   return target;
+}
+
+// Symlink-aware variant of resolveSafe. resolveSafe only does string-prefix
+// validation, which is fooled by symlinks *inside* the project tree
+// (a `assets/` symlink pointing at `/Users/me/.ssh` passes the prefix
+// check because the literal path stays under dir, but the OS follows
+// the link at open() time). This helper realpath()s the resolved
+// candidate (or its existing prefix, for writes that haven't created
+// the file yet) and re-validates against the realpath of dir, so
+// descendant symlinks can't reach outside the project.
+async function resolveSafeReal(dir, name) {
+  const candidate = resolveSafe(dir, name);
+  const rootReal = await realpath(dir).catch(() => dir);
+  let real;
+  try {
+    real = await realpath(candidate);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
+    // Write case: path doesn't exist yet. Realpath the longest existing
+    // prefix and re-append the missing tail.
+    real = await resolveExistingPrefix(candidate);
+  }
+  if (!real.startsWith(rootReal + path.sep) && real !== rootReal) {
+    const e = new Error('path escapes project dir via symlink');
+    e.code = 'EPATHESCAPE';
+    throw e;
+  }
+  return real;
+}
+
+async function resolveExistingPrefix(p) {
+  const parts = p.split(path.sep);
+  for (let i = parts.length; i > 0; i--) {
+    const prefix = parts.slice(0, i).join(path.sep) || path.sep;
+    try {
+      const real = await realpath(prefix);
+      const rest = parts.slice(i).join(path.sep);
+      return rest ? path.join(real, rest) : real;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+  return p;
 }
 
 export function sanitizePath(raw) {
@@ -456,8 +736,20 @@ function toProjectPath(raw) {
   return raw.split(path.sep).join('/');
 }
 
-function isSafeId(id) {
-  return typeof id === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(id);
+// Validates an id string for use as a path segment under a daemon-managed
+// directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
+// class allows dots so ids like `my-project.v2` work, but pure-dot ids
+// (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
+// resolve to the parent directory when fed into `path.join`. Without the
+// pure-dot guard, an attacker could create a project row with id `..` (or
+// reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
+// which Express decodes before the route handler sees it) and steer
+// finalize / write operations outside `.od/projects/`.
+export function isSafeId(id) {
+  if (typeof id !== 'string') return false;
+  if (id.length === 0 || id.length > 128) return false;
+  if (/^\.+$/.test(id)) return false; // reject `.`, `..`, `...`, etc.
+  return /^[A-Za-z0-9._-]+$/.test(id);
 }
 
 const EXT_MIME = {
@@ -469,6 +761,7 @@ const EXT_MIME = {
   '.cjs': 'text/javascript; charset=utf-8',
   '.jsx': 'text/javascript; charset=utf-8',
   '.ts': 'text/typescript; charset=utf-8',
+  '.py': 'text/x-python; charset=utf-8',
   // `.tsx` previously served as `text/typescript`, which browser module
   // loaders and strict CSPs do not accept as a JavaScript MIME. Multi-file
   // React prototypes that load `.tsx` via Babel-standalone (`<script
@@ -502,11 +795,50 @@ export function mimeFor(name) {
   return EXT_MIME[ext] || 'application/octet-stream';
 }
 
+// Parses an HTTP Range header (RFC 7233) for a single byte range.
+// Returns { start, end } for a satisfiable range, 'unsatisfiable' for a
+// 416-class range, or null if the header is absent/malformed/multi-range
+// (callers fall back to a full 200 response in the null case).
+export function parseByteRange(header, fileSize) {
+  if (!header || !header.startsWith('bytes=')) return null;
+  const spec = header.slice(6).trim();
+  // Multi-range is valid RFC 7233 but uncommon for media; fall back to full.
+  if (spec.includes(',')) return null;
+  const dashIdx = spec.indexOf('-');
+  if (dashIdx === -1) return null;
+  const rawStart = spec.slice(0, dashIdx);
+  const rawEnd = spec.slice(dashIdx + 1);
+  let start, end;
+  if (rawStart === '') {
+    // Suffix range: bytes=-N → last N bytes.
+    const suffix = Number(rawEnd);
+    if (!Number.isFinite(suffix) || !Number.isInteger(suffix) || suffix <= 0) {
+      return 'unsatisfiable';
+    }
+    start = Math.max(0, fileSize - suffix);
+    end = fileSize - 1;
+  } else {
+    start = Number(rawStart);
+    if (!Number.isFinite(start) || !Number.isInteger(start) || start < 0) return null;
+    if (start >= fileSize) return 'unsatisfiable';
+    if (rawEnd === '') {
+      // Open-ended range: bytes=N- → from N to EOF.
+      end = fileSize - 1;
+    } else {
+      end = Number(rawEnd);
+      if (!Number.isFinite(end) || !Number.isInteger(end) || end < start) return null;
+      end = Math.min(end, fileSize - 1); // clamp over-long end
+    }
+  }
+  return { start, end };
+}
+
 export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
   const max = Math.min(Number(opts.max) || 200, 1000);
   const pattern = opts.pattern || null;
-  const items = await listFiles(projectsRoot, projectId);
-  const dir = projectDir(projectsRoot, projectId);
+  const metadata = opts.metadata;
+  const items = await listFiles(projectsRoot, projectId, { metadata });
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(escaped, 'i');
   const matches = [];

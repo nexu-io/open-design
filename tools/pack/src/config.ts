@@ -20,6 +20,7 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
 export type ToolPackCliOptions = {
+  appVersion?: string;
   cacheDir?: string;
   containerized?: boolean;
   dir?: string;
@@ -55,6 +56,7 @@ export type ToolPackRoots = {
 };
 
 export type ToolPackConfig = {
+  appVersion?: string;
   containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
@@ -87,6 +89,14 @@ function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCo
   if (value == null || value.length === 0) return "normal";
   if (value === "store" || value === "normal" || value === "maximum") return value;
   throw new Error(`unsupported mac --mac-compression value: ${value}`);
+}
+
+function resolveToolPackAppVersion(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) throw new Error("--app-version must not be empty");
+  if (/\s/.test(normalized)) throw new Error(`--app-version must not contain whitespace: ${value}`);
+  return normalized;
 }
 
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
@@ -138,6 +148,7 @@ export function resolveToolPackConfig(
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
 
   return {
+    appVersion: resolveToolPackAppVersion(options.appVersion),
     containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),

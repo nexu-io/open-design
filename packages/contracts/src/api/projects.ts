@@ -1,4 +1,4 @@
-import type { ChatMessage } from './chat';
+import type { ChatMessage } from './chat.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -62,9 +62,26 @@ export interface ProjectMetadata {
   templateId?: string;
   templateLabel?: string;
   inspirationDesignSystemIds?: string[];
-  importedFrom?: 'claude-design' | string;
+  importedFrom?: 'claude-design' | 'folder' | string;
   entryFile?: string;
   sourceFileName?: string;
+  // Folder-import (#597): when set, the project's files live under this
+  // absolute path instead of .od/projects/<id>/. OD reads and writes
+  // directly inside the user's folder. Stored as the realpath() result so
+  // symlinks can't redirect writes after import time.
+  baseDir?: string;
+  // PR #974: marker stamped by the daemon's HMAC-gated import handler
+  // when a folder import passed the desktop-main-process trust gate.
+  // Only set on folder-imported projects (`baseDir` set) and only when
+  // the import request carried a valid `X-OD-Desktop-Import-Token`
+  // signed with the secret the desktop main process registered with the
+  // daemon at startup. The desktop `shell.openPath` IPC refuses to
+  // forward folder-imported projects whose metadata lacks this marker,
+  // so a renderer cannot launder an attacker-chosen baseDir into a
+  // file-manager reveal even if a future codepath inadvertently lets
+  // it set `baseDir` outside the trusted flow. Privileged: rejected
+  // by `POST /api/projects` and `PATCH /api/projects/:id`.
+  fromTrustedPicker?: true;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
@@ -136,8 +153,36 @@ export interface ProjectResponse {
   project: Project;
 }
 
+// Response body for `GET /api/projects/:id`. Carries the same `project`
+// payload as `ProjectResponse` plus a derived `resolvedDir` so the web
+// client can address the on-disk working directory directly (e.g. for
+// `shell.openPath` from the desktop bridge). For folder-imported projects
+// `resolvedDir === metadata.baseDir`; for native projects it is
+// `path.join(<daemon projects root>, project.id)`. Computed server-side via
+// `resolveProjectDir(...)` so the web client never reconstructs the path.
+export interface ProjectDetailResponse extends ProjectResponse {
+  resolvedDir: string;
+}
+
 export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
+}
+
+// POST /api/import/folder — create a project rooted at an existing local
+// folder. The submitted baseDir is stored as the project's metadata.baseDir
+// (after realpath canonicalization) and OD reads/writes directly inside it.
+// The user owns version control; OD does not snapshot or copy.
+export interface ImportFolderRequest {
+  baseDir: string;
+  name?: string;
+  skillId?: string | null;
+  designSystemId?: string | null;
+}
+
+export interface ImportFolderResponse {
+  project: Project;
+  conversationId: string;
+  entryFile: string | null;
 }
 
 export interface ConversationsResponse {
@@ -160,7 +205,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -169,19 +214,112 @@ export type DeploymentStatus =
   | 'protected'
   | 'failed';
 
+export interface CloudflarePagesConfigHints {
+  lastZoneId?: string;
+  lastZoneName?: string;
+  lastDomainPrefix?: string;
+}
+
+export interface CloudflarePagesZoneInfo {
+  id: string;
+  name: string;
+  status?: string;
+  type?: string;
+}
+
+export interface CloudflarePagesZonesResponse {
+  zones: CloudflarePagesZoneInfo[];
+  cloudflarePages?: CloudflarePagesConfigHints;
+}
+
+export interface CloudflarePagesDeploySelection {
+  zoneId: string;
+  zoneName: string;
+  domainPrefix: string;
+}
+
+export type DeploymentLinkStatus =
+  | 'ready'
+  | 'link-delayed'
+  | 'protected'
+  | 'failed';
+
+export interface DeploymentLinkInfo {
+  url: string;
+  status: DeploymentLinkStatus;
+  statusMessage?: string;
+  reachableAt?: number;
+}
+
+export type CloudflarePagesDnsStatus =
+  | 'skipped'
+  | 'created'
+  | 'reused'
+  | 'unmarked'
+  | 'patched'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesDomainStatus =
+  | 'skipped'
+  | 'pending'
+  | 'active'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesCustomDomainStatus =
+  | 'pending'
+  | 'ready'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesDnsOwnership = 'marked' | 'unmarked' | 'external';
+
+export interface CloudflarePagesCustomDomainInfo {
+  hostname: string;
+  url: string;
+  zoneId: string;
+  zoneName: string;
+  domainPrefix: string;
+  status: CloudflarePagesCustomDomainStatus;
+  statusMessage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  dnsStatus?: CloudflarePagesDnsStatus;
+  dnsRecordId?: string;
+  dnsOwnership?: CloudflarePagesDnsOwnership;
+  domainStatus?: CloudflarePagesDomainStatus;
+  pagesDomainStatus?: string;
+  validationData?: unknown;
+  verificationData?: unknown;
+}
+
+export interface CloudflarePagesDeploymentInfo {
+  projectName: string;
+  pagesDev: DeploymentLinkInfo;
+  customDomain?: CloudflarePagesCustomDomainInfo;
+}
+
 export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
   tokenMask: string;
   teamId: string;
   teamSlug: string;
+  accountId?: string;
+  projectName?: string;
+  cloudflarePages?: CloudflarePagesConfigHints;
   target: 'preview';
 }
 
 export interface UpdateDeployConfigRequest {
+  providerId?: DeployProviderId;
   token?: string;
   teamId?: string;
   teamSlug?: string;
+  accountId?: string;
+  projectName?: string;
+  cloudflarePages?: CloudflarePagesConfigHints;
 }
 
 export interface DeploymentInfo {
@@ -196,6 +334,7 @@ export interface DeploymentInfo {
   status: DeploymentStatus;
   statusMessage?: string;
   reachableAt?: number;
+  cloudflarePages?: CloudflarePagesDeploymentInfo;
   createdAt: number;
   updatedAt: number;
 }
@@ -207,6 +346,7 @@ export interface ProjectDeploymentsResponse {
 export interface DeployProjectFileRequest {
   fileName: string;
   providerId?: DeployProviderId;
+  cloudflarePages?: CloudflarePagesDeploySelection;
 }
 
 export interface DeployProjectFileResponse extends DeploymentInfo {}

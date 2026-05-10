@@ -12,6 +12,10 @@ export interface AgentInfo {
   version?: string | null;
   models?: AgentModelOption[];
   reasoningOptions?: AgentModelOption[];
+  /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
+  installUrl?: string;
+  /** Optional HTTPS URL for configuration / auth / usage docs. */
+  docsUrl?: string;
 }
 
 export interface AgentsResponse {
@@ -45,6 +49,15 @@ export interface SkillSummary {
   craftRequires?: string[];
   hasBody: boolean;
   examplePrompt: string;
+  // True when this skill exists only to group derived `<parent>:<child>`
+  // example cards. The Examples gallery hides such cards because their
+  // preview would duplicate one of the derived cards and add no extra
+  // information, but the entry stays in the listing so `findSkillById`
+  // resolves the parent for system-prompt composition and "Use this
+  // prompt" fast-create on a derived card still composes the parent's
+  // SKILL.md body.
+  aggregatesExamples: boolean;
+  source?: 'built-in' | 'installed';
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -66,6 +79,7 @@ export interface DesignSystemSummary {
   summary: string;
   swatches?: string[];
   surface?: 'web' | 'image' | 'video' | 'audio';
+  source?: 'built-in' | 'installed';
 }
 
 export interface DesignSystemDetail extends DesignSystemSummary {
@@ -140,4 +154,20 @@ export interface SyncCommunityPetsResponse {
   rootDir: string;
   // Up to ~10 surfaced error messages (the daemon log keeps the rest).
   errors: string[];
+}
+
+export type InstallInput =
+  | { source: 'github'; url: string }
+  | { source: 'local'; path: string };
+
+export interface InstallSkillResponse {
+  skill: SkillSummary;
+}
+
+export interface InstallDesignSystemResponse {
+  designSystem: DesignSystemSummary;
+}
+
+export interface UninstallResponse {
+  ok: true;
 }

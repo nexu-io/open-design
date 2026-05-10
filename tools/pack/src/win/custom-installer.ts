@@ -258,7 +258,13 @@ FunctionEnd
 Function DetectRunningInstances
   Push $0
   Push $1
-  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { param($$install, $$registered); $$roots = @($$install, $$registered) | Where-Object { $$_ } | ForEach-Object { $$root = $$_.TrimEnd([char]92).ToLowerInvariant(); [pscustomobject]@{ Exact = $$root; Prefix = ($$root + [char]92) } } | Select-Object -Unique Exact, Prefix; $$matches = Get-CimInstance Win32_Process | Where-Object { $$matched = $$false; $$exe = $$_.ExecutablePath; if ($$null -ne $$exe) { $$exe = $$exe.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Exact -and (($$exe -eq $$root.Exact) -or $$exe.StartsWith($$root.Prefix))) { $$matched = $$true; break } } }; $$matched }; if ($$matches) { $$matches | ForEach-Object { [string]$$_.ProcessId + [char]32 + $$_.Name } } }" "$INSTDIR" "$ExistingInstallLocation"'
+  ; Match by ExecutablePath under the install root when available. WMI returns
+  ; null ExecutablePath for processes the caller cannot fully introspect
+  ; (insufficient access, processes mid-spawn). For those rows, fall back to
+  ; CommandLine containing the install-root prefix, which is OD-specific
+  ; enough to avoid false positives without resorting to global Name matching.
+  ; Issue #821.
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { param($$install, $$registered); $$roots = @($$install, $$registered) | Where-Object { $$_ } | ForEach-Object { $$root = $$_.TrimEnd([char]92).ToLowerInvariant(); [pscustomobject]@{ Exact = $$root; Prefix = ($$root + [char]92) } } | Select-Object -Unique Exact, Prefix; $$matches = Get-CimInstance Win32_Process | Where-Object { $$matched = $$false; $$exe = $$_.ExecutablePath; if ($$null -ne $$exe) { $$exe = $$exe.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Exact -and (($$exe -eq $$root.Exact) -or $$exe.StartsWith($$root.Prefix))) { $$matched = $$true; break } } } else { $$cmd = $$_.CommandLine; if ($$null -ne $$cmd) { $$cmdLc = $$cmd.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Prefix -and $$cmdLc.Contains($$root.Prefix)) { $$matched = $$true; break } } } }; $$matched }; if ($$matches) { $$matches | ForEach-Object { [string]$$_.ProcessId + [char]32 + $$_.Name } } }" "$INSTDIR" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
   \${If} $0 == "0"
@@ -275,7 +281,14 @@ FunctionEnd
 Function CloseRunningInstances
   Push $0
   Push $1
-  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { param($$install, $$registered); $$roots = @($$install, $$registered) | Where-Object { $$_ } | ForEach-Object { $$root = $$_.TrimEnd([char]92).ToLowerInvariant(); [pscustomobject]@{ Exact = $$root; Prefix = ($$root + [char]92) } } | Select-Object -Unique Exact, Prefix; $$matches = Get-CimInstance Win32_Process | Where-Object { $$matched = $$false; $$exe = $$_.ExecutablePath; if ($$null -ne $$exe) { $$exe = $$exe.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Exact -and (($$exe -eq $$root.Exact) -or $$exe.StartsWith($$root.Prefix))) { $$matched = $$true; break } } }; $$matched }; $$ids = @($$matches | ForEach-Object { $$_.ProcessId }); foreach ($$id in $$ids) { try { [void][System.Diagnostics.Process]::GetProcessById($$id).CloseMainWindow() } catch {} }; Start-Sleep -Milliseconds 1500; foreach ($$id in $$ids) { try { $$p = [System.Diagnostics.Process]::GetProcessById($$id); if (-not $$p.HasExited) { Stop-Process -Id $$id -Force -ErrorAction SilentlyContinue } } catch {} }; if ($$ids) { $$ids -join ([char]32) } }" "$INSTDIR" "$ExistingInstallLocation"'
+  ; Same matching as DetectRunningInstances (ExecutablePath path-prefix +
+  ; CommandLine fallback for null ExecutablePath rows). After Stop-Process
+  ; -Force we now WaitForExit on each PID (5s per process) before returning,
+  ; so the OS file-handle GC has time to release the lock on $INSTDIR\$exeName
+  ; before the installer proceeds into MUI_PAGE_INSTFILES. Without this wait
+  ; the next overwrite can race the kill and trigger NSIS's native "file in
+  ; use" Retry/Cancel dialog. Issue #821.
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { param($$install, $$registered); $$roots = @($$install, $$registered) | Where-Object { $$_ } | ForEach-Object { $$root = $$_.TrimEnd([char]92).ToLowerInvariant(); [pscustomobject]@{ Exact = $$root; Prefix = ($$root + [char]92) } } | Select-Object -Unique Exact, Prefix; $$matches = Get-CimInstance Win32_Process | Where-Object { $$matched = $$false; $$exe = $$_.ExecutablePath; if ($$null -ne $$exe) { $$exe = $$exe.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Exact -and (($$exe -eq $$root.Exact) -or $$exe.StartsWith($$root.Prefix))) { $$matched = $$true; break } } } else { $$cmd = $$_.CommandLine; if ($$null -ne $$cmd) { $$cmdLc = $$cmd.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Prefix -and $$cmdLc.Contains($$root.Prefix)) { $$matched = $$true; break } } } }; $$matched }; $$ids = @($$matches | ForEach-Object { $$_.ProcessId }); foreach ($$id in $$ids) { try { [void][System.Diagnostics.Process]::GetProcessById($$id).CloseMainWindow() } catch {} }; Start-Sleep -Milliseconds 1500; foreach ($$id in $$ids) { try { $$p = [System.Diagnostics.Process]::GetProcessById($$id); if (-not $$p.HasExited) { Stop-Process -Id $$id -Force -ErrorAction SilentlyContinue } } catch {} }; foreach ($$id in $$ids) { try { $$p = [System.Diagnostics.Process]::GetProcessById($$id); if (-not $$p.HasExited) { [void]$$p.WaitForExit(5000) } } catch {} }; if ($$ids) { $$ids -join ([char]32) } }" "$INSTDIR" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
   Push "running instances close exit=$0 output=$1"
