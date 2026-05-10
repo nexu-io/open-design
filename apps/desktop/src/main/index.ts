@@ -61,6 +61,16 @@ const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
   discoverWebUrl?: () => Promise<string | null>;
+  /**
+   * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
+   * renderer URL (`od://app/`) over `discoverWebUrl`, but Node-side
+   * fetch can't resolve a custom Electron protocol. Optional. When
+   * provided, runtime API calls (`/api/import/folder`,
+   * `/api/projects/:id`) target this URL instead. tools-dev callers
+   * omit it because their web URL IS already an http://127.0.0.1 URL
+   * Node fetch can hit.
+   */
+  discoverDaemonUrl?: () => Promise<string | null>;
 };
 
 function isDirectEntry(): boolean {
@@ -192,6 +202,7 @@ export async function runDesktopMain(
   const desktop = await createDesktopRuntime({
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
+    discoverDaemonUrl: options.discoverDaemonUrl,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
     // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
     // (after a daemon restart, or after a missed startup window). The

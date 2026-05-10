@@ -116,7 +116,7 @@ export function isOpenPathAllowedForProject(
  * desktop HMAC-gated import flow (PR #974).
  */
 export async function fetchResolvedProjectDir(
-  webUrl: string,
+  apiBaseUrl: string,
   projectId: string,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<{ ok: true; context: ResolvedProjectDirContext } | { ok: false; reason: string }> {
@@ -136,7 +136,7 @@ export async function fetchResolvedProjectDir(
   }
   let resp: Response;
   try {
-    resp = await fetchImpl(`${webUrl.replace(/\/+$/, "")}/api/projects/${encodeURIComponent(projectId)}`);
+    resp = await fetchImpl(`${apiBaseUrl.replace(/\/+$/, "")}/api/projects/${encodeURIComponent(projectId)}`);
   } catch (err) {
     return { ok: false, reason: `daemon fetch failed: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -273,6 +273,19 @@ export type DesktopRuntimeOptions = {
   desktopAuthSecret?: Buffer | null;
   discoverUrl(): Promise<string | null>;
   /**
+   * Round-7 (lefarcen P2 @ runtime.ts:336): packaged desktop loads the
+   * renderer from `od://app/`, which only resolves through Electron's
+   * registered protocol handler in the renderer context. Main-process
+   * `globalThis.fetch` (Node/undici) ignores that handler, so any
+   * `fetch(webUrl + '/api/...')` from main fails in packaged builds.
+   * `discoverDaemonUrl` returns the real `http://127.0.0.1:<port>` URL
+   * the sidecar daemon reported over STATUS IPC, so main-process API
+   * calls bypass the protocol handler entirely. Optional so tools-dev
+   * (where webUrl IS an http:// URL Node fetch can hit) can omit it
+   * and the runtime falls back to `discoverUrl` for API calls too.
+   */
+  discoverDaemonUrl?: () => Promise<string | null>;
+  /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
    * daemon-restart-mid-session, or a missed startup-window race, no
@@ -313,6 +326,16 @@ export function mintImportToken(secret: Buffer, baseDir: string): string {
  *     structured failure to the renderer. The Toast surfaces the reason.
  */
 export type PickAndImportFolderDeps = {
+  /**
+   * Round-7 (lefarcen P2 @ runtime.ts:336): the helper now POSTs to the
+   * sidecar daemon's real `http://127.0.0.1:<port>` URL rather than the
+   * renderer-only `od://app/` webUrl. Renamed from `webUrl` to make the
+   * boundary explicit — main-process Node fetch must hit a real http
+   * URL, never a custom Electron protocol scheme. tools-dev callers
+   * pass the same value they used to pass for `webUrl` (its web URL is
+   * already http://127.0.0.1:...).
+   */
+  apiBaseUrl: string;
   baseDir: string;
   desktopAuthSecret: Buffer;
   fetchImpl?: typeof globalThis.fetch;
@@ -321,7 +344,6 @@ export type PickAndImportFolderDeps = {
   registerDesktopAuth?: () => Promise<boolean>;
   /** Injected for tests; defaults to the production HMAC mint. */
   mintToken?: (secret: Buffer, baseDir: string) => string;
-  webUrl: string;
 };
 
 export type PickAndImportFolderResult =
@@ -333,7 +355,7 @@ export async function pickAndImportFolder(
 ): Promise<PickAndImportFolderResult> {
   const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
   const mint = deps.mintToken ?? mintImportToken;
-  const importUrl = `${deps.webUrl.replace(/\/+$/, "")}/api/import/folder`;
+  const importUrl = `${deps.apiBaseUrl.replace(/\/+$/, "")}/api/import/folder`;
   const requestBody = JSON.stringify({
     baseDir: deps.baseDir,
     ...(deps.init?.name == null ? {} : { name: deps.init.name }),
@@ -669,9 +691,17 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (options.desktopAuthSecret == null) {
         return { ok: false, reason: "desktop auth secret not registered" };
       }
-      const webUrl = await options.discoverUrl();
-      if (!webUrl) {
-        return { ok: false, reason: "web sidecar URL not available" };
+      // Round-7 (lefarcen P2): packaged builds report the renderer URL
+      // (`od://app/`) over `discoverUrl`, but Node-side fetch can't
+      // resolve a custom Electron protocol scheme. Prefer the daemon
+      // sidecar's real http URL when packaged exposes it; tools-dev
+      // omits `discoverDaemonUrl` and we fall back to the web URL
+      // (which is itself an http://127.0.0.1 URL in dev).
+      const apiBaseUrl =
+        (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
+        (await options.discoverUrl());
+      if (!apiBaseUrl) {
+        return { ok: false, reason: "daemon API URL not available" };
       }
       const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
@@ -689,11 +719,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         return { ok: false, reason: "picker returned an empty path" };
       }
       return await pickAndImportFolder({
+        apiBaseUrl,
         baseDir,
         desktopAuthSecret: options.desktopAuthSecret,
         init,
         registerDesktopAuth: options.registerDesktopAuthWithDaemon,
-        webUrl,
       });
     },
   );
@@ -722,11 +752,15 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // openPath(projectId) for projects whose resolvedDir came from that
   // trusted flow."
   ipcMain.handle("shell:open-path", async (_event, projectId: string) => {
-    const webUrl = await options.discoverUrl();
-    if (!webUrl) {
-      return "open-path: web sidecar URL not available";
+    // Round-7 (lefarcen P2): same packaged od:// → daemon URL pivot as
+    // the dialog:pick-and-import handler above.
+    const apiBaseUrl =
+      (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
+      (await options.discoverUrl());
+    if (!apiBaseUrl) {
+      return "open-path: daemon API URL not available";
     }
-    const resolved = await fetchResolvedProjectDir(webUrl, projectId);
+    const resolved = await fetchResolvedProjectDir(apiBaseUrl, projectId);
     if (!resolved.ok) return `open-path: ${resolved.reason}`;
     const allowed = isOpenPathAllowedForProject(resolved.context);
     if (!allowed.ok) return `open-path: ${allowed.reason}`;

@@ -78,7 +78,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       fetchImpl,
       mintToken,
       registerDesktopAuth,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(true);
@@ -113,7 +113,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       desktopAuthSecret: TEST_SECRET,
       fetchImpl,
       registerDesktopAuth,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(false);
@@ -141,7 +141,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       desktopAuthSecret: TEST_SECRET,
       fetchImpl,
       registerDesktopAuth,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(true);
@@ -162,7 +162,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       baseDir: "/Users/u/proj",
       desktopAuthSecret: TEST_SECRET,
       fetchImpl,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(false);
@@ -185,7 +185,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       desktopAuthSecret: TEST_SECRET,
       fetchImpl,
       registerDesktopAuth,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(false);
@@ -206,7 +206,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       baseDir: "/Users/u/proj",
       desktopAuthSecret: TEST_SECRET,
       fetchImpl,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(false);
@@ -214,6 +214,32 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       expect(result.reason).toMatch(/daemon fetch failed.*ECONNREFUSED/);
     }
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds load the
+  // renderer from `od://app/`, which the main-process Node fetch cannot
+  // resolve. The helper now POSTs to the daemon sidecar's real http URL
+  // — the deps shape was renamed `webUrl` → `apiBaseUrl` to make the
+  // boundary explicit. This test pins the URL composition so a
+  // regression that re-introduces the protocol-handler hop fails fast.
+  it("composes the import URL from apiBaseUrl, not from a renderer protocol scheme", async () => {
+    const fetchImpl = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(jsonResponse({ project: { id: "p3" }, conversationId: "c3" }, 200));
+
+    await pickAndImportFolder({
+      apiBaseUrl: "http://127.0.0.1:17456",
+      baseDir: "/Users/u/proj",
+      desktopAuthSecret: TEST_SECRET,
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url] = fetchImpl.mock.calls[0];
+    expect(typeof url).toBe("string");
+    expect(url as string).toBe("http://127.0.0.1:17456/api/import/folder");
+    // Defensive: never hand main-process fetch a custom protocol URL.
+    expect(url as string).not.toMatch(/^od:\/\//);
   });
 
   it("does NOT retry when the daemon answers 503 with a non-DESKTOP_AUTH_PENDING code", async () => {
@@ -230,7 +256,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
       desktopAuthSecret: TEST_SECRET,
       fetchImpl,
       registerDesktopAuth,
-      webUrl: "http://127.0.0.1:1234",
+      apiBaseUrl: "http://127.0.0.1:1234",
     });
 
     expect(result.ok).toBe(false);
