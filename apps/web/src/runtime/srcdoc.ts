@@ -48,7 +48,9 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(wrapped) : wrapped;
+  const needsOdIds = options.commentBridge || options.inspectBridge;
+  const withOdIds = needsOdIds ? annotateMissingOdIds(wrapped) : wrapped;
+  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
@@ -240,6 +242,32 @@ function sourcePathForElement(el: Element): string {
 function serializeHtmlDocument(doc: Document): string {
   const doctype = doc.doctype ? '<!doctype html>\n' : '';
   return `${doctype}${doc.documentElement.outerHTML}`;
+}
+
+/**
+ * Auto-annotate structural HTML elements that lack `data-od-id` or
+ * `data-screen-label` so that the selection bridge (Picker / Pods /
+ * Tweaks) can target them. This fixes imported designs whose HTML was
+ * generated outside of Open Design and therefore carries no OD-specific
+ * annotations.
+ */
+function annotateMissingOdIds(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  try {
+    const parsed = new DOMParser().parseFromString(doc, 'text/html');
+    const selector = 'section, article, header, footer, nav, main, aside, [id]';
+    let fallbackIndex = 0;
+    parsed.body.querySelectorAll(selector).forEach((el) => {
+      if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return;
+      const tag = el.tagName.toLowerCase();
+      if (tag === 'script' || tag === 'style' || tag === 'template' || tag === 'noscript') return;
+      const path = sourcePathForElement(el);
+      el.setAttribute('data-od-id', path || `od-${tag}-${fallbackIndex++}`);
+    });
+    return serializeHtmlDocument(parsed);
+  } catch {
+    return doc;
+  }
 }
 
 function injectManualEditBridge(doc: string): string {

@@ -217,4 +217,76 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).not.toContain("type: 'od:comment-target'");
     expect(srcdoc).not.toContain("type: 'od:inspect-overrides'");
   });
+
+  // Regression for nexu-io/open-design#892: imported designs (e.g. Claude
+  // Design ZIP) may not carry data-od-id annotations. The selection bridge
+  // depends on these attributes to identify clickable targets, so we
+  // auto-annotate structural elements when they are missing.
+  it('auto-annotates imported HTML that lacks data-od-id or data-screen-label', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><h1>Title</h1></div></section><article>Body</article>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Structural elements get path-based data-od-id
+    expect(srcdoc).toContain('data-od-id="');
+    // Script / style elements are skipped
+    expect(srcdoc).not.toContain('<script data-od-id=');
+  });
+
+  it('does not overwrite existing data-od-id or data-screen-label annotations', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section data-od-id="hero">Hero</section><div data-screen-label="cta">CTA</div>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Existing annotations must be preserved intact on their elements.
+    expect(srcdoc).toContain('<section data-od-id="hero">');
+    expect(srcdoc).toContain('<div data-screen-label="cta">');
+    // The div already has data-screen-label, so it must not get a fallback
+    // data-od-id injected by auto-annotation.
+    expect(srcdoc).not.toContain('<div data-od-id=');
+  });
+
+  it('annotates direct-child divs under semantic containers and skips iframe/object/embed', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<main><div class="card">A</div><iframe src="x"></iframe></main>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('<div class="card" data-od-id=');
+    expect(srcdoc).not.toContain('<iframe data-od-id=');
+  });
+
+  it('always annotates missing od-ids even when no selection bridge is requested', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc('<section><h1>Title</h1></section>', {});
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-id=');
+    expect(srcdoc).not.toContain('data-od-selection-bridge');
+  });
+
+  it('annotates div children of [id] elements but not nested anonymous divs', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<div id="root"><div class="child">A</div><div><div class="nested">B</div></div></div>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('<div class="child" data-od-id=');
+    expect(srcdoc).not.toContain('<div class="nested" data-od-id=');
+  });
 });
