@@ -347,6 +347,7 @@ export interface DeployProjectFileRequest {
   fileName: string;
   providerId?: DeployProviderId;
   cloudflarePages?: CloudflarePagesDeploySelection;
+  linkedPages?: string[];
 }
 
 export interface DeployProjectFileResponse extends DeploymentInfo {}
@@ -386,6 +387,7 @@ export interface DeployPreflightFile {
 export interface DeployPreflightRequest {
   fileName: string;
   providerId?: DeployProviderId;
+  linkedPages?: string[];
 }
 
 export interface DeployPreflightResponse {

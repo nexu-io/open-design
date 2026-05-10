@@ -655,11 +655,13 @@ export async function deployProjectFile(
   fileName: string,
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
   cloudflarePages?: WebCloudflarePagesDeploySelection,
+  linkedPages?: string[],
 ): Promise<WebDeployProjectFileResponse> {
-  const body = {
+  const body: Record<string, unknown> = {
     fileName,
     providerId,
     ...(cloudflarePages ? { cloudflarePages } : {}),
+    ...(linkedPages && linkedPages.length > 0 ? { linkedPages } : {}),
   };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',

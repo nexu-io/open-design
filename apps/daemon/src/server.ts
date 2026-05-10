@@ -143,6 +143,7 @@ import {
   resolveProjectFilePath,
   sanitizeName,
   searchProjectFiles,
+  validateProjectPath,
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
@@ -4291,7 +4292,7 @@ export async function startServer({
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages } = req.body || {};
+      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, linkedPages } = req.body || {};
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
@@ -4306,11 +4307,30 @@ export async function startServer({
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
       const deployProject = getProject(db, req.params.id);
+
+      // Resolve linked page paths into validated LinkedPageInfo records.
+      const linkedPagePaths = Array.isArray(linkedPages)
+        ? (linkedPages.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0))
+        : [];
+      const deployLinkedPages: { path: string; deployedName: string }[] = [];
+      for (const rawPath of linkedPagePaths) {
+        try {
+          const resolved = validateProjectPath(rawPath);
+          deployLinkedPages.push({
+            path: resolved,
+            deployedName: path.posix.basename(resolved),
+          });
+        } catch {
+          // Invalid paths are silently skipped — missing pages are
+          // caught by buildDeployFilePlan as missing entries.
+        }
+      }
+
       const files = await buildDeployFileSet(
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: deployProject?.metadata },
+        { metadata: deployProject?.metadata, linkedPages: deployLinkedPages },
       );
       const project = getProject(db, req.params.id);
       const cloudflarePagesProjectName =
@@ -4374,7 +4394,7 @@ export async function startServer({
 
   app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
+      const { fileName, providerId = VERCEL_PROVIDER_ID, linkedPages } = req.body || {};
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
@@ -4387,12 +4407,19 @@ export async function startServer({
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
       const preflightProject = getProject(db, req.params.id);
+      const linkedPagePaths = Array.isArray(linkedPages)
+        ? (linkedPages.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0))
+        : [];
+      const deployLinkedPages = linkedPagePaths.map((p) => {
+        const resolved = validateProjectPath(p);
+        return { path: resolved, deployedName: path.posix.basename(resolved) };
+      });
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: preflightProject?.metadata, providerId },
+        { metadata: preflightProject?.metadata, providerId, linkedPages: deployLinkedPages },
       );
       res.json(body);
     } catch (err) {

@@ -2970,6 +2970,7 @@ function HtmlViewer({
   const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
+  const [deployLinkedPages, setDeployLinkedPages] = useState<string[]>([]);
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
@@ -3964,6 +3965,34 @@ function HtmlViewer({
     setCopiedDeployLink(null);
     setDeployPhase('idle');
     await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+
+    // Detect linked .html pages from <a href> links in the entry file.
+    if (/\.html?$/i.test(file.name)) {
+      detectLinkedHtmlPages();
+    } else {
+      setDeployLinkedPages([]);
+    }
+  }
+
+  async function detectLinkedHtmlPages() {
+    try {
+      const text = await fetchProjectFileText(projectId, file.name);
+      if (!text) { setDeployLinkedPages([]); return; }
+      const anchorRe = /<a\s[^>]*href\s*=\s*"([^"]*\.html?)"/gi;
+      const found: string[] = [];
+      let match;
+      while ((match = anchorRe.exec(text)) !== null) {
+        const href = match[1];
+        if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('#') || href.startsWith('/')) continue;
+        if (href.startsWith('javascript:') || href.startsWith('mailto:')) continue;
+        const clean = href.split('?')[0].split('#')[0];
+        if (!found.includes(clean)) found.push(clean);
+      }
+      // Cap to a reasonable limit to avoid pathological pages
+      setDeployLinkedPages(found.slice(0, 20));
+    } catch {
+      setDeployLinkedPages([]);
+    }
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
@@ -4051,7 +4080,7 @@ function HtmlViewer({
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name, deployProviderId, cloudflarePagesSelection);
+      const next = await deployProjectFile(projectId, file.name, deployProviderId, cloudflarePagesSelection, deployLinkedPages);
       setDeploymentsByProvider((current) => ({
         ...current,
         [next.providerId]: next,
@@ -5215,6 +5244,14 @@ function HtmlViewer({
                 </div>
               ) : null}
             </div>
+            {deployLinkedPages.length > 0 && deployPhase === 'idle' ? (
+              <p className="hint deploy-linked-pages-note">
+                {t('fileViewer.linkedPagesNotice', {
+                  count: String(deployLinkedPages.length),
+                  pages: deployLinkedPages.join(', '),
+                })}
+              </p>
+            ) : null}
             <div className="modal-foot">
               <button
                 type="button"
