@@ -832,7 +832,7 @@ export const th: Dict = {
   'fileViewer.cloudflarePagesProvider': 'โฮส Cloudflare Pages',
   'fileViewer.deployToProvider': 'จัดนำโฮสติ้งไปเพื่อ {provider}',
   'fileViewer.redeployToProvider': 'ใช้ทับการ Deploy กับทาง {provider}',
-  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
+  'fileViewer.linkedPagesNotice': 'รวม {count} หน้าที่เชื่อมโยง: {pages}',
   'fileViewer.deployingToProvider': 'กำลังย้ายข้อมูลเข้าไปสู่ {provider}…',
   'fileViewer.preparingPublicLink': 'จัดทำลิ้งก์ให้พบเห็นทางด้านนอก…',
   'fileViewer.copyDeployLink': 'ลอกลิ้งก์เซฟใช้',

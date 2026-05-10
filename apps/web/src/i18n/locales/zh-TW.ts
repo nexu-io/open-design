@@ -895,7 +895,7 @@ export const zhTW: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': '部署到 {provider}',
   'fileViewer.redeployToProvider': '重新部署到 {provider}',
-  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
+  'fileViewer.linkedPagesNotice': '包含 {count} 個連結頁面：{pages}',
   'fileViewer.deployingToProvider': '正在部署到 {provider}…',
   'fileViewer.preparingPublicLink': '正在準備公開連結…',
   'fileViewer.copyDeployLink': '複製連結',
