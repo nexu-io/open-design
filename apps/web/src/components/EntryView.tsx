@@ -478,7 +478,7 @@ export function EntryView({
                 ? t('settings.localCli')
                 : apiProtocolLabel(config.apiProtocol)}
             </span>
-            <span className="avatar-item-meta" style={{ color: 'var(--text-faint)', flexShrink: 0 }}>
+            <span className="avatar-item-inline-meta">
               · {envMetaLine}
             </span>
           </button>

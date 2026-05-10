@@ -677,6 +677,13 @@ a.avatar-item:hover { background: var(--bg-subtle); }
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.avatar-item-inline-meta {
+  margin-left: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 50%;
