@@ -195,10 +195,11 @@ test('connectors search supports empty results and keyboard-closeable details', 
 
   await page.goto('/');
   // Connector cards + search now live under Settings → Connectors. Open the
-  // settings dialog via the entry sidebar's "Configure execution mode" pill
+  // settings dialog via the avatar menu's "Configure execution mode" item
   // and switch to the Connectors section before exercising the
   // search/empty/details flow.
-  await page.getByRole('button', { name: 'Configure execution mode' }).click();
+  await page.getByRole('button', { name: /open settings/i }).click();
+  await page.getByRole('menu').getByRole('button', { name: /configure execution mode/i }).click();
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
   await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();
@@ -253,7 +254,8 @@ test('saving a Composio key from Settings unlocks the connectors gate immediatel
   });
 
   await gotoEntryHome(page);
-  await page.getByRole('button', { name: 'Configure execution mode' }).click();
+  await page.getByRole('button', { name: /open settings/i }).click();
+  await page.getByRole('menu').getByRole('button', { name: /configure execution mode/i }).click();
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
   await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();

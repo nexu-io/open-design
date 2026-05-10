@@ -19,7 +19,8 @@ async function openExecutionSettings(
   });
 
   await page.goto('/');
-  await page.getByTitle('Configure execution mode').click();
+  await page.getByRole('button', { name: /open settings/i }).click();
+  await page.getByRole('menu').getByRole('button', { name: /configure execution mode/i }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
@@ -57,7 +58,8 @@ async function openExecutionSettingsWithAgents(
   });
 
   await page.goto('/');
-  await page.getByTitle('Configure execution mode').click();
+  await page.getByRole('button', { name: /open settings/i }).click();
+  await page.getByRole('menu').getByRole('button', { name: /configure execution mode/i }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
@@ -183,7 +185,8 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
     apiProviderBaseUrl: 'https://api.deepseek.com',
   });
 
-  await page.getByTitle('Configure execution mode').click();
+  await page.getByRole('button', { name: /open settings/i }).click();
+  await page.getByRole('menu').getByRole('button', { name: /configure execution mode/i }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -278,8 +281,8 @@ test('saving Local CLI updates the entry status pill with the selected agent', a
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const executionPill = page.getByTitle('Configure execution mode');
-  await expect(executionPill).toContainText('Local CLI');
-  await expect(executionPill).toContainText('Codex CLI');
-  await expect(executionPill).toContainText('0.80.0');
+  const executionButton = page.getByRole('button', { name: /Local CLI/i });
+  await expect(executionButton).toContainText('Local CLI');
+  await expect(executionButton).toContainText('Codex CLI');
+  await expect(executionButton).toContainText('0.80.0');
 });
