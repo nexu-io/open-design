@@ -1902,6 +1902,7 @@ function BoardComposerPopover({
                   type="button"
                   className="board-pod-chip-remove"
                   title={t('chat.comments.removePodMember')}
+                  aria-label={t('chat.comments.removePodMember')}
                   onClick={() => onRemovePodMember(member.elementId)}
                 >
                   <Icon name="close" size={10} />
@@ -3690,6 +3691,8 @@ function HtmlViewer({
     [],
   );
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  const activeCommentTargetRef = useRef(activeCommentTarget);
+  activeCommentTargetRef.current = activeCommentTarget;
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
@@ -5838,7 +5841,7 @@ function HtmlViewer({
                   setQueuedBoardNotes((current) => current.filter((_, currentIndex) => currentIndex !== index))
                 }
                 onRemovePodMember={(elementId) => {
-                  const current = activeCommentTarget;
+                  const current = activeCommentTargetRef.current;
                   if (!current) return;
                   const nextMembers = (current.podMembers ?? []).filter((m) => m.elementId !== elementId);
                   if (nextMembers.length === 0) {
