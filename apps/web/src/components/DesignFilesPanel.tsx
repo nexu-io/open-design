@@ -5,6 +5,7 @@ import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import Tooltip from './Tooltip';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -549,16 +550,17 @@ export function DesignFilesPanel({
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
         <div className="df-head">
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            title={t('designFiles.refresh')}
-            aria-label={t('designFiles.refresh')}
-          >
-            <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
-          </button>
+          <Tooltip text={t('designFiles.refresh')}>
+            <button
+              type="button"
+              className="icon-only"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+              aria-label={t('designFiles.refresh')}
+            >
+              <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
+            </button>
+          </Tooltip>
           <span className="crumbs">{t('designFiles.crumbs')}</span>
           {selected.size > 0 ? (
             <div className="df-actions">
@@ -583,23 +585,28 @@ export function DesignFilesPanel({
             </div>
           ) : (
             <div className="df-actions">
-            <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
-              <Icon name="pencil" size={13} />
-              <span>{t('designFiles.newSketch')}</span>
-            </button>
-            <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
-              <Icon name="copy" size={13} />
-              <span>{t('designFiles.paste.label')}</span>
-            </button>
-            <button
-              type="button"
-              data-testid="design-files-upload-trigger"
-              onClick={onUpload}
-              title={t('designFiles.upload.title')}
-            >
-              <Icon name="upload" size={13} />
-              <span>{t('designFiles.upload.label')}</span>
-            </button>
+            <Tooltip text={t('designFiles.newSketch')}>
+              <button type="button" onClick={onNewSketch}>
+                <Icon name="pencil" size={13} />
+                <span>{t('designFiles.newSketch')}</span>
+              </button>
+            </Tooltip>
+            <Tooltip text={t('designFiles.paste.title')}>
+              <button type="button" onClick={onPaste}>
+                <Icon name="copy" size={13} />
+                <span>{t('designFiles.paste.label')}</span>
+              </button>
+            </Tooltip>
+            <Tooltip text={t('designFiles.upload.title')}>
+              <button
+                type="button"
+                data-testid="design-files-upload-trigger"
+                onClick={onUpload}
+              >
+                <Icon name="upload" size={13} />
+                <span>{t('designFiles.upload.label')}</span>
+              </button>
+            </Tooltip>
           </div>
           )}
         </div>
