@@ -34,6 +34,7 @@ import { useProjectFileEvents, type ProjectEvent } from '../providers/project-ev
 import { composeSystemPrompt, type ResearchOptions } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
+import { isMacPlatform } from '../utils/platform';
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
@@ -1956,10 +1957,8 @@ export function ProjectView({
   // Quick Switcher shortcut. ⌘+Shift+K is free (⌘+P is the only
   // existing primary-modifier shortcut on this surface).
   useEffect(() => {
-    const isMac =
-      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     const onKeyDown = (e: KeyboardEvent) => {
-      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (primary && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         if (e.isComposing) return;
         if (!designMdState.exists) return;
