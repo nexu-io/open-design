@@ -21,9 +21,13 @@ declare const URL: {
 };
 
 function normalizeBracketedIpv6(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1).toLowerCase()
-    : hostname.toLowerCase();
+  const stripped = hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
+  // FQDN trailing-dot form (RFC 1034) resolves identically to the dotless form,
+  // so `localhost.` and `foo.localhost.` must normalize to `localhost` /
+  // `foo.localhost` before any equality / endsWith comparison runs.
+  return stripped.toLowerCase().replace(/\.+$/, '');
 }
 
 function parseIpv4(hostname: string): [number, number, number, number] | null {

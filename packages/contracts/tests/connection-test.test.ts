@@ -9,6 +9,12 @@ describe('provider base URL validation', () => {
       'http://127.0.0.1:11434/v1',
       'http://[::1]:11434/v1',
       'http://[::ffff:127.0.0.1]:11434/v1',
+      // FQDN trailing-dot form must be treated as loopback, not as an
+      // unknown public host (`new URL('http://localhost./').hostname`
+      // returns `'localhost.'`).
+      'http://localhost./v1',
+      'http://foo.localhost./v1',
+      'http://127.0.0.1.:11434/v1',
     ]) {
       expect(validateBaseUrl(baseUrl).error).toBeUndefined();
     }
@@ -27,6 +33,12 @@ describe('provider base URL validation', () => {
       'http://[fd00::1]:11434/v1',
       'http://[fe80::1]:11434/v1',
       'http://[::ffff:192.168.1.5]:11434/v1',
+      // Trailing-dot FQDN bypass: `192.168.1.5.` doesn't parse as IPv4
+      // until normalized, so without the trailing-dot strip an attacker
+      // can hit AWS metadata via 169.254.169.254. and reach LAN ranges.
+      'http://169.254.169.254./latest/meta-data',
+      'http://192.168.1.5.:11434/v1',
+      'http://10.0.0.5.:11434/v1',
     ]) {
       expect(validateBaseUrl(baseUrl)).toMatchObject({
         error: 'Internal IPs blocked',
