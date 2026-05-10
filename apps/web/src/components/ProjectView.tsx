@@ -1471,10 +1471,7 @@ export function ProjectView({
         // Surface the daemon's stub-guard warning when it fires in `warn`
         // mode (the default). Without this the warning would land in the
         // file metadata silently and the user would never see that the
-        // model shipped a placeholder. Reject mode returns null from
-        // writeProjectTextFile (the 422 is collapsed by the API client) —
-        // surfacing that case requires plumbing error responses through
-        // writeProjectTextFile, tracked separately.
+        // model shipped a placeholder.
         if (file.stubGuardWarning) {
           setError(
             `Saved "${file.name}", but the model may have shipped a placeholder: ` +
@@ -1485,6 +1482,20 @@ export function ProjectView({
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
         requestOpenFile(file.name);
+      } else {
+        // writeProjectTextFile collapses non-OK responses (including
+        // 422 ARTIFACT_REGRESSION from reject-mode stub-guard) to null.
+        // Surfacing the structured error requires changing that helper's
+        // return contract for all callers — out of scope here. Until then,
+        // a generic banner makes the failure observable instead of silent.
+        // Allow the user to retry by clearing the saved-artifact ref so a
+        // retry attempt re-enters this code path.
+        savedArtifactRef.current = '';
+        setError(
+          `Couldn't save artifact "${fileName}". The daemon refused the write — ` +
+            'this is most likely OD_ARTIFACT_STUB_GUARD=reject catching a placeholder body. ' +
+            'Check the daemon logs for the structured ARTIFACT_REGRESSION details.',
+        );
       }
     },
     [project.id, projectFiles, requestOpenFile],

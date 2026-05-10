@@ -93,6 +93,12 @@ export function slugifyArtifactIdentifier(value: string): string {
     .slice(0, 60);
 }
 
+// Frontend fallback name used by persistArtifact when the slugified
+// identifier is empty (e.g. all-non-ASCII identifiers like "测试" strip to
+// nothing). Without matching against this, sibling discovery would miss
+// the entire "artifact*.html" family that such identifiers produce.
+export const EMPTY_SLUG_FALLBACK_NAME = 'artifact';
+
 // Finds prior HTML siblings on disk that share an identifier with a
 // newly-written artifact. The frontend's collision-suffixing scheme means
 // related entries match `<identifier>(-\d+)?\.html?`. The scan deliberately
@@ -105,10 +111,13 @@ export async function findPriorArtifactSiblings(
 ): Promise<PriorArtifactSibling[]> {
   if (identifier.length === 0) return [];
   const tokens = new Set<string>();
-  if (identifier.length > 0) tokens.add(identifier);
+  tokens.add(identifier);
   const slug = slugifyArtifactIdentifier(identifier);
   if (slug.length > 0) tokens.add(slug);
-  if (tokens.size === 0) return [];
+  // When the identifier slugifies to empty (e.g. all-non-ASCII), the web
+  // path falls back to the literal "artifact" basename. Match that family
+  // so a later artifact-2.html stub doesn't bypass the prior.
+  else tokens.add(EMPTY_SLUG_FALLBACK_NAME);
   const alternation = Array.from(tokens, escapeRegExp).join('|');
   const pattern = new RegExp(`^(?:${alternation})(?:-\\d+)?\\.html?$`);
   let entries: Dirent[];

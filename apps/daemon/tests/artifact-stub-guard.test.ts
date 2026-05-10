@@ -168,6 +168,19 @@ describe('findPriorArtifactSiblings', () => {
     const priors = await findPriorArtifactSiblings(dir, 'Landing Page');
     expect(priors.map((p) => p.name)).toEqual(['landing-page.html']);
   });
+
+  it('falls back to the "artifact" basename when the identifier slugifies to empty', async () => {
+    const dir = await makeDir();
+    // Identifier like "测试" (or any all-non-ASCII / punctuation-only
+    // string) strips to "" through the web slugifier and persistArtifact's
+    // `|| 'artifact'` fallback writes it as artifact.html / artifact-2.html.
+    await writeFile(path.join(dir, 'artifact.html'), 'a'.repeat(40_000));
+    await writeFile(path.join(dir, 'artifact-2.html'), 'b'.repeat(60_000));
+
+    const priors = await findPriorArtifactSiblings(dir, '测试');
+    const names = priors.map((p) => p.name).sort();
+    expect(names).toEqual(['artifact-2.html', 'artifact.html']);
+  });
 });
 
 describe('evaluateArtifactStubGuard (integration with disk scan)', () => {

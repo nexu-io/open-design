@@ -315,4 +315,31 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
     const body = (await stubResp.json()) as { error: { code: string } };
     expect(body.error.code).toBe('ARTIFACT_REGRESSION');
   });
+
+  it('finds artifact.html siblings when identifier slugifies to empty (lefarcen P2)', async () => {
+    const projectId = await createProject('empty-slug');
+
+    // Frontend persistArtifact slugifies "测试" -> "" -> falls back to
+    // "artifact", so the file lands as artifact.html. A subsequent stub
+    // emission with the same non-ASCII identifier must still find the
+    // prior via the empty-slug fallback.
+    const firstResp = await postFile(projectId, {
+      name: 'artifact.html',
+      content: htmlBody(20_000),
+      artifactManifest: { ...manifestFor('artifact'), metadata: { identifier: '测试' } },
+    });
+    expect(firstResp.status).toBe(200);
+
+    const stubResp = await postFile(projectId, {
+      name: 'artifact-2.html',
+      content: '<html><body>see artifact.html</body></html>',
+      artifactManifest: { ...manifestFor('artifact'), metadata: { identifier: '测试' } },
+    });
+    expect(stubResp.status).toBe(422);
+    const body = (await stubResp.json()) as {
+      error: { code: string; details?: { priorName?: string } };
+    };
+    expect(body.error.code).toBe('ARTIFACT_REGRESSION');
+    expect(body.error.details?.priorName).toBe('artifact.html');
+  });
 });
