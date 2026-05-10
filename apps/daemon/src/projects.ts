@@ -413,9 +413,11 @@ export async function writeProjectFile(
       // Other kinds (markdown, svg, code-snippet) can legitimately be small
       // and are skipped.
       if (identifier.length > 0 && STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)) {
+        // Scan the directory the new file actually lands in, not the project
+        // root — writeProjectFile accepts nested paths like reports/X.html
+        // and a root-only scan would miss prior siblings in subdirectories.
         const guard = await evaluateArtifactStubGuard({
-          projectDir: dir,
-          safeName,
+          scanDir: path.dirname(target),
           identifier,
           newSize: Buffer.byteLength(body),
           config: readArtifactStubGuardConfigFromEnv(),

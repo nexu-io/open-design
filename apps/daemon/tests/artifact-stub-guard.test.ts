@@ -116,7 +116,7 @@ describe('findPriorArtifactSiblings', () => {
     return dir;
   }
 
-  it('finds bare and suffixed siblings while excluding the new entry', async () => {
+  it('finds bare and suffixed siblings, including the same-named target if it exists', async () => {
     const dir = await makeDir();
     await writeFile(path.join(dir, 'report.html'), 'a'.repeat(20_000));
     await writeFile(path.join(dir, 'report-2.html'), 'b'.repeat(40_000));
@@ -124,13 +124,17 @@ describe('findPriorArtifactSiblings', () => {
     await writeFile(path.join(dir, 'unrelated.html'), 'x'.repeat(50_000));
     await writeFile(path.join(dir, 'report-2.html.artifact.json'), '{}');
 
-    const priors = await findPriorArtifactSiblings(dir, 'report', 'report-3.html');
+    // The target 'report-3.html' is included because it currently exists on
+    // disk and its current size is the prior content (the overwrite that
+    // would replace it has not happened yet at scan time). This is the
+    // same-name-overwrite case: see lefarcen P1.
+    const priors = await findPriorArtifactSiblings(dir, 'report');
     const names = priors.map((p) => p.name).sort();
-    expect(names).toEqual(['report-2.html', 'report.html']);
+    expect(names).toEqual(['report-2.html', 'report-3.html', 'report.html']);
   });
 
   it('returns an empty list when the directory does not exist', async () => {
-    const priors = await findPriorArtifactSiblings('/nonexistent/od/projects/missing', 'dashboard', 'dashboard.html');
+    const priors = await findPriorArtifactSiblings('/nonexistent/od/projects/missing', 'dashboard');
     expect(priors).toEqual([]);
   });
 
@@ -139,8 +143,9 @@ describe('findPriorArtifactSiblings', () => {
     await writeFile(path.join(dir, 'landing.html'), 'a'.repeat(1_000));
     await writeFile(path.join(dir, 'landing-page.html'), 'b'.repeat(1_000));
 
-    const priors = await findPriorArtifactSiblings(dir, 'landing', 'landing.html');
-    expect(priors).toEqual([]);
+    const priors = await findPriorArtifactSiblings(dir, 'landing');
+    const names = priors.map((p) => p.name).sort();
+    expect(names).toEqual(['landing.html']);
   });
 
   it('also matches .htm siblings', async () => {
@@ -148,9 +153,20 @@ describe('findPriorArtifactSiblings', () => {
     await writeFile(path.join(dir, 'overview-doc.htm'), 'a'.repeat(20_000));
     await writeFile(path.join(dir, 'overview-doc-2.html'), 'b'.repeat(30_000));
 
-    const priors = await findPriorArtifactSiblings(dir, 'overview-doc', 'overview-doc-3.html');
+    const priors = await findPriorArtifactSiblings(dir, 'overview-doc');
     const names = priors.map((p) => p.name).sort();
     expect(names).toEqual(['overview-doc-2.html', 'overview-doc.htm']);
+  });
+
+  it('matches siblings using the slugified form of a non-slug identifier', async () => {
+    const dir = await makeDir();
+    // Frontend persistArtifact slugifies "Landing Page" -> "landing-page"
+    // for the filename but keeps the raw "Landing Page" in the manifest.
+    // Both forms must find the same prior sibling on disk.
+    await writeFile(path.join(dir, 'landing-page.html'), 'a'.repeat(40_000));
+
+    const priors = await findPriorArtifactSiblings(dir, 'Landing Page');
+    expect(priors.map((p) => p.name)).toEqual(['landing-page.html']);
   });
 });
 
@@ -174,8 +190,7 @@ describe('evaluateArtifactStubGuard (integration with disk scan)', () => {
     await writeFile(path.join(dir, 'presentation.html'), 'p'.repeat(60_000));
 
     const result = await evaluateArtifactStubGuard({
-      projectDir: dir,
-      safeName: 'presentation-2.html',
+      scanDir: dir,
       identifier: 'presentation',
       newSize: 200,
       config: rejectingConfig(),
@@ -190,8 +205,7 @@ describe('evaluateArtifactStubGuard (integration with disk scan)', () => {
     await writeFile(path.join(dir, 'presentation.html'), 'p'.repeat(60_000));
 
     const result = await evaluateArtifactStubGuard({
-      projectDir: dir,
-      safeName: 'presentation-2.html',
+      scanDir: dir,
       identifier: 'presentation',
       newSize: 50_000,
       config: rejectingConfig(),

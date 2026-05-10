@@ -240,4 +240,79 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
     expect(body.error.code).toBe('ARTIFACT_REGRESSION');
     expect(body.error.details?.priorName).toBe('overview-doc.htm');
   });
+
+  it('rejects a same-name overwrite that shrinks the existing file (lefarcen P1)', async () => {
+    const projectId = await createProject('overwrite');
+
+    const firstResp = await postFile(projectId, {
+      name: 'dashboard.html',
+      content: htmlBody(20_000),
+      artifactManifest: manifestFor('dashboard'),
+    });
+    expect(firstResp.status).toBe(200);
+
+    // Same name, same identifier, stub body: existing file is the prior.
+    const stubResp = await postFile(projectId, {
+      name: 'dashboard.html',
+      content: '<html><body>see dashboard.html</body></html>',
+      artifactManifest: manifestFor('dashboard'),
+    });
+    expect(stubResp.status).toBe(422);
+    const body = (await stubResp.json()) as {
+      error: { code: string; details?: { priorName?: string } };
+    };
+    expect(body.error.code).toBe('ARTIFACT_REGRESSION');
+    expect(body.error.details?.priorName).toBe('dashboard.html');
+
+    // Confirm the original 20 KB file is intact (not overwritten).
+    const filesResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    const files = (await filesResp.json()) as { files: Array<{ name: string; size: number }> };
+    const dashboard = files.files.find((f) => f.name === 'dashboard.html');
+    expect(dashboard?.size).toBeGreaterThan(15_000);
+  });
+
+  it('rejects stub regressions in subdirectories (Codex/mrcfps P2)', async () => {
+    const projectId = await createProject('nested');
+
+    const firstResp = await postFile(projectId, {
+      name: 'reports/overview.html',
+      content: htmlBody(20_000),
+      artifactManifest: manifestFor('overview'),
+    });
+    expect(firstResp.status).toBe(200);
+
+    const stubResp = await postFile(projectId, {
+      name: 'reports/overview-2.html',
+      content: '<html><body>see reports/overview.html</body></html>',
+      artifactManifest: manifestFor('overview'),
+    });
+    expect(stubResp.status).toBe(422);
+    const body = (await stubResp.json()) as {
+      error: { code: string; details?: { priorName?: string } };
+    };
+    expect(body.error.code).toBe('ARTIFACT_REGRESSION');
+    expect(body.error.details?.priorName).toBe('overview.html');
+  });
+
+  it('finds slug-form sibling when manifest carries non-slug identifier (Codex/lefarcen/mrcfps P2)', async () => {
+    const projectId = await createProject('slug');
+
+    // Frontend wrote the previous artifact under a slugified name but the
+    // manifest carried the raw identifier "Landing Page".
+    const firstResp = await postFile(projectId, {
+      name: 'landing-page.html',
+      content: htmlBody(20_000),
+      artifactManifest: { ...manifestFor('landing-page'), metadata: { identifier: 'Landing Page' } },
+    });
+    expect(firstResp.status).toBe(200);
+
+    const stubResp = await postFile(projectId, {
+      name: 'landing-page-2.html',
+      content: '<html><body>see landing-page.html</body></html>',
+      artifactManifest: { ...manifestFor('landing-page'), metadata: { identifier: 'Landing Page' } },
+    });
+    expect(stubResp.status).toBe(422);
+    const body = (await stubResp.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('ARTIFACT_REGRESSION');
+  });
 });

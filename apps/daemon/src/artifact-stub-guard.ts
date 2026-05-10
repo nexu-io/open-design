@@ -6,7 +6,7 @@
 // The guard is structural: it compares the new body's size against the
 // largest prior sibling sharing the same identifier. It does not pattern-
 // match on phrasing, so it works regardless of which agent backend produced
-// the regression. False positives are bounded by MIN_PRIOR_BYTES (we won't
+// the regression. False positives are bounded by minPriorBytes (we won't
 // compare against priors that are themselves small) and minRetainedRatio.
 
 import type { Dirent } from 'node:fs';
@@ -36,8 +36,7 @@ export interface ArtifactStubGuardWarning {
 }
 
 export interface EvaluateArtifactStubGuardInput {
-  projectDir: string;
-  safeName: string;
+  scanDir: string;
   identifier: string;
   newSize: number;
   config: ArtifactStubGuardConfig;
@@ -71,40 +70,59 @@ export const DEFAULT_ARTIFACT_STUB_GUARD_CONFIG: ArtifactStubGuardConfig = {
   minPriorBytes: 4096,
 };
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 // HTML-rendered manifest kinds. Decks are HTML files on disk and have the
 // same regression failure mode as plain html artifacts (the agent emits a
 // placeholder where a multi-KB framework should be), so they're guarded
 // alongside `html`.
 export const STUB_GUARDED_MANIFEST_KINDS: ReadonlySet<string> = new Set(['html', 'deck']);
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Mirror of the slugifier in `apps/web/src/components/ProjectView.tsx`'s
+// `persistArtifact`. The web path slugifies the identifier for the
+// filename basename but keeps the *raw* identifier in the manifest, so a
+// regex anchored on the raw identifier alone can miss its own slug-form
+// siblings on disk. We try both forms.
+export function slugifyArtifactIdentifier(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
 // Finds prior HTML siblings on disk that share an identifier with a
 // newly-written artifact. The frontend's collision-suffixing scheme means
-// related entries match `<identifier>(-\d+)?\.html?`. We scan once per
-// write; project directories are small so this is cheap.
+// related entries match `<identifier>(-\d+)?\.html?`. The scan deliberately
+// includes any file at the same path as the new write — when an agent
+// overwrites `dashboard.html` with the same name, the file currently on
+// disk is the prior content (the overwrite happens after this scan).
 export async function findPriorArtifactSiblings(
-  projectDir: string,
+  scanDir: string,
   identifier: string,
-  excludeSafeName: string,
 ): Promise<PriorArtifactSibling[]> {
   if (identifier.length === 0) return [];
-  const pattern = new RegExp(`^${escapeRegExp(identifier)}(?:-\\d+)?\\.html?$`);
+  const tokens = new Set<string>();
+  if (identifier.length > 0) tokens.add(identifier);
+  const slug = slugifyArtifactIdentifier(identifier);
+  if (slug.length > 0) tokens.add(slug);
+  if (tokens.size === 0) return [];
+  const alternation = Array.from(tokens, escapeRegExp).join('|');
+  const pattern = new RegExp(`^(?:${alternation})(?:-\\d+)?\\.html?$`);
   let entries: Dirent[];
   try {
-    entries = await readdir(projectDir, { withFileTypes: true });
+    entries = await readdir(scanDir, { withFileTypes: true });
   } catch {
     return [];
   }
   const results: PriorArtifactSibling[] = [];
   for (const entry of entries) {
     if (!entry.isFile()) continue;
-    if (entry.name === excludeSafeName) continue;
     if (!pattern.test(entry.name)) continue;
     try {
-      const st = await stat(path.join(projectDir, entry.name));
+      const st = await stat(path.join(scanDir, entry.name));
       results.push({ name: entry.name, size: st.size });
     } catch {
       // ignore unreadable entries; they don't influence the guard decision
@@ -188,10 +206,6 @@ export async function evaluateArtifactStubGuard(
 ): Promise<EvaluateArtifactStubGuardResult> {
   if (input.config.mode === 'off') return { outcome: 'pass' };
   if (input.identifier.length === 0) return { outcome: 'pass' };
-  const priors = await findPriorArtifactSiblings(
-    input.projectDir,
-    input.identifier,
-    input.safeName,
-  );
+  const priors = await findPriorArtifactSiblings(input.scanDir, input.identifier);
   return classifyArtifactStubGuard(priors, input.identifier, input.newSize, input.config);
 }

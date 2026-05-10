@@ -1468,6 +1468,19 @@ export function ProjectView({
       });
       if (file) {
         setFilesRefresh((n) => n + 1);
+        // Surface the daemon's stub-guard warning when it fires in `warn`
+        // mode (the default). Without this the warning would land in the
+        // file metadata silently and the user would never see that the
+        // model shipped a placeholder. Reject mode returns null from
+        // writeProjectTextFile (the 422 is collapsed by the API client) —
+        // surfacing that case requires plumbing error responses through
+        // writeProjectTextFile, tracked separately.
+        if (file.stubGuardWarning) {
+          setError(
+            `Saved "${file.name}", but the model may have shipped a placeholder: ` +
+              `${file.stubGuardWarning.message}`,
+          );
+        }
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
