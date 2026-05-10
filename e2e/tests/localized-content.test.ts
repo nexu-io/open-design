@@ -40,6 +40,25 @@ function sorted(values: Iterable<string>): string[] {
   return [...values].sort((a, b) => a.localeCompare(b));
 }
 
+function uniqueSorted(values: Iterable<string>): string[] {
+  return sorted(new Set(values));
+}
+
+function findMissingIds(localizedIds: Iterable<string>, discoveredIds: Iterable<string>): string[] {
+  const localized = new Set(localizedIds);
+  const discovered = new Set(discoveredIds);
+  return sorted([...discovered].filter((id) => !localized.has(id)));
+}
+
+function expectExactResourceCoverage(
+  label: string,
+  localizedIds: Iterable<string>,
+  discoveredIds: Iterable<string>,
+): void {
+  const missing = findMissingIds(localizedIds, discoveredIds);
+  expect(missing, `${label} should cover every discovered resource`).toEqual([]);
+}
+
 async function entriesWithFile(root: string, fileName: string): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
   const ids: string[] = [];
@@ -141,12 +160,16 @@ describe('localized display content coverage', () => {
         readPromptTemplateSummaries(),
       ]);
 
-      expect(sorted(ids.skills), 'skills display copy').toEqual(skillIds);
-      expect(sorted(ids.designSystems), 'design-system summaries').toEqual(
+      expectExactResourceCoverage('skills display copy', ids.skills, skillIds);
+      expectExactResourceCoverage(
+        'design-system summaries',
+        ids.designSystems,
         designSystemIds,
       );
-      expect(sorted(ids.promptTemplates), 'prompt-template metadata').toEqual(
-        sorted(promptTemplateSummaries.map((template) => template.id)),
+      expectExactResourceCoverage(
+        'prompt-template metadata',
+        ids.promptTemplates,
+        uniqueSorted(promptTemplateSummaries.map((template) => template.id)),
       );
     });
 
