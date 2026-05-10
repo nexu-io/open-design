@@ -862,6 +862,7 @@ export const uk: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Розгорнути на {provider}',
   'fileViewer.redeployToProvider': 'Розгорнути повторно на {provider}',
+  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
   'fileViewer.deployingToProvider': 'Розгортання на {provider}…',
   'fileViewer.preparingPublicLink': 'Підготовка публічного посилання…',
   'fileViewer.copyDeployLink': 'Копіювати посилання',

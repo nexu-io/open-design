@@ -1653,7 +1653,7 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
         // references so they get rewritten to clean URLs.
         if (tagName === 'a' && linkedPages && linkedPages.length > 0) {
           const aHref = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
-          const cleanHref = aHref.split('?')[0].split('#')[0];
+          const cleanHref = aHref.split('?')[0]?.split('#')[0] ?? '';
           const suffix = aHref.slice(cleanHref.length);
           const resolved = resolveReferencedPath(cleanHref, baseDir);
           if (resolved) {

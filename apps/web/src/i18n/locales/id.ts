@@ -968,6 +968,7 @@ export const id: Dict = {
   'fileViewer.cloudflarePagesProvider': 'Cloudflare Pages',
   'fileViewer.deployToProvider': 'Deploy ke {provider}',
   'fileViewer.redeployToProvider': 'Deploy ulang ke {provider}',
+  'fileViewer.linkedPagesNotice': 'Includes {count} linked page(s): {pages}',
   'fileViewer.deployingToProvider': 'Deploying ke {provider}...',
   'fileViewer.cloudflareApiToken': 'Token API Cloudflare',
   'fileViewer.cloudflareApiTokenGetLink': 'Dapatkan token API Cloudflare',
