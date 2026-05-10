@@ -391,7 +391,8 @@ code {
   min-width: 0;
   flex: 0 1 auto;
 }
-.project-target-platforms {
+.project-target-platforms,
+.project-feature-chips {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -402,7 +403,11 @@ code {
   white-space: nowrap;
   flex: 0 1 auto;
 }
-.project-target-platforms-label {
+.project-feature-chips {
+  max-width: min(100%, 260px);
+}
+.project-target-platforms-label,
+.project-feature-chips-label {
   color: var(--text-muted);
   font-size: 10px;
   line-height: 18px;
@@ -411,7 +416,8 @@ code {
   letter-spacing: 0.06em;
   flex-shrink: 0;
 }
-.project-target-platform-chip {
+.project-target-platform-chip,
+.project-feature-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -429,6 +435,16 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 0 1 auto;
+}
+.project-feature-chip.is-landing {
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-strong));
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-subtle));
+}
+.project-feature-chip.is-widgets {
+  color: color-mix(in srgb, #0891b2 72%, var(--text-strong));
+  border-color: color-mix(in srgb, #0891b2 26%, transparent);
+  background: color-mix(in srgb, #0891b2 10%, var(--bg-subtle));
 }
 .project-target-platform-chip.is-count {
   min-width: 28px;
@@ -4003,6 +4019,14 @@ code {
 }
 .toggle-row:hover { border-color: var(--border-strong); }
 .toggle-row.on { border-color: var(--accent); background: var(--accent-tint); }
+.toggle-row.disabled,
+.toggle-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  background: var(--bg-subtle);
+}
+.toggle-row.disabled:hover,
+.toggle-row:disabled:hover { border-color: var(--border); }
 .toggle-row-text {
   flex: 1;
   min-width: 0;

@@ -404,6 +404,15 @@ export const id: Dict = {
   'newproj.toggleSpeakerNotesHint': 'Kurangi teks di slide; simpan poin bicara di catatan.',
   'newproj.toggleAnimations': 'Sertakan animasi',
   'newproj.toggleAnimationsHint': 'Tambahkan motion, hover, dan transisi di atas templat.',
+  'newproj.surfaceOptionsLabel': 'Companion surfaces',
+  'newproj.includeLandingPage': 'Include landing page',
+  'newproj.includeLandingPageHint':
+    'Add a responsive marketing page for ads, waitlists, launch campaigns, app downloads, or product explanation.',
+  'newproj.includeOsWidgets': 'Include OS widgets',
+  'newproj.includeOsWidgetsHint':
+    'Add platform-native home screen, lock screen, or quick-access widgets for mobile/tablet apps.',
+  'newproj.includeOsWidgetsDisabledHint':
+    'Available when iOS, Android, or tablet app is selected as a target platform.',
   'newproj.templateLabel': 'Templat',
   'newproj.noTemplatesTitle': 'Belum ada templat',
   'newproj.noTemplatesBody': 'Buka proyek apa pun, lalu pakai menu Share di penampil berkas untuk mengubahnya menjadi templat.',
@@ -840,7 +849,7 @@ export const id: Dict = {
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',
   'fileViewer.viewportTablet': 'Tablet',
-  'fileViewer.viewportTabletTitle': 'Tablet preview at 1024 × 768',
+  'fileViewer.viewportTabletTitle': 'Tablet preview at 820 × 1180 (modern portrait baseline)',
   'fileViewer.viewportMobile': 'Mobile',
   'fileViewer.viewportMobileTitle': 'Mobile preview at 390 × 844',
   'fileViewer.reloadAria': 'Muat ulang file',

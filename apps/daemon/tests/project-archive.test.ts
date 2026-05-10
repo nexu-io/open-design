@@ -36,7 +36,7 @@ describe('buildProjectArchive', () => {
       .filter((entry) => !entry.dir)
       .map((entry) => entry.name)
       .sort();
-    expect(fileEntries).toEqual(['DESIGN-HANDOFF.md', 'frames/phone.html', 'index.html', 'src/app.css']);
+    expect(fileEntries).toEqual(['DESIGN-HANDOFF.md', 'DESIGN-MANIFEST.json', 'frames/phone.html', 'index.html', 'src/app.css']);
   });
 
   it('zips the whole project when no root is given', async () => {
@@ -47,6 +47,7 @@ describe('buildProjectArchive', () => {
       .filter((entry) => !entry.dir)
       .map((entry) => entry.name);
     expect(fileEntries).toContain('DESIGN-HANDOFF.md');
+    expect(fileEntries).toContain('DESIGN-MANIFEST.json');
     expect(fileEntries).toContain('README.md');
     expect(fileEntries).toContain('ui-design/index.html');
     expect(fileEntries).toContain('ui-design/src/app.css');
@@ -93,13 +94,37 @@ describe('buildProjectArchive', () => {
     const zip = await JSZip.loadAsync(buffer);
     const handoff = await zip.file('DESIGN-HANDOFF.md')?.async('string');
     expect(handoff).toContain('implementation handoff');
-    expect(handoff).toContain('Desktop: 1440×900');
-    expect(handoff).toContain('Tablet: 1024×768');
-    expect(handoff).toContain('Mobile: 390×844');
+    expect(handoff).toContain('Mobile compact: 360×800');
+    expect(handoff).toContain('Tablet portrait: 820×1180');
+    expect(handoff).toContain('Wide desktop: 1920×1080');
     expect(handoff).toContain('Design fidelity contract');
+    expect(handoff).toContain('CJX-ready UX contract');
+    expect(handoff).toContain('DESIGN-MANIFEST.json');
+    expect(handoff).toContain('in-app modules/components');
+    expect(handoff).toContain('OS widgets are home-screen/lock-screen/quick-access surfaces');
     expect(handoff).toContain('Color and brand contract');
     expect(handoff).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
-    expect(handoff).toContain('Build components from largest layout regions down to controls');
+    expect(handoff).toContain('Build product screens and domain-specific in-app modules');
+  });
+
+  it('adds a machine-readable design manifest to project archives', async () => {
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'ui-design');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+    expect(manifest.schema).toBe('open-design.design-manifest.v1');
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.sourceFiles.css).toEqual(['src/app.css']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['frames/phone.html', 'index.html']);
+    expect(manifest.appModules.join(' ')).toContain('domain-specific in-app modules');
+    expect(manifest.osWidgets.join(' ')).toContain('home-screen');
+    expect(manifest.responsiveViewports).toContainEqual({
+      name: 'tablet-portrait',
+      width: 820,
+      height: 1180,
+      category: 'tablet',
+      mustAvoidHorizontalScroll: true,
+    });
   });
 
   it('does not overwrite an existing design handoff file', async () => {

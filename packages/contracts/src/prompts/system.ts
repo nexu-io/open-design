@@ -156,20 +156,36 @@ function renderMetadataBlock(
   }
   if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
     lines.push(
-      '- **responsive web contract**: `responsive` means one web product experience that adapts across desktop, tablet, and mobile browser breakpoints. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real layout changes in the product UI; do not render viewport labels as user-facing product content.',
+      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
     );
   }
   if ((metadata.platformTargets?.length ?? 0) > 1) {
     lines.push(
-      '- **cross-platform rule**: each selected target keeps the same product goal but adapts navigation, density, safe areas, input behavior, and layout to that platform. Prefer separate product screens/files or a preview shell with real product variants. Do not replace the product with a cross-platform map, comparison board, or labelled documentation section.',
+      '- **cross-platform deliverable rule**: each selected target keeps the same product goal but MUST be delivered as its own product screen/file when more than one concrete target is selected. Use clear files such as `landing.html` (if enabled), `mobile-ios.html`, `mobile-android.html`, `tablet.html`, `desktop.html`, plus shared `css/` and `js/` when useful. `index.html` may be a launcher/overview that links to these files, but it must not be the only place where mobile/tablet/desktop designs live. Do not collapse cross-platform work into a single tabbed demo, selector UI, comparison board, platform map, or labelled documentation section inside one mock product page.',
     );
   }
   if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
     lines.push(
-      '- **product-realism rule**: final artifacts must look like end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "full design target" badges, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard.',
+      '- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.',
+    );
+    lines.push(
+      '- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.',
+    );
+    lines.push(
+      '- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained `index.html`, put the CSS/JS in clearly labelled blocks; for complex UX, generate `css/` and `js/` files when useful.',
     );
     lines.push(
       '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
+    );
+  }
+  if (metadata.includeLandingPage) {
+    lines.push(
+      '- **includeLandingPage**: true — add a responsive marketing companion landing page in addition to the selected product/app surfaces. It must not replace the app screens. Prefer a separate `landing.html` file for cross-platform/native projects; for responsive-web-only projects, a distinct landing section or `landing.html` is acceptable as long as it is clearly separate from the working product app UI. Include hero, value props, product screenshots/device mockups, proof/features, and an appropriate CTA such as waitlist, download, or contact sales.',
+    );
+  }
+  if (metadata.includeOsWidgets) {
+    lines.push(
+      '- **includeOsWidgets**: true — add platform-native OS home-screen / lock-screen / quick-access widget surfaces where relevant. These are outside-the-app widgets (for example iOS WidgetKit, Android home screen widget, Live Activity/lock screen, tablet glance panel), not in-app cards. Include realistic widget sizes and direct quick actions for the domain.',
     );
   }
   if (metadata.intent === 'live-artifact') {

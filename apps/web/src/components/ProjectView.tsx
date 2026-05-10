@@ -237,6 +237,31 @@ function projectTargetPlatforms(project: Project): string[] {
   return [];
 }
 
+type ProjectFeatureChip = {
+  label: string;
+  title: string;
+  tone: 'landing' | 'widgets';
+};
+
+function projectFeatureChips(project: Project): ProjectFeatureChip[] {
+  const chips: ProjectFeatureChip[] = [];
+  if (project.metadata?.includeLandingPage) {
+    chips.push({
+      label: 'Landing page',
+      title: 'Landing page companion surface is enabled for this project',
+      tone: 'landing',
+    });
+  }
+  if (project.metadata?.includeOsWidgets) {
+    chips.push({
+      label: 'OS widgets',
+      title: 'Home-screen, lock-screen, or quick-access OS widget surfaces are enabled',
+      tone: 'widgets',
+    });
+  }
+  return chips;
+}
+
 export function ProjectView({
   project,
   routeFileName,
@@ -1600,6 +1625,8 @@ export function ProjectView({
   const targetPlatformsLabel = targetPlatforms.join(', ');
   const visibleTargetPlatforms = targetPlatforms.slice(0, 5);
   const hiddenTargetPlatformCount = Math.max(0, targetPlatforms.length - visibleTargetPlatforms.length);
+  const featureChips = useMemo(() => projectFeatureChips(project), [project]);
+  const featureChipsLabel = featureChips.map((chip) => chip.label).join(', ');
 
   const isDeck = useMemo(
     () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
@@ -1852,6 +1879,24 @@ export function ProjectView({
                   +{hiddenTargetPlatformCount}
                 </span>
               ) : null}
+            </span>
+          ) : null}
+          {featureChips.length > 0 ? (
+            <span
+              className="project-feature-chips"
+              data-testid="project-feature-chips"
+              title={`Enabled design outputs: ${featureChipsLabel}`}
+            >
+              <span className="project-feature-chips-label">Includes</span>
+              {featureChips.map((chip) => (
+                <span
+                  className={`project-feature-chip is-${chip.tone}`}
+                  key={chip.tone}
+                  title={chip.title}
+                >
+                  {chip.label}
+                </span>
+              ))}
             </span>
           ) : null}
         </div>

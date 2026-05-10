@@ -627,7 +627,7 @@ export const ja: Dict = {
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',
   'fileViewer.viewportTablet': 'Tablet',
-  'fileViewer.viewportTabletTitle': 'Tablet preview at 1024 × 768',
+  'fileViewer.viewportTabletTitle': 'Tablet preview at 820 × 1180 (modern portrait baseline)',
   'fileViewer.viewportMobile': 'Mobile',
   'fileViewer.viewportMobileTitle': 'Mobile preview at 390 × 844',
   'fileViewer.reloadAria': '再読み込み',

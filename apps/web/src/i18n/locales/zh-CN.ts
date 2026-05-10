@@ -303,6 +303,15 @@ export const zhCN: Dict = {
   'newproj.toggleSpeakerNotesHint': '减少幻灯片上的文字，要点放到备注中。',
   'newproj.toggleAnimations': '加入动效',
   'newproj.toggleAnimationsHint': '在模板基础上叠加动效（入场、悬停、过渡）。',
+  'newproj.surfaceOptionsLabel': 'Companion surfaces',
+  'newproj.includeLandingPage': 'Include landing page',
+  'newproj.includeLandingPageHint':
+    'Add a responsive marketing page for ads, waitlists, launch campaigns, app downloads, or product explanation.',
+  'newproj.includeOsWidgets': 'Include OS widgets',
+  'newproj.includeOsWidgetsHint':
+    'Add platform-native home screen, lock screen, or quick-access widgets for mobile/tablet apps.',
+  'newproj.includeOsWidgetsDisabledHint':
+    'Available when iOS, Android, or tablet app is selected as a target platform.',
   'newproj.templateLabel': '模板',
   'newproj.noTemplatesTitle': '还没有模板',
   'newproj.noTemplatesBody':
@@ -736,7 +745,7 @@ export const zhCN: Dict = {
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',
   'fileViewer.viewportTablet': 'Tablet',
-  'fileViewer.viewportTabletTitle': 'Tablet preview at 1024 × 768',
+  'fileViewer.viewportTabletTitle': 'Tablet preview at 820 × 1180 (modern portrait baseline)',
   'fileViewer.viewportMobile': 'Mobile',
   'fileViewer.viewportMobileTitle': 'Mobile preview at 390 × 844',
   'fileViewer.reloadAria': '重新加载',

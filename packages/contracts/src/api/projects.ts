@@ -68,6 +68,8 @@ export interface ProjectMetadata {
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
+  includeLandingPage?: boolean;
+  includeOsWidgets?: boolean;
   templateId?: string;
   templateLabel?: string;
   /** Primary target surface selected at project creation. */

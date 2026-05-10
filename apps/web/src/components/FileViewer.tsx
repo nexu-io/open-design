@@ -83,6 +83,7 @@ type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
 type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
+type PreviewCanvasSize = { width: number; height: number };
 type PreviewViewportPreset = {
   id: PreviewViewportId;
   width: number | null;
@@ -131,8 +132,8 @@ const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
   },
   {
     id: 'tablet',
-    width: 1024,
-    height: 768,
+    width: 820,
+    height: 1180,
     labelKey: 'fileViewer.viewportTablet',
     titleKey: 'fileViewer.viewportTabletTitle',
   },
@@ -322,14 +323,32 @@ function PreviewViewportControls({
 function previewViewportStyle(
   viewport: PreviewViewportId,
   previewScale = 1,
+  canvasSize?: PreviewCanvasSize,
 ): CSSProperties & Record<string, string | number> {
   const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
   if (!preset.width) return {};
+  const effectiveScale = effectivePreviewScale(viewport, previewScale, canvasSize);
   return {
     '--preview-viewport-width': `${preset.width}px`,
     '--preview-viewport-height': `${preset.height}px`,
-    '--preview-scale': previewScale,
+    '--preview-scale': effectiveScale,
+    '--preview-user-scale': previewScale,
   };
+}
+
+function effectivePreviewScale(
+  viewport: PreviewViewportId,
+  previewScale: number,
+  canvasSize?: PreviewCanvasSize,
+) {
+  if (viewport === 'desktop') return previewScale;
+  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport);
+  if (!preset?.width || !preset.height || !canvasSize?.width || !canvasSize.height) return previewScale;
+  const canvasPadding = 48;
+  const availableWidth = Math.max(1, canvasSize.width - canvasPadding);
+  const availableHeight = Math.max(1, canvasSize.height - canvasPadding);
+  const fitScale = Math.min(1, availableWidth / preset.width, availableHeight / preset.height);
+  return Math.min(previewScale, fitScale);
 }
 
 function previewScaleShellStyle(
@@ -345,12 +364,35 @@ function previewScaleShellStyle(
     };
   }
   return {
-    '--preview-scale': previewScale,
     width: 'var(--preview-viewport-width)',
     height: 'var(--preview-viewport-height)',
-    transform: `scale(${previewScale})`,
+    transform: 'scale(var(--preview-scale, 1))',
     transformOrigin: '0 0',
   };
+}
+
+function usePreviewCanvasSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState<PreviewCanvasSize | undefined>(undefined);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setSize({ width: rect.width, height: rect.height });
+    };
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(measure);
+      observer.observe(el);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  return [ref, size] as const;
 }
 
 function ensureMarkdownCodeBlockControls(root: HTMLElement, t: TranslateFn) {
@@ -479,6 +521,7 @@ export function LiveArtifactViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
+  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshSuccess, setRefreshSuccess] = useState<string | null>(null);
@@ -740,7 +783,7 @@ export function LiveArtifactViewer({
           </button>
         </div>
       </div>
-      <div className="viewer-body">
+      <div className="viewer-body" ref={previewBodyRef}>
         {refreshError ? (
           <LiveArtifactRefreshNotice
             tone="error"
@@ -771,7 +814,7 @@ export function LiveArtifactViewer({
         {mode === 'preview' ? (
           <div
             className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale)}
+            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
           >
             <div className="preview-frame-clip">
               <div
@@ -3160,7 +3203,7 @@ function HtmlViewer({
   const [slideState, setSlideState] = useState<SlideState | null>(
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
-  const previewBodyRef = useRef<HTMLDivElement | null>(null);
+  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
 
@@ -4591,7 +4634,7 @@ function HtmlViewer({
         ) : mode === 'preview' ? (
           <div
             className={`${manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale)}
+            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
           >
             {manualEditMode ? (
               <ManualEditPanel

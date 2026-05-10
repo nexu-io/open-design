@@ -305,6 +305,15 @@ export const ru: Dict = {
   'newproj.toggleAnimations': 'Включить анимации',
   'newproj.toggleAnimationsHint':
     'Добавить анимации (появление, наведение, переходы) поверх шаблона.',
+  'newproj.surfaceOptionsLabel': 'Companion surfaces',
+  'newproj.includeLandingPage': 'Include landing page',
+  'newproj.includeLandingPageHint':
+    'Add a responsive marketing page for ads, waitlists, launch campaigns, app downloads, or product explanation.',
+  'newproj.includeOsWidgets': 'Include OS widgets',
+  'newproj.includeOsWidgetsHint':
+    'Add platform-native home screen, lock screen, or quick-access widgets for mobile/tablet apps.',
+  'newproj.includeOsWidgetsDisabledHint':
+    'Available when iOS, Android, or tablet app is selected as a target platform.',
   'newproj.templateLabel': 'Шаблон',
   'newproj.noTemplatesTitle': 'Шаблонов пока нет',
   'newproj.noTemplatesBody':
@@ -747,7 +756,7 @@ export const ru: Dict = {
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',
   'fileViewer.viewportTablet': 'Tablet',
-  'fileViewer.viewportTabletTitle': 'Tablet preview at 1024 × 768',
+  'fileViewer.viewportTabletTitle': 'Tablet preview at 820 × 1180 (modern portrait baseline)',
   'fileViewer.viewportMobile': 'Mobile',
   'fileViewer.viewportMobileTitle': 'Mobile preview at 390 × 844',
   'fileViewer.reloadAria': 'Перезагрузить',

@@ -440,6 +440,12 @@ export interface Dict {
   'newproj.toggleSpeakerNotesHint': string;
   'newproj.toggleAnimations': string;
   'newproj.toggleAnimationsHint': string;
+  'newproj.surfaceOptionsLabel': string;
+  'newproj.includeLandingPage': string;
+  'newproj.includeLandingPageHint': string;
+  'newproj.includeOsWidgets': string;
+  'newproj.includeOsWidgetsHint': string;
+  'newproj.includeOsWidgetsDisabledHint': string;
   'newproj.templateLabel': string;
   'newproj.noTemplatesTitle': string;
   'newproj.noTemplatesBody': string;

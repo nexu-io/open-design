@@ -191,6 +191,8 @@ export function NewProjectPanel({
     'high-fidelity',
   );
   const [platformTargets, setPlatformTargets] = useState<NewProjectPlatform[]>(['responsive']);
+  const [includeLandingPage, setIncludeLandingPage] = useState(false);
+  const [includeOsWidgets, setIncludeOsWidgets] = useState(false);
   const [speakerNotes, setSpeakerNotes] = useState(false);
   const [animations, setAnimations] = useState(false);
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -378,6 +380,8 @@ export function NewProjectPanel({
       tab,
       fidelity,
       platformTargets,
+      includeLandingPage,
+      includeOsWidgets,
       speakerNotes,
       animations,
       templateId,
@@ -525,6 +529,16 @@ export function NewProjectPanel({
 
         {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
           <PlatformPicker value={platformTargets} onChange={setPlatformTargets} />
+        ) : null}
+
+        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+          <SurfaceOptions
+            includeLandingPage={includeLandingPage}
+            includeOsWidgets={includeOsWidgets}
+            osWidgetsAvailable={platformTargetsSupportOsWidgets(platformTargets)}
+            onIncludeLandingPage={setIncludeLandingPage}
+            onIncludeOsWidgets={setIncludeOsWidgets}
+          />
         ) : null}
 
         {tab === 'prototype' || tab === 'live-artifact' ? (
@@ -727,6 +741,44 @@ function PlatformPicker({
   );
 }
 
+function SurfaceOptions({
+  includeLandingPage,
+  includeOsWidgets,
+  osWidgetsAvailable,
+  onIncludeLandingPage,
+  onIncludeOsWidgets,
+}: {
+  includeLandingPage: boolean;
+  includeOsWidgets: boolean;
+  osWidgetsAvailable: boolean;
+  onIncludeLandingPage: (v: boolean) => void;
+  onIncludeOsWidgets: (v: boolean) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="newproj-section surface-options">
+      <label className="newproj-label">{t('newproj.surfaceOptionsLabel')}</label>
+      <ToggleRow
+        label={t('newproj.includeLandingPage')}
+        hint={t('newproj.includeLandingPageHint')}
+        checked={includeLandingPage}
+        onChange={onIncludeLandingPage}
+      />
+      <ToggleRow
+        label={t('newproj.includeOsWidgets')}
+        hint={
+          osWidgetsAvailable
+            ? t('newproj.includeOsWidgetsHint')
+            : t('newproj.includeOsWidgetsDisabledHint')
+        }
+        checked={osWidgetsAvailable && includeOsWidgets}
+        disabled={!osWidgetsAvailable}
+        onChange={onIncludeOsWidgets}
+      />
+    </div>
+  );
+}
+
 function FidelityPicker({
   value,
   onChange,
@@ -921,18 +973,21 @@ function ToggleRow({
   hint,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
   hint?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
     <button
       type="button"
-      className={`toggle-row${checked ? ' on' : ''}`}
-      onClick={() => onChange(!checked)}
+      className={`toggle-row${checked ? ' on' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
       aria-pressed={checked}
+      disabled={disabled}
     >
       <div className="toggle-row-text">
         <span className="toggle-row-label">{label}</span>
@@ -1976,6 +2031,8 @@ function buildMetadata(input: {
   tab: CreateTab;
   fidelity: 'wireframe' | 'high-fidelity';
   platformTargets: NewProjectPlatform[];
+  includeLandingPage: boolean;
+  includeOsWidgets: boolean;
   speakerNotes: boolean;
   animations: boolean;
   templateId: string | null;
@@ -1996,9 +2053,15 @@ function buildMetadata(input: {
   const kind: ProjectKind = input.tab === 'live-artifact' ? 'prototype' : input.tab;
   const selectedPlatforms = normalizeSelectedPlatforms(input.platformTargets);
   const concreteTargets = platformTargetsFor(selectedPlatforms);
+  const canIncludeOsWidgets = platformTargetsSupportOsWidgets(concreteTargets);
+  const surfaceOptions = {
+    ...(input.includeLandingPage ? { includeLandingPage: true } : {}),
+    ...(input.includeOsWidgets && canIncludeOsWidgets ? { includeOsWidgets: true } : {}),
+  };
   const base = {
     platform: selectedPlatforms[0],
     platformTargets: concreteTargets,
+    ...surfaceOptions,
   };
   const inspirations = input.inspirationIds.length > 0
     ? { inspirationDesignSystemIds: input.inspirationIds }
@@ -2072,6 +2135,14 @@ function normalizeSelectedPlatforms(platforms: NewProjectPlatform[]): NewProject
     }
   }
   return seen.size > 0 ? [...seen] : ['responsive'];
+}
+
+function platformTargetsSupportOsWidgets(platforms: ProjectPlatform[] | NewProjectPlatform[]): boolean {
+  return platforms.some((platform) =>
+    platform === 'mobile-ios'
+    || platform === 'mobile-android'
+    || platform === 'tablet',
+  );
 }
 
 function platformTargetsFor(platforms: NewProjectPlatform[]): ProjectPlatform[] {

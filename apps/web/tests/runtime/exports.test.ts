@@ -3,6 +3,7 @@ import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
   buildDesignHandoffContent,
+  buildDesignManifestContent,
   buildSandboxedPreviewDocument,
   exportAsMd,
   exportAsPdf,
@@ -82,15 +83,42 @@ describe('buildDesignHandoffContent', () => {
     });
 
     expect(content).toContain('Checkout Design implementation handoff');
-    expect(content).toContain('Desktop: 1440×900');
-    expect(content).toContain('Tablet: 1024×768');
-    expect(content).toContain('Mobile: 390×844');
+    expect(content).toContain('Mobile compact: 360×800');
+    expect(content).toContain('Tablet portrait: 820×1180');
+    expect(content).toContain('Wide desktop: 1920×1080');
     expect(content).toContain('`src/app.css`');
     expect(content).toContain('visual system');
     expect(content).toContain('Design fidelity contract');
+    expect(content).toContain('CJX-ready UX contract');
+    expect(content).toContain('DESIGN-MANIFEST.json');
+    expect(content).toContain('in-app modules/components');
+    expect(content).toContain('OS widgets are home-screen/lock-screen/quick-access surfaces');
     expect(content).toContain('Color and brand contract');
     expect(content).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
-    expect(content).toContain('Build components from largest layout regions down to controls');
+    expect(content).toContain('Build product screens and domain-specific in-app modules');
+  });
+
+  it('builds a machine-readable design manifest for coding tools', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Checkout Design',
+      entryFile: 'index.html',
+      files: ['index.html', 'src/app.css', 'src/app.js'],
+    }));
+
+    expect(manifest.schema).toBe('open-design.design-manifest.v1');
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.sourceFiles.css).toEqual(['src/app.css']);
+    expect(manifest.sourceFiles.scriptsAndComponents).toEqual(['src/app.js']);
+    expect(manifest.appModules.join(' ')).toContain('domain-specific in-app modules');
+    expect(manifest.osWidgets.join(' ')).toContain('home-screen');
+    expect(manifest.responsiveViewports).toContainEqual({
+      name: 'tablet-portrait',
+      width: 820,
+      height: 1180,
+      category: 'tablet',
+      mustAvoidHorizontalScroll: true,
+    });
+    expect(manifest.implementationChecklist.join(' ')).toContain('landing pages, in-app modules, and OS widgets');
   });
 });
 
