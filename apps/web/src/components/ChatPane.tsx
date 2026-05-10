@@ -870,9 +870,9 @@ function UserMessage({
         <div className="user-attachments comment-history-attachments">
           {commentAttachments.map((a) => (
             <span key={a.id} className="user-attachment staged-comment">
-              <span className="staged-name">
+              <span className="staged-name" title={`${a.elementId}: ${a.comment}`}>
                 <strong>{a.elementId}</strong>
-                <span title={a.comment}>{a.comment}</span>
+                <span>{a.comment}</span>
               </span>
             </span>
           ))}
