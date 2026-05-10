@@ -646,17 +646,37 @@ code {
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text);
+  min-width: 0;
 }
 .avatar-item:hover { background: var(--bg-subtle); }
+a.avatar-item {
+  text-decoration: none;
+  color: var(--text);
+}
+a.avatar-item:hover { background: var(--bg-subtle); }
 .avatar-item .avatar-item-icon {
   width: 18px; text-align: center; color: var(--text-muted); flex-shrink: 0;
 }
+.avatar-item-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.avatar-item-text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
 .avatar-item .avatar-item-meta {
-  margin-left: auto;
   font-size: 11px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .avatar-section-label {
   font-size: 10.5px;
@@ -4666,106 +4686,6 @@ code {
   border: 1px solid var(--border) !important;
 }
 .ds-picker-clear:hover { border-color: var(--border-strong) !important; }
-
-.entry-side-foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  padding: 16px 24px 20px;
-}
-.entry-side-foot-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.entry-side-foot .foot-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-size: 11.5px;
-  color: var(--text-muted);
-  align-self: flex-start;
-  cursor: pointer;
-  text-decoration: none;
-}
-.entry-side-foot-row .foot-pill {
-  min-width: 0;
-}
-.entry-side-foot-row .foot-pill-follow {
-  flex: 0 1 auto;
-}
-.entry-side-foot-row .foot-pill-follow-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.entry-side-foot .foot-pill:hover { background: var(--bg-panel); border-color: var(--border-strong); color: var(--text); }
-.entry-side-foot .foot-pill .ico { font-size: 12px; opacity: 0.7; }
-
-/* Language switcher pill + popover (entry sidebar foot). */
-.lang-menu-wrap {
-  position: relative;
-  align-self: flex-start;
-}
-.lang-menu-wrap .lang-pill {
-  font-variant-numeric: tabular-nums;
-}
-.lang-menu-popover {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 50;
-  min-width: 180px;
-  width: max-content;
-  max-width: min(280px, calc(100vw - 48px));
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
-}
-.lang-menu-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.lang-menu-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.lang-menu-item:hover { background: var(--bg-subtle); }
-.lang-menu-item.active { background: var(--bg-subtle); }
-.lang-menu-item .lang-menu-code {
-  color: var(--text-faint);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-.lang-menu-item .lang-menu-check {
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-}
 
 /* Right side */
 .entry-main {
@@ -12428,32 +12348,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 @keyframes pet-bubble-in {
   from { opacity: 0; transform: translateY(4px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* ----- Entry sidebar adopt pill ----- */
-.pet-pill {
-  position: relative;
-}
-.pet-pill .pet-pill-glyph {
-  font-size: 14px;
-  line-height: 1;
-}
-.pet-pill-fresh {
-  border-color: var(--accent);
-  color: var(--text);
-  background: var(--accent-tint);
-}
-.pet-pill-fresh:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-.pet-pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-tint);
-  margin-left: 2px;
 }
 
 /* ----- Settings → Pets ----- */

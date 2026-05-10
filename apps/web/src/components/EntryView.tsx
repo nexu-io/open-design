@@ -425,6 +425,29 @@ export function EntryView({
             type="button"
             className="avatar-item"
             onClick={() => {
+              setAvatarMenuOpen(false);
+              onOpenSettings('pet');
+            }}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>
+                {config.pet?.adopted
+                  ? config.pet.petId === 'custom'
+                    ? config.pet.custom.glyph || '🦄'
+                    : '🐾'
+                  : '🐾'}
+              </span>
+            </span>
+            <span>
+              {config.pet?.adopted
+                ? t('pet.changePet')
+                : t('pet.adoptCallout')}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="avatar-item"
+            onClick={() => {
               setPetRailHidden(!petRailHidden);
               setAvatarMenuOpen(false);
             }}
@@ -438,6 +461,54 @@ export function EntryView({
                 : t('pet.railHide')}
             </span>
           </button>
+          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
+          <button
+            type="button"
+            className="avatar-item"
+            onClick={() => {
+              setAvatarMenuOpen(false);
+              onOpenSettings('execution');
+            }}
+            title={`${config.mode === 'daemon' ? t('settings.localCli') : apiProtocolLabel(config.apiProtocol)} · ${envMetaLine}`}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <Icon name="sliders" size={14} />
+            </span>
+            <span className="avatar-item-text-truncate">
+              {config.mode === 'daemon'
+                ? t('settings.localCli')
+                : apiProtocolLabel(config.apiProtocol)}
+            </span>
+            <span className="avatar-item-meta" style={{ color: 'var(--text-faint)', flexShrink: 0 }}>
+              · {envMetaLine}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="avatar-item"
+            onClick={() => {
+              setAvatarMenuOpen(false);
+              onOpenSettings('language');
+            }}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <Icon name="languages" size={14} />
+            </span>
+            <span>{t('settings.language')}</span>
+          </button>
+          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
+          <a
+            className="avatar-item avatar-item-link"
+            href="https://x.com/nexudotio"
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Follow @nexudotio on X for releases and milestones"
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <Icon name="external-link" size={14} />
+            </span>
+            <span>Follow @nexudotio</span>
+          </a>
           <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
           <button
             type="button"
@@ -485,64 +556,6 @@ export function EntryView({
           onOpenConnectorsTab={() => onOpenSettings('composio')}
           loading={skillsLoading || designSystemsLoading}
         />
-        <div className="entry-side-foot">
-          <div className="entry-side-foot-row">
-            <button
-              type="button"
-              className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
-              onClick={onAdoptPet}
-              title={
-                config.pet?.adopted
-                  ? t('pet.changePet')
-                  : t('pet.adoptCallout')
-              }
-            >
-              <span className="pet-pill-glyph" aria-hidden>
-                {config.pet?.adopted
-                  ? config.pet.petId === 'custom'
-                    ? config.pet.custom.glyph || '🦄'
-                    : '🐾'
-                  : '🐾'}
-              </span>
-              <span>
-                {config.pet?.adopted
-                  ? t('pet.changePet')
-                  : t('pet.adoptCallout')}
-              </span>
-              {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
-            </button>
-            <a
-              className="foot-pill foot-pill-follow"
-              href="https://x.com/nexudotio"
-              target="_blank"
-              rel="noreferrer noopener"
-              title="Follow @nexudotio on X for releases and milestones"
-              aria-label="Follow @nexudotio on X"
-            >
-              <Icon name="external-link" size={12} />
-              <span className="foot-pill-follow-label">Follow @nexudotio</span>
-            </a>
-          </div>
-          <button
-            type="button"
-            className="foot-pill"
-            onClick={() => onOpenSettings()}
-            aria-label={t('settings.envConfigure')}
-            title={t('settings.envConfigure')}
-          >
-            <Icon name="settings" size={12} />
-            <span>
-              {config.mode === 'daemon'
-                ? t('settings.localCli')
-                : apiProtocolLabel(config.apiProtocol)}
-            </span>
-            <span style={{ color: 'var(--text-faint)' }}>·</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
-              {envMetaLine}
-            </span>
-          </button>
-          <LanguageMenu />
-        </div>
         <button
           type="button"
           aria-label={t('entry.resizeAria')}
