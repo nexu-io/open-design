@@ -14984,6 +14984,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   justify-content: center;
   width: 22px;
   height: 22px;
+  padding: 0;
+  box-sizing: border-box;
   font-size: 14px;
   line-height: 1;
   border-radius: var(--radius-sm);
