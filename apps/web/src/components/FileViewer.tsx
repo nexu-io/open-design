@@ -5847,7 +5847,18 @@ function HtmlViewer({
                   if (nextMembers.length === 0) {
                     clearBoardComposer();
                   } else {
-                    setActiveCommentTarget({ ...current, podMembers: nextMembers, memberCount: nextMembers.length });
+                    const minX = Math.min(...nextMembers.map((m) => m.position.x));
+                    const minY = Math.min(...nextMembers.map((m) => m.position.y));
+                    const maxX = Math.max(...nextMembers.map((m) => m.position.x + m.position.width));
+                    const maxY = Math.max(...nextMembers.map((m) => m.position.y + m.position.height));
+                    setActiveCommentTarget({
+                      ...current,
+                      podMembers: nextMembers,
+                      memberCount: nextMembers.length,
+                      position: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+                      text: nextMembers[0]?.text || current.text,
+                      htmlHint: nextMembers[0]?.htmlHint || current.htmlHint,
+                    });
                   }
                 }}
                 onClose={clearBoardComposer}
