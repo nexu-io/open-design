@@ -114,8 +114,12 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  */
 export function htmlNeedsSandboxShim(source: string): boolean {
   // Quote-optional: HTML5 permits unquoted attribute values
-  // (`<script type=text/babel src=app.jsx>`). The `\b` after `text/babel`
-  // still rejects `text/babel-other` / `text/babelish`.
+  // (`<script type=text/babel src=app.jsx>`). The trailing `\b` rejects
+  // same-prefix word continuations like `text/babelish`. Hyphenated variants
+  // (`text/babel-other`) still match because `\b` treats `-` as a non-word
+  // boundary, but that's a harmless false positive — srcDoc fallback is
+  // the safe direction. Tightening to a `(?=[\s>"'])` lookahead would also
+  // reject hyphenated variants if a real case ever surfaces.
   if (/<script\s[^>]*\btype\s*=\s*["']?text\/babel\b/i.test(source)) return true;
   if (/\b(?:local|session)Storage\b/.test(source)) return true;
   return false;
