@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildDaemonTranscript,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   streamViaDaemon,
@@ -74,6 +75,49 @@ describe('streamViaDaemon', () => {
         { id: '3', role: 'user', content: 'current turn' },
       ]),
     ).toBe('current turn');
+  });
+
+  it('truncates oversized prior messages before composing daemon context', () => {
+    const transcript = buildDaemonTranscript([
+      { id: '1', role: 'user', content: 'x'.repeat(13_000) },
+      { id: '2', role: 'assistant', content: 'small answer' },
+    ]);
+
+    expect(transcript).toContain('## user');
+    expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
+    expect(transcript).not.toContain('x'.repeat(13_000));
+    expect(transcript).toContain('small answer');
+  });
+
+  it('adds a compact context warning for high-usage agent-browser doc runs', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content: 'The prior run failed.',
+        events: [
+          { kind: 'usage', inputTokens: 924_126, outputTokens: 12 },
+          {
+            kind: 'tool_use',
+            id: 'call-1',
+            name: 'Bash',
+            input: { command: 'agent-browser skills get core' },
+          },
+          {
+            kind: 'tool_result',
+            toolUseId: 'call-1',
+            content: 'agent-browser skills get core\n' + 'doc '.repeat(3_000),
+            isError: false,
+          },
+        ],
+      },
+      { id: '2', role: 'user', content: 'retry compactly' },
+    ]);
+
+    expect(transcript).toContain('## context warning');
+    expect(transcript).toContain('924126 input tokens');
+    expect(transcript).toContain('agent-browser documentation output was seen earlier');
+    expect(transcript).toContain('retry compactly');
   });
 
   it('ignores comment frames without notifying handlers', async () => {
@@ -164,6 +208,40 @@ describe('streamViaDaemon', () => {
     });
 
     expect(handlers.onError).toHaveBeenCalledWith(new Error('typed message'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('includes unified SSE error details in daemon error messages', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              'data: {"message":"Claude Code failed","error":{"code":"AGENT_EXECUTION_FAILED","message":"Claude Code failed","details":{"detail":"Set CLAUDE_CONFIG_DIR in Settings and retry."}}}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Set CLAUDE_CONFIG_DIR in Settings'),
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 

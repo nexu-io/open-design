@@ -5,6 +5,7 @@ import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -22,6 +23,8 @@ interface Props {
   onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
   onNewSketch: () => void;
+  uploadError?: string | null;
+  onClearUploadError?: () => void;
 }
 
 type DesignFilesGroupMode = 'kind' | 'modified';
@@ -64,6 +67,8 @@ export function DesignFilesPanel({
   onUploadFiles,
   onPaste,
   onNewSketch,
+  uploadError = null,
+  onClearUploadError,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
@@ -600,8 +605,38 @@ export function DesignFilesPanel({
           )}
         </div>
         <div className="df-body">
+          {uploadError && !preview ? (
+            <div className="df-upload-banner" data-testid="upload-error-banner">
+              <span>{uploadError}</span>
+              {onClearUploadError ? (
+                <button
+                  type="button"
+                  data-testid="upload-error-dismiss"
+                  onClick={onClearUploadError}
+                >
+                  Dismiss
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {files.length === 0 && liveArtifacts.length === 0 ? (
-            <div className="df-empty">{t('designFiles.empty')}</div>
+            <div className="df-empty" data-testid="design-files-empty">
+              <div className="df-empty-pill">
+                <span className="df-empty-title">
+                  {t('designFiles.empty')}
+                </span>
+                <button
+                  type="button"
+                  className="df-empty-cta"
+                  data-testid="design-files-empty-new-sketch"
+                  onClick={onNewSketch}
+                  title={t('designFiles.newSketch')}
+                >
+                  <Icon name="pencil" size={13} />
+                  <span>{t('designFiles.newSketch')}</span>
+                </button>
+              </div>
+            </div>
           ) : (
             <>
               {files.length > 0 ? (
@@ -927,10 +962,13 @@ function DfPreview({
 }) {
   const t = useT();
   const url = projectFileUrl(projectId, file.name);
+  const rendersSketchJson = isRenderableSketchJson(file);
   return (
     <aside className="df-preview">
       <div className="df-preview-thumb">
-        {file.kind === 'image' || file.kind === 'sketch' ? (
+        {rendersSketchJson ? (
+          <SketchPreview projectId={projectId} file={file} />
+        ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
           <iframe title={file.name} src={url} sandbox="allow-scripts" />

@@ -250,27 +250,27 @@ Match easing to purpose: `ease-in` for entering, `ease-out` for leaving, `linear
 
 ## 7. Locale Coverage Requirements
 
-When adding a new design system, you must also add its localized catalog entry. This is a **separate PR** (do not mix design system and i18n changes).
+When adding a new design system, include complete English catalog metadata in `design-systems/<id>/DESIGN.md`. Locales use translated summaries when present and otherwise derive the runtime fallback from the English source fields.
 
-### Which locales need updating?
+### Which localized dictionaries need updating?
 
-Use this decision tree to decide which array to add to:
+Use this decision tree to decide whether to add dictionary copy:
 
 **Does a localized summary already exist for this design system?**
-- **Yes** → Add to `*_DESIGN_SYSTEM_SUMMARIES` only (FR + RU). **Never also add to the fallback array** — `buildLocalizedContentIds()` concatenates both without deduplication, producing a duplicate that fails the test.
-- **No** (no translation yet) → Add to `*_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` only. This makes the system appear in the catalog with English fallbacks.
+- **Yes** → Add it to the matching `*_DESIGN_SYSTEM_SUMMARIES` dictionary.
+- **No** (no translation yet) → Keep the English `summary` and `category` metadata complete in `DESIGN.md`; the localized runtime renders those fields through the default fallback path.
 
 | Locale | File to update | Array |
 |--------|---------------|-------|
-| German | `apps/web/src/i18n/content.ts` | `DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` |
-| French | `apps/web/src/i18n/content.fr.ts` | `FR_DESIGN_SYSTEM_SUMMARIES` (if localized copy exists) or `FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` (if not) |
-| Russian | `apps/web/src/i18n/content.ru.ts` | `RU_DESIGN_SYSTEM_SUMMARIES` (if localized copy exists) or `RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK` (if not) |
+| German | `apps/web/src/i18n/content.ts` | `DE_DESIGN_SYSTEM_SUMMARIES` when localized copy exists |
+| French | `apps/web/src/i18n/content.fr.ts` | `FR_DESIGN_SYSTEM_SUMMARIES` when localized copy exists |
+| Russian | `apps/web/src/i18n/content.ru.ts` | `RU_DESIGN_SYSTEM_SUMMARIES` when localized copy exists |
 
-> ⚠️ **The duplicate-ID trap:** `buildLocalizedContentIds()` concatenates summary keys and fallback IDs **without deduplication**. Adding to both arrays produces the same ID twice, and the e2e test's curated ID list rejects duplicates. This is exactly what caused the loom/trading-terminal #929 failure.
+The default English fallback path is automatic. Add localized summary dictionaries only when translated copy exists.
 
 ### Test behavior
 
-The `e2e/tests/localized-content.test.ts` test verifies that every `design-systems/*/DESIGN.md` on disk has a corresponding catalog entry. If your design system directory does not exist in the locale PR's branch, do not add it to the DE fallback array — the test builds the expected ID list from the filesystem.
+The `e2e/tests/localized-content.test.ts` test verifies that every `design-systems/*/DESIGN.md` on disk is discoverable and renders a non-empty localized summary through either translated dictionary copy or the English fallback fields.
 
 ---
 

@@ -81,6 +81,7 @@ export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
+  streamFormat?: string | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -101,6 +102,12 @@ export interface ComposeInput {
   // (letter-spacing, accent caps, anti-slop) cover everything below.
   craftBody?: string | undefined;
   craftSections?: string[] | undefined;
+  // Markdown built from the user's auto-memory store
+  // (<dataDir>/memory/*.md). Folded in before the active design system so
+  // tone/voice/preferences extracted from past chats win over the
+  // built-in identity charter but still defer to the brand's hard tokens
+  // and the active skill's workflow. Empty/undefined skips the block.
+  memoryBody?: string | undefined;
   // Project-level metadata captured by the new-project panel. Drives the
   // agent's understanding of artifact kind, fidelity, speaker-notes intent
   // and animation intent. Missing fields here are exactly what the
@@ -142,22 +149,45 @@ export function composeSystemPrompt({
   designSystemTitle,
   craftBody,
   craftSections,
+  memoryBody,
   metadata,
   template,
   critique,
   critiqueBrand,
   critiqueSkill,
   connectedExternalMcp,
+  streamFormat,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
   // checklist + critique before <artifact>) win precedence over softer
   // wording later in the official base prompt.
-  const parts: string[] = [
+  const parts: string[] = [];
+
+  // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
+  // `@open-design/contracts`'s composer. The daemon hits this path for
+  // any plain-stream adapter (e.g. DeepSeek), so without pinning the
+  // override above DISCOVERY_AND_PHILOSOPHY here too, those daemon
+  // agents still emit the `<todo-list>` / `[读取 X]` pseudo-tool
+  // markup described in #313. Keep the wording byte-identical to the
+  // contracts copy so both code paths produce the same observable
+  // behaviour.
+  if (streamFormat === 'plain') {
+    parts.push(API_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  parts.push(
     DISCOVERY_AND_PHILOSOPHY,
     '\n\n---\n\n# Identity and workflow charter (background)\n\n',
     BASE_SYSTEM_PROMPT,
-  ];
+  );
+
+  if (memoryBody && memoryBody.trim().length > 0) {
+    parts.push(
+      `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\n${memoryBody.trim()}`,
+    );
+  }
 
   if (designSystemBody && designSystemBody.trim().length > 0) {
     parts.push(
@@ -249,6 +279,33 @@ export function composeSystemPrompt({
 
   return parts.join('');
 }
+
+/**
+ * Top-anchored override for plain-stream daemon agents (#313). Mirrors
+ * the contracts-package copy byte-for-byte; see that file for the full
+ * rationale. Pinning it at the absolute top of the composed prompt is
+ * what beats the discovery layer's own "these override anything later"
+ * header — the old bottom-appended `## API mode rule` lost that
+ * precedence war and let `<todo-list>` / `[读取 X]` pseudo-tool markup
+ * leak into the chat.
+ */
+const API_MODE_OVERRIDE = `# API mode — no tools available (read first — overrides every rule below)
+
+You are running through a plain Messages API. **No tools are wired through to you.** \`TodoWrite\`, \`Read\`, \`Write\`, \`Edit\`, \`Bash\`, and \`WebFetch\` are unavailable — calls to them will not execute and will not render in the UI.
+
+Every later instruction in this prompt that tells you to "call TodoWrite", "run Bash", "read via Read", or otherwise invoke a tool is describing the daemon-mode workflow. In this API run those instructions are **overridden** — do not attempt them and do not pretend you did.
+
+**Forbidden output:**
+- Pseudo-tool markup such as \`<todo-list>...</todo-list>\`, \`<tool-call>\`, or invented XML wrappers around a plan.
+- Fake-protocol prose such as \`[读取 template.html ...]\`, \`[读取 layouts.md ...]\`, \`[正在调用 TodoWrite ...]\`, or any \`[doing X]\` placeholder narrating a tool you cannot run.
+- Statements like "I'll call TodoWrite to track this" or "let me read the skill file first" — there is no TodoWrite and no Read in this run.
+
+**Allowed output:**
+- Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
+- A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
+- \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+
+If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
 // Defense-in-depth against Claude Code's synthetic OAuth tools.
 //
@@ -588,6 +645,14 @@ function derivePreflight(skillBody: string): string {
   if (/references\/themes\.md/.test(skillBody)) refs.push('`references/themes.md`');
   if (/references\/components\.md/.test(skillBody)) refs.push('`references/components.md`');
   if (/references\/checklist\.md/.test(skillBody)) refs.push('`references/checklist.md`');
+  // The hyperframes skill ships an html-in-canvas reference next to the
+  // VFX catalog blocks. The chat handler at server.ts:4138 routes through
+  // this composer (not the contracts copy), so the case must live here
+  // too — otherwise live agent runs miss the preflight directive even
+  // when the skill body explicitly lists the file.
+  if (/references\/html-in-canvas\.md|html-in-canvas\.md/.test(skillBody)) {
+    refs.push('`references/html-in-canvas.md`');
+  }
   if (refs.length === 0) return '';
   return ` **Pre-flight (do this before any other tool):** Read ${refs.join(', ')} via the path written in the skill-root preamble. The seed template defines the class system you'll paste into; the layouts file is the only acceptable source of section/screen/slide skeletons; the checklist is your P0/P1/P2 gate before emitting \`<artifact>\`. Skipping this step is the #1 reason output regresses to generic AI-slop.`;
 }

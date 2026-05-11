@@ -215,8 +215,24 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
-  'settings.library': string;
-  'settings.libraryHint': string;
+  'settings.skills': string;
+  'settings.skillsHint': string;
+  'settings.skillsNew': string;
+  'settings.skillsEmpty': string;
+  'settings.skillsEdit': string;
+  'settings.skillsDelete': string;
+  'settings.skillsDeleteConfirm': string;
+  'settings.skillsName': string;
+  'settings.skillsTriggers': string;
+  'settings.skillsDescription': string;
+  'settings.skillsBody': string;
+  'settings.skillsCreate': string;
+  'settings.skillsSave': string;
+  'settings.skillsSaving': string;
+  'settings.skillsFiles': string;
+  'settings.skillsNoFiles': string;
+  'settings.designSystems': string;
+  'settings.designSystemsHint': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
@@ -329,6 +345,97 @@ export interface Dict {
   'settings.orbit.controlsLockedBadge': string;
   'settings.orbit.controlsLockedHint': string;
 
+  // Memory (auto-extracted personalization saved as on-disk markdown)
+  'settings.memory': string;
+  'settings.memoryHint': string;
+  'settings.memoryDescription': string;
+  'settings.memoryEnabled': string;
+  'settings.memoryDisabled': string;
+  'settings.memoryEnableLabel': string;
+  'settings.memoryDisabledBanner': string;
+  'settings.memoryNew': string;
+  'settings.memoryEdit': string;
+  'settings.memoryDelete': string;
+  'settings.memoryPreview': string;
+  'settings.memoryEmpty': string;
+  'settings.memoryEmptyHintZh': string;
+  'settings.memoryEmptyHintEn': string;
+  'settings.memoryName': string;
+  'settings.memoryDesc': string;
+  'settings.memoryBody': string;
+  'settings.memoryBodyHint': string;
+  'settings.memoryStartersLabel': string;
+  'settings.memoryStarterUserName': string;
+  'settings.memoryStarterUserDesc': string;
+  'settings.memoryStarterUserBody': string;
+  'settings.memoryStarterFeedbackName': string;
+  'settings.memoryStarterFeedbackDesc': string;
+  'settings.memoryStarterFeedbackBody': string;
+  'settings.memoryStarterProjectName': string;
+  'settings.memoryStarterProjectDesc': string;
+  'settings.memoryStarterProjectBody': string;
+  'settings.memorySaveHint': string;
+  'settings.memoryIndexSaveHint': string;
+  'settings.memoryIndexUnsaved': string;
+  'settings.memoryFlashCreated': string;
+  'settings.memoryFlashSaved': string;
+  'settings.memoryFlashDeleted': string;
+  'settings.memoryFlashIndexSaved': string;
+  'settings.memoryNameLabel': string;
+  'settings.memoryTypeLabel': string;
+  'settings.memoryDescLabel': string;
+  'settings.memoryBodyLabel': string;
+  'settings.memoryTypeUser': string;
+  'settings.memoryTypeFeedback': string;
+  'settings.memoryTypeProject': string;
+  'settings.memoryTypeReference': string;
+  'settings.memoryIndex': string;
+  'settings.memoryIndexSave': string;
+  'settings.memoryIndexReset': string;
+  'settings.memoryToastChanged': string;
+  'settings.memoryToastClickHint': string;
+  'settings.memoryAll': string;
+  // Memory → LLM extraction observability
+  'settings.memoryExtractions': string;
+  'settings.memoryExtractionsHint': string;
+  'settings.memoryExtractionsEmpty': string;
+  'settings.memoryExtractionsRefresh': string;
+  'settings.memoryExtractionPhaseRunning': string;
+  'settings.memoryExtractionPhaseSuccess': string;
+  'settings.memoryExtractionPhaseSkipped': string;
+  'settings.memoryExtractionPhaseFailed': string;
+  'settings.memoryExtractionSkipNoProvider': string;
+  'settings.memoryExtractionSkipDisabled': string;
+  'settings.memoryExtractionSkipEmpty': string;
+  'settings.memoryExtractionSkipNoMatch': string;
+  'settings.memoryExtractionKindHeuristic': string;
+  'settings.memoryExtractionKindLlm': string;
+  'settings.memoryExtractionProviderEnv': string;
+  'settings.memoryExtractionProviderMediaConfig': string;
+  'settings.memoryExtractionProviderOverride': string;
+  'settings.memoryExtractionProposed': string;
+  'settings.memoryExtractionWritten': string;
+  'settings.memoryExtractionDuration': string;
+  'settings.memoryExtractionDelete': string;
+  'settings.memoryExtractionsClear': string;
+  'settings.memoryExtractionsClearTitle': string;
+  'settings.memoryNoProviderBannerTitle': string;
+  'settings.memoryNoProviderBannerBody': string;
+  // Memory model picker — rendered inline next to the chat model picker
+  // so picking "the fast model that mines facts each turn" lives in the
+  // same row as the chat agent + model. Reuses the surrounding chat
+  // protocol/CLI context (key, baseUrl, apiVersion); the user only
+  // chooses the model id.
+  'settings.memoryModelInlineLabel': string;
+  'settings.memoryModelInlineSameAsChat': string;
+  'settings.memoryModelInlineSameAsChatWithModel': string;
+  'settings.memoryModelInlineSameAsChatWithProvider': string;
+  'settings.memoryModelInlineHintCli': string;
+  'settings.memoryModelInlineHintCliConstrained': string;
+  'settings.memoryModelInlineHintByok': string;
+  'settings.memoryModelInlineFlashSaved': string;
+  'settings.memoryModelInlineFlashCleared': string;
+
   // MCP server settings
   'settings.mcpTitle': string;
   'settings.mcpHint': string;
@@ -390,7 +497,7 @@ export interface Dict {
 
   // Entry view / tabs
   'entry.tabDesigns': string;
-  'entry.tabExamples': string;
+  'entry.tabTemplates': string;
   'entry.tabDesignSystems': string;
   'entry.tabConnectors': string;
   'entry.tabImageTemplates': string;
@@ -1184,6 +1291,8 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.emptyResponseLabel': string;
+  'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;
   'assistant.unfinishedSummary': string;
   'assistant.unfinishedMore': string;

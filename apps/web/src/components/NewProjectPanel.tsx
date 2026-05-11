@@ -205,6 +205,7 @@ export function NewProjectPanel({
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
   const [imageStyle, setImageStyle] = useState('');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
+  const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
   const [videoLength, setVideoLength] = useState(5);
   const [audioKind, setAudioKind] = useState<AudioKind>('speech');
@@ -312,12 +313,76 @@ export function NewProjectPanel({
     }
     if (tab === 'image' || tab === 'video' || tab === 'audio') {
       const list = skills.filter((s) => s.mode === tab || s.surface === tab);
+      // The HyperFrames-HTML render path lives in the `hyperframes` skill.
+      // When the user has chosen `hyperframes-html` (via dropdown or template),
+      // pin the project to that skill explicitly — otherwise this branch falls
+      // back to `list[0]`, which is unsorted (apps/daemon/src/skills.ts builds
+      // the list from `readdir()`), so the project could route through
+      // `video-shortform` while metadata still says `videoModel: 'hyperframes-html'`.
+      if (tab === 'video' && videoModel === 'hyperframes-html') {
+        const hyper = list.find((s) => s.id === 'hyperframes');
+        if (hyper) return hyper.id;
+      }
       return list.find((s) => s.defaultFor.includes(tab))?.id
         ?? list[0]?.id
         ?? null;
     }
     return null;
-  }, [tab, skills]);
+  }, [tab, skills, videoModel]);
+
+  // When the user picks a curated prompt template, propagate the template's
+  // declared `model` and `aspect` onto the actual project state. Without
+  // this the user picks (e.g.) a HyperFrames template but `videoModel`
+  // stays on the default seedance — the agent then dispatches the wrong
+  // model and the render path mismatches the prompt.
+  function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
+    setImagePromptTemplate(pick);
+    const m = pick?.summary.model;
+    if (m && IMAGE_MODELS.some((x) => x.id === m)) setImageModel(m);
+    const a = pick?.summary.aspect;
+    if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
+      setImageAspect(a as MediaAspect);
+    }
+  }
+  function handleVideoPromptTemplate(pick: PromptTemplatePick | null) {
+    setVideoPromptTemplate(pick);
+    const m = pick?.summary.model;
+    if (m && VIDEO_MODELS.some((x) => x.id === m)) {
+      setVideoModel(m);
+      setVideoModelTouched(true);
+    }
+    const a = pick?.summary.aspect;
+    if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
+      setVideoAspect(a as MediaAspect);
+    }
+  }
+  function handleVideoModel(id: string) {
+    setVideoModel(id);
+    setVideoModelTouched(true);
+  }
+
+  // The HyperFrames skill renders HTML compositions through a local
+  // `npx hyperframes render` path, which dispatches under the
+  // `hyperframes-html` model — not seedance/veo/sora. When the resolved
+  // skill for the video tab is hyperframes, default `videoModel` so the
+  // model dropdown matches the actual render path. Once the user has
+  // explicitly chosen a model (via the dropdown or by picking a template
+  // that declares a model), `videoModelTouched` latches and this effect
+  // becomes a no-op for the rest of the panel session — re-entering the
+  // Video tab no longer silently rewrites their override back to
+  // hyperframes-html.
+  useEffect(() => {
+    if (tab !== 'video') return;
+    if (skillIdForTab !== 'hyperframes') return;
+    if (videoModelTouched) return;
+    if (videoPromptTemplate) return;
+    if (!VIDEO_MODELS.some((m) => m.id === 'hyperframes-html')) return;
+    setVideoModel('hyperframes-html');
+    // Intentionally leaving videoPromptTemplate / videoModel out of deps
+    // so this only fires when the user toggles the tab or the skill
+    // resolution shifts — not whenever the user changes the dropdown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, skillIdForTab, videoModelTouched]);
 
   const canCreate =
     !loading && (tab !== 'template' || templateId != null);
@@ -548,7 +613,7 @@ export function NewProjectPanel({
             surface="image"
             templates={promptTemplates}
             value={imagePromptTemplate}
-            onChange={setImagePromptTemplate}
+            onChange={handleImagePromptTemplate}
           />
         ) : null}
 
@@ -557,7 +622,7 @@ export function NewProjectPanel({
             surface="video"
             templates={promptTemplates}
             value={videoPromptTemplate}
-            onChange={setVideoPromptTemplate}
+            onChange={handleVideoPromptTemplate}
           />
         ) : null}
 
@@ -618,7 +683,7 @@ export function NewProjectPanel({
             videoAspect={videoAspect}
             videoLength={videoLength}
             mediaProviders={mediaProviders}
-            onVideoModel={setVideoModel}
+            onVideoModel={handleVideoModel}
             onVideoAspect={setVideoAspect}
             onVideoLength={setVideoLength}
           />

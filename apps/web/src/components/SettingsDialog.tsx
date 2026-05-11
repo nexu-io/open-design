@@ -25,6 +25,12 @@ import {
 import type { KnownProvider } from '../state/config';
 import { navigate as navigateRoute } from '../router';
 import {
+  API_KEY_PLACEHOLDERS,
+  API_PROTOCOL_LABELS,
+  API_PROTOCOL_TABS,
+  SUGGESTED_MODELS_BY_PROTOCOL,
+} from '../state/apiProtocols';
+import {
   MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
@@ -51,14 +57,18 @@ import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
-import { LibrarySection } from './LibrarySection';
+import { SkillsSection } from './SkillsSection';
+import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
+import { MemoryModelInline } from './MemoryModelInline';
+import { MemorySection } from './MemorySection';
 import {
   applyAppearanceToDocument,
   normalizeAccentColor,
 } from '../state/appearance';
+import { isAutosaveDraftOnlyChange } from '../App';
 import {
   FAILURE_SOUNDS,
   SUCCESS_SOUNDS,
@@ -80,7 +90,9 @@ export type SettingsSection =
   | 'appearance'
   | 'notifications'
   | 'pet'
-  | 'library'
+  | 'skills'
+  | 'designSystems'
+  | 'memory'
   | 'privacy'
   | 'about';
 
@@ -131,113 +143,43 @@ export interface AgentRefreshOptions {
   agentCliEnv?: AppConfig['agentCliEnv'];
 }
 
-const SUGGESTED_MODELS_BY_PROTOCOL = {
-  anthropic: [
-    'claude-opus-4-5',
-    'claude-sonnet-4-5',
-    'claude-haiku-4-5',
-    'deepseek-chat',
-    'deepseek-reasoner',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'MiniMax-M2.7-highspeed',
-    'MiniMax-M2.7',
-    'MiniMax-M2.5-highspeed',
-    'MiniMax-M2.5',
-    'MiniMax-M2.1-highspeed',
-    'MiniMax-M2.1',
-    'MiniMax-M2',
-    'mimo-v2.5-pro',
-  ],
-  openai: [
-    'gpt-4o',
-    'gpt-4o-mini',
-    'o3',
-    'o4-mini',
-    'deepseek-chat',
-    'deepseek-reasoner',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'MiniMax-M2.7-highspeed',
-    'MiniMax-M2.7',
-    'MiniMax-M2.5-highspeed',
-    'MiniMax-M2.5',
-    'MiniMax-M2.1-highspeed',
-    'MiniMax-M2.1',
-    'MiniMax-M2',
-    'mimo-v2.5-pro',
-  ],
-  ollama: [
-    'cogito-2.1:671b',
-    'deepseek-v3.1:671b',
-    'deepseek-v3.2',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'devstral-2:123b',
-    'devstral-small-2:24b',
-    'gemini-3-flash-preview',
-    'gemma3:4b',
-    'gemma3:12b',
-    'gemma3:27b',
-    'gemma4:31b',
-    'glm-4.6',
-    'glm-4.7',
-    'glm-5',
-    'glm-5.1',
-    'gpt-oss:20b',
-    'gpt-oss:120b',
-    'kimi-k2:1t',
-    'kimi-k2-thinking',
-    'kimi-k2.5',
-    'kimi-k2.6',
-    'minimax-m2',
-    'minimax-m2.1',
-    'minimax-m2.5',
-    'minimax-m2.7',
-    'ministral-3:3b',
-    'ministral-3:8b',
-    'ministral-3:14b',
-    'mistral-large-3:675b',
-    'nemotron-3-nano:30b',
-    'nemotron-3-super',
-    'qwen3-coder:480b',
-    'qwen3-coder-next',
-    'qwen3-next:80b',
-    'qwen3-vl:235b',
-    'qwen3-vl:235b-instruct',
-    'qwen3.5:397b',
-    'rnj-1:8b',
-  ],
-  azure: [
-    'gpt-4o',
-    'gpt-4o-mini',
-  ],
-  google: [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
-  ],
-} as const;
-
-const API_PROTOCOL_TABS: Array<{
-  id: ApiProtocol;
-  title: string;
-}> = [
-  { id: 'anthropic', title: 'Anthropic' },
-  { id: 'openai', title: 'OpenAI' },
-  { id: 'azure', title: 'Azure OpenAI' },
-  { id: 'google', title: 'Google Gemini' },
-  { id: 'ollama', title: 'Ollama Cloud' },
-];
-
-const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
-  anthropic: 'Anthropic API',
-  openai: 'OpenAI API',
-  azure: 'Azure OpenAI',
-  google: 'Google Gemini',
-  ollama: 'Ollama Cloud API',
-};
+function codexPathStrings(locale: Locale) {
+  if (locale === 'zh-CN') {
+    return {
+      repairHint: '当前保存的 Codex 路径不适合继续使用。',
+      useDetected: '使用检测到的 Codex',
+      clearCustom: '清空自定义路径',
+      configuredSuccess: (path: string) => `本次测试使用的是已配置的 Codex 路径：${path}。`,
+      invalidFallback: (configuredPath: string, detectedPath: string) =>
+        `已配置的 Codex 路径无效或不可执行：${configuredPath}。本次测试改用 PATH 中的 Codex CLI：${detectedPath}。建议更新 CODEX_BIN 或清空自定义路径。`,
+      failedFallback: (configuredPath: string, detectedPath: string) =>
+        `已配置的 Codex 路径启动失败：${configuredPath}。本次测试改用 PATH 中的 Codex CLI：${detectedPath}。建议更新 CODEX_BIN 或清空自定义路径。`,
+    };
+  }
+  if (locale === 'zh-TW') {
+    return {
+      repairHint: '目前儲存的 Codex 路徑不適合繼續使用。',
+      useDetected: '使用偵測到的 Codex',
+      clearCustom: '清除自訂路徑',
+      configuredSuccess: (path: string) => `本次測試使用的是已設定的 Codex 路徑：${path}。`,
+      invalidFallback: (configuredPath: string, detectedPath: string) =>
+        `已設定的 Codex 路徑無效或不可執行：${configuredPath}。本次測試改用 PATH 中的 Codex CLI：${detectedPath}。建議更新 CODEX_BIN 或清除自訂路徑。`,
+      failedFallback: (configuredPath: string, detectedPath: string) =>
+        `已設定的 Codex 路徑啟動失敗：${configuredPath}。本次測試改用 PATH 中的 Codex CLI：${detectedPath}。建議更新 CODEX_BIN 或清除自訂路徑。`,
+    };
+  }
+  return {
+    repairHint: 'The saved Codex path is not the binary this test should keep using.',
+    useDetected: 'Use detected Codex',
+    clearCustom: 'Clear custom path',
+    configuredSuccess: (path: string) =>
+      `This test used the configured Codex path: ${path}.`,
+    invalidFallback: (configuredPath: string, detectedPath: string) =>
+      `Configured Codex path is invalid or not executable: ${configuredPath}. This test used the PATH Codex CLI at ${detectedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`,
+    failedFallback: (configuredPath: string, detectedPath: string) =>
+      `Configured Codex path failed: ${configuredPath}. This test succeeded with the PATH Codex CLI at ${detectedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`,
+  };
+}
 
 function sanitizeHttpsUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
@@ -248,14 +190,6 @@ function sanitizeHttpsUrl(url: string | undefined): string | undefined {
     return undefined;
   }
 }
-
-const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
-  anthropic: 'sk-ant-...',
-  openai: 'sk-...',
-  azure: 'azure key',
-  google: 'AIza...',
-  ollama: 'Ollama API key',
-};
 
 type RescanNotice =
   | { kind: 'success'; count: number }
@@ -537,6 +471,24 @@ function apiModelOptionLabel(model: ProviderModelOption): string {
   return model.label && model.label !== model.id
     ? `${model.label} (${model.id})`
     : model.id;
+}
+
+function codexPathRepairState(
+  result: ConnectionTestResponse,
+): { detectedPath: string; canUseDetected: boolean } | null {
+  if (!result.ok) return null;
+  if (
+    result.usedExecutableSource !== 'fallback_invalid' &&
+    result.usedExecutableSource !== 'fallback_failed'
+  ) {
+    return null;
+  }
+  const detectedPath = result.detectedExecutablePath?.trim() || '';
+  if (!detectedPath) return null;
+  return {
+    detectedPath,
+    canUseDetected: true,
+  };
 }
 
 /**
@@ -1034,9 +986,39 @@ export function SettingsDialog({
     const agentName = result.agentName ?? '';
     const testedModel = result.model ?? cfg.model;
     if (result.ok) {
-      return kindForSuccess === 'api'
+      const baseMessage = kindForSuccess === 'api'
         ? t('settings.testSuccessApi', { ms, sample })
         : t('settings.testSuccessCli', { agentName, ms, sample });
+      if (kindForSuccess === 'cli' && cfg.agentId === 'codex') {
+        const codexStrings = codexPathStrings(locale);
+        if (
+          result.usedExecutableSource === 'configured' &&
+          result.configuredExecutablePath
+        ) {
+          return `${baseMessage} ${codexStrings.configuredSuccess(result.configuredExecutablePath)}`;
+        }
+        if (
+          result.usedExecutableSource === 'fallback_invalid' &&
+          result.configuredExecutablePath &&
+          result.detectedExecutablePath
+        ) {
+          return `${baseMessage} ${codexStrings.invalidFallback(
+            result.configuredExecutablePath,
+            result.detectedExecutablePath,
+          )}`;
+        }
+        if (
+          result.usedExecutableSource === 'fallback_failed' &&
+          result.configuredExecutablePath &&
+          result.detectedExecutablePath
+        ) {
+          return `${baseMessage} ${codexStrings.failedFallback(
+            result.configuredExecutablePath,
+            result.detectedExecutablePath,
+          )}`;
+        }
+      }
+      return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
     }
     switch (result.kind) {
       case 'auth_failed':
@@ -1099,6 +1081,16 @@ export function SettingsDialog({
     }
   };
 
+  const applyCodexDetectedPath = (detectedPath: string) => {
+    setCfg((c) => updateAgentCliEnvValue(c, 'codex', 'CODEX_BIN', detectedPath));
+    setAgentTestState({ status: 'idle' });
+  };
+
+  const clearCodexCustomPath = () => {
+    setCfg((c) => updateAgentCliEnvValue(c, 'codex', 'CODEX_BIN', ''));
+    setAgentTestState({ status: 'idle' });
+  };
+
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
@@ -1121,6 +1113,13 @@ export function SettingsDialog({
   const autosaveRetryTimerRef = useRef<number | null>(null);
   const autosavePendingFlushRef = useRef(false);
   const autosaveLatestRef = useRef<AppConfig>(cfg);
+  // Baseline used by the draft-only detector: the snapshot at the most
+  // recent successful autosave (or the initial cfg on mount). Compared
+  // against the current snapshot to decide whether the only edits
+  // since last save are intentionally-stripped fields like the
+  // Composio API key — in which case we must NOT flash "All changes
+  // saved", because the draft has not actually been persisted.
+  const autosaveLastSavedRef = useRef<AppConfig>(cfg);
   const mediaProvidersChangeVersionRef = useRef(0);
   const lastSyncedMediaProvidersVersionRef = useRef(0);
   const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
@@ -1128,6 +1127,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
+      autosaveLastSavedRef.current = cfg;
       return;
     }
     setAutosaveStatus('pending');
@@ -1151,10 +1151,27 @@ export function SettingsDialog({
       const persistOptions = {
         forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
       };
+      // Draft-only edit (e.g. the user is mid-typing the Composio API
+      // key, which only commits via the explicit "Save key" gesture):
+      // the persisted shape would be identical to what is already on
+      // disk, so a save would be a no-op that mis-reports "Saved" and
+      // makes users trust that a sensitive key was persisted when it
+      // was not. Skip the persist and settle the indicator to idle.
+      // The forced media-provider sync path still runs because that
+      // is a real outbound effect even when the persisted shape
+      // hasn't changed.
+      if (
+        !persistOptions.forceMediaProviderSync
+        && isAutosaveDraftOnlyChange(snapshot, autosaveLastSavedRef.current)
+      ) {
+        setAutosaveStatus('idle');
+        return;
+      }
       setAutosaveStatus('saving');
       void (async () => {
         try {
           await onPersist(snapshot, persistOptions);
+          autosaveLastSavedRef.current = snapshot;
           if (persistOptions.forceMediaProviderSync) {
             lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
           }
@@ -1315,7 +1332,12 @@ export function SettingsDialog({
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
-    library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
+    skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
+    designSystems: {
+      title: t('settings.designSystems'),
+      subtitle: t('settings.designSystemsHint'),
+    },
+    memory: { title: t('settings.memory'), subtitle: t('settings.memoryHint') },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
@@ -1383,26 +1405,6 @@ export function SettingsDialog({
               <span className="kicker">{t('settings.welcomeKicker')}</span>
               <h2>{t('settings.welcomeTitle')}</h2>
               <p className="subtitle">{t('settings.welcomeSubtitle')}</p>
-              {/* First-run users see a mini pet teaser inside the welcome
-                  modal so adoption is part of the warm intro rather than
-                  hidden behind another nav click. The chip nudges them
-                  toward Pets without forcing them to leave the rest of
-                  the welcome flow. */}
-              <button
-                type="button"
-                className="welcome-pet-teaser"
-                onClick={() => setActiveSection('pet')}
-              >
-                <span className="welcome-pet-glyph" aria-hidden>🐾</span>
-                <span className="welcome-pet-copy">
-                  <strong>{t('pet.welcomeTeaserTitle')}</strong>
-                  <span>{t('pet.welcomeTeaserBody')}</span>
-                </span>
-                <span className="welcome-pet-cta">
-                  {t('pet.welcomeTeaserCta')}
-                  <Icon name="chevron-right" size={12} />
-                </span>
-              </button>
             </>
           ) : (
             <>
@@ -1428,6 +1430,17 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
+              onClick={() => setActiveSection('memory')}
+            >
+              <Icon name="history" size={18} />
+              <span>
+                <strong>{t('settings.memory')}</strong>
+                <small>{t('settings.memoryHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
               onClick={() => setActiveSection('media')}
             >
@@ -1435,6 +1448,28 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.mediaProviders')}</strong>
                 <small>Image / video / audio</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'skills' ? ' active' : ''}`}
+              onClick={() => setActiveSection('skills')}
+            >
+              <Icon name="grid" size={18} />
+              <span>
+                <strong>{t('settings.skills')}</strong>
+                <small>{t('settings.skillsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
+              onClick={() => setActiveSection('mcpClient')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('settings.externalMcpTitle')}</strong>
+                <small>{t('settings.externalMcpHint')}</small>
               </span>
             </button>
             <button
@@ -1483,17 +1518,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
-              onClick={() => setActiveSection('mcpClient')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('settings.externalMcpTitle')}</strong>
-                <small>{t('settings.externalMcpHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
               onClick={() => setActiveSection('language')}
             >
@@ -1538,13 +1562,13 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'library' ? ' active' : ''}`}
-              onClick={() => setActiveSection('library')}
+              className={`settings-nav-item${activeSection === 'designSystems' ? ' active' : ''}`}
+              onClick={() => setActiveSection('designSystems')}
             >
-              <Icon name="grid" size={18} />
+              <Icon name="draw" size={18} />
               <span>
-                <strong>{t('settings.library')}</strong>
-                <small>{t('settings.libraryHint')}</small>
+                <strong>{t('settings.designSystems')}</strong>
+                <small>{t('settings.designSystemsHint')}</small>
               </span>
             </button>
             <button
@@ -1716,15 +1740,47 @@ export function SettingsDialog({
                   {t('settings.testRunning')}
                 </p>
               ) : agentTestState.status === 'done' ? (
-                <p
-                  className={
-                    'settings-test-status ' +
-                    testStatusVariant(agentTestState.result)
-                  }
-                  role={agentTestState.result.ok ? 'status' : 'alert'}
-                >
-                  {renderTestMessage(agentTestState.result, 'cli')}
-                </p>
+                <>
+                  <p
+                    className={
+                      'settings-test-status ' +
+                      testStatusVariant(agentTestState.result)
+                    }
+                    role={agentTestState.result.ok ? 'status' : 'alert'}
+                  >
+                    {renderTestMessage(agentTestState.result, 'cli')}
+                  </p>
+                  {cfg.agentId === 'codex' && (() => {
+                    const repair = codexPathRepairState(agentTestState.result);
+                    if (!repair) return null;
+                    const codexStrings = codexPathStrings(locale);
+                    return (
+                      <div className="settings-test-actions">
+                        <span className="settings-test-actions-hint">
+                          {codexStrings.repairHint}
+                        </span>
+                        <div className="settings-test-actions-row">
+                          {repair.canUseDetected ? (
+                            <button
+                              type="button"
+                              className="settings-test-btn"
+                              onClick={() => applyCodexDetectedPath(repair.detectedPath)}
+                            >
+                              {codexStrings.useDetected}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="ghost icon-btn settings-rescan-btn"
+                            onClick={clearCodexCustomPath}
+                          >
+                            {codexStrings.clearCustom}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
               ) : null}
               {agents.length === 0 ? (
                 <div className="empty-card">
@@ -1949,6 +2005,20 @@ export function SettingsDialog({
                         </select>
                       </label>
                     ) : null}
+                    <MemoryModelInline
+                      mode="daemon"
+                      apiProtocol={apiProtocol}
+                      chatApiKey={cfg.apiKey}
+                      chatBaseUrl={cfg.baseUrl}
+                      chatApiVersion={cfg.apiVersion ?? ''}
+                      chatModel={modelValue}
+                      cliAgentId={selected.id}
+                      cliModelOptions={
+                        hasModels
+                          ? selected.models!.map((m) => m.id)
+                          : []
+                      }
+                    />
                     <p className="hint">{t('settings.modelPickerHint')}</p>
                   </div>
                 );
@@ -2193,6 +2263,14 @@ export function SettingsDialog({
                   />
                 </label>
               ) : null}
+              <MemoryModelInline
+                mode="api"
+                apiProtocol={apiProtocol}
+                chatApiKey={cfg.apiKey}
+                chatBaseUrl={cfg.baseUrl}
+                chatApiVersion={cfg.apiVersion ?? ''}
+                chatModel={cfg.model}
+              />
               <label className="field">
                 <span className="field-label">{t('settings.baseUrl')}</span>
                 <input
@@ -2370,9 +2448,15 @@ export function SettingsDialog({
             <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'library' ? (
-            <LibrarySection cfg={cfg} setCfg={setCfg} />
+          {activeSection === 'skills' ? (
+            <SkillsSection cfg={cfg} setCfg={setCfg} />
           ) : null}
+
+          {activeSection === 'designSystems' ? (
+            <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'memory' ? <MemorySection /> : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />

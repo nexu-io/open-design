@@ -1,9 +1,13 @@
-// Skill registry. Scans <projectRoot>/skills/* for SKILL.md files, parses
+// Skill registry. Scans one or more on-disk roots for SKILL.md files, parses
 // front-matter, returns listing. No watching in this MVP — re-scans on every
 // GET /api/skills, which is fine for dozens of skills.
+//
+// Roots are passed in priority order: the first one wins on `id` collisions
+// so user-imported skills under USER_SKILLS_DIR can shadow a built-in skill
+// of the same name without erasing the built-in copy.
 
 import type { Dirent } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import { SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
@@ -30,8 +34,19 @@ interface SkillFrontmatter extends JsonRecord {
   name?: unknown;
   description?: unknown;
   triggers?: unknown;
-  od?: JsonRecord & { craft?: JsonRecord; preview?: JsonRecord; design_system?: JsonRecord };
+  od?: JsonRecord & {
+    craft?: JsonRecord;
+    preview?: JsonRecord;
+    design_system?: JsonRecord;
+    category?: unknown;
+  };
 }
+
+// Indicates whether a skill came from a user-writable root (the first root
+// passed to listSkills) or from a built-in repo root (any later root). The
+// UI uses this to render an origin pill and to gate destructive actions:
+// only `user` skills can be deleted via /api/skills/:id.
+export type SkillSource = "user" | "built-in";
 
 export interface SkillInfo {
   id: string;
@@ -40,9 +55,16 @@ export interface SkillInfo {
   triggers: unknown[];
   mode: SkillMode;
   surface: SkillSurface;
+  source: SkillSource;
   craftRequires: string[];
   platform: SkillPlatform;
   scenario: string;
+  // Optional human-readable category (e.g. "image-generation", "video",
+  // "design-systems"). Surfaced as a filter pill in Settings → Skills so a
+  // large pre-loaded catalogue (e.g. curated design/creative skills from the
+  // upstream awesome-* lists) stays scannable. Not part of system-prompt
+  // composition; purely a UI hint.
+  category: string | null;
   previewType: string;
   designSystemRequired: boolean;
   defaultFor: string[];
@@ -91,125 +113,162 @@ export function findSkillById(skills: unknown, id: unknown): SkillInfo | undefin
   return (skills as SkillInfo[]).find((s) => s.id === canonical);
 }
 
-export async function listSkills(skillsRoot: string): Promise<SkillInfo[]> {
+// Accept either a single root path or an array. When given multiple roots,
+// the first one wins on id collisions so user-imported skills under
+// USER_SKILLS_DIR can shadow a built-in skill of the same name without
+// erasing the bundled copy. Each surfaced summary carries a `source`
+// (`"user"` for the first root, `"built-in"` for any later root) so the
+// UI can render an origin pill and gate the delete control.
+export async function listSkills(
+  skillsRoots: string | readonly string[],
+): Promise<SkillInfo[]> {
+  const roots = Array.isArray(skillsRoots) ? skillsRoots : [skillsRoots];
   const out: SkillInfo[] = [];
-  let entries: Dirent[] = [];
-  try {
-    entries = await readdir(skillsRoot, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    const dir = path.join(skillsRoot, entry.name);
-    const skillPath = path.join(dir, "SKILL.md");
+  const seenIds = new Set<string>();
+  for (let rootIdx = 0; rootIdx < roots.length; rootIdx += 1) {
+    const skillsRoot = roots[rootIdx];
+    if (!skillsRoot) continue;
+    const source: SkillSource = rootIdx === 0 ? "user" : "built-in";
+    let entries: Dirent[] = [];
     try {
-      const stats = await stat(skillPath);
-      if (!stats.isFile()) continue;
-      const raw = await readFile(skillPath, "utf8");
-      const { data: parsedData, body } = parseFrontmatter(raw) as { data: unknown; body: string };
-      const data = asSkillFrontmatter(parsedData);
-      const hasAttachments = await dirHasAttachments(dir);
-      const mode = normalizeMode(data.od?.mode, body, data.description);
-      const surface = normalizeSurface(data.od?.surface, mode);
-      const platform = normalizePlatform(
-        data.od?.platform,
-        mode,
-        body,
-        data.description
-      );
-      const scenario = normalizeScenario(
-        data.od?.scenario,
-        body,
-        data.description
-      );
-      const designSystemRequired =
-        typeof data.od?.design_system?.requires === "boolean"
-          ? data.od.design_system.requires
-          : true;
-      const upstream =
-        typeof data.od?.upstream === "string" ? data.od.upstream : null;
-      const previewType =
-        typeof data.od?.preview?.type === "string" ? data.od.preview.type : "html";
-      const parentId = typeof data.name === "string" && data.name ? data.name : entry.name;
-      const description = typeof data.description === "string" ? data.description : "";
-      const parentBody = hasAttachments ? withSkillRootPreamble(body, dir) : body;
-      // Pre-compute derived examples so the parent entry can advertise
-      // `aggregatesExamples` in the same push. The frontend uses that
-      // flag to hide the parent card from the gallery (its preview would
-      // duplicate one of the derived cards), while the daemon keeps the
-      // parent in the listing so `findSkillById` still resolves it for
-      // system-prompt composition and id alias lookups.
-      const derivedExamples = await collectDerivedExamples(dir);
-      const aggregatesExamples = derivedExamples.length > 0;
-      out.push({
-        id: parentId,
-        name: parentId,
-        description,
-        triggers: Array.isArray(data.triggers) ? data.triggers : [],
-        mode,
-        surface,
-        craftRequires: normalizeCraftRequires(data.od?.craft?.requires),
-        platform,
-        scenario,
-        previewType,
-        designSystemRequired,
-        defaultFor: normalizeDefaultFor(data.od?.default_for),
-        upstream,
-        featured: normalizeFeatured(data.od?.featured),
-        // Optional metadata hints used by 'Use this prompt' fast-create so
-        // the resulting project mirrors the shipped example.html. Each hint
-        // is only consumed when its kind matches the skill mode; missing
-        // hints fall back to the same defaults the new-project form uses.
-        fidelity: normalizeFidelity(data.od?.fidelity),
-        speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
-        animations: normalizeBoolHint(data.od?.animations),
-        examplePrompt: derivePrompt(data),
-        aggregatesExamples,
-        body: parentBody,
-        dir,
-      });
-
-      // Surface every example sitting next to a SKILL.md as its own card so
-      // a single skill (e.g. live-artifact) can ship a small gallery of
-      // hand-crafted samples without needing one SKILL.md per sample. Each
-      // derived card inherits the parent's mode/platform/surface/scenario
-      // so existing TYPE/SURFACE filters keep working; the synthetic id
-      // `<parent>:<child>` lets `/api/skills/:id/example` resolve straight
-      // to the matching HTML on disk. We deliberately do not inherit
-      // `featured` so derived cards never crowd the magazine row.
-      for (const example of derivedExamples) {
+      entries = await readdir(skillsRoot, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      const dir = path.join(skillsRoot, entry.name);
+      const skillPath = path.join(dir, "SKILL.md");
+      try {
+        const stats = await stat(skillPath);
+        if (!stats.isFile()) continue;
+        const raw = await readFile(skillPath, "utf8");
+        const { data: parsedData, body } = parseFrontmatter(raw) as {
+          data: unknown;
+          body: string;
+        };
+        const data = asSkillFrontmatter(parsedData);
+        const parentId =
+          typeof data.name === "string" && data.name ? data.name : entry.name;
+        // Skip when an earlier root already surfaced this id — the first
+        // root wins so user shadows built-in. Done before we read the
+        // rest of the frontmatter to keep the shadowed-skill path cheap.
+        if (seenIds.has(parentId)) continue;
+        seenIds.add(parentId);
+        const hasAttachments = await dirHasAttachments(dir);
+        const mode = normalizeMode(data.od?.mode, body, data.description);
+        const surface = normalizeSurface(data.od?.surface, mode);
+        const platform = normalizePlatform(
+          data.od?.platform,
+          mode,
+          body,
+          data.description,
+        );
+        const scenario = normalizeScenario(
+          data.od?.scenario,
+          body,
+          data.description,
+        );
+        const category = normalizeCategory(data.od?.category);
+        const designSystemRequired =
+          typeof data.od?.design_system?.requires === "boolean"
+            ? data.od.design_system.requires
+            : true;
+        const upstream =
+          typeof data.od?.upstream === "string" ? data.od.upstream : null;
+        const previewType =
+          typeof data.od?.preview?.type === "string"
+            ? data.od.preview.type
+            : "html";
+        const description =
+          typeof data.description === "string" ? data.description : "";
+        const parentBody = hasAttachments
+          ? withSkillRootPreamble(body, dir)
+          : body;
+        // Pre-compute derived examples so the parent entry can advertise
+        // `aggregatesExamples` in the same push. The frontend uses that
+        // flag to hide the parent card from the gallery (its preview would
+        // duplicate one of the derived cards), while the daemon keeps the
+        // parent in the listing so `findSkillById` still resolves it for
+        // system-prompt composition and id alias lookups.
+        const derivedExamples = await collectDerivedExamples(dir);
+        const aggregatesExamples = derivedExamples.length > 0;
         out.push({
-          id: `${parentId}:${example.key}`,
-          name: humanizeExampleName(example.key),
+          id: parentId,
+          name: parentId,
           description,
           triggers: Array.isArray(data.triggers) ? data.triggers : [],
           mode,
           surface,
-          craftRequires: [],
+          source,
+          craftRequires: normalizeCraftRequires(data.od?.craft?.requires),
           platform,
           scenario,
+          category,
           previewType,
           designSystemRequired,
-          defaultFor: [],
+          defaultFor: normalizeDefaultFor(data.od?.default_for),
           upstream,
-          featured: null,
+          featured: normalizeFeatured(data.od?.featured),
+          // Optional metadata hints used by 'Use this prompt' fast-create
+          // so the resulting project mirrors the shipped example.html.
+          // Each hint is only consumed when its kind matches the skill
+          // mode; missing hints fall back to the new-project defaults.
           fidelity: normalizeFidelity(data.od?.fidelity),
           speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
           animations: normalizeBoolHint(data.od?.animations),
           examplePrompt: derivePrompt(data),
-          aggregatesExamples: false,
-          // Inherit the parent's full SKILL.md body so 'Use this prompt'
-          // on a derived card seeds the agent with the same workflow the
-          // parent describes. Without this, picking a derived card would
-          // compose an empty system prompt and the agent would have no
-          // skill instructions.
+          aggregatesExamples,
           body: parentBody,
           dir,
         });
+
+        // Surface every example sitting next to a SKILL.md as its own card
+        // so a single skill (e.g. live-artifact) can ship a small gallery
+        // of hand-crafted samples without needing one SKILL.md per sample.
+        // Each derived card inherits the parent's mode/platform/surface/
+        // scenario so existing TYPE/SURFACE filters keep working; the
+        // synthetic id `<parent>:<child>` lets `/api/skills/:id/example`
+        // resolve straight to the matching HTML on disk. We deliberately
+        // do not inherit `featured` so derived cards never crowd the
+        // magazine row.
+        for (const example of derivedExamples) {
+          const derivedId = `${parentId}:${example.key}`;
+          if (seenIds.has(derivedId)) continue;
+          seenIds.add(derivedId);
+          out.push({
+            id: derivedId,
+            name: humanizeExampleName(example.key),
+            description,
+            triggers: Array.isArray(data.triggers) ? data.triggers : [],
+            mode,
+            surface,
+            source,
+            craftRequires: [],
+            platform,
+            scenario,
+            category,
+            previewType,
+            designSystemRequired,
+            defaultFor: [],
+            upstream,
+            featured: null,
+            fidelity: normalizeFidelity(data.od?.fidelity),
+            speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
+            animations: normalizeBoolHint(data.od?.animations),
+            examplePrompt: derivePrompt(data),
+            aggregatesExamples: false,
+            // Inherit the parent's full SKILL.md body so 'Use this prompt'
+            // on a derived card seeds the agent with the same workflow
+            // the parent describes. Without this, picking a derived card
+            // would compose an empty system prompt.
+            body: parentBody,
+            dir,
+          });
+        }
+      } catch {
+        // Skip unreadable entries — this is discovery, not validation.
       }
-    } catch {
-      // Skip unreadable entries — this is discovery, not validation.
     }
   }
   return out;
@@ -512,6 +571,21 @@ const KNOWN_SCENARIOS = new Set([
   "education",
   "personal",
 ]);
+// Normalise a free-form category tag. Limits the set of accepted characters
+// to lowercase letters, digits, and dashes so the value can flow straight
+// into the UI as a filter pill class without escaping. Empty / non-string
+// values become null so the filter row hides instead of rendering an empty
+// pill. We intentionally do not lock down a fixed vocabulary here — the
+// curated catalogue under skills/ owns the canonical category set, and
+// user-imported skills are free to introduce their own.
+function normalizeCategory(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const slug = value.trim().toLowerCase();
+  if (!slug) return null;
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) return null;
+  return slug.slice(0, 64);
+}
+
 function normalizeScenario(value: unknown, body: unknown, description: unknown): string {
   if (typeof value === "string") {
     const v = value.trim().toLowerCase();
@@ -533,3 +607,356 @@ function normalizeScenario(value: unknown, body: unknown, description: unknown):
 // Surface the vocabulary so callers (frontend filter UI) could mirror it
 // later if they want to. Not exported today, kept here for documentation.
 void KNOWN_SCENARIOS;
+
+// ---------------------------------------------------------------------------
+// User-skill import / delete primitives
+// ---------------------------------------------------------------------------
+// User-imported skills live under <runtimeData>/user-skills/<slug>/SKILL.md.
+// We treat that directory as fully owned by the daemon, so import/delete are
+// simple: write or rm the slug folder and let listSkills() pick the change up
+// on the next /api/skills request. The slug is derived from the user-supplied
+// `name` (alphanumeric + dash) and prefixed with `user-` only when an existing
+// built-in skill folder shares the same id, to avoid colliding with a
+// repo-shipped folder.
+
+export type SkillImportErrorCode =
+  | "BAD_REQUEST"
+  | "CONFLICT"
+  | "NOT_FOUND"
+  | "INTERNAL_ERROR";
+
+export class SkillImportError extends Error {
+  readonly code: SkillImportErrorCode;
+  constructor(code: SkillImportErrorCode, message: string) {
+    super(message);
+    this.code = code;
+    this.name = "SkillImportError";
+  }
+}
+
+const RESERVED_SLUGS = new Set(["", ".", ".."]);
+
+export function slugifySkillName(name: unknown): string {
+  if (typeof name !== "string") return "";
+  const lowered = name.trim().toLowerCase();
+  const cleaned = lowered
+    .replace(/[^a-z0-9\-_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+  if (!cleaned || RESERVED_SLUGS.has(cleaned)) return "";
+  return cleaned.slice(0, 64);
+}
+
+function escapeYamlString(value: unknown): string {
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+interface BuildSkillMarkdownInput {
+  name: string;
+  description: string;
+  body: string;
+  triggers: string[];
+}
+
+function buildSkillMarkdown({
+  name,
+  description,
+  body,
+  triggers,
+}: BuildSkillMarkdownInput): string {
+  // Always emit `name` as a quoted scalar so YAML never coerces it to a
+  // number / boolean / null. Without the quotes, parseYamlSubset() would
+  // re-read names like '123', 'true', or 'null' as non-string literals,
+  // and importUserSkill()'s round-trip ("imported skill could not be
+  // re-read") would fail for those ids. See PR #955 review feedback.
+  const lines: string[] = ["---", `name: "${escapeYamlString(name)}"`];
+  if (description && description.trim().length > 0) {
+    lines.push("description: |");
+    for (const ln of description.trim().split(/\r?\n/)) {
+      lines.push(`  ${ln}`);
+    }
+  }
+  if (triggers.length > 0) {
+    lines.push("triggers:");
+    for (const t of triggers) {
+      const trimmed = typeof t === "string" ? t.trim() : "";
+      if (!trimmed) continue;
+      lines.push(`  - "${escapeYamlString(trimmed)}"`);
+    }
+  }
+  lines.push("---", "", body.trim(), "");
+  return lines.join("\n");
+}
+
+export interface SkillImportInput {
+  name?: unknown;
+  description?: unknown;
+  body?: unknown;
+  triggers?: unknown;
+}
+
+export interface SkillImportResult {
+  id: string;
+  slug: string;
+  dir: string;
+}
+
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return Boolean(err) && typeof err === "object" && "code" in (err as object);
+}
+
+export async function importUserSkill(
+  userSkillsRoot: string,
+  input: SkillImportInput,
+): Promise<SkillImportResult> {
+  const name = typeof input?.name === "string" ? input.name.trim() : "";
+  const description =
+    typeof input?.description === "string" ? input.description : "";
+  const body = typeof input?.body === "string" ? input.body : "";
+  if (!name) {
+    throw new SkillImportError("BAD_REQUEST", "skill name required");
+  }
+  if (!body || body.trim().length === 0) {
+    throw new SkillImportError("BAD_REQUEST", "skill body required");
+  }
+  const slug = slugifySkillName(name);
+  if (!slug) {
+    throw new SkillImportError(
+      "BAD_REQUEST",
+      "skill name must produce a valid slug (a-z, 0-9, dash)",
+    );
+  }
+  const triggersRaw = Array.isArray(input?.triggers) ? input.triggers : [];
+  const triggers = triggersRaw
+    .map((t) => (typeof t === "string" ? t.trim() : ""))
+    .filter(Boolean);
+
+  await mkdir(userSkillsRoot, { recursive: true });
+  const dir = path.join(userSkillsRoot, slug);
+  // Refuse to overwrite an existing folder. The caller can DELETE first
+  // when intentionally replacing a skill.
+  try {
+    const existing = await stat(dir);
+    if (existing) {
+      throw new SkillImportError(
+        "CONFLICT",
+        `a user skill with slug "${slug}" already exists`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof SkillImportError) throw err;
+    if (isErrnoException(err) && err.code !== "ENOENT") {
+      throw new SkillImportError(
+        "INTERNAL_ERROR",
+        `could not check skill dir: ${err.message ?? err}`,
+      );
+    }
+  }
+  await mkdir(dir, { recursive: true });
+  const md = buildSkillMarkdown({ name, description, body, triggers });
+  await writeFile(path.join(dir, "SKILL.md"), md, "utf8");
+  return { id: name, slug, dir };
+}
+
+export interface SkillUpdateInput {
+  name: string;
+  description?: unknown;
+  body?: unknown;
+  triggers?: unknown;
+  // Original on-disk dir for the skill being edited. When the caller is
+  // shadowing a built-in for the first time (i.e. `sourceDir` differs
+  // from the user shadow target and the shadow folder does not exist
+  // yet), `updateUserSkill` clones every entry except `SKILL.md` from
+  // `sourceDir` into the shadow so the bundled side tree (assets/,
+  // references/, scripts/, examples/, ...) keeps resolving through the
+  // /api/skills/:id/files, /example, and /assets/* routes after the
+  // edit. Without this, listSkills() promotes the shadow folder to the
+  // active dir but the resolvers see only the user-authored SKILL.md
+  // and the rest of the skill silently disappears (mrcfps PR #955
+  // review). When omitted (or pointing at the same folder) the call
+  // only writes SKILL.md and leaves any previously-cloned side files
+  // alone so subsequent edits do not clobber the user's tweaks.
+  sourceDir?: string;
+}
+
+// Overwrite (or create-on-demand) a user-owned SKILL.md. For built-in
+// skills this writes a "shadow" copy under USER_SKILLS_DIR/<slug>/ that
+// the next listSkills() pass will surface in place of the bundled copy.
+// On the very first shadow-creation we also clone the built-in's side
+// files (assets/, references/, scripts/, examples/, ...) so the shadow
+// folder is self-contained and downstream resolvers — `/api/skills/:id/
+// files`, `/example`, `/assets/*`, the system-prompt preamble, and the
+// per-turn cwd staging — keep finding the bundled tree even though the
+// user's `SKILL.md` is what we serve.
+export async function updateUserSkill(
+  userSkillsRoot: string,
+  input: SkillUpdateInput,
+): Promise<SkillImportResult> {
+  const name = typeof input?.name === "string" ? input.name.trim() : "";
+  if (!name) {
+    throw new SkillImportError("BAD_REQUEST", "skill name required");
+  }
+  const description =
+    typeof input?.description === "string" ? input.description : "";
+  const body = typeof input?.body === "string" ? input.body : "";
+  if (!body || body.trim().length === 0) {
+    throw new SkillImportError("BAD_REQUEST", "skill body required");
+  }
+  const slug = slugifySkillName(name);
+  if (!slug) {
+    throw new SkillImportError(
+      "BAD_REQUEST",
+      "skill name must produce a valid slug (a-z, 0-9, dash)",
+    );
+  }
+  const triggersRaw = Array.isArray(input?.triggers) ? input.triggers : [];
+  const triggers = triggersRaw
+    .map((t) => (typeof t === "string" ? t.trim() : ""))
+    .filter(Boolean);
+  await mkdir(userSkillsRoot, { recursive: true });
+  const dir = path.join(userSkillsRoot, slug);
+  const dirExisted = await stat(dir)
+    .then(() => true)
+    .catch(() => false);
+  // Only clone on the very first shadow over a built-in. If `dirExisted`
+  // is true, we are editing an already-shadowed skill (or a pure user
+  // skill); re-cloning would clobber the user's tweaks under the side
+  // tree. If `sourceDir` is missing or already points at the shadow,
+  // there is nothing to clone — same dir.
+  const shouldCloneSideFiles =
+    !dirExisted &&
+    typeof input.sourceDir === "string" &&
+    input.sourceDir.length > 0 &&
+    path.resolve(input.sourceDir) !== path.resolve(dir);
+  if (shouldCloneSideFiles) {
+    try {
+      await cloneSkillSideFiles(input.sourceDir!, dir);
+    } catch {
+      // Non-fatal: SKILL.md still lands below. Side-file resolvers will
+      // 404 individual entries instead of erasing the whole edit, which
+      // matches the pre-fix behaviour for unreachable assets.
+      await mkdir(dir, { recursive: true });
+    }
+  } else {
+    await mkdir(dir, { recursive: true });
+  }
+  const md = buildSkillMarkdown({ name, description, body, triggers });
+  await writeFile(path.join(dir, "SKILL.md"), md, "utf8");
+  return { id: name, slug, dir };
+}
+
+// Copy every entry in `sourceDir` into `destDir` except `SKILL.md` and
+// dotfiles. Used by `updateUserSkill` to build a self-contained shadow
+// folder over a built-in skill on first edit. We dereference symlinks
+// for the same reason `stageActiveSkill` does — the shadow lives under
+// runtime data and must not link back into a read-only resource tree.
+async function cloneSkillSideFiles(
+  sourceDir: string,
+  destDir: string,
+): Promise<void> {
+  await mkdir(destDir, { recursive: true });
+  let entries: Dirent[] = [];
+  try {
+    entries = await readdir(sourceDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name === "SKILL.md") continue;
+    if (entry.name.startsWith(".")) continue;
+    const src = path.join(sourceDir, entry.name);
+    const dst = path.join(destDir, entry.name);
+    await cp(src, dst, {
+      recursive: true,
+      dereference: true,
+      preserveTimestamps: true,
+    });
+  }
+}
+
+export interface SkillFileEntry {
+  // Path relative to the skill's on-disk directory. Forward-slashes only.
+  path: string;
+  // 'file' | 'directory'. We do not surface symlinks or other file types.
+  kind: "file" | "directory";
+  // Byte size for files; null for directories.
+  size: number | null;
+}
+
+const SKILL_FILES_MAX_ENTRIES = 500;
+const SKILL_FILES_MAX_DEPTH = 6;
+
+// Walk a skill directory and return a flat list of files/folders. Used by
+// the Settings → Skills detail panel to render a small file tree next to
+// the SKILL.md preview. Skips dotfiles, symlinks, and anything past
+// `SKILL_FILES_MAX_DEPTH` so a pathological skill folder cannot stall the
+// daemon. The cap on entries protects against large bundled assets folders.
+export async function listSkillFiles(skillDir: string): Promise<SkillFileEntry[]> {
+  const out: SkillFileEntry[] = [];
+  const seen = new Set<string>();
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > SKILL_FILES_MAX_DEPTH) return;
+    if (out.length >= SKILL_FILES_MAX_ENTRIES) return;
+    let entries: Dirent[] = [];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (out.length >= SKILL_FILES_MAX_ENTRIES) return;
+      if (entry.name.startsWith(".")) continue;
+      // Refuse symlinks defensively — readdir's withFileTypes already
+      // returns isSymbolicLink(), but we double-check via the Dirent's
+      // kind methods to keep this aligned with the read paths elsewhere.
+      if (entry.isSymbolicLink()) continue;
+      const abs = path.join(dir, entry.name);
+      const rel = path.relative(skillDir, abs).split(path.sep).join("/");
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      if (entry.isDirectory()) {
+        out.push({ path: rel, kind: "directory", size: null });
+        await walk(abs, depth + 1);
+      } else if (entry.isFile()) {
+        let size: number | null = null;
+        try {
+          const s = await stat(abs);
+          size = s.size;
+        } catch {
+          size = null;
+        }
+        out.push({ path: rel, kind: "file", size });
+      }
+    }
+  }
+  await walk(skillDir, 0);
+  return out;
+}
+
+export async function deleteUserSkill(
+  userSkillsRoot: string,
+  id: string,
+): Promise<void> {
+  const slug = slugifySkillName(id);
+  if (!slug) {
+    throw new SkillImportError("BAD_REQUEST", "invalid skill id");
+  }
+  const dir = path.join(userSkillsRoot, slug);
+  const root = path.resolve(userSkillsRoot);
+  const target = path.resolve(dir);
+  if (target !== dir || !target.startsWith(root + path.sep)) {
+    // Defence-in-depth: refuse to delete anything outside the user-skills
+    // root. The slugify above already strips traversal characters.
+    throw new SkillImportError("BAD_REQUEST", "invalid skill path");
+  }
+  try {
+    await stat(target);
+  } catch (err) {
+    if (isErrnoException(err) && err.code === "ENOENT") {
+      throw new SkillImportError("NOT_FOUND", "user skill not found");
+    }
+    throw err;
+  }
+  await rm(target, { recursive: true, force: true });
+}

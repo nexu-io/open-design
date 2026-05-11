@@ -179,7 +179,7 @@ We hold skill PRs to a higher bar than feature PRs because skills are the user-f
 
 ### Shape
 
-- [ ] **Single self-contained folder + the i18n fallback line.** Everything the skill needs lives under `skills/<your-skill>/`. The **only** outside edit is adding your skill id to the `*_SKILL_IDS_WITH_EN_FALLBACK` arrays — see "i18n coverage" below. No edits to `apps/daemon/`, `packages/`, `tools/`, etc. in the same PR.
+- [ ] **Single self-contained folder + discoverable English display copy.** Everything the skill needs lives under `skills/<your-skill>/`. The folder's `SKILL.md` must include the English display fields consumed by the picker — see "i18n coverage" below. No edits to `apps/daemon/`, `packages/`, `tools/`, etc. in the same PR.
 - [ ] **No CDN imports** beyond what other skills already use. If you need a new font CDN, GSAP, three.js, etc., raise it in your PR description.
 - [ ] **No images larger than ~250 KB.** If your example genuinely needs a hero photo, run it through an optimizer first. No raw PNG screenshots.
 - [ ] **No fonts you didn't license.** System font stack is always safe; Google Fonts and Adobe Fonts free tier are also safe; anything else needs a license file in `references/`.
@@ -187,19 +187,19 @@ We hold skill PRs to a higher bar than feature PRs because skills are the user-f
 
 ### i18n coverage (every skill, not just featured)
 
-The `e2e/tests/localized-content.test.ts` test enforces that every directory under `skills/` with a `SKILL.md` is represented in the localized content metadata for de / ru / fr — otherwise CI fails on the `skills display copy` assertion.
+The `e2e/tests/localized-content.test.ts` test enforces that every directory under `skills/` with a `SKILL.md` is discoverable and displayable for de / ru / fr. Locales use translated copy when present and otherwise derive the runtime fallback from the English source fields in `SKILL.md`.
 
-For a non-featured skill, the cheap path is to declare your id falls back to English:
+For a non-featured skill, the cheap path is to keep the source metadata complete:
 
-- [ ] **Add your skill id to all three `*_SKILL_IDS_WITH_EN_FALLBACK` arrays** in `apps/web/src/i18n/content.ts` (DE), `apps/web/src/i18n/content.fr.ts` (FR), and `apps/web/src/i18n/content.ru.ts` (RU). Just the bare id on its own line, sorted alphabetically — **no `TODO:` comment**, no inline note. The fallback marker IS the note.
-- [ ] **Run `pnpm --filter @open-design/web test`** locally before pushing. The localized-content test catches missing entries; failing it earns a "please add the fallback line" comment.
+- [ ] **Ensure `SKILL.md` has complete English display copy**: title/name, description, example prompt, and any picker metadata required by the skill schema. The localized runtime uses these fields as the fallback display path.
+- [ ] **Run `pnpm --filter @open-design/web test` and `pnpm --filter @open-design/e2e test tests/localized-content.test.ts`** locally before pushing. These suites catch missing localized dictionaries and undisplayable discovered resources.
 
 ### Featured skills (optional path)
 
 If you set `od.featured: 1`, also:
 
 - [ ] **Add a screenshot** at `docs/screenshots/skills/<skill>.png`. PNG, ~1024×640 retina, captured from the real `example.html` at zoomed-out browser scale.
-- [ ] **Replace the fallback id with full localized display copy** in `content.ts` (DE), `content.fr.ts` (FR), `content.ru.ts` (RU) — title, summary, scenario tag. The featured row in the picker uses this copy; the bare fallback path renders English everywhere.
+- [ ] **Add full localized display copy** in `content.ts` (DE), `content.fr.ts` (FR), `content.ru.ts` (RU) — title, summary, scenario tag. The featured row in the picker uses this copy; the default fallback path renders English everywhere.
 
 ### Forking
 
@@ -234,8 +234,8 @@ they don't cover this case. If you can't, fold into the existing skill instead.
 - [ ] Sent the `example_prompt` end-to-end and confirmed the artifact rendered
 - [ ] Verified export works (PPTX / PDF / etc.) if the mode supports it
 - [ ] Ran `pnpm typecheck`
-- [ ] Added the skill id to all three `*_SKILL_IDS_WITH_EN_FALLBACK` arrays (or full localized copy if featured) — **required for every skill**
-- [ ] Ran `pnpm --filter @open-design/web test` and the `localized-content` suite is green
+- [ ] Verified `SKILL.md` has complete English display copy for localized fallback — **required for every skill**
+- [ ] Ran `pnpm --filter @open-design/web test` and `pnpm --filter @open-design/e2e test tests/localized-content.test.ts`; localized-content coverage is green
 
 ## Screenshot
 (Required if `od.featured` is set. Otherwise nice-to-have.)

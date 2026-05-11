@@ -98,6 +98,9 @@ const PATTERNS: readonly Pattern[] = [
 // non-card numbers (timestamps, IDs, hashes). We isolate the candidate
 // then run a Luhn check before redacting.
 const CARD_CANDIDATE = /\b(?:\d[ -]?){12,18}\d\b/g;
+const API_KEY_HEADER =
+  /(^|[^?&\w-])("?)(x-api-key|api-key|x-goog-api-key)\2(\s*[:=]\s*)("[^"]*"|[^\s,;"'#}]+)/gi;
+const API_KEY_QUERY = /([?&](?:key|api_key|api-key)=)[^&#\s,;"']+/gi;
 
 function isLuhnValid(digits: string): boolean {
   if (digits.length < 13 || digits.length > 19) return false;
@@ -116,6 +119,19 @@ function isLuhnValid(digits: string): boolean {
   return sum % 10 === 0;
 }
 
+function redactApiKeyHeaderValue(
+  prefix: string,
+  quote: string,
+  name: string,
+  separator: string,
+  value: string,
+): string {
+  const redactedValue = value.startsWith('"')
+    ? '"[REDACTED:api_key_header]"'
+    : '[REDACTED:api_key_header]';
+  return `${prefix}${quote}${name}${quote}${separator}${redactedValue}`;
+}
+
 /**
  * Returns `input` with every recognised secret / PII pattern replaced by
  * a `[REDACTED:<kind>]` marker. Idempotent — re-running on already
@@ -130,6 +146,19 @@ export function redactSecrets(input: string): string {
   for (const { name, regex } of PATTERNS) {
     out = out.replace(regex, `[REDACTED:${name}]`);
   }
+  out = out
+    .replace(
+      API_KEY_HEADER,
+      (
+        _match,
+        prefix: string,
+        quote: string,
+        name: string,
+        separator: string,
+        value: string,
+      ) => redactApiKeyHeaderValue(prefix, quote, name, separator, value),
+    )
+    .replace(API_KEY_QUERY, '$1[REDACTED:api_key_query]');
   out = out.replace(CARD_CANDIDATE, (match) => {
     const digits = match.replace(/\D/g, '');
     return isLuhnValid(digits) ? '[REDACTED:credit_card]' : match;
@@ -157,6 +186,28 @@ export function redactSecretsWithCounts(input: string): {
     });
     if (matched > 0) counts[name] = matched;
   }
+  let apiKeyHeaderCount = 0;
+  out = out.replace(
+    API_KEY_HEADER,
+    (
+      _match,
+      prefix: string,
+      quote: string,
+      name: string,
+      separator: string,
+      value: string,
+    ) => {
+      apiKeyHeaderCount += 1;
+      return redactApiKeyHeaderValue(prefix, quote, name, separator, value);
+    },
+  );
+  if (apiKeyHeaderCount > 0) counts.api_key_header = apiKeyHeaderCount;
+  let apiKeyQueryCount = 0;
+  out = out.replace(API_KEY_QUERY, (_match, prefix: string) => {
+    apiKeyQueryCount += 1;
+    return `${prefix}[REDACTED:api_key_query]`;
+  });
+  if (apiKeyQueryCount > 0) counts.api_key_query = apiKeyQueryCount;
   let cardCount = 0;
   out = out.replace(CARD_CANDIDATE, (match) => {
     const digits = match.replace(/\D/g, '');

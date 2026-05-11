@@ -418,6 +418,64 @@ describe('ConnectorsBrowser', () => {
     ).toHaveProperty('github');
   });
 
+  it('surfaces a connect error inline on the connector card', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: null,
+      error: 'Composio provider is not configured',
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('github'));
+    await waitFor(() => expect(
+      screen.getByRole('alert').textContent,
+    ).toContain('Composio provider is not configured'));
+  });
+
+  it('clears the inline connect error when the user retries and succeeds', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(connectConnector)
+      .mockResolvedValueOnce({ connector: null, error: 'Composio provider is not configured' })
+      .mockResolvedValueOnce({
+        connector: availableConnector,
+        auth: {
+          kind: 'redirect_required',
+          redirectUrl: 'https://example.com/oauth',
+          expiresAt: '2026-05-08T10:00:00.000Z',
+        },
+      });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(
+      screen.getByRole('alert').textContent,
+    ).toContain('Composio provider is not configured'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(connectConnector).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
   it('does not mark failed OAuth launches as pending authorization', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,

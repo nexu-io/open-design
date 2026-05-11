@@ -9,8 +9,14 @@ import { composeSystemPrompt } from '../../src/prompts/system.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../../..');
-const liveArtifactRoot = path.join(repoRoot, 'skills/live-artifact');
-const liveArtifactSkillPath = path.join(repoRoot, 'skills/live-artifact/SKILL.md');
+// `live-artifact` moved from skills/ to design-templates/ in PR #955 as
+// part of the skills/design-templates split (see specs/current/
+// skills-and-design-templates.md). The root path now points there.
+const liveArtifactRoot = path.join(repoRoot, 'design-templates/live-artifact');
+const liveArtifactSkillPath = path.join(
+  repoRoot,
+  'design-templates/live-artifact/SKILL.md',
+);
 const liveArtifactSkillMarkdown = readFileSync(liveArtifactSkillPath, 'utf8');
 const liveArtifactSkillBody = [
   `> **Skill root (absolute):** \`${liveArtifactRoot}\``,
@@ -23,6 +29,24 @@ const liveArtifactSkillBody = [
   '',
   '',
   liveArtifactSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
+].join('\n');
+
+// `hyperframes` also moved to design-templates/ in PR #955 — same split
+// as `live-artifact` above.
+const hyperframesRoot = path.join(repoRoot, 'design-templates/hyperframes');
+const hyperframesSkillPath = path.join(
+  repoRoot,
+  'design-templates/hyperframes/SKILL.md',
+);
+const hyperframesSkillMarkdown = readFileSync(hyperframesSkillPath, 'utf8');
+const hyperframesSkillBody = [
+  `> **Skill root (absolute):** \`${hyperframesRoot}\``,
+  '>',
+  '> This skill ships side files alongside `SKILL.md`. Resolve references',
+  '> like `references/html-in-canvas.md` against the skill root above.',
+  '',
+  '',
+  hyperframesSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
 ].join('\n');
 
 describe('composeSystemPrompt', () => {
@@ -53,6 +77,83 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('a connected `notion` connector plus a user brief that names Notion is enough to start with `notion.notion_search`');
     expect(prompt).toContain('Prefer the `live-artifact` skill workflow when available');
     expect(prompt).toContain('The first output should be a live artifact/dashboard/report');
+  });
+
+  // The daemon composer (this file) is what apps/daemon/src/server.ts wires
+  // into live chat runs. The contracts copy at packages/contracts/src/prompts
+  // /system.ts exists for non-daemon contexts and was updated in the
+  // hyperframes PR; without this test the two copies drift silently and the
+  // main HyperFrames flow misses its preflight directive in production.
+  it('injects the html-in-canvas preflight for the hyperframes skill', () => {
+    const prompt = composeSystemPrompt({
+      skillName: 'hyperframes',
+      skillMode: 'video',
+      skillBody: hyperframesSkillBody,
+      metadata: {
+        kind: 'video',
+        videoModel: 'hyperframes-html',
+      } as any,
+    });
+
+    expect(prompt).toContain('## Active skill — hyperframes');
+    expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
+    expect(prompt).toContain('`references/html-in-canvas.md`');
+  });
+
+  describe('artifact handoff no-emit clauses (#1143)', () => {
+    it('drops the absolute "non-negotiable" framing in favor of conditional language', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).not.toContain('non-negotiable output rule');
+    });
+
+    it('includes the "When NOT to emit <artifact>" sub-section', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toContain('When NOT to emit `<artifact>`');
+    });
+
+    it('forbids wrapping in-place-edit-only turns in an artifact block', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toMatch(/in-place|Edit-only|already-existing/i);
+      expect(prompt).toMatch(/do not (emit|wrap|send) (a |an )?`?<artifact/i);
+    });
+
+    it('forbids putting prose / summaries / paths inside an artifact block', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toMatch(/complete `?<!doctype html>`?/i);
+      expect(prompt).toMatch(/summar(y|ies)|prose|file path/i);
+    });
+
+    it('does not carry unconditional "Emit single <artifact>" / "emit a single <artifact>" lines anywhere in the composed prompt', () => {
+      const prompt = composeSystemPrompt({});
+      // Discovery layer used to carry hard-rule unconditional emit instructions
+      // (plan template step 9, default arc Turn 3+ recap, deck workflow step 7).
+      // Those must be conditional now — otherwise the no-emit exception in the
+      // base prompt is overridden by the higher-priority discovery layer.
+      expect(prompt).not.toMatch(/^- 9\.\s+Emit single <artifact>\s*$/m);
+      expect(prompt).not.toMatch(/emit a single `?<artifact>`?\.\s*$/m);
+      expect(prompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
+    });
+
+    it('declares artifact-emission conditionality at the dominant discovery layer', () => {
+      const prompt = composeSystemPrompt({});
+      // The base prompt's "When NOT to emit" section is at lower precedence than
+      // DISCOVERY_AND_PHILOSOPHY, so the exception itself must be stated once at
+      // the dominant layer (near RULE 3) — not only back-pointed.
+      expect(prompt).toMatch(/only when this turn wrote a new canonical HTML/i);
+      expect(prompt).toMatch(/only edited an existing HTML file/i);
+    });
+
+    it('also keeps deck-mode prompts free of the unconditional emit line (DECK_FRAMEWORK_DIRECTIVE only stacks for deck projects)', () => {
+      // The plain composeSystemPrompt({}) call does NOT include
+      // DECK_FRAMEWORK_DIRECTIVE; that directive only stacks when
+      // `skillMode === 'deck'` or `metadata.kind === 'deck'`. So if
+      // deck-framework.ts:327 ever regresses back to "Emit single <artifact>",
+      // a no-args negative assertion is a false negative — exercise the deck
+      // path explicitly here.
+      const deckPrompt = composeSystemPrompt({ skillMode: 'deck' });
+      expect(deckPrompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
+      expect(deckPrompt).toMatch(/Emit single <artifact> if a new canonical deck HTML/i);
+    });
   });
 
   describe('connectedExternalMcp directive', () => {

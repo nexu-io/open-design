@@ -249,28 +249,15 @@ jobs:
       - name: Smoke beta mac packaged runtime
         working-directory: e2e
         env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
           OD_PACKAGED_E2E_MAC: "1"
           OD_PACKAGED_E2E_NAMESPACE: release-beta
-          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/mac/screenshots/open-design-mac-smoke.png
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           set -euo pipefail
-          report_dir="$RUNNER_TEMP/release-report/mac"
-          mkdir -p "$report_dir/screenshots"
-          cat > "$report_dir/manifest.json" <<EOF
-          {
-            "platform": "mac",
-            "spec": "specs/mac.spec.ts",
-            "namespace": "release-beta",
-            "screenshot": "screenshots/open-design-mac-smoke.png",
-            "githubRunId": "$GITHUB_RUN_ID",
-            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
-            "commit": "$GITHUB_SHA"
-          }
-          EOF
-          cp "$RUNNER_TEMP/mac-tools-pack-build.json" "$report_dir/tools-pack.json"
-          cp "$RUNNER_TEMP/mac-tools-pack-build.log" "$report_dir/tools-pack.log"
-          pnpm test specs/mac.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
 
       - name: Upload mac e2e spec report
         if: ${{ always() }}
@@ -302,7 +289,7 @@ jobs:
     name: Build beta mac x64
     needs: metadata
     if: ${{ inputs.enable_mac_intel }}
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -468,29 +455,16 @@ jobs:
       - name: Smoke beta windows packaged runtime
         working-directory: e2e
         env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
           OD_PACKAGED_E2E_WIN: "1"
           OD_PACKAGED_E2E_NAMESPACE: release-beta-win
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           $ErrorActionPreference = "Stop"
-          $reportDir = Join-Path $env:RUNNER_TEMP "release-report/win"
-          $screenshotDir = Join-Path $reportDir "screenshots"
-          New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
-          $env:OD_PACKAGED_E2E_SCREENSHOT_PATH = Join-Path $screenshotDir "open-design-win-smoke.png"
-          @{
-            platform = "win"
-            spec = "specs/win.spec.ts"
-            namespace = "release-beta-win"
-            screenshot = "screenshots/open-design-win-smoke.png"
-            githubRunId = $env:GITHUB_RUN_ID
-            githubRunAttempt = $env:GITHUB_RUN_ATTEMPT
-            commit = $env:GITHUB_SHA
-          } | ConvertTo-Json | Set-Content -Path (Join-Path $reportDir "manifest.json")
-          Copy-Item -Force -Path (Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json") -Destination (Join-Path $reportDir "tools-pack.json")
-          pnpm test specs/win.spec.ts 2>&1 | Tee-Object -FilePath (Join-Path $reportDir "vitest.log")
-          $testExitCode = $LASTEXITCODE
-          if ($testExitCode -ne 0) {
-            exit $testExitCode
+          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
           }
 
       - name: Upload windows e2e spec report

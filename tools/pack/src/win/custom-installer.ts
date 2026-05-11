@@ -89,6 +89,80 @@ async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
   throw new Error("makensis is required to build the Windows installer; install NSIS or populate the electron-builder NSIS cache");
 }
 
+function createRunningInstancesScript(): string {
+  return `param(
+  [ValidateSet("detect", "close")]
+  [string]$Action,
+  [string]$Install,
+  [string]$Registered
+)
+
+$ErrorActionPreference = "Stop"
+
+$roots = @($Install, $Registered) |
+  Where-Object { $_ } |
+  ForEach-Object {
+    $root = $_.TrimEnd([char]92).ToLowerInvariant()
+    [pscustomobject]@{ Exact = $root; Prefix = ($root + [char]92) }
+  } |
+  Select-Object -Unique Exact, Prefix
+
+$matches = Get-CimInstance Win32_Process | Where-Object {
+  $matched = $false
+  $exe = $_.ExecutablePath
+  if ($null -ne $exe) {
+    $exe = $exe.ToLowerInvariant()
+    foreach ($root in $roots) {
+      if ($root.Exact -and (($exe -eq $root.Exact) -or $exe.StartsWith($root.Prefix))) {
+        $matched = $true
+        break
+      }
+    }
+  } else {
+    $cmd = $_.CommandLine
+    if ($null -ne $cmd) {
+      $cmdLc = $cmd.ToLowerInvariant()
+      foreach ($root in $roots) {
+        if ($root.Prefix -and $cmdLc.Contains($root.Prefix)) {
+          $matched = $true
+          break
+        }
+      }
+    }
+  }
+  $matched
+}
+
+$ids = @($matches | ForEach-Object { $_.ProcessId })
+if ($Action -eq "close") {
+  foreach ($id in $ids) {
+    try { [void][System.Diagnostics.Process]::GetProcessById($id).CloseMainWindow() } catch {}
+  }
+  Start-Sleep -Milliseconds 1500
+  foreach ($id in $ids) {
+    try {
+      $p = [System.Diagnostics.Process]::GetProcessById($id)
+      if (-not $p.HasExited) {
+        Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+  foreach ($id in $ids) {
+    try {
+      $p = [System.Diagnostics.Process]::GetProcessById($id)
+      if (-not $p.HasExited) {
+        [void]$p.WaitForExit(5000)
+      }
+    } catch {}
+  }
+}
+
+if ($ids) {
+  $matches | ForEach-Object { [string]$_.ProcessId + [char]32 + $_.Name }
+}
+`;
+}
+
 async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths): Promise<void> {
   const identity = resolveWinInstallIdentity(config);
   const productName = escapeNsisString(identity.displayName);
@@ -100,8 +174,10 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths): Pr
   const namespace = escapeNsisString(config.namespace);
   const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
   const nsisLogPath = escapeNsisString(paths.nsisLogPath);
+  const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
 
   await mkdir(dirname(paths.installerScriptPath), { recursive: true });
+  await writeFile(runningInstancesScriptPath, createRunningInstancesScript(), "utf8");
   const script = `Unicode true
 ManifestDPIAware true
 RequestExecutionLevel user
@@ -123,6 +199,9 @@ RequestExecutionLevel user
 !endif
 !ifndef APP_VERSION
   !error "APP_VERSION define is required"
+!endif
+!ifndef RUNNING_INSTANCES_PS1
+  !error "RUNNING_INSTANCES_PS1 define is required"
 !endif
 
 !include "MUI2.nsh"
@@ -180,6 +259,7 @@ Var RemoveDesktopShortcutState
 Var RemoveLocalDataState
 Var RunningInstancesOutput
 Var ExistingInstallLocation
+Var RunningInstancesInstallRoot
 Var LE
 Var LT
 Var LX
@@ -258,19 +338,15 @@ FunctionEnd
 Function DetectRunningInstances
   Push $0
   Push $1
-  ; Match by ExecutablePath under the install root when available. WMI returns
-  ; null ExecutablePath for processes the caller cannot fully introspect
-  ; (insufficient access, processes mid-spawn). For those rows, fall back to
-  ; CommandLine containing the install-root prefix, which is OD-specific
-  ; enough to avoid false positives without resorting to global Name matching.
-  ; Issue #821.
-  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { param($$install, $$registered); $$roots = @($$install, $$registered) | Where-Object { $$_ } | ForEach-Object { $$root = $$_.TrimEnd([char]92).ToLowerInvariant(); [pscustomobject]@{ Exact = $$root; Prefix = ($$root + [char]92) } } | Select-Object -Unique Exact, Prefix; $$matches = Get-CimInstance Win32_Process | Where-Object { $$matched = $$false; $$exe = $$_.ExecutablePath; if ($$null -ne $$exe) { $$exe = $$exe.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Exact -and (($$exe -eq $$root.Exact) -or $$exe.StartsWith($$root.Prefix))) { $$matched = $$true; break } } } else { $$cmd = $$_.CommandLine; if ($$null -ne $$cmd) { $$cmdLc = $$cmd.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Prefix -and $$cmdLc.Contains($$root.Prefix)) { $$matched = $$true; break } } } }; $$matched }; if ($$matches) { $$matches | ForEach-Object { [string]$$_.ProcessId + [char]32 + $$_.Name } } }" "$INSTDIR" "$ExistingInstallLocation"'
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
   \${If} $0 == "0"
     StrCpy $RunningInstancesOutput $1
   \${Else}
-    StrCpy $RunningInstancesOutput ""
+    StrCpy $RunningInstancesOutput "__detection_failed__"
     Push "running instance detection failed exit=$0 output=$1"
     Call LogInstallerEvent
   \${EndIf}
@@ -281,14 +357,9 @@ FunctionEnd
 Function CloseRunningInstances
   Push $0
   Push $1
-  ; Same matching as DetectRunningInstances (ExecutablePath path-prefix +
-  ; CommandLine fallback for null ExecutablePath rows). After Stop-Process
-  ; -Force we now WaitForExit on each PID (5s per process) before returning,
-  ; so the OS file-handle GC has time to release the lock on $INSTDIR\$exeName
-  ; before the installer proceeds into MUI_PAGE_INSTFILES. Without this wait
-  ; the next overwrite can race the kill and trigger NSIS's native "file in
-  ; use" Retry/Cancel dialog. Issue #821.
-  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { param($$install, $$registered); $$roots = @($$install, $$registered) | Where-Object { $$_ } | ForEach-Object { $$root = $$_.TrimEnd([char]92).ToLowerInvariant(); [pscustomobject]@{ Exact = $$root; Prefix = ($$root + [char]92) } } | Select-Object -Unique Exact, Prefix; $$matches = Get-CimInstance Win32_Process | Where-Object { $$matched = $$false; $$exe = $$_.ExecutablePath; if ($$null -ne $$exe) { $$exe = $$exe.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Exact -and (($$exe -eq $$root.Exact) -or $$exe.StartsWith($$root.Prefix))) { $$matched = $$true; break } } } else { $$cmd = $$_.CommandLine; if ($$null -ne $$cmd) { $$cmdLc = $$cmd.ToLowerInvariant(); foreach ($$root in $$roots) { if ($$root.Prefix -and $$cmdLc.Contains($$root.Prefix)) { $$matched = $$true; break } } } }; $$matched }; $$ids = @($$matches | ForEach-Object { $$_.ProcessId }); foreach ($$id in $$ids) { try { [void][System.Diagnostics.Process]::GetProcessById($$id).CloseMainWindow() } catch {} }; Start-Sleep -Milliseconds 1500; foreach ($$id in $$ids) { try { $$p = [System.Diagnostics.Process]::GetProcessById($$id); if (-not $$p.HasExited) { Stop-Process -Id $$id -Force -ErrorAction SilentlyContinue } } catch {} }; foreach ($$id in $$ids) { try { $$p = [System.Diagnostics.Process]::GetProcessById($$id); if (-not $$p.HasExited) { [void]$$p.WaitForExit(5000) } } catch {} }; if ($$ids) { $$ids -join ([char]32) } }" "$INSTDIR" "$ExistingInstallLocation"'
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
   Push "running instances close exit=$0 output=$1"
@@ -300,14 +371,29 @@ FunctionEnd
 Function .onInit
   SetShellVarContext current
   ReadRegStr $ExistingInstallLocation HKCU "${registryKey}" "InstallLocation"
+  StrCpy $RunningInstancesInstallRoot ""
+  \${If} $ExistingInstallLocation != ""
+    IfFileExists "$ExistingInstallLocation\\${exeName}" valid_existing_location invalid_existing_location
+invalid_existing_location:
+    Push "ignoring registered install location without expected exe: $ExistingInstallLocation"
+    Call LogInstallerEvent
+    StrCpy $ExistingInstallLocation ""
+valid_existing_location:
+  \${EndIf}
 
   IfSilent silent_check no_existing_install
 silent_check:
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput != ""
-    Push "install aborted: running instances detected: $RunningInstancesOutput"
+    Push "running instances detected before silent install: $RunningInstancesOutput"
     Call LogInstallerEvent
-    Abort "$(RunningInstancesSilentAbort)"
+    Call CloseRunningInstances
+    Call DetectRunningInstances
+    \${If} $RunningInstancesOutput != ""
+      Push "install aborted: running instances still detected before silent install: $RunningInstancesOutput"
+      Call LogInstallerEvent
+      Abort "$(RunningInstancesSilentAbort)"
+    \${EndIf}
   \${EndIf}
 
   IfFileExists "$INSTDIR\\${exeName}" existing_install no_existing_install
@@ -327,6 +413,7 @@ FunctionEnd
 
 Function RunningInstancesPage
   IfSilent done
+  StrCpy $RunningInstancesInstallRoot ""
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput == ""
     Abort
@@ -354,6 +441,7 @@ done:
 FunctionEnd
 
 Function RunningInstancesPageLeave
+  StrCpy $RunningInstancesInstallRoot ""
   Call CloseRunningInstances
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput != ""
@@ -361,6 +449,27 @@ Function RunningInstancesPageLeave
     Call LogInstallerEvent
     MessageBox MB_OK|MB_ICONEXCLAMATION "$(RunningInstancesCloseFailed)"
     Abort
+  \${EndIf}
+FunctionEnd
+
+Function GuardRunningInstancesBeforeInstall
+  StrCpy $RunningInstancesInstallRoot ""
+  IfFileExists "$INSTDIR\\${exeName}" 0 detect_running_instances
+  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
+detect_running_instances:
+  Call DetectRunningInstances
+  \${If} $RunningInstancesOutput == ""
+    Return
+  \${EndIf}
+
+  Push "running instances detected at install section: $RunningInstancesOutput"
+  Call LogInstallerEvent
+  Call CloseRunningInstances
+  Call DetectRunningInstances
+  \${If} $RunningInstancesOutput != ""
+    Push "install aborted: running instances still detected before file changes: $RunningInstancesOutput"
+    Call LogInstallerEvent
+    Abort "$(RunningInstancesCloseFailed)"
   \${EndIf}
 FunctionEnd
 
@@ -450,6 +559,7 @@ Section "Install"
   SetShellVarContext current
   Push "install section start"
   Call LogInstallerEvent
+  Call GuardRunningInstancesBeforeInstall
   !insertmacro LOG_PATH_STATE "install_dir_before_install" "$INSTDIR"
   !insertmacro LOG_PATH_STATE "installed_exe_before_install" "$INSTDIR\\${exeName}"
 
@@ -563,6 +673,7 @@ export async function buildCustomWinNsisInstaller(
     `/DSEVEN_Z_EXE=${winResources.sevenZipExe}`,
     `/DSEVEN_Z_DLL=${winResources.sevenZipDll}`,
     `/DAPP_ICON=${paths.winIconPath}`,
+    `/DRUNNING_INSTANCES_PS1=${join(dirname(paths.installerScriptPath), "running-instances.ps1")}`,
     paths.installerScriptPath,
   ], {
     cwd: dirname(paths.installerScriptPath),

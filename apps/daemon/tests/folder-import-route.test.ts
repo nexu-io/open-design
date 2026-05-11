@@ -116,6 +116,14 @@ describe('POST /api/import/folder', () => {
     expect(body.error?.message).toMatch(/directory/i);
   });
 
+  it('rejects the filesystem root as an import folder', async () => {
+    const root = path.parse(process.cwd()).root;
+    const resp = await importFolder({ baseDir: root });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { message?: string } };
+    expect(body.error?.message).toMatch(/filesystem root/i);
+  });
+
   // Security: a user-controlled symlink at baseDir would let writeProjectFile
   // escape the project sandbox at every later call (resolveSafe checks the
   // *literal* baseDir, but the OS follows symlinks at open() time). The

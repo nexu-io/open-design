@@ -448,9 +448,54 @@ function injectSelectionBridge(
       };
     } catch (_) { return null; }
   }
-  function targetFrom(el){
+  function annotatedSelectorFor(el){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     if (!id) return null;
+    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+  }
+  function domSelectorFor(el){
+    if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
+    var parts = [];
+    var node = el;
+    while (node && node !== document.documentElement && node !== document.body) {
+      var tag = node.tagName ? node.tagName.toLowerCase() : '';
+      if (!tag || /^(script|style|template|meta|link|title|noscript)$/.test(tag)) return null;
+      var parent = node.parentElement;
+      if (!parent) return null;
+      var index = 1;
+      var sibling = node.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName && sibling.tagName.toLowerCase() === tag) index++;
+        sibling = sibling.previousElementSibling;
+      }
+      parts.unshift(tag + ':nth-of-type(' + index + ')');
+      node = parent;
+    }
+    if (!parts.length) return null;
+    return 'body > ' + parts.join(' > ');
+  }
+  function visibleTarget(el){
+    if (!el || !el.getBoundingClientRect) return false;
+    if (el === document.documentElement || el === document.body) return false;
+    if (/^(script|style|template|meta|link|title|noscript)$/.test(el.tagName ? el.tagName.toLowerCase() : '')) return false;
+    try {
+      var rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return false;
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+  function targetFrom(el, allowDomFallback){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    var selector = annotatedSelectorFor(el);
+    if (!id && allowDomFallback && visibleTarget(el)) {
+      selector = domSelectorFor(el);
+      if (selector) id = 'dom:' + selector;
+    }
+    if (!id || !selector) return null;
     var rect = el.getBoundingClientRect();
     var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
@@ -459,7 +504,7 @@ function injectSelectionBridge(
     return {
       type: 'od:comment-target',
       elementId: id,
-      selector: el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]',
+      selector: selector,
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
@@ -468,11 +513,19 @@ function injectSelectionBridge(
     };
   }
   function allTargets(){
-    var nodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var includeDomFallback = canUseDomFallback();
+    var nodes = includeDomFallback
+      ? document.querySelectorAll('body *')
+      : annotatedNodes;
     var items = [];
+    var seen = Object.create(null);
     for (var i = 0; i < nodes.length; i++) {
-      var item = targetFrom(nodes[i]);
-      if (item) items.push(item);
+      var item = targetFrom(nodes[i], includeDomFallback);
+      if (item && !seen[item.elementId]) {
+        seen[item.elementId] = true;
+        items.push(item);
+      }
     }
     return items;
   }
@@ -499,18 +552,19 @@ function injectSelectionBridge(
   function postStroke(type){
     window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
   }
+  function canUseDomFallback(){
+    return commentEnabled && !inspectEnabled && document.querySelectorAll('[data-od-id], [data-screen-label]').length === 0;
+  }
   function closestTarget(event){
     var el = event.target;
+    var fallback = null;
+    var allowDomFallback = mode === 'picker' && canUseDomFallback();
     while (el && el !== document.documentElement) {
       if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
+      if (!fallback && allowDomFallback && visibleTarget(el)) fallback = el;
       el = el.parentElement;
     }
-    return null;
-  }
-  function selectorFor(el){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    if (!id) return null;
-    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+    return fallback;
   }
   function applyOverride(elementId, selector, prop, value){
     if (!elementId || !prop) return;
@@ -615,7 +669,7 @@ function injectSelectionBridge(
     if (!pickerActive()) return;
     var el = closestTarget(ev);
     if (!el) return;
-    var payload = targetFrom(el);
+    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
@@ -638,7 +692,7 @@ function injectSelectionBridge(
     if (!el) return;
     ev.preventDefault();
     ev.stopPropagation();
-    var payload = targetFrom(el);
+    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
     if (payload) window.parent.postMessage(payload, '*');
   }, true);
   // Pod drawing — only active in comment mode with the 'pod' tool.

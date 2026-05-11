@@ -351,6 +351,42 @@ describe('connectConnector', () => {
     });
   });
 
+  it('renders an info notice in the popup when the connect response carries no redirect URL', async () => {
+    const authWindow = {
+      document: {
+        title: '',
+        body: { innerHTML: '' },
+      },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    };
+    vi.stubGlobal('window', {
+      open: vi.fn(() => authWindow),
+      location: { assign: vi.fn() },
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/connectors/auth-configs/prepare') {
+        return new Response(JSON.stringify({
+          results: { twitter: { status: 'ready', authConfigId: 'ac_twitter' } },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        connector: { id: 'twitter', name: 'Twitter', status: 'available', tools: [] },
+        auth: { kind: 'pending', expiresAt: '2026-05-08T10:00:00.000Z' },
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(connectConnector('twitter')).resolves.toMatchObject({
+      connector: { id: 'twitter' },
+      auth: { kind: 'pending' },
+    });
+
+    expect(authWindow.close).not.toHaveBeenCalled();
+    expect(authWindow.document.title).toBe('Authorization pending');
+    expect(authWindow.document.body.innerHTML).toContain('Authorization pending');
+  });
+
   it('opens connector auth in the system browser when Electron returns a success boolean', async () => {
     const open = vi.fn();
     const openExternal = vi.fn(async () => true);

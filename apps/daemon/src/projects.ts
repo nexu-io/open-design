@@ -15,6 +15,12 @@ import {
   parsePersistedManifest,
   validateArtifactManifestInput,
 } from './artifact-manifest.js';
+import {
+  ArtifactRegressionError,
+  STUB_GUARDED_MANIFEST_KINDS,
+  evaluateArtifactStubGuard,
+  readArtifactStubGuardConfigFromEnv,
+} from './artifact-stub-guard.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
@@ -342,7 +348,8 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
   const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
   const st = await stat(file);
-  const rel = toProjectPath(path.relative(dir, file));
+  const rootReal = await realpath(dir).catch(() => dir);
+  const rel = toProjectPath(path.relative(rootReal, file));
   const manifest = await readManifestForPath(dir, rel);
   return {
     buffer: buf,
@@ -394,19 +401,60 @@ export async function writeProjectFile(
     }
   }
   await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, body);
+  let stubGuardWarning = null;
+  let validatedManifest = null;
   if (artifactManifest && typeof artifactManifest === 'object') {
-    const manifestFileName = artifactManifestNameFor(safeName);
-    const manifestTarget = await resolveSafeReal(dir, manifestFileName);
     const validated = validateArtifactManifestInput(artifactManifest, safeName);
     if (validated.ok && validated.value) {
-      const nextManifest = validated.value;
-      await writeFile(manifestTarget, JSON.stringify(nextManifest, null, 2));
+      validatedManifest = validated.value;
+      const identifier = typeof validatedManifest.metadata?.identifier === 'string'
+        ? validatedManifest.metadata.identifier
+        : '';
+      // Stub-guard applies to HTML-rendered manifest kinds (html, deck).
+      // Other kinds (markdown, svg, code-snippet) can legitimately be small
+      // and are skipped.
+      if (identifier.length > 0 && STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)) {
+        // Scan the directory the new file actually lands in, not the project
+        // root — writeProjectFile accepts nested paths like reports/X.html
+        // and a root-only scan would miss prior siblings in subdirectories.
+        const guard = await evaluateArtifactStubGuard({
+          scanDir: path.dirname(target),
+          identifier,
+          newSize: Buffer.byteLength(body),
+          config: readArtifactStubGuardConfigFromEnv(),
+        });
+        if ((guard.outcome === 'reject' || guard.outcome === 'warn') && guard.warning) {
+          // Operator-visible signal regardless of mode, so on-call can see
+          // how often the guard fires without combing through 422s.
+          console.warn(
+            `[stub-guard] ${guard.outcome} identifier=${guard.warning.identifier} ` +
+              `newSize=${guard.warning.newSize} priorSize=${guard.warning.priorSize} ` +
+              `priorName=${guard.warning.priorName} project=${projectId}`,
+          );
+        }
+        if (guard.outcome === 'reject' && guard.warning) {
+          throw new ArtifactRegressionError(guard.warning.message, {
+            identifier: guard.warning.identifier,
+            newSize: guard.warning.newSize,
+            priorSize: guard.warning.priorSize,
+            priorName: guard.warning.priorName,
+          });
+        }
+        if (guard.outcome === 'warn' && guard.warning) {
+          stubGuardWarning = guard.warning;
+        }
+      }
     }
+  }
+  await writeFile(target, body);
+  if (validatedManifest) {
+    const manifestFileName = artifactManifestNameFor(safeName);
+    const manifestTarget = await resolveSafeReal(dir, manifestFileName);
+    await writeFile(manifestTarget, JSON.stringify(validatedManifest, null, 2));
   }
   const st = await stat(target);
   const persistedManifest = await readManifestForPath(dir, safeName);
-  return {
+  const result = {
     name: safeName,
     path: safeName,
     size: st.size,
@@ -416,6 +464,8 @@ export async function writeProjectFile(
     artifactKind: persistedManifest?.kind,
     artifactManifest: persistedManifest,
   };
+  if (stubGuardWarning) result.stubGuardWarning = stubGuardWarning;
+  return result;
 }
 
 function artifactManifestNameFor(name) {
@@ -450,6 +500,16 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const oldName = validateProjectPath(fromName);
   const newName = sanitizePath(toName);
+  try {
+    await stat(dir);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      const missing = new Error('source file not found');
+      missing.code = 'ENOENT';
+      throw missing;
+    }
+    throw err;
+  }
   const source = await resolveSafeReal(dir, oldName);
   const sourceStat = await stat(source);
   if (!sourceStat.isFile()) {

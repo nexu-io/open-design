@@ -19,6 +19,12 @@ export interface ChatRequest {
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
+  // Per-turn skill ids picked via the composer's @-mention popover. The
+  // daemon concatenates each skill's body into the system prompt for
+  // this run only — they are NOT persisted on the project. Use this to
+  // assemble multiple capabilities (e.g. @web-search + @summarize) for
+  // a single turn without binding the project to one of them.
+  skillIds?: string[];
   designSystemId?: string | null;
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];

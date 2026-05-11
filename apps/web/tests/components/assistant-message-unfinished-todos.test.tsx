@@ -19,6 +19,28 @@ function messageWithEvents(events: AgentEvent[]): ChatMessage {
 describe('AssistantMessage unfinished todo state', () => {
   afterEach(() => cleanup());
 
+  it('shows a soft no-output state instead of Done for empty API responses', () => {
+    render(
+      <AssistantMessage
+        message={messageWithEvents([
+          { kind: 'status', label: 'empty_response', detail: 'deepseek-chat' },
+          {
+            kind: 'text',
+            text: 'The provider ended the request without returning text or an artifact. Try another model or provider, check quota, or retry.',
+          },
+        ])}
+        streaming={false}
+        projectId="project-1"
+        isLast
+      />,
+    );
+
+    expect(screen.getByText('No output')).toBeTruthy();
+    expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
+    expect(screen.queryByText('Done')).toBeNull();
+    expect(screen.queryByText('empty_response')).toBeNull();
+  });
+
   it('keeps Done for a completed latest TodoWrite fixture', () => {
     render(
       <AssistantMessage

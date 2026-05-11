@@ -1,0 +1,1302 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><script>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+})();</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>Open Orbit — 每日简报</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #FAF7F2;
+    --surface: #FFFFFF;
+    --fg: #1A1816;
+    --muted: #6B6660;
+    --border: #EAE5DD;
+    --orange: #D86A47;
+    --green: #2E7D5B;
+    --yellow: #C9982E;
+    --red: #C0473A;
+    --font-display: 'Cormorant', Georgia, serif;
+    --font-body: 'Inter', -apple-system, system-ui, sans-serif;
+    --radius-l: 24px;
+    --radius-m: 16px;
+    --radius-s: 12px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .container {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 40px 48px 64px;
+  }
+
+  /* ─── Hero ─── */
+  .hero {
+    text-align: center;
+    padding: 48px 0 40px;
+  }
+  .hero-sun {
+    display: inline-block;
+    width: 48px; height: 48px;
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: 48px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    margin-bottom: 8px;
+  }
+  .hero h1 span { color: var(--orange); }
+  .hero .hero-date {
+    font-size: 15px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── KPI Strip ─── */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .kpi-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: 20px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .kpi-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .kpi-icon svg { width: 20px; height: 20px; }
+  .kpi-text { flex: 1; min-width: 0; }
+  .kpi-number {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  /* ─── Top 3 ─── */
+  .top3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .top3-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    padding: 28px 24px;
+    display: flex;
+    gap: 16px;
+  }
+  .top3-num {
+    font-family: var(--font-display);
+    font-size: 96px;
+    font-weight: 700;
+    line-height: 0.85;
+    color: var(--border);
+    flex-shrink: 0;
+    width: 64px;
+  }
+  .top3-body { flex: 1; }
+  .top3-body h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    line-height: 1.35;
+  }
+  .top3-meta {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .top3-meta .source {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .top3-meta .wait { color: var(--orange); font-weight: 600; }
+
+  /* ─── Bento Grid ─── */
+  .bento {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .bento-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    padding: 24px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .bento-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+  .bento-icon {
+    width: 28px; height: 28px;
+    flex-shrink: 0;
+  }
+  .bento-title {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .bento-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--muted);
+  }
+  .bento-body { flex: 1; }
+
+  /* ── GitHub ── */
+  .gh-list { list-style: none; }
+  .gh-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .gh-list li:last-child { border-bottom: none; }
+  .gh-list li.ci-fail { background: rgba(192,71,58,0.06); margin: 0 -24px; padding: 8px 24px; border-radius: 6px; }
+  .gh-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .gh-dot.open { background: var(--green); }
+  .gh-dot.merged { background: #8B5CF6; }
+  .gh-dot.fail { background: var(--red); }
+  .gh-pr-title { flex: 1; font-weight: 500; }
+  .gh-time { color: var(--muted); font-size: 12px; white-space: nowrap; margin-left: auto; }
+
+  /* ── Sentry ── */
+  .sentry-big {
+    font-family: var(--font-display);
+    font-size: 72px;
+    font-weight: 700;
+    color: var(--red);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .sentry-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .sentry-card-bg {
+    background: rgba(192,71,58,0.05);
+    border-color: rgba(192,71,58,0.15);
+  }
+  .heatmap {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .heatmap-day {
+    flex: 1;
+    height: 28px;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .heatmap-day span {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .sentry-error {
+    font-size: 13px;
+    padding: 10px 12px;
+    background: rgba(192,71,58,0.06);
+    border-radius: 8px;
+    font-family: 'SF Mono', ui-monospace, monospace;
+    color: var(--red);
+    line-height: 1.4;
+  }
+
+  /* ── Linear ── */
+  .linear-ring {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 16px;
+  }
+  .linear-ring svg { flex-shrink: 0; }
+  .linear-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .linear-stats .stat-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .linear-stats .stat-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .linear-list { list-style: none; }
+  .linear-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .linear-list li:last-child { border-bottom: none; }
+  .linear-status {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .linear-status.in-progress { border-color: var(--yellow); }
+  .linear-status.todo { border-color: var(--muted); }
+  .linear-status.done { border-color: var(--green); background: var(--green); }
+  .linear-priority {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--muted);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* ── Vercel ── */
+  .vercel-deploy {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .vercel-deploy:last-child { border-bottom: none; }
+  .vercel-light {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .vercel-light.ready { background: var(--green); }
+  .vercel-light.building { background: var(--yellow); }
+  .vercel-light.error { background: var(--red); }
+  .vercel-info { flex: 1; }
+  .vercel-branch { font-weight: 500; }
+  .vercel-time { font-size: 12px; color: var(--muted); }
+  .vercel-dur { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  /* ── Gmail ── */
+  .mail-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .mail-item:last-child { border-bottom: none; }
+  .mail-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .mail-body { flex: 1; min-width: 0; }
+  .mail-from { font-size: 13px; font-weight: 600; }
+  .mail-subject { font-size: 13px; color: var(--fg); }
+  .mail-snippet { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mail-time { font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+
+  /* ── Slack ── */
+  .slack-msg {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .slack-msg:last-child { border-bottom: none; }
+  .slack-avatar {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .slack-content { flex: 1; font-size: 13px; }
+  .slack-sender { font-weight: 600; }
+  .slack-channel { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .slack-text { color: var(--fg); line-height: 1.4; }
+  .slack-highlight {
+    background: rgba(216,106,71,0.12);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  /* ── Notion ── */
+  .notion-doc {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .notion-doc:last-child { border-bottom: none; }
+  .notion-doc-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .notion-doc-title .icon { font-size: 16px; }
+  .notion-doc-excerpt {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .notion-doc-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Drive ── */
+  .drive-file {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .drive-file:last-child { border-bottom: none; }
+  .drive-thumb {
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: var(--bg);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .drive-name { flex: 1; font-weight: 500; }
+  .drive-size { font-size: 12px; color: var(--muted); }
+
+  /* ── Trello ── */
+  .trello-board {
+    display: flex;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .trello-col {
+    flex: 1;
+    min-width: 0;
+  }
+  .trello-col-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .trello-col-count {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .trello-chip {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    margin-bottom: 6px;
+    line-height: 1.35;
+  }
+  .trello-chip-tag {
+    display: inline-block;
+    width: 24px; height: 4px;
+    border-radius: 2px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Jira ── */
+  .jira-progress {
+    margin-bottom: 16px;
+  }
+  .jira-progress-bar {
+    height: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .jira-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+  }
+  .jira-progress-label {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  .jira-ticket {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .jira-ticket:last-child { border-bottom: none; }
+  .jira-key {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', ui-monospace, monospace;
+  }
+  .jira-ticket-title { flex: 1; font-weight: 500; }
+  .jira-type-icon {
+    width: 16px; height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* ── 飞书 IM ── */
+  .lark-msg {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .lark-msg:last-child { border-bottom: none; }
+
+  /* ── GitLab ── */
+  .gitlab-pipeline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .gitlab-pipeline:last-child { border-bottom: none; }
+  .pipeline-stages {
+    display: flex;
+    gap: 3px;
+    margin-left: auto;
+  }
+  .pipeline-stage {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ─── Footer ─── */
+  .footer {
+    text-align: center;
+    padding: 24px 0;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+  }
+  .footer .orbit-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  /* ─── Clickable CTAs ─── */
+  .bento-cta {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--orange);
+    text-decoration: none;
+    font-weight: 500;
+    align-self: flex-start;
+    transition: opacity 0.15s ease;
+  }
+  .bento-cta:hover { opacity: 0.7; text-decoration: underline; }
+  .top3-card.linked { cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease; text-decoration: none; color: inherit; }
+  .top3-card.linked:hover { border-color: var(--orange); }
+  .top3-card.linked:hover h3 { color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ═══ Hero ═══ -->
+  <div class="hero" data-od-id="hero">
+    <svg class="hero-sun" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="10" fill="var(--orange)"/>
+      <g stroke="var(--orange)" stroke-width="2" stroke-linecap="round">
+        <line x1="24" y1="4" x2="24" y2="10"/>
+        <line x1="24" y1="38" x2="24" y2="44"/>
+        <line x1="4" y1="24" x2="10" y2="24"/>
+        <line x1="38" y1="24" x2="44" y2="24"/>
+        <line x1="9.86" y1="9.86" x2="14.1" y2="14.1"/>
+        <line x1="33.9" y1="33.9" x2="38.14" y2="38.14"/>
+        <line x1="9.86" y1="38.14" x2="14.1" y2="33.9"/>
+        <line x1="33.9" y1="14.1" x2="38.14" y2="9.86"/>
+      </g>
+    </svg>
+    <h1>你好，<span>Eli</span></h1>
+    <div class="hero-date">2026 年 5 月 6 日 · 星期三</div>
+  </div>
+
+  <!-- ═══ KPI Strip ═══ -->
+  <div class="kpi-strip" data-od-id="kpi-strip">
+    <div class="kpi-card" style="background:rgba(216,106,71,0.06);">
+      <div class="kpi-icon" style="background:rgba(216,106,71,0.12);">
+        <svg viewBox="0 0 20 20" fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="7.5"/><polyline points="7,10 9.5,12.5 13.5,7.5"/></svg>
+      </div>
+      <div class="kpi-text">
+        <div class="kpi-number" style="color:var(--orange)">7</div>
+        <div class="kpi-label">待办事项</div>
+      </div>
+    </div>
+    <div class="kpi-card" style="background:rgba(139,92,246,0.05);">
+      <div class="kpi-icon" style="background:rgba(139,92,246,0.10);">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"><path d="M6 3v14l4-3 4 3V3z"/></svg>
+      </div>
+      <div class="kpi-text">
+        <div class="kpi-number" style="color:#8B5CF6">3</div>
+        <div class="kpi-label">待 Review</div>
+      </div>
+    </div>
+    <div class="kpi-card" style="background:rgba(201,152,46,0.06);">
+      <div class="kpi-icon" style="background:rgba(201,152,46,0.12);">
+        <svg viewBox="0 0 20 20" fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="14" height="12" rx="2"/><line x1="3" y1="8" x2="17" y2="8"/><line x1="7" y1="4" x2="7" y2="8"/><line x1="13" y1="4" x2="13" y2="8"/></svg>
+      </div>
+      <div class="kpi-text">
+        <div class="kpi-number" style="color:var(--yellow)">4</div>
+        <div class="kpi-label">今日会议</div>
+      </div>
+    </div>
+    <div class="kpi-card" style="background:rgba(192,71,58,0.05);">
+      <div class="kpi-icon" style="background:rgba(192,71,58,0.10);">
+        <svg viewBox="0 0 20 20" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round"><path d="M4 4h12v10H7l-3 3V4z"/><circle cx="7" cy="9" r="0.75" fill="var(--red)"/><circle cx="10" cy="9" r="0.75" fill="var(--red)"/><circle cx="13" cy="9" r="0.75" fill="var(--red)"/></svg>
+      </div>
+      <div class="kpi-text">
+        <div class="kpi-number" style="color:var(--red)">12</div>
+        <div class="kpi-label">@我的消息</div>
+      </div>
+    </div>
+    <div class="kpi-card" style="background:rgba(46,125,91,0.05);">
+      <div class="kpi-icon" style="background:rgba(46,125,91,0.10);">
+        <svg viewBox="0 0 20 20" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round"><path d="M10 2a8 8 0 108 8"/><polyline points="12,2 12,6 16,6"/><path d="M18 2l-6 6"/></svg>
+      </div>
+      <div class="kpi-text">
+        <div class="kpi-number" style="color:var(--green)">2</div>
+        <div class="kpi-label">Agent 完成</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Top 3 ═══ -->
+  <div class="top3" data-od-id="top3">
+    <div class="top3-card">
+      <div class="top3-num">1</div>
+      <div class="top3-body">
+        <h3>Review #1842 权限模型重构 PR</h3>
+        <div class="top3-meta">
+          <span class="source">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--muted)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </span>
+          <span class="wait">等待 4h</span>
+        </div>
+      </div>
+    </div>
+    <div class="top3-card">
+      <div class="top3-num">2</div>
+      <div class="top3-body">
+        <h3>回复 Yuki 在《Onboarding Flow v3》文档里的评论</h3>
+        <div class="top3-meta">
+          <span class="source">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" stroke-width="1.4"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>
+            Notion
+          </span>
+          <span class="wait">等待 2h</span>
+        </div>
+      </div>
+    </div>
+    <div class="top3-card">
+      <div class="top3-num">3</div>
+      <div class="top3-body">
+        <h3>Sentry P0 报错量上升，需要排查 auth-service</h3>
+        <div class="top3-meta">
+          <span class="source">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--muted)"><path d="M8 1l7 13H1L8 1zm0 4.5v4m0 1.5v1"/></svg>
+            Sentry
+          </span>
+          <span class="wait">新增 23 例</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Bento Connector Grid ═══ -->
+  <div class="bento" data-od-id="bento-grid">
+
+    <!-- ── 1. GitHub (A: 代码协作) — span 2 col ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/>
+        </svg>
+        <div class="bento-title">GitHub</div>
+        <div class="bento-badge">5 open</div>
+      </div>
+      <div class="bento-body">
+        <ul class="gh-list">
+          <li>
+            <span class="gh-dot open"></span>
+            <span class="gh-pr-title">#1842 refactor: permission model v2</span>
+            <span class="gh-time">4h ago</span>
+          </li>
+          <li>
+            <span class="gh-dot merged"></span>
+            <span class="gh-pr-title">#1839 feat: add workspace invite flow</span>
+            <span class="gh-time">昨天</span>
+          </li>
+          <li class="ci-fail">
+            <span class="gh-dot fail"></span>
+            <span class="gh-pr-title">#1841 fix: rate limiter edge case — CI failed</span>
+            <span class="gh-time">2h ago</span>
+          </li>
+          <li>
+            <span class="gh-dot open"></span>
+            <span class="gh-pr-title">#1843 chore: upgrade deps to latest</span>
+            <span class="gh-time">1h ago</span>
+          </li>
+          <li>
+            <span class="gh-dot merged"></span>
+            <span class="gh-pr-title">#1838 docs: API reference for billing module</span>
+            <span class="gh-time">昨天</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ── 2. Sentry (G: 警报) ── -->
+    <div class="bento-card sentry-card-bg">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 22h20L12 2z"/>
+          <line x1="12" y1="9" x2="12" y2="15"/>
+          <circle cx="12" cy="18" r="0.5" fill="var(--red)"/>
+        </svg>
+        <div class="bento-title" style="color:var(--red)">Sentry</div>
+      </div>
+      <div class="bento-body">
+        <div class="sentry-big">23</div>
+        <div class="sentry-label">未处理错误 (24h)</div>
+        <div class="heatmap">
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.08)"><span>一</span></div>
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.12)"><span>二</span></div>
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.06)"><span>三</span></div>
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.20)"><span>四</span></div>
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.35)"><span>五</span></div>
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.15)"><span>六</span></div>
+          <div class="heatmap-day" style="background:rgba(192,71,58,0.45)"><span>日</span></div>
+        </div>
+        <div class="sentry-error">TypeError: Cannot read property 'token' of undefined — auth-service/session.ts:142</div>
+      </div>
+    </div>
+
+    <!-- ── 3. Vercel (H: 状态) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="var(--fg)">
+          <path d="M12 2L2 20h20L12 2z"/>
+        </svg>
+        <div class="bento-title">Vercel</div>
+      </div>
+      <div class="bento-body">
+        <div class="vercel-deploy">
+          <span class="vercel-light ready"></span>
+          <div class="vercel-info">
+            <div class="vercel-branch">main</div>
+            <div class="vercel-time">12 min ago</div>
+          </div>
+          <span class="vercel-dur">32s</span>
+        </div>
+        <div class="vercel-deploy">
+          <span class="vercel-light building"></span>
+          <div class="vercel-info">
+            <div class="vercel-branch">feat/invite-flow</div>
+            <div class="vercel-time">building…</div>
+          </div>
+          <span class="vercel-dur">—</span>
+        </div>
+        <div class="vercel-deploy">
+          <span class="vercel-light ready"></span>
+          <div class="vercel-info">
+            <div class="vercel-branch">fix/nav-layout</div>
+            <div class="vercel-time">1h ago</div>
+          </div>
+          <span class="vercel-dur">28s</span>
+        </div>
+        <div class="vercel-deploy">
+          <span class="vercel-light error"></span>
+          <div class="vercel-info">
+            <div class="vercel-branch">chore/deps-upgrade</div>
+            <div class="vercel-time">2h ago</div>
+          </div>
+          <span class="vercel-dur">fail</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 5. Linear (C: 任务管理) — span 2 row ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round">
+          <path d="M3.34 17.66A10 10 0 1117.66 3.34"/>
+          <path d="M2 12h4m-2.83-4.24l2.83 2.83"/>
+        </svg>
+        <div class="bento-title">Linear</div>
+        <div class="bento-badge">Sprint 24</div>
+      </div>
+      <div class="bento-body">
+        <div class="linear-ring">
+          <svg width="72" height="72" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r="30" fill="none" stroke="var(--border)" stroke-width="6"/>
+            <!-- done: 60% = 188.5 * 0.6 -->
+            <circle cx="36" cy="36" r="30" fill="none" stroke="var(--green)" stroke-width="6" stroke-dasharray="113.1 188.5" stroke-dashoffset="0" transform="rotate(-90 36 36)" stroke-linecap="round"/>
+            <!-- in progress: 25% = 188.5 * 0.25 -->
+            <circle cx="36" cy="36" r="30" fill="none" stroke="var(--yellow)" stroke-width="6" stroke-dasharray="47.1 188.5" stroke-dashoffset="-113.1" transform="rotate(-90 36 36)" stroke-linecap="round"/>
+            <text x="36" y="38" text-anchor="middle" font-family="var(--font-display)" font-size="18" font-weight="600" fill="var(--fg)">60%</text>
+          </svg>
+          <div class="linear-stats">
+            <div class="stat-row"><span class="stat-dot" style="background:var(--green)"></span> 完成 9</div>
+            <div class="stat-row"><span class="stat-dot" style="background:var(--yellow)"></span> 进行中 4</div>
+            <div class="stat-row"><span class="stat-dot" style="background:var(--muted)"></span> 待办 2</div>
+          </div>
+        </div>
+        <ul class="linear-list">
+          <li>
+            <span class="linear-status in-progress"></span>
+            <span style="flex:1">权限模型 v2 迁移</span>
+            <span class="linear-priority">Urgent</span>
+          </li>
+          <li>
+            <span class="linear-status in-progress"></span>
+            <span style="flex:1">Invite flow 前端</span>
+            <span class="linear-priority">High</span>
+          </li>
+          <li>
+            <span class="linear-status todo"></span>
+            <span style="flex:1">Billing webhook 重试</span>
+            <span class="linear-priority">Medium</span>
+          </li>
+          <li>
+            <span class="linear-status done">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="white" stroke-width="1.5"><polyline points="1.5,4 3.5,6 6.5,2"/></svg>
+            </span>
+            <span style="flex:1">API 文档更新</span>
+            <span class="linear-priority">Low</span>
+          </li>
+          <li>
+            <span class="linear-status in-progress"></span>
+            <span style="flex:1">Dashboard 性能优化</span>
+            <span class="linear-priority">High</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ── 6. Slack (D: 通讯) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.5 2a2.5 2.5 0 00-2.5 2.5V9h4.5A2.5 2.5 0 0014.5 2z"/>
+          <path d="M2 14.5A2.5 2.5 0 004.5 17H9v-4.5A2.5 2.5 0 002 14.5z"/>
+          <path d="M22 9.5A2.5 2.5 0 0019.5 7H15v4.5a2.5 2.5 0 005 0z"/>
+          <path d="M9.5 22a2.5 2.5 0 002.5-2.5V15H7.5A2.5 2.5 0 009.5 22z"/>
+        </svg>
+        <div class="bento-title">Slack</div>
+        <div class="bento-badge">3 @</div>
+      </div>
+      <div class="bento-body">
+        <div class="slack-msg">
+          <div class="slack-avatar">MK</div>
+          <div class="slack-content">
+            <div class="slack-channel">#frontend</div>
+            <div class="slack-text"><span class="slack-sender">Mike</span> <span class="slack-highlight">@Eli</span> nav 组件有个 z-index 的问题，能看一下吗</div>
+          </div>
+        </div>
+        <div class="slack-msg">
+          <div class="slack-avatar">LW</div>
+          <div class="slack-content">
+            <div class="slack-channel">#ship-it</div>
+            <div class="slack-text"><span class="slack-sender">Lisa</span> 权限 PR merge 后可以发 staging 了 <span class="slack-highlight">@Eli</span></div>
+          </div>
+        </div>
+        <div class="slack-msg">
+          <div class="slack-avatar">JC</div>
+          <div class="slack-content">
+            <div class="slack-channel">#random</div>
+            <div class="slack-text"><span class="slack-sender">Jason</span> 今天谁要咖啡 <span class="slack-highlight">@channel</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 7. Gmail (D: 通讯) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="20" height="16" rx="2"/>
+          <polyline points="22,4 12,13 2,4"/>
+        </svg>
+        <div class="bento-title">Gmail</div>
+        <div class="bento-badge">4 封</div>
+      </div>
+      <div class="bento-body">
+        <div class="mail-item">
+          <div class="mail-avatar">AW</div>
+          <div class="mail-body">
+            <div class="mail-from">Alex Wang</div>
+            <div class="mail-subject">Q3 roadmap feedback</div>
+            <div class="mail-snippet">Hi Eli, 看了你上周的 roadmap 草稿，有几个建议…</div>
+          </div>
+          <div class="mail-time">09:14</div>
+        </div>
+        <div class="mail-item">
+          <div class="mail-avatar">HR</div>
+          <div class="mail-body">
+            <div class="mail-from">HR Team</div>
+            <div class="mail-subject">年中 review 提醒</div>
+            <div class="mail-snippet">请在 5/15 前完成自评问卷…</div>
+          </div>
+          <div class="mail-time">08:30</div>
+        </div>
+        <div class="mail-item">
+          <div class="mail-avatar">SL</div>
+          <div class="mail-body">
+            <div class="mail-from">Stripe Legal</div>
+            <div class="mail-subject">DPA amendment — action needed</div>
+            <div class="mail-snippet">Please review the attached amendment to…</div>
+          </div>
+          <div class="mail-time">昨天</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 8. Notion (E: 知识库) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16v16H4z"/>
+          <path d="M9 4v16"/>
+          <path d="M4 9h5"/>
+          <path d="M4 14h5"/>
+        </svg>
+        <div class="bento-title">Notion</div>
+      </div>
+      <div class="bento-body">
+        <div class="notion-doc">
+          <div class="notion-doc-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--muted)" stroke-width="1.2"><rect x="2" y="2" width="10" height="10" rx="1.5"/><line x1="5" y1="5" x2="9" y2="5"/><line x1="5" y1="7.5" x2="9" y2="7.5"/></svg>
+            Q3 产品路线图
+          </div>
+          <div class="notion-doc-excerpt">核心目标：权限系统 v2 上线、自助 billing 模块、onboarding 转化率提升 15%。时间线按 milestone 拆分…</div>
+          <div class="notion-doc-meta">Eli 编辑 · 3h ago</div>
+        </div>
+        <div class="notion-doc">
+          <div class="notion-doc-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--muted)" stroke-width="1.2"><rect x="2" y="2" width="10" height="10" rx="1.5"/><line x1="5" y1="5" x2="9" y2="5"/><line x1="5" y1="7.5" x2="9" y2="7.5"/></svg>
+            工程规范 — Code Review 指南
+          </div>
+          <div class="notion-doc-excerpt">所有 PR 需至少一名 reviewer approve。超过 400 行的 PR 必须拆分…</div>
+          <div class="notion-doc-meta">更新于昨天</div>
+        </div>
+        <div class="notion-doc">
+          <div class="notion-doc-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--muted)" stroke-width="1.2"><rect x="2" y="2" width="10" height="10" rx="1.5"/><line x1="5" y1="5" x2="9" y2="5"/><line x1="5" y1="7.5" x2="9" y2="7.5"/></svg>
+            竞品分析 — Clerk vs WorkOS
+          </div>
+          <div class="notion-doc-excerpt">Clerk 在 DX 方面领先，WorkOS 在 enterprise SSO 场景更成熟…</div>
+          <div class="notion-doc-meta">Yuki 编辑 · 5h ago</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 9. Jira (C: 任务管理) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <div class="bento-title">Jira</div>
+        <div class="bento-badge">PLAT-Sprint 8</div>
+      </div>
+      <div class="bento-body">
+        <div class="jira-progress">
+          <div class="jira-progress-bar">
+            <div class="jira-progress-fill" style="width:72%;background:var(--green)"></div>
+          </div>
+          <div class="jira-progress-label">
+            <span>18/25 story points</span>
+            <span>72%</span>
+          </div>
+        </div>
+        <div class="jira-ticket">
+          <span class="jira-key">PLAT-412</span>
+          <span class="jira-ticket-title">SSO 集成 — SAML callback</span>
+        </div>
+        <div class="jira-ticket">
+          <span class="jira-key">PLAT-415</span>
+          <span class="jira-ticket-title">Audit log 导出为 CSV</span>
+        </div>
+        <div class="jira-ticket">
+          <span class="jira-key">PLAT-418</span>
+          <span class="jira-ticket-title">Webhook 重试策略配置</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 10. Trello (J: 看板) — span 2 col ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <rect x="6" y="6" width="4" height="10" rx="1"/>
+          <rect x="14" y="6" width="4" height="6" rx="1"/>
+        </svg>
+        <div class="bento-title">Trello</div>
+        <div class="bento-badge">Marketing</div>
+      </div>
+      <div class="bento-body">
+        <div class="trello-board">
+          <div class="trello-col">
+            <div class="trello-col-header">To Do <span class="trello-col-count">3</span></div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:var(--yellow)"></div>写 launch blog post</div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:#8B5CF6"></div>录制 demo 视频脚本</div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:var(--green)"></div>竞品 landing 截图整理</div>
+          </div>
+          <div class="trello-col">
+            <div class="trello-col-header">In Progress <span class="trello-col-count">2</span></div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:var(--orange)"></div>设计 Product Hunt 素材</div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:var(--yellow)"></div>Twitter thread 草稿</div>
+          </div>
+          <div class="trello-col">
+            <div class="trello-col-header">Done <span class="trello-col-count">4</span></div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:var(--green)"></div>Changelog 更新</div>
+            <div class="trello-chip"><div class="trello-chip-tag" style="background:var(--green)"></div>Newsletter 排版</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 11. Google Drive (I: 文件) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        <div class="bento-title">Drive</div>
+        <div class="bento-badge">近期</div>
+      </div>
+      <div class="bento-body">
+        <div class="drive-file">
+          <div class="drive-thumb">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--muted)" stroke-width="1.2"><rect x="3" y="2" width="12" height="14" rx="1.5"/><line x1="6" y1="6" x2="12" y2="6"/><line x1="6" y1="9" x2="10" y2="9"/></svg>
+          </div>
+          <span class="drive-name">Q3 Roadmap.pdf</span>
+          <span class="drive-size">2.4 MB</span>
+        </div>
+        <div class="drive-file">
+          <div class="drive-thumb">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--green)" stroke-width="1.2"><rect x="3" y="2" width="12" height="14" rx="1.5"/><line x1="6" y1="6" x2="12" y2="6"/><line x1="6" y1="9" x2="12" y2="9"/><line x1="6" y1="12" x2="9" y2="12"/></svg>
+          </div>
+          <span class="drive-name">Budget 2026 H2.xlsx</span>
+          <span class="drive-size">680 KB</span>
+        </div>
+        <div class="drive-file">
+          <div class="drive-thumb">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--orange)" stroke-width="1.2"><rect x="3" y="2" width="12" height="14" rx="1.5"/><polygon points="7,7 7,12 12,9.5"/></svg>
+          </div>
+          <span class="drive-name">Product Demo.mp4</span>
+          <span class="drive-size">148 MB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 12. 飞书 IM (D: 通讯) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 6l8 5 8-5"/>
+          <path d="M20 6v10a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h12a2 2 0 012 2z"/>
+        </svg>
+        <div class="bento-title">飞书 IM</div>
+        <div class="bento-badge">2 条</div>
+      </div>
+      <div class="bento-body">
+        <div class="lark-msg" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div class="mail-avatar">陈</div>
+          <div style="flex:1;font-size:13px;">
+            <div style="font-weight:600;">陈思远 · 产品运营群</div>
+            <div style="color:var(--muted);margin-top:2px;">5 月活动的 landing page 初稿放在文档里了，帮忙看看文案</div>
+          </div>
+        </div>
+        <div class="lark-msg" style="display:flex;gap:10px;padding:8px 0;">
+          <div class="mail-avatar">王</div>
+          <div style="flex:1;font-size:13px;">
+            <div style="font-weight:600;">王浩 · 技术周会群</div>
+            <div style="color:var(--muted);margin-top:2px;">周三的分享你还做吗？主题可以聊一下新的 CI pipeline</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 13. GitLab (A: 代码协作) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linejoin="round">
+          <path d="M12 21L3.27 14.22a.5.5 0 01-.1-.56l1.52-4.27 2.71-7.72a.26.26 0 01.5 0l2.71 7.72h3.18l2.71-7.72a.26.26 0 01.5 0l2.71 7.72 1.52 4.27a.5.5 0 01-.1.56L12 21z"/>
+        </svg>
+        <div class="bento-title">GitLab</div>
+        <div class="bento-badge">infra</div>
+      </div>
+      <div class="bento-body">
+        <div class="gitlab-pipeline">
+          <span style="flex:1;font-weight:500;font-size:13px">!327 K8s config 更新</span>
+          <div class="pipeline-stages">
+            <div class="pipeline-stage" style="background:var(--green);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><polyline points="2,5 4,7 8,3"/></svg></div>
+            <div class="pipeline-stage" style="background:var(--green);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><polyline points="2,5 4,7 8,3"/></svg></div>
+            <div class="pipeline-stage" style="background:var(--yellow);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><circle cx="5" cy="5" r="2"/></svg></div>
+          </div>
+        </div>
+        <div class="gitlab-pipeline">
+          <span style="flex:1;font-weight:500;font-size:13px">!324 Terraform drift fix</span>
+          <div class="pipeline-stages">
+            <div class="pipeline-stage" style="background:var(--green);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><polyline points="2,5 4,7 8,3"/></svg></div>
+            <div class="pipeline-stage" style="background:var(--green);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><polyline points="2,5 4,7 8,3"/></svg></div>
+            <div class="pipeline-stage" style="background:var(--green);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><polyline points="2,5 4,7 8,3"/></svg></div>
+          </div>
+        </div>
+        <div class="gitlab-pipeline">
+          <span style="flex:1;font-weight:500;font-size:13px">!329 监控告警规则</span>
+          <div class="pipeline-stages">
+            <div class="pipeline-stage" style="background:var(--red);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="1.5"><line x1="3" y1="3" x2="7" y2="7"/><line x1="7" y1="3" x2="3" y2="7"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 14. 飞书 Doc (E: 知识库) ── -->
+    <div class="bento-card">
+      <div class="bento-header">
+        <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+          <line x1="9" y1="13" x2="15" y2="13"/>
+          <line x1="9" y1="17" x2="13" y2="17"/>
+        </svg>
+        <div class="bento-title">飞书文档</div>
+      </div>
+      <div class="bento-body">
+        <div class="notion-doc">
+          <div class="notion-doc-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--muted)" stroke-width="1.2"><rect x="2" y="2" width="10" height="10" rx="1.5"/><line x1="5" y1="5" x2="9" y2="5"/><line x1="5" y1="7.5" x2="9" y2="7.5"/></svg>
+            5 月用户增长方案
+          </div>
+          <div class="notion-doc-excerpt">渠道预算分配：SEO 30%、社媒 25%、KOL 合作 20%、线下活动 15%、其他 10%…</div>
+          <div class="notion-doc-meta">陈思远 · 今天 08:15</div>
+        </div>
+        <div class="notion-doc">
+          <div class="notion-doc-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--muted)" stroke-width="1.2"><rect x="2" y="2" width="10" height="10" rx="1.5"/><line x1="5" y1="5" x2="9" y2="5"/><line x1="5" y1="7.5" x2="9" y2="7.5"/></svg>
+            技术架构评审 — 微服务拆分
+          </div>
+          <div class="notion-doc-excerpt">建议将 auth、billing、notification 从 monolith 拆出为独立服务…</div>
+          <div class="notion-doc-meta">王浩 · 昨天</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /bento -->
+
+  <!-- ═══ Footer ═══ -->
+  <div class="footer" data-od-id="footer">
+    <div class="orbit-logo">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" stroke-width="1.2">
+        <circle cx="8" cy="8" r="6"/>
+        <circle cx="8" cy="8" r="2" fill="var(--muted)" stroke="none"/>
+        <ellipse cx="8" cy="8" rx="6" ry="2.5" transform="rotate(30 8 8)"/>
+      </svg>
+      Open Orbit
+    </div>
+    <div>auto-generated · 06:42</div>
+  </div>
+
+</div>
+
+<script>
+  // Inject CTA links into each bento card based on its connector title.
+  const connectorLinks = {
+    'GitHub': 'https://github.com/nexu-io/open-design',
+    'GitLab': 'https://gitlab.com/nexu-io/open-design',
+    'Sentry': 'https://nexu.sentry.io/issues/?statsPeriod=24h',
+    'Vercel': 'https://vercel.com/nexu/open-design',
+    'Linear': 'https://linear.app/nexu/team/ENG/active',
+    'Slack': 'https://nexu.slack.com',
+    'Gmail': 'https://mail.google.com/mail/u/0/#inbox',
+    'Notion': 'https://www.notion.so/nexu',
+    'Jira': 'https://nexu.atlassian.net/jira/your-work',
+    'Trello': 'https://trello.com/nexu',
+    'Drive': 'https://drive.google.com/drive/u/0/recent',
+    '飞书 IM': 'https://www.feishu.cn/messenger',
+    '飞书文档': 'https://www.feishu.cn/drive/home'
+  };
+  document.querySelectorAll('.bento-card').forEach((card) => {
+    const title = card.querySelector('.bento-title')?.textContent.trim();
+    const url = connectorLinks[title];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.className = 'bento-cta';
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = `Open in ${title} ↗`;
+    card.appendChild(a);
+  });
+
+  // Make Top 3 cards clickable (entire tile is the link).
+  const top3Links = [
+    'https://github.com/nexu-io/open-design/pull/1842',
+    'https://www.notion.so/nexu/Onboarding-Flow-v3',
+    'https://nexu.sentry.io/issues/?project=auth-service&statsPeriod=24h'
+  ];
+  document.querySelectorAll('.top3-card').forEach((card, i) => {
+    const url = top3Links[i];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = card.className + ' linked';
+    while (card.firstChild) a.appendChild(card.firstChild);
+    card.replaceWith(a);
+  });
+</script>
+</body>
+</html>

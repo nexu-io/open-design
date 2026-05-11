@@ -276,10 +276,10 @@ setInterval(() => {}, 1000);
           eventsController.abort();
           const statusBody = await waitForRunStatus(baseUrl, runId);
 
-          expect(eventsBody).toContain('event: agent');
-          expect(eventsBody).toContain('"type":"status"');
           expect(eventsBody).toContain('event: error');
           expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
           expect(statusBody.status).toBe('failed');
         },
       );
@@ -340,6 +340,41 @@ const timer = setInterval(() => {
         process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
       }
     }
+  });
+
+  it('surfaces Claude auth diagnostics through the SSE error channel', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.error(JSON.stringify({ apiKeySource: 'none', error_status: 401 }));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('/login');
+        expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
   });
 
   it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {

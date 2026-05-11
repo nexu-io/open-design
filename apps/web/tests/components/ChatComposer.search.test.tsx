@@ -149,4 +149,28 @@ describe('ChatComposer /search command', () => {
     expect(commentAttachments).toEqual([]);
     expect(meta).toBeUndefined();
   });
+
+  it('keeps keyboard submits blocked when sending is disabled', () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        sendDisabled
+        researchAvailable
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId('chat-composer-input');
+    fireEvent.change(input, { target: { value: 'keep this draft' } });
+    fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect((input as HTMLTextAreaElement).value).toBe('keep this draft');
+  });
 });

@@ -42,12 +42,87 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
 }
 import { parseSseFrame } from './sse';
 
+const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
+const LARGE_TOOL_RESULT_CHARS = 8_000;
+const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
     if (message?.role === 'user') return message.content;
   }
   return '';
+}
+
+function truncateForTranscript(content: string): string {
+  if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
+  const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
+  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[Open Design truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
+}
+
+function compactInput(input: unknown): string {
+  if (typeof input === 'string') return input;
+  try {
+    return JSON.stringify(input);
+  } catch {
+    return String(input);
+  }
+}
+
+function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
+  let highestInputTokens = 0;
+  let largeToolResults = 0;
+  let sawAgentBrowserCoreDump = false;
+
+  for (const message of history) {
+    for (const event of message.events ?? []) {
+      if (event.kind === 'usage' && typeof event.inputTokens === 'number') {
+        highestInputTokens = Math.max(highestInputTokens, event.inputTokens);
+      }
+      if (event.kind === 'tool_result') {
+        if (event.content.length > LARGE_TOOL_RESULT_CHARS) largeToolResults += 1;
+        if (
+          event.content.includes('agent-browser skills get core') ||
+          event.content.includes('Agent Browser Core') ||
+          event.content.includes('name: core')
+        ) {
+          sawAgentBrowserCoreDump = true;
+        }
+      }
+      if (event.kind === 'tool_use') {
+        const input = compactInput(event.input);
+        if (input.includes('agent-browser skills get core')) {
+          sawAgentBrowserCoreDump = true;
+        }
+      }
+    }
+  }
+
+  const notes: string[] = [];
+  if (highestInputTokens >= HIGH_INPUT_TOKEN_WARNING_THRESHOLD) {
+    notes.push(`a previous run reported ${highestInputTokens} input tokens`);
+  }
+  if (largeToolResults > 0) {
+    notes.push(`${largeToolResults} large prior tool result${largeToolResults === 1 ? '' : 's'} exist only in persisted event history`);
+  }
+  if (sawAgentBrowserCoreDump) {
+    notes.push('agent-browser documentation output was seen earlier; do not replay it into this turn');
+  }
+  if (notes.length === 0) return null;
+
+  return [
+    '## context warning',
+    `Open Design detected ${notes.join(', ')}.`,
+    'Keep this turn compact: summarize prior tool output, read large references from temp files, and quote only task-relevant lines.',
+  ].join('\n');
+}
+
+export function buildDaemonTranscript(history: ChatMessage[]): string {
+  const transcript = history
+    .map((m) => `## ${m.role}\n${truncateForTranscript(m.content.trim())}`)
+    .join('\n\n');
+  const warning = buildPriorRunContextWarning(history);
+  return warning ? `${warning}\n\n${transcript}` : transcript;
 }
 
 export interface DaemonStreamHandlers extends StreamHandlers {
@@ -72,6 +147,10 @@ export interface DaemonStreamOptions {
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
+  // Per-turn skill ids picked via the composer's @-mention popover. These
+  // are layered onto the system prompt for this run only and do not
+  // change the project's persistent `skillId`.
+  skillIds?: string[];
   designSystemId?: string | null;
   // Project-relative paths the user has staged for this turn. The
   // daemon resolves them inside the project folder, validates they
@@ -100,6 +179,19 @@ export interface DaemonReattachOptions {
   onRunEventId?: (eventId: string) => void;
 }
 
+function daemonSseErrorMessage(data: SseErrorPayload): string {
+  const message = String(data.error?.message ?? data.message ?? 'daemon error');
+  const detail =
+    data.error?.details &&
+    typeof data.error.details === 'object' &&
+    !Array.isArray(data.error.details) &&
+    typeof data.error.details.detail === 'string'
+      ? data.error.details.detail
+      : null;
+  if (!detail || detail === message || message.includes(detail)) return message;
+  return `${message}\n${detail}`;
+}
+
 export async function streamViaDaemon({
   agentId,
   history,
@@ -111,6 +203,7 @@ export async function streamViaDaemon({
   assistantMessageId,
   clientRequestId,
   skillId,
+  skillIds,
   designSystemId,
   attachments,
   commentAttachments,
@@ -125,9 +218,7 @@ export async function streamViaDaemon({
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
   // fix is to only include the final user turn.
-  const transcript = history
-    .map((m) => `## ${m.role}\n${m.content.trim()}`)
-    .join('\n\n');
+  const transcript = buildDaemonTranscript(history);
   const request: ChatRequest = {
     agentId,
     message: transcript,
@@ -137,6 +228,7 @@ export async function streamViaDaemon({
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
+    skillIds: Array.isArray(skillIds) ? skillIds : [],
     designSystemId: designSystemId ?? null,
     attachments: attachments ?? [],
     commentAttachments: commentAttachments ?? [],
@@ -331,7 +423,7 @@ async function consumeDaemonRun({
           if (event.event === 'error') {
             onRunStatus?.('failed');
             const data = event.data as SseErrorPayload;
-            handlers.onError(new Error(String(data.error?.message ?? data.message ?? 'daemon error')));
+            handlers.onError(new Error(daemonSseErrorMessage(data)));
             return;
           }
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -7,7 +8,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
 import { projectSplitClassName } from '../../src/components/ProjectView';
+import { uploadProjectFiles } from '../../src/providers/registry';
 import type { ProjectFile } from '../../src/types';
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    uploadProjectFiles: vi.fn(),
+  };
+});
+
+const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -15,16 +29,31 @@ let host: HTMLDivElement | null = null;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 afterEach(() => {
+  cleanup();
   if (root) {
     act(() => root?.unmount());
     root = null;
   }
   host?.remove();
   host = null;
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+
+function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
+  return {
+    name: 'mock.png',
+    path: 'mock.png',
+    type: 'file',
+    size: 1024,
+    mtime: 1710000000,
+    kind: 'image',
+    mime: 'image/png',
+    ...overrides,
+  };
+}
 
 function workspaceFile(name: string): ProjectFile {
   return {
@@ -120,6 +149,94 @@ describe('FileWorkspace upload input', () => {
 
     expect(markup).toContain('data-testid="design-files-upload-input"');
     expect(markup).not.toContain('accept=');
+  });
+
+  it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
+    mockedUploadProjectFiles.mockRejectedValueOnce(new Error('storage offline'));
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[baseFile()]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('design-files-upload-input'), {
+      target: { files: [new File(['mock'], 'mock.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'storage offline',
+      );
+    });
+
+    const row = screen.getByTestId('design-file-row-mock.png');
+    const nameButton = row.querySelector<HTMLButtonElement>('.df-row-name-btn');
+    if (!nameButton) throw new Error('Could not find file name button');
+    fireEvent.click(nameButton);
+
+    expect(screen.getByTestId('design-file-preview')).toBeTruthy();
+    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'storage offline',
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('upload-error-dismiss'));
+
+    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+  });
+
+  it('keeps partial upload failures visible after a successful file opens', async () => {
+    mockedUploadProjectFiles.mockResolvedValueOnce({
+      uploaded: [
+        {
+          path: 'uploaded.png',
+          name: 'uploaded.png',
+          kind: 'image',
+          size: 1024,
+        },
+      ],
+      failed: [{ name: 'failed.png', error: 'permission denied' }],
+      error: 'permission denied',
+    });
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[baseFile({ name: 'uploaded.png', path: 'uploaded.png' })]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('design-files-upload-input'), {
+      target: {
+        files: [
+          new File(['uploaded'], 'uploaded.png', { type: 'image/png' }),
+          new File(['failed'], 'failed.png', { type: 'image/png' }),
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'Uploaded 1 file(s), but 1 failed (permission denied).',
+      );
+    });
   });
 
   it('hides the workspace focus control while the chat pane is open', () => {
@@ -321,6 +438,307 @@ describe('FileWorkspace design file rename', () => {
     expect(renameCalls).toHaveLength(0);
     expect(onTabsStateChange).not.toHaveBeenCalled();
     expect(pendingSketchTab.textContent).toContain(pendingSketchName);
+  });
+});
+
+describe('FileWorkspace sketch round-trip', () => {
+  it('preserves unsupported sketch items when saving an unedited sketch file', async () => {
+    const sourceDoc = {
+      version: 3,
+      items: [
+        { kind: 'pen', points: [{ x: 10, y: 12 }], color: '#111', size: 2 },
+        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
+        { kind: 'text', x: 20, y: 32, text: 'hello', color: '#222', size: 16 },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
+        return new Response(JSON.stringify(sourceDoc), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            file: {
+              ...workspaceFile('diagram.sketch.json'),
+              kind: 'sketch',
+              mime: 'application/json',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[
+          baseFile({
+            name: 'diagram.sketch.json',
+            path: 'diagram.sketch.json',
+            kind: 'sketch',
+            mime: 'application/json',
+          }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const saveButton = await screen.findByRole('button', { name: 'Save' });
+    await waitFor(() => expect(saveButton.hasAttribute('disabled')).toBe(false));
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      const writeCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === '/api/projects/project-1/files' &&
+          init &&
+          typeof init === 'object' &&
+          init.method === 'POST',
+      );
+      expect(writeCall).toBeTruthy();
+    });
+
+    const writeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === '/api/projects/project-1/files' &&
+        init &&
+        typeof init === 'object' &&
+        init.method === 'POST',
+    );
+    if (!writeCall) throw new Error('Expected sketch save request');
+    const [, init] = writeCall;
+    const payload = JSON.parse(String((init as RequestInit).body)) as {
+      name: string;
+      content: string;
+    };
+    const savedDoc = JSON.parse(payload.content) as {
+      version: number;
+      items: Array<Record<string, unknown>>;
+    };
+
+    expect(savedDoc).toEqual(sourceDoc);
+  });
+
+  it('keeps Save and Clear available for unsupported-only sketch files', async () => {
+    const sourceDoc = {
+      version: 3,
+      items: [
+        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
+        return new Response(JSON.stringify(sourceDoc), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            file: {
+              ...workspaceFile('diagram.sketch.json'),
+              kind: 'sketch',
+              mime: 'application/json',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[
+          baseFile({
+            name: 'diagram.sketch.json',
+            path: 'diagram.sketch.json',
+            kind: 'sketch',
+            mime: 'application/json',
+          }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const clearButton = await screen.findByRole('button', { name: 'Clear' });
+    const saveButton = await screen.findByRole('button', { name: 'Save' });
+    await waitFor(() => {
+      expect(clearButton.hasAttribute('disabled')).toBe(false);
+      expect(saveButton.hasAttribute('disabled')).toBe(false);
+    });
+
+    fireEvent.click(clearButton);
+    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(true));
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      const writeCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === '/api/projects/project-1/files' &&
+          init &&
+          typeof init === 'object' &&
+          init.method === 'POST',
+      );
+      expect(writeCall).toBeTruthy();
+    });
+
+    const writeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === '/api/projects/project-1/files' &&
+        init &&
+        typeof init === 'object' &&
+        init.method === 'POST',
+    );
+    if (!writeCall) throw new Error('Expected sketch save request');
+    const [, init] = writeCall;
+    const payload = JSON.parse(String((init as RequestInit).body)) as {
+      name: string;
+      content: string;
+    };
+    const savedDoc = JSON.parse(payload.content) as {
+      version: number;
+      items: Array<Record<string, unknown>>;
+    };
+
+    expect(savedDoc).toEqual({
+      version: 3,
+      items: [],
+    });
+  });
+
+  it('does not resurrect unsupported sketch items after clearing and saving', async () => {
+    const sourceDoc = {
+      version: 3,
+      items: [
+        { kind: 'text', x: 20, y: 32, text: 'hello', color: '#222', size: 16 },
+        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
+        return new Response(JSON.stringify(sourceDoc), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            file: {
+              ...workspaceFile('diagram.sketch.json'),
+              kind: 'sketch',
+              mime: 'application/json',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[
+          baseFile({
+            name: 'diagram.sketch.json',
+            path: 'diagram.sketch.json',
+            kind: 'sketch',
+            mime: 'application/json',
+          }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const clearButton = await screen.findByRole('button', { name: 'Clear' });
+    const saveButton = await screen.findByRole('button', { name: 'Save' });
+    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(false));
+
+    fireEvent.click(clearButton);
+    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(true));
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      const writeCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === '/api/projects/project-1/files' &&
+          init &&
+          typeof init === 'object' &&
+          init.method === 'POST',
+      );
+      expect(writeCall).toBeTruthy();
+    });
+
+    const writeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === '/api/projects/project-1/files' &&
+        init &&
+        typeof init === 'object' &&
+        init.method === 'POST',
+    );
+    if (!writeCall) throw new Error('Expected sketch save request');
+    const [, init] = writeCall;
+    const payload = JSON.parse(String((init as RequestInit).body)) as {
+      name: string;
+      content: string;
+    };
+    const savedDoc = JSON.parse(payload.content) as {
+      version: number;
+      items: Array<Record<string, unknown>>;
+    };
+
+    expect(savedDoc).toEqual({
+      version: 3,
+      items: [],
+    });
   });
 });
 
