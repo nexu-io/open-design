@@ -48,6 +48,7 @@ downloaded_metadata="$RUNNER_TEMP/metadata.json"
 curl -fsSL "$R2_METADATA_URL?run=${GITHUB_RUN_ID:-local}" -o "$downloaded_metadata"
 DOWNLOADED_METADATA="$downloaded_metadata" \
 EXPECTED_CHANNEL="$RELEASE_CHANNEL" \
+EXPECTED_MAC_INTEL_SIGNED="${MAC_INTEL_SIGNED:-}" \
 EXPECTED_NIGHTLY_NUMBER="${NIGHTLY_NUMBER:-}" \
 EXPECTED_RELEASE_VERSION="$RELEASE_VERSION" \
 node --input-type=module <<'NODE'
@@ -71,6 +72,12 @@ if (metadata.channel === "beta") {
     if (metadata.nightlyNumber !== Number(process.env.EXPECTED_NIGHTLY_NUMBER)) {
       throw new Error("unexpected metadata nightlyNumber: " + metadata.nightlyNumber);
     }
+  }
+}
+if (process.env.EXPECTED_MAC_INTEL_SIGNED !== "") {
+  const expected = process.env.EXPECTED_MAC_INTEL_SIGNED === "true";
+  if (metadata.platforms?.macIntel?.signed !== expected) {
+    throw new Error("unexpected metadata platforms.macIntel.signed: " + metadata.platforms?.macIntel?.signed);
   }
 }
 NODE
@@ -98,6 +105,7 @@ if [ "$ENABLE_MAC" = "true" ]; then
   fi
   require_report_file "mac/manifest.json"
   require_report_file "mac/screenshots/open-design-mac-smoke.png"
+  require_report_file "mac/suite-result.json"
   require_report_file "mac/tools-pack.json"
   require_report_file "mac/tools-pack.log"
   require_report_file "mac/vitest.log"
@@ -117,6 +125,7 @@ if [ "$ENABLE_WIN" = "true" ]; then
   curl -fsSI "$R2_WIN_INSTALLER_URL" >/dev/null
   require_report_file "win/manifest.json"
   require_report_file "win/screenshots/open-design-win-smoke.png"
+  require_report_file "win/suite-result.json"
   require_report_file "win/tools-pack.json"
   require_report_file "win/vitest.log"
 fi

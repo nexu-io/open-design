@@ -2,6 +2,10 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
+const allowedE2eScripts = new Set([
+  "e2e/scripts/playwright.ts",
+  "e2e/scripts/release-smoke.ts",
+]);
 
 type GuardCheck = {
   name: string;
@@ -304,13 +308,13 @@ async function checkE2eLayout(): Promise<boolean> {
     }
 
     if (repositoryPath.startsWith("e2e/scripts/")) {
-      if (repositoryPath !== "e2e/scripts/playwright.ts") {
-        violations.push(`${repositoryPath} -> e2e scripts currently allow only scripts/playwright.ts`);
+      if (!allowedE2eScripts.has(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e scripts must be an approved package-owned entrypoint`);
       }
       continue;
     }
 
-    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or scripts/playwright.ts`);
+    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or approved scripts`);
   }
 
   if (violations.length > 0) {

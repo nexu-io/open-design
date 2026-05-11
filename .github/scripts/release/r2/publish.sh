@@ -266,7 +266,7 @@ if (enabled("ENABLE_MAC_INTEL")) {
     arch: "x64",
     enabled: true,
     feed: null,
-    signed: false,
+    signed: env.MAC_INTEL_SIGNED === "true",
     artifacts: {
       dmg: fileEntry("mac-intel", env.MAC_INTEL_DMG, "application/x-apple-diskimage"),
       zip: fileEntry("mac-intel", env.MAC_INTEL_ZIP, "application/zip"),

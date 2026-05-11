@@ -1,12 +1,14 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
+
+import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -19,9 +21,7 @@ const installIdentity = resolveInstallIdentity(namespace);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);
-const screenshotPath = resolveFromWorkspace(
-  process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
-);
+const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
 
 type DesktopStatus = {
@@ -133,6 +133,7 @@ winDescribe('packaged windows runtime smoke', () => {
   let started = false;
 
   test('installs, starts, inspects with eval and screenshot, stops, and uninstalls the built windows artifact', async () => {
+    const report = await createPackagedSmokeReport('win');
     let passed = false;
     const timings: SmokeTiming[] = [];
     try {
@@ -190,11 +191,13 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
 
+      await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>
         runToolsPackJson<WinInspectResult>('inspect', ['--path', screenshotPath]),
       );
       expect(screenshot.screenshot?.path).toBe(screenshotPath);
       expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
+      await report.saveScreenshot(screenshotPath);
 
       const logs = await measureSmokeStep(timings, 'logs', async () => runToolsPackJson<LogsResult>('logs'));
       assertLogPathsAndContent(logs);
@@ -217,6 +220,33 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(uninstall.residueObservation?.uninstallerExists).toBe(false);
       expect(uninstall.residueObservation?.startMenuShortcutExists).toBe(false);
       expect(uninstall.residueObservation?.userDesktopShortcutExists).toBe(false);
+      await report.saveSummary({
+        health: value,
+        install: {
+          desktopShortcutExists: install.desktopShortcutExists,
+          installDir: install.installDir,
+          installPayload: install.installPayload,
+          installerPath: install.installerPath,
+          registryEntryCount: install.registryEntries.length,
+          startMenuShortcutExists: install.startMenuShortcutExists,
+          timingPath: install.timingPath,
+          uninstallerPath: install.uninstallerPath,
+        },
+        installTiming,
+        logs: summarizeLogs(logs),
+        namespace,
+        screenshot: report.screenshotRelpath,
+        start: {
+          executablePath: start.executablePath,
+          logPath: start.logPath,
+          pid: start.pid,
+          source: start.source,
+          status: start.status,
+        },
+        stop,
+        timings,
+        uninstall,
+      });
       passed = true;
     } finally {
       if (!passed) {
@@ -341,6 +371,18 @@ function assertLogPathsAndContent(result: LogsResult): void {
   expect(combined).not.toMatch(/ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING/);
   expect(combined).not.toMatch(/packaged runtime failed/i);
   expect(combined).not.toMatch(/standalone Next\.js server exited/i);
+}
+
+function summarizeLogs(result: LogsResult): Record<string, { lineCount: number; logPath: string }> {
+  return Object.fromEntries(
+    Object.entries(result.logs).map(([app, entry]) => [
+      app,
+      {
+        lineCount: entry.lines.length,
+        logPath: entry.logPath,
+      },
+    ]),
+  );
 }
 
 async function printPackagedLogs(): Promise<void> {

@@ -112,11 +112,13 @@ describe('DELETE /api/skills/:id', () => {
     // surfaced with `source: 'built-in'`; the handler must reject it
     // regardless of the resolution path.
     const resp = await fetch(`${baseUrl}/api/skills/live-artifact`, { method: 'DELETE' });
-    // The id may not even appear under SKILL_ROOTS (functional-only) — in
-    // that case the route returns 404 without falling through to a
-    // built-in deletion. Both shapes are safe; what we forbid is a 200
+    // The id may not even appear under the user/built-in skill roots
+    // (functional-only) — in that case the route returns 404 without
+    // falling through to a built-in deletion. uninstallById returns 403
+    // ("Cannot uninstall built-in items") when the id IS present in the
+    // bundled skills root. Both shapes are safe; what we forbid is a 200
     // that would have removed the bundled folder.
-    expect([400, 404]).toContain(resp.status);
+    expect([400, 403, 404]).toContain(resp.status);
     expect(resp.status).not.toBe(200);
   });
 

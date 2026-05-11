@@ -17,12 +17,13 @@ cat > "$notes_file" <<EOF
 - R2 metadata: $public_origin/$RELEASE_CHANNEL/latest/metadata.json
 - E2E report: $public_origin/$RELEASE_CHANNEL/versions/$RELEASE_VERSION/report.zip
 - mac signed/notarized: $RELEASE_SIGNED
+- mac x64 signed/notarized: ${MAC_INTEL_SIGNED:-false}
 - windows signed: false
 - branch: $BRANCH_NAME
 - commit: $GITHUB_SHA
 
 See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/$VERSION_TAG/CHANGELOG.md) for the full release notes.
 
-This stable release ships mac arm64 DMG/update ZIP, Windows x64 NSIS installer assets, checksums, updater feed files, and a zipped packaged e2e spec report. Linux AppImage packaging remains optional through the stable Linux lane.
+This stable release ships mac arm64/x64 DMG and ZIP assets, Windows x64 NSIS installer assets, checksums, updater feed files, and a zipped packaged e2e spec report. Linux AppImage packaging remains optional through the stable Linux lane.
 EOF
 echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
