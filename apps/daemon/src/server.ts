@@ -4153,17 +4153,25 @@ export async function startServer({
       }
       // ACP agents that don't shut down on stdin.end() (e.g. Devin for
       // Terminal) are forced to exit via SIGTERM from attachAcpSession after
-      // a clean prompt completion. Without this check, the chat run would be
-      // marked `failed` because `code === 0` fails (code is null on a signal
-      // exit). `completedSuccessfully()` reports whether the ACP session
-      // resolved without a fatal error or abort, so we treat that as success
-      // even when the underlying process exit was signal-driven.
+      // a clean prompt completion. Without an override, the chat run would
+      // be marked `failed` because `code === 0` fails (code is null on a
+      // signal exit). `completedSuccessfully()` reports whether the ACP
+      // session resolved without a fatal error or abort.
+      //
+      // Scope the override narrowly to the exact forced-shutdown shape this
+      // PR introduces: code is null AND signal is SIGTERM AND the ACP
+      // session reported clean completion. Any other post-response failure
+      // (non-zero exit code, SIGKILL, SIGSEGV, etc.) still propagates as
+      // `failed`, preserving the existing close-status behavior for genuine
+      // post-response process problems.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
+      const acpForcedShutdown =
+        code === null && signal === 'SIGTERM' && acpCleanCompletion;
       const status = run.cancelRequested
         ? 'canceled'
-        : code === 0 || acpCleanCompletion
+        : code === 0 || acpForcedShutdown
           ? 'succeeded'
           : 'failed';
       if (status === 'failed') {

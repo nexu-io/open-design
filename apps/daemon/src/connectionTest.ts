@@ -1161,14 +1161,25 @@ async function testAgentConnectionInternal(
       // ACP agents that don't shut down on stdin.end() (e.g. Devin for
       // Terminal) are now SIGTERM'd from attachAcpSession after a clean
       // prompt completion, which sets `winner.signal === 'SIGTERM'`. For
-      // those runs we trust the ACP-level success signal so connection
-      // tests don't report `agent_spawn_failed` despite a healthy
-      // assistant response (see #1265 / #1286).
+      // that exact forced-shutdown shape we trust the ACP-level success
+      // signal so connection tests don't report `agent_spawn_failed`
+      // despite a healthy assistant response (see #1265 / #1286).
+      //
+      // Scope the override narrowly: only `code === null` AND
+      // `signal === 'SIGTERM'` AND `acpCleanCompletion` count as a clean
+      // forced shutdown. Any other post-response process failure (non-zero
+      // exit code, SIGKILL, SIGSEGV, etc.) still falls through to
+      // `agent_spawn_failed`, preserving the existing connection-test
+      // failure behavior for genuine post-response problems.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
+      const acpForcedShutdown =
+        winner.code === null &&
+        winner.signal === 'SIGTERM' &&
+        acpCleanCompletion;
       const exitedCleanly =
-        (winner.code === 0 && !winner.signal) || acpCleanCompletion;
+        (winner.code === 0 && !winner.signal) || acpForcedShutdown;
       if (buffered) {
         const rawSample = truncateSample(buffered);
         if (rawSample && isLikelyModelErrorText(rawSample)) {
