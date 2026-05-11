@@ -46,7 +46,11 @@ import {
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
+import {
+  htmlNeedsSandboxShim,
+  parseForceInline,
+  shouldUrlLoadHtmlPreview,
+} from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
@@ -3625,7 +3629,12 @@ function HtmlViewer({
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
-    forceInline,
+    // Auto-fall back to the srcDoc path when the artifact will crash under
+    // the URL-load iframe's bare `sandbox="allow-scripts"` — Babel-standalone
+    // React prototypes and any HTML that reads Web Storage at mount throw
+    // SecurityError without `allow-same-origin`. The srcDoc path runs
+    // `injectSandboxShim` before any user script, so those artifacts render.
+    forceInline: forceInline || (source != null && htmlNeedsSandboxShim(source)),
   });
   const previewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,

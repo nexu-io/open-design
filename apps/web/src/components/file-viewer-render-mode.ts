@@ -72,3 +72,33 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
   const normalized = value.trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
+
+/**
+ * Return true when the HTML source contains patterns that fail under the
+ * URL-load iframe's bare `sandbox="allow-scripts"` (no `allow-same-origin`).
+ *
+ * The srcDoc path runs `injectSandboxShim` (see
+ * `apps/web/src/runtime/srcdoc.ts`) before any user script, which polyfills
+ * `localStorage` / `sessionStorage` so artifacts that read them at mount
+ * don't throw `SecurityError` and unmount the React tree. The URL-load path
+ * serves raw HTML untouched, so any artifact that touches sandbox-blocked
+ * Web Storage at startup goes blank.
+ *
+ * Detect the two reliable signals and route those artifacts back through
+ * srcDoc by toggling `forceInline`:
+ *   - `<script type="text/babel">`: Babel-standalone XHR-fetches and evals
+ *     sibling `.jsx`/`.tsx` files at runtime. Agent-emitted React prototypes
+ *     in this style routinely read Web Storage from `useState` initializers.
+ *   - Direct `localStorage` / `sessionStorage` mentions in the document
+ *     source (covers inline scripts and plain HTML that calls them).
+ *
+ * Pure string scan — caller passes the same `source` already fetched for
+ * preview rendering, so this adds no extra I/O. Heuristic by design: false
+ * positives just take the (slightly slower but safer) srcDoc path; false
+ * negatives are the same blank-preview the user already hits.
+ */
+export function htmlNeedsSandboxShim(source: string): boolean {
+  if (/<script\s[^>]*\btype\s*=\s*["']text\/babel\b/i.test(source)) return true;
+  if (/\b(?:local|session)Storage\b/.test(source)) return true;
+  return false;
+}
