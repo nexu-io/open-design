@@ -344,6 +344,102 @@ test('codex json stream emits structured errors once', () => {
   ]);
 });
 
+test('codex json stream surfaces response.failed details', () => {
+  const { events, handler } = collectEvents('codex');
+  const failed = {
+    type: 'response.failed',
+    response: {
+      id: 'resp_123',
+      status: 'failed',
+      error: {
+        code: 'model_not_found',
+        message: 'The requested model is not available for this account.',
+      },
+    },
+  };
+
+  handler.feed(JSON.stringify(failed) + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'The requested model is not available for this account.',
+      raw: JSON.stringify(failed),
+    },
+  ]);
+});
+
+test('codex json stream falls back to top-level response.failed errors', () => {
+  const { events, handler } = collectEvents('codex');
+  const failed = {
+    type: 'response.failed',
+    error: {
+      message: 'Top-level Codex provider failure.',
+    },
+  };
+
+  handler.feed(JSON.stringify(failed) + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Top-level Codex provider failure.',
+      raw: JSON.stringify(failed),
+    },
+  ]);
+});
+
+test('codex json stream skips non-actionable response.failed error fields', () => {
+  const { events, handler } = collectEvents('codex');
+  const failed = {
+    type: 'response.failed',
+    response: {
+      status: 'failed',
+      error: { code: 'server_error' },
+    },
+    message: 'The model provider failed before completing the response.',
+  };
+
+  handler.feed(JSON.stringify(failed) + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'The model provider failed before completing the response.',
+      raw: JSON.stringify(failed),
+    },
+  ]);
+});
+
+test('codex json stream emits only one error when response.failed is followed by turn.failed', () => {
+  const { events, handler } = collectEvents('codex');
+  const failed = {
+    type: 'response.failed',
+    response: {
+      status: 'failed',
+      error: { message: 'First failure wins.' },
+    },
+  };
+
+  handler.feed(
+    JSON.stringify(failed) +
+      '\n' +
+      JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'Second failure should be ignored.' },
+      }) +
+      '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'First failure wins.',
+      raw: JSON.stringify(failed),
+    },
+  ]);
+});
+
 test('codex json stream emits command execution tool events', () => {
   const { events, handler } = collectEvents('codex');
 

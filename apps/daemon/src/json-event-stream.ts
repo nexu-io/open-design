@@ -284,6 +284,25 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
       onEvent({
         type: 'error',
         message: extractErrorMessage(obj.error ?? obj.message, 'Codex turn failed'),
+        raw: stringifyContent(obj),
+      });
+    }
+    return true;
+  }
+
+  if (obj.type === 'response.failed') {
+    if (!state.codexErrorEmitted) {
+      const response = isRecord(obj.response) ? obj.response : null;
+      state.codexErrorEmitted = true;
+      const message =
+        extractErrorMessage(response?.error, '') ||
+        extractErrorMessage(obj.error, '') ||
+        extractErrorMessage(obj.message, '') ||
+        'Codex response failed';
+      onEvent({
+        type: 'error',
+        message,
+        raw: stringifyContent(obj),
       });
     }
     return true;
