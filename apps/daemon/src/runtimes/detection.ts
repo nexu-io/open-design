@@ -1,7 +1,7 @@
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
-import { resolveAgentExecutable } from './executables.js';
+import { inspectAgentExecutableResolution } from './executables.js';
 import { spawnEnvForAgent } from './env.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
@@ -47,18 +47,80 @@ async function fetchModels(
   }
 }
 
+type VersionProbeOutcome =
+  | { kind: 'not-invocable' }
+  | { kind: 'spawned'; version: string | null };
+
+/**
+ * Run the agent's `--version` probe and classify the result. The probe
+ * has two distinct failure modes the catch arm has to discriminate:
+ *
+ *   - **Not invocable.** The OS rejected the spawn outright (ENOENT
+ *     for a vanished target, EACCES for a stripped-x bit, ENOTDIR
+ *     for a broken parent), OR the wrapper script spawned but its
+ *     underlying interpreter / target is missing and the shim exits
+ *     with code 127 ("command not found") / 126 ("not executable").
+ *     127 is the canonical POSIX shell signal for "I ran but the
+ *     thing I delegate to is gone"; 126 is the perm/not-a-binary
+ *     sibling. Both shapes are reproducible by leftover npm bin
+ *     shims, mise/nvm/fnm pointer files, and Windows `.CMD` shims
+ *     whose target was uninstalled. We mark the agent unavailable
+ *     so Settings does not advertise a ghost entry (issue #658,
+ *     lefarcen review P2 on PR #1301).
+ *
+ *   - **Spawned but `--version` was unhappy.** The binary itself ran
+ *     (any other rejection: timeout, generic non-zero exit, stderr
+ *     noise) so the CLI is invocable; we just can't read a version
+ *     string. Adapters whose `--version` flag is unsupported land
+ *     here and must keep working with `version: null`.
+ *
+ * `child_process.execFile` reports OS-level rejections with a string
+ * `err.code` (`'ENOENT'`, `'EACCES'`, `'ENOTDIR'`) and non-zero exit
+ * codes with a *numeric* `err.code` equal to the exit status, so the
+ * two arms below are unambiguous.
+ */
+async function probeVersionAtPath(
+  def: RuntimeAgentDef,
+  resolved: string,
+  env: NodeJS.ProcessEnv,
+): Promise<VersionProbeOutcome> {
+  try {
+    const { stdout } = await execAgentFile(resolved, def.versionArgs, {
+      env,
+      timeout: 3000,
+    });
+    const version = String(stdout).trim().split('\n')[0] ?? null;
+    return { kind: 'spawned', version };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (typeof code === 'string') {
+      if (code === 'ENOENT' || code === 'EACCES' || code === 'ENOTDIR') {
+        return { kind: 'not-invocable' };
+      }
+    } else if (typeof code === 'number' && (code === 126 || code === 127)) {
+      return { kind: 'not-invocable' };
+    }
+    return { kind: 'spawned', version: null };
+  }
+}
+
+function unavailableAgent(def: RuntimeAgentDef): DetectedAgent {
+  return {
+    ...stripFns(def),
+    models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
+    available: false,
+    ...installMetaForAgent(def.id),
+  };
+}
+
 async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
-  const resolved = resolveAgentExecutable(def, configuredEnv);
+  const resolution = inspectAgentExecutableResolution(def, configuredEnv);
+  let resolved = resolution.selectedPath;
   if (!resolved) {
-    return {
-      ...stripFns(def),
-      models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
-      available: false,
-      ...installMetaForAgent(def.id),
-    };
+    return unavailableAgent(def);
   }
   const probeEnv = spawnEnvForAgent(
     def.id,
@@ -68,46 +130,26 @@ async function probe(
     },
     configuredEnv,
   );
-  let version = null;
-  try {
-    const { stdout } = await execAgentFile(resolved, def.versionArgs, {
-      env: probeEnv,
-      timeout: 3000,
-    });
-    version = String(stdout).trim().split('\n')[0] ?? null;
-  } catch (err) {
-    // The path resolved on disk but spawning the binary failed. If the
-    // OS rejected the spawn outright (ENOENT for a vanished target,
-    // EACCES for a stripped-x bit, ENOTDIR for a broken parent), the
-    // CLI cannot actually be invoked — mark it unavailable so the
-    // Settings UI does not keep advertising a ghost entry after the
-    // user has uninstalled the real binary (issue #658). Typical
-    // shapes this catches:
-    //   - macOS/Linux: `which codex` returns a stale wrapper shim, but
-    //     the underlying `node` / Python interpreter the shim invokes
-    //     is gone, so `execFile` rejects with ENOENT.
-    //   - Windows: a leftover `.CMD` shim still exists on PATH but
-    //     points at a deleted target; spawn fails with ENOENT.
-    //   - Permissions: the binary file is there but no longer
-    //     executable.
-    // Any other failure (the binary spawns but `--version` returns
-    // non-zero, or stderr noise, or a timeout) still falls through to
-    // the previous "available, version unknown" behaviour so adapters
-    // whose `--version` flag is unsupported keep working.
-    const spawnErrorCode = (err as NodeJS.ErrnoException)?.code;
-    if (
-      spawnErrorCode === 'ENOENT'
-      || spawnErrorCode === 'EACCES'
-      || spawnErrorCode === 'ENOTDIR'
-    ) {
-      return {
-        ...stripFns(def),
-        models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
-        available: false,
-        ...installMetaForAgent(def.id),
-      };
-    }
-    // binary exists and spawned but --version failed; still mark available
+  let outcome = await probeVersionAtPath(def, resolved, probeEnv);
+  // If the selected executable is not invocable but a distinct PATH
+  // candidate exists, retry there. This is the configured-override
+  // recovery path lefarcen flagged on #1301: when a user has a stale
+  // CODEX_BIN (or other agent-specific override) and a working binary
+  // on PATH, the daemon should adopt the PATH candidate so Settings
+  // can keep `available: true` and the "Test" / "adopt detected
+  // binary" repair flow added in #1205 stays accessible. Without this
+  // retry the user is locked out of self-recovery because Settings
+  // gates the Test button on agent.available.
+  if (
+    outcome.kind === 'not-invocable'
+    && resolution.pathResolvedPath
+    && resolution.pathResolvedPath !== resolved
+  ) {
+    resolved = resolution.pathResolvedPath;
+    outcome = await probeVersionAtPath(def, resolved, probeEnv);
+  }
+  if (outcome.kind === 'not-invocable') {
+    return unavailableAgent(def);
   }
   // Probe `--help` once per agent and record which flags the installed CLI
   // advertises. Cached on `agentCapabilities` for buildArgs to consult.
@@ -123,7 +165,7 @@ async function probe(
         caps[key] = String(stdout).includes(flag);
       }
     } catch {
-      // If --help fails, leave caps empty — buildArgs falls back to the safe
+      // If --help fails, leave caps empty so buildArgs falls back to the safe
       // baseline (no optional flags).
     }
     agentCapabilities.set(def.id, caps);
@@ -134,7 +176,7 @@ async function probe(
     models,
     available: true,
     path: resolved,
-    version,
+    version: outcome.version,
     ...installMetaForAgent(def.id),
   };
 }
