@@ -29,6 +29,7 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime } from "./runtime.js";
+import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -171,6 +172,15 @@ export async function runDesktopMain(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   options: DesktopMainOptions = {},
 ): Promise<void> {
+  // Install the defensive uncaughtException filter BEFORE awaiting
+  // app.whenReady, so a setTypeOfService EINVAL thrown by undici during
+  // the renderer's first fetch is intercepted rather than surfacing as
+  // Electron's "JavaScript error in main process" dialog (issue #647).
+  // The packaged entry has the parallel filter wired in
+  // apps/packaged/src/logging.ts; both must stay in sync until the
+  // helper is promoted to a shared workspace package.
+  attachDesktopProcessErrorFilter();
+
   await app.whenReady();
 
   // PR #974: mint a per-process auth secret and hand it to the daemon
