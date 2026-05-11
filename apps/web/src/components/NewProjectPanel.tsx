@@ -1875,7 +1875,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'bfl']),
     video: new Set(['volcengine', 'hyperframes', 'grok']),
     audio: new Set(['minimax', 'fishaudio']),
   };
