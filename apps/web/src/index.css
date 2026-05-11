@@ -7145,33 +7145,41 @@ button.connector-action.is-loading {
   padding: 48px 24px;
   color: var(--text-muted);
   font-size: 13px;
-  min-height: 240px;
+  min-height: 320px;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(to right, var(--border-soft) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border-soft) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
 }
 .df-empty-pill {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 18px;
-  padding: 18px 22px 18px 28px;
-  border-radius: 999px;
+  gap: 14px;
+  padding: 28px 36px;
+  border-radius: 24px;
   border: 1px solid var(--border);
   background: var(--bg-panel);
-  box-shadow: 0 1px 0 rgba(15, 15, 15, 0.02);
+  box-shadow:
+    0 1px 0 rgba(15, 15, 15, 0.02),
+    0 8px 24px -12px rgba(15, 15, 15, 0.08);
   max-width: min(420px, 92%);
+  text-align: center;
 }
 .df-empty-title {
-  font-size: 15.5px;
+  font-size: 16px;
   color: var(--text-strong);
   font-weight: 500;
   letter-spacing: -0.005em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
 }
 .df-empty-cta {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 13px;
+  padding: 7px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg);
