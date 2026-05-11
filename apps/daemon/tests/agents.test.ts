@@ -2639,6 +2639,56 @@ fsTest(
   },
 );
 
+test(
+  'detectAgents with GEMINI_BIN does not poison the cache; clearing the override returns to the auto-pick (#1007 P2 lefarcen)',
+  async () => {
+    // Without this guard, `chooseExecutableByMinVersion` would
+    // return the override path AND `probe()`'s cache write would
+    // record it. A subsequent `resolveAgentBin('gemini', {})`
+    // (request without the env var) would then read the override
+    // back out of the cache — turning the escape hatch one-way:
+    // the user cleared GEMINI_BIN but chat still spawns the
+    // override binary. After the fix, `probe()` skips the cache
+    // write when the resolver returns `fromOverride: true`, so
+    // the cache stays pinned to the last version-aware auto-pick
+    // and the override is reversible.
+    const home = isolateAgentHome();
+    const autoDir = mkdtempSync(join(tmpdir(), 'od-gemini-poison-auto-'));
+    const pinDir = mkdtempSync(join(tmpdir(), 'od-gemini-poison-pin-'));
+    try {
+      const autoPath = writeFakeVersionCli(autoDir, 'gemini', '0.40.1');
+      const pinPath = writeFakeVersionCli(pinDir, 'gemini', '0.40.2');
+      // Step 1: detect without override → cache = autoPath.
+      process.env.PATH = autoDir;
+      clearResolvedAgentBinCache('gemini');
+      await detectAgents({});
+      assert.equal(resolveAgentBin('gemini', {}), autoPath);
+
+      // Step 2: detect WITH override → resolves to pinPath for
+      // the settings/UI response, but must NOT overwrite the
+      // cache the auto-pick populated above.
+      const overrideResults = await detectAgents({
+        gemini: { GEMINI_BIN: pinPath },
+      });
+      const overrideGemini = overrideResults.find(
+        (agent) => agent.id === 'gemini',
+      );
+      assert.equal(overrideGemini?.path, pinPath);
+
+      // Step 3: a later request without the override clears its
+      // env. resolveAgentBin reads the cache; with the poisoning
+      // fix the cache is still autoPath, so the result is the
+      // last-known auto-pick, not the pinned override.
+      assert.equal(resolveAgentBin('gemini', {}), autoPath);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(autoDir, { recursive: true, force: true });
+      rmSync(pinDir, { recursive: true, force: true });
+      clearResolvedAgentBinCache('gemini');
+    }
+  },
+);
+
 test('Gemini AGENT_DEF declares minVersion so the version-aware resolver kicks in (#978)', () => {
   // Pinned here as a regression guard so a future cleanup that
   // strips the field doesn't silently put the GUI app back into the

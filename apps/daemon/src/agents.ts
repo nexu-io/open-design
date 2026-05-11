@@ -1212,13 +1212,16 @@ export function clearResolvedAgentBinCache(id) {
 // `<AGENT>_BIN` override is configured, the override wins
 // unconditionally — the user has already opted out of auto-pick.
 //
-// Returns `{ resolved: string|null, version: string|null }` so the
-// caller can short-circuit the second `--version` exec in `probe()`
-// — the version we just probed here is exactly the one the API
-// response should ship.
+// Returns `{ resolved: string|null, version: string|null,
+// fromOverride: boolean }` so the caller can (a) short-circuit the
+// second `--version` exec in `probe()` (the version we just probed
+// here is exactly the one the API response should ship) and (b)
+// know whether the result is a request-scoped override path — those
+// must not be cached, otherwise clearing the override leaves a stale
+// pin pointing at a path the user explicitly opted out of.
 export async function chooseExecutableByMinVersion(def, configuredEnv, env) {
   const configured = configuredExecutableOverride(def, configuredEnv);
-  if (configured) return { resolved: configured, version: null };
+  if (configured) return { resolved: configured, version: null, fromOverride: true };
   const bins = [
     def.bin,
     ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
@@ -1232,7 +1235,7 @@ export async function chooseExecutableByMinVersion(def, configuredEnv, env) {
       candidates.push(found);
     }
   }
-  if (candidates.length === 0) return { resolved: null, version: null };
+  if (candidates.length === 0) return { resolved: null, version: null, fromOverride: false };
   // Probe versions in parallel with a short timeout so a hung old
   // binary doesn't block detection. 1500ms is generous for a
   // local CLI's `--version` path which is typically <50ms.
@@ -1261,7 +1264,7 @@ export async function chooseExecutableByMinVersion(def, configuredEnv, env) {
     // detection error path stays visible.
     const cmp = compareSemver(result.version, def.minVersion);
     if (cmp !== null && cmp >= 0) {
-      return { resolved: result.path, version: result.version };
+      return { resolved: result.path, version: result.version, fromOverride: false };
     }
   }
   // No candidate met the minimum — fall through to the first-found
@@ -1273,6 +1276,7 @@ export async function chooseExecutableByMinVersion(def, configuredEnv, env) {
   return {
     resolved: fallback?.path ?? candidates[0],
     version: fallback?.version ?? null,
+    fromOverride: false,
   };
 }
 
@@ -1330,13 +1334,13 @@ async function probe(def, configuredEnv = {}) {
     const picked = await chooseExecutableByMinVersion(def, configuredEnv, probeEnv);
     resolved = picked.resolved;
     version = picked.version;
-    if (resolved) {
+    if (resolved && !picked.fromOverride) {
       // Cache so the synchronous chat-time `resolveAgentBin` returns
       // the same path the async detection chose. Without this, chat
       // would re-resolve via the first-match `resolveAgentExecutable`
       // and pick the stale binary even though detection skipped it.
       resolvedAgentBinCache.set(def.id, { resolved, version });
-    } else {
+    } else if (!resolved) {
       // Detection couldn't resolve a binary this pass — clear the
       // cache so a previously-cached path doesn't survive an
       // uninstall / PATH change / override clear. Without this,
@@ -1347,6 +1351,15 @@ async function probe(def, configuredEnv = {}) {
       // #1007.
       resolvedAgentBinCache.delete(def.id);
     }
+    // When `picked.fromOverride` is true the cache is intentionally
+    // left as-is: the result is a request-scoped <AGENT>_BIN path
+    // the user can clear at any time, so writing it to the cache
+    // turns the escape hatch one-way (clear the env and chat still
+    // spawns the override path, even though the env that opted in
+    // is gone). Preserving the previous auto-pick instead keeps the
+    // override reversible — clearing it falls back to the last
+    // version-aware pick the resolver actually walked candidates
+    // for. lefarcen review of #1007.
   } else {
     resolved = resolveAgentExecutable(def, configuredEnv);
   }
