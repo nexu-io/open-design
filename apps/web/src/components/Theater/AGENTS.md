@@ -50,6 +50,15 @@ without code churn.
   /api/projects/:id/critique/:runId/interrupt`. A failed fetch is
   swallowed with a dev-mode warning so the UI still moves to the
   collapsed badge.
+- **Composite weights are read-only on the web side in v1.** The
+  `ScoreTicker` and `TheaterCollapsed` read `composite` straight off
+  the wire; the UI does not recompute it from per-panelist scores.
+  Per-skill cast configuration lands in v2 as a Settings surface
+  that writes to the project's settings row; the daemon resolver
+  (see `apps/daemon/src/critique/AGENTS.md`) reads that row and
+  feeds the per-run weight map into the composite computation. Do
+  not add a "weights" prop to any component in this directory
+  until the contracts package carries the v2 cast type.
 
 ## When you change anything here
 
