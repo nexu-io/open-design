@@ -453,7 +453,19 @@ async function consumeDaemonRun({
 
     if (endStatus === 'canceled') return;
 
-    if (endStatus === 'failed' || exitSignal || (exitCode !== null && exitCode !== 0)) {
+    // Trust the server's authoritative `endStatus`. When the server reports
+    // `succeeded`, the run completed cleanly even if the underlying process
+    // exited via a signal — some agents (e.g. ACP agents like Devin for
+    // Terminal) intentionally exit via SIGTERM after a clean prompt
+    // completion because they don't shut down on stdin.end(). The
+    // signal/non-zero-code safety net only applies when the server hasn't
+    // explicitly declared success, so we never surface a fake error on a
+    // run the server already marked successful.
+    const looksLikeFailure =
+      endStatus === 'failed' ||
+      (endStatus !== 'succeeded' &&
+        (exitSignal || (exitCode !== null && exitCode !== 0)));
+    if (looksLikeFailure) {
       const tail = stderrBuf.trim().slice(-400);
       handlers.onError(
         new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),

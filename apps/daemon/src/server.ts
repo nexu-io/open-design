@@ -4151,9 +4151,19 @@ export async function startServer({
         ));
         return design.runs.finish(run, 'failed', code, signal);
       }
+      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
+      // Terminal) are forced to exit via SIGTERM from attachAcpSession after
+      // a clean prompt completion. Without this check, the chat run would be
+      // marked `failed` because `code === 0` fails (code is null on a signal
+      // exit). `completedSuccessfully()` reports whether the ACP session
+      // resolved without a fatal error or abort, so we treat that as success
+      // even when the underlying process exit was signal-driven.
+      const acpCleanCompletion =
+        typeof acpSession?.completedSuccessfully === 'function' &&
+        acpSession.completedSuccessfully();
       const status = run.cancelRequested
         ? 'canceled'
-        : code === 0
+        : code === 0 || acpCleanCompletion
           ? 'succeeded'
           : 'failed';
       if (status === 'failed') {

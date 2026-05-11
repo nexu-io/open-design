@@ -621,6 +621,19 @@ export function attachAcpSession({
       finished = true;
       clearStageTimer();
       stdin.end();
+      // Some ACP agents (e.g. Devin for Terminal) keep the child process
+      // alive after stdin closes, waiting for the next prompt. Each Open
+      // Design run spawns its own agent process per turn, so the child must
+      // terminate for `child.on('close')` to fire and the chat run to
+      // finalize — otherwise the chat stays stuck in the "working" state.
+      // Give the child a short grace period to exit on its own first; if it
+      // doesn't, SIGTERM forces it. This mirrors the pattern in
+      // detectAcpModels() which already kills the child after a clean
+      // model-discovery probe completes (see line ~270 in this file).
+      const cleanExitTimer = setTimeout(() => {
+        if (!child.killed) child.kill('SIGTERM');
+      }, 500);
+      child.once('close', () => clearTimeout(cleanExitTimer));
       return;
     }
     if (sessionId && model && model !== 'default' && obj.id === expectedId) {
@@ -647,6 +660,13 @@ export function attachAcpSession({
   return {
     hasFatalError() {
       return fatal;
+    },
+    completedSuccessfully() {
+      // Returns true when the prompt request resolved without a fatal error
+      // and was not aborted. The chat consumer treats this as a successful
+      // run even if the child process subsequently exited via SIGTERM
+      // (which is expected for agents that don't shut down on stdin.end()).
+      return finished && !fatal && !aborted;
     },
     abort() {
       if (aborted || finished) return;
