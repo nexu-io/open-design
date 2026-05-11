@@ -601,6 +601,30 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     expect(body.error.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
+  it('returns 413 (not 415) for an oversize non-HTML file — proves owner cap fires pre-buffer', async () => {
+    // PR #1312 round-5 (lefarcen P2): the route must stat the owner with
+    // resolveProjectFilePath BEFORE readProjectFile and reject sizes
+    // above MAX_INLINE_OWNER_BYTES with 413 PAYLOAD_TOO_LARGE. The
+    // Red→Green discriminator is the combination "oversize AND
+    // non-HTML": pre-fix, the route reads the buffer first and the
+    // text/plain mime check at file.mime fires → 415. Post-fix, the
+    // route stats first and the size check fires before the mime
+    // check → 413. Asserting "got 413, not 415" pins both the
+    // pre-buffer property and the check ordering (size before mime,
+    // per lefarcen's locked round-5 sequence).
+    //
+    // 2 MiB+1 byte fixture is acceptable in test setup; MAX_INLINE_OWNER_BYTES
+    // is 2 MiB so this is the minimal fixture that exceeds the cap with the
+    // production constant (no test-door needed).
+    const dir = path.join(projectsRoot, projectId);
+    const overCap = 2 * 1024 * 1024 + 1;
+    await writeFile(path.join(dir, 'huge.txt'), Buffer.alloc(overCap, 0x61));
+    const res = await fetch(exportUrl('huge.txt'));
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
   it('rejects an invalid project id (chars outside isSafeId char class) with 400 BAD_REQUEST', async () => {
     // PR #1312 round-2 review (lefarcen P3 @ export-inline-route.test.ts:287):
     // the previous `..` test was rejected by Express path normalization
