@@ -5665,13 +5665,85 @@ function TextViewer({
   );
 }
 
+// Pretty-print JSON without round-tripping through JS values, so 64-bit IDs
+// and other numeric literals beyond Number.MAX_SAFE_INTEGER (also exponent
+// notation, \u-escapes inside strings) survive the preview byte-for-byte.
+// `JSON.parse` is used only as a syntactic validator; its decoded result is
+// discarded and the original text is re-emitted with normalized whitespace.
 export function formatJsonForPreview(fileName: string, text: string): string {
   if (!fileName.toLowerCase().endsWith('.json')) return text;
   try {
-    return JSON.stringify(JSON.parse(text), null, 2);
+    JSON.parse(text);
+    return prettyPrintJsonPreservingTokens(text);
   } catch {
     return text;
   }
+}
+
+function prettyPrintJsonPreservingTokens(input: string): string {
+  let out = '';
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  const pad = (n: number) => '  '.repeat(n);
+  const peek = (from: number): string => {
+    for (let i = from; i < input.length; i++) {
+      const c = input[i];
+      if (c !== ' ' && c !== '\t' && c !== '\n' && c !== '\r') return c;
+    }
+    return '';
+  };
+
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+
+    if (inString) {
+      out += c;
+      if (escape) escape = false;
+      else if (c === '\\') escape = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+
+    if (c === '"') {
+      inString = true;
+      out += c;
+      continue;
+    }
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') continue;
+
+    if (c === '{' || c === '[') {
+      out += c;
+      if (peek(i + 1) === (c === '{' ? '}' : ']')) continue;
+      depth++;
+      out += '\n' + pad(depth);
+      continue;
+    }
+    if (c === '}' || c === ']') {
+      const last = out[out.length - 1];
+      if (last === '{' || last === '[') {
+        out += c;
+        continue;
+      }
+      depth--;
+      out += '\n' + pad(depth) + c;
+      continue;
+    }
+    if (c === ',') {
+      out += ',\n' + pad(depth);
+      continue;
+    }
+    if (c === ':') {
+      out += ': ';
+      continue;
+    }
+
+    // Number / true / false / null literals — copy character verbatim.
+    out += c;
+  }
+
+  return out;
 }
 
 function MarkdownViewer({

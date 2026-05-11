@@ -1346,4 +1346,55 @@ describe('formatJsonForPreview', () => {
   it('preserves empty input without crashing', () => {
     expect(formatJsonForPreview('empty.json', '')).toBe('');
   });
+
+  it('preserves integer literals beyond Number.MAX_SAFE_INTEGER without truncation', () => {
+    const big = '{"id":9007199254740993,"snowflake":1234567890123456789}';
+    const out = formatJsonForPreview('ids.json', big);
+
+    expect(out).toContain('9007199254740993');
+    expect(out).not.toContain('9007199254740992');
+    expect(out).toContain('1234567890123456789');
+    expect(out).not.toContain('1.2345678901234568e');
+  });
+
+  it('preserves exponent notation instead of expanding it', () => {
+    const out = formatJsonForPreview('nums.json', '{"a":1e3,"b":-2.5e-4}');
+
+    expect(out).toContain('1e3');
+    expect(out).toContain('-2.5e-4');
+    expect(out).not.toContain('1000');
+  });
+
+  it('preserves \\uXXXX escapes inside strings instead of decoding them', () => {
+    const out = formatJsonForPreview('s.json', '{"s":"caf\\u00e9"}');
+
+    expect(out).toContain('caf\\u00e9');
+    expect(out).not.toContain('café');
+  });
+
+  it('does not break on JSON-like punctuation inside string contents', () => {
+    const tricky = '{"s":"{\\"a\\":1, b:[},]"}';
+    const out = formatJsonForPreview('s.json', tricky);
+
+    expect(out).toContain('"{\\"a\\":1, b:[},]"');
+    // Outer object still gets indented
+    expect(out.startsWith('{\n  "s": ')).toBe(true);
+  });
+
+  it('keeps empty containers on a single line', () => {
+    expect(formatJsonForPreview('empty.json', '{}')).toBe('{}');
+    expect(formatJsonForPreview('empty.json', '[]')).toBe('[]');
+    expect(formatJsonForPreview('mixed.json', '{"a":[],"b":{}}')).toBe(
+      '{\n  "a": [],\n  "b": {}\n}',
+    );
+  });
+
+  it('matches JSON.stringify(_, null, 2) output for ordinary structural cases', () => {
+    const value = { a: 1, b: [2, 3], c: { d: 'hello' } };
+    const minified = JSON.stringify(value);
+
+    expect(formatJsonForPreview('payload.json', minified)).toBe(
+      JSON.stringify(value, null, 2),
+    );
+  });
 });
