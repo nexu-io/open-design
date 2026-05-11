@@ -34,8 +34,14 @@
  *     Node's default crash path so Electron's native error dialog
  *     renders exactly as it would without this filter.
  *
- *  3. `unhandledRejection` mirrors the same harmless / fall-through
- *     split.
+ *  3. The installed `unhandledRejection` handler mirrors that policy:
+ *     harmless `setTypeOfService EINVAL` rejections log at warn and
+ *     return; every other rejection logs at error, removes the
+ *     listener, and schedules a re-throw via `setImmediate`. Without
+ *     the detach + rethrow a non-harmless rejection would land in
+ *     this log line and silently keep the process alive, which would
+ *     hide real main-process bugs (issue #647 review by Siri-Ray and
+ *     the codex P2 thread on PR #1298).
  */
 
 /**
@@ -91,6 +97,34 @@ export function createDesktopUncaughtExceptionHandler(
   return handler;
 }
 
+/**
+ * Parallel factory for the `unhandledRejection` listener. Harmless
+ * undici `setTypeOfService EINVAL` rejections log at warn and return;
+ * anything else logs at error, removes the listener, and schedules a
+ * re-throw via `setImmediate`. The detached re-throw lands in the
+ * `uncaughtException` listener installed above, which then walks its
+ * own non-harmless path (log + detach + rethrow), so Node's default
+ * crash semantics take over and Electron's native error dialog
+ * renders as it would without this filter. Pinned by a unit test so a
+ * future refactor that drops the detach can't silently regress.
+ */
+export function createDesktopUnhandledRejectionHandler(
+  logger: DesktopErrorFilterLogger,
+): (reason: unknown) => void {
+  const handler = (reason: unknown): void => {
+    if (isHarmlessSocketOptionError(reason)) {
+      logger.warn('desktop main swallowed harmless socket option rejection', { reason });
+      return;
+    }
+    logger.error('desktop main unhandled rejection', { reason });
+    process.removeListener('unhandledRejection', handler);
+    setImmediate(() => {
+      throw reason;
+    });
+  };
+  return handler;
+}
+
 /** Install the filter on `process`. Idempotent across the dev entry's
  *  hot-reload paths because Node's listener registry deduplicates
  *  identical function references; we capture the once-built handler
@@ -104,13 +138,7 @@ export function attachDesktopProcessErrorFilter(
   const handler = createDesktopUncaughtExceptionHandler(logger);
   installedHandler = handler;
   process.on('uncaughtException', handler);
-  process.on('unhandledRejection', (reason) => {
-    if (isHarmlessSocketOptionError(reason)) {
-      logger.warn('desktop main swallowed harmless socket option rejection', { reason });
-      return;
-    }
-    logger.error('desktop main unhandled rejection', { reason });
-  });
+  process.on('unhandledRejection', createDesktopUnhandledRejectionHandler(logger));
 }
 
 function consoleLogger(): DesktopErrorFilterLogger {

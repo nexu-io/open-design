@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createDesktopUncaughtExceptionHandler,
+  createDesktopUnhandledRejectionHandler,
   isHarmlessSocketOptionError,
   type DesktopErrorFilterLogger,
 } from '../../src/main/uncaught-exception.js';
@@ -116,7 +117,7 @@ describe('createDesktopUncaughtExceptionHandler (desktop main, issue #647)', () 
       .spyOn(global, 'setImmediate')
       .mockImplementation(((cb: () => void) => {
         // Capture the callback for assertion but don't invoke it
-        // synchronously — the real semantics rely on the call
+        // synchronously, the real semantics rely on the call
         // happening AFTER the listener has been removed.
         return cb as unknown as NodeJS.Immediate;
       }) as unknown as typeof setImmediate);
@@ -129,6 +130,65 @@ describe('createDesktopUncaughtExceptionHandler (desktop main, issue #647)', () 
     // crash falls through to Node's default handler rather than
     // re-entering this filter.
     expect(removeListener).toHaveBeenCalledWith('uncaughtException', handler);
+    expect(setImmediateSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createDesktopUnhandledRejectionHandler (desktop main, issue #647 review follow-up)', () => {
+  it('logs at warn level and returns silently for a harmless rejection', () => {
+    const logger = stubLogger();
+    const handler = createDesktopUnhandledRejectionHandler(logger);
+    const reason = new Error('setTypeOfService EINVAL') as NodeJS.ErrnoException;
+    reason.code = 'EINVAL';
+    const removeListener = vi.spyOn(process, 'removeListener');
+    const setImmediateSpy = vi.spyOn(global, 'setImmediate');
+
+    handler(reason);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(removeListener).not.toHaveBeenCalled();
+    expect(setImmediateSpy).not.toHaveBeenCalled();
+  });
+
+  it('logs at error level, detaches itself, and re-throws for a non-harmless rejection', () => {
+    // Regression guard: a previous revision of this file logged
+    // non-harmless rejections and returned, which kept the dev main
+    // process alive after arbitrary rejected promises and hid real
+    // bugs from Node/Electron's default fail-fast path. The
+    // unhandledRejection handler must mirror the uncaughtException
+    // fall-through so only the EINVAL shape is swallowed.
+    const logger = stubLogger();
+    const handler = createDesktopUnhandledRejectionHandler(logger);
+    const reason = new Error('real ipc registration failure');
+    const removeListener = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+    const setImmediateSpy = vi
+      .spyOn(global, 'setImmediate')
+      .mockImplementation(((cb: () => void) => cb as unknown as NodeJS.Immediate) as unknown as typeof setImmediate);
+
+    handler(reason);
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(removeListener).toHaveBeenCalledWith('unhandledRejection', handler);
+    expect(setImmediateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats non-Error rejection reasons as non-harmless and falls through', () => {
+    // Primitive rejections (e.g. `Promise.reject(42)`) are never the
+    // undici socket shape, so the handler must take the fail-fast
+    // path rather than silently log them away.
+    const logger = stubLogger();
+    const handler = createDesktopUnhandledRejectionHandler(logger);
+    const removeListener = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+    const setImmediateSpy = vi
+      .spyOn(global, 'setImmediate')
+      .mockImplementation(((cb: () => void) => cb as unknown as NodeJS.Immediate) as unknown as typeof setImmediate);
+
+    handler(42);
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(removeListener).toHaveBeenCalledWith('unhandledRejection', handler);
     expect(setImmediateSpy).toHaveBeenCalledTimes(1);
   });
 });
