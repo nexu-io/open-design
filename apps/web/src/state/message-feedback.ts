@@ -85,10 +85,28 @@ export function readMessageFeedback(messageId: string): MessageFeedback | null {
   }
 }
 
+const FEEDBACK_EVENT_NAME = 'open-design:message-feedback';
+
+interface FeedbackEventDetail {
+  messageId: string;
+  value: MessageFeedback | null;
+}
+
 /**
  * Persist or clear the feedback for a single message. Passing `null`
  * removes the entry so the UI flips back to the unsubmitted state and
  * the user can re-rate.
+ *
+ * The broadcast contract: a same-tab `open-design:message-feedback`
+ * CustomEvent always fires with the new value in `detail.value`,
+ * regardless of whether the underlying storage write succeeded.
+ * Listeners apply the value directly instead of re-reading storage so
+ * a setItem failure (private mode, quota exceeded, disabled storage)
+ * does not clobber the in-memory confirmation the user just saw
+ * (codex + lefarcen P2 on PR #1308). The clear path likewise emits the
+ * broadcast so two mounted hooks for the same message return to idle
+ * together when the user clicks Change (Siri-Ray + lefarcen P2 on
+ * PR #1308).
  */
 export function writeMessageFeedback(
   messageId: string,
@@ -99,21 +117,19 @@ export function writeMessageFeedback(
   try {
     if (feedback === null) {
       w.localStorage.removeItem(storageKey(messageId));
-      return;
+    } else {
+      w.localStorage.setItem(storageKey(messageId), JSON.stringify(feedback));
     }
-    w.localStorage.setItem(storageKey(messageId), JSON.stringify(feedback));
   } catch {
     // Storage quota / disabled storage / private-mode rejection: the
     // UI keeps the in-memory state so the user still sees a confirmation
-    // for this session.
+    // for this session. The broadcast below ensures every mounted hook
+    // for this messageId picks up the new value from the event detail
+    // even though `readMessageFeedback` would now return null.
   }
-  // Broadcast across listeners in the same tab (the storage event only
-  // fires for OTHER tabs); use a custom event so multiple mounted
-  // `useMessageFeedback` hooks for the same messageId stay in sync.
   try {
-    w.dispatchEvent(new CustomEvent('open-design:message-feedback', {
-      detail: { messageId },
-    }));
+    const detail: FeedbackEventDetail = { messageId, value: feedback };
+    w.dispatchEvent(new CustomEvent(FEEDBACK_EVENT_NAME, { detail }));
   } catch {
     /* IE-style CustomEvent shim missing — fine, single-mount remains correct */
   }
@@ -132,27 +148,33 @@ export function useMessageFeedback(
     readMessageFeedback(messageId),
   );
 
-  // Re-read on storage / custom-event ticks so two mounts of this hook
-  // for the same messageId stay in sync.
+  // Keep two mounts of this hook for the same messageId in sync.
+  // Cross-tab updates land via the platform `storage` event and we
+  // re-read from storage to pick up the new value. Same-tab updates
+  // land via our `open-design:message-feedback` CustomEvent and we
+  // apply the broadcast value directly — re-reading from storage at
+  // this point would clobber the in-memory state if the writer's
+  // setItem call failed (private mode / quota / disabled storage).
   useEffect(() => {
     const w = safeWindow();
     if (!w) return;
-    const reload = () => setValue(readMessageFeedback(messageId));
     const onStorage = (evt: StorageEvent) => {
-      if (evt.key === null || evt.key === storageKey(messageId)) reload();
+      if (evt.key !== null && evt.key !== storageKey(messageId)) return;
+      setValue(readMessageFeedback(messageId));
     };
     const onCustom = (evt: Event) => {
-      const detail = (evt as CustomEvent<{ messageId: string }>).detail;
-      if (!detail || detail.messageId === messageId) reload();
+      const detail = (evt as CustomEvent<FeedbackEventDetail>).detail;
+      if (!detail || detail.messageId !== messageId) return;
+      setValue(detail.value);
     };
     w.addEventListener('storage', onStorage);
-    w.addEventListener('open-design:message-feedback', onCustom);
+    w.addEventListener(FEEDBACK_EVENT_NAME, onCustom);
     // Re-read on mount in case storage changed between the lazy init
     // and the effect attaching (rare, but cheap to cover).
-    reload();
+    setValue(readMessageFeedback(messageId));
     return () => {
       w.removeEventListener('storage', onStorage);
-      w.removeEventListener('open-design:message-feedback', onCustom);
+      w.removeEventListener(FEEDBACK_EVENT_NAME, onCustom);
     };
   }, [messageId]);
 

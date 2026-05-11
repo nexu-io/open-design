@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useT } from '../i18n';
 import {
@@ -46,13 +46,39 @@ interface Props {
 export function MessageFeedback({ messageId, now = Date.now }: Props) {
   const t = useT();
   const [feedback, setFeedback] = useMessageFeedback(messageId);
-  const [draftComment, setDraftComment] = useState('');
+  // Seed the textarea from any saved comment at mount time so a
+  // rehydrated negative feedback shows its prior text. The effect
+  // below re-seeds on rating transitions (idle -> negative, or a
+  // cross-mount sync flipping the rating) without overriding the
+  // user's in-progress edits.
+  const [draftComment, setDraftComment] = useState<string>(
+    () => feedback?.comment ?? '',
+  );
   const [commentJustSaved, setCommentJustSaved] = useState(false);
+  const lastSeededRatingRef = useRef<FeedbackRating | null>(
+    feedback?.rating ?? null,
+  );
+
+  // Re-seed draftComment whenever the rating itself transitions
+  // (e.g. clearFeedback -> null -> negative again, or a cross-tab
+  // update flips us into a different state). The dependency is
+  // `feedback?.rating` specifically — NOT `feedback?.comment` —
+  // because once the user types into the textarea we must not
+  // override their draft with a stale saved comment. Cleared
+  // comments (user erased the textarea then hit Send) deliberately
+  // surface as an empty draft.
+  useEffect(() => {
+    const nextRating = feedback?.rating ?? null;
+    if (nextRating !== lastSeededRatingRef.current) {
+      lastSeededRatingRef.current = nextRating;
+      setDraftComment(feedback?.comment ?? '');
+      setCommentJustSaved(false);
+    }
+  }, [feedback?.rating, feedback?.comment]);
 
   const submitRating = (rating: FeedbackRating) => {
     const submittedAt = now();
     setFeedback({ rating, submittedAt });
-    setDraftComment('');
     setCommentJustSaved(false);
   };
 
@@ -108,6 +134,13 @@ export function MessageFeedback({ messageId, now = Date.now }: Props) {
     = feedback.rating === 'positive'
       ? 'feedback.submittedPositive'
       : 'feedback.submittedNegative';
+  // Send is enabled when the textarea content differs from what's
+  // already persisted. That covers three intents: writing a new
+  // comment, editing an existing one, and clearing one (typed empty
+  // -> Send -> comment removed). Disabling on draft === saved keeps
+  // the button from being a no-op tap target.
+  const savedComment = feedback.comment ?? '';
+  const sendDisabled = draftComment === savedComment;
 
   return (
     <div
@@ -115,7 +148,11 @@ export function MessageFeedback({ messageId, now = Date.now }: Props) {
       data-state="submitted"
       data-rating={feedback.rating}
     >
-      <span className="message-feedback-confirmation">
+      <span
+        className="message-feedback-confirmation"
+        role="status"
+        aria-live="polite"
+      >
         {t(confirmationKey)}
       </span>
       {feedback.rating === 'negative' ? (
@@ -125,7 +162,7 @@ export function MessageFeedback({ messageId, now = Date.now }: Props) {
             <textarea
               className="message-feedback-comment-input"
               placeholder={t('feedback.commentPlaceholder')}
-              value={draftComment || feedback.comment || ''}
+              value={draftComment}
               onChange={(e) => {
                 setDraftComment(e.target.value);
                 if (commentJustSaved) setCommentJustSaved(false);
@@ -138,13 +175,17 @@ export function MessageFeedback({ messageId, now = Date.now }: Props) {
               type="button"
               className="message-feedback-comment-submit"
               onClick={submitComment}
-              disabled={!draftComment.trim() && !feedback.comment}
+              disabled={sendDisabled}
               data-testid="message-feedback-comment-submit"
             >
               {t('feedback.commentSubmit')}
             </button>
             {commentJustSaved ? (
-              <span className="message-feedback-comment-saved">
+              <span
+                className="message-feedback-comment-saved"
+                role="status"
+                aria-live="polite"
+              >
                 {t('feedback.commentSaved')}
               </span>
             ) : null}

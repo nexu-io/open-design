@@ -165,7 +165,13 @@ export function AssistantMessage({
           hasUnfinishedTodos={unfinishedTodos.length > 0}
           hasEmptyResponse={hasEmptyResponse}
         />
-        {runSucceeded && !hasEmptyResponse ? (
+        {/* Feedback widget for issue #1288 — gated on `produced.length > 0`
+            because the issue scopes feedback to turns that produce a final
+            artifact, not text-only acknowledgements or question-form turns
+            (lefarcen review on PR #1308). The `runSucceeded`
+            guard keeps it off failed runs, and `!hasEmptyResponse` keeps it
+            off agents that succeeded silently with no content. */}
+        {runSucceeded && !hasEmptyResponse && produced.length > 0 ? (
           <MessageFeedback messageId={message.id} />
         ) : null}
       </div>

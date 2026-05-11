@@ -12,7 +12,7 @@
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageFeedback } from '../../src/components/MessageFeedback';
 import { readMessageFeedback } from '../../src/state/message-feedback';
@@ -109,5 +109,86 @@ describe('MessageFeedback (issue #1288)', () => {
     expect(screen.getByText('Thanks for the feedback.')).toBeTruthy();
     // The idle prompt must NOT also appear.
     expect(screen.queryByText('Was this response helpful?')).toBeNull();
+  });
+
+  it('lets the user clear a saved comment by erasing the textarea and clicking Send', () => {
+    // Lefarcen P3 (#1308 review): the prior `draftComment ||
+    // feedback.comment || ''` controlled value made the textarea
+    // snap back to the saved comment whenever the draft was empty,
+    // so the user could never erase a saved comment without
+    // clicking Change first. With the draft-only value the user
+    // can erase + Send to clear.
+    window.localStorage.setItem(
+      'open-design:message-feedback:msg-clear-comment',
+      JSON.stringify({
+        rating: 'negative',
+        comment: 'preview opened the pointer file',
+        submittedAt: 1700000020,
+      }),
+    );
+    render(<MessageFeedback messageId="msg-clear-comment" />);
+
+    const textarea = screen.getByTestId('message-feedback-comment') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('preview opened the pointer file');
+    fireEvent.change(textarea, { target: { value: '' } });
+    expect(textarea.value).toBe('');
+
+    fireEvent.click(screen.getByTestId('message-feedback-comment-submit'));
+    expect(readMessageFeedback('msg-clear-comment')).toEqual({
+      rating: 'negative',
+      comment: undefined,
+      submittedAt: 1700000020,
+    });
+  });
+
+  it('keeps the in-session confirmation visible when localStorage writes fail (private mode / quota)', () => {
+    // Codex + lefarcen P2 (#1308 review): a failing setItem used to
+    // unstick the just-submitted rating because the CustomEvent
+    // listener re-read storage (now null) and overrode the in-memory
+    // state. The fix puts the new value in the event detail so
+    // listeners apply it directly.
+    const setItemSpy = vi
+      .spyOn(window.localStorage, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+    render(<MessageFeedback messageId="msg-quota" now={() => 1700000030} />);
+    fireEvent.click(screen.getByTestId('message-feedback-positive'));
+
+    expect(screen.getByText('Thanks for the feedback.')).toBeTruthy();
+    expect(screen.queryByText('Was this response helpful?')).toBeNull();
+    setItemSpy.mockRestore();
+  });
+
+  it('keeps two mounts of the same messageId in sync (positive submit + Change)', () => {
+    // Siri-Ray (#1308 review): the previous implementation broke the
+    // same-tab sync contract on the clear path because it early-
+    // returned before dispatching the CustomEvent. Two mounts of the
+    // same message must reach the same state on both Submit and Clear.
+    render(
+      <div>
+        <div data-testid="mount-a">
+          <MessageFeedback messageId="msg-shared" now={() => 1700000040} />
+        </div>
+        <div data-testid="mount-b">
+          <MessageFeedback messageId="msg-shared" now={() => 1700000040} />
+        </div>
+      </div>,
+    );
+
+    // Both start in idle.
+    expect(screen.getAllByText('Was this response helpful?')).toHaveLength(2);
+
+    // Click positive on mount A: both mounts flip to submitted.
+    const positiveButtons = screen.getAllByTestId('message-feedback-positive');
+    fireEvent.click(positiveButtons[0]!);
+    expect(screen.getAllByText('Thanks for the feedback.')).toHaveLength(2);
+    expect(screen.queryByText('Was this response helpful?')).toBeNull();
+
+    // Click Change on mount B: both mounts return to idle.
+    const changeButtons = screen.getAllByTestId('message-feedback-change');
+    fireEvent.click(changeButtons[1]!);
+    expect(screen.getAllByText('Was this response helpful?')).toHaveLength(2);
+    expect(screen.queryByText('Thanks for the feedback.')).toBeNull();
   });
 });

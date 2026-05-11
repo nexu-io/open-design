@@ -9,7 +9,7 @@
  * doesn't quietly drop a feature the UI already depends on.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   readMessageFeedback,
@@ -94,5 +94,46 @@ describe('message-feedback storage', () => {
     writeMessageFeedback('msg-7-b', { rating: 'negative', submittedAt: 2 });
     expect(readMessageFeedback('msg-7-a')?.rating).toBe('positive');
     expect(readMessageFeedback('msg-7-b')?.rating).toBe('negative');
+  });
+
+  it('broadcasts a CustomEvent carrying the new value on every successful write', () => {
+    // Regression for the codex + lefarcen P2: a setItem failure used
+    // to leave the broadcast in place but with no value to apply, so
+    // listeners would re-read storage and get null. The new contract
+    // always includes the value in `detail.value` so listeners can
+    // apply it directly without trusting storage.
+    const seen: unknown[] = [];
+    const handler = (evt: Event) => seen.push((evt as CustomEvent).detail);
+    window.addEventListener('open-design:message-feedback', handler);
+
+    writeMessageFeedback('msg-broadcast', { rating: 'positive', submittedAt: 7 });
+    writeMessageFeedback('msg-broadcast', null);
+
+    window.removeEventListener('open-design:message-feedback', handler);
+    expect(seen).toEqual([
+      { messageId: 'msg-broadcast', value: { rating: 'positive', submittedAt: 7 } },
+      { messageId: 'msg-broadcast', value: null },
+    ]);
+  });
+
+  it('still broadcasts the new value when localStorage.setItem throws (private mode / quota)', () => {
+    // The whole point of carrying the value in the event: writers in
+    // private-mode browsers still keep the in-memory confirmation.
+    const seen: unknown[] = [];
+    const handler = (evt: Event) => seen.push((evt as CustomEvent).detail);
+    window.addEventListener('open-design:message-feedback', handler);
+    const setItemSpy = vi
+      .spyOn(window.localStorage, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+    writeMessageFeedback('msg-quota', { rating: 'positive', submittedAt: 9 });
+
+    window.removeEventListener('open-design:message-feedback', handler);
+    setItemSpy.mockRestore();
+    expect(seen).toEqual([
+      { messageId: 'msg-quota', value: { rating: 'positive', submittedAt: 9 } },
+    ]);
   });
 });

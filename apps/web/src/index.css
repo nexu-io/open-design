@@ -11832,6 +11832,138 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--amber);
 }
 
+/* Message-level feedback widget (issue #1288). Sits under the
+   assistant footer, mirrors the pill / chip vocabulary used by the
+   surrounding chat surface so it reads as "part of the completed
+   turn" rather than as a modal. */
+.message-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.message-feedback-prompt {
+  color: var(--text-muted);
+}
+.message-feedback-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+.message-feedback-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.message-feedback-button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.message-feedback-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.message-feedback-confirmation {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 11.5px;
+}
+.message-feedback[data-rating="positive"] .message-feedback-confirmation {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.message-feedback[data-rating="negative"] .message-feedback-confirmation {
+  background: color-mix(in srgb, var(--amber) 10%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--border));
+}
+.message-feedback-change {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.message-feedback-change:hover { color: var(--text); }
+.message-feedback-change:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.message-feedback-comment {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  max-width: 520px;
+}
+.message-feedback-comment-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+}
+.message-feedback-comment-input {
+  min-height: 64px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  resize: vertical;
+}
+.message-feedback-comment-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+.message-feedback-comment-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.message-feedback-comment-submit {
+  padding: 4px 12px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--bg-panel);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.message-feedback-comment-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.message-feedback-comment-saved {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .unfinished-todos {
   margin-top: 10px;
   width: min(520px, 100%);
