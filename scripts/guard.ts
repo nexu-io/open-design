@@ -10,6 +10,10 @@ import {
 } from "./check-tokens-fixture-sync.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
+const allowedE2eScripts = new Set([
+  "e2e/scripts/playwright.ts",
+  "e2e/scripts/release-smoke.ts",
+]);
 
 type GuardCheck = {
   name: string;
@@ -81,23 +85,23 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/reports/playwright-html-report/",
   "e2e/ui/reports/test-results/",
   "e2e/ui/test-results/",
-  // Vendored upstream HyperFrames skill helper scripts.
-  "skills/hyperframes/scripts/",
-  // Vendored upstream Last30Days runtime helper used by the skill engine.
-  "skills/last30days/scripts/lib/vendor/",
-  // Vendored upstream html-ppt skill runtime assets (lewislulu/html-ppt-skill).
-  "skills/html-ppt/assets/",
+  // Vendored upstream HyperFrames helper scripts (design template).
+  "design-templates/hyperframes/scripts/",
+  // Vendored upstream Last30Days runtime helper used by the engine (design template).
+  "design-templates/last30days/scripts/lib/vendor/",
+  // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
+  "design-templates/html-ppt/assets/",
   "test-results/",
   "vendor/",
 ];
 
 const residualAllowedPathPatterns: RegExp[] = [
-  // Vendored upstream Zara template runtimes — one skill per template, name prefix
-  // `html-ppt-zhangzara-` (zarazhangrui/beautiful-html-templates). Only the
-  // vendored deck-stage runtime asset is allowlisted; any other JavaScript under
-  // these skill directories must still be converted to TypeScript or explicitly
-  // listed in `residualAllowedExactPaths`.
-  /^skills\/html-ppt-zhangzara-[^/]+\/assets\/deck-stage\.js$/,
+  // Vendored upstream Zara template runtimes — one design template per template,
+  // name prefix `html-ppt-zhangzara-` (zarazhangrui/beautiful-html-templates).
+  // Only the vendored deck-stage runtime asset is allowlisted; any other
+  // JavaScript under these design-template directories must still be converted
+  // to TypeScript or explicitly listed in `residualAllowedExactPaths`.
+  /^design-templates\/html-ppt-zhangzara-[^/]+\/assets\/deck-stage\.js$/,
 ];
 
 function isResidualAllowedPath(repositoryPath: string): boolean {
@@ -312,13 +316,13 @@ async function checkE2eLayout(): Promise<boolean> {
     }
 
     if (repositoryPath.startsWith("e2e/scripts/")) {
-      if (repositoryPath !== "e2e/scripts/playwright.ts") {
-        violations.push(`${repositoryPath} -> e2e scripts currently allow only scripts/playwright.ts`);
+      if (!allowedE2eScripts.has(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e scripts must be an approved package-owned entrypoint`);
       }
       continue;
     }
 
-    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or scripts/playwright.ts`);
+    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or approved scripts`);
   }
 
   if (violations.length > 0) {

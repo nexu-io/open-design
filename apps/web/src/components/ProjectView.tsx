@@ -23,6 +23,7 @@ import {
   deletePreviewComment,
   fetchPreviewComments,
   fetchDesignSystem,
+  fetchDesignTemplate,
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchSkill,
@@ -31,7 +32,11 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
-import { composeSystemPrompt, type ResearchOptions } from '@open-design/contracts';
+import {
+  composeSystemPrompt,
+  type MemorySystemPromptResponse,
+  type ResearchOptions,
+} from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
@@ -105,7 +110,17 @@ interface Props {
   routeFileName: string | null;
   config: AppConfig;
   agents: AgentInfo[];
+  // Mentionable functional skills — already filtered by config.disabledSkills
+  // upstream, so this drives only the chat composer's @-picker scope. For
+  // resolving an existing project's `skillId` (which can also point at a
+  // design template after the skills/design-templates split) use
+  // `designTemplates` as a fallback in composedSystemPrompt() and in the
+  // skill-name / skill-mode lookups below.
   skills: SkillSummary[];
+  // All known design templates (unfiltered). Required so projects created
+  // from the Templates surface keep composing the template body in API
+  // mode even when the user later disables the template in Settings.
+  designTemplates: SkillSummary[];
   designSystems: DesignSystemSummary[];
   daemonLive: boolean;
   onModeChange: (mode: AppConfig['mode']) => void;
@@ -230,6 +245,7 @@ export function ProjectView({
   config,
   agents,
   skills,
+  designTemplates,
   designSystems,
   daemonLive,
   onModeChange,
@@ -650,14 +666,21 @@ export function ProjectView({
     let designSystemTitle: string | undefined;
 
     if (project.skillId) {
-      const summary = skills.find((s) => s.id === project.skillId);
+      // project.skillId can resolve to either root after the
+      // skills/design-templates split; check both lists so a template-backed
+      // project keeps composing its template body when running in API mode.
+      const summary =
+        skills.find((s) => s.id === project.skillId) ??
+        designTemplates.find((s) => s.id === project.skillId);
       skillName = summary?.name;
       skillMode = summary?.mode;
       const cached = skillCache.current.get(project.skillId);
       if (cached !== undefined) {
         skillBody = cached;
       } else {
-        const detail = await fetchSkill(project.skillId);
+        const detail =
+          (await fetchSkill(project.skillId)) ??
+          (await fetchDesignTemplate(project.skillId));
         if (detail) {
           skillBody = detail.body;
           skillCache.current.set(project.skillId, detail.body);
@@ -692,12 +715,31 @@ export function ProjectView({
         }
       }
     }
+    // Fold in the auto-memory block so BYOK / API-mode chats see the
+    // same Personal-memory section a daemon-side CLI chat would. The
+    // daemon does this by calling `composeMemoryBody()` directly; the
+    // web side hits the equivalent HTTP surface so it can stay
+    // ignorant of daemon internals. Failures are swallowed — memory is
+    // best-effort, never a blocker for the chat round-trip.
+    let memoryBody: string | undefined;
+    try {
+      const resp = await fetch('/api/memory/system-prompt');
+      if (resp.ok) {
+        const json = (await resp.json()) as MemorySystemPromptResponse;
+        if (typeof json.body === 'string' && json.body.trim().length > 0) {
+          memoryBody = json.body;
+        }
+      }
+    } catch {
+      // Ignore; memory injection is best-effort.
+    }
     return composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
       designSystemBody,
       designSystemTitle,
+      memoryBody,
       metadata: project.metadata,
       template,
       streamFormat: config.mode === 'api' ? 'plain' : undefined,
@@ -707,6 +749,7 @@ export function ProjectView({
     project.designSystemId,
     project.metadata,
     skills,
+    designTemplates,
     designSystems,
     config.mode,
   ]);
@@ -1052,7 +1095,7 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
-      meta?: { research?: ResearchOptions },
+      meta?: { research?: ResearchOptions; skillIds?: string[] },
     ) => {
       if (!activeConversationId) return;
       if (streaming) return;
@@ -1133,6 +1176,7 @@ export function ProjectView({
 
       const parser = createArtifactParser();
       let liveHtml = '';
+      let streamedText = '';
 
       const updateAssistant = (updater: (prev: ChatMessage) => ChatMessage) => {
         setMessages((curr) =>
@@ -1242,12 +1286,15 @@ export function ProjectView({
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
-        onDelta: textBuffer.appendContent,
+        onDelta: (delta: string) => {
+          streamedText += delta;
+          textBuffer.appendContent(delta);
+        },
         onAgentEvent: (ev: AgentEvent) => {
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else pushEvent(ev);
         },
-        onDone: () => {
+        onDone: (fullText = '') => {
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
@@ -1255,6 +1302,37 @@ export function ProjectView({
             if (ev.type === 'artifact:end') {
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
+          }
+          const emptyApiResponse =
+            config.mode === 'api' &&
+            !fullText.trim() &&
+            !streamedText.trim() &&
+            !liveHtml.trim();
+          if (emptyApiResponse) {
+            const diagnostic = t('assistant.emptyResponseMessage');
+            updateMessageById(
+              assistantId,
+              (prev) => ({
+                ...prev,
+                endedAt: Date.now(),
+                events: [
+                  ...(prev.events ?? []),
+                  { kind: 'status', label: 'empty_response', detail: config.model },
+                  { kind: 'text', text: diagnostic },
+                ],
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+            if (commentAttachments.length > 0) {
+              void patchAttachedStatuses(commentAttachments, 'failed');
+            }
+            setStreaming(false);
+            abortRef.current = null;
+            cancelRef.current = null;
+            void refreshProjectFiles();
+            onProjectsRefresh();
+            return;
           }
           updateAssistant((prev) => ({
             ...prev,
@@ -1338,6 +1416,7 @@ export function ProjectView({
           assistantMessageId: assistantId,
           clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
+          skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
@@ -1365,15 +1444,85 @@ export function ProjectView({
           },
         });
       } else {
+        // Mirror the daemon chat-route memory hook for BYOK chats. The
+        // CLI path runs `extractFromMessage` BEFORE composing the prompt
+        // (so an explicit "remember: X" / "我是 X" marker in this turn's
+        // user message lands in memory in time for this turn's system
+        // prompt), then queues `extractWithLLM` on child close (so the
+        // small-model pass picks up implicit facts from the full
+        // user+assistant exchange). BYOK chats never hit that route, so
+        // we replicate both phases here against `/api/memory/extract`.
+        // Without this, the Memory tab / model picker is a no-op for
+        // BYOK users even though the UI saves model + index + entries
+        // for that mode.
+        const userText = (userMsg.content ?? '').trim();
+        // Snapshot the live BYOK chat config so the daemon can run
+        // "Same as chat" memory extraction against the same vendor /
+        // key / baseUrl / apiVersion the user is chatting with. The
+        // daemon never persists BYOK creds itself, so this per-call
+        // signal is the only way `pickProvider()` can avoid falling
+        // through to env / media-config (which is wrong for BYOK)
+        // when no explicit memory model override is set. The picker
+        // re-syncs an *explicit* override when chat config drifts;
+        // this snapshot covers the implicit "Same as chat" default.
+        const byokChatProvider =
+          config.apiProtocol && config.apiKey
+            ? {
+                provider: config.apiProtocol,
+                apiKey: config.apiKey,
+                baseUrl: config.baseUrl,
+                apiVersion:
+                  config.apiProtocol === 'azure'
+                    ? config.apiVersion ?? ''
+                    : '',
+              }
+            : undefined;
+        if (userText.length > 0) {
+          try {
+            await fetch('/api/memory/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userMessage: userText,
+                projectId: project.id,
+                conversationId: activeConversationId,
+                chatProvider: byokChatProvider,
+              }),
+            });
+          } catch {
+            // Best-effort: memory extraction must never block the
+            // chat. The daemon's SSE bus will catch up the Memory tab
+            // on the next event.
+          }
+        }
         const systemPrompt = await composedSystemPrompt();
         const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
+        let accumulatedAssistantText = '';
         void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
           onDelta: (delta) => {
+            accumulatedAssistantText += delta;
             handlers.onDelta(delta);
             handlers.onAgentEvent({ kind: 'text', text: delta });
           },
-          onDone: handlers.onDone,
+          onDone: () => {
+            handlers.onDone();
+            const assistantText = accumulatedAssistantText.trim();
+            if (userText.length === 0 || assistantText.length === 0) return;
+            void fetch('/api/memory/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userMessage: userText,
+                assistantMessage: accumulatedAssistantText,
+                projectId: project.id,
+                conversationId: activeConversationId,
+                chatProvider: byokChatProvider,
+              }),
+            }).catch(() => {
+              // Best-effort: see comment above on the pre-turn call.
+            });
+          },
           onError: handlers.onError,
         });
       }
@@ -1658,14 +1807,19 @@ export function ProjectView({
   );
 
   const projectMeta = useMemo(() => {
-    const skill = skills.find((s) => s.id === project.skillId)?.name;
+    const summary =
+      skills.find((s) => s.id === project.skillId) ??
+      designTemplates.find((s) => s.id === project.skillId);
+    const skill = summary?.name;
     const ds = designSystems.find((d) => d.id === project.designSystemId)?.title;
     return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
-  }, [skills, designSystems, project.skillId, project.designSystemId, t]);
+  }, [skills, designTemplates, designSystems, project.skillId, project.designSystemId, t]);
 
   const isDeck = useMemo(
-    () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
-    [skills, project.skillId],
+    () =>
+      (skills.find((s) => s.id === project.skillId) ??
+        designTemplates.find((s) => s.id === project.skillId))?.mode === 'deck',
+    [skills, designTemplates, project.skillId],
   );
   const chatResizeLabel = t('project.resizeChatPanel');
   const workspacePanelTrack =
@@ -2043,6 +2197,7 @@ export function ProjectView({
               projectId={project.id}
               projectFiles={projectFiles}
               projectFileNames={projectFileNames}
+              skills={skills}
               onEnsureProject={handleEnsureProject}
               previewComments={previewComments}
               attachedComments={attachedComments}

@@ -76,16 +76,34 @@ async function entriesWithFile(root: string, fileName: string): Promise<string[]
   return sorted(ids);
 }
 
-async function readSkillIds(): Promise<string[]> {
-  const skillsRoot = path.join(repoRoot, 'skills');
-  const dirs = await entriesWithFile(skillsRoot, 'SKILL.md');
+// As of the skills/design-templates split (specs/current/
+// skills-and-design-templates.md, Phase 0), the SKILL.md catalogue lives
+// under two sibling roots: `skills/` for functional skills the agent
+// invokes mid-task, and `design-templates/` for the rendering catalogue.
+// Both roots feed the same id-keyed `skillCopy` map in
+// apps/web/src/i18n/content.ts because the runtime looks up localized
+// copy by id without caring about origin (e.g. ExamplesTab passes
+// `designTemplates` into `localizeSkillDescription`). The coverage test
+// therefore validates the union of both roots — that's what the
+// localized content claims to cover.
+async function readSkillRootIds(rootName: 'skills' | 'design-templates'): Promise<string[]> {
+  const root = path.join(repoRoot, rootName);
+  const dirs = await entriesWithFile(root, 'SKILL.md');
   const ids = await Promise.all(
     dirs.map(async (dir) => {
-      const raw = await readFile(path.join(skillsRoot, dir, 'SKILL.md'), 'utf8');
+      const raw = await readFile(path.join(root, dir, 'SKILL.md'), 'utf8');
       return readFrontmatterName(raw) ?? dir;
     }),
   );
   return sorted(ids);
+}
+
+async function readSkillIds(): Promise<string[]> {
+  const [skills, designTemplates] = await Promise.all([
+    readSkillRootIds('skills'),
+    readSkillRootIds('design-templates'),
+  ]);
+  return sorted(new Set([...skills, ...designTemplates]));
 }
 
 async function readDesignSystemIds(): Promise<string[]> {

@@ -660,7 +660,18 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
   it('runs the BYOK connection test only after required fields are present', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(input.toString()).toBe('/api/test/connection');
+      const url = input.toString();
+      // MemoryModelInline mounts inside the BYOK section and reads the
+      // current extraction override from /api/memory on mount. Swallow
+      // it here so the assertion below only counts the test-connection
+      // POST the user actually triggered.
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
       expect(JSON.parse(String(init?.body))).toMatchObject({
         mode: 'provider',
         protocol: 'anthropic',
@@ -694,7 +705,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Connected\. Replied in 42 ms/)).toBeTruthy();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const testConnectionCalls = fetchMock.mock.calls.filter(
+      ([input]) => input.toString() === '/api/test/connection',
+    );
+    expect(testConnectionCalls).toHaveLength(1);
   });
 });
 
@@ -864,7 +878,18 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
   it('runs the Local CLI connection test for the selected installed agent', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(input.toString()).toBe('/api/test/connection');
+      const url = input.toString();
+      // MemoryModelInline mounts inside the Local CLI section and reads
+      // the current extraction override from /api/memory on mount.
+      // Swallow it here so the assertion below only counts the
+      // test-connection POST the user actually triggered.
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
       expect(JSON.parse(String(init?.body))).toMatchObject({
         mode: 'agent',
         agentId: 'codex',
@@ -898,7 +923,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Codex CLI replied in 31 ms/)).toBeTruthy();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const testConnectionCalls = fetchMock.mock.calls.filter(
+      ([input]) => input.toString() === '/api/test/connection',
+    );
+    expect(testConnectionCalls).toHaveLength(1);
   });
 });
 
@@ -1911,19 +1939,18 @@ describe('SettingsDialog pets interactions', () => {
   });
 });
 
-describe('SettingsDialog skills and design systems interactions', () => {
+describe('SettingsDialog skills section', () => {
   afterEach(() => {
     cleanup();
   });
 
-  it('renders the skills library by default and filters by mode and search', async () => {
+  it('lists functional skills and filters them by mode + search', async () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
+      { initialSection: 'skills' },
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Skills3/i })).toBeTruthy();
       expect(screen.getByText('blog-post')).toBeTruthy();
       expect(screen.getByText('sales-deck')).toBeTruthy();
     });
@@ -1939,17 +1966,17 @@ describe('SettingsDialog skills and design systems interactions', () => {
     expect(screen.queryByText('dashboard')).toBeNull();
   });
 
-  it('opens a skill preview and persists disabled skills from toggle switches', async () => {
+  it('opens a skill detail panel and persists disabled skills from toggle switches', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
+      { initialSection: 'skills' },
     );
 
     await waitFor(() => {
       expect(screen.getByText('blog-post')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByTitle('Preview')[0] as HTMLElement);
+    fireEvent.click(screen.getByText('blog-post'));
     await waitFor(() => {
       expect(fetchSkillMock).toHaveBeenCalledWith('blog-post');
       expect(screen.getByText('skill body for blog-post')).toBeTruthy();
@@ -1967,17 +1994,34 @@ describe('SettingsDialog skills and design systems interactions', () => {
     );
   });
 
-  it('switches to design systems, previews details, and persists disabled design systems', async () => {
-    const { onPersist } = renderSettingsDialog(
+  it('shows an empty state when search matches nothing', async () => {
+    renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
+      { initialSection: 'skills' },
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Design Systems2/i })).toBeTruthy();
+      expect(screen.getByText('blog-post')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: /Design Systems2/i }));
+    fireEvent.change(screen.getByPlaceholderText('Search...'), {
+      target: { value: 'zzz-no-match' },
+    });
+    expect(screen.getByText('No items match your search.')).toBeTruthy();
+  });
+});
+
+describe('SettingsDialog design systems section', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('lists design systems and persists disabled selections from toggle switches', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'designSystems' },
+    );
+
     await waitFor(() => {
       expect(screen.getByText('Neutral Modern')).toBeTruthy();
       expect(screen.getByText('Signal Green')).toBeTruthy();
@@ -2002,22 +2046,6 @@ describe('SettingsDialog skills and design systems interactions', () => {
       }),
       {},
     );
-  });
-
-  it('shows an empty state when library search returns no results', async () => {
-    renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('blog-post')).toBeTruthy();
-    });
-
-    fireEvent.change(screen.getByPlaceholderText('Search...'), {
-      target: { value: 'zzz-no-match' },
-    });
-    expect(screen.getByText('No items match your search.')).toBeTruthy();
   });
 });
 

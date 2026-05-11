@@ -619,7 +619,23 @@ export function DesignFilesPanel({
             </div>
           ) : null}
           {files.length === 0 && liveArtifacts.length === 0 ? (
-            <div className="df-empty">{t('designFiles.empty')}</div>
+            <div className="df-empty" data-testid="design-files-empty">
+              <div className="df-empty-pill">
+                <span className="df-empty-title">
+                  {t('designFiles.empty')}
+                </span>
+                <button
+                  type="button"
+                  className="df-empty-cta"
+                  data-testid="design-files-empty-new-sketch"
+                  onClick={onNewSketch}
+                  title={t('designFiles.newSketch')}
+                >
+                  <Icon name="pencil" size={13} />
+                  <span>{t('designFiles.newSketch')}</span>
+                </button>
+              </div>
+            </div>
           ) : (
             <>
               {files.length > 0 ? (

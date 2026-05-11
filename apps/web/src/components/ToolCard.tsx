@@ -18,9 +18,11 @@ interface Props {
   use: Extract<AgentEvent, { kind: 'tool_use' }>;
   result?: Extract<AgentEvent, { kind: 'tool_result' }> | undefined;
   // True while the parent run is still streaming. Forwarded to registered
-  // renderers via `status` so they can distinguish "executing" (run alive)
-  // from "inProgress" (run dead before result arrived).
+  // renderers via `status` so they can show live execution.
   runStreaming?: boolean;
+  // True when the parent run reached a successful terminal status. Missing
+  // tool results in successful completed turns are rendered as done.
+  runSucceeded?: boolean;
   // Set of file names that exist in the project folder. When the tool's
   // `file_path`/`path` argument's basename appears in this set we surface
   // an "open" button on the card. Pass `undefined` to skip the existence
@@ -35,10 +37,13 @@ export function ToolCard({
   use,
   result,
   runStreaming,
+  runSucceeded,
   projectFileNames,
   onRequestOpenFile,
 }: Props) {
   const name = use.name;
+  const isStreaming = runStreaming ?? false;
+  const isSucceeded = runSucceeded ?? false;
   const custom = getToolRenderer(name);
   if (custom) {
     // A misbehaving third-party renderer must not take down the whole
@@ -46,26 +51,26 @@ export function ToolCard({
     // built-in family card. (React's own error boundaries still cover
     // throws raised inside the returned tree once it's mounted.)
     try {
-      const node = custom(toRenderProps(use, result, runStreaming ?? false));
+      const node = custom(toRenderProps(use, result, isStreaming, isSucceeded));
       if (node !== undefined && node !== null && node !== false) return <>{node}</>;
     } catch (err) {
       console.error(`[ToolCard] custom renderer for "${name}" threw; falling back`, err);
     }
   }
   const ctx: FileToolCtx = { projectFileNames, onRequestOpenFile };
-  if (name === 'TodoWrite' || name === 'todowrite') return <TodoCard input={use.input} />;
+  if (name === 'TodoWrite' || name === 'todowrite') return <TodoCard input={use.input} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'Write' || name === 'write' || name === 'create_file')
-    return <FileWriteCard input={use.input} result={result} ctx={ctx} />;
+    return <FileWriteCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
   if (name === 'Edit' || name === 'str_replace_edit')
-    return <FileEditCard input={use.input} result={result} ctx={ctx} />;
+    return <FileEditCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
   if (name === 'Read' || name === 'read_file')
-    return <FileReadCard input={use.input} result={result} ctx={ctx} />;
-  if (name === 'Bash') return <BashCard input={use.input} result={result} />;
-  if (name === 'Glob' || name === 'list_files') return <GlobCard input={use.input} result={result} />;
-  if (name === 'Grep') return <GrepCard input={use.input} result={result} />;
+    return <FileReadCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
+  if (name === 'Bash') return <BashCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (name === 'Glob' || name === 'list_files') return <GlobCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} />;
   if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} />;
-  return <GenericCard name={name} input={use.input} result={result} />;
+  return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
 }
 
 interface FileToolCtx {
@@ -94,10 +99,10 @@ function OpenInTabButton({ filePath, ctx }: { filePath: string; ctx: FileToolCtx
   );
 }
 
-function TodoCard({ input }: { input: unknown }) {
+function TodoCard({ input, runStreaming, runSucceeded }: { input: unknown; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const todos = parseTodoWriteInput(input);
-  if (todos.length === 0) return <GenericCard name="TodoWrite" input={input} />;
+  if (todos.length === 0) return <GenericCard name="TodoWrite" input={input} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
   const done = todos.filter((todo) => todo.status === 'completed').length;
   return (
     <div className="op-card op-todo">
@@ -127,10 +132,14 @@ function TodoCard({ input }: { input: unknown }) {
 function FileWriteCard({
   input,
   result,
+  runStreaming,
+  runSucceeded,
   ctx,
 }: {
   input: unknown;
   result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
   ctx: FileToolCtx;
 }) {
   const t = useT();
@@ -146,7 +155,7 @@ function FileWriteCard({
         {lines !== null ? (
           <span className="op-meta">{t('tool.lines', { n: lines })}</span>
         ) : null}
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <OpenInTabButton filePath={file} ctx={ctx} />
       </div>
     </div>
@@ -156,10 +165,14 @@ function FileWriteCard({
 function FileEditCard({
   input,
   result,
+  runStreaming,
+  runSucceeded,
   ctx,
 }: {
   input: unknown;
   result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
   ctx: FileToolCtx;
 }) {
   const t = useT();
@@ -182,7 +195,7 @@ function FileEditCard({
         <span className="op-meta">
           {editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}
         </span>
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <OpenInTabButton filePath={file} ctx={ctx} />
       </div>
     </div>
@@ -192,10 +205,14 @@ function FileEditCard({
 function FileReadCard({
   input,
   result,
+  runStreaming,
+  runSucceeded,
   ctx,
 }: {
   input: unknown;
   result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
   ctx: FileToolCtx;
 }) {
   const t = useT();
@@ -207,14 +224,14 @@ function FileReadCard({
         <span className="op-icon op-icon-read" aria-hidden>↗</span>
         <span className="op-title">{t('tool.read')}</span>
         <code className="op-path">{file}</code>
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <OpenInTabButton filePath={file} ctx={ctx} />
       </div>
     </div>
   );
 }
 
-function BashCard({ input, result }: { input: unknown; result?: Props['result'] }) {
+function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { command?: string; description?: string };
   const command = obj.command ?? '';
@@ -226,7 +243,7 @@ function BashCard({ input, result }: { input: unknown; result?: Props['result'] 
         <span className="op-icon" aria-hidden>$</span>
         <span className="op-title">{t('tool.bash')}</span>
         {desc ? <span className="op-meta op-desc">{desc}</span> : null}
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         {result && result.content ? (
           <button className="op-toggle" onClick={() => setOpen((o) => !o)}>
             {open ? t('tool.hide') : t('tool.output')}
@@ -241,7 +258,7 @@ function BashCard({ input, result }: { input: unknown; result?: Props['result'] 
   );
 }
 
-function GlobCard({ input, result }: { input: unknown; result?: Props['result'] }) {
+function GlobCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { pattern?: string; path?: string };
   return (
@@ -253,13 +270,13 @@ function GlobCard({ input, result }: { input: unknown; result?: Props['result'] 
         {obj.path ? (
           <span className="op-meta">{t('tool.in', { path: obj.path })}</span>
         ) : null}
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
       </div>
     </div>
   );
 }
 
-function GrepCard({ input, result }: { input: unknown; result?: Props['result'] }) {
+function GrepCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { pattern?: string; path?: string; glob?: string };
   return (
@@ -271,7 +288,7 @@ function GrepCard({ input, result }: { input: unknown; result?: Props['result'] 
         {obj.path ? (
           <span className="op-meta">{t('tool.in', { path: obj.path })}</span>
         ) : null}
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
       </div>
     </div>
   );
@@ -309,10 +326,14 @@ function GenericCard({
   name,
   input,
   result,
+  runStreaming,
+  runSucceeded,
 }: {
   name: string;
   input: unknown;
   result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
 }) {
   const summary = describeInput(input);
   return (
@@ -321,16 +342,17 @@ function GenericCard({
         <span className="op-icon" aria-hidden>·</span>
         <span className="op-title">{name}</span>
         {summary ? <span className="op-meta">{truncate(summary, 200)}</span> : null}
-        <ResultBadge result={result} />
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
       </div>
     </div>
   );
 }
 
-function ResultBadge({ result }: { result?: Props['result'] }) {
+function ResultBadge({ result, runStreaming, runSucceeded }: { result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
-  if (!result) return <span className="op-status op-status-running">{t('tool.running')}</span>;
-  if (result.isError) return <span className="op-status op-status-error">{t('tool.error')}</span>;
+  if (!result && runStreaming) return <span className="op-status op-status-running">{t('tool.running')}</span>;
+  if (!result && !runSucceeded) return <span className="op-status op-status-error">{t('tool.error')}</span>;
+  if (result?.isError) return <span className="op-status op-status-error">{t('tool.error')}</span>;
   return <span className="op-status op-status-ok">{t('tool.done')}</span>;
 }
 

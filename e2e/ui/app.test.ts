@@ -62,32 +62,35 @@ for (const entry of automatedUiScenarios()) {
     }
 
     if (entry.flow === 'example-use-prompt') {
+      const exampleSummary = {
+        id: 'warm-utility-example',
+        name: 'Warm Utility Example',
+        description: 'A warm utility prototype example.',
+        triggers: [],
+        mode: 'prototype',
+        platform: 'desktop',
+        scenario: 'product',
+        previewType: 'html',
+        designSystemRequired: false,
+        defaultFor: ['prototype'],
+        upstream: null,
+        featured: 1,
+        fidelity: 'high-fidelity',
+        speakerNotes: null,
+        animations: null,
+        hasBody: true,
+        examplePrompt: entry.prompt,
+      };
       await page.route('**/api/skills', async (route) => {
-        await route.fulfill({
-          json: {
-            skills: [
-              {
-                id: 'warm-utility-example',
-                name: 'Warm Utility Example',
-                description: 'A warm utility prototype example.',
-                triggers: [],
-                mode: 'prototype',
-                platform: 'desktop',
-                scenario: 'product',
-                previewType: 'html',
-                designSystemRequired: false,
-                defaultFor: ['prototype'],
-                upstream: null,
-                featured: 1,
-                fidelity: 'high-fidelity',
-                speakerNotes: null,
-                animations: null,
-                hasBody: true,
-                examplePrompt: entry.prompt,
-              },
-            ],
-          },
-        });
+        await route.fulfill({ json: { skills: [exampleSummary] } });
+      });
+      // The skills/design-templates split (see specs/current/
+      // skills-and-design-templates.md) moved the EntryView Templates
+      // tab onto its own daemon registry. The fixture skill above now
+      // also has to be served on the design-templates surface so the
+      // gallery card the test clicks actually renders.
+      await page.route('**/api/design-templates', async (route) => {
+        await route.fulfill({ json: { designTemplates: [exampleSummary] } });
       });
     }
 
@@ -667,7 +670,7 @@ async function runExampleUsePromptFlow(
   page: Page,
   entry: UiScenario,
 ) {
-  await page.getByTestId('entry-tab-examples').click();
+  await page.getByTestId('entry-tab-templates').click();
   await expect(page.getByTestId('example-card-warm-utility-example')).toBeVisible();
   await page.getByTestId('example-use-prompt-warm-utility-example').click();
 

@@ -26,6 +26,14 @@ describe("copyBundledResourceTrees", () => {
         "pet.json",
       );
       await mkdir(join(workspaceRoot, "skills", "sample"), { recursive: true });
+      // The skills/design-templates split (see specs/current/
+      // skills-and-design-templates.md) added a separate top-level
+      // `design-templates/` tree that copyBundledResourceTrees now also
+      // bundles. Create it in the fixture so the recursive copy does not
+      // fail with ENOENT before reaching the prompt-templates assertion.
+      await mkdir(join(workspaceRoot, "design-templates", "sample"), {
+        recursive: true,
+      });
       await mkdir(join(workspaceRoot, "design-systems", "sample"), {
         recursive: true,
       });
