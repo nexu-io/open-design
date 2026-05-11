@@ -2577,9 +2577,9 @@ function ConnectorSection({
   // the saved state with the same UI as a key loaded from disk.
   const [keySaveStatus, setKeySaveStatus] =
     useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const keySavedTimerRef = useRef<number | null>(null);
   const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
-  // Clear the saved-state timer on unmount
+  const keySavedTimerRef = useRef<number | null>(null);
+  // Clear the saved-state timer on unmount to avoid setState after unmount
   useEffect(() => {
     return () => {
       if (keySavedTimerRef.current != null) {
@@ -2606,10 +2606,13 @@ function ConnectorSection({
         apiKeyTail: pendingKey.trim().slice(-4),
       });
       setCatalogRefreshNonce((nonce) => nonce + 1);
-      setKeySaveStatus('saved');
+      // Clear any existing timer before starting a new one to avoid
+      // a stale timeout flipping status back to 'idle' after a
+      // subsequent save or clear.
       if (keySavedTimerRef.current != null) {
         window.clearTimeout(keySavedTimerRef.current);
       }
+      setKeySaveStatus('saved');
       keySavedTimerRef.current = window.setTimeout(() => {
         setKeySaveStatus('idle');
       }, 2000);
@@ -2700,6 +2703,9 @@ function ConnectorSection({
       setCatalogRefreshNonce((nonce) => nonce + 1);
       setClearStage('idle');
       setClearArmed(false);
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
       setKeySaveStatus('idle');
     } catch {
       setKeySaveStatus('error');
