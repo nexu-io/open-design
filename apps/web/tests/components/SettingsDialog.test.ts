@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
+  autosaveDiffIsMeaningful,
   canFetchProviderModels,
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
@@ -443,6 +444,86 @@ describe('deriveComposioCredentialState', () => {
     expect(
       deriveComposioCredentialState({ apiKey: '   \t\n', apiKeyConfigured: true }),
     ).toBe('saved');
+  });
+});
+
+describe('autosaveDiffIsMeaningful', () => {
+  // Issue #1187: typing a Composio API key draft fired the autosave loop
+  // and made the global "All changes saved" indicator flash for every
+  // keystroke even though the draft is intentionally stripped before
+  // anything reaches the daemon. The helper now suppresses that flicker
+  // by reporting draft-only diffs as non-events.
+
+  it('treats the initial (null) snapshot as meaningful so first edits still fire', () => {
+    expect(autosaveDiffIsMeaningful(null, baseConfig)).toBe(true);
+  });
+
+  it('treats the identical reference as a no-op', () => {
+    expect(autosaveDiffIsMeaningful(baseConfig, baseConfig)).toBe(false);
+  });
+
+  it('returns true when a non-composio field changes (e.g. model)', () => {
+    const next: AppConfig = { ...baseConfig, model: 'claude-opus-4-7' };
+    expect(autosaveDiffIsMeaningful(baseConfig, next)).toBe(true);
+  });
+
+  it('returns false when only the Composio apiKey draft changes', () => {
+    const prev: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '', apiKeyConfigured: true, apiKeyTail: 'abcd' },
+    };
+    const next: AppConfig = {
+      ...prev,
+      composio: { ...prev.composio, apiKey: '111' },
+    };
+    expect(autosaveDiffIsMeaningful(prev, next)).toBe(false);
+  });
+
+  it('returns true when apiKeyConfigured changes (real save coming back from the daemon)', () => {
+    const prev: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '', apiKeyConfigured: false },
+    };
+    const next: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '', apiKeyConfigured: true, apiKeyTail: 'abcd' },
+    };
+    expect(autosaveDiffIsMeaningful(prev, next)).toBe(true);
+  });
+
+  it('returns true when apiKeyTail changes (daemon echoed back a new tail)', () => {
+    const prev: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '', apiKeyConfigured: true, apiKeyTail: 'abcd' },
+    };
+    const next: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '', apiKeyConfigured: true, apiKeyTail: 'wxyz' },
+    };
+    expect(autosaveDiffIsMeaningful(prev, next)).toBe(true);
+  });
+
+  it('handles the "previously no composio block, now drafting" transition without flicker', () => {
+    const next: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '111' },
+    };
+    // The prev cfg has no composio block; next has a draft-only composio block.
+    // This is a draft-only change for autosave purposes.
+    expect(autosaveDiffIsMeaningful(baseConfig, next)).toBe(false);
+  });
+
+  it('still returns true when a draft AND a real field both change', () => {
+    const prev: AppConfig = {
+      ...baseConfig,
+      composio: { apiKey: '', apiKeyConfigured: true },
+    };
+    const next: AppConfig = {
+      ...prev,
+      model: 'claude-opus-4-7',
+      composio: { ...prev.composio, apiKey: '111' },
+    };
+    expect(autosaveDiffIsMeaningful(prev, next)).toBe(true);
   });
 });
 

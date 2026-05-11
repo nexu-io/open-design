@@ -1220,12 +1220,22 @@ export function SettingsDialog({
   const mediaProvidersChangeVersionRef = useRef(0);
   const lastSyncedMediaProvidersVersionRef = useRef(0);
   const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
+  // Snapshot of the last cfg that triggered a real autosave cycle. Used
+  // to distinguish a meaningful edit from a Composio-draft-only diff so
+  // the indicator does not flash "All changes saved" while the user is
+  // still typing a replacement key that the daemon has not received.
+  const lastAutosavedCfgRef = useRef<AppConfig | null>(null);
   autosaveLatestRef.current = cfg;
   useEffect(() => {
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
+      lastAutosavedCfgRef.current = cfg;
       return;
     }
+    if (!autosaveDiffIsMeaningful(lastAutosavedCfgRef.current, cfg)) {
+      return;
+    }
+    lastAutosavedCfgRef.current = cfg;
     setAutosaveStatus('pending');
     if (autosaveSavedTimerRef.current != null) {
       window.clearTimeout(autosaveSavedTimerRef.current);
@@ -2579,6 +2589,46 @@ export function deriveComposioCredentialState(
   if (hasSavedKey) return 'saved';
   if (hasPendingEdit) return 'pending-new';
   return 'empty';
+}
+
+/**
+ * Compare two configs ignoring the in-flight Composio API key draft.
+ *
+ * The autosave loop fires on every committed edit to `cfg`, including
+ * keystrokes in the Composio API key field. That field is intentionally
+ * stripped before anything reaches localStorage or the daemon (see
+ * `buildPersistedConfig` in `App.tsx` and the "Save key" gesture in
+ * `ConnectorSection`), so a draft-only diff is a non-event for the
+ * persistence layer.
+ *
+ * Returning `false` from this helper lets the autosave effect skip the
+ * pending -> saving -> saved status flicker for that case so the global
+ * "All changes saved" indicator never reports a write the daemon never
+ * received. Returns `true` for any other diff (including
+ * apiKeyConfigured / apiKeyTail changes, which DO come from the daemon
+ * after a real save).
+ */
+export function autosaveDiffIsMeaningful(
+  prev: AppConfig | null,
+  next: AppConfig,
+): boolean {
+  if (prev === null) return true;
+  if (prev === next) return false;
+  const stripDraftKey = (cfg: AppConfig): AppConfig => {
+    if (!cfg.composio) return cfg;
+    const { apiKey: _draft, ...rest } = cfg.composio;
+    // A composio block with no persistent state (just the draft apiKey)
+    // is functionally equivalent to no composio block at all -- nothing
+    // would be written to localStorage or the daemon. Collapse it so the
+    // "I added a draft" transition does not register as a meaningful
+    // diff.
+    if (Object.keys(rest).length === 0) {
+      const { composio: _composio, ...withoutComposio } = cfg;
+      return withoutComposio as AppConfig;
+    }
+    return { ...cfg, composio: rest };
+  };
+  return JSON.stringify(stripDraftKey(prev)) !== JSON.stringify(stripDraftKey(next));
 }
 
 function ConnectorSection({
