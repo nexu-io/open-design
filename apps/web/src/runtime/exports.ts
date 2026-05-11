@@ -88,7 +88,7 @@ export function buildDesignManifestContent(opts: {
     },
     screens: screenFiles.map((file) => {
       const isIndex = /(^|\/)index\.html?$/i.test(file);
-      const isLanding = /(^|\/)(landing|marketing|home)\.html?$/i.test(file) || /landing|marketing/i.test(file);
+      const isLanding = /(^|\/)(landing|marketing)\.html?$/i.test(file) || /landing|marketing/i.test(file);
       const isOsWidget = /widget|live-activity|lock-screen|home-screen/i.test(file);
       const isApp = /app|dashboard|workspace|generator|translator|editor|screen/i.test(file);
       return {

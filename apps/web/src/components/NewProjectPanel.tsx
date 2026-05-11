@@ -2230,7 +2230,7 @@ function buildMetadata(input: {
     };
   }
   if (input.tab === 'deck') {
-    return { kind, ...base, speakerNotes: input.speakerNotes, ...inspirations };
+    return { kind, speakerNotes: input.speakerNotes, ...inspirations };
   }
   if (input.tab === 'template') {
     if (input.templateId == null) {

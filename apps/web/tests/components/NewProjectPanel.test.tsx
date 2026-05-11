@@ -278,6 +278,9 @@ describe('NewProjectPanel design system defaults', () => {
         }),
       }),
     );
+    const payload = onCreate.mock.calls[0]?.[0];
+    expect(payload.metadata).not.toHaveProperty('platform');
+    expect(payload.metadata).not.toHaveProperty('platformTargets');
   });
 
   it('prevents template creation when there are no saved templates and enables creation once one exists', () => {

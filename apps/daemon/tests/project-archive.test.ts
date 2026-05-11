@@ -127,6 +127,24 @@ describe('buildProjectArchive', () => {
     });
   });
 
+  it('does not classify plain home.html as a landing page in daemon archive manifests', async () => {
+    const dir = path.join(projectsRoot, projectId, 'product-app');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'home.html'), '<!doctype html>home');
+    await writeFile(path.join(dir, 'dashboard.html'), '<!doctype html>dashboard');
+    await writeFile(path.join(dir, 'marketing.html'), '<!doctype html>marketing');
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'product-app');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+    const screens = new Map(manifest.screens.map((screen: { file: string; role: string }) => [screen.file, screen.role]));
+
+    expect(screens.get('home.html')).not.toBe('landing-page');
+    expect(screens.get('marketing.html')).toBe('landing-page');
+    expect(screens.get('dashboard.html')).toBe('product-screen');
+  });
+
   it('does not overwrite an existing design handoff file', async () => {
     const dir = path.join(projectsRoot, projectId, 'custom-handoff');
     await mkdir(dir, { recursive: true });

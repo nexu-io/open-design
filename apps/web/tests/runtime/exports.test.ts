@@ -121,6 +121,19 @@ describe('buildDesignHandoffContent', () => {
     });
     expect(manifest.implementationChecklist.join(' ')).toContain('landing pages, in-app modules, and OS widgets');
   });
+
+  it('does not classify plain home.html as a landing page in the manifest', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Product App',
+      entryFile: 'home.html',
+      files: ['home.html', 'dashboard.html', 'marketing.html'],
+    }));
+
+    const screens = new Map(manifest.screens.map((screen: { file: string; role: string }) => [screen.file, screen.role]));
+    expect(screens.get('home.html')).not.toBe('landing-page');
+    expect(screens.get('marketing.html')).toBe('landing-page');
+    expect(screens.get('dashboard.html')).toBe('product-screen');
+  });
 });
 
 describe('exportProjectAsPdf', () => {

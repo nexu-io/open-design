@@ -89,6 +89,19 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('`references/html-in-canvas.md`');
   });
 
+  it('does not add the responsive web contract to deck metadata without platform fields', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'deck',
+        speakerNotes: true,
+      } as any,
+    });
+
+    expect(prompt).toContain('- **kind**: deck');
+    expect(prompt).not.toContain('**responsive web contract**');
+    expect(prompt).not.toContain('**platformTargets**');
+  });
+
   describe('artifact handoff no-emit clauses (#1143)', () => {
     it('drops the absolute "non-negotiable" framing in favor of conditional language', () => {
       const prompt = composeSystemPrompt({});
