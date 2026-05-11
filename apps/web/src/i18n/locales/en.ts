@@ -83,6 +83,15 @@ export const en: Dict = {
   'settings.testAgentMissing': '{agentName} is not installed or not in PATH.',
   'settings.testAgentSpawn': 'Could not start {agentName}: {detail}.',
   'settings.testUnknown': 'Test failed: {detail}',
+  'settings.agentInstall.install': 'Install',
+  'settings.agentInstall.docs': 'Docs',
+  'settings.agentInstall.pathHint':
+    'If you installed a CLI with npm or Homebrew and it still shows as not installed, ensure the tool\'s bin directory is on the PATH the Open Design daemon inherits (Terminal vs GUI apps can differ on macOS). See QUICKSTART.md (section "Local agent CLI and PATH").',
+  'settings.agentInstall.stepOpenLinks': 'Open Install or Docs for your preferred agent.',
+  'settings.agentInstall.stepAuth':
+    'Authenticate with the vendor CLI (sign in or add API credentials) before returning to Open Design.',
+  'settings.agentInstall.stepRescan': 'Click Rescan in this section.',
+  'settings.agentInstall.stepSelect': 'Select the agent card once it appears as installed.',
   'settings.noAgentsDetected':
     'No agents detected yet. Install one of Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, or GitHub Copilot CLI, then click Rescan.',
   'settings.apiSection': 'Anthropic API',
@@ -94,6 +103,13 @@ export const en: Dict = {
   'settings.show': 'Show',
   'settings.hide': 'Hide',
   'settings.model': 'Model',
+  'settings.fetchModels': 'Fetch models',
+  'settings.fetchModelsTitle': 'Fetch available models from this provider',
+  'settings.fetchModelsRunning': 'Fetching models…',
+  'settings.fetchModelsSuccess': 'Fetched {count} models.',
+  'settings.fetchModelsEmpty': 'No compatible text models were returned.',
+  'settings.fetchModelsUnsupported': 'Model discovery is not available for this protocol.',
+  'settings.fetchModelsFailed': 'Could not fetch models: {detail}',
   'settings.suggestedModelsHint':
     'These are suggested models for this protocol. Your provider may support different models.',
   'settings.baseUrl': 'Base URL',
@@ -101,6 +117,8 @@ export const en: Dict = {
   'settings.azureDeploymentModel': 'Deployment name',
   'settings.azureDeploymentModelHint':
     'For Azure OpenAI, this field is used as the deployment name in /openai/deployments/<model>. Enter the deployment name you created in Azure.',
+  'settings.azureModelFetchHint':
+    'For Azure OpenAI, enter the deployment name you created in Azure. Automatic deployment discovery is not available from this BYOK endpoint.',
   'settings.apiVersion': 'API version',
   'settings.maxTokens': 'Max tokens (optional)',
   'settings.maxTokensHint':
@@ -126,7 +144,7 @@ export const en: Dict = {
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
-  'settings.cliEnvClaudeConfigDir': 'Claude Code config dir',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelCustom': 'Custom (type below)…',
@@ -147,6 +165,10 @@ export const en: Dict = {
   'settings.mediaProviderClearConfirm': 'Clear saved {name} settings? You\'ll need to enter them again to use {name}.',
   'settings.mediaProviderPlaceholder': 'Paste API key',
   'settings.mediaProviderBaseUrlPlaceholder': 'Override default base URL',
+  'settings.mediaProviderReload': 'Reload from daemon',
+  'settings.mediaProviderReloadError': 'Could not reload media provider settings from the local daemon.',
+  'settings.mediaProviderReloadSuccess': 'Reloaded media provider settings from the local daemon.',
+  'settings.mediaProviderLoadError': 'Could not load media provider settings from the local daemon. Using browser-saved settings for now.',
   'settings.privacy': 'Privacy',
   'settings.privacyHint': 'What data is shared with the Open Design team',
   'settings.privacyConsentKicker': 'Help us improve Open Design',
@@ -174,6 +196,53 @@ export const en: Dict = {
   'settings.runtimePackaged': 'Packaged app',
   'settings.runtimeDevelopment': 'Development',
   'settings.versionUnavailable': 'Version details are unavailable while the daemon is offline.',
+
+  // MCP server settings
+  'settings.mcpTitle': 'MCP server',
+  'settings.mcpHint':
+    'Lets a coding agent in another repo (Claude Code, Cursor, VS Code, Antigravity, Zed, Windsurf) read your Open Design projects. Use it to pull a design into your app without exporting a zip first.',
+  'settings.mcpDaemonError':
+    "Couldn't reach the local daemon to resolve install paths ({error}). Make sure Open Design is running, then reopen this panel.",
+  'settings.mcpBuildDaemon': 'Build the daemon first.',
+  'settings.mcpNodeMissing': 'Node binary is missing.',
+  'settings.mcpBuildHint':
+    'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.',
+  'settings.mcpMethodCli': 'CLI command',
+  'settings.mcpInstructionCli': 'Run this in your terminal.',
+  'settings.mcpMethodToml': 'TOML config',
+  'settings.mcpInstructionCodex':
+    'Append this table to {path}. The same config is shared between the Codex CLI and the Codex IDE extension.',
+  'settings.mcpMethodOneClick': 'One-click install',
+  'settings.mcpInstructionCursor':
+    'Click "Install in Cursor" to install with an approval dialog, or merge this JSON into {path}.',
+  'settings.mcpDeeplinkInstallCursor': 'Install in Cursor',
+  'settings.mcpMethodJson': 'JSON config',
+  'settings.mcpInstructionCopilot':
+    'Open the Command Palette ({shortcut}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.',
+  'settings.mcpInstructionAntigravity':
+    'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
+  'settings.mcpInstructionZed':
+    'Open Zed Settings ({shortcut}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".',
+  'settings.mcpInstructionWindsurf':
+    'Open {path} (or use the MCPs icon in Cascade → Configure) and merge:',
+  'settings.mcpCopyAria': 'Copy MCP configuration snippet',
+  'settings.mcpResolvingFailed': '# resolving paths failed, see the error above',
+  'settings.mcpLoadingPaths': '# loading install paths from the local daemon…',
+  'settings.mcpCopied': 'Copied',
+  'settings.mcpCopy': 'Copy',
+  'settings.mcpCursorApproval': 'Cursor pops an approval dialog before writing the config.',
+  'settings.mcpRestartNote': 'Restart your client to pick up the new server.',
+  'settings.mcpRestartDetail':
+    'Most editors only load MCP servers at startup. In Cursor / VS Code / Antigravity / Windsurf you can run `Developer: Reload Window` from the command palette instead of a full restart. Zed and Claude Code need a quit and reopen.',
+  'settings.mcpCapabilitiesTitle': 'What your agent can do',
+  'settings.mcpCapabilityRead':
+    'Read or search any file in a project (HTML, JSX, CSS, JSON, SVG, Markdown).',
+  'settings.mcpCapabilityPull':
+    'Pull a design bundle in one call: the entry file plus every CSS variable, component, and font it references.',
+  'settings.mcpCapabilityDefault':
+    'Default to the project and file you have open in Open Design, so you can say "build this in my app" without re-stating which design.',
+  'settings.mcpRunningNote':
+    'Open Design must be running for MCP tool calls to succeed. If you started your coding agent before opening Open Design, restart the agent so it can reach the live daemon.',
 
   'entry.tabDesigns': 'Designs',
   'entry.tabExamples': 'Examples',
@@ -470,6 +539,8 @@ export const en: Dict = {
   'examples.previewModalTitle': 'Open full preview (modal)',
   'examples.shareTitle': 'Share this example',
   'examples.shareLoadFirst': 'Hover to load preview first',
+  'examples.unavailablePlaceholder': 'No shipped {kind} preview — open to learn more',
+  'examples.shareUnavailable': 'No shipped {kind} preview to share',
   'examples.shareMenu': 'Share ▾',
   'examples.exportPdfAllSlides': 'Export as PDF (all slides)',
   'examples.exportPptxLocked': 'Export as PPTX… (open template first)',
@@ -602,6 +673,8 @@ export const en: Dict = {
   'preview.errorTitle': 'Couldn\'t load this example.',
   'preview.errorBody': 'The example HTML failed to fetch. Make sure Open Design is running and try again.',
   'preview.retry': 'Retry',
+  'preview.unavailableTitle': 'No shipped preview for this skill.',
+  'preview.unavailableBody': 'This skill produces {kind} output — run the prompt in chat to generate one.',
   'preview.showSidebar': 'Show {label}',
   'preview.hideSidebar': 'Hide {label}',
 
@@ -650,12 +723,22 @@ export const en: Dict = {
   'designFiles.previewClose': 'Close preview',
   'designFiles.modified': 'Modified {time} · {size}',
   'designFiles.weeksAgo': '{n}w ago',
+  'designFiles.groupBy': 'Group by',
+  'designFiles.groupByKind': 'Kind',
+  'designFiles.groupByModified': 'Modified',
+  'designFiles.expandGroup': 'Expand',
+  'designFiles.collapseGroup': 'Collapse',
   'designFiles.sectionPages': 'Pages',
   'designFiles.sectionScripts': 'Scripts',
   'designFiles.sectionImages': 'Images',
   'designFiles.sectionSketches': 'Sketches',
   'designFiles.sectionLiveArtifacts': 'Live artifacts',
   'designFiles.sectionOther': 'Other',
+  'designFiles.modifiedToday': 'Today',
+  'designFiles.modifiedYesterday': 'Yesterday',
+  'designFiles.modifiedPrevious7Days': 'Previous 7 days',
+  'designFiles.modifiedPrevious30Days': 'Previous 30 days',
+  'designFiles.modifiedOlder': 'Older',
   'designFiles.showMore': 'Show +{n} more',
   'designFiles.kindHtml': 'HTML page',
   'designFiles.kindImage': 'Image',
@@ -1178,6 +1261,15 @@ export const en: Dict = {
   'settings.autosaveSaved': 'All changes saved',
   'settings.autosaveError': 'Couldn\u2019t save changes. The local daemon may be offline.',
   'settings.libraryToggleLabel': 'Toggle',
+  'settings.libraryInstall': 'Install',
+  'settings.libraryInstallGithub': 'GitHub',
+  'settings.libraryInstallLocal': 'Local Path',
+  'settings.libraryInstallUrl': 'https://github.com/owner/repo',
+  'settings.libraryInstallPath': '/path/to/skill-folder',
+  'settings.libraryInstallButton': 'Install',
+  'settings.libraryUninstall': 'Uninstall',
+  'settings.libraryBuiltIn': 'Built-in',
+  'settings.libraryInstalled': 'Installed',
   'settings.orbit.eyebrow': 'Automation',
   'settings.orbit.title': 'Orbit',
   'settings.orbit.navHint': 'Daily connector summary',

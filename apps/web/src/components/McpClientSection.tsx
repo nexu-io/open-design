@@ -51,6 +51,16 @@ interface DraftRow extends McpServerConfig {
   // map when the user steps away from the field.
   _envText?: string;
   _headersText?: string;
+  // Per-instance local id to use as a stable React `key` independent of
+  // the editable `id` field (avoids remounts & focus loss while editing).
+  _localId: string;
+}
+
+// Simple incrementing local id generator for row keys. Kept module-scoped
+// and deterministic for the lifetime of this UI instance.
+let NEXT_LOCAL_ID = 1;
+function genLocalId(): string {
+  return `mcp-row-${NEXT_LOCAL_ID++}`;
 }
 
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
@@ -58,6 +68,7 @@ function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
     ...s,
     _envText: s.env ? mapToText(s.env) : '',
     _headersText: s.headers ? mapToText(s.headers) : '',
+    _localId: genLocalId(),
   }));
 }
 
@@ -127,6 +138,7 @@ function rowFromTemplate(
     _envText: Object.keys(env).length > 0 ? mapToText(env) : '',
     _headersText: Object.keys(headers).length > 0 ? mapToText(headers) : '',
     _isNew: true,
+    _localId: genLocalId(),
   };
 }
 
@@ -141,6 +153,7 @@ function rowFromBlank(taken: ReadonlySet<string>): DraftRow {
     _envText: '',
     _headersText: '',
     _isNew: true,
+    _localId: genLocalId(),
   };
 }
 
@@ -397,7 +410,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
         <div className="mcp-rows">
           {rows.map((row, idx) => (
             <McpRow
-              key={`${row.id}-${idx}`}
+              key={row._localId}
               row={row}
               idx={idx}
               total={rows.length}
@@ -637,13 +650,11 @@ interface RowProps {
 
 function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMoveDown }: RowProps) {
   const isHttpLike = row.transport === 'http' || row.transport === 'sse';
-  // Every row starts collapsed. The Settings page is meant to be scannable
-  // — the user expands a row only when they need to edit fields or run the
-  // OAuth dance. Newly-added rows from the picker are no exception: their
-  // fields are already pre-filled from the template, so the user can save
-  // immediately if they don't need to customize anything.
   const [expanded, setExpanded] = useState<boolean>(false);
   const summaryTitle = row.label?.trim() || row.id || 'Unnamed MCP server';
+  const [showMcpExample, setShowMcpExample] = useState<boolean>(false);
+  const helperId = `mcp-json-helper-panel-${row._localId}`;
+
   return (
     <div
       className={`mcp-row${row.enabled ? '' : ' mcp-row-disabled'}${
@@ -668,9 +679,6 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             onChange={(e) => onChange({ label: e.target.value })}
           />
         ) : (
-          // When collapsed, the label is read-only — keeps the row compact
-          // and avoids accidental edits while scanning. The user can click
-          // the expand caret to reveal the full editable label input.
           <button
             type="button"
             className="mcp-row-summary-title"
@@ -859,6 +867,96 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
               </label>
             </>
           )}
+
+          <div className={`mcp-json-helper ${showMcpExample ? 'is-open' : ''}`}>
+            <button
+              type="button"
+              className="mcp-json-helper-toggle"
+              aria-expanded={showMcpExample}
+              aria-controls={helperId}
+              onClick={() => setShowMcpExample((prev) => !prev)}
+            >
+              <span className="mcp-json-helper-toggle-content">
+                <span className="mcp-json-helper-eye">
+                  <Icon name="eye" />
+                </span>
+                <span className="mcp-json-helper-toggle-text">
+                  Need help? Map your MCP server's JSON config using the example below.
+                </span>
+              </span>
+              <span className="mcp-json-helper-toggle-icon">
+                {showMcpExample ? (
+                  <Icon name="arrow-up" />
+                ) : (
+                  <Icon name="chevron-down" />
+                )}
+              </span>
+            </button>
+
+            {showMcpExample && (
+              <div className="mcp-json-helper-example" id={helperId}>
+                <div className="mcp-json-helper-example-head">
+                  Example MCP JSON
+                </div>
+                <pre className="mcp-json-helper-code">
+                  <code>
+                    <span className="json-punctuation">{"{"}</span>
+                    {"\n  "}
+                    <span className="json-key">"mcpServers"</span>
+                    <span className="json-punctuation">: {"{"}</span>
+                    {"\n    "}
+                    <span className="json-key">"tdesign"</span>
+                    <span className="json-punctuation">: {"{"}</span>
+                    {"\n      "}
+                    <span className="json-key">"command"</span>
+                    <span className="json-punctuation">:</span>{" "}
+                    <span className="json-string">"npx"</span>
+                    <span className="json-punctuation">,</span>
+                    {"\n      "}
+                    <span className="json-key">"args"</span>
+                    <span className="json-punctuation">: [</span>
+                    <span className="json-string">"-y"</span>
+                    <span className="json-punctuation">, </span>
+                    <span className="json-string">"tdesign-mcp-server@latest"</span>
+                    <span className="json-punctuation">],</span>
+                    {"\n      "}
+                    <span className="json-key">"env"</span>
+                    <span className="json-punctuation">: {"{"}</span>
+                    {"\n        "}
+                    <span className="json-key">"API_KEY"</span>
+                    <span className="json-punctuation">:</span>{" "}
+                    <span className="json-string">"your-key-here"</span>
+                    {"\n      "}
+                    <span className="json-punctuation">{"}"}</span>
+                    {"\n    "}
+                    <span className="json-punctuation">{"}"}</span>
+                    {"\n  "}
+                    <span className="json-punctuation">{"}"}</span>
+                    {"\n"}
+                    <span className="json-punctuation">{"}"}</span>
+                  </code>
+                </pre>
+                <div className="mcp-json-helper-conversion">
+                  <div>
+                    <strong>Command</strong>
+                    <code>npx</code>
+                  </div>
+                  <div>
+                    <strong>Args</strong>
+                    <code>-y tdesign-mcp-server@latest</code>
+                  </div>
+                  <div>
+                    <strong>Env</strong>
+                    <code>API_KEY = your-key-here</code>
+                  </div>
+                  <div>
+                    <strong>HTTP / SSE</strong>
+                    <code>use url + headers instead of command / args</code>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       ) : null}
     </div>

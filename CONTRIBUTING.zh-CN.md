@@ -16,7 +16,7 @@
 | 让 OD 说一种新品牌的视觉语言 | 一套 **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | 一个 Markdown 文件 |
 | 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | 一个数组里 ~10 行 |
 | 加功能、修 bug、从 [`open-codesign`][ocod] 移植一个 UX 模式 | 代码 | `apps/web/src/`、`apps/daemon/` | 普通 PR |
-| 改文档、补法语 / 德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.fr.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | 一个 PR |
+| 改文档、补法语 / 德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.fr.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.zh-CN.md` | 一个 PR |
 
 不确定自己想做的属于哪一桶？[先开 issue / discussion](https://github.com/nexu-io/open-design/issues/new)，我们告诉你该改哪个面。
 
@@ -24,7 +24,7 @@
 
 ## 本地起跑
 
-完整的一页式 setup 在 [`QUICKSTART.md`](QUICKSTART.md)。给贡献者的 TL;DR：
+完整的一页式 setup 在 [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。给贡献者的 TL;DR：
 
 ```bash
 git clone https://github.com/nexu-io/open-design.git

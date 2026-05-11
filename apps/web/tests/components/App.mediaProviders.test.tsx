@@ -209,7 +209,9 @@ describe('App media provider sync flows', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(mockedSyncMediaProvidersToDaemon).toHaveBeenCalledWith(configuredProviders);
+      expect(mockedSyncMediaProvidersToDaemon).toHaveBeenCalledWith(configuredProviders, {
+        daemonProviders: {},
+      });
     });
   });
 
@@ -237,7 +239,7 @@ describe('App media provider sync flows', () => {
             model: '',
           },
         },
-        { force: undefined, throwOnError: undefined },
+        { daemonProviders: {}, force: undefined, throwOnError: undefined },
       );
     });
 

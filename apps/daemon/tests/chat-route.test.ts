@@ -342,6 +342,43 @@ const timer = setInterval(() => {
     }
   });
 
+  it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+setTimeout(() => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'done' } }));
+  process.exit(0);
+}, 50);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
   it('marks stalled runs failed even when the child ignores SIGTERM', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';

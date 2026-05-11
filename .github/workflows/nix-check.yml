@@ -1,0 +1,90 @@
+name: nix-check
+
+on:
+  push:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.txt'
+      - LICENSE
+      - .gitignore
+      - .editorconfig
+      - .vscode/**
+      - .idea/**
+      - docs/**
+      - assets/**
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.gif'
+      - '**/*.svg'
+      - '**/*.webp'
+      - .github/ISSUE_TEMPLATE/**
+      - .github/PULL_REQUEST_TEMPLATE.md
+      - .github/CODEOWNERS
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.txt'
+      - LICENSE
+      - .gitignore
+      - .editorconfig
+      - .vscode/**
+      - .idea/**
+      - docs/**
+      - assets/**
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.gif'
+      - '**/*.svg'
+      - '**/*.webp'
+      - .github/ISSUE_TEMPLATE/**
+      - .github/PULL_REQUEST_TEMPLATE.md
+      - .github/CODEOWNERS
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      # - name: Configure Cachix (always pull; push only with token)
+      #   uses: cachix/cachix-action@v15
+      #   with:
+      #     name: nexu-open-design
+      #     # Empty token = read-only mode. Forks/PRs from external
+      #     # contributors still get cache hits but cannot push back.
+      #     authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      #     skipPush: ${{ secrets.CACHIX_AUTH_TOKEN == '' }}
+
+      - name: nix flake check
+        run: nix flake check --print-build-logs --keep-going
+
+      - name: nix build .#daemon
+        id: build-daemon
+        run: nix build .#daemon --print-build-logs --log-format raw |& tee daemon-build.log
+
+      - name: nix build .#web
+        id: build-web
+        run: nix build .#web --print-build-logs --log-format raw |& tee web-build.log
+
+      - name: Upload build logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-build-logs
+          path: |
+            daemon-build.log
+            web-build.log
+          if-no-files-found: ignore

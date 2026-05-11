@@ -55,6 +55,62 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('The first output should be a live artifact/dashboard/report');
   });
 
+  describe('artifact handoff no-emit clauses (#1143)', () => {
+    it('drops the absolute "non-negotiable" framing in favor of conditional language', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).not.toContain('non-negotiable output rule');
+    });
+
+    it('includes the "When NOT to emit <artifact>" sub-section', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toContain('When NOT to emit `<artifact>`');
+    });
+
+    it('forbids wrapping in-place-edit-only turns in an artifact block', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toMatch(/in-place|Edit-only|already-existing/i);
+      expect(prompt).toMatch(/do not (emit|wrap|send) (a |an )?`?<artifact/i);
+    });
+
+    it('forbids putting prose / summaries / paths inside an artifact block', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toMatch(/complete `?<!doctype html>`?/i);
+      expect(prompt).toMatch(/summar(y|ies)|prose|file path/i);
+    });
+
+    it('does not carry unconditional "Emit single <artifact>" / "emit a single <artifact>" lines anywhere in the composed prompt', () => {
+      const prompt = composeSystemPrompt({});
+      // Discovery layer used to carry hard-rule unconditional emit instructions
+      // (plan template step 9, default arc Turn 3+ recap, deck workflow step 7).
+      // Those must be conditional now — otherwise the no-emit exception in the
+      // base prompt is overridden by the higher-priority discovery layer.
+      expect(prompt).not.toMatch(/^- 9\.\s+Emit single <artifact>\s*$/m);
+      expect(prompt).not.toMatch(/emit a single `?<artifact>`?\.\s*$/m);
+      expect(prompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
+    });
+
+    it('declares artifact-emission conditionality at the dominant discovery layer', () => {
+      const prompt = composeSystemPrompt({});
+      // The base prompt's "When NOT to emit" section is at lower precedence than
+      // DISCOVERY_AND_PHILOSOPHY, so the exception itself must be stated once at
+      // the dominant layer (near RULE 3) — not only back-pointed.
+      expect(prompt).toMatch(/only when this turn wrote a new canonical HTML/i);
+      expect(prompt).toMatch(/only edited an existing HTML file/i);
+    });
+
+    it('also keeps deck-mode prompts free of the unconditional emit line (DECK_FRAMEWORK_DIRECTIVE only stacks for deck projects)', () => {
+      // The plain composeSystemPrompt({}) call does NOT include
+      // DECK_FRAMEWORK_DIRECTIVE; that directive only stacks when
+      // `skillMode === 'deck'` or `metadata.kind === 'deck'`. So if
+      // deck-framework.ts:327 ever regresses back to "Emit single <artifact>",
+      // a no-args negative assertion is a false negative — exercise the deck
+      // path explicitly here.
+      const deckPrompt = composeSystemPrompt({ skillMode: 'deck' });
+      expect(deckPrompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
+      expect(deckPrompt).toMatch(/Emit single <artifact> if a new canonical deck HTML/i);
+    });
+  });
+
   describe('connectedExternalMcp directive', () => {
     it('omits the directive when no servers are passed', () => {
       const prompt = composeSystemPrompt({});

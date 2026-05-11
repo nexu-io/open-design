@@ -378,6 +378,15 @@ function isChatRunStatus(value: unknown): value is ChatRunStatus {
   return value === 'queued' || value === 'running' || value === 'succeeded' || value === 'failed' || value === 'canceled';
 }
 
+function normalizeToolInput(input: unknown): unknown {
+  if (input == null || typeof input !== 'object') return input;
+  const obj = input as Record<string, unknown>;
+  if ('filePath' in obj && typeof obj.filePath === 'string') {
+    return { ...obj, file_path: obj.filePath };
+  }
+  return input;
+}
+
 // Translate a raw `agent` SSE payload (what apps/daemon/src/claude-stream.ts emits)
 // into the UI's AgentEvent union. Keep this liberal — unknown types just
 // return null so the UI ignores them instead of rendering garbage.
@@ -429,7 +438,7 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     };
   }
   if (t === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: data.input ?? null };
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizeToolInput(data.input) };
   }
   if (t === 'tool_result' && typeof data.toolUseId === 'string') {
     return {

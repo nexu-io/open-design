@@ -19,7 +19,20 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 
-import { startServer } from "../server.js";
+import { isDesktopAuthGateActive, setDesktopAuthSecret, startServer } from "../server.js";
+
+/**
+ * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
+ * `desktopAuthGateActive` flag on a cached startup snapshot. The
+ * STATUS IPC handler and the public `status()` method both call this
+ * so the gate flag is always read fresh (it flips after
+ * REGISTER_DESKTOP_AUTH and stays sticky), even though the rest of
+ * the snapshot is captured once at boot. Exported so the daemon
+ * test suite can pin the wiring without booting a real IPC server.
+ */
+export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): DaemonStatusSnapshot {
+  return { ...snapshot, desktopAuthGateActive: isDesktopAuthGateActive() };
+}
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -126,7 +139,14 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
   }
   const serverHandle = started;
 
+  // PR #974 round 6 (mrcfps): tools-dev's split-start hardening reads
+  // `desktopAuthGateActive` from the STATUS IPC. The flag is dynamic
+  // (flips to true on REGISTER_DESKTOP_AUTH) so the STATUS handler and
+  // the public `status()` method below recompute it from
+  // `isDesktopAuthGateActive()` per request — the value cached here is
+  // a startup snapshot only.
   const state: DaemonStatusSnapshot = {
+    desktopAuthGateActive: isDesktopAuthGateActive(),
     pid: process.pid,
     state: "running",
     updatedAt: new Date().toISOString(),
@@ -161,11 +181,22 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
       const request = normalizeDaemonSidecarMessage(message);
       switch (request.type) {
         case SIDECAR_MESSAGES.STATUS:
-          return { ...state };
+          // PR #974 round 6 (mrcfps): recompute the gate flag per
+          // request so `tools-dev start desktop` sees the live value
+          // (the flag flips after REGISTER_DESKTOP_AUTH and stays sticky).
+          return withCurrentDesktopAuthGate(state);
         case SIDECAR_MESSAGES.SHUTDOWN:
           setImmediate(() => {
             void stop().finally(() => process.exit(0));
           });
+          return { accepted: true };
+        case SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH:
+          // PR #974: the desktop main process registers its per-process
+          // auth secret here at startup. From this point on the HTTP
+          // server's POST /api/import/folder middleware requires a valid
+          // HMAC token signed with this secret, closing the
+          // renderer→arbitrary-baseDir→shell.openPath bypass.
+          setDesktopAuthSecret(Buffer.from(request.input.secret, "base64"));
           return { accepted: true };
       }
     },
@@ -179,7 +210,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
 
   return {
     async status() {
-      return { ...state };
+      return withCurrentDesktopAuthGate(state);
     },
     stop,
     waitUntilStopped() {

@@ -15,6 +15,7 @@ import {
   STAMP_MODE_FLAG,
   STAMP_NAMESPACE_FLAG,
   STAMP_SOURCE_FLAG,
+  type DaemonStatusSnapshot,
 } from "../src/index.js";
 
 const validStamp = {
@@ -66,6 +67,35 @@ describe("open-design sidecar contract", () => {
     expect(() => normalizeDaemonSidecarMessage({ input: {}, type: SIDECAR_MESSAGES.EVAL })).toThrow();
   });
 
+  it("accepts a base64 register-desktop-auth payload", () => {
+    const message = {
+      input: { secret: "AAECAwQFBgcICQoLDA0ODw==" },
+      type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+    };
+    expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
+  });
+
+  it("rejects register-desktop-auth payloads that are not base64-shaped", () => {
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { secret: "not base64!" },
+        type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+      }),
+    ).toThrow(/base64/i);
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { secret: "" },
+        type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+      }),
+    ).toThrow();
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: {},
+        type: SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+      }),
+    ).toThrow();
+  });
+
   it("validates desktop IPC message inputs", () => {
     expect(normalizeDesktopSidecarMessage({ input: { expression: "location.href" }, type: SIDECAR_MESSAGES.EVAL })).toEqual({
       input: { expression: "location.href" },
@@ -73,6 +103,27 @@ describe("open-design sidecar contract", () => {
     });
     expect(() => normalizeDesktopSidecarMessage({ input: { expression: 42 }, type: SIDECAR_MESSAGES.EVAL })).toThrow();
     expect(() => normalizeDesktopSidecarMessage({ input: { selector: "" }, type: SIDECAR_MESSAGES.CLICK })).toThrow();
+  });
+
+  it("requires DaemonStatusSnapshot to carry desktopAuthGateActive (PR #974 round 6)", () => {
+    // The TS compiler enforces that `desktopAuthGateActive: boolean` is
+    // present on every constructed snapshot — tools-dev's split-start
+    // hardening relies on the daemon STATUS IPC carrying this field so
+    // `start desktop` can detect an ungated already-running daemon and
+    // restart it before launching desktop main. Removing the field, or
+    // softening it to optional, must fail this build.
+    const armed: DaemonStatusSnapshot = {
+      state: "running",
+      url: "http://127.0.0.1:7456",
+      desktopAuthGateActive: true,
+    };
+    const dormant: DaemonStatusSnapshot = {
+      state: "running",
+      url: "http://127.0.0.1:7456",
+      desktopAuthGateActive: false,
+    };
+    expect(armed.desktopAuthGateActive).toBe(true);
+    expect(dormant.desktopAuthGateActive).toBe(false);
   });
 
   it("validates desktop PDF export IPC message inputs", () => {

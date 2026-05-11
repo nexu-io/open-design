@@ -774,6 +774,74 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
       status: 502,
     });
   });
+
+  // PR #974 round 7 (lefarcen P1): the helper used to disable its own
+  // timeout when the caller passed a request-abort signal. These two tests
+  // pin the AbortSignal.any combination so neither cancel path replaces the
+  // other. The `timeoutMs` option exists solely so these tests can exercise
+  // the abort path without a 120 s real-time wait or fake-timer chains.
+  it('aborts after the helper timeout fires even when caller signal never aborts', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+    });
+
+    let capturedSignal: AbortSignal | undefined;
+    const hangingFetch = vi.fn((_url: string, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        capturedSignal?.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const callerController = new AbortController();
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-opus-4-7',
+        fetchImpl: hangingFetch as any,
+        signal: callerController.signal,
+        timeoutMs: 50,
+      } as any),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(callerController.signal.aborted).toBe(false);
+    expect(capturedSignal?.aborted).toBe(true);
+  });
+
+  it('aborts immediately when caller signal aborts before fetch settles', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+    });
+
+    const callerController = new AbortController();
+    callerController.abort();
+
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.signal?.aborted) {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+      throw new Error('fetch should not see a non-aborted signal when caller aborted pre-flight');
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-opus-4-7',
+        fetchImpl: fetchImpl as any,
+        signal: callerController.signal,
+      } as any),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
 });
 
 // HTTP-layer tests for the route handler's validation. Boot the daemon

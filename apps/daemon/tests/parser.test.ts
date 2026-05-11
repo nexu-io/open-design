@@ -413,3 +413,220 @@ describe('parseCritiqueStream -- Defects 3+5 regressions', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// SHIP <ARTIFACT> body extraction
+//
+// The earlier extractor used a single `<ARTIFACT\b([^>]*)>([\s\S]*?)</ARTIFACT>`
+// match, which truncated at the first literal `</ARTIFACT>` inside the
+// body. Real shipped HTML / SVG / JS bodies wrapped in CDATA can legitimately
+// contain that sentinel inside a string or comment. The CDATA-aware
+// extractor scans for `]]></ARTIFACT>` instead so the round-trip preserves
+// arbitrary bytes the agent shipped (mrcfps follow-up on PR #1085).
+// ---------------------------------------------------------------------------
+
+describe('parseCritiqueStream -- SHIP <ARTIFACT> CDATA-aware extraction', () => {
+  // Build a minimal complete v1 stream around a SHIP whose <ARTIFACT> body
+  // is the literal text we want to test.
+  function streamWithArtifact(body: string, mime = 'text/html'): string {
+    return `<CRITIQUE_RUN version="1" maxRounds="1" threshold="8.0" scale="10">
+  <ROUND n="1">
+    <PANELIST role="designer">
+      <NOTES>v1</NOTES>
+      <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+    </PANELIST>
+    <PANELIST role="critic" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="brand" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="a11y" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="copy" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+  </ROUND>
+  <SHIP round="1" composite="9" status="shipped">
+    <ARTIFACT mime="${mime}">${body}</ARTIFACT>
+    <SUMMARY>Done.</SUMMARY>
+  </SHIP>
+</CRITIQUE_RUN>`;
+  }
+
+  it('preserves a CDATA-wrapped JS body that contains the literal `</ARTIFACT>` sentinel inside a string', async () => {
+    const dangerousBody = `<![CDATA[<script>const s = "</ARTIFACT>";</script>]]>`;
+    const captured: Array<{ round: number; mime: string; body: string }> = [];
+    await collect(
+      parseCritiqueStream(chunkify(streamWithArtifact(dangerousBody)), {
+        runId: 't-cdata',
+        adapter: 'test',
+        parserMaxBlockBytes: 262_144,
+        onArtifact: (info) => captured.push(info),
+      }),
+    );
+
+    expect(captured).toHaveLength(1);
+    // The CDATA wrapper is stripped; the embedded `</ARTIFACT>` sentinel
+    // travels through verbatim and the writer would persist it byte-for-byte.
+    expect(captured[0]?.body).toBe(`<script>const s = "</ARTIFACT>";</script>`);
+    expect(captured[0]?.mime).toBe('text/html');
+  });
+
+  it('preserves a CDATA body that contains the literal `</ARTIFACT>` sentinel inside an HTML comment', async () => {
+    const body = `<![CDATA[<!-- bookmark: </ARTIFACT> --><p>real</p>]]>`;
+    const captured: Array<{ round: number; mime: string; body: string }> = [];
+    await collect(
+      parseCritiqueStream(chunkify(streamWithArtifact(body)), {
+        runId: 't-cdata-comment',
+        adapter: 'test',
+        parserMaxBlockBytes: 262_144,
+        onArtifact: (info) => captured.push(info),
+      }),
+    );
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.body).toBe(`<!-- bookmark: </ARTIFACT> --><p>real</p>`);
+  });
+
+  it('still extracts a non-CDATA inline body that does NOT contain the sentinel', async () => {
+    const body = `<p>plain inline body</p>`;
+    const captured: Array<{ round: number; mime: string; body: string }> = [];
+    await collect(
+      parseCritiqueStream(chunkify(streamWithArtifact(body)), {
+        runId: 't-inline',
+        adapter: 'test',
+        parserMaxBlockBytes: 262_144,
+        onArtifact: (info) => captured.push(info),
+      }),
+    );
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.body).toBe(`<p>plain inline body</p>`);
+  });
+
+  it('tolerates whitespace between the `]]>` CDATA terminator and `</ARTIFACT>`', async () => {
+    const body = `<![CDATA[<p>spaced</p>]]>\n  `;
+    // Intentionally insert a newline + spaces between the CDATA close and
+    // the `</ARTIFACT>` tag so a regex that requires the close to be
+    // immediately followed by `</ARTIFACT>` would miss it.
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="1" threshold="8.0" scale="10">
+  <ROUND n="1">
+    <PANELIST role="designer">
+      <NOTES>v1</NOTES>
+      <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+    </PANELIST>
+    <PANELIST role="critic" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="brand" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="a11y" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="copy" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+  </ROUND>
+  <SHIP round="1" composite="9" status="shipped">
+    <ARTIFACT mime="text/html">${body}
+</ARTIFACT>
+    <SUMMARY>Done.</SUMMARY>
+  </SHIP>
+</CRITIQUE_RUN>`;
+
+    const captured: Array<{ round: number; mime: string; body: string }> = [];
+    await collect(
+      parseCritiqueStream(chunkify(stream), {
+        runId: 't-pretty',
+        adapter: 'test',
+        parserMaxBlockBytes: 262_144,
+        onArtifact: (info) => captured.push(info),
+      }),
+    );
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.body).toBe('<p>spaced</p>');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SHIP boundary sentinel safety
+//
+// The parser walks the SHIP block by `indexOf('</SHIP>')` and the ship
+// summary by `<SUMMARY>` regex on the SHIP inner. Both used to be
+// non-CDATA-aware, so an agent shipping arbitrary HTML / JS bodies that
+// happened to contain those literal sentinels inside a CDATA wrapper
+// could either truncate the SHIP block early (lefarcen P2) or hijack the
+// ship summary text (mrcfps follow-up). Both lookups now skip CDATA
+// spans, so the streamed bytes round-trip intact and the sibling tags
+// resolve to the real outer occurrences.
+// ---------------------------------------------------------------------------
+
+describe('parseCritiqueStream -- SHIP sentinel safety inside CDATA', () => {
+  function streamWithArtifactAndSummary(
+    artifactBody: string,
+    summary: string,
+  ): string {
+    return `<CRITIQUE_RUN version="1" maxRounds="1" threshold="8.0" scale="10">
+  <ROUND n="1">
+    <PANELIST role="designer">
+      <NOTES>v1</NOTES>
+      <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>
+    </PANELIST>
+    <PANELIST role="critic" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="brand" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="a11y" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <PANELIST role="copy" score="9"><DIM name="x" score="9">ok</DIM></PANELIST>
+    <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ok</REASON></ROUND_END>
+  </ROUND>
+  <SHIP round="1" composite="9" status="shipped">
+    <ARTIFACT mime="text/html">${artifactBody}</ARTIFACT>
+    <SUMMARY>${summary}</SUMMARY>
+  </SHIP>
+</CRITIQUE_RUN>`;
+  }
+
+  it('uses the real ship summary even when the artifact CDATA contains a literal <SUMMARY> pair before it', async () => {
+    // The artifact body contains `<SUMMARY>artifact text</SUMMARY>` BEFORE
+    // the real sibling SUMMARY. A naive regex against the full SHIP inner
+    // would grab the artifact-internal pair first and emit "artifact text"
+    // as the ship summary.
+    const artifactBody =
+      `<![CDATA[<div><SUMMARY>artifact text</SUMMARY></div><p>real artifact body</p>]]>`;
+    const realSummary = 'Design converged after one round.';
+
+    const events = await collect(
+      parseCritiqueStream(chunkify(streamWithArtifactAndSummary(artifactBody, realSummary)), {
+        runId: 't-summary-hijack',
+        adapter: 'test',
+        parserMaxBlockBytes: 262_144,
+      }),
+    );
+
+    const ship = events.find((e) => e.type === 'ship');
+    expect(ship).toBeDefined();
+    if (ship && ship.type === 'ship') {
+      expect(ship.summary).toBe(realSummary);
+    }
+  });
+
+  it('finds the real </SHIP> closer even when the artifact CDATA contains a literal </SHIP> string', async () => {
+    // The artifact body contains `</SHIP>` inside a JS string. A naive
+    // `slice.indexOf('</SHIP>')` would treat that as the SHIP closer,
+    // truncating before the real `</ARTIFACT>` and `</SUMMARY>` siblings
+    // and leaving the parser in a corrupted state.
+    const artifactBody =
+      `<![CDATA[<script>const s = "</SHIP>";</script><p>real body</p>]]>`;
+    const realSummary = 'Honored the closer outside CDATA.';
+
+    const captured: Array<{ round: number; mime: string; body: string }> = [];
+    const events = await collect(
+      parseCritiqueStream(chunkify(streamWithArtifactAndSummary(artifactBody, realSummary)), {
+        runId: 't-ship-close-hijack',
+        adapter: 'test',
+        parserMaxBlockBytes: 262_144,
+        onArtifact: (info) => captured.push(info),
+      }),
+    );
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.body).toBe(
+      `<script>const s = "</SHIP>";</script><p>real body</p>`,
+    );
+
+    const ship = events.find((e) => e.type === 'ship');
+    expect(ship).toBeDefined();
+    if (ship && ship.type === 'ship') {
+      expect(ship.summary).toBe(realSummary);
+    }
+  });
+});

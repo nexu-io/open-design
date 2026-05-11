@@ -81,6 +81,7 @@ export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
+  streamFormat?: string | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -148,6 +149,7 @@ export function composeSystemPrompt({
   critiqueBrand,
   critiqueSkill,
   connectedExternalMcp,
+  streamFormat,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -246,6 +248,16 @@ export function composeSystemPrompt({
 
   const mcpDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
   if (mcpDirective) parts.push(mcpDirective);
+
+  // Suppress tool_calls in API/BYOK mode (streamFormat === 'plain').
+  // Only fires when the caller explicitly passes streamFormat='plain';
+  // does NOT fire when streamFormat is omitted, so non-plain (tool-using)
+  // adapters are unaffected and normal chat runs can still use tools.
+  if (streamFormat === 'plain') {
+    parts.push(
+      '\n\n## API mode rule\n\nDo not emit tool_calls. Output only <artifact> HTML blocks. Any tool description in your internal reasoning must not appear in the response.',
+    );
+  }
 
   return parts.join('');
 }

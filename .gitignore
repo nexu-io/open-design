@@ -52,5 +52,8 @@ task.md
 specs/change/active
 .ralph/
 
+# Nix and direnv
+.direnv/
+.envrc
 # Local design assistant context
 .impeccable.md

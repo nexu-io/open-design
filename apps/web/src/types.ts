@@ -32,6 +32,10 @@ import type {
   ProjectDeploymentsResponse,
   ProviderTestRequest,
   PersistedAgentEvent,
+  ProviderModelOption,
+  ProviderModelsKind,
+  ProviderModelsRequest,
+  ProviderModelsResponse,
   Project,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
@@ -45,12 +49,17 @@ import type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  RenameProjectFileResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
+  InstallInput,
+  InstallSkillResponse,
+  InstallDesignSystemResponse,
+  UninstallResponse,
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
 
@@ -144,6 +153,8 @@ export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
   model?: string;
+  apiKeyConfigured?: boolean;
+  apiKeyTail?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -423,13 +434,22 @@ export type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  RenameProjectFileResponse,
   ProviderTestRequest,
+  ProviderModelOption,
+  ProviderModelsKind,
+  ProviderModelsRequest,
+  ProviderModelsResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
+  InstallInput,
+  InstallSkillResponse,
+  InstallDesignSystemResponse,
+  UninstallResponse,
   UpdateDeployConfigRequest,
 };
 

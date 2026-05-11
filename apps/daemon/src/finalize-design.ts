@@ -68,6 +68,11 @@ export interface FinalizeOptions {
   now?: () => Date;
   fetchImpl?: typeof globalThis.fetch;
   signal?: AbortSignal;
+  // Override the helper-internal upstream-call timeout. Production callers
+  // omit this so the helper bounds at DEFAULT_TIMEOUT_MS; tests pass a
+  // smaller value to exercise the AbortSignal.any composition without
+  // depending on fake timers.
+  timeoutMs?: number;
 }
 
 export class FinalizePackageLockedError extends Error {
@@ -295,9 +300,12 @@ export async function finalizeDesignPackage(
       now: now(),
     });
 
-    // Phase 7: Anthropic call with bounded blocking timeout. We use our own
-    // AbortController if the caller did not pass one; either way the call
-    // bounds at DEFAULT_TIMEOUT_MS.
+    // Phase 7: Anthropic call with bounded blocking timeout. The timeout
+    // controller is always created so DEFAULT_TIMEOUT_MS bounds every call,
+    // regardless of whether the caller supplied a request-abort signal.
+    // When the caller does pass a signal, both cancel paths are honored via
+    // AbortSignal.any so neither replaces the other (per @lefarcen P1 review
+    // on PR #974 round 7: passing options.signal alone disabled the timeout).
     //
     // Network errors (DNS, ECONNREFUSED, ECONNRESET) and JSON parse errors
     // on the response body are rewrapped as FinalizeUpstreamError(502) so
@@ -305,10 +313,9 @@ export async function finalizeDesignPackage(
     // INTERNAL. Per @lefarcen P1 review on PR #832: only HTTP-non-OK
     // responses were previously wrapped, leaving DNS/parse failures to
     // surface as generic 500s.
-    const ownController = options.signal ? null : new AbortController();
-    const timeoutId = ownController
-      ? setTimeout(() => ownController.abort(), DEFAULT_TIMEOUT_MS)
-      : null;
+    const timeoutController = new AbortController();
+    const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
     let response: Response;
     try {
       const callParams: AnthropicCallParams = {
@@ -319,8 +326,9 @@ export async function finalizeDesignPackage(
         systemPrompt,
         userPrompt,
       };
-      const signalToUse = options.signal ?? ownController?.signal;
-      if (signalToUse) callParams.signal = signalToUse;
+      callParams.signal = options.signal
+        ? AbortSignal.any([options.signal, timeoutController.signal])
+        : timeoutController.signal;
       if (options.fetchImpl) callParams.fetchImpl = options.fetchImpl;
       try {
         response = await callAnthropicWithRetry(callParams);
@@ -338,7 +346,7 @@ export async function finalizeDesignPackage(
         throw new FinalizeUpstreamError(502, '', `upstream network error: ${message}`);
       }
     } finally {
-      if (timeoutId !== null) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
     }
 
     // Phase 8: extract DESIGN.md body and usage counters. A 200 with a body

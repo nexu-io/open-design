@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: true
+      enable_mac_intel:
+        description: "Build and publish macOS Intel x64 (unsigned) beta artifacts."
+        required: true
+        type: boolean
+        default: false
       enable_linux:
         description: "Build and publish Linux x64 AppImage/checksum to R2 only; no updater feed is published yet."
         required: true
@@ -55,7 +60,7 @@ jobs:
       - name: Validate beta publish inputs
         run: |
           set -euo pipefail
-          if [ "${{ inputs.enable_mac }}" != "true" ] && [ "${{ inputs.enable_win }}" != "true" ] && [ "${{ inputs.enable_linux }}" != "true" ]; then
+          if [ "${{ inputs.enable_mac }}" != "true" ] && [ "${{ inputs.enable_win }}" != "true" ] && [ "${{ inputs.enable_mac_intel }}" != "true" ] && [ "${{ inputs.enable_linux }}" != "true" ]; then
             echo "release-beta requires at least one platform to be enabled" >&2
             exit 1
           fi
@@ -120,9 +125,6 @@ jobs:
             fi
           done
 
-      - name: Apply beta package version
-        run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
-
       - name: Prepare Apple signing certificate
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
@@ -155,7 +157,8 @@ jobs:
             --dir "$tools_pack_dir"
             --namespace release-beta
             --portable
-            --mac-compression maximum
+            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --mac-compression normal
             --to dmg
             --json
             --signed
@@ -295,6 +298,59 @@ jobs:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets
 
+  build_mac_intel:
+    name: Build beta mac x64
+    needs: metadata
+    if: ${{ inputs.enable_mac_intel }}
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply beta package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
+
+      - name: Build beta mac intel artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-beta-intel \
+            --portable \
+            --mac-compression maximum \
+            --to all \
+            --json
+
+      - name: Prepare beta mac intel assets
+        id: assets
+        env:
+          ASSET_VERSION_SUFFIX: .unsigned
+          RELEASE_CHANNEL: beta
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_NAMESPACE: release-beta-intel
+        run: bash .github/scripts/release/assets/mac-intel.sh
+
+      - name: Upload mac intel release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets
+
   build_win:
     name: Build beta win x64
     needs: metadata
@@ -321,9 +377,16 @@ jobs:
       - name: Compute Windows tools-pack cache key
         id: win_tools_pack_cache_key
         shell: pwsh
+        env:
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/contracts/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
         run: |
-          $epoch = (Get-Date).ToUniversalTime().ToString("yyyy-MM")
-          "epoch=$epoch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
+            throw "Windows tools-pack cache origin key is empty"
+          }
+          $prefix = "tools-pack-win-v7-beta-$env:RUNNER_OS-"
+          "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Restore Windows tools-pack cache
         id: win_tools_pack_cache_restore
@@ -331,9 +394,9 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/tools-pack-cache
-          key: tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
           restore-keys: |
-            tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-
+            ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -346,10 +409,8 @@ jobs:
           }
           choco install nsis -y --no-progress
 
-      - name: Apply beta package version
-        run: npm pkg set "version=${{ needs.metadata.outputs.beta_version }}" --prefix apps/packaged
-
       - name: Build beta windows artifacts
+        id: win_tools_pack_build
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -362,9 +423,11 @@ jobs:
             "--cache-dir", $cacheDir,
             "--namespace", "release-beta-win",
             "--portable",
+            "--app-version", "${{ needs.metadata.outputs.beta_version }}",
             "--to", "nsis",
             "--json"
           )
+          "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           try {
             $buildOutput = pnpm @buildArgs
             if ($LASTEXITCODE -ne 0) {
@@ -372,11 +435,13 @@ jobs:
             }
           } catch {
             Write-Warning "Windows tools-pack cached build failed; removing restored cache and retrying without cache."
+            "cache_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
             $buildOutput = pnpm exec tools-pack win build `
               --dir $toolsPackDir `
               --namespace release-beta-win `
               --portable `
+              --app-version "${{ needs.metadata.outputs.beta_version }}" `
               --to nsis `
               --json
             if ($LASTEXITCODE -ne 0) {
@@ -385,6 +450,20 @@ jobs:
           }
           $buildOutput | Set-Content -Path $buildJsonPath
           $buildOutput
+
+      - name: Delete failed Windows tools-pack cache
+        if: ${{ steps.win_tools_pack_build.outputs.cache_failed == 'true' && steps.win_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $matchedKey = "${{ steps.win_tools_pack_cache_restore.outputs.cache-matched-key }}"
+          $caches = @(gh cache list --key $matchedKey --limit 100 --json id,key,ref | ConvertFrom-Json | Where-Object { $_.key -eq $matchedKey })
+          foreach ($cache in $caches) {
+            gh cache delete $cache.id
+          }
+          "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
 
       - name: Smoke beta windows packaged runtime
         working-directory: e2e
@@ -428,12 +507,28 @@ jobs:
         run: ./.github/scripts/release/cache/win.ps1
 
       - name: Save Windows tools-pack cache
-        if: ${{ success() && steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' }}
+        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outputs.cache_failed == 'true') }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/tools-pack-cache
-          key: tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+
+      - name: Retain recent Windows tools-pack caches
+        if: ${{ success() }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
+          $keep = 3
+          $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
+          $stale = @($caches | Select-Object -Skip $keep)
+          foreach ($cache in $stale) {
+            gh cache delete $cache.id
+          }
+          "actionsCachePrefix=$prefix kept=$([Math]::Min($caches.Count, $keep)) deleted=$($stale.Count)"
 
       - name: Prepare windows beta assets
         shell: pwsh
@@ -477,11 +572,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply beta package version
-        env:
-          BETA_VERSION: ${{ needs.metadata.outputs.beta_version }}
-        run: npm pkg set "version=$BETA_VERSION" --prefix apps/packaged
-
       # `--containerized` builds the AppImage inside the electronuserland/builder
       # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
       # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
@@ -493,6 +583,7 @@ jobs:
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace release-beta-linux \
             --portable \
+            --app-version "${{ needs.metadata.outputs.beta_version }}" \
             --to appimage \
             --containerized \
             --json
@@ -515,6 +606,7 @@ jobs:
     needs:
       - metadata
       - build_mac
+      - build_mac_intel
       - build_win
       - build_linux
     if: >-
@@ -522,8 +614,9 @@ jobs:
         always() &&
         !cancelled() &&
         needs.metadata.result == 'success' &&
-        (inputs.enable_mac || inputs.enable_win || inputs.enable_linux) &&
+        (inputs.enable_mac || inputs.enable_win || inputs.enable_mac_intel || inputs.enable_linux) &&
         (!inputs.enable_mac || needs.build_mac.result == 'success') &&
+        (!inputs.enable_mac_intel || needs.build_mac_intel.result == 'success') &&
         (!inputs.enable_win || needs.build_win.result == 'success') &&
         (!inputs.enable_linux || needs.build_linux.result == 'success')
       }}
@@ -543,10 +636,12 @@ jobs:
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
       ENABLE_LINUX: ${{ inputs.enable_linux }}
       ENABLE_MAC: ${{ inputs.enable_mac }}
+      ENABLE_MAC_INTEL: ${{ inputs.enable_mac_intel }}
       ENABLE_WIN: ${{ inputs.enable_win }}
       GITHUB_RELEASE_ENABLED: "false"
       LINUX_ASSET_SUFFIX: .unsigned
       MAC_ARTIFACT_MODE: dmg-only
+      MAC_INTEL_ASSET_SUFFIX: .unsigned
       RELEASE_CHANNEL: beta
       RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
       RELEASE_SIGNED: "true"
@@ -565,6 +660,13 @@ jobs:
         with:
           name: open-design-beta-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Download mac intel release bundle
+        if: ${{ inputs.enable_mac_intel }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets/mac-intel
 
       - name: Download windows release bundle
         if: ${{ inputs.enable_win }}
@@ -608,6 +710,8 @@ jobs:
           R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
           R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
           R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
           R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
           R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
@@ -620,6 +724,8 @@ jobs:
           R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
           R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
           R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
           R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
           R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}

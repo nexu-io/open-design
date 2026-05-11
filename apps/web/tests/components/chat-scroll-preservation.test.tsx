@@ -1,5 +1,18 @@
 // @vitest-environment jsdom
 
+// Polyfill scrollTo for jsdom (not available in jsdom's HTMLElement)
+if (typeof HTMLElement.prototype.scrollTo !== 'function') {
+  HTMLElement.prototype.scrollTo = function (
+    options?: ScrollToOptions | number,
+    _y?: number,
+  ) {
+    if (typeof options === 'object' && options !== null) {
+      if (options.top !== undefined) this.scrollTop = options.top;
+      if (options.left !== undefined) this.scrollLeft = options.left;
+    }
+  };
+}
+
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
