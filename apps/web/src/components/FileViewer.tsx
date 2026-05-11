@@ -5706,10 +5706,15 @@ function hasPrecisionSensitiveJsonNumberText(text: string): boolean {
     }
 
     const token = match[0];
+    if (isSignedNegativeZeroJsonNumberToken(token)) return true;
     if (/[.eE]/.test(token) && isPrecisionSensitiveJsonNumberToken(token)) return true;
     i += token.length;
   }
   return false;
+}
+
+function isSignedNegativeZeroJsonNumberToken(token: string): boolean {
+  return /^-0(?:\.0+)?(?:[eE][+-]?\d+)?$/.test(token);
 }
 
 function isPrecisionSensitiveJsonNumberToken(token: string): boolean {
