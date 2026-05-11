@@ -1,0 +1,101 @@
+name: web-preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/web-preview.yml
+      - apps/web/**
+      - packages/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
+concurrency:
+  group: web-preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy web preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Forks cannot read secrets — skip the deploy step entirely instead of
+    # failing the workflow. Reviewers can ask the contributor to push to a
+    # branch on this repo when a preview matters.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Mirror ci.yml's prebuild step — apps/web's typecheck depends on these
+      # generated declaration files from sibling packages.
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Build web (static export)
+        env:
+          NODE_ENV: production
+        run: pnpm --filter @open-design/web build
+
+      # The `out/` directory is the static export target when NODE_ENV=production
+      # and OD_WEB_OUTPUT_MODE is unset; see apps/web/next.config.ts.
+      - name: Verify static export exists
+        run: |
+          if [ ! -d "apps/web/out" ]; then
+            echo "Expected apps/web/out to exist after build; check next.config.ts output mode."
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          packageManager: npm
+          command: >
+            pages deploy out
+            --project-name=open-design-web
+            --branch=pr-${{ github.event.pull_request.number }}
+
+      - name: Comment preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: web-preview
+          message: |
+            ### Web app preview is ready
+
+            | Field | Value |
+            | --- | --- |
+            | Preview | https://pr-${{ github.event.pull_request.number }}.open-design-web.pages.dev |
+            | Commit | `${{ github.event.pull_request.head.sha }}` |
+            | Workflow | [run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+            Updates on every push to this PR. This is a static export of
+            `apps/web`, so daemon-backed routes (`/api`, `/artifacts`, `/frames`)
+            will 404 unless a separate daemon is reachable.
