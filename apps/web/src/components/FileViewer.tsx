@@ -5667,12 +5667,84 @@ function TextViewer({
 function formatJsonFileTextForDisplay(file: ProjectFile, text: string): string {
   if (!isJsonFile(file)) return text;
   try {
+    if (hasPrecisionSensitiveJsonNumberText(text)) return text;
     const parsed = JSON.parse(text) as unknown;
     if (hasUnsafeJsonNumber(parsed)) return text;
     return JSON.stringify(parsed, null, 2);
   } catch {
     return text;
   }
+}
+
+function hasPrecisionSensitiveJsonNumberText(text: string): boolean {
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length;) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      i += 1;
+      continue;
+    }
+
+    const match = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(i));
+    if (!match) {
+      i += 1;
+      continue;
+    }
+
+    const token = match[0];
+    if (/[.eE]/.test(token) && isPrecisionSensitiveJsonNumberToken(token)) return true;
+    i += token.length;
+  }
+  return false;
+}
+
+function isPrecisionSensitiveJsonNumberToken(token: string): boolean {
+  const parsed = Number(token);
+  if (!Number.isFinite(parsed)) return true;
+  const rendered = JSON.stringify(parsed);
+  if (!rendered) return true;
+  const originalValue = parseJsonNumberTokenAsDecimal(token);
+  const renderedValue = parseJsonNumberTokenAsDecimal(rendered);
+  return (
+    !originalValue ||
+    !renderedValue ||
+    originalValue.coefficient !== renderedValue.coefficient ||
+    originalValue.exponent !== renderedValue.exponent
+  );
+}
+
+function parseJsonNumberTokenAsDecimal(token: string): { coefficient: bigint; exponent: number } | null {
+  const match = /^(-)?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(token);
+  if (!match) return null;
+  const [, sign, integerPart, fractionPart = '', exponentPart = '0'] = match;
+  const coefficient = BigInt(`${sign ?? ''}${integerPart}${fractionPart}`);
+  const exponent = Number(exponentPart) - fractionPart.length;
+  return normalizeDecimalParts(coefficient, exponent);
+}
+
+function normalizeDecimalParts(coefficient: bigint, exponent: number): { coefficient: bigint; exponent: number } {
+  if (coefficient === 0n) return { coefficient: 0n, exponent: 0 };
+  let normalizedCoefficient = coefficient;
+  let normalizedExponent = exponent;
+  while (normalizedCoefficient % 10n === 0n) {
+    normalizedCoefficient /= 10n;
+    normalizedExponent += 1;
+  }
+  return { coefficient: normalizedCoefficient, exponent: normalizedExponent };
 }
 
 function hasUnsafeJsonNumber(value: unknown): boolean {
