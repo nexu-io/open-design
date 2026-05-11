@@ -36,12 +36,13 @@
 // so the CLI can exit non-zero and the agent can't silently narrate the
 // placeholder as the final result.
 
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile as execFileCb, spawn } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
+import { resolveProviderConfig } from './media-config.js';
 import {
   AUDIO_DURATIONS_SEC,
   type AudioKind,
@@ -53,7 +54,6 @@ import {
   findProvider,
   modelsForSurface,
 } from './media-models.js';
-import { resolveProviderConfig } from './media-config.js';
 import {
   ensureProject,
   kindFor,
@@ -415,6 +415,11 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'nanobanana' && surface === 'image') {
       const result = await renderNanoBananaImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'bfl' && surface === 'image') {
+      const result = await renderBFLImage(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1210,6 +1215,139 @@ function sniffImageExt(bytes: Buffer): string {
     return '.webp';
   }
   return '.png';
+}
+
+function bflAspectFor(aspect?: string): string {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+    || aspect === '3:2'
+    || aspect === '2:3'
+    || aspect === '21:9'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+function bflStripDataUrlPrefix(dataUrl: string): string {
+  const comma = dataUrl.indexOf(',');
+  return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+}
+
+async function renderBFLImage(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no BFL API key — configure it in Settings or set BFL_API_KEY (see https://dashboard.bfl.ai/get-started)',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://api.bfl.ai').replace(/\/$/, '');
+  const model = ctx.model;
+  const promptText = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+  const aspect = bflAspectFor(ctx.aspect);
+  const body: JsonRecord = {
+    prompt: promptText,
+    aspect_ratio: aspect,
+  };
+  if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    body.input_image = bflStripDataUrlPrefix(ctx.imageRef.dataUrl);
+  }
+
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2i' : 't2i';
+    onProgress(`bfl ${model} ${mode} request submitted; polling status…`);
+  }
+
+  // POST request → { id, polling_url }
+  const postResp = await fetch(`${baseUrl}/v1/${encodeURIComponent(model)}`, {
+    method: 'POST',
+    headers: {
+      'x-key': credentials.apiKey,
+      'content-type': 'application/json',
+      'accept': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const postText = await postResp.text();
+  if (!postResp.ok) {
+    throw new Error(`bfl submit ${postResp.status}: ${truncate(postText, 240)}`);
+  }
+  let postData: any;
+  try {
+    postData = JSON.parse(postText);
+  } catch {
+    throw new Error(`bfl submit non-JSON: ${truncate(postText, 200)}`);
+  }
+  const taskId = typeof postData?.id === 'string' ? postData.id : '';
+  const pollingUrl = typeof postData?.polling_url === 'string' ? postData.polling_url : '';
+  if (!pollingUrl) {
+    throw new Error(`bfl submit response missing polling_url (id=${taskId || 'none'})`);
+  }
+
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_BFL_IMAGE_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 30_000
+      ? configuredMaxMs
+      : 8 * 60 * 1000;
+  let imageUrl: string | null = null;
+  let lastStatus = '';
+  let seedSeen: unknown = undefined;
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(1500);
+    const pollResp = await fetch(pollingUrl, {
+      headers: { 'x-key': credentials.apiKey, 'accept': 'application/json' },
+    });
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(`bfl poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`bfl poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+    lastStatus = typeof pollData?.status === 'string' ? pollData.status : '';
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`bfl task ${taskId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastStatus === 'Ready') {
+      imageUrl = typeof pollData?.result?.sample === 'string' ? pollData.result.sample : null;
+      seedSeen = pollData?.result?.seed;
+      break;
+    }
+    if (
+      lastStatus === 'Error'
+      || lastStatus === 'Content Moderated'
+      || lastStatus === 'Request Moderated'
+      || lastStatus === 'Task not found'
+    ) {
+      const detail =
+        (typeof pollData?.result === 'string' ? pollData.result : '')
+        || (typeof pollData?.details === 'string' ? pollData.details : '')
+        || lastStatus;
+      throw new Error(`bfl task ${lastStatus}: ${detail}`);
+    }
+  }
+  if (!imageUrl) {
+    throw new Error(`bfl task did not finish in time (last status: ${lastStatus || 'unknown'})`);
+  }
+
+  const dlResp = await fetch(imageUrl);
+  if (!dlResp.ok) throw new Error(`bfl image fetch ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+
+  const seedNote = typeof seedSeen === 'number' ? ` · seed=${seedSeen}` : '';
+  return {
+    bytes,
+    providerNote: `bfl/${model} · ${aspect}${seedNote} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
 }
 
 async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {

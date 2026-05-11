@@ -119,10 +119,10 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'bfl',
     label: 'Black Forest Labs',
-    hint: 'FLUX 1.1 Pro / FLUX Pro / Dev',
-    integrated: false,
+    hint: 'FLUX.2 [max] · highest-quality image generation by Black Forest Labs',
+    integrated: true,
     defaultBaseUrl: 'https://api.bfl.ai',
-    docsUrl: 'https://docs.bfl.ai/quick_start/create_account',
+    docsUrl: 'https://docs.bfl.ai/quick_start/get_started',
   },
   {
     id: 'fal',
@@ -313,12 +313,8 @@ export const IMAGE_MODELS: MediaModel[] = [
     caps: ['t2i'],
   },
 
-  // Black Forest Labs FLUX family.
-  { id: 'flux-1.1-pro', label: 'flux-1.1-pro', hint: 'BFL · flagship', provider: 'bfl', caps: ['t2i', 'i2i'] },
-  { id: 'flux-pro', label: 'flux-pro', hint: 'BFL', provider: 'bfl', caps: ['t2i'] },
-  { id: 'flux-dev', label: 'flux-dev', hint: 'BFL · open weights', provider: 'bfl', caps: ['t2i'] },
-  { id: 'flux-schnell', label: 'flux-schnell', hint: 'BFL · fast', provider: 'bfl', caps: ['t2i'] },
-  { id: 'flux-kontext-pro', label: 'flux-kontext-pro', hint: 'BFL · in-context edits', provider: 'bfl', caps: ['t2i', 'i2i'] },
+  // Black Forest Labs FLUX.2 [max].
+  { id: 'flux-2-max', label: 'flux-2-max', hint: 'FLUX.2 [max] · text-to-image + image-to-image', provider: 'bfl', caps: ['t2i', 'i2i'] },
 
   // Google.
   { id: 'imagen-4', label: 'imagen-4', hint: 'Google · latest', provider: 'google', caps: ['t2i'] },
