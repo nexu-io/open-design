@@ -161,6 +161,31 @@ describe('inlineRelativeAssets', () => {
     expect(out).not.toContain(`data-od-inline-asset="${href}"`);
   });
 
+  it('does not treat "disabled" inside a quoted attribute value as the disabled boolean attr', async () => {
+    // PR #1312 round-2 review (lefarcen P3): the current
+    // `hasBooleanHtmlAttr` regex `\sdisabled(?=\s|=|/?>)` tests the
+    // tag string with NO attr-quoting awareness, so the literal text
+    // `disabled` appearing inside any quoted attribute value, followed
+    // by another whitespace char, satisfies the lookahead. A source
+    // tag like
+    //   <link rel=stylesheet href=x.css data-note="content disabled stuff">
+    // would then emit a <style disabled> block — silently disabling
+    // a stylesheet the author wrote without that attr.
+    const html =
+      '<link rel="stylesheet" href="x.css" data-note="content disabled stuff">';
+    const out = await inlineRelativeAssets(html, 'index.html', readerFrom({ 'x.css': '.x{}' }));
+    expect(out).toMatch(/<style\b[^>]*data-od-inline-asset/);
+    expect(out).not.toMatch(/<style\b[^>]*\bdisabled\b/);
+  });
+
+  it('still detects disabled when it is a real boolean attr (regression for the dedup fix)', async () => {
+    // Counterweight to the previous case: don't over-correct and
+    // start dropping the legitimate `disabled` attr.
+    const html = '<link rel="stylesheet" href="x.css" disabled>';
+    const out = await inlineRelativeAssets(html, 'index.html', readerFrom({ 'x.css': '.x{}' }));
+    expect(out).toMatch(/<style\b[^>]*\bdisabled\b/);
+  });
+
   it('preserves <link> attrs (media, title, disabled, nonce) on the generated <style> tag', async () => {
     // PR #1312 round-2 (lefarcen P2 @ inline-assets.ts:44): a stylesheet
     // <link> with `media="print"` was becoming a plain <style> with no
