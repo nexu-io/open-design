@@ -31,8 +31,13 @@ const liveArtifactSkillBody = [
   liveArtifactSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
 ].join('\n');
 
-const hyperframesRoot = path.join(repoRoot, 'skills/hyperframes');
-const hyperframesSkillPath = path.join(repoRoot, 'skills/hyperframes/SKILL.md');
+// `hyperframes` also moved to design-templates/ in PR #955 — same split
+// as `live-artifact` above.
+const hyperframesRoot = path.join(repoRoot, 'design-templates/hyperframes');
+const hyperframesSkillPath = path.join(
+  repoRoot,
+  'design-templates/hyperframes/SKILL.md',
+);
 const hyperframesSkillMarkdown = readFileSync(hyperframesSkillPath, 'utf8');
 const hyperframesSkillBody = [
   `> **Skill root (absolute):** \`${hyperframesRoot}\``,
