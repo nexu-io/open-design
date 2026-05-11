@@ -643,11 +643,11 @@ export function insertTemplate(db: SqliteDb, t: DbRow) {
 export function updateTemplate(
   db: SqliteDb,
   id: string,
-  t: { description: string | null; files: unknown[]; createdAt: number },
+  t: { description: string | null; files: unknown[] },
 ) {
   db.prepare(
-    `UPDATE templates SET description = ?, files_json = ?, created_at = ? WHERE id = ?`,
-  ).run(t.description, JSON.stringify(t.files), t.createdAt, id);
+    `UPDATE templates SET description = ?, files_json = ? WHERE id = ?`,
+  ).run(t.description, JSON.stringify(t.files), id);
   return getTemplate(db, id);
 }
 

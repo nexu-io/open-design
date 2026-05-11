@@ -544,7 +544,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         t = updateTemplate(db, existing.id, {
           description: descValue,
           files: snapshot,
-          createdAt: Date.now(),
         });
       } else {
         t = insertTemplate(db, {
