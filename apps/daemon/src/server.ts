@@ -183,6 +183,8 @@ import {
   insertRoutine,
   insertRoutineRun,
   insertTemplate,
+  findTemplateByNameAndProject,
+  updateTemplate,
   listProjectsAwaitingInput,
   listConversations,
   listDeployments,
@@ -2669,7 +2671,7 @@ export async function startServer({
     updatePreviewCommentStatus,
     deletePreviewComment,
   };
-  const templateDeps = { getTemplate, listTemplates, deleteTemplate, insertTemplate };
+  const templateDeps = { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate };
   const projectStatusDeps = {
     listLatestProjectRunStatuses,
     listProjectsAwaitingInput,

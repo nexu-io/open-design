@@ -609,6 +609,22 @@ export function getTemplate(db: SqliteDb, id: string) {
   return row ? normalizeTemplate(row) : null;
 }
 
+export function findTemplateByNameAndProject(
+  db: SqliteDb,
+  name: string,
+  sourceProjectId: string,
+) {
+  const row = db
+    .prepare(
+      `SELECT id, name, description, source_project_id AS sourceProjectId,
+              files_json AS filesJson, created_at AS createdAt
+         FROM templates
+        WHERE name = ? AND source_project_id = ?`,
+    )
+    .get(name, sourceProjectId) as DbRow | undefined;
+  return row ? normalizeTemplate(row) : null;
+}
+
 export function insertTemplate(db: SqliteDb, t: DbRow) {
   db.prepare(
     `INSERT INTO templates (id, name, description, source_project_id, files_json, created_at)
@@ -622,6 +638,17 @@ export function insertTemplate(db: SqliteDb, t: DbRow) {
     t.createdAt,
   );
   return getTemplate(db, t.id);
+}
+
+export function updateTemplate(
+  db: SqliteDb,
+  id: string,
+  t: { description: string | null; files: unknown[]; createdAt: number },
+) {
+  db.prepare(
+    `UPDATE templates SET description = ?, files_json = ?, created_at = ? WHERE id = ?`,
+  ).run(t.description, JSON.stringify(t.files), t.createdAt, id);
+  return getTemplate(db, id);
 }
 
 export function deleteTemplate(db: SqliteDb, id: string) {
