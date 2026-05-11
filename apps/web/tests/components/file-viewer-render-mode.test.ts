@@ -108,6 +108,22 @@ describe('htmlNeedsSandboxShim', () => {
     expect(htmlNeedsSandboxShim('<script type="TEXT/BABEL"></script>')).toBe(true);
   });
 
+  it('detects unquoted <script type=text/babel> (HTML5 permits unquoted attrs)', () => {
+    // Bare unquoted type value, no other attributes.
+    expect(htmlNeedsSandboxShim('<script type=text/babel></script>')).toBe(true);
+    // Unquoted with an unquoted src= following — terminates on whitespace.
+    expect(
+      htmlNeedsSandboxShim('<script type=text/babel src=app.jsx></script>'),
+    ).toBe(true);
+    // Mixed: unquoted type=, then a quoted src=.
+    expect(
+      htmlNeedsSandboxShim('<script type=text/babel src="components/Icon.jsx"></script>'),
+    ).toBe(true);
+    // Unquoted must still respect the trailing word-boundary anchor — a
+    // `type=text/babel-other` value remains a non-match (defensive).
+    expect(htmlNeedsSandboxShim('<script type=text/babelish></script>')).toBe(false);
+  });
+
   it('does not match plain <script> tags or unrelated MIME types', () => {
     expect(htmlNeedsSandboxShim('<script src="app.js"></script>')).toBe(false);
     expect(htmlNeedsSandboxShim('<script type="module" src="app.js"></script>')).toBe(false);

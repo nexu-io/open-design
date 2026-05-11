@@ -81,16 +81,31 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * `apps/web/src/runtime/srcdoc.ts`) before any user script, which polyfills
  * `localStorage` / `sessionStorage` so artifacts that read them at mount
  * don't throw `SecurityError` and unmount the React tree. The URL-load path
- * serves raw HTML untouched, so any artifact that touches sandbox-blocked
- * Web Storage at startup goes blank.
+ * serves raw HTML untouched, so artifacts that touch sandbox-blocked Web
+ * Storage at startup go blank.
  *
- * Detect the two reliable signals and route those artifacts back through
+ * Scope is narrow on purpose. This helper detects two reliable signals
+ * visible in the *document* source and routes those artifacts back through
  * srcDoc by toggling `forceInline`:
- *   - `<script type="text/babel">`: Babel-standalone XHR-fetches and evals
- *     sibling `.jsx`/`.tsx` files at runtime. Agent-emitted React prototypes
- *     in this style routinely read Web Storage from `useState` initializers.
+ *
+ *   - `<script type="text/babel">` (quoted or unquoted): Babel-standalone
+ *     XHR-fetches and evals sibling `.jsx`/`.tsx` files at runtime.
+ *     Agent-emitted React prototypes in this style routinely read Web
+ *     Storage from `useState` initializers.
  *   - Direct `localStorage` / `sessionStorage` mentions in the document
  *     source (covers inline scripts and plain HTML that calls them).
+ *
+ * Known limitation: a `<script src="./app.js">` (or
+ * `<script type="module" src="./main.js">`) whose **external** file reads
+ * Web Storage at module eval is *not* covered — the helper only sees the
+ * HTML, not the linked subresource, so URL-load is still chosen and the
+ * SecurityError still throws. Catching that case would require fetching
+ * and scanning every script reference before deciding the iframe load
+ * strategy, which duplicates work the browser is about to do and adds
+ * round trips on every preview load. Leaving that path uncovered until
+ * there's a reported case that justifies the cost. Workaround for now:
+ * users can opt the artifact into srcDoc with `?forceInline=1` or by
+ * toggling Tweaks.
  *
  * Pure string scan — caller passes the same `source` already fetched for
  * preview rendering, so this adds no extra I/O. Heuristic by design: false
@@ -98,7 +113,10 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * negatives are the same blank-preview the user already hits.
  */
 export function htmlNeedsSandboxShim(source: string): boolean {
-  if (/<script\s[^>]*\btype\s*=\s*["']text\/babel\b/i.test(source)) return true;
+  // Quote-optional: HTML5 permits unquoted attribute values
+  // (`<script type=text/babel src=app.jsx>`). The `\b` after `text/babel`
+  // still rejects `text/babel-other` / `text/babelish`.
+  if (/<script\s[^>]*\btype\s*=\s*["']?text\/babel\b/i.test(source)) return true;
   if (/\b(?:local|session)Storage\b/.test(source)) return true;
   return false;
 }
