@@ -1,6 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { checkDesignSystemTokenFixtureSync } from "./check-tokens-fixture-sync.ts";
+
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
 type GuardCheck = {
@@ -404,6 +406,7 @@ const checks: GuardCheck[] = [
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
+  { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
 ];
 
 const results: boolean[] = [];
