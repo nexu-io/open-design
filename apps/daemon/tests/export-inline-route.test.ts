@@ -17,9 +17,13 @@ import { startServer } from '../src/server.js';
 // `FileViewer.tsx:5313` (replace-all vs first-match) is locked decision §3.3.
 
 function readerFrom(files: Record<string, string>) {
-  return async (relPath: string): Promise<string | null> => {
+  return async (relPath: string) => {
     const value = files[relPath];
-    return typeof value === 'string' ? value : null;
+    if (typeof value !== 'string') return null;
+    return {
+      size: Buffer.byteLength(value, 'utf8'),
+      read: async () => value,
+    };
   };
 }
 
@@ -291,18 +295,74 @@ describe('inlineRelativeAssets', () => {
     });
   });
 
+  it('checks maxAssetBytes via handle.size BEFORE invoking handle.read()', async () => {
+    // PR #1312 round-4 (lefarcen P2): the maxAssetBytes cap must fire
+    // pre-buffer. A reader whose read() throws is fine — the helper
+    // must not invoke it once the stat-side size exceeds the cap.
+    let readsAttempted = 0;
+    const sizeOnlyReader = async (relPath: string) => ({
+      size: 10_000,
+      read: async (): Promise<string | null> => {
+        readsAttempted += 1;
+        throw new Error(`read should not happen for ${relPath}`);
+      },
+    });
+    const html = '<link rel="stylesheet" href="big.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', sizeOnlyReader, {
+      maxAssetBytes: 1_000,
+    });
+    expect(readsAttempted).toBe(0);
+    expect(out).toContain('<link rel="stylesheet" href="big.css">');
+  });
+
+  it('stops dispatching reads once running total exceeds maxTotalBytes', async () => {
+    // PR #1312 round-4 (lefarcen P2): the running-total guard must
+    // abort the worker pool, not wait for the final concat. With a
+    // tiny totalBytes cap and 20 candidates each contributing 800
+    // bytes of stat-size, we expect at most a few reads to actually
+    // run before the abort flag short-circuits the rest. Concurrency
+    // is 1 so the abort timing is deterministic.
+    let reads = 0;
+    const countingReader = async (relPath: string) => ({
+      size: 800,
+      read: async () => {
+        reads += 1;
+        return `/* ${relPath} */`;
+      },
+    });
+    const html = Array.from({ length: 20 }, (_, i) =>
+      `<link rel="stylesheet" href="a${i}.css">`,
+    ).join('');
+    await expect(
+      inlineRelativeAssets(html, 'index.html', countingReader, {
+        maxTotalBytes: 1_000,
+        maxReadConcurrency: 1,
+      }),
+    ).rejects.toMatchObject({ name: 'InlineAssetsLimitError', limit: 'total' });
+    // Owner html is ~760 bytes. First asset's 800 stat-size pushes
+    // running over 1000 → abort. So at most ONE read should fire.
+    expect(reads).toBeLessThanOrEqual(2);
+  });
+
   it('caps concurrent file reads at maxReadConcurrency', async () => {
-    // A reader that records peak concurrency: increments on entry,
-    // decrements on exit, tracks the high-water mark.
+    // A reader that records peak concurrency inside read(): increments
+    // on entry, decrements on exit, tracks the high-water mark. The
+    // size lookup is synchronous-fast so it doesn't contribute.
     let inFlight = 0;
     let peak = 0;
-    const readerWithCounter = async (relPath: string): Promise<string | null> => {
-      inFlight += 1;
-      if (inFlight > peak) peak = inFlight;
-      // Yield a microtask so other concurrent calls can interleave.
-      await new Promise((r) => setImmediate(r));
-      inFlight -= 1;
-      return `/* ${relPath} */`;
+    const readerWithCounter = async (relPath: string) => {
+      const body = `/* ${relPath} */`;
+      return {
+        size: Buffer.byteLength(body, 'utf8'),
+        read: async () => {
+          inFlight += 1;
+          if (inFlight > peak) peak = inFlight;
+          // Yield a microtask so other concurrent calls can interleave.
+          await new Promise((r) => setImmediate(r));
+          inFlight -= 1;
+          return body;
+        },
+      };
     };
     const html = Array.from({ length: 20 }, (_, i) =>
       `<link rel="stylesheet" href="a${i}.css">`,

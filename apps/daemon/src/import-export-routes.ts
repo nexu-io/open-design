@@ -228,7 +228,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   const { sendApiError } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
-  const { readProjectFile } = ctx.projectFiles;
+  const { readProjectFile, resolveProjectFilePath } = ctx.projectFiles;
   const { isSafeId } = ctx.validation;
   const {
     buildProjectArchive,
@@ -420,18 +420,39 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         );
       }
 
+      // PR #1312 round-4 (lefarcen P2): stat first, then read. This
+      // lets the helper short-circuit on maxAssetBytes / maxTotalBytes
+      // BEFORE the buffer is materialized into memory. A 100 MiB
+      // sibling file is rejected after the cheap stat call, not after
+      // a 100 MiB readFile.
       const fileReader: InlineAssetReader = async (sibling) => {
+        let meta;
         try {
-          const siblingFile = await readProjectFile(
+          meta = await resolveProjectFilePath(
             PROJECTS_DIR,
             req.params.id,
             sibling,
             project?.metadata,
           );
-          return siblingFile.buffer.toString('utf8');
         } catch {
           return null;
         }
+        return {
+          size: meta.size,
+          read: async () => {
+            try {
+              const siblingFile = await readProjectFile(
+                PROJECTS_DIR,
+                req.params.id,
+                sibling,
+                project?.metadata,
+              );
+              return siblingFile.buffer.toString('utf8');
+            } catch {
+              return null;
+            }
+          },
+        };
       };
 
       const rendered = await inlineRelativeAssets(

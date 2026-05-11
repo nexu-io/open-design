@@ -33,8 +33,23 @@
 // callers later, you'll want a bounded-concurrency reader and an
 // output-size limit.
 
+/**
+ * A handle to a project-relative asset. Decoupled into `size` (cheap;
+ * sourced from `stat` or equivalent) and `read()` (full materialization)
+ * so the helper can short-circuit on `maxAssetBytes` / `maxTotalBytes`
+ * BEFORE the asset is buffered into memory. PR #1312 round-4 (lefarcen
+ * P2): the round-3 caps fired only after every candidate had already
+ * been fully read + decoded, so 500 assets at 5 MiB each could
+ * materialize 2.5 GiB before the 413. The size-then-read contract
+ * lets us cap pre-buffer.
+ */
+export interface AssetHandle {
+  readonly size: number;
+  read(): Promise<string | null>;
+}
+
 export interface InlineAssetReader {
-  (relPath: string): Promise<string | null>;
+  (relPath: string): Promise<AssetHandle | null>;
 }
 
 export interface InlineOptions {
@@ -174,22 +189,65 @@ export async function inlineRelativeAssets(
   // need overlap-resolution logic.
   pending.sort((a, b) => a.start - b.start);
 
+  // Running-total tracker. Owner html bytes contribute first; each
+  // accepted asset reserves its stat-size BEFORE the read. The
+  // concat-time guard further down is the exact final check; this
+  // pre-buffer reservation is the early-abort that bounds peak memory
+  // (PR #1312 round-4, lefarcen P2). Reservation is approximate
+  // (counts the original tag bytes that get replaced, doesn't count
+  // wrapper overhead) — close enough for resource bounding, and the
+  // concat-time guard catches any remaining drift.
+  let runningBytes = ownerBytes;
+  let totalAborted = false;
+
   const replacements = await runWithConcurrency(
     pending,
     maxReadConcurrency,
     async (p) => {
-      const content = await fileReader(p.resolved);
-      if (content == null) return null;
-      if (Buffer.byteLength(content, 'utf8') > maxAssetBytes) return null;
+      if (totalAborted) return null;
+      const handle = await fileReader(p.resolved);
+      if (handle == null) return null;
+      // Per-asset cap, pre-buffer (stat-based — no read yet).
+      if (handle.size > maxAssetBytes) return null;
+      // Total cap, pre-buffer. The check + write below has no `await`
+      // between them, so under Node's single-threaded event loop the
+      // pair is atomic with respect to other workers — no race.
+      if (runningBytes + handle.size > maxTotalBytes) {
+        totalAborted = true;
+        return null;
+      }
+      runningBytes += handle.size;
+      const content = await handle.read();
+      if (content == null) {
+        // Read failed/returned null AFTER stat said it was OK — refund
+        // the reservation so the total stays honest for any in-flight
+        // siblings still racing the cap check.
+        runningBytes -= handle.size;
+        return null;
+      }
+      if (Buffer.byteLength(content, 'utf8') > maxAssetBytes) {
+        // Defensive: handle.size may have been stale or the reader
+        // ignored its own promise. Refund and drop the inlining.
+        runningBytes -= handle.size;
+        return null;
+      }
       return p.build(content);
     },
   );
 
+  if (totalAborted) {
+    throw new InlineAssetsLimitError(
+      `running total exceeded maxTotalBytes ${maxTotalBytes} during reads`,
+      'total',
+    );
+  }
+
   // Concat slices in one pass with a running output-size guard. The
   // guard counts both the original-html slices we preserve and the
-  // replacement strings we inject, since either side can blow past
-  // maxTotalBytes (a wildly large owner with no inlinings, or a
-  // small owner with one giant inlined asset).
+  // replacement strings we inject. Exact final check; the
+  // pre-buffer reservation above is approximate (raw asset size,
+  // doesn't account for <style>/<script> wrapper overhead) so this
+  // catches any drift.
   const parts: string[] = [];
   let cursor = 0;
   let totalBytes = 0;
