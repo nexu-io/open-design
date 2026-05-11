@@ -254,39 +254,79 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).not.toContain('<div data-od-id=');
   });
 
-  it('annotates direct-child divs under semantic containers and skips iframe/object/embed', () => {
+  it('auto-annotates direct-child divs with class or id under semantic containers', () => {
     const dom = new JSDOM('');
     globalThis.DOMParser = dom.window.DOMParser;
     const srcdoc = buildSrcdoc(
-      '<main><div class="card">A</div><iframe src="x"></iframe></main>',
-      { commentBridge: true },
+      '<section><div class="wrapper">Wrapper</div><div id="named">Named</div></section>',
+      {},
     );
     Reflect.deleteProperty(globalThis, 'DOMParser');
 
-    expect(srcdoc).toContain('<div class="card" data-od-id=');
+    // Direct-child divs under section get data-od-id
+    expect(srcdoc).toContain('<div class="wrapper" data-od-id=');
+    expect(srcdoc).toContain('<div id="named" data-od-id=');
+  });
+
+  it('skips deeply nested divs to avoid layout-noise in the selection bridge', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><div class="outer"><div class="inner">Deep</div></div></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // The outer div is a direct child of section, so it gets annotated
+    expect(srcdoc).toContain('<div class="outer" data-od-id=');
+    // The inner div is nested two levels deep; it must NOT get annotated
+    expect(srcdoc).not.toContain('<div class="inner" data-od-id=');
+  });
+
+  it('auto-annotates even when no bridge flags are set (always-on for persistence)', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<article><h1>Title</h1></article>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Without commentBridge or inspectBridge, annotation still runs so that
+    // saved inspect tweaks (which reference data-od-id selectors) survive
+    // when the user later leaves inspect mode.
+    expect(srcdoc).toContain('<article data-od-id=');
+    expect(srcdoc).toContain('<h1 data-od-id=');
+  });
+
+  it('skips iframe, object, and embed tags from auto-annotation even when they have id', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><iframe src="x"></iframe><object data="x"></object><embed src="x"></embed><iframe id="framed" src="y"></iframe></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
     expect(srcdoc).not.toContain('<iframe data-od-id=');
+    expect(srcdoc).not.toContain('<object data-od-id=');
+    expect(srcdoc).not.toContain('<embed data-od-id=');
+    expect(srcdoc).not.toContain('<iframe id="framed" data-od-id=');
   });
 
-  it('always annotates missing od-ids even when no selection bridge is requested', () => {
-    const dom = new JSDOM('');
-    globalThis.DOMParser = dom.window.DOMParser;
-    const srcdoc = buildSrcdoc('<section><h1>Title</h1></section>', {});
-    Reflect.deleteProperty(globalThis, 'DOMParser');
-
-    expect(srcdoc).toContain('data-od-id=');
-    expect(srcdoc).not.toContain('data-od-selection-bridge');
-  });
-
-  it('annotates div children of [id] elements but not nested anonymous divs', () => {
+  it('annotates div children of elements with id', () => {
     const dom = new JSDOM('');
     globalThis.DOMParser = dom.window.DOMParser;
     const srcdoc = buildSrcdoc(
-      '<div id="root"><div class="child">A</div><div><div class="nested">B</div></div></div>',
-      { commentBridge: true },
+      '<div id="wrapper"><div class="content">Content</div><div id="named">Named</div></div>',
+      {},
     );
     Reflect.deleteProperty(globalThis, 'DOMParser');
 
-    expect(srcdoc).toContain('<div class="child" data-od-id=');
-    expect(srcdoc).not.toContain('<div class="nested" data-od-id=');
+    // The wrapper div itself is matched by [id] and gets annotated
+    expect(srcdoc).toContain('<div id="wrapper" data-od-id=');
+    // Its direct-child divs are matched by [id] > div[class] / [id] > div[id]
+    expect(srcdoc).toContain('<div class="content" data-od-id=');
+    expect(srcdoc).toContain('<div id="named" data-od-id=');
   });
 });
