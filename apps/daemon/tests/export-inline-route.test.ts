@@ -223,6 +223,95 @@ describe('inlineRelativeAssets', () => {
     expect(out).not.toContain('src="../../shared/util.js"');
   });
 
+  // ---- Cap enforcement (PR #1312 round-3, lefarcen P2) ---------------
+  // The helper accepts an InlineOptions bag (test-door per
+  // feedback_test_doors_over_fake_timers.md) so the tests can exercise
+  // each cap with tiny fixtures rather than 2-50 MiB on-disk writes.
+  // Production callers use the module-level defaults.
+  // --------------------------------------------------------------------
+
+  it('throws InlineAssetsLimitError("owner") when the owner html exceeds maxOwnerBytes', async () => {
+    const html = '<html><head>' + 'x'.repeat(500) + '</head></html>';
+    await expect(
+      inlineRelativeAssets(html, 'index.html', readerFrom({}), { maxOwnerBytes: 100 }),
+    ).rejects.toMatchObject({
+      name: 'InlineAssetsLimitError',
+      limit: 'owner',
+    });
+  });
+
+  it('throws InlineAssetsLimitError("candidates") when tag matches exceed maxCandidates', async () => {
+    // Build HTML with 5 link tags, cap at 3.
+    const html = Array.from({ length: 5 }, (_, i) =>
+      `<link rel="stylesheet" href="a${i}.css">`,
+    ).join('');
+    await expect(
+      inlineRelativeAssets(html, 'index.html', readerFrom({}), { maxCandidates: 3 }),
+    ).rejects.toMatchObject({
+      name: 'InlineAssetsLimitError',
+      limit: 'candidates',
+    });
+  });
+
+  it('leaves a tag intact (no replacement) when its asset body exceeds maxAssetBytes', async () => {
+    const html =
+      '<link rel="stylesheet" href="big.css"><link rel="stylesheet" href="small.css">';
+    const out = await inlineRelativeAssets(
+      html,
+      'index.html',
+      readerFrom({
+        'big.css': 'a'.repeat(2000), // exceeds cap
+        'small.css': '.s{}',
+      }),
+      { maxAssetBytes: 1000 },
+    );
+    // Oversized asset stays as a URL ref (graceful — the export still
+    // succeeds; the consumer sees an un-inlined link instead of inflated
+    // memory or a 413 for one bad asset).
+    expect(out).toContain('<link rel="stylesheet" href="big.css">');
+    // The small asset still inlines normally.
+    expect(out).toContain('.s{}');
+    expect(out).not.toContain('href="small.css"');
+  });
+
+  it('throws InlineAssetsLimitError("total") when the assembled output exceeds maxTotalBytes', async () => {
+    const html =
+      '<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="b.css">';
+    const big = 'x'.repeat(800);
+    await expect(
+      inlineRelativeAssets(
+        html,
+        'index.html',
+        readerFrom({ 'a.css': big, 'b.css': big }),
+        { maxTotalBytes: 1000 },
+      ),
+    ).rejects.toMatchObject({
+      name: 'InlineAssetsLimitError',
+      limit: 'total',
+    });
+  });
+
+  it('caps concurrent file reads at maxReadConcurrency', async () => {
+    // A reader that records peak concurrency: increments on entry,
+    // decrements on exit, tracks the high-water mark.
+    let inFlight = 0;
+    let peak = 0;
+    const readerWithCounter = async (relPath: string): Promise<string | null> => {
+      inFlight += 1;
+      if (inFlight > peak) peak = inFlight;
+      // Yield a microtask so other concurrent calls can interleave.
+      await new Promise((r) => setImmediate(r));
+      inFlight -= 1;
+      return `/* ${relPath} */`;
+    };
+    const html = Array.from({ length: 20 }, (_, i) =>
+      `<link rel="stylesheet" href="a${i}.css">`,
+    ).join('');
+    await inlineRelativeAssets(html, 'index.html', readerWithCounter, { maxReadConcurrency: 4 });
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(peak).toBeGreaterThan(0);
+  });
+
   it('does not re-replace a tag literal that appears inside an already-inlined asset body', async () => {
     // Regression for nexu-io/open-design#1312 review feedback (Siri-Ray
     // looper + codex bot): the previous reduce/split-join approach
@@ -426,6 +515,25 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
       const res = await fetch(exportUrl('index.html', q));
       expect(res.status).toBe(200);
     }
+  });
+
+  it('returns 413 PAYLOAD_TOO_LARGE when the owner file blows past the candidates cap', async () => {
+    // PR #1312 round-3 (lefarcen P2): the route must surface the
+    // InlineAssetsLimitError as a structured 413 envelope, not let it
+    // propagate as a 400 BAD_REQUEST. Generated owner has 501
+    // `<link rel=stylesheet>` tags, one above the default
+    // MAX_INLINE_CANDIDATES (500). The candidates cap fires after
+    // matchAll, BEFORE any sibling read, so the fact that `a.css`
+    // doesn't exist on disk is irrelevant.
+    const dir = path.join(projectsRoot, projectId);
+    const huge = '<!doctype html><html><head>' +
+      '<link rel="stylesheet" href="a.css">'.repeat(501) +
+      '</head></html>';
+    await writeFile(path.join(dir, 'too-many-tags.html'), huge);
+    const res = await fetch(exportUrl('too-many-tags.html'));
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
   it('rejects an invalid project id (chars outside isSafeId char class) with 400 BAD_REQUEST', async () => {

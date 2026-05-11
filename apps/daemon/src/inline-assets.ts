@@ -37,10 +37,24 @@ export interface InlineAssetReader {
   (relPath: string): Promise<string | null>;
 }
 
+export interface InlineOptions {
+  /** Max byte length of the owner HTML; exceeds → throw InlineAssetsLimitError("owner"). */
+  maxOwnerBytes?: number;
+  /** Max byte length of a single inlined asset body; exceeds → tag stays as URL ref. */
+  maxAssetBytes?: number;
+  /** Max number of `<link>`/`<script>` matches in the owner HTML; exceeds → throw "candidates". */
+  maxCandidates?: number;
+  /** Max byte length of the assembled output; exceeds → throw InlineAssetsLimitError("total"). */
+  maxTotalBytes?: number;
+  /** Max concurrent fileReader invocations; defaults to MAX_INLINE_READ_CONCURRENCY. */
+  maxReadConcurrency?: number;
+}
+
 export async function inlineRelativeAssets(
   html: string,
   ownerFileName: string,
   fileReader: InlineAssetReader,
+  _opts: InlineOptions = {},
 ): Promise<string> {
   // Each candidate records the exact byte span in the ORIGINAL html. We
   // never mutate-then-rescan, so a tag literal that happens to appear
