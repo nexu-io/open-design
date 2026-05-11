@@ -1,7 +1,13 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { checkDesignSystemTokenFixtureSync } from "./check-tokens-fixture-sync.ts";
+import {
+  checkDesignSystemA1RequiredTokens,
+  checkDesignSystemA2DefaultsParity,
+  checkDesignSystemA2RequiredTokens,
+  checkDesignSystemTokenFixtureSync,
+  checkDesignSystemUnknownTokens,
+} from "./check-tokens-fixture-sync.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
@@ -407,6 +413,10 @@ const checks: GuardCheck[] = [
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
   { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
+  { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },
+  { name: "design system A2 required tokens", run: checkDesignSystemA2RequiredTokens },
+  { name: "design system unknown token allowlist", run: checkDesignSystemUnknownTokens },
+  { name: "design system A2 defaults parity", run: checkDesignSystemA2DefaultsParity },
 ];
 
 const results: boolean[] = [];

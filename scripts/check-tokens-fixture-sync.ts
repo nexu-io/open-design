@@ -1,37 +1,43 @@
 /* ─────────────────────────────────────────────────────────────────────────
  * scripts/check-tokens-fixture-sync.ts
  *
- * Drift guard for the token / fixture pair introduced in #1231.
+ * Guard checks that enforce the design-system token contract.
  *
- * Each design system in `design-systems/<brand>/` ships two files that
- * agents consume in tandem:
+ * The shared schema lives in `design-systems/_schema/tokens.schema.ts`;
+ * its A2 fallback values mirror into `design-systems/_schema/defaults.css`.
+ * Every brand under `design-systems/<brand>/` ships two consumer-facing
+ * artifacts:
  *
- *   - tokens.css         — the canonical token bindings (`:root { ... }`)
- *   - components.html    — a self-contained fixture whose first <style>
- *                          embeds the same `:root { ... }` so the file
- *                          renders standalone in any browser
+ *   - tokens.css       — canonical token bindings (`:root { ... }`)
+ *   - components.html  — self-contained fixture whose first <style>
+ *                        embeds the same `:root` so the file renders
+ *                        standalone in any browser.
  *
- * The fixture's :root block is a *copy* of tokens.css's :root block. If
- * the two drift apart, agents that paste the fixture's :root will quietly
- * generate artifacts whose token values disagree with the canonical
- * brand definition. There is no compile step linking the two — only a
- * comment in components.html asking authors to keep them in sync — so
- * this guard exists to make the contract enforceable.
+ * This file exports five check functions, each registered as its own
+ * entry in `pnpm guard` so failures attribute to a specific contract.
  *
- * What it checks:
- *   - For every brand directory under design-systems/, if both
- *     tokens.css and components.html exist, their first unscoped
- *     `:root { ... }` block must be byte-equivalent after canonical
- *     normalization (comments stripped, whitespace collapsed).
- *   - If only one of the pair exists, that's a violation — token /
- *     fixture pairs must travel together.
- *   - Scoped overrides like `:root[lang="zh-CN"]` and `:root[lang="ja"]`
- *     are *not* required to appear in the fixture (per the inline
- *     comment in design-systems/kami/components.html they are pasted
- *     only when an artifact's <html lang="..."> matches), so this guard
- *     only compares the unscoped `:root` block.
+ *   1. checkDesignSystemTokenFixtureSync
+ *        components.html `:root` is byte-equivalent to tokens.css
+ *        `:root` after canonical normalization.
  *
- * Run standalone with: `pnpm exec tsx scripts/check-tokens-fixture-sync.ts`
+ *   2. checkDesignSystemA1RequiredTokens
+ *        Every brand declares every A1-identity / A1-structure token
+ *        from the schema. Missing → fail.
+ *
+ *   3. checkDesignSystemA2RequiredTokens
+ *        Every brand declares every A2 token from the schema. Missing
+ *        → fail (until the derive script lands; see _schema/AGENTS.md).
+ *
+ *   4. checkDesignSystemUnknownTokens
+ *        Every token a brand declares is either in the shared schema
+ *        or explicitly allowed by `BRAND_EXTENSIONS` /
+ *        `BRAND_EXTENSION_PREFIXES`. Stray names → fail.
+ *
+ *   5. checkDesignSystemA2DefaultsParity
+ *        Each A2 declaration in `_schema/defaults.css` matches the
+ *        `fallback` field on the matching entry in `tokens.schema.ts`.
+ *
+ * Run standalone: `pnpm exec tsx scripts/check-tokens-fixture-sync.ts`
  * Or as part of `pnpm guard` (registered in scripts/guard.ts).
  * ─────────────────────────────────────────────────────────────────── */
 
@@ -39,62 +45,150 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  BRAND_EXTENSIONS,
+  BRAND_EXTENSION_PREFIXES,
+  TOKEN_SCHEMA,
+  getAllSchemaNames,
+  getRequiredA1Names,
+  getRequiredA2Names,
+  isAllowedExtension,
+} from "../design-systems/_schema/tokens.schema.ts";
+
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const designSystemsRoot = path.join(repoRoot, "design-systems");
+const schemaRoot = path.join(designSystemsRoot, "_schema");
+const defaultsCssPath = path.join(schemaRoot, "defaults.css");
+
+const SKIPPED_BRAND_DIRECTORIES = new Set(["_schema"]);
 
 function toRepositoryPath(filePath: string): string {
   return path.relative(repoRoot, filePath).split(path.sep).join("/");
 }
 
-/**
- * Strip every CSS block comment from the source. We do this *before*
- * looking for `:root { ... }` because file-level docstrings often
- * mention the literal text `:root { ... }` inside backticks; matching
- * the regex against raw source would happily extract the example body
- * instead of the real rule.
- */
+// ─── CSS parsing utilities ──────────────────────────────────────────
+
 function stripCssComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-/**
- * Extract the body of the first unscoped `:root { ... }` rule from
- * already-comment-stripped CSS.
- *
- * "Unscoped" means we skip rules like `:root[lang="zh-CN"]` — those are
- * brand-specific i18n overrides that should not appear in the fixture's
- * default paste block.
- */
 function extractUnscopedRootBlockBody(commentlessCss: string): string | null {
   const match = commentlessCss.match(/:root(?!\[)\s*\{([\s\S]*?)\}/);
   return match == null ? null : (match[1] ?? null);
 }
 
-/**
- * Canonicalize a `:root { ... }` body for byte-level comparison.
- *
- * The two sources legitimately differ in formatting — tokens.css carries
- * extensive inline comments and per-section dividers, components.html
- * strips them for a minimal paste — so comparing raw bytes always fails.
- * Canonicalization normalizes both to the same shape so only meaningful
- * value differences remain. Comments are assumed already stripped.
- */
 function canonicalizeRootBlockBody(body: string): string {
   const declarations = body
     .split(";")
     .map((decl) =>
       decl
         .trim()
-        // Collapse any internal whitespace run to one space.
         .replace(/\s+/g, " ")
-        // Normalize spacing around the property/value separator. CSS
-        // ignores it (`--x:y` and `--x: y` are equivalent) so we should
-        // not flag it as drift.
         .replace(/\s*:\s*/, ": "),
     )
     .filter((decl) => decl.length > 0);
   return declarations.map((decl) => `${decl};`).join("\n");
 }
+
+/** Parse a normalized `:root` body into a name→value map for tokens (--*). */
+function parseTokenDeclarations(commentlessRootBody: string): Map<string, string> {
+  const declarations = new Map<string, string>();
+  for (const rawDecl of commentlessRootBody.split(";")) {
+    const decl = rawDecl.trim();
+    if (decl.length === 0) continue;
+    const colonIndex = decl.indexOf(":");
+    if (colonIndex === -1) continue;
+    const name = decl.slice(0, colonIndex).trim();
+    if (!name.startsWith("--")) continue;
+    const value = decl
+      .slice(colonIndex + 1)
+      .trim()
+      .replace(/\s+/g, " ");
+    declarations.set(name, value);
+  }
+  return declarations;
+}
+
+/** Normalize a CSS expression for byte-level comparison. */
+function normalizeCssValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+// ─── Brand discovery ────────────────────────────────────────────────
+
+type BrandSources = {
+  brand: string;
+  tokensPath: string;
+  fixturePath: string;
+  tokensCss: string;
+  fixtureHtml: string;
+};
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await readFile(filePath, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type BrandDiscovery = { sources: BrandSources[]; pairingErrors: string[] };
+
+async function discoverBrandSources(): Promise<BrandDiscovery> {
+  let designSystemEntries;
+  try {
+    designSystemEntries = await readdir(designSystemsRoot, { withFileTypes: true });
+  } catch {
+    return { sources: [], pairingErrors: [] };
+  }
+
+  const sources: BrandSources[] = [];
+  const pairingErrors: string[] = [];
+
+  for (const entry of designSystemEntries) {
+    if (!entry.isDirectory()) continue;
+    if (SKIPPED_BRAND_DIRECTORIES.has(entry.name)) continue;
+
+    const brand = entry.name;
+    const brandRoot = path.join(designSystemsRoot, brand);
+    const tokensPath = path.join(brandRoot, "tokens.css");
+    const fixturePath = path.join(brandRoot, "components.html");
+
+    const [tokensExists, fixtureExists] = await Promise.all([fileExists(tokensPath), fileExists(fixturePath)]);
+
+    if (!tokensExists && !fixtureExists) continue;
+
+    if (tokensExists !== fixtureExists) {
+      const present = tokensExists ? tokensPath : fixturePath;
+      const missing = tokensExists ? fixturePath : tokensPath;
+      pairingErrors.push(
+        `${toRepositoryPath(present)} exists but ${toRepositoryPath(missing)} does not — ` +
+          `token / fixture pairs must travel together so agents always have both the values and a working example.`,
+      );
+      continue;
+    }
+
+    const [tokensCss, fixtureHtml] = await Promise.all([readFile(tokensPath, "utf8"), readFile(fixturePath, "utf8")]);
+
+    sources.push({ brand, tokensPath, fixturePath, tokensCss, fixtureHtml });
+  }
+
+  sources.sort((a, b) => a.brand.localeCompare(b.brand));
+  return { sources, pairingErrors };
+}
+
+function reportFailure(checkLabel: string, violations: string[], remediation?: string): boolean {
+  if (violations.length === 0) return true;
+  console.error(`${checkLabel} violations:`);
+  for (const violation of violations) {
+    console.error(`- ${violation}`);
+  }
+  if (remediation != null) console.error(remediation);
+  return false;
+}
+
+// ─── 1. Sync between tokens.css and components.html ──────────────────
 
 function describeFirstDivergence(canonicalTokens: string, canonicalFixture: string): string {
   const tokenLines = canonicalTokens.split("\n");
@@ -114,52 +208,12 @@ function describeFirstDivergence(canonicalTokens: string, canonicalFixture: stri
   return "  declarations align by index but the canonical strings still differ — inspect manually";
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await readFile(filePath, "utf8");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function checkDesignSystemTokenFixtureSync(): Promise<boolean> {
-  let designSystemEntries;
-  try {
-    designSystemEntries = await readdir(designSystemsRoot, { withFileTypes: true });
-  } catch {
-    // No design-systems/ directory yet — nothing to check, treated as
-    // pass so the guard does not block repos pre-dating the feature.
-    console.log("Token-fixture sync skipped: no design-systems/ directory.");
-    return true;
-  }
-
-  const violations: string[] = [];
+  const { sources, pairingErrors } = await discoverBrandSources();
+  const violations = [...pairingErrors];
   let pairsChecked = 0;
 
-  for (const entry of designSystemEntries) {
-    if (!entry.isDirectory()) continue;
-
-    const brandRoot = path.join(designSystemsRoot, entry.name);
-    const tokensPath = path.join(brandRoot, "tokens.css");
-    const fixturePath = path.join(brandRoot, "components.html");
-
-    const [tokensExists, fixtureExists] = await Promise.all([fileExists(tokensPath), fileExists(fixturePath)]);
-
-    if (!tokensExists && !fixtureExists) continue;
-
-    if (tokensExists !== fixtureExists) {
-      const present = tokensExists ? tokensPath : fixturePath;
-      const missing = tokensExists ? fixturePath : tokensPath;
-      violations.push(
-        `${toRepositoryPath(present)} exists but ${toRepositoryPath(missing)} does not — ` +
-          `token / fixture pairs must travel together so agents always have both the values and a working example.`,
-      );
-      continue;
-    }
-
-    const [tokensCss, fixtureHtml] = await Promise.all([readFile(tokensPath, "utf8"), readFile(fixturePath, "utf8")]);
-
+  for (const { brand, tokensPath, fixturePath, tokensCss, fixtureHtml } of sources) {
     const tokensRootBody = extractUnscopedRootBlockBody(stripCssComments(tokensCss));
     const fixtureRootBody = extractUnscopedRootBlockBody(stripCssComments(fixtureHtml));
 
@@ -182,7 +236,7 @@ export async function checkDesignSystemTokenFixtureSync(): Promise<boolean> {
     if (canonicalTokens !== canonicalFixture) {
       violations.push(
         [
-          `${toRepositoryPath(fixturePath)} :root block drifted from ${toRepositoryPath(tokensPath)} :root.`,
+          `[${brand}] ${toRepositoryPath(fixturePath)} :root drifted from ${toRepositoryPath(tokensPath)} :root.`,
           describeFirstDivergence(canonicalTokens, canonicalFixture),
           `  Re-paste the canonical block from tokens.css (declarations only — comments and whitespace are normalized).`,
         ].join("\n"),
@@ -190,28 +244,216 @@ export async function checkDesignSystemTokenFixtureSync(): Promise<boolean> {
     }
   }
 
-  if (violations.length > 0) {
-    console.error("Design system token-fixture sync violations:");
-    for (const violation of violations) {
-      console.error(`- ${violation}`);
-    }
-    console.error(
-      "Each design-systems/<brand>/components.html must keep its first `:root { ... }` block byte-equivalent (after comment / whitespace normalization) to the same brand's tokens.css `:root` block.",
+  const passed = reportFailure(
+    "Design system token-fixture sync",
+    violations,
+    "Each design-systems/<brand>/components.html must keep its first `:root { ... }` block byte-equivalent (after comment / whitespace normalization) to the same brand's tokens.css `:root` block.",
+  );
+  if (passed) {
+    console.log(
+      `Design system token-fixture sync passed: ${pairsChecked} brand pair${pairsChecked === 1 ? "" : "s"} aligned (components.html :root matches tokens.css :root).`,
     );
-    return false;
+  }
+  return passed;
+}
+
+// ─── 2. A1 required tokens ──────────────────────────────────────────
+
+export async function checkDesignSystemA1RequiredTokens(): Promise<boolean> {
+  const { sources } = await discoverBrandSources();
+  const requiredA1 = getRequiredA1Names();
+  const violations: string[] = [];
+
+  for (const { brand, tokensPath, tokensCss } of sources) {
+    const rootBody = extractUnscopedRootBlockBody(stripCssComments(tokensCss));
+    if (rootBody == null) continue; // sync check covers this case
+    const declared = parseTokenDeclarations(rootBody);
+
+    const missing = requiredA1.filter((name) => !declared.has(name));
+    if (missing.length > 0) {
+      violations.push(
+        `[${brand}] ${toRepositoryPath(tokensPath)} is missing ${missing.length} A1 token${missing.length === 1 ? "" : "s"} (brand identity / structure must be explicit per brand):\n  ${missing.join(", ")}`,
+      );
+    }
   }
 
-  console.log(
-    `Design system token-fixture sync passed: ${pairsChecked} brand pair${pairsChecked === 1 ? "" : "s"} aligned (components.html :root matches tokens.css :root).`,
+  const passed = reportFailure(
+    "Design system A1 required tokens",
+    violations,
+    "A1 tokens (identity + structure) have no defensible cross-brand fallback. Every brand must declare them explicitly. See design-systems/_schema/AGENTS.md for the layer model.",
   );
-  return true;
+  if (passed) {
+    console.log(
+      `Design system A1 required tokens passed: ${sources.length} brand${sources.length === 1 ? "" : "s"} declare all ${requiredA1.length} A1 tokens.`,
+    );
+  }
+  return passed;
 }
+
+// ─── 3. A2 required tokens ──────────────────────────────────────────
+
+export async function checkDesignSystemA2RequiredTokens(): Promise<boolean> {
+  const { sources } = await discoverBrandSources();
+  const requiredA2 = getRequiredA2Names();
+  const violations: string[] = [];
+
+  for (const { brand, tokensPath, tokensCss } of sources) {
+    const rootBody = extractUnscopedRootBlockBody(stripCssComments(tokensCss));
+    if (rootBody == null) continue;
+    const declared = parseTokenDeclarations(rootBody);
+
+    const missing = requiredA2.filter((name) => !declared.has(name));
+    if (missing.length > 0) {
+      violations.push(
+        `[${brand}] ${toRepositoryPath(tokensPath)} is missing ${missing.length} A2 token${missing.length === 1 ? "" : "s"} (default values exist in design-systems/_schema/defaults.css; copy or override):\n  ${missing.join(", ")}`,
+      );
+    }
+  }
+
+  const passed = reportFailure(
+    "Design system A2 required tokens",
+    violations,
+    "A2 tokens carry sensible cross-brand defaults but artifacts paste a single :root block — agents that paste a tokens.css missing an A2 declaration will produce broken artifacts. Every brand's tokens.css must declare every A2 token (until the derive script lands and inlines fallbacks automatically).",
+  );
+  if (passed) {
+    console.log(
+      `Design system A2 required tokens passed: ${sources.length} brand${sources.length === 1 ? "" : "s"} declare all ${requiredA2.length} A2 tokens.`,
+    );
+  }
+  return passed;
+}
+
+// ─── 4. Unknown token allowlist ─────────────────────────────────────
+
+export async function checkDesignSystemUnknownTokens(): Promise<boolean> {
+  const { sources } = await discoverBrandSources();
+  const schemaNames = new Set(getAllSchemaNames());
+  const violations: string[] = [];
+
+  for (const { brand, tokensPath, tokensCss } of sources) {
+    const rootBody = extractUnscopedRootBlockBody(stripCssComments(tokensCss));
+    if (rootBody == null) continue;
+    const declared = parseTokenDeclarations(rootBody);
+
+    const unknown: string[] = [];
+    for (const name of declared.keys()) {
+      if (schemaNames.has(name)) continue;
+      if (isAllowedExtension(brand, name)) continue;
+      unknown.push(name);
+    }
+
+    if (unknown.length > 0) {
+      violations.push(
+        `[${brand}] ${toRepositoryPath(tokensPath)} declares ${unknown.length} unknown token${unknown.length === 1 ? "" : "s"} (not in shared schema, not in BRAND_EXTENSIONS["${brand}"], not matching any BRAND_EXTENSION_PREFIXES):\n  ${unknown.join(", ")}`,
+      );
+    }
+  }
+
+  const passed = reportFailure(
+    "Design system unknown token allowlist",
+    violations,
+    'Every token must be declared in design-systems/_schema/tokens.schema.ts (shared schema), or listed in BRAND_EXTENSIONS["<brand>"] (brand-specific), or match a prefix in BRAND_EXTENSION_PREFIXES. See _schema/AGENTS.md for the C → B-slot → A2 promotion path before adding new shared tokens.',
+  );
+  if (passed) {
+    const totalTokens = sources.reduce((sum, source) => {
+      const body = extractUnscopedRootBlockBody(stripCssComments(source.tokensCss));
+      return sum + (body == null ? 0 : parseTokenDeclarations(body).size);
+    }, 0);
+    console.log(
+      `Design system unknown token allowlist passed: ${totalTokens} declarations across ${sources.length} brand${sources.length === 1 ? "" : "s"} all match shared schema or brand extensions.`,
+    );
+  }
+  return passed;
+}
+
+// ─── 5. A2 defaults parity (schema fallback ↔ defaults.css) ─────────
+
+export async function checkDesignSystemA2DefaultsParity(): Promise<boolean> {
+  let defaultsCss: string;
+  try {
+    defaultsCss = await readFile(defaultsCssPath, "utf8");
+  } catch {
+    return reportFailure(
+      "Design system A2 defaults parity",
+      [`${toRepositoryPath(defaultsCssPath)} does not exist — A2 fallback contract requires a CSS mirror of tokens.schema.ts.`],
+    );
+  }
+
+  const rootBody = extractUnscopedRootBlockBody(stripCssComments(defaultsCss));
+  if (rootBody == null) {
+    return reportFailure(
+      "Design system A2 defaults parity",
+      [`${toRepositoryPath(defaultsCssPath)} contains no \`:root { ... }\` rule.`],
+    );
+  }
+
+  const declared = parseTokenDeclarations(rootBody);
+  const violations: string[] = [];
+
+  const a2Specs = TOKEN_SCHEMA.filter((spec) => spec.layer === "A2");
+
+  for (const spec of a2Specs) {
+    const fallback = spec.fallback;
+    if (fallback == null) {
+      violations.push(
+        `tokens.schema.ts entry ${spec.name} has layer "A2" but no \`fallback\` field — every A2 token must specify the value the derive script will inline.`,
+      );
+      continue;
+    }
+    const actual = declared.get(spec.name);
+    if (actual == null) {
+      violations.push(
+        `${toRepositoryPath(defaultsCssPath)} is missing a declaration for ${spec.name} (schema fallback is \`${fallback}\`).`,
+      );
+      continue;
+    }
+    if (normalizeCssValue(actual) !== normalizeCssValue(fallback)) {
+      violations.push(
+        [
+          `${spec.name} drifted between schema and defaults.css:`,
+          `  tokens.schema.ts → ${normalizeCssValue(fallback)}`,
+          `  defaults.css     → ${normalizeCssValue(actual)}`,
+        ].join("\n"),
+      );
+    }
+  }
+
+  const a2Names = new Set(a2Specs.map((spec) => spec.name));
+  for (const declaredName of declared.keys()) {
+    if (!a2Names.has(declaredName)) {
+      violations.push(
+        `${toRepositoryPath(defaultsCssPath)} declares ${declaredName}, which is not an A2 token in tokens.schema.ts. defaults.css mirrors only A2 fallbacks.`,
+      );
+    }
+  }
+
+  const passed = reportFailure(
+    "Design system A2 defaults parity",
+    violations,
+    "Update both tokens.schema.ts and defaults.css together. defaults.css exists as a human-readable mirror of A2 fallback fields and is the future input to the derive script.",
+  );
+  if (passed) {
+    console.log(
+      `Design system A2 defaults parity passed: ${a2Specs.length} A2 fallback${a2Specs.length === 1 ? "" : "s"} match tokens.schema.ts ↔ defaults.css byte-for-byte.`,
+    );
+  }
+  return passed;
+}
+
+// ─── Standalone entrypoint ───────────────────────────────────────────
 
 const isInvokedDirectly = process.argv[1] != null && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (isInvokedDirectly) {
-  const passed = await checkDesignSystemTokenFixtureSync();
-  if (!passed) {
+  const checks = [
+    checkDesignSystemTokenFixtureSync,
+    checkDesignSystemA1RequiredTokens,
+    checkDesignSystemA2RequiredTokens,
+    checkDesignSystemUnknownTokens,
+    checkDesignSystemA2DefaultsParity,
+  ];
+  const results = await Promise.all(checks.map((check) => check()));
+  if (results.some((passed) => !passed)) {
     process.exitCode = 1;
   }
 }
