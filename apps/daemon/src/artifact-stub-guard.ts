@@ -100,15 +100,22 @@ export function slugifyArtifactIdentifier(value: string): string {
 export const EMPTY_SLUG_FALLBACK_NAME = 'artifact';
 
 // Two identifiers refer to the same artifact lineage when they're
-// literally equal OR they slugify to the same non-empty value. Empty-slug
-// equivalence (e.g. "测试" vs "首页") is *not* treated as a match because
-// distinct identifiers can both strip to empty, and conflating them
-// would re-introduce the false-positive that lefarcen / mrcfps flagged.
+// literally equal OR one is the canonical slug form of the other (and
+// that slug is non-empty). Slugs alone matching is not enough: the
+// frontend slugifier truncates at 60 chars, so two raw identifiers that
+// only diverge after character 60 (e.g. "A...A1" and "A...A2", 70 chars
+// each) would otherwise falsely bridge. Requiring one side to *be* the
+// slug form keeps the "Landing Page" <-> "landing-page" bridge while
+// rejecting truncation-induced collisions. Empty-slug equivalence
+// (e.g. "测试" vs "首页") is also not treated as a match for the same
+// reason — distinct identifiers can both strip to empty.
 export function artifactIdentifiersMatch(a: string, b: string): boolean {
   if (a === b) return true;
   const slugA = slugifyArtifactIdentifier(a);
   if (slugA.length === 0) return false;
-  return slugA === slugifyArtifactIdentifier(b);
+  const slugB = slugifyArtifactIdentifier(b);
+  if (slugA !== slugB) return false;
+  return a === slugA || b === slugB;
 }
 
 // Reads the canonical identifier from a sibling's `.artifact.json`

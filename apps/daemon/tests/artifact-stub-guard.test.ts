@@ -11,6 +11,7 @@ import {
   evaluateArtifactStubGuard,
   findPriorArtifactSiblings,
   readArtifactStubGuardConfigFromEnv,
+  slugifyArtifactIdentifier,
   type ArtifactStubGuardConfig,
 } from '../src/artifact-stub-guard.js';
 
@@ -231,9 +232,17 @@ describe('artifactIdentifiersMatch', () => {
     expect(artifactIdentifiersMatch('dashboard', 'dashboard')).toBe(true);
   });
 
-  it('matches via slug-equivalence for non-empty slugs', () => {
+  it('bridges raw form to its canonical slug form', () => {
     expect(artifactIdentifiersMatch('Landing Page', 'landing-page')).toBe(true);
-    expect(artifactIdentifiersMatch('Landing Page', 'LANDING-PAGE')).toBe(true);
+    expect(artifactIdentifiersMatch('landing-page', 'Landing Page')).toBe(true);
+  });
+
+  it('does NOT bridge two non-canonical forms even if they slugify the same', () => {
+    // Both inputs slugify to "landing-page" but neither IS the canonical
+    // slug form, so we can't safely call them the same lineage. This is
+    // the same safety property that protects against truncation
+    // collisions for >60-char identifiers.
+    expect(artifactIdentifiersMatch('Landing Page', 'LANDING-PAGE')).toBe(false);
   });
 
   it('does not match distinct identifiers that both slugify to empty', () => {
@@ -247,6 +256,28 @@ describe('artifactIdentifiersMatch', () => {
 
   it('does not match unrelated identifiers with different slugs', () => {
     expect(artifactIdentifiersMatch('dashboard', 'legacy-dashboard')).toBe(false);
+  });
+
+  it('does NOT bridge two long raw identifiers that share a 60-char truncated slug (mrcfps R5)', () => {
+    // Both >60 chars and identical for the first 60, differing only after.
+    // Their slugify outputs collide via truncation, but neither is the
+    // canonical slug form of itself, so they must not bridge.
+    const sixtyAs = 'a'.repeat(60);
+    const a = `${sixtyAs}-suffix-one`;
+    const b = `${sixtyAs}-suffix-two`;
+    expect(a).not.toBe(b);
+    expect(artifactIdentifiersMatch(a, b)).toBe(false);
+  });
+
+  it('still bridges raw form to truncated slug when the slug is the canonical second input', () => {
+    // The standard "Landing Page" <-> "landing-page" case must still work.
+    // Asserting via inputs that hit the truncation boundary: a 70-char raw
+    // identifier whose slug is the truncated-to-60 form, paired with that
+    // truncated form passed in directly, should still match.
+    const slug = 'a'.repeat(60);
+    const raw = 'a'.repeat(70);
+    expect(slugifyArtifactIdentifier(raw)).toBe(slug);
+    expect(artifactIdentifiersMatch(raw, slug)).toBe(true);
   });
 });
 
