@@ -1,9 +1,10 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
+import { useResetOnFullscreenExit } from '../hooks/useResetOnFullscreenExit';
 import type { Dict } from '../i18n/types';
 import {
   fetchLiveArtifact,
@@ -601,6 +602,15 @@ export function LiveArtifactViewer({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [inTabPresent]);
+
+  // Mirror native fullscreen state into React so the in-tab present
+  // overlay doesn't linger after the user exits fullscreen via Esc,
+  // the OS menu, or the macOS window close path. Without this,
+  // entering both "Present in this tab" and then "Present fullscreen"
+  // could leave `inTabPresent` true after exit, keeping the
+  // `is-tab-present` class on the viewer while native fullscreen is
+  // gone.
+  useResetOnFullscreenExit(useCallback(() => setInTabPresent(false), []));
 
   return (
     <div className={`viewer html-viewer live-artifact-viewer${inTabPresent ? ' is-tab-present' : ''}`}>
@@ -3901,6 +3911,11 @@ function HtmlViewer({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [inTabPresent]);
+
+  // Same fullscreen-exit sync as the live-artifact viewer above —
+  // keeps the in-tab present overlay from sticking when the user
+  // leaves native fullscreen by any non-React path.
+  useResetOnFullscreenExit(useCallback(() => setInTabPresent(false), []));
 
   function openInNewTab() {
     if (!source) return;

@@ -602,6 +602,38 @@ export function resolveDesktopStatusUrl(currentUrl: string | null, pendingUrl: s
   return pendingUrl ?? currentUrl;
 }
 
+// Drive the macOS native-fullscreen exit transition to completion
+// before the caller hides the window. Used by the close handler in
+// `createDesktopRuntime` to avoid leaving the fullscreen Space painted
+// as a solid black surface after `window.hide()` runs mid-transition
+// (the bug in #1215).
+//
+// On non-fullscreen windows the call resolves on the next tick with no
+// side effect, so callers can use it unconditionally. The exit is
+// observed via Electron's `leave-full-screen` event; a 2-second safety
+// timeout resolves the promise even if the event is missed so we never
+// strand the close path.
+//
+// Pure with respect to the input window: the caller decides whether to
+// `hide()` / `close()` / `destroy()` after the promise resolves.
+export function exitFullscreenBeforeHide(window: BrowserWindow): Promise<void> {
+  if (window.isDestroyed()) return Promise.resolve();
+  if (!window.isFullScreen()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.removeListener("leave-full-screen", finish);
+      clearTimeout(timeout);
+      resolve();
+    };
+    window.once("leave-full-screen", finish);
+    const timeout = setTimeout(finish, 2000);
+    window.setFullScreen(false);
+  });
+}
+
 function installWindowChromeCssHook(window: BrowserWindow): void {
   window.webContents.on("did-finish-load", () => {
     void applyWindowChromeCss(window).catch((error: unknown) => {
@@ -868,10 +900,17 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   if (process.platform === "darwin") {
     window.on("close", (event) => {
-      if (!stopped) {
-        event.preventDefault();
-        window.hide();
-      }
+      if (stopped) return;
+      event.preventDefault();
+      // Hiding the window while it is still in macOS native fullscreen
+      // leaves the fullscreen Space painted as a solid black surface
+      // (the user sees a black screen until they switch Spaces). Exit
+      // fullscreen first and wait for the animated transition to
+      // complete before hiding so the Space animates back to the
+      // previous app.
+      void exitFullscreenBeforeHide(window).then(() => {
+        if (!stopped && !window.isDestroyed()) window.hide();
+      });
     });
   }
 
