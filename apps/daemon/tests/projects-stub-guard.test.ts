@@ -342,4 +342,28 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
     expect(body.error.code).toBe('ARTIFACT_REGRESSION');
     expect(body.error.details?.priorName).toBe('artifact.html');
   });
+
+  it('does NOT cross-reject distinct empty-slug identifiers (lefarcen/mrcfps round 4)', async () => {
+    const projectId = await createProject('empty-slug-distinct');
+
+    // First save: identifier "测试", lands as artifact.html with a 20 KB
+    // body. Sidecar carries identifier="测试".
+    const firstResp = await postFile(projectId, {
+      name: 'artifact.html',
+      content: htmlBody(20_000),
+      artifactManifest: { ...manifestFor('artifact'), metadata: { identifier: '测试' } },
+    });
+    expect(firstResp.status).toBe(200);
+
+    // Second save: a *different* non-ASCII identifier "首页" that also
+    // slugifies to empty. This is a brand-new artifact lineage; the small
+    // first-emission body must not be compared against the unrelated
+    // "测试" prior just because both share the artifact*.html namespace.
+    const secondResp = await postFile(projectId, {
+      name: 'artifact-2.html',
+      content: '<html><body>tiny but legitimate first emission</body></html>',
+      artifactManifest: { ...manifestFor('artifact'), metadata: { identifier: '首页' } },
+    });
+    expect(secondResp.status).toBe(200);
+  });
 });

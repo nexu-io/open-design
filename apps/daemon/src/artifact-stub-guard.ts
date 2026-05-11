@@ -10,7 +10,7 @@
 // compare against priors that are themselves small) and minRetainedRatio.
 
 import type { Dirent } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 export type ArtifactStubGuardMode = 'reject' | 'warn' | 'off';
@@ -99,6 +99,33 @@ export function slugifyArtifactIdentifier(value: string): string {
 // the entire "artifact*.html" family that such identifiers produce.
 export const EMPTY_SLUG_FALLBACK_NAME = 'artifact';
 
+// Two identifiers refer to the same artifact lineage when they're
+// literally equal OR they slugify to the same non-empty value. Empty-slug
+// equivalence (e.g. "测试" vs "首页") is *not* treated as a match because
+// distinct identifiers can both strip to empty, and conflating them
+// would re-introduce the false-positive that lefarcen / mrcfps flagged.
+export function artifactIdentifiersMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const slugA = slugifyArtifactIdentifier(a);
+  if (slugA.length === 0) return false;
+  return slugA === slugifyArtifactIdentifier(b);
+}
+
+// Reads the canonical identifier from a sibling's `.artifact.json`
+// sidecar. Returns null when the sidecar is absent, malformed, or
+// missing a string identifier — callers treat null as "this file isn't
+// a verifiable artifact prior" and skip it.
+async function readSidecarIdentifier(scanDir: string, entryName: string): Promise<string | null> {
+  try {
+    const raw = await readFile(path.join(scanDir, `${entryName}.artifact.json`), 'utf8');
+    const parsed = JSON.parse(raw) as { metadata?: { identifier?: unknown } } | null;
+    const id = parsed?.metadata?.identifier;
+    return typeof id === 'string' && id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 // Finds prior HTML siblings on disk that share an identifier with a
 // newly-written artifact. The frontend's collision-suffixing scheme means
 // related entries match `<identifier>(-\d+)?\.html?`. The scan deliberately
@@ -130,6 +157,16 @@ export async function findPriorArtifactSiblings(
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     if (!pattern.test(entry.name)) continue;
+    // Verify the sibling's canonical identifier matches before treating
+    // it as a prior. Without this check, distinct identifiers that share
+    // a sibling-name namespace (most reachably the empty-slug fallback,
+    // where 测试 and 首页 both land in artifact*.html) would falsely
+    // warn/reject across each other. Files without a sidecar are skipped
+    // to keep the guard conservative — they weren't written via the
+    // artifact-tag path that this guard targets.
+    const sidecarIdentifier = await readSidecarIdentifier(scanDir, entry.name);
+    if (sidecarIdentifier === null) continue;
+    if (!artifactIdentifiersMatch(identifier, sidecarIdentifier)) continue;
     try {
       const st = await stat(path.join(scanDir, entry.name));
       results.push({ name: entry.name, size: st.size });

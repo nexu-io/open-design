@@ -6,12 +6,31 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   ArtifactRegressionError,
   DEFAULT_ARTIFACT_STUB_GUARD_CONFIG,
+  artifactIdentifiersMatch,
   classifyArtifactStubGuard,
   evaluateArtifactStubGuard,
   findPriorArtifactSiblings,
   readArtifactStubGuardConfigFromEnv,
   type ArtifactStubGuardConfig,
 } from '../src/artifact-stub-guard.js';
+
+// Helper: write an artifact body + the sidecar manifest the production
+// write path would produce. Sibling discovery requires the sidecar to
+// verify the canonical identifier, so unit fixtures must include both.
+async function writeArtifactPair(dir: string, name: string, body: string, identifier: string): Promise<void> {
+  await writeFile(path.join(dir, name), body);
+  const manifest = {
+    version: 1,
+    kind: 'html',
+    title: identifier,
+    entry: name,
+    renderer: 'html',
+    status: 'complete',
+    exports: ['html'],
+    metadata: { identifier, artifactType: 'text/html', inferred: false },
+  };
+  await writeFile(path.join(dir, `${name}.artifact.json`), JSON.stringify(manifest));
+}
 
 function rejectingConfig(overrides: Partial<ArtifactStubGuardConfig> = {}): ArtifactStubGuardConfig {
   return { ...DEFAULT_ARTIFACT_STUB_GUARD_CONFIG, mode: 'reject', ...overrides };
@@ -118,11 +137,10 @@ describe('findPriorArtifactSiblings', () => {
 
   it('finds bare and suffixed siblings, including the same-named target if it exists', async () => {
     const dir = await makeDir();
-    await writeFile(path.join(dir, 'report.html'), 'a'.repeat(20_000));
-    await writeFile(path.join(dir, 'report-2.html'), 'b'.repeat(40_000));
-    await writeFile(path.join(dir, 'report-3.html'), 'c'.repeat(60_000));
-    await writeFile(path.join(dir, 'unrelated.html'), 'x'.repeat(50_000));
-    await writeFile(path.join(dir, 'report-2.html.artifact.json'), '{}');
+    await writeArtifactPair(dir, 'report.html', 'a'.repeat(20_000), 'report');
+    await writeArtifactPair(dir, 'report-2.html', 'b'.repeat(40_000), 'report');
+    await writeArtifactPair(dir, 'report-3.html', 'c'.repeat(60_000), 'report');
+    await writeArtifactPair(dir, 'unrelated.html', 'x'.repeat(50_000), 'unrelated');
 
     // The target 'report-3.html' is included because it currently exists on
     // disk and its current size is the prior content (the overwrite that
@@ -140,8 +158,8 @@ describe('findPriorArtifactSiblings', () => {
 
   it('does not match identifiers that share a prefix', async () => {
     const dir = await makeDir();
-    await writeFile(path.join(dir, 'landing.html'), 'a'.repeat(1_000));
-    await writeFile(path.join(dir, 'landing-page.html'), 'b'.repeat(1_000));
+    await writeArtifactPair(dir, 'landing.html', 'a'.repeat(1_000), 'landing');
+    await writeArtifactPair(dir, 'landing-page.html', 'b'.repeat(1_000), 'landing-page');
 
     const priors = await findPriorArtifactSiblings(dir, 'landing');
     const names = priors.map((p) => p.name).sort();
@@ -150,8 +168,8 @@ describe('findPriorArtifactSiblings', () => {
 
   it('also matches .htm siblings', async () => {
     const dir = await makeDir();
-    await writeFile(path.join(dir, 'overview-doc.htm'), 'a'.repeat(20_000));
-    await writeFile(path.join(dir, 'overview-doc-2.html'), 'b'.repeat(30_000));
+    await writeArtifactPair(dir, 'overview-doc.htm', 'a'.repeat(20_000), 'overview-doc');
+    await writeArtifactPair(dir, 'overview-doc-2.html', 'b'.repeat(30_000), 'overview-doc');
 
     const priors = await findPriorArtifactSiblings(dir, 'overview-doc');
     const names = priors.map((p) => p.name).sort();
@@ -162,8 +180,9 @@ describe('findPriorArtifactSiblings', () => {
     const dir = await makeDir();
     // Frontend persistArtifact slugifies "Landing Page" -> "landing-page"
     // for the filename but keeps the raw "Landing Page" in the manifest.
-    // Both forms must find the same prior sibling on disk.
-    await writeFile(path.join(dir, 'landing-page.html'), 'a'.repeat(40_000));
+    // Both forms refer to the same lineage; sidecar identity uses
+    // slug-equivalence to bridge them.
+    await writeArtifactPair(dir, 'landing-page.html', 'a'.repeat(40_000), 'Landing Page');
 
     const priors = await findPriorArtifactSiblings(dir, 'Landing Page');
     expect(priors.map((p) => p.name)).toEqual(['landing-page.html']);
@@ -174,12 +193,60 @@ describe('findPriorArtifactSiblings', () => {
     // Identifier like "测试" (or any all-non-ASCII / punctuation-only
     // string) strips to "" through the web slugifier and persistArtifact's
     // `|| 'artifact'` fallback writes it as artifact.html / artifact-2.html.
-    await writeFile(path.join(dir, 'artifact.html'), 'a'.repeat(40_000));
-    await writeFile(path.join(dir, 'artifact-2.html'), 'b'.repeat(60_000));
+    await writeArtifactPair(dir, 'artifact.html', 'a'.repeat(40_000), '测试');
+    await writeArtifactPair(dir, 'artifact-2.html', 'b'.repeat(60_000), '测试');
 
     const priors = await findPriorArtifactSiblings(dir, '测试');
     const names = priors.map((p) => p.name).sort();
     expect(names).toEqual(['artifact-2.html', 'artifact.html']);
+  });
+
+  it('does NOT match a fallback sibling whose sidecar identifier differs (lefarcen/mrcfps round 4)', async () => {
+    const dir = await makeDir();
+    // Two distinct empty-slug identifiers both land in the artifact*.html
+    // namespace. A new save for "首页" must not be compared against the
+    // earlier "测试" sibling — they're unrelated artifacts that just
+    // happen to share a fallback basename.
+    await writeArtifactPair(dir, 'artifact.html', 'a'.repeat(40_000), '测试');
+
+    const priors = await findPriorArtifactSiblings(dir, '首页');
+    expect(priors).toEqual([]);
+  });
+
+  it('skips files without a sidecar (likely not artifact-tag-authored)', async () => {
+    const dir = await makeDir();
+    // Bare HTML file with no .artifact.json — could be a paste-text upload
+    // or a hand-edited file. Without sidecar provenance the guard can't
+    // verify the identifier, so we treat it as not-a-prior to avoid
+    // false-positive rejections.
+    await writeFile(path.join(dir, 'dashboard.html'), 'a'.repeat(40_000));
+
+    const priors = await findPriorArtifactSiblings(dir, 'dashboard');
+    expect(priors).toEqual([]);
+  });
+});
+
+describe('artifactIdentifiersMatch', () => {
+  it('matches identical raw identifiers', () => {
+    expect(artifactIdentifiersMatch('dashboard', 'dashboard')).toBe(true);
+  });
+
+  it('matches via slug-equivalence for non-empty slugs', () => {
+    expect(artifactIdentifiersMatch('Landing Page', 'landing-page')).toBe(true);
+    expect(artifactIdentifiersMatch('Landing Page', 'LANDING-PAGE')).toBe(true);
+  });
+
+  it('does not match distinct identifiers that both slugify to empty', () => {
+    expect(artifactIdentifiersMatch('测试', '首页')).toBe(false);
+    expect(artifactIdentifiersMatch('!!!', '???')).toBe(false);
+  });
+
+  it('matches a non-ASCII identifier with itself even when its slug is empty', () => {
+    expect(artifactIdentifiersMatch('测试', '测试')).toBe(true);
+  });
+
+  it('does not match unrelated identifiers with different slugs', () => {
+    expect(artifactIdentifiersMatch('dashboard', 'legacy-dashboard')).toBe(false);
   });
 });
 
@@ -200,7 +267,7 @@ describe('evaluateArtifactStubGuard (integration with disk scan)', () => {
 
   it('rejects a stub-sized rewrite of an existing identifier', async () => {
     const dir = await makeDir();
-    await writeFile(path.join(dir, 'presentation.html'), 'p'.repeat(60_000));
+    await writeArtifactPair(dir, 'presentation.html', 'p'.repeat(60_000), 'presentation');
 
     const result = await evaluateArtifactStubGuard({
       scanDir: dir,
@@ -215,7 +282,7 @@ describe('evaluateArtifactStubGuard (integration with disk scan)', () => {
 
   it('passes when the new body comparable in size to the prior', async () => {
     const dir = await makeDir();
-    await writeFile(path.join(dir, 'presentation.html'), 'p'.repeat(60_000));
+    await writeArtifactPair(dir, 'presentation.html', 'p'.repeat(60_000), 'presentation');
 
     const result = await evaluateArtifactStubGuard({
       scanDir: dir,
