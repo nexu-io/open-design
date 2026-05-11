@@ -118,7 +118,7 @@ column at ~720px max width with the rest as `--gray-light` rails.
    `#E9E5E0`, optional small "Add cover" hint hidden in the corner.
 
 4. **Page header inside content column** — emoji icon (60px) at top,
-   then page title `早安简报 · 2026 年 5 月 6 日 (Wed)` in 40px bold,
+   then page title `每日简报 · 2026 年 5 月 6 日 (Wed)` in 40px bold,
    then a row of property chips (gray):
    `🗂 Type: Daily Briefing  ·  👤 Owner: Eli  ·  📅 Created: 06:42`.
 

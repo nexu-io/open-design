@@ -16,7 +16,7 @@ triggers:
   - "orbit"
   - "daily digest"
   - "morning briefing"
-  - "早安简报"
+  - "每日简报"
   - "每日简报"
   - "跨工具汇总"
 od:
@@ -107,7 +107,7 @@ Connector icons must be monochrome line SVG (1.5 stroke).
 ## Page sections (top to bottom)
 
 1. **Hero** — single row, ~80px tall.
-   Left: `☀ 早安, Eli` (Cormorant 38px, with `,` in `--orange`).
+   Left: `☀ 你好, Eli` (Cormorant 38px, with `,` in `--orange`).
    Right of name: `· 2026 年 5 月 6 日 · 星期三` (muted, 18px).
    Far right: round avatar (40px) + small ⚙ + ✕ icons.
 
