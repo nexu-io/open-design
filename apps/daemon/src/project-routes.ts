@@ -503,6 +503,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof name !== 'string' || !name.trim()) {
         return res.status(400).json({ error: 'name required' });
       }
+      if (name.length > 100) {
+        return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+      }
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
