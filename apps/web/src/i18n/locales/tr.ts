@@ -1158,6 +1158,7 @@ export const tr: Dict = {
   'settings.connectorsSaveKey': "Anahtarı kaydet",
   'settings.connectorsSaveKeyTitle': "Bu anahtarı yerel daemon’a gönder",
   'settings.connectorsKeySaving': "Kaydediliyor…",
+  'settings.connectorsKeySaved': "Kaydedildi ✓",
   'settings.connectorsKeyError': "Anahtar kaydedilemedi. Yerel daemon’ın çalıştığını doğrulayın ve tekrar deneyin.",
   'settings.connectorsHelpSaved': 'Anahtarınız aşağıdaki kataloğu açar ve yerel daemon’da kalır. Değiştirmek için yeni anahtar yapıştırın veya kaldırmak için temizleyin.',
   'settings.connectorsHelpUnsaved': "Kaydedilmemiş değişiklikler — bu kimlik bilgisini yerel daemon’a kaydetmek ve aşağıdaki kataloğu açmak için Anahtarı kaydet’e tıklayın.",

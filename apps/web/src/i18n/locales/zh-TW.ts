@@ -1232,6 +1232,7 @@ export const zhTW: Dict = {
   'settings.connectorsSaveKey': "儲存金鑰",
   'settings.connectorsSaveKeyTitle': "將此金鑰送往本機 daemon",
   'settings.connectorsKeySaving': "儲存中…",
+  'settings.connectorsKeySaved': "已儲存 ✓",
   'settings.connectorsKeyError': "儲存金鑰失敗。請確認本機 daemon 已啟動後再試。",
   'settings.connectorsHelpSaved': '你的金鑰會解鎖下方目錄，並保留在本機 daemon 中。貼上新金鑰可取代，或清除以移除。',
   'settings.connectorsHelpUnsaved': "尚未儲存 — 點擊「儲存金鑰」即可將其存入本機 daemon，並解鎖下方目錄。",

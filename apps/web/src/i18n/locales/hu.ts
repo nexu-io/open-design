@@ -1177,6 +1177,7 @@ export const hu: Dict = {
   'settings.connectorsSaveKey': "Kulcs mentése",
   'settings.connectorsSaveKeyTitle': "Kulcs elküldése a helyi daemonhoz",
   'settings.connectorsKeySaving': "Mentés…",
+  'settings.connectorsKeySaved': "Mentve ✓",
   'settings.connectorsKeyError': "A kulcs mentése nem sikerült. Ellenőrizd, hogy a helyi daemon fut-e, majd próbáld újra.",
   'settings.connectorsHelpSaved': 'A kulcs feloldja az alábbi katalógust, és a helyi daemonban marad. Illessz be új kulcsot a cseréhez, vagy töröld az eltávolításhoz.',
   'settings.connectorsHelpUnsaved': "Mentetlen változtatások — kattints a Kulcs mentése gombra, hogy a hitelesítő adat a helyi daemonba kerüljön, és nyíljon a lenti katalógus.",

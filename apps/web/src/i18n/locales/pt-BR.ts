@@ -1199,6 +1199,7 @@ export const ptBR: Dict = {
   'settings.connectorsSaveKey': "Salvar chave",
   'settings.connectorsSaveKeyTitle': "Enviar esta chave para o daemon local",
   'settings.connectorsKeySaving': "Salvando…",
+  'settings.connectorsKeySaved': "Salvo ✓",
   'settings.connectorsKeyError': "Não foi possível salvar a chave. Confirme que o daemon local está ativo e tente novamente.",
   'settings.connectorsHelpSaved': 'Sua chave desbloqueia o catálogo abaixo e permanece no daemon local. Cole uma nova chave para substituí-la ou limpe para remover.',
   'settings.connectorsHelpUnsaved': "Alterações não salvas — clique em Salvar chave para armazenar esta credencial no daemon local e desbloquear o catálogo abaixo.",

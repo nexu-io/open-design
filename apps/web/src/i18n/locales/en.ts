@@ -1269,6 +1269,7 @@ export const en: Dict = {
   'settings.connectorsSaveKey': 'Save key',
   'settings.connectorsSaveKeyTitle': 'Send this key to the local daemon',
   'settings.connectorsKeySaving': 'Saving\u2026',
+  'settings.connectorsKeySaved': "Saved ✓",
   'settings.connectorsKeyError': 'Couldn\u2019t save the key. Check that the local daemon is running and try again.',
   'settings.connectorsHelpSaved': 'Your key is saved in the local daemon. Paste a new key to replace it, or Clear to remove.',
   'settings.connectorsHelpUnsaved': 'Unsaved changes \u2014 click Save key to store this credential in the local daemon and refresh the catalog below.',

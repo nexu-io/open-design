@@ -1239,6 +1239,7 @@ export const zhCN: Dict = {
   'settings.connectorsSaveKey': "保存密钥",
   'settings.connectorsSaveKeyTitle': "将此密钥发送到本地 daemon",
   'settings.connectorsKeySaving': "保存中…",
+  'settings.connectorsKeySaved': "已保存 ✓",
   'settings.connectorsKeyError': "保存密钥失败。请确认本地 daemon 已启动后再试。",
   'settings.connectorsHelpSaved': '你的密钥会解锁下方目录，并保留在本地 daemon 中。粘贴新密钥可替换，或清除以移除。',
   'settings.connectorsHelpUnsaved': "尚未保存 — 点击「保存密钥」即可把它存入本地 daemon，并解锁下方目录。",

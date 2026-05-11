@@ -1167,6 +1167,7 @@ export const ar: Dict = {
   'settings.connectorsSaveKey': "حفظ المفتاح",
   'settings.connectorsSaveKeyTitle': "إرسال هذا المفتاح إلى الـ daemon المحلي",
   'settings.connectorsKeySaving': "جارٍ الحفظ…",
+  'settings.connectorsKeySaved': "تم الحفظ ✓",
   'settings.connectorsKeyError': "تعذّر حفظ المفتاح. تأكد أن الـ daemon المحلي يعمل ثم حاول مرة أخرى.",
   'settings.connectorsHelpSaved': 'يفتح مفتاحك الكتالوج أدناه ويبقى في daemon المحلي. الصق مفتاحًا جديدًا لاستبداله أو امسحه لإزالته.',
   'settings.connectorsHelpUnsaved': "تغييرات غير محفوظة — اضغط على \"حفظ المفتاح\" لتخزين بيانات الاعتماد في الـ daemon المحلي وفتح الكتالوج أدناه.",

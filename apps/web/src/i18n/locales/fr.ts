@@ -1167,6 +1167,7 @@ export const fr: Dict = {
   'settings.connectorsSaveKey': "Enregistrer la clé",
   'settings.connectorsSaveKeyTitle': "Envoyer cette clé au daemon local",
   'settings.connectorsKeySaving': "Enregistrement…",
+  'settings.connectorsKeySaved': "Enregistré ✓",
   'settings.connectorsKeyError': "Impossible d’enregistrer la clé. Vérifie que le daemon local est lancé puis réessaie.",
   'settings.connectorsHelpSaved': 'Votre clé déverrouille le catalogue ci-dessous et reste dans le daemon local. Collez une nouvelle clé pour la remplacer ou effacez-la.',
   'settings.connectorsHelpUnsaved': "Modifications non enregistrées — clique sur Enregistrer la clé pour stocker cette information dans le daemon local et débloquer le catalogue ci-dessous.",

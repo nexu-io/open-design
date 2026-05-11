@@ -1055,6 +1055,7 @@ export const de: Dict = {
   'settings.connectorsSaveKey': "Key speichern",
   'settings.connectorsSaveKeyTitle': "Diesen Key an den lokalen Daemon senden",
   'settings.connectorsKeySaving': "Speichere…",
+  'settings.connectorsKeySaved': "Gespeichert ✓",
   'settings.connectorsKeyError': "Key konnte nicht gespeichert werden. Prüfe, ob der lokale Daemon läuft, und versuche es erneut.",
   'settings.connectorsHelpSaved': 'Dein Schlüssel entsperrt den Katalog unten und bleibt im lokalen Daemon. Füge einen neuen Schlüssel ein, um ihn zu ersetzen, oder lösche ihn.',
   'settings.connectorsHelpUnsaved': "Ungespeicherte Änderungen — klicke auf „Key speichern“, um diesen Schlüssel im lokalen Daemon abzulegen und den Katalog unten freizuschalten.",

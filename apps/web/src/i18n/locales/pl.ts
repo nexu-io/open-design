@@ -1167,6 +1167,7 @@ export const pl: Dict = {
   'settings.connectorsSaveKey': "Zapisz klucz",
   'settings.connectorsSaveKeyTitle': "Wyślij ten klucz do lokalnego demona",
   'settings.connectorsKeySaving': "Zapisywanie…",
+  'settings.connectorsKeySaved': "Zapisano ✓",
   'settings.connectorsKeyError': "Nie udało się zapisać klucza. Sprawdź, czy lokalny demon działa, i spróbuj ponownie.",
   'settings.connectorsHelpSaved': 'Twój klucz odblokowuje katalog poniżej i pozostaje w lokalnym daemon. Wklej nowy klucz, aby go zastąpić, albo wyczyść, aby usunąć.',
   'settings.connectorsHelpUnsaved': "Niezapisane zmiany — kliknij Zapisz klucz, aby zachować te dane w lokalnym demonie i odblokować katalog poniżej.",

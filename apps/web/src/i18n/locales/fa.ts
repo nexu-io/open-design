@@ -1201,6 +1201,7 @@ export const fa: Dict = {
   'settings.connectorsSaveKey': "ذخیره کلید",
   'settings.connectorsSaveKeyTitle': "ارسال این کلید به daemon محلی",
   'settings.connectorsKeySaving': "در حال ذخیره…",
+  'settings.connectorsKeySaved': "ذخیره شد ✓",
   'settings.connectorsKeyError': "ذخیره کلید ممکن نشد. بررسی کنید daemon محلی در حال اجراست و دوباره تلاش کنید.",
   'settings.connectorsHelpSaved': 'کلید شما کاتالوگ پایین را باز می‌کند و در daemon محلی می‌ماند. برای جایگزینی، کلید جدیدی جای‌گذاری کنید یا برای حذف، پاک کنید.',
   'settings.connectorsHelpUnsaved': "تغییرات ذخیره‌نشده — برای ذخیرهٔ این اعتبارنامه در daemon محلی و باز کردن کاتالوگ پایین، روی «ذخیره کلید» بزنید.",

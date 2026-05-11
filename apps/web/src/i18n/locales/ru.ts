@@ -1199,6 +1199,7 @@ export const ru: Dict = {
   'settings.connectorsSaveKey': "Сохранить ключ",
   'settings.connectorsSaveKeyTitle': "Отправить ключ локальному демону",
   'settings.connectorsKeySaving': "Сохранение…",
+  'settings.connectorsKeySaved': "Сохранено ✓",
   'settings.connectorsKeyError': "Не удалось сохранить ключ. Убедитесь, что локальный демон запущен, и попробуйте снова.",
   'settings.connectorsHelpSaved': 'Ваш ключ открывает каталог ниже и остаётся в локальном daemon. Вставьте новый ключ для замены или очистите, чтобы удалить.',
   'settings.connectorsHelpUnsaved': "Несохранённые изменения — нажмите «Сохранить ключ», чтобы передать его локальному демону и открыть каталог ниже.",

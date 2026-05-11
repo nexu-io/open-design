@@ -2576,8 +2576,17 @@ function ConnectorSection({
   // completes, the daemon returns a tail-only echo, and we land in
   // the saved state with the same UI as a key loaded from disk.
   const [keySaveStatus, setKeySaveStatus] =
-    useState<'idle' | 'saving' | 'error'>('idle');
+    useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const keySavedTimerRef = useRef<number | null>(null);
   const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  // Clear the saved-state timer on unmount
+  useEffect(() => {
+    return () => {
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
+    };
+  }, []);
   const handleSaveKey = async () => {
     if (keySaveStatus === 'saving') return;
     if (!hasPendingEdit) return;
@@ -2597,7 +2606,13 @@ function ConnectorSection({
         apiKeyTail: pendingKey.trim().slice(-4),
       });
       setCatalogRefreshNonce((nonce) => nonce + 1);
-      setKeySaveStatus('idle');
+      setKeySaveStatus('saved');
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
+      keySavedTimerRef.current = window.setTimeout(() => {
+        setKeySaveStatus('idle');
+      }, 2000);
     } catch {
       setKeySaveStatus('error');
     }
@@ -2790,6 +2805,11 @@ function ConnectorSection({
               <>
                 <Icon name="spinner" size={12} className="icon-spin" />
                 <span>{t('settings.connectorsKeySaving')}</span>
+              </>
+            ) : keySaveStatus === 'saved' ? (
+              <>
+                <Icon name="check" size={12} />
+                <span>{t('settings.connectorsKeySaved')}</span>
               </>
             ) : (
               t('settings.connectorsSaveKey')

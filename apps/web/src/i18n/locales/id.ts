@@ -210,6 +210,7 @@ export const id: Dict = {
   'settings.connectorsSaveKey': 'Simpan key',
   'settings.connectorsSaveKeyTitle': 'Kirim key ini ke daemon lokal',
   'settings.connectorsKeySaving': 'Menyimpan…',
+  'settings.connectorsKeySaved': "Tersimpan ✓",
   'settings.connectorsKeyError': 'Tidak bisa menyimpan key. Pastikan daemon lokal berjalan lalu coba lagi.',
   'settings.connectorsHelpSaved':
     'Key kamu tersimpan di daemon lokal. Tempel key baru untuk menggantinya, atau Hapus untuk menghapusnya.',
