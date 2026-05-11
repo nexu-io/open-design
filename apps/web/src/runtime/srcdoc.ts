@@ -48,8 +48,7 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const needsOdIds = options.commentBridge || options.inspectBridge;
-  const withOdIds = needsOdIds ? annotateMissingOdIds(wrapped) : wrapped;
+  const withOdIds = annotateMissingOdIds(wrapped);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
@@ -255,7 +254,7 @@ function annotateMissingOdIds(doc: string): string {
   if (typeof DOMParser === 'undefined') return doc;
   try {
     const parsed = new DOMParser().parseFromString(doc, 'text/html');
-    const selector = 'section, article, header, footer, nav, main, aside, [id]';
+    const selector = 'section, article, header, footer, nav, main, aside, h1, h2, h3, h4, h5, h6, button, a, [id], div[class], div[id]';
     let fallbackIndex = 0;
     parsed.body.querySelectorAll(selector).forEach((el) => {
       if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return;
