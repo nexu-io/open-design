@@ -10711,6 +10711,21 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
 .qf-chip input { width: auto; margin: 0; display: none; }
+.qf-chip-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+.qf-chip-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.qf-chip-on .qf-chip-desc {
+  color: inherit;
+  opacity: 0.72;
+}
 .qf-chip:hover { border-color: var(--border-strong); }
 .qf-chip-disabled {
   cursor: not-allowed;
