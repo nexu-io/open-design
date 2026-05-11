@@ -1,0 +1,272 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/kami/tokens.css
+ *
+ * Structured token bindings for "kami / 紙 / 纸" — a print-first
+ * editorial system: warm parchment canvas, single ink-blue accent,
+ * serif at one weight (500), no italic, no cool grays.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into
+ * the schema shared with all OD design systems. Two paste paths:
+ *
+ *   1. Agents generating an artifact for kami should paste the
+ *      :root block verbatim into the first <style> of the artifact,
+ *      then reference everything via var(--*).
+ *   2. The optional `:root[lang="zh-CN"]` and `:root[lang="ja"]`
+ *      blocks below override --font-display / --font-body for
+ *      Chinese and Japanese typesetting. Include them only when
+ *      the artifact's <html lang="..."> matches; otherwise drop
+ *      to keep the paste minimal.
+ *
+ * Schema notes (kami pushed the schema in five places — see comments
+ * inline tagged "#Gap N" for the matching item in the design log):
+ *   #Gap 1  — 4-level foreground ramp (--fg / --fg-2 / --muted / --meta)
+ *   #Gap 2  — 3-level surface (--bg / --surface / --surface-warm)
+ *   #Gap 3  — 2-level border (--border / --border-soft)
+ *   #Gap 4  — accent-hover binds to value, not formula
+ *   #Gap 5  — ring elevation as a first-class level (--elev-ring)
+ *
+ * Brand-specific extensions (NOT part of the shared schema, only in
+ * kami because of print-fidelity needs — see DESIGN.md §2 "Tag tints"):
+ *   --tag-bg-soft / --tag-bg-base / --tag-bg-strong  — solid-hex
+ *   pre-blends of ink-blue over parchment, replacing rgba/color-mix
+ *   tints because print renderers double-paint alpha fills.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — #Gap 2) ────────────────────────────────
+   * Warm parchment canvas; cards lift one half-shade brighter to
+   * ivory; secondary interactive surfaces drop to warm-sand. Never
+   * #ffffff anywhere — the cream tone *is* kami's identity.
+   * `--surface-warm` is new in the shared schema; brands without a
+   * tertiary surface tier should alias it to var(--surface). */
+  --bg: #f5f4ed;            /* parchment — page background */
+  --surface: #faf9f5;       /* ivory — cards, lifted containers */
+  --surface-warm: #e8e6dc;  /* warm sand — default button bg, secondary surfaces */
+
+  /* ─── Foreground ramp (4 levels — #Gap 1) ───────────────────────
+   * kami's text uses four named levels — primary / secondary /
+   * subtext / metadata. Cool blue-grays are forbidden everywhere;
+   * each token below has the warm yellow-brown undertone (R ≈ G > B)
+   * the brand requires.
+   *
+   * `--fg-2` and `--meta` are new in the shared schema; brands that
+   * only differentiate two levels should alias these to var(--fg)
+   * and var(--muted). */
+  --fg: #141413;            /* near-black — primary text, slight olive warmth */
+  --fg-2: #3d3d3a;          /* dark warm — secondary text, table headers */
+  --muted: #504e49;         /* olive — subtext, captions */
+  --meta: #6b6a64;          /* stone — tertiary, dates, metadata */
+
+  /* ─── Border (2 levels — #Gap 3) ────────────────────────────────
+   * Primary border for card edges and section dividers; soft border
+   * for inner row separators that should not visually compete.
+   * `--border-soft` is new in the shared schema; brands with one
+   * border tier should alias it to var(--border). */
+  --border: #e8e6dc;
+  --border-soft: #e5e3d8;
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * The single chromatic move. CTAs, section numbers, link text,
+   * the left rule of a quote, the W500 weight in a metric. Hard
+   * cap of ≤5% of any surface area (DESIGN.md §2). */
+  --accent: #1b365d;        /* ink blue */
+  --accent-on: #faf9f5;     /* ivory — fg when accent is the bg (NOT pure white) */
+  --accent-light: #2d5a8a;  /* brighter variant — links on dark surfaces only */
+
+  /* ─── Accent states (#Gap 4) ────────────────────────────────────
+   * kami treats --accent-hover and --accent-active as VALUE
+   * bindings, not formula derivations. Ink blue is already deep;
+   * mixing further black makes hover invisible. The brand instead
+   * expresses hover through elevation (whisper shadow) and keeps
+   * the color identical. Active darkens slightly via a hand-picked
+   * value, not a formula.
+   *
+   * Schema rule: every brand provides --accent-hover and
+   * --accent-active. Default's brand uses a black-mix formula;
+   * kami uses identity / hand-picked. Both satisfy the contract. */
+  --accent-hover: var(--accent);                /* color-stable; hover via elevation */
+  --accent-active: #142a48;                     /* hand-picked, ~12% darker ink */
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * kami's DESIGN.md doesn't specify success/warn/danger because the
+   * system is print-first and rarely renders status. We bind them to
+   * desaturated warm hues that survive parchment without breaking
+   * the "single chromatic move" rule. Use sparingly; kami artifacts
+   * almost never need these. */
+  --success: #4a6b3a;       /* warm forest — toned down for parchment */
+  --warn: #8a6b1f;          /* burnt sienna */
+  --danger: #8a3a30;        /* warm terracotta — never tailwind red */
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Default to English Charter stack on :root. The `:root[lang]`
+   * blocks below override for CN and JA. `--font-body` and
+   * `--font-display` are equal — kami uses a single serif weight
+   * (500) and lets size carry hierarchy.
+   *
+   * Sans is reserved for eyebrows, switchers, small labels — it
+   * literally equals the serif stack, so there is no separate
+   * sans token. */
+  --font-display:
+    Charter, Georgia, Palatino, "Times New Roman", serif;
+  --font-body:
+    Charter, Georgia, Palatino, "Times New Roman", serif;
+  --font-mono:
+    "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco,
+    "TsangerJinKai02", "Source Han Serif SC", monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * kami runs lighter on the small end and heavier on the display
+   * end than default's 12–64 — print rhythm needs both 11px captions
+   * and 96px hero display.
+   *
+   * `--text-md` (15px) is a brand-specific extension — kami needs an
+   * in-between size for ledes that the schema's --text-base (body)
+   * and --text-lg (H3) ramp doesn't supply. Generic cross-brand
+   * components must NOT reference --text-md; only kami's own
+   * components.html consumes it. Promote to schema if a second
+   * brand reports the same need. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;        /* body — print-dense */
+  --text-md: 15px;          /* brand-specific — lede / large body */
+  --text-lg: 17px;          /* H3 */
+  --text-xl: 22px;          /* H2 */
+  --text-2xl: 32px;         /* section title */
+  --text-3xl: 48px;         /* CJK display ceiling */
+  --text-4xl: 96px;         /* EN hero / cover slide title */
+
+  /* kami's line-height envelope is 1.10–1.55, narrower than default's */
+  --leading-display: 1.1;   /* hero, H1, H2 */
+  --leading-tight: 1.25;    /* section title */
+  --leading-body: 1.55;     /* reading body */
+  --leading-dense: 1.4;     /* resume / one-pager */
+
+  /* Letter-spacing rules from DESIGN.md §3. EN body is 0; CN/JA
+   * override below. Display tracking is negative (compresses
+   * 96px hero); eyebrow tracking is positive (uppercase labels). */
+  --tracking-display: -1.2px;   /* applied to 96px hero only */
+  --tracking-eyebrow: 1.2px;    /* uppercase eyebrow / overline */
+  --tracking-label: 0.4px;      /* small uppercase labels */
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * kami is print-rooted; section gaps and card paddings come from
+   * the layout grid in DESIGN.md §5, not the 4px web-grid that
+   * default uses. We keep the same token names but rebind values
+   * to kami's actual rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;          /* card interior */
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-18: 72px;         /* section gap (web) */
+  --space-22: 88px;         /* page top padding (web) */
+
+  /* Web page geometry (DESIGN.md §5) */
+  --section-y-desktop: 72px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * `2px → 4px → 6px → 8px → 12px → 16px` per DESIGN.md §6. Tags
+   * sit at 2–4px; buttons and cards at 8px; featured at 12–16px. */
+  --radius-xs: 2px;         /* tags */
+  --radius-sm: 4px;         /* small chips */
+  --radius-md: 8px;         /* default — buttons, cards */
+  --radius-lg: 12px;        /* featured cards */
+  --radius-xl: 16px;        /* hero containers */
+  --radius-pill: 9999px;    /* avatars (rare) */
+
+  /* ─── Elevation (3 levels — #Gap 5) ─────────────────────────────
+   * kami forbids hard drop shadows. Three sanctioned levels:
+   * flat / ring (1px hairline OR 1px brand ring) / whisper. The
+   * shared schema gains `--elev-ring` so brands using ring shadows
+   * as primary elevation (kami, paper, editorial) don't have to
+   * rebind --elev-raised away from blur shadow.
+   *
+   * `--elev-ring-accent` is brand-specific — kami uses it as the
+   * edge for primary buttons (`box-shadow: var(--elev-ring-accent)`
+   * instead of border, to keep the rectangle perfectly aligned
+   * with the fill). */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-ring-accent: 0 0 0 1px var(--accent); /* brand-specific */
+  --elev-raised: 0 4px 24px rgba(0, 0, 0, 0.05);  /* whisper */
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * kami's focus is more restrained than default's — the brand
+   * forbids cool-blue glows. We use a smaller ring with the active
+   * variant of accent. */
+  --focus-ring: 0 0 0 2px var(--accent-active);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * kami's hover is a 200ms whisper-shadow lift only — no transform,
+   * no brightness shift. Two durations, one easing. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * Web container: 1120px max, 64px gutter desktop. Print pages
+   * have margin tokens specific to document type (resume / one-pager
+   * / long-doc / letter / portfolio) — those live in the print
+   * skill, not in this shared token block. */
+  --container-max: 1120px;
+  --container-gutter-desktop: 64px;
+  --container-gutter-tablet: 32px;
+  --container-gutter-phone: 16px;
+
+  /* ─── Brand-specific: tag tint scale (#Gap 6) ────────────────────
+   * Print renderers double-paint alpha fills. kami pre-blends ink
+   * blue over parchment as solid hex at 5 effective alphas. These
+   * tokens are NOT part of the shared schema; they live here only
+   * because kami's rendering target needs them. Other brands tint
+   * with `color-mix(... transparent N%)` inline. */
+  --tag-bg-faint: #eef2f7;     /* ≈ ink at 0.08 */
+  --tag-bg-soft: #e4ecf5;      /* ≈ ink at 0.18 — DEFAULT tag */
+  --tag-bg-base: #d6e1ee;      /* ≈ ink at 0.30 */
+  --tag-bg-strong: #d0dce9;    /* ≈ ink at 0.22, denser */
+}
+
+/* ─── i18n font overrides (#Gap 7) ──────────────────────────────────
+ * Switch the dominant font stack based on the artifact's lang.
+ * Apply ONLY ONE of these blocks — the one matching <html lang="...">
+ * — and keep --font-mono on the EN stack since code labels stay Latin
+ * regardless of the document language.
+ *
+ * For multi-language artifacts (e.g. a deck with one Japanese chapter),
+ * keep the dominant stack on :root and scope the override on a
+ * wrapper element instead:
+ *
+ *   section[lang="ja"] { --font-display: <JA stack>; ... }
+ *
+ * Do NOT chain all three font families inside a single font-family
+ * declaration — that dilutes the visual character of every page.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root[lang="zh-CN"],
+:root[lang="zh"] {
+  --font-display:
+    "TsangerJinKai02", "Source Han Serif SC", "Noto Serif CJK SC",
+    "Songti SC", "STSong", Georgia, serif;
+  --font-body:
+    "TsangerJinKai02", "Source Han Serif SC", "Noto Serif CJK SC",
+    "Songti SC", "STSong", Georgia, serif;
+}
+
+:root[lang="ja"] {
+  --font-display:
+    "YuMincho", "Yu Mincho", "Hiragino Mincho ProN",
+    "Noto Serif CJK JP", "Source Han Serif JP",
+    "TsangerJinKai02", Georgia, serif;
+  --font-body:
+    "YuMincho", "Yu Mincho", "Hiragino Mincho ProN",
+    "Noto Serif CJK JP", "Source Han Serif JP",
+    "TsangerJinKai02", Georgia, serif;
+  /* JA needs the lighter olive override — YuMincho strokes are thinner
+   * and the standard olive looks anemic against parchment. */
+  --muted: #4d4c48;
+}
