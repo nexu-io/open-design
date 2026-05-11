@@ -348,16 +348,31 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     }
   });
 
-  // Export endpoint: serves a self-contained HTML body with every same-
-  // project <link rel=stylesheet> / <script src> inlined. Counterpart to
-  // GET /api/projects/:id/raw/* — that route stays URL-load (one request
-  // per asset; the FileViewer iframe's default since PR #384). This route
-  // exists for explicit "Export self-contained HTML" + screenshot tooling
-  // where one HTTP response with no inter-file dependencies is the goal.
-  // Null-origin (sandboxed iframe srcdoc) callers are intentionally NOT
-  // supported — the only consumers are the daemon UI (same-origin) and
-  // server-side screenshot tooling (no Origin header). See nexu-io/
-  // open-design#368 and the architecture lock at
+  // Export endpoint: serves an HTML body with every same-project
+  // top-level `<link rel=stylesheet>` / `<script src>` inlined.
+  // Counterpart to GET /api/projects/:id/raw/* — that route stays
+  // URL-load (one request per asset; FileViewer's default since
+  // PR #384). This route exists for explicit "Inline top-level
+  // CSS/JS" exports + the screenshot path where the headless browser
+  // fetches the response and renders it.
+  //
+  // Scope is intentionally narrow: only `<link rel=stylesheet>` and
+  // `<script src>` are rewritten. `<img src>`, CSS `url(...)` refs,
+  // `@import`, ES module imports, font sources, and similar remain
+  // external in the response — see the docstring on
+  // `apps/daemon/src/inline-assets.ts` for the full not-rewritten list
+  // and rationale. A fully offline "self-contained" export with image
+  // and font bundling would be a follow-up issue.
+  //
+  // Null-origin (sandboxed iframe srcdoc) callers are intentionally
+  // NOT supported — the only consumers are the daemon UI (same-origin)
+  // and server-side screenshot tooling (no Origin header). The
+  // response also carries `Content-Security-Policy: sandbox
+  // allow-scripts` so top-level browser navigation (no Origin header,
+  // would otherwise pass the daemon middleware) cannot escalate to
+  // daemon-origin privileges through script execution.
+  //
+  // See nexu-io/open-design#368 and the architecture lock at
   // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
   app.get('/api/projects/:id/export/*', async (req, res) => {
     try {

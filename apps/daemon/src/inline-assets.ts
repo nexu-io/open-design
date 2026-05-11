@@ -1,13 +1,37 @@
 // Server-side port of the web-client inliner at
 // apps/web/src/components/FileViewer.tsx:5248-5354 (@ base SHA 5bd97631).
-// Powers the GET /api/projects/:id/export/*?inline=1 endpoint that ships a
-// self-contained HTML document for explicit "Export self-contained HTML" and
-// screenshot tooling — the viewer itself stays URL-load by default since
-// PR #384 (Part 1 of nexu-io/open-design#368).
+// Powers the GET /api/projects/:id/export/*?inline=1 endpoint that
+// inlines TOP-LEVEL relative `<link rel=stylesheet>` and
+// `<script src=...>` tags into the response HTML — the viewer itself
+// stays URL-load by default since PR #384 (Part 1 of
+// nexu-io/open-design#368).
 //
-// The web client and this helper diverge in exactly one place: the global
-// replace below. See the inline comment near `replaceAllOccurrences` for
-// the rationale.
+// Scope: this helper handles two tag families only. The following are
+// NOT rewritten and remain external in the response:
+//   - <img src>, <video src>, <audio src>, <source src>, <iframe src>
+//   - CSS `url(...)` references (in inlined stylesheets or otherwise)
+//   - CSS `@import` directives
+//   - ES module `import` / `export from` statements inside JS bodies
+//   - <link rel=preload|prefetch|icon|...> (only rel=stylesheet inlines)
+//   - <link rel=stylesheet> with absolute / data: / blob: hrefs
+//   - <font-face> src attrs / @font-face url() references
+//
+// Callers that need a fully bundled offline artifact (e.g. an HTML
+// archive that opens on a machine with no network access) must layer
+// their own asset rewriting on top of this primitive or build a
+// stricter "fully self-contained export" follow-up. The screenshot
+// path is the primary motivator: a headless browser fetches each
+// referenced asset on render, so the inline-CSS-and-JS-only contract
+// is sufficient.
+//
+// Memory profile: the helper holds one Buffer-as-string copy of the
+// owner HTML plus one string copy of each sibling asset body, plus the
+// concatenated output. The daemon is local-first (single-user, on the
+// developer's machine — see open_design_architecture.md), so the
+// effective ceiling is the size of the user's own project; no hard
+// cap is enforced. If you're surfacing this endpoint to non-trusted
+// callers later, you'll want a bounded-concurrency reader and an
+// output-size limit.
 
 export interface InlineAssetReader {
   (relPath: string): Promise<string | null>;
