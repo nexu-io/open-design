@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitOnQuestionForms } from '../../src/artifacts/question-form';
+import { formatFormAnswers, splitOnQuestionForms } from '../../src/artifacts/question-form';
 
 describe('splitOnQuestionForms', () => {
   it('normalizes string and object question options', () => {
@@ -43,5 +43,28 @@ describe('splitOnQuestionForms', () => {
         description: 'Browser-first prototype',
       },
     ]);
+  });
+
+  it('preserves stable option values when formatting object-option answers', () => {
+    const text = formatFormAnswers(
+      {
+        id: 'discovery',
+        title: 'Quick brief',
+        questions: [
+          {
+            id: 'platform',
+            label: 'Primary surface',
+            type: 'radio',
+            options: [
+              { label: 'Mobile (iOS/Android)', value: 'mobile' },
+              { label: 'Desktop web', value: 'Desktop web' },
+            ],
+          },
+        ],
+      },
+      { platform: 'mobile' },
+    );
+
+    expect(text).toContain('- Primary surface: Mobile (iOS/Android) [value: mobile]');
   });
 });

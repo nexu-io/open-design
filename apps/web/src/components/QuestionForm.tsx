@@ -357,10 +357,16 @@ export function parseSubmittedAnswers(
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0 && s.toLowerCase() !== '(skipped)')
-        .map((s) => formOptionValueForLabel(q, s));
+        .map((s) => formOptionValueForLabel(q, parseSubmittedOptionToken(s)));
     } else {
-      answers[id] = value.toLowerCase() === '(skipped)' ? '' : formOptionValueForLabel(q, value);
+      answers[id] = value.toLowerCase() === '(skipped)' ? '' : formOptionValueForLabel(q, parseSubmittedOptionToken(value));
     }
   }
   return Object.keys(answers).length > 0 ? answers : null;
+}
+
+function parseSubmittedOptionToken(raw: string): string {
+  const match = /\s+\[value:\s*([^\]]+)\]\s*$/i.exec(raw);
+  if (!match) return raw.trim();
+  return match[1]!.trim();
 }

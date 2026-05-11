@@ -315,14 +315,24 @@ export function formatFormAnswers(
     const v = answers[q.id];
     let display: string;
     if (Array.isArray(v)) {
-      display = v.length > 0 ? v.map((value) => formOptionLabelForValue(q, value)).join(', ') : '(skipped)';
+      display = v.length > 0 ? v.map((value) => formOptionDisplayForValue(q, value)).join(', ') : '(skipped)';
     } else if (typeof v === 'string') {
-      display = v.trim().length > 0 ? formOptionLabelForValue(q, v.trim()) : '(skipped)';
+      display = v.trim().length > 0 ? formOptionDisplayForValue(q, v.trim()) : '(skipped)';
     }
     else display = '(skipped)';
     lines.push(`- ${q.label}: ${display}`);
   }
   return lines.join('\n');
+}
+
+function formOptionDisplayForValue(
+  question: Pick<FormQuestion, 'options'>,
+  value: string,
+): string {
+  const match = question.options?.find((option) => option.value === value || option.label === value);
+  if (!match) return value;
+  if (match.value === match.label) return match.label;
+  return `${match.label} [value: ${match.value}]`;
 }
 
 export function formOptionLabelForValue(
