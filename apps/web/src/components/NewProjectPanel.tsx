@@ -313,12 +313,22 @@ export function NewProjectPanel({
     }
     if (tab === 'image' || tab === 'video' || tab === 'audio') {
       const list = skills.filter((s) => s.mode === tab || s.surface === tab);
+      // The HyperFrames-HTML render path lives in the `hyperframes` skill.
+      // When the user has chosen `hyperframes-html` (via dropdown or template),
+      // pin the project to that skill explicitly — otherwise this branch falls
+      // back to `list[0]`, which is unsorted (apps/daemon/src/skills.ts builds
+      // the list from `readdir()`), so the project could route through
+      // `video-shortform` while metadata still says `videoModel: 'hyperframes-html'`.
+      if (tab === 'video' && videoModel === 'hyperframes-html') {
+        const hyper = list.find((s) => s.id === 'hyperframes');
+        if (hyper) return hyper.id;
+      }
       return list.find((s) => s.defaultFor.includes(tab))?.id
         ?? list[0]?.id
         ?? null;
     }
     return null;
-  }, [tab, skills]);
+  }, [tab, skills, videoModel]);
 
   // When the user picks a curated prompt template, propagate the template's
   // declared `model` and `aspect` onto the actual project state. Without
