@@ -13,7 +13,7 @@
   "model": "flux-2-max",
   "aspect": "1:1",
   "prompt": "Create an image that is pure vibes, think like Editorial, cars, 2000s ads, you can use some colors from this palette #07130e, #556659, #b9b5d0, #f3f1e6, #dedbc9, #afaa92, #ffffff",
-  "previewImageUrl": "https://raw.githubusercontent.com/keremnalbant/open-design/feat/bfl-flux2-integration/prompt-templates/image/hex-palette-vibes-flux2-max.preview.png",
+  "previewImageUrl": "https://cdn.sanity.io/images/2gpum2i6/production/80433f714670662d1b592294670f4067cd86caa3-2048x2048.png",
   "source": {
     "repo": "black-forest-labs/flux-playground",
     "license": "Apache-2.0",

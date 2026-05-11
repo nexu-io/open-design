@@ -13,7 +13,7 @@
   "model": "flux-2-max",
   "aspect": "3:4",
   "prompt": "48.8584° N, 2.2945° E in 1960 styles",
-  "previewImageUrl": "https://raw.githubusercontent.com/keremnalbant/open-design/feat/bfl-flux2-integration/prompt-templates/image/coordinates-to-scene-flux2-max.preview.png",
+  "previewImageUrl": "https://cdn.sanity.io/images/2gpum2i6/production/e34603ec4c870b06671cf2cc97bc4883a75a665e-1152x1440.png",
   "source": {
     "repo": "black-forest-labs/flux-playground",
     "license": "Apache-2.0",

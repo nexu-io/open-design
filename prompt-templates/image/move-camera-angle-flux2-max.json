@@ -13,7 +13,7 @@
   "model": "flux-2-max",
   "aspect": "1:1",
   "prompt": "Move the camera to a bird's-eye top-down angle, revealing new aspects of the scene while maintaining the subject and environment consistency.",
-  "previewImageUrl": "https://raw.githubusercontent.com/keremnalbant/open-design/feat/bfl-flux2-integration/prompt-templates/image/move-camera-angle-flux2-max.preview.png",
+  "previewImageUrl": "https://cdn.sanity.io/images/2gpum2i6/production/94e8ad9c7315204ef31b3ed10482c8bc005968ba-800x1052.png",
   "source": {
     "repo": "black-forest-labs/flux-playground",
     "license": "Apache-2.0",
