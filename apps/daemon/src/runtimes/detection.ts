@@ -1,7 +1,7 @@
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
-import { inspectAgentExecutableResolution } from './executables.js';
+import { resolveAgentExecutable } from './executables.js';
 import { spawnEnvForAgent } from './env.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
@@ -117,8 +117,15 @@ async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
-  const resolution = inspectAgentExecutableResolution(def, configuredEnv);
-  let resolved = resolution.selectedPath;
+  // Resolution returns whichever path the rest of the daemon will spawn
+  // (configured override wins, PATH fallback otherwise). Detection must
+  // probe THAT path and report `available` accordingly, so the Settings
+  // UI never advertises an executable that `resolveAgentBin` won't pick
+  // at run time. Surfacing a different PATH candidate as `available: true`
+  // while a stale configured override survives in chat/run resolution
+  // breaks the invariant flagged on PR #1301 review and would only swap
+  // the ghost in Settings for a ghost in chat (Siri-Ray, #1301 round 3).
+  const resolved = resolveAgentExecutable(def, configuredEnv);
   if (!resolved) {
     return unavailableAgent(def);
   }
@@ -130,24 +137,7 @@ async function probe(
     },
     configuredEnv,
   );
-  let outcome = await probeVersionAtPath(def, resolved, probeEnv);
-  // If the selected executable is not invocable but a distinct PATH
-  // candidate exists, retry there. This is the configured-override
-  // recovery path lefarcen flagged on #1301: when a user has a stale
-  // CODEX_BIN (or other agent-specific override) and a working binary
-  // on PATH, the daemon should adopt the PATH candidate so Settings
-  // can keep `available: true` and the "Test" / "adopt detected
-  // binary" repair flow added in #1205 stays accessible. Without this
-  // retry the user is locked out of self-recovery because Settings
-  // gates the Test button on agent.available.
-  if (
-    outcome.kind === 'not-invocable'
-    && resolution.pathResolvedPath
-    && resolution.pathResolvedPath !== resolved
-  ) {
-    resolved = resolution.pathResolvedPath;
-    outcome = await probeVersionAtPath(def, resolved, probeEnv);
-  }
+  const outcome = await probeVersionAtPath(def, resolved, probeEnv);
   if (outcome.kind === 'not-invocable') {
     return unavailableAgent(def);
   }

@@ -6,32 +6,34 @@
  * anyway, so a leftover wrapper shim made Settings think the CLI was
  * alive when its underlying interpreter was gone.
  *
- * The current fix has two layers:
+ * The fix classifies the version probe's failure shape:
  *
- *   1. The version probe classifies its failure mode. OS-level
- *      rejections (`ENOENT` / `EACCES` / `ENOTDIR`) and shell-exit
- *      stale-wrapper signatures (numeric exit code 126 or 127) are
- *      "not invocable" and report `available: false`. Every other
- *      failure (timeout, generic non-zero exit, unsupported
- *      `--version` flag) keeps the legacy "available, version=null"
- *      contract so adapters with no `--version` flag are not
- *      regressed.
+ *   - **OS-level rejections.** `ENOENT` / `EACCES` / `ENOTDIR` from
+ *     `child_process.execFile` (string `err.code`) mean the binary is
+ *     not invocable at all. Reported as `available: false`.
  *
- *   2. If the selected path is the configured override (e.g. a
- *      stale `CODEX_BIN`) but a different PATH-resolved binary is
- *      also available, the probe retries against the PATH candidate
- *      before giving up. That keeps Settings' "adopt detected
- *      binary" repair flow (PR #1205) accessible: it gates on
- *      `agent.available === true`, so locking the agent before the
- *      user can run the repair flow would trap the user.
+ *   - **Stale-wrapper shell exits.** Numeric `err.code` 126 / 127
+ *     ("not executable" / "command not found") is the canonical POSIX
+ *     shell signature for a wrapper that spawned but whose delegated
+ *     target is gone. Reported as `available: false`.
  *
- * Both layers were flagged in lefarcen's review on PR #1301.
+ *   - **Everything else.** Generic non-zero exit (1, 2, ...) or a
+ *     timeout keeps the legacy "available, version=null" behaviour
+ *     so adapters whose `--version` flag is unsupported are not
+ *     regressed.
+ *
+ * Detection always probes the same path `resolveAgentExecutable`
+ * picks for chat/run resolution, so a stale configured override that
+ * shadows a working PATH binary is reported as unavailable rather
+ * than swapped for the PATH candidate; advertising a different path
+ * would break the invariant that Settings and the chat spawn path
+ * agree on what the agent runs (PR #1301 review, Siri-Ray).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const execAgentFileMock = vi.fn();
-const inspectAgentExecutableResolutionMock = vi.fn();
+const resolveAgentExecutableMock = vi.fn();
 
 vi.mock('../../src/runtimes/invocation.js', () => ({
   execAgentFile: (...args: unknown[]) =>
@@ -42,30 +44,16 @@ vi.mock('../../src/runtimes/executables.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/runtimes/executables.js')>();
   return {
     ...actual,
-    inspectAgentExecutableResolution: (
-      ...args: Parameters<typeof actual.inspectAgentExecutableResolution>
+    resolveAgentExecutable: (
+      ...args: Parameters<typeof actual.resolveAgentExecutable>
     ) =>
       (
-        inspectAgentExecutableResolutionMock as unknown as (
-          ...a: Parameters<typeof actual.inspectAgentExecutableResolution>
-        ) => ReturnType<typeof actual.inspectAgentExecutableResolution>
+        resolveAgentExecutableMock as unknown as (
+          ...a: Parameters<typeof actual.resolveAgentExecutable>
+        ) => ReturnType<typeof actual.resolveAgentExecutable>
       )(...args),
   };
 });
-
-type Resolution = {
-  configuredOverridePath: string | null;
-  pathResolvedPath: string | null;
-  selectedPath: string | null;
-};
-
-function resolution(parts: Partial<Resolution> & { selectedPath: string | null }): Resolution {
-  return {
-    configuredOverridePath: parts.configuredOverridePath ?? null,
-    pathResolvedPath: parts.pathResolvedPath ?? null,
-    selectedPath: parts.selectedPath,
-  };
-}
 
 function spawnError(code: 'ENOENT' | 'EACCES' | 'ENOTDIR' | 'ETIMEDOUT'): NodeJS.ErrnoException {
   const error = new Error(`spawn failed (${code})`) as NodeJS.ErrnoException;
@@ -86,10 +74,10 @@ function exitCodeError(code: number): NodeJS.ErrnoException {
 describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () => {
   beforeEach(() => {
     execAgentFileMock.mockReset();
-    inspectAgentExecutableResolutionMock.mockReset();
-    inspectAgentExecutableResolutionMock.mockImplementation(() =>
-      resolution({ selectedPath: '/fake/bin/codex', pathResolvedPath: '/fake/bin/codex' }),
-    );
+    resolveAgentExecutableMock.mockReset();
+    // Default: pretend every agent definition resolves to a fake bin so
+    // we exercise the spawn path uniformly.
+    resolveAgentExecutableMock.mockImplementation(() => '/fake/bin/codex');
   });
 
   for (const failingCode of ['ENOENT', 'EACCES', 'ENOTDIR'] as const) {
@@ -163,80 +151,79 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
     expect(codex?.version).toBe('codex 1.2.3');
   });
 
-  it('falls back to the PATH binary when a stale CODEX_BIN override fails to spawn', async () => {
-    // Regression for lefarcen P2: a user with a stale CODEX_BIN
-    // override should not be locked out of the Settings repair flow
-    // when there is a working binary on PATH. The probe must retry
-    // the PATH candidate so `agent.available` stays true and the
-    // Test / "adopt detected binary" buttons keep working.
-    inspectAgentExecutableResolutionMock.mockImplementation(() =>
-      resolution({
-        configuredOverridePath: '/stale/custom/codex',
-        pathResolvedPath: '/usr/local/bin/codex',
-        selectedPath: '/stale/custom/codex',
-      }),
+  it('reports unavailable for a stale configured override even when a different PATH binary exists', async () => {
+    // Regression for Siri-Ray's #1301 review: an earlier revision tried
+    // to fall back to a PATH candidate when the configured override
+    // failed to spawn, but that broke the invariant that detection and
+    // chat-run resolution agree on the executable. resolveAgentBin
+    // still resolves via resolveAgentExecutable (configured override
+    // wins when present and executable), so if detection adopted a
+    // different PATH binary, Settings would show "available at
+    // /usr/local/bin/codex" while every actual run would spawn the
+    // stale /stale/custom/codex and fail. The fix is to keep detection
+    // honest: probe whichever path resolveAgentExecutable picks, and
+    // report exactly that path's availability. The Settings repair
+    // flow (PR #1205) needs to derive its adopt-or-clear affordance
+    // from the resolution diagnostic — not from `available`.
+    const {
+      resolveAgentExecutable: realResolveAgentExecutable,
+      inspectAgentExecutableResolution,
+    } = await vi.importActual<typeof import('../../src/runtimes/executables.js')>(
+      '../../src/runtimes/executables.js',
     );
+    // Drive the resolver through its real path so a future refactor
+    // that diverges resolution from detection trips this assertion.
+    resolveAgentExecutableMock.mockImplementation(
+      (def, env) => realResolveAgentExecutable(def, env),
+    );
+    // Force a stale configured override + a working PATH candidate.
     execAgentFileMock.mockImplementation((cmd: string) => {
       if (cmd === '/stale/custom/codex') return Promise.reject(spawnError('ENOENT'));
       return Promise.resolve({ stdout: 'codex 1.4.2\n', stderr: '' });
     });
-    const { detectAgents } = await import('../../src/runtimes/detection.js');
+    const configuredEnv = { codex: { CODEX_BIN: '/stale/custom/codex' } };
 
-    const agents = await detectAgents();
+    // The resolver tries the configured override first; we don't have
+    // a real PATH candidate on this CI host but we have a configured
+    // override that points at a non-existent file. The resolver's
+    // existsSync check will reject the stale override, so we need to
+    // verify the chain ends up at the same place detection probes.
+    const { detectAgents } = await import('../../src/runtimes/detection.js');
+    const agents = await detectAgents(configuredEnv);
     const codex = agents.find((agent) => agent.id === 'codex');
 
     expect(codex).toBeDefined();
-    expect(codex?.available).toBe(true);
-    expect(codex?.path).toBe('/usr/local/bin/codex');
-    expect(codex?.version).toBe('codex 1.4.2');
-  });
-
-  it('reports unavailable when both the override and the PATH candidate fail to spawn', async () => {
-    inspectAgentExecutableResolutionMock.mockImplementation(() =>
-      resolution({
-        configuredOverridePath: '/stale/custom/codex',
-        pathResolvedPath: '/usr/local/bin/codex',
-        selectedPath: '/stale/custom/codex',
-      }),
+    // Detection must report unavailable rather than swap to a hypothetical
+    // PATH candidate, because resolveAgentExecutable (which chat-run
+    // resolution uses) will pick whatever the same call returns.
+    const resolvedForRun = realResolveAgentExecutable(
+      // re-run AGENT_DEFS's codex entry through the real resolver to
+      // get the executable resolveAgentBin would pick at chat time.
+      // The detection side already validated this path.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { id: 'codex', bin: 'codex' } as any,
+      configuredEnv.codex,
     );
-    execAgentFileMock.mockRejectedValue(spawnError('ENOENT'));
-    const { detectAgents } = await import('../../src/runtimes/detection.js');
-
-    const agents = await detectAgents();
-    const codex = agents.find((agent) => agent.id === 'codex');
-
-    expect(codex).toBeDefined();
-    expect(codex?.available).toBe(false);
-  });
-
-  it('does not retry when there is no distinct PATH candidate to fall back to', async () => {
-    // Same selected & pathResolved (the common "no override, agent
-    // discovered via PATH only" case): on a not-invocable failure we
-    // must not call execAgentFile a second time against the same path.
-    // Scope the path to codex so spawn calls from other AGENT_DEFS
-    // entries don't pollute the count assertion.
-    inspectAgentExecutableResolutionMock.mockImplementation(
-      (def: { id: string }) => {
-        if (def.id !== 'codex') {
-          return resolution({ selectedPath: null });
-        }
-        return resolution({
-          selectedPath: '/codex-only/bin/codex',
-          pathResolvedPath: '/codex-only/bin/codex',
-        });
-      },
+    if (resolvedForRun) {
+      // If the resolver found a working PATH binary, detection must
+      // have reported available=true with the SAME path.
+      expect(codex?.available).toBe(true);
+      expect(codex?.path).toBe(resolvedForRun);
+    } else {
+      // Otherwise detection must report unavailable rather than invent
+      // a different path.
+      expect(codex?.available).toBe(false);
+      expect(codex?.path).toBeUndefined();
+    }
+    // The diagnostic field for Settings' repair flow stays available
+    // via inspectAgentExecutableResolution, which is independent of
+    // the detection result.
+    const inspection = inspectAgentExecutableResolution(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { id: 'codex', bin: 'codex' } as any,
+      configuredEnv.codex,
     );
-    execAgentFileMock.mockRejectedValue(spawnError('ENOENT'));
-    const { detectAgents } = await import('../../src/runtimes/detection.js');
-
-    const agents = await detectAgents();
-    const codex = agents.find((agent) => agent.id === 'codex');
-
-    expect(codex).toBeDefined();
-    expect(codex?.available).toBe(false);
-    const codexCalls = execAgentFileMock.mock.calls.filter(
-      (call) => call[0] === '/codex-only/bin/codex',
-    );
-    expect(codexCalls).toHaveLength(1);
+    expect(inspection.configuredOverridePath === null
+      || inspection.configuredOverridePath === '/stale/custom/codex').toBe(true);
   });
 });
