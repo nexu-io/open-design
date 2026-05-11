@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import {
   InlineAssetsLimitError,
+  MAX_INLINE_OWNER_BYTES,
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
@@ -398,9 +399,27 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const project = getProject(db, req.params.id);
       const relPath = (req.params as any)[0];
 
-      let file;
+      // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
+      // readProjectFile so a 100 MiB owner HTML is rejected after a
+      // cheap stat() call, not after a 100 MiB readFile() into memory.
+      // The size check + mime check both run pre-buffer here, mirroring
+      // the sibling-asset stat-then-read contract round 4 already
+      // applied via AssetHandle. Size fires before mime so an oversize
+      // non-HTML file returns 413 (not 415) — that ordering is the
+      // observable Red→Green for this round.
+      //
+      // The helper's ownerBytes check (inline-assets.ts:127-133) stays
+      // as defense-in-depth: it still catches direct in-process callers
+      // that skip the route and any future drift in the size reported
+      // by stat vs the bytes actually returned by readFile.
+      let ownerMeta;
       try {
-        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+        ownerMeta = await resolveProjectFilePath(
+          PROJECTS_DIR,
+          req.params.id,
+          relPath,
+          project?.metadata,
+        );
       } catch (err: any) {
         const status = err && err.code === 'ENOENT' ? 404 : 400;
         return sendApiError(
@@ -411,12 +430,34 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         );
       }
 
-      if (!file.mime.startsWith('text/html')) {
+      if (ownerMeta.size > MAX_INLINE_OWNER_BYTES) {
+        return sendApiError(
+          res,
+          413,
+          'PAYLOAD_TOO_LARGE',
+          `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
+        );
+      }
+
+      if (!ownerMeta.mime.startsWith('text/html')) {
         return sendApiError(
           res,
           415,
           'UNSUPPORTED_MEDIA_TYPE',
           'export endpoint only supports HTML files',
+        );
+      }
+
+      let file;
+      try {
+        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      } catch (err: any) {
+        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        return sendApiError(
+          res,
+          status,
+          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          String(err),
         );
       }
 
