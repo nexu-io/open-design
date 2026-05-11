@@ -34,10 +34,10 @@ function parseArgs(argv: string[]) {
   const args: Record<string, string | boolean> = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (!a.startsWith("--")) continue;
+    if (typeof a !== "string" || !a.startsWith("--")) continue;
     const key = a.slice(2);
     const next = argv[i + 1];
-    if (!next || next.startsWith("--")) {
+    if (typeof next !== "string" || next.startsWith("--")) {
       args[key] = true;
     } else {
       args[key] = next;
@@ -300,10 +300,12 @@ function main() {
       advanced = true;
       picked++;
       if (b.kind === "issue") {
-        // Only open/closed are valid issue states.
-        (selectedIssuesByState as Record<string, GhItem[]>)[b.state].push(it);
+        if (b.state === "open") selectedIssuesByState.open.push(it);
+        else selectedIssuesByState.closed.push(it);
       } else {
-        (selectedPrsByState as Record<string, GhItem[]>)[b.state].push(it);
+        if (b.state === "open") selectedPrsByState.open.push(it);
+        else if (b.state === "closed") selectedPrsByState.closed.push(it);
+        else selectedPrsByState.merged.push(it);
       }
     }
     if (!advanced) break; // no more items anywhere
