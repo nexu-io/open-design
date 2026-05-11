@@ -121,7 +121,26 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
   });
 }
 
-test.describe('Critique Theater e2e (Phase 11)', () => {
+/**
+ * Activation status (Codex P1 on PR #1317): this suite is parked
+ * behind `test.describe.fixme` until the `<CritiqueTheaterMount>`
+ * is actually rendered inside `App` / `ProjectView`. The mount is
+ * exported from `apps/web/src/components/Theater/index.ts` today
+ * but no caller in the web app instantiates it yet, so a
+ * Playwright run that visits `/` would never produce a Theater
+ * region for these tests to assert against. The follow-up PR that
+ * wires the mount into the route tree (the same PR that lights up
+ * the orchestrator path post-Phase 15) flips this from `fixme` to
+ * a live `describe`. The spec stays on disk in the meantime so
+ * the next reviewer reads exactly what e2e coverage will look like
+ * once the wireup lands.
+ *
+ * Visual baselines (Codex P1 on PR #1317): no `*.png` snapshots
+ * are committed yet because there is nothing to screenshot. The
+ * first CI run after the mount wireup will generate and commit
+ * the baseline images under `e2e/ui/critique-theater.test.ts-snapshots/`.
+ */
+test.describe.fixme('Critique Theater e2e (Phase 11) [awaiting mount wireup, see file header]', () => {
   test.beforeEach(async ({ page }) => {
     await bootAppWithCritiqueEnabled(page);
   });
@@ -159,7 +178,20 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await expect(page.getByText(/Interrupted at round/)).toBeVisible();
   });
 
-  // Task 11.3: visual regression at 3 viewports
+  // Task 11.3: visual regression at 3 viewports.
+  //
+  // These widths are picked at the breakpoints where the Theater CSS
+  // changes how panelist lanes wrap, so each snapshot guards a
+  // distinct layout regime (lefarcen P2 on PR #1317):
+  //
+  //   375 px  - mobile baseline: lanes stack vertically (1 col x 5)
+  //   768 px  - tablet: lanes flow as a 2x3 grid (last cell empty)
+  //   1280 px - desktop: lanes flow as a single 1x5 row
+  //
+  // Intermediate widths (e.g. 400 px or 800 px) sit inside one of
+  // those brackets without changing the wrap math, so an extra
+  // baseline at every 100 px would triple the snapshot cost
+  // without catching a regression the three breakpoints would not.
   for (const vp of [
     { width: 375, height: 720, label: 'mobile' },
     { width: 768, height: 1024, label: 'tablet' },
