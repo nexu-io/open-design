@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Logos</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .tile { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 14px; padding: 18px; display:flex; flex-direction:column; align-items:center; justify-content: space-between; gap:10px; min-height: 110px; }
+  .tile.light { background: #fff; }
+  .tile img { max-height: 36px; max-width: 100%; }
+  .lbl { font: 500 10px var(--font-mono); color: var(--fg-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .lbl.dark { color: #6b788e; }
+</style>
+</head>
+<body>
+  <div class="tile"><img src="../assets/logo-icon.svg" alt="" style="filter: invert(1)"/><span class="lbl">icon · dark</span></div>
+  <div class="tile"><img src="../assets/logo-wordmark.svg" alt="" style="filter: invert(1)"/><span class="lbl">wordmark · dark</span></div>
+  <div class="tile light"><img src="../assets/logo-icon.svg" alt=""/><span class="lbl dark">icon · light</span></div>
+  <div class="tile light"><img src="../assets/christianwu-mark.svg" alt=""/><span class="lbl dark">cw mark · #0500FF</span></div>
+</body>
+</html>

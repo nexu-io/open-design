@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Buttons</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); display:flex; flex-direction:column; gap: 14px; }
+  .row { display:flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { font: 500 13px var(--font-sans); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-default); cursor: pointer; display:inline-flex; align-items:center; gap:8px; transition: all 200ms var(--ease-out); }
+  .btn-primary { background: #0500FF; color: #fff; border-color: rgba(255,255,255,0.18); box-shadow: var(--shadow-glow); }
+  .btn-secondary { background: var(--bg-elevated); color: var(--fg-primary); }
+  .btn-ghost { background: transparent; color: var(--fg-secondary); border-color: transparent; }
+  .btn-glass { background: rgba(0,0,0,0.6); color:#fff; border:1px solid rgba(255,255,255,0.12); backdrop-filter: blur(20px); }
+  .btn-pill { border-radius: 999px; }
+  .btn-sm { font-size: 12px; padding: 6px 10px; }
+  .arrow { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <button class="btn btn-primary">Connect Wallet <span class="arrow">→</span></button>
+    <button class="btn btn-secondary">Browse Work</button>
+    <button class="btn btn-ghost">Documentation</button>
+    <button class="btn btn-glass">Open Assistant</button>
+    <button class="btn btn-secondary btn-pill">Subscribe</button>
+  </div>
+  <div class="row">
+    <button class="btn btn-primary btn-sm">+ New</button>
+    <button class="btn btn-secondary btn-sm">Filter</button>
+    <button class="btn btn-secondary btn-sm">Sort: Recent</button>
+    <button class="btn btn-secondary btn-sm" style="border-color:#1fa463;color:#1fa463">● online</button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Inputs & Search</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); display:flex; flex-direction:column; gap: 14px; }
+  .input { display:flex; align-items:center; gap:10px; background: var(--bg-elevated); border:1px solid var(--border-default); border-radius: 10px; padding: 10px 14px; font: 13px var(--font-sans); color: var(--fg-secondary); }
+  .input.focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(86,214,255,0.18); }
+  .kbd { margin-left:auto; font: 11px var(--font-mono); color: var(--fg-muted); border:1px solid var(--border-default); border-radius:4px; padding: 1px 6px; }
+  .icon { width: 16px; height: 16px; opacity:.5; }
+  .grp { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+  <div class="input"><span class="icon">⌕</span><span>Search projects, tools, addresses…</span><span class="kbd">⌘K</span></div>
+  <div class="input focus"><span class="icon">⌕</span><span style="color:var(--fg-primary)">skywalker mcp</span><span class="kbd">↩</span></div>
+  <div class="grp">
+    <div class="input"><span>Email address</span></div>
+    <div class="input"><span style="color:var(--fg-primary)">0xa3f9…b21c</span><span class="kbd" style="color:#1fa463">connected</span></div>
+  </div>
+</body>
+</html>

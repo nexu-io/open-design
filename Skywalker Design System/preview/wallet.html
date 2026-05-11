@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Wallet Status</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); display:flex; flex-direction:column; gap:12px; align-items:flex-start;}
+  .pill { display:inline-flex; gap: 10px; align-items:center; background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 999px; padding: 6px 14px 6px 8px; }
+  .av { width: 22px; height: 22px; border-radius:999px; background: linear-gradient(135deg,#0500FF,#56D6FF); }
+  .addr { font: 500 12px var(--font-mono); color: var(--fg-primary); }
+  .chain { font: 500 11px var(--font-mono); color: var(--fg-muted); }
+  .dot { width: 6px; height: 6px; border-radius:999px; background: #1fa463; box-shadow: 0 0 8px #1fa463; }
+  .balance { font: 600 13px var(--font-mono); color: var(--c-cyan); margin-left: 6px;}
+</style>
+</head>
+<body>
+  <div class="pill"><span class="av"></span><span class="dot"></span><span class="addr">0xa3f9…b21c</span><span class="chain">· arbitrum</span><span class="balance">0.42 Ξ</span></div>
+  <div class="pill"><span class="av" style="background:linear-gradient(135deg,#7147ff,#FF7EAB)"></span><span class="addr" style="color:var(--fg-muted)">connect wallet</span></div>
+</body>
+</html>

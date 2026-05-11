@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>MCP App Card</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); }
+  .card { display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items:center; padding: 16px; border:1px solid var(--border-default); border-radius: 12px; background: var(--bg-elevated); width: 540px; }
+  .ico { width: 44px; height: 44px; border-radius: 10px; background: linear-gradient(135deg,#0500FF 0%, #5E00FF 60%, #FF7EAB 100%); display:flex; align-items:center; justify-content:center; color:#fff; font: 700 16px var(--font-mono); }
+  .ttl { font: 600 14px var(--font-sans); }
+  .sub { font: 12px var(--font-mono); color: var(--fg-muted); margin-top: 2px; }
+  .switch { width: 40px; height: 22px; border-radius: 999px; background: rgba(5,0,255,0.4); border:1px solid var(--border-default); position: relative; }
+  .switch::after { content:""; position:absolute; top: 2px; right: 3px; width: 16px; height: 16px; background: #fff; border-radius:999px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="ico">F</div>
+  <div><div class="ttl">Figma exporter</div><div class="sub">3 tools · last call 12m ago</div></div>
+  <div class="switch"></div>
+</div>
+</body>
+</html>

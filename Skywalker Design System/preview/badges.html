@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Badges & Tags</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); display:flex; flex-direction:column; gap: 14px; }
+  .row { display:flex; flex-wrap:wrap; gap: 8px; align-items:center; }
+  .tag { font: 500 11px var(--font-mono); padding: 4px 10px; border-radius: 999px; border:1px solid var(--border-default); color: var(--fg-secondary); letter-spacing: 0.02em; }
+  .tag.solid { background: rgba(5,0,255,0.18); color: #56D6FF; border-color: rgba(86,214,255,0.3); }
+  .tag.dot::before { content:""; width:6px; height:6px; border-radius:999px; background: var(--c-success); display:inline-block; margin-right:6px; vertical-align: 1px;}
+  .tag.warn { color: #f5a524; border-color: rgba(245,165,36,0.4); }
+  .tag.danger { color: #f46772; border-color: rgba(244,103,114,0.4); }
+  .tag.chain { display:inline-flex; gap: 6px; align-items:center; padding: 4px 10px 4px 6px; }
+  .tag.chain .d { width: 14px; height: 14px; border-radius: 999px; background: linear-gradient(135deg,#56D6FF,#0500FF); }
+</style>
+</head>
+<body>
+  <div class="row">
+    <span class="tag solid">design-system</span>
+    <span class="tag">ai-workflow</span>
+    <span class="tag">web3</span>
+    <span class="tag">mcp</span>
+    <span class="tag">case-study</span>
+  </div>
+  <div class="row">
+    <span class="tag dot">live</span>
+    <span class="tag warn">beta</span>
+    <span class="tag danger">archived</span>
+    <span class="tag chain"><span class="d"></span>arbitrum</span>
+    <span class="tag chain"><span class="d" style="background:#7147ff"></span>base</span>
+  </div>
+</body>
+</html>

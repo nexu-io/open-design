@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Colors — Semantic</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 16px; background: var(--bg-canvas); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-elevated); }
+  .dot { width: 14px; height: 14px; border-radius: 999px; }
+  .label { font: 500 13px var(--font-sans); }
+  .hex { font: 11px var(--font-mono); color: var(--fg-muted); margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="row"><span class="dot" style="background:#1fa463"></span><span class="label">success</span><span class="hex">#1FA463</span></div>
+  <div class="row"><span class="dot" style="background:#f5a524"></span><span class="label">warning</span><span class="hex">#F5A524</span></div>
+  <div class="row"><span class="dot" style="background:#f46772"></span><span class="label">danger</span><span class="hex">#F46772</span></div>
+  <div class="row"><span class="dot" style="background:#3395ff"></span><span class="label">info</span><span class="hex">#3395FF</span></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,292 @@
+/* ============================================================
+   Skywalker Design System — Tokens
+   Christian Wu · AI-Driven Web3 Portfolio
+   ============================================================ */
+
+/* Satoshi (variable) — uploaded as the primary sans family. */
+@font-face {
+  font-family: "Satoshi";
+  src: url("fonts/Satoshi-Variable.ttf") format("truetype-variations");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Satoshi";
+  src: url("fonts/Satoshi-VariableItalic.ttf") format("truetype-variations");
+  font-weight: 300 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* JetBrains Mono comes from Google Fonts. No serifs in this system. */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@font-face {
+  font-family: "Futurina";
+  src: url("fonts/Futurina.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- TYPE FAMILIES ---------- */
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: "Futurina", "Satoshi", sans-serif; /* brand display — uploaded by user */
+  --font-brand: "Futurina", "Satoshi", sans-serif; /* logo / wordmark accents */
+
+  /* ---------- TYPE SCALE (px) ---------- */
+  --t-display:    80px;  /* hero */
+  --t-h1:         60px;
+  --t-h2:         50px;
+  --t-h3:         40px;
+  --t-h4:         30px;
+  --t-h5:         24px;
+  --t-headline:   20px;
+  --t-body-lg:    18px;
+  --t-body:       16px;
+  --t-footnote:   14px;
+  --t-caption:    13px;
+  --t-small:      12px;
+  --t-micro:      11px;
+
+  /* ---------- WEIGHTS ---------- */
+  --fw-light:     300;
+  --fw-regular:   400;
+  --fw-medium:    500;
+  --fw-semibold:  600;
+  --fw-bold:      700;
+
+  /* ---------- LINE-HEIGHTS ---------- */
+  --lh-tight:     1.1;
+  --lh-snug:      1.25;
+  --lh-normal:    1.5;
+  --lh-loose:     1.65;
+
+  /* ---------- LETTER-SPACING ---------- */
+  --ls-tight:    -0.04em;
+  --ls-display:  -0.03em;
+  --ls-normal:    0;
+  --ls-wide:      0.04em;
+  --ls-mono:     -0.01em;
+
+  /* ---------- NEUTRAL SCALE (CodeUI inspired) ---------- */
+  --n-0:    #ffffff;
+  --n-10:   #fafbfb;
+  --n-20:   #f5f6f7;
+  --n-30:   #ebedf0;
+  --n-40:   #dfe2e6;
+  --n-50:   #c2c7d0;
+  --n-60:   #b3b9c4;
+  --n-70:   #a6aebb;
+  --n-80:   #98a1b0;
+  --n-90:   #8993a4;
+  --n-100:  #7a8699;
+  --n-200:  #6b788e;
+  --n-400:  #505f79;
+  --n-500:  #42526d;
+  --n-600:  #354764;
+  --n-700:  #243757;
+  --n-800:  #15294b;
+  --n-900:  #091e42;
+  --n-950:  #050d1f;
+  --n-1000: #000000;
+
+  /* ---------- ACCENT — Skywalker palette ---------- */
+  /* Primary (Christian Wu blue) */
+  --c-primary:        #0500ff;
+  --c-primary-hover:  #1f1aff;
+  --c-primary-soft:   rgba(5, 0, 255, 0.12);
+
+  /* Secondary glow (cyan) */
+  --c-cyan:           #56d6ff;
+  --c-cyan-soft:      rgba(86, 214, 255, 0.16);
+
+  /* Accents */
+  --c-purple:         #7147ff;
+  --c-pink:           #ff7eab;
+  --c-violet:         #5e00ff;
+
+  /* Semantic */
+  --c-success:        #1fa463;
+  --c-warning:        #f5a524;
+  --c-danger:         #f46772;
+  --c-info:           #3395ff;
+
+  /* ---------- LIGHT THEME ---------- */
+  --bg-canvas:        #f5f6f7;
+  --bg-surface:       #ffffff;
+  --bg-elevated:      #ffffff;
+  --bg-muted:         #ebedf0;
+  --bg-subtle:        #fafbfb;
+  --bg-inverse:       #0a0a0c;
+
+  --fg-primary:       #091e42;
+  --fg-secondary:     #42526d;
+  --fg-muted:         #6b788e;
+  --fg-subtle:        #8993a4;
+  --fg-inverse:       #ffffff;
+  --fg-accent:        #0500ff;
+
+  --border-subtle:    rgba(9, 30, 66, 0.06);
+  --border-default:   rgba(9, 30, 66, 0.10);
+  --border-strong:    rgba(9, 30, 66, 0.18);
+  --border-focus:     #0500ff;
+
+  --overlay-scrim:    rgba(9, 30, 66, 0.45);
+  --code-bg:          #f5f6f7;
+  --code-fg:          #091e42;
+
+  /* ---------- SPACING (4-pt grid) ---------- */
+  --sp-0:   0px;
+  --sp-1:   2px;
+  --sp-2:   4px;
+  --sp-3:   8px;
+  --sp-4:   12px;
+  --sp-5:   16px;
+  --sp-6:   20px;
+  --sp-7:   24px;
+  --sp-8:   32px;
+  --sp-9:   40px;
+  --sp-10:  48px;
+  --sp-11:  64px;
+  --sp-12:  80px;
+  --sp-13:  96px;
+  --sp-14:  120px;
+
+  /* ---------- RADII ---------- */
+  --r-xs:    4px;
+  --r-sm:    6px;
+  --r-md:    8px;
+  --r-lg:   10px;
+  --r-xl:   14px;
+  --r-2xl:  18px;
+  --r-3xl:  24px;
+  --r-pill: 999px;
+
+  /* ---------- ELEVATION (light) ---------- */
+  --shadow-xs: 0 1px 0 0 rgba(9, 30, 66, 0.05);
+  --shadow-sm: 0 1px 2px 0 rgba(9, 30, 66, 0.06), 0 1px 1px 0 rgba(9, 30, 66, 0.04);
+  --shadow-md: 0 4px 4px 0 rgba(9, 30, 66, 0.05), 0 1px 0 0 rgba(9, 30, 66, 0.05);
+  --shadow-lg: 0 10px 10px 0 rgba(9, 30, 66, 0.10), 0 4px 4px 0 rgba(9, 30, 66, 0.05), 0 1px 0 0 rgba(9, 30, 66, 0.05);
+  --shadow-xl: 0 24px 40px -8px rgba(9, 30, 66, 0.18), 0 8px 16px -4px rgba(9, 30, 66, 0.10);
+  --shadow-glow: 0 0 0 1px rgba(5, 0, 255, 0.18), 0 8px 32px rgba(5, 0, 255, 0.22);
+  --shadow-inner: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+
+  /* ---------- MOTION ---------- */
+  --ease-standard:  cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:    cubic-bezier(0.65, 0, 0.35, 1);
+  --d-fast:         120ms;
+  --d-base:         200ms;
+  --d-slow:         360ms;
+
+  /* ---------- LAYOUT ---------- */
+  --container-xs:   640px;
+  --container-sm:   768px;
+  --container-md:   1024px;
+  --container-lg:   1280px;
+  --container-xl:   1440px;
+  --container-2xl:  1600px;
+}
+
+/* ============================================================
+   DARK THEME — primary surface for Skywalker (developer-tool)
+   ============================================================ */
+[data-theme="dark"], :root.dark {
+  --bg-canvas:        #050507;
+  --bg-surface:       #0a0a0c;
+  --bg-elevated:      #111115;
+  --bg-muted:         #16171c;
+  --bg-subtle:        #0d0d11;
+  --bg-inverse:       #ffffff;
+
+  --fg-primary:       #ffffff;
+  --fg-secondary:     rgba(255, 255, 255, 0.78);
+  --fg-muted:         rgba(255, 255, 255, 0.54);
+  --fg-subtle:        rgba(255, 255, 255, 0.38);
+  --fg-inverse:       #0a0a0c;
+  --fg-accent:        #56d6ff;
+
+  --border-subtle:    rgba(255, 255, 255, 0.06);
+  --border-default:   rgba(255, 255, 255, 0.10);
+  --border-strong:    rgba(255, 255, 255, 0.18);
+  --border-focus:     #56d6ff;
+
+  --overlay-scrim:    rgba(0, 0, 0, 0.65);
+  --code-bg:          #111115;
+  --code-fg:          #d6dee8;
+
+  --shadow-xs:  0 1px 0 0 rgba(0,0,0,0.4);
+  --shadow-sm:  0 1px 2px 0 rgba(0,0,0,0.5);
+  --shadow-md:  0 4px 4px 0 rgba(0,0,0,0.4), 0 1px 0 0 rgba(0,0,0,0.4);
+  --shadow-lg:  0 10px 10px 0 rgba(0,0,0,0.5), 0 4px 4px 0 rgba(0,0,0,0.35), 0 1px 0 0 rgba(0,0,0,0.4);
+  --shadow-xl:  0 24px 60px -8px rgba(0,0,0,0.7), 0 8px 16px -4px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 0 1px rgba(86, 214, 255, 0.25), 0 8px 40px rgba(86, 214, 255, 0.18);
+  --shadow-inner: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   SEMANTIC TYPOGRAPHY (drop-in)
+   ============================================================ */
+.sw-display, h1.sw-display {
+  font-family: var(--font-sans);
+  font-size: var(--t-display);
+  font-weight: var(--fw-light);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-display);
+}
+.sw-h1 { font-family: var(--font-sans); font-size: var(--t-h1); font-weight: var(--fw-semibold); line-height: var(--lh-tight); letter-spacing: var(--ls-tight); }
+.sw-h2 { font-family: var(--font-sans); font-size: var(--t-h2); font-weight: var(--fw-semibold); line-height: var(--lh-tight); letter-spacing: var(--ls-tight); }
+.sw-h3 { font-family: var(--font-sans); font-size: var(--t-h3); font-weight: var(--fw-semibold); line-height: 1.15; letter-spacing: var(--ls-tight); }
+.sw-h4 { font-family: var(--font-sans); font-size: var(--t-h4); font-weight: var(--fw-semibold); line-height: 1.2; letter-spacing: -0.02em; }
+.sw-h5 { font-family: var(--font-sans); font-size: var(--t-h5); font-weight: var(--fw-semibold); line-height: 1.3; letter-spacing: -0.01em; }
+.sw-headline { font-family: var(--font-sans); font-size: var(--t-headline); font-weight: var(--fw-medium); line-height: 1.4; letter-spacing: -0.005em; }
+.sw-body-lg { font-family: var(--font-sans); font-size: var(--t-body-lg); font-weight: var(--fw-regular); line-height: var(--lh-loose); }
+.sw-body { font-family: var(--font-sans); font-size: var(--t-body); font-weight: var(--fw-regular); line-height: var(--lh-normal); }
+.sw-footnote { font-family: var(--font-sans); font-size: var(--t-footnote); font-weight: var(--fw-regular); line-height: 1.4; }
+.sw-caption { font-family: var(--font-sans); font-size: var(--t-caption); font-weight: var(--fw-medium); line-height: 1.4; }
+.sw-small { font-family: var(--font-sans); font-size: var(--t-small); font-weight: var(--fw-medium); line-height: 1.4; letter-spacing: 0.01em; }
+.sw-mono { font-family: var(--font-mono); font-size: var(--t-caption); font-weight: var(--fw-regular); letter-spacing: var(--ls-mono); }
+.sw-mono-sm { font-family: var(--font-mono); font-size: var(--t-small); font-weight: var(--fw-regular); letter-spacing: var(--ls-mono); }
+
+.sw-label-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* ============================================================
+   GLOBAL UTILITIES
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg-canvas);
+  color: var(--fg-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.sw-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.sw-dotgrid-bg {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+.sw-glow-conic {
+  background: conic-gradient(from 0deg,
+    rgba(66,232,255,0) 26%,
+    rgba(255,126,171,0.5) 52%,
+    rgb(48,131,255) 76%,
+    rgb(113,71,255) 100%);
+}

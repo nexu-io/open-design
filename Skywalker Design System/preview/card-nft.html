@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>NFT Card</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); }
+  .card { width: 280px; border: 1px solid var(--border-default); border-radius: 14px; overflow: hidden; background: var(--bg-elevated); }
+  .art { aspect-ratio: 1; background: conic-gradient(from 210deg at 50% 50%, #5E00FF, #56D6FF, #FF7EAB, #5E00FF); position: relative; }
+  .art::after { content:""; position:absolute; inset: 0; backdrop-filter: blur(20px); }
+  .art .num { position:absolute; left:14px; top:14px; font: 11px var(--font-mono); color: rgba(255,255,255,0.85); z-index: 2; letter-spacing: 0.06em; }
+  .meta { padding: 14px; display:flex; flex-direction:column; gap: 4px; }
+  .ttl { font: 600 14px var(--font-sans); }
+  .sub { font: 11px var(--font-mono); color: var(--fg-muted); }
+  .foot { display:flex; justify-content: space-between; padding: 10px 14px 14px; align-items:flex-end; border-top: 1px solid var(--border-subtle);}
+  .price { font: 600 14px var(--font-mono); }
+  .label { font: 10px var(--font-mono); color: var(--fg-muted); letter-spacing: 0.1em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="art"><span class="num">// 023</span></div>
+  <div class="meta">
+    <span class="ttl">Skywalker MCP Suite</span>
+    <span class="sub">case-study · 2026</span>
+  </div>
+  <div class="foot">
+    <div><div class="label">price</div><div class="price">0.42 ETH</div></div>
+    <div><div class="label">chain</div><div class="price" style="font-size:12px;color:var(--fg-secondary)">arbitrum</div></div>
+  </div>
+</div>
+</body>
+</html>

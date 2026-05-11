@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Elevation</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .card { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 12px; height: 90px; display:flex; align-items:flex-end; justify-content:flex-start; padding: 12px; font: 500 11px var(--font-mono); color: var(--fg-muted); }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="card" style="box-shadow: var(--shadow-xs)">xs</div>
+  <div class="card" style="box-shadow: var(--shadow-sm)">sm</div>
+  <div class="card" style="box-shadow: var(--shadow-md)">md</div>
+  <div class="card" style="box-shadow: var(--shadow-lg)">lg</div>
+  <div class="card" style="box-shadow: var(--shadow-glow); border-color: rgba(86,214,255,0.4)">glow</div>
+</div>
+</body>
+</html>

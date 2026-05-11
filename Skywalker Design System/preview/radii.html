@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Radii</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 18px 20px; background: var(--bg-canvas); color: var(--fg-primary); }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
+  .tile { aspect-ratio: 1/1; background: var(--bg-elevated); border: 1px solid var(--border-default); display: flex; align-items: flex-end; justify-content: center; padding: 8px; font: 500 11px var(--font-mono); color: var(--fg-muted); }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="tile" style="border-radius:4px">xs · 4</div>
+  <div class="tile" style="border-radius:6px">sm · 6</div>
+  <div class="tile" style="border-radius:8px">md · 8</div>
+  <div class="tile" style="border-radius:10px">lg · 10</div>
+  <div class="tile" style="border-radius:14px">xl · 14</div>
+  <div class="tile" style="border-radius:24px">3xl · 24</div>
+  <div class="tile" style="border-radius:999px">pill</div>
+</div>
+</body>
+</html>

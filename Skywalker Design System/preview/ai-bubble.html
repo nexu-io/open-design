@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>AI Assistant — message bubble</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 22px; background: var(--bg-canvas); color: var(--fg-primary); display:flex; flex-direction:column; gap: 12px;}
+  .row { display:flex; gap: 12px; }
+  .av { width: 28px; height: 28px; flex:none; border-radius: 8px; background: linear-gradient(135deg,#0500FF,#56D6FF); display:flex; align-items:center; justify-content:center; color:#fff; font: 600 11px var(--font-mono); }
+  .av.user { background: var(--bg-elevated); border:1px solid var(--border-default); color: var(--fg-secondary); }
+  .bubble { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 14px; padding: 12px 14px; max-width: 520px; }
+  .bubble .who { font: 500 11px var(--font-mono); color: var(--fg-muted); margin-bottom: 6px; letter-spacing: 0.06em; }
+  .bubble p { margin: 0; font: 14px var(--font-sans); line-height: 1.5; color: var(--fg-secondary); }
+  .tool { display:inline-flex; gap: 8px; align-items:center; margin-top: 8px; padding: 6px 10px; background: rgba(86,214,255,0.08); border: 1px solid rgba(86,214,255,0.25); border-radius: 8px; font: 11px var(--font-mono); color: var(--c-cyan); }
+</style>
+</head>
+<body>
+  <div class="row"><div class="av user">CW</div><div class="bubble"><div class="who">you</div><p>Show me Skywalker case studies that ship to Arbitrum.</p></div></div>
+  <div class="row"><div class="av">SK</div><div class="bubble"><div class="who">skywalker</div><p>Found 3 projects matching arbitrum + production. Loading covers.</p><span class="tool">→ search.projects · chain:arbitrum · 0.4s</span></div></div>
+</body>
+</html>

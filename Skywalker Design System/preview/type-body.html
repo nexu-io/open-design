@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Type — Body & Mono</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 18px 22px; background: var(--bg-canvas); color: var(--fg-primary); }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .row { display:flex; flex-direction:column; gap:6px; }
+  .meta { font: 500 10px var(--font-mono); color: var(--fg-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .sample { color: var(--fg-secondary); }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="row"><span class="meta">Headline · 20/500</span><span class="sw-headline">Designer–engineer building AI-native portfolio surfaces.</span></div>
+  <div class="row"><span class="meta">Body Large · 18/400</span><span class="sw-body-lg sample">I ship interfaces that fuse on-chain data with calm, precise visual language.</span></div>
+  <div class="row"><span class="meta">Body · 16/400</span><span class="sw-body sample">Twelve case studies, three production tools, one MCP suite. All ledgered, all linkable.</span></div>
+  <div class="row"><span class="meta">Footnote · 14/400</span><span class="sw-footnote sample">Last deployment 12 minutes ago — arbitrum-mainnet via Skywalker CLI.</span></div>
+  <div class="row"><span class="meta">Mono · 13</span><span class="sw-mono">tool: figma_export · 1.2s · ok</span></div>
+  <div class="row"><span class="meta">Mono SM · 12</span><span class="sw-mono-sm">0xa3f9 · arbitrum · 0.42 ETH</span></div>
+</div>
+</body>
+</html>

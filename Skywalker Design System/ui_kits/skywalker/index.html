@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Skywalker — Christian Wu</title>
+<link rel="icon" href="../../assets/christianwu-mark.svg" />
+<link rel="stylesheet" href="../../colors_and_type.css" />
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body { background: var(--bg-canvas); color: var(--fg-primary); font-family: var(--font-sans); }
+  *::selection { background: rgba(86,214,255,0.3); color: #fff; }
+  /* fonts */
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="Components.jsx"></script>
+<script type="text/babel" src="Screens.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+function App() {
+  const [route, setRoute] = useState({ screen: 'landing', project: null });
+  const open = (screen, project = null) => setRoute({ screen, project });
+
+  const isLanding = route.screen === 'landing';
+  const titles = {
+    landing:    ['skywalker', 'home'],
+    dashboard:  ['skywalker', 'dashboard'],
+    collection: ['skywalker', 'collection'],
+    detail:     ['skywalker', 'collection', route.project ? route.project.title.toLowerCase() : 'item'],
+    assistant:  ['skywalker', 'assistant'],
+    mcp:        ['skywalker', 'mcp'],
+    wallet:     ['skywalker', 'wallet'],
+    casestudy:  ['skywalker', 'case-study', route.project ? route.project.id : '023'],
+  };
+
+  const screen = (() => {
+    switch (route.screen) {
+      case 'landing':    return <LandingHero onEnter={() => open('dashboard')} />;
+      case 'dashboard':  return <Dashboard onOpen={open} />;
+      case 'collection': return <Collection onOpen={open} />;
+      case 'detail':     return <Detail project={route.project} onOpen={open} />;
+      case 'assistant':  return <Assistant />;
+      case 'mcp':        return <MCPApps />;
+      case 'wallet':     return <WalletProfile />;
+      case 'casestudy':  return <CaseStudy project={route.project} />;
+      default: return null;
+    }
+  })();
+
+  if (isLanding) {
+    return (
+      <div data-screen-label="01 Landing" style={{ height: '100%', overflow: 'auto' }}>
+        {screen}
+      </div>
+    );
+  }
+
+  const screenLabels = {
+    dashboard: '02 Dashboard', collection: '03 Collection', detail: '04 NFT Detail',
+    assistant: '05 Assistant', mcp: '06 MCP Apps', wallet: '07 Wallet', casestudy: '08 Case Study',
+  };
+
+  return (
+    <div data-screen-label={screenLabels[route.screen]} style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <Sidebar active={route.screen} onNav={(k) => open(k, route.project)} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TopBar breadcrumb={titles[route.screen]} />
+        <div style={{ flex: 1, overflow: 'auto' }}>{screen}</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

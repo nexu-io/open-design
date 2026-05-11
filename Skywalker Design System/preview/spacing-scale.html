@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Spacing scale</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 18px 20px; background: var(--bg-canvas); color: var(--fg-primary); }
+  .row { display: grid; grid-template-columns: 60px 1fr 60px; align-items: center; gap: 14px; padding: 6px 0; }
+  .label { font: 500 12px var(--font-mono); color: var(--fg-muted); }
+  .bar { height: 10px; background: var(--c-cyan); border-radius: 2px; }
+  .px   { font: 11px var(--font-mono); color: var(--fg-secondary); text-align:right; }
+</style>
+</head>
+<body>
+  <div class="row"><span class="label">sp-2</span><span class="bar" style="width:4px"></span><span class="px">4 px</span></div>
+  <div class="row"><span class="label">sp-3</span><span class="bar" style="width:8px"></span><span class="px">8 px</span></div>
+  <div class="row"><span class="label">sp-4</span><span class="bar" style="width:12px"></span><span class="px">12 px</span></div>
+  <div class="row"><span class="label">sp-5</span><span class="bar" style="width:16px"></span><span class="px">16 px</span></div>
+  <div class="row"><span class="label">sp-7</span><span class="bar" style="width:24px"></span><span class="px">24 px</span></div>
+  <div class="row"><span class="label">sp-8</span><span class="bar" style="width:32px"></span><span class="px">32 px</span></div>
+  <div class="row"><span class="label">sp-10</span><span class="bar" style="width:48px"></span><span class="px">48 px</span></div>
+  <div class="row"><span class="label">sp-12</span><span class="bar" style="width:80px"></span><span class="px">80 px</span></div>
+</body>
+</html>

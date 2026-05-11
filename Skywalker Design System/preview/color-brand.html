@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Colors — Brand</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  body { padding: 16px; background: var(--bg-canvas); }
+  .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .swatch { border-radius: 10px; padding: 12px; min-height: 92px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--border-default); }
+  .swatch .name { font-family: var(--font-mono); font-size: 11px; opacity: .8; letter-spacing: -0.01em; }
+  .swatch .hex { font-family: var(--font-mono); font-size: 11px; opacity: .55; }
+  .swatch .lbl  { font-size: 13px; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="swatch" style="background:#0500FF;color:#fff;"><span class="lbl">Primary</span><span><div class="name">cw-blue</div><div class="hex">#0500FF</div></span></div>
+  <div class="swatch" style="background:#56D6FF;color:#0a0a0c;"><span class="lbl">Cyan</span><span><div class="name">sw-cyan</div><div class="hex">#56D6FF</div></span></div>
+  <div class="swatch" style="background:#7147FF;color:#fff;"><span class="lbl">Purple</span><span><div class="name">sw-purple</div><div class="hex">#7147FF</div></span></div>
+  <div class="swatch" style="background:#FF7EAB;color:#0a0a0c;"><span class="lbl">Pink</span><span><div class="name">sw-pink</div><div class="hex">#FF7EAB</div></span></div>
+  <div class="swatch" style="background:#5E00FF;color:#fff;"><span class="lbl">Violet</span><span><div class="name">sw-violet</div><div class="hex">#5E00FF</div></span></div>
+</div>
+</body>
+</html>
