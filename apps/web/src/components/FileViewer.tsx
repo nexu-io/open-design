@@ -1127,6 +1127,28 @@ function describeEventPhase(
   return { label: t('liveArtifact.refresh.eventFailed'), tone: 'error' };
 }
 
+function describePersistedStatus(
+  status: LiveArtifactRefreshLogEntry['status'],
+  t: TranslateFn,
+): string {
+  switch (status) {
+    case 'succeeded':
+      return t('liveArtifact.refresh.persistedStatusSucceeded');
+    case 'running':
+      return t('liveArtifact.refresh.persistedStatusRunning');
+    case 'failed':
+      return t('liveArtifact.refresh.persistedStatusFailed');
+    case 'cancelled':
+      return t('liveArtifact.refresh.persistedStatusCancelled');
+    case 'skipped':
+      return t('liveArtifact.refresh.persistedStatusSkipped');
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
 export function LiveArtifactRefreshHistoryPanel({
   liveArtifact,
   fallbackRefreshStatus,
@@ -1183,7 +1205,9 @@ export function LiveArtifactRefreshHistoryPanel({
         </div>
         <div className="live-artifact-refresh-hero-meta">
           <div className="live-artifact-refresh-hero-metric">
-            <span className="live-artifact-refresh-label">Last refreshed</span>
+            <span className="live-artifact-refresh-label">
+              {t('liveArtifact.refresh.heroLastRefreshedLabel')}
+            </span>
             {lastRefreshedAt ? (
               <>
                 <span className="live-artifact-refresh-value">
@@ -1197,7 +1221,9 @@ export function LiveArtifactRefreshHistoryPanel({
                 </span>
               </>
             ) : (
-              <span className="live-artifact-refresh-value muted">Never</span>
+              <span className="live-artifact-refresh-value muted">
+                {t('liveArtifact.refresh.heroLastRefreshedNever')}
+              </span>
             )}
           </div>
         </div>
@@ -1205,29 +1231,29 @@ export function LiveArtifactRefreshHistoryPanel({
 
       <section className="live-artifact-refresh-facts">
         <LiveArtifactRefreshFact
-          label="Created"
+          label={t('liveArtifact.refresh.factCreated')}
           iso={createdAt}
-          emptyLabel="Unknown"
+          emptyLabel={t('liveArtifact.refresh.factUnknown')}
           now={now}
         />
         <LiveArtifactRefreshFact
-          label="Last updated"
+          label={t('liveArtifact.refresh.factLastUpdated')}
           iso={updatedAt}
-          emptyLabel="Unknown"
+          emptyLabel={t('liveArtifact.refresh.factUnknown')}
           now={now}
         />
       </section>
 
       <section className="live-artifact-refresh-section">
         <header className="live-artifact-refresh-section-header">
-          <h4>Persisted refresh history</h4>
+          <h4>{t('liveArtifact.refresh.persistedTitle')}</h4>
           <span className="live-artifact-refresh-hint">
-            Entries loaded from refreshes.jsonl
+            {t('liveArtifact.refresh.persistedHint')}
           </span>
         </header>
         {reversedPersistedEvents.length === 0 ? (
           <div className="live-artifact-refresh-empty">
-            No persisted refresh history yet.
+            {t('liveArtifact.refresh.persistedEmpty')}
           </div>
         ) : (
           <ol className="live-artifact-refresh-timeline">
@@ -1246,11 +1272,12 @@ export function LiveArtifactRefreshHistoryPanel({
                   <div className="live-artifact-refresh-event-body">
                     <div className="live-artifact-refresh-event-row">
                       <span className={`live-artifact-badge refresh-status tone-${tone}`}>
-                        {event.status}
+                        {describePersistedStatus(event.status, t)}
                       </span>
                       <strong>{event.step}</strong>
                       <span className="live-artifact-refresh-event-time">
-                        {formatRelativeTime(event.startedAt, now) ?? 'just now'}
+                        {formatRelativeTime(event.startedAt, now)
+                          ?? t('liveArtifact.refresh.justNow')}
                       </span>
                     </div>
                     <div className="live-artifact-refresh-event-meta">
@@ -1268,9 +1295,9 @@ export function LiveArtifactRefreshHistoryPanel({
 
       <section className="live-artifact-refresh-section">
         <header className="live-artifact-refresh-section-header">
-          <h4>Session activity</h4>
+          <h4>{t('liveArtifact.refresh.sessionTitle')}</h4>
           <span className="live-artifact-refresh-hint">
-            Events observed while this tab is open
+            {t('liveArtifact.refresh.sessionHint')}
           </span>
         </header>
         {reversedEvents.length === 0 ? (
@@ -1331,19 +1358,19 @@ export function LiveArtifactRefreshHistoryPanel({
       {documentSource ? (
         <section className="live-artifact-refresh-section">
           <header className="live-artifact-refresh-section-header">
-            <h4>Document source</h4>
+            <h4>{t('liveArtifact.refresh.docSourceTitle')}</h4>
             <span className="live-artifact-refresh-hint">
-              Source configured
+              {t('liveArtifact.refresh.docSourceHint')}
             </span>
           </header>
           <dl className="live-artifact-refresh-kv">
             <div>
-              <dt>Type</dt>
+              <dt>{t('liveArtifact.refresh.docSourceType')}</dt>
               <dd>{documentSource.type}</dd>
             </div>
             {documentSource.toolName ? (
               <div>
-                <dt>Tool</dt>
+                <dt>{t('liveArtifact.refresh.docSourceTool')}</dt>
                 <dd>
                   <code>{documentSource.toolName}</code>
                 </dd>
@@ -1351,7 +1378,7 @@ export function LiveArtifactRefreshHistoryPanel({
             ) : null}
             {documentSource.connector ? (
               <div>
-                <dt>Connector</dt>
+                <dt>{t('liveArtifact.refresh.docSourceConnector')}</dt>
                 <dd>
                   {documentSource.connector.accountLabel ??
                     documentSource.connector.connectorId}
@@ -1364,9 +1391,9 @@ export function LiveArtifactRefreshHistoryPanel({
 
       {rawDebugPayload != null ? (
         <details className="live-artifact-refresh-raw">
-          <summary>Advanced debug metadata</summary>
+          <summary>{t('liveArtifact.refresh.debugSummary')}</summary>
           <p className="live-artifact-refresh-raw-note">
-            May include connector IDs, file names, source metadata, and internal artifact paths.
+            {t('liveArtifact.refresh.debugNote')}
           </p>
           <pre className="viewer-source">{JSON.stringify(rawDebugPayload, null, 2)}</pre>
         </details>
