@@ -34,6 +34,7 @@ import {
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { applyAppearanceToDocument } from './state/appearance';
+import { isMacPlatform } from './utils/platform';
 import {
   createProject,
   deleteProject as deleteProjectApi,
@@ -716,6 +717,22 @@ export function App() {
     setSettingsInitialSection('mcpClient');
     setSettingsOpen(true);
   }, []);
+
+  // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
+  // beat the browser's default Preferences dialog. Platform-gated so
+  // meta/ctrl don't conflict across OS.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && !e.shiftKey && !e.altKey && e.key === ',') {
+        if (e.isComposing) return;
+        e.preventDefault();
+        openSettings();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [openSettings]);
 
   // Explicit enabled toggle — true = wake, false = tuck. Persists to
   // localStorage so the overlay state survives across reloads. We keep

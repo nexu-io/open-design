@@ -6,6 +6,7 @@ import {
   type DragEvent as ReactDragEvent,
 } from 'react';
 import { useT } from '../i18n';
+import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
   fetchProjectFileText,
@@ -332,10 +333,8 @@ export function FileWorkspace({
   // text fields, and on win/linux we don't steal Cmd+P (rare but possible
   // on remapped keyboards).
   useEffect(() => {
-    const isMac =
-      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     const onKeyDown = (e: KeyboardEvent) => {
-      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (primary && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
         if (e.isComposing) return;
         e.preventDefault();

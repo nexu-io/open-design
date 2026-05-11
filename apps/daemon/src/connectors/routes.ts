@@ -5,8 +5,9 @@ import type { Express, Request, RequestHandler, Response } from 'express';
 import type { ToolTokenGrant } from '../tool-tokens.js';
 import { validateBoundedJsonObject } from '../live-artifacts/schema.js';
 import { executeConnectorTool, listConnectorTools } from '../tools/connectors.js';
+import { readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './composio-config.js';
 import type { ConnectorToolUseCase } from './catalog.js';
-import { connectorService, ConnectorService, ConnectorServiceError } from './service.js';
+import { connectorService, ConnectorService, ConnectorServiceError, deleteConnectorCredentialsByProvider } from './service.js';
 
 type ConnectorApiErrorCode =
   | 'BAD_REQUEST'
@@ -53,6 +54,9 @@ export interface RegisterConnectorRoutesOptions {
   projectsRoot?: string;
   authorizeToolRequest?: (req: Request, res: Response, operation: string) => ToolTokenGrant | null;
   requireLocalDaemonRequest?: RequestHandler;
+  composio?: {
+    clearDiscoveryCache: () => void;
+  };
 }
 
 function sendConnectorRouteError(res: Response, err: unknown, sendApiError: ConnectorApiErrorSender): Response {
@@ -558,6 +562,29 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
       await proxyComposioLogo(req, res);
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
+    }
+  });
+
+  app.get('/api/connectors/composio/config', (_req: Request, res: Response) => {
+    try {
+      res.json(readPublicComposioConfig());
+    } catch (err) {
+      res.status(500).json({ error: String(err instanceof Error ? err.message : err) });
+    }
+  });
+
+  app.put('/api/connectors/composio/config', requireLocalDaemonRequest, (req: Request, res: Response) => {
+    try {
+      const before = readComposioConfig();
+      const cfg = writeComposioConfig(req.body);
+      const after = readComposioConfig();
+      options.composio?.clearDiscoveryCache();
+      if (!cfg.configured || (before.apiKey && before.apiKey !== after.apiKey)) {
+        deleteConnectorCredentialsByProvider('composio');
+      }
+      res.json(cfg);
+    } catch (err) {
+      res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
     }
   });
 

@@ -34,6 +34,7 @@ import { PetRail } from './pet/PetRail';
 import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
 import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { isMacPlatform } from '../utils/platform';
 
 type TopTab = 'designs' | 'examples' | 'design-systems' | 'image-templates' | 'video-templates';
 
@@ -451,6 +452,7 @@ export function EntryView({
               <Icon name="settings" size={14} />
             </span>
             <span>{t('avatar.settings')}</span>
+            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
           </button>
         </div>
       ) : null}

@@ -305,6 +305,7 @@ beforeEach(() => {
 describe('SettingsDialog execution settings BYOK interactions', () => {
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('renders BYOK protocol tabs and toggles API key visibility', () => {
@@ -410,6 +411,41 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('surfaces autosave progress, success, and failure states in the modal chrome', async () => {
+    const first = renderSettingsDialog();
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-saved' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Saving…')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('All changes saved')).toBeTruthy();
+    });
+    expect(first.onPersist).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'sk-saved' }),
+      expect.any(Object),
+    );
+
+    cleanup();
+
+    const second = renderSettingsDialog();
+    second.onPersist.mockRejectedValueOnce(new Error('daemon offline'));
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-error' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Saving…')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
+    });
+  });
+
   it('closes BYOK via the close button or backdrop', () => {
     const first = renderSettingsDialog();
 
@@ -469,37 +505,13 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
-  it('supports custom model entry in BYOK mode', async () => {
-    const { onPersist } = renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
-
-    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
-    fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'sk-openai' },
-    });
-    fireEvent.change(screen.getByLabelText('Model'), {
-      target: { value: '__custom__' },
-    });
-
-    const customModelInput = screen.getByLabelText('Custom model id') as HTMLInputElement;
-    expect(customModelInput).toBeTruthy();
-    fireEvent.change(customModelInput, {
-      target: { value: 'gpt-4.1-custom' },
-    });
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        apiProtocol: 'openai',
-        apiKey: 'sk-openai',
-        model: 'gpt-4.1-custom',
-        baseUrl: 'https://api.openai.com/v1',
-      }),
-      {},
-    );
-  });
-
   it('enables model fetching only for supported BYOK provider drafts', () => {
-    renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
     const fetchButton = screen.getByRole('button', { name: 'Fetch models' }) as HTMLButtonElement;
@@ -555,13 +567,11 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect.any(AbortSignal),
     );
     const select = screen.getByLabelText('Model') as HTMLSelectElement;
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(
       expect.arrayContaining(['remote-alpha', 'gpt-4o', '__custom__']),
     );
     expect(
-      Array.from(select.options).some((o) =>
-        o.textContent === 'Remote Alpha (remote-alpha)',
-      ),
+      Array.from(select.options).some((option) => option.textContent === 'Remote Alpha (remote-alpha)'),
     ).toBe(true);
     expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe('custom-still-here');
 
@@ -618,11 +628,80 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     expect(await screen.findByText('Authentication failed. Check your API key.')).toBeTruthy();
   });
+
+  it('supports custom model entry in BYOK mode', async () => {
+    const { onPersist } = renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-openai' },
+    });
+    fireEvent.change(screen.getByLabelText('Model'), {
+      target: { value: '__custom__' },
+    });
+
+    const customModelInput = screen.getByLabelText('Custom model id') as HTMLInputElement;
+    expect(customModelInput).toBeTruthy();
+    fireEvent.change(customModelInput, {
+      target: { value: 'gpt-4.1-custom' },
+    });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        apiKey: 'sk-openai',
+        model: 'gpt-4.1-custom',
+        baseUrl: 'https://api.openai.com/v1',
+      }),
+      {},
+    );
+  });
+
+  it('runs the BYOK connection test only after required fields are present', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(input.toString()).toBe('/api/test/connection');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        mode: 'provider',
+        protocol: 'anthropic',
+        apiKey: 'sk-test-provider',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+      });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 42,
+          model: 'claude-sonnet-4-5',
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ apiKey: 'sk-test-provider' });
+
+    const testButton = screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement;
+    expect(testButton.disabled).toBe(false);
+
+    fireEvent.click(testButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Testing connection…')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 42 ms/)).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('SettingsDialog execution settings Local CLI interactions', () => {
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
@@ -781,6 +860,45 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(localCliTab.disabled).toBe(true);
     expect(localCliTab.getAttribute('title')).toBe('Daemon is not running');
     expect(screen.getByRole('tab', { name: /BYOK.*API provider/i }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('runs the Local CLI connection test for the selected installed agent', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(input.toString()).toBe('/api/test/connection');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        mode: 'agent',
+        agentId: 'codex',
+        agentCliEnv: {},
+      });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 31,
+          agentName: 'Codex CLI',
+          model: 'default',
+          sample: 'ready',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { agents: availableAgents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Testing connection…')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Codex CLI replied in 31 ms/)).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1570,6 +1688,37 @@ describe('SettingsDialog appearance interactions', () => {
       expect.objectContaining({
         theme: 'system',
         accentColor: '#2563eb',
+      }),
+      {},
+    );
+  });
+
+  it('live previews and autosaves preset and custom accent colors', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', theme: 'light' },
+      { initialSection: 'appearance' },
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        accentColor: '#059669',
+      }),
+      {},
+    );
+
+    fireEvent.change(screen.getByLabelText('Custom accent color'), {
+      target: { value: '#123456' },
+    });
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#123456');
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        accentColor: '#123456',
       }),
       {},
     );

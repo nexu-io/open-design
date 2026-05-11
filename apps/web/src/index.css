@@ -1941,6 +1941,21 @@ code {
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
+.settings-test-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-test-actions-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.settings-test-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .settings-test-btn {
   display: inline-flex;
   align-items: center;
