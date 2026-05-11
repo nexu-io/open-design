@@ -250,20 +250,54 @@ export function openSandboxedPreviewInNewTab(
 // equivalent print rules; this is a safety net for older / partially
 // regenerated decks where the framework was stripped — without it,
 // horizontal-snap decks print only the visible slide.
-export function exportAsPdf(
+export async function exportAsPdf(
   html: string,
   title: string,
   opts?: SrcdocOptions & { sandboxedPreview?: boolean },
-): void {
+): Promise<void> {
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
+  // Generate a per-export nonce so the print-ready handshake is resistant to
+  // spoofing by untrusted scripts inside the exported artifact.
+  const nonce = crypto.randomUUID();
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
-  doc = injectPrintScript(doc, title);
-  if (sandboxedPreview) {
-    // `allow-modals` is needed so the child can show the browser print dialog;
-    // it still does not grant same-origin access to the generated document.
-    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+  doc = injectPrintReadyHandshake(doc, nonce);
+
+  // Desktop native print bridge — uses Electron's webContents.print() API
+  // instead of window.open + window.print(). The sandboxed wrapper omits
+  // allow-modals here because the native flow doesn't call window.print();
+  // granting it would let untrusted artifact code call alert()/confirm()
+  // and stall the hidden Electron window indefinitely.
+  const desktopApi =
+    typeof window !== 'undefined'
+      ? (window as unknown as Record<string, unknown>).__odDesktop as
+          | { printPdf?: (html: string, nonce?: string) => Promise<void>; isDesktop?: boolean }
+          | undefined
+      : undefined;
+  if (desktopApi?.printPdf) {
+    if (sandboxedPreview) {
+      doc = buildSandboxedPreviewDocument(doc, title);
+    }
+    doc = injectParentPrintReadyCache(doc, nonce);
+    try {
+      await desktopApi.printPdf(doc, nonce);
+    } catch {
+      if (typeof alert !== 'undefined') {
+        alert('Print failed. Please try Export PDF again or use the browser version.');
+      }
+    }
+    return;
   }
+
+  // Browser fallback: wrap with allow-modals so the injected script can
+  // call window.print(), then inject the self-printing script and open a
+  // popup.
+  if (sandboxedPreview) {
+    doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
+    doc = injectParentPrintReadyCache(doc, nonce);
+  }
+  doc = injectPrintScript(doc, title);
+
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
 
@@ -274,23 +308,24 @@ export function exportAsPdf(
 
   if (!win) {
     if (typeof alert !== 'undefined') {
-      alert('Popup blocked! Please allow popups for this site to export as PDF.');
+      alert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     }
-    URL.revokeObjectURL(url); // Prevent memory leaks on early exit
+    URL.revokeObjectURL(url);
     return;
   }
 
   if (sandboxedPreview) {
     try {
-      // Disassociate the opener reference to preserve sandboxing/noopener behavior
       win.opener = null;
     } catch (e) {
       // Guard against potential context environment restrictions
     }
   }
 
-  // Navigate the verified window to the generated Blob URL
+  // Navigate the verified window to the generated Blob URL then release
+  // the Blob URL after the tab has had time to start loading it.
   win.location.href = url;
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function injectPrintScript(doc: string, title: string): string {
@@ -302,6 +337,28 @@ function injectPrintScript(doc: string, title: string): string {
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
+}
+
+function injectPrintReadyHandshake(doc: string, nonce: string): string {
+  // Wait for fonts, the window load event (which covers initial images), and
+  // any images that are still loading after load fires (dynamically added or
+  // slow images that weren't complete by the time this script ran). This
+  // mirrors the safety of the legacy waitForPrintableContent() helper and
+  // prevents image-heavy exports from printing with blank images.
+  //
+  // The nonce is a per-export random UUID that verifies the readiness signal
+  // came from our injected handshake, not a spoofed message from untrusted
+  // artifact code.
+  const script = `<script data-od-print-ready>(function(){Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){var imgs=Array.from(document.images).filter(function(img){return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}).then(function(){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}'},'*')})})();<\/script>`;
+  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
+  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
+  return doc + script;
+}
+
+function injectParentPrintReadyCache(doc: string, nonce: string): string {
+  const script = `<script>window.__odPrintReady=false;window.addEventListener('message',function(e){if(e.data&&e.data.type==='OD_PRINT_READY'&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0])))window.__odPrintReady=true});<\/script>`;
+  if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
+  return script + doc;
 }
 
 // Stitches every .slide into a vertical multi-page PDF: 1920×1080 per page,

@@ -3,7 +3,6 @@ import type Database from 'better-sqlite3';
 import {
   getCritiqueRun,
   markRunInterruptedRecovery,
-  type CritiqueRunStatus,
 } from './persistence.js';
 import type { RunRegistry } from './run-registry.js';
 
@@ -62,7 +61,10 @@ export function handleCritiqueInterrupt(
       return;
     }
 
-    const liveStatus = row.status as CritiqueRunStatus | 'running';
+    // row.status is already CritiquePersistedStatus (the contracts type that
+    // admits 'running' alongside terminal values), so we can compare without
+    // the inline widen this handler used to carry.
+    const liveStatus = row.status;
 
     if (liveStatus === 'interrupted') {
       // Idempotent retry path. The original interrupt already drove the run

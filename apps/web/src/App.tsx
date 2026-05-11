@@ -22,16 +22,20 @@ import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
+  fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
   mergeDaemonConfig,
+  mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { applyAppearanceToDocument } from './state/appearance';
+import { isMacPlatform } from './utils/platform';
 import {
   createProject,
   deleteProject as deleteProjectApi,
@@ -41,6 +45,7 @@ import {
   listTemplates,
   patchProject,
 } from './state/projects';
+import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
@@ -109,6 +114,7 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -129,6 +135,13 @@ export function App() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+  const [daemonMediaProviders, setDaemonMediaProviders] = useState<
+    AppConfig['mediaProviders'] | null
+  >(null);
+  const [daemonMediaProvidersFetchState, setDaemonMediaProvidersFetchState] = useState<
+    'idle' | 'ok' | 'error'
+  >('idle');
+  const [mediaProvidersNotice, setMediaProvidersNotice] = useState<string | null>(null);
   // Per-resource loading flags. Each goes false the moment its own fetch
   // resolves so each entry-view tab can render as its data lands instead of
   // every tab waiting on the slowest endpoint (typically `/api/agents`,
@@ -199,7 +212,6 @@ export function App() {
       const alive = await daemonIsLive();
       if (cancelled) return;
       setDaemonLive(alive);
-
       if (!alive) {
         // No daemon — clear every loading flag so empty states render
         // instead of the entry view sitting on indefinite spinners.
@@ -256,28 +268,57 @@ export function App() {
         setAppVersionInfo(info);
       });
 
-      // Daemon-persisted config + composio config land together so the
-      // welcome-modal decision and the daemon-side composio key both apply
-      // in one merge, avoiding a flash where local-only state is shown
+      // Daemon-persisted config + composio config + media provider config land
+      // together so the welcome-modal decision and daemon-backed settings
+      // apply in one merge, avoiding a flash where local-only state is shown
       // before daemon overrides it.
       void Promise.all([
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
-      ]).then(([daemonConfig, daemonComposioConfig]) => {
+        fetchMediaProvidersFromDaemon(),
+      ]).then(([
+        daemonConfig,
+        daemonComposioConfig,
+        daemonMediaProvidersResult,
+      ]) => {
         if (cancelled) return;
+        const daemonMediaProvidersLoaded =
+          daemonMediaProvidersResult.status === 'ok'
+            ? daemonMediaProvidersResult.providers
+            : null;
+        setDaemonMediaProviders(daemonMediaProvidersLoaded);
+        setDaemonMediaProvidersFetchState(daemonMediaProvidersResult.status);
+        setMediaProvidersNotice(
+          daemonMediaProvidersResult.status === 'error'
+            ? t('settings.mediaProviderLoadError')
+            : null,
+        );
         setConfig((prev) => {
-          const next = mergeDaemonConfig(prev, daemonConfig);
+          const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
+            prev.mediaProviders,
+            daemonMediaProvidersLoaded,
+          );
+          const next = mergeDaemonMediaProviders(
+            mergeDaemonConfig(prev, daemonConfig),
+            daemonMediaProvidersLoaded,
+          );
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
           if (!hasLocalComposioKey && daemonComposioConfig) {
             next.composio = daemonComposioConfig;
           }
           saveConfig(next);
-          if (hasAnyConfiguredProvider(next.mediaProviders)) {
-            void syncMediaProvidersToDaemon(next.mediaProviders);
+          if (
+            daemonMediaProvidersResult.status === 'ok' &&
+            migratedLocalMediaProviders &&
+            hasAnyConfiguredProvider(next.mediaProviders)
+          ) {
+            void syncMediaProvidersToDaemon(next.mediaProviders, {
+              daemonProviders: daemonMediaProvidersLoaded,
+            });
           }
           // Migrate localStorage prefs to daemon on first boot with the new
-          // endpoint. If daemon already had values the merge above used
-          // them; writing back is idempotent and keeps both sides in sync.
+          // endpoint. If daemon already had values the merge above used them;
+          // writing back is idempotent and keeps both sides in sync.
           void syncConfigToDaemon(next);
           void syncComposioConfigToDaemon(next.composio);
 
@@ -380,6 +421,26 @@ export function App() {
     setTemplates(list);
   }, []);
 
+  const reloadMediaProvidersFromDaemon = useCallback(async () => {
+    const result = await fetchMediaProvidersFromDaemon();
+    if (result.status !== 'ok') {
+      setDaemonMediaProvidersFetchState('error');
+      setMediaProvidersNotice(
+        t('settings.mediaProviderLoadError'),
+      );
+      return null;
+    }
+    setDaemonMediaProviders(result.providers);
+    setDaemonMediaProvidersFetchState('ok');
+    setMediaProvidersNotice(null);
+    setConfig((prev) => {
+      const merged = mergeDaemonMediaProviders(prev, result.providers);
+      saveConfig(merged);
+      return merged;
+    });
+    return result.providers;
+  }, []);
+
   /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
@@ -401,18 +462,22 @@ export function App() {
     latestPersistedConfigRef.current = persisted;
     saveConfig(persisted);
     setConfig(persisted);
-    await Promise.all([
-      shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
+    const shouldSyncMediaProviders =
+      daemonMediaProvidersFetchState === 'ok'
+      && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
         force: options?.forceMediaProviderSync,
-      })
+      });
+    await Promise.all([
+      shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
             force: options?.forceMediaProviderSync,
+            daemonProviders: daemonMediaProviders,
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
       syncConfigToDaemon(persisted),
     ]);
-  }, []);
+  }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
   /**
    * Explicit Composio API-key save. Called from the section-local
@@ -549,6 +614,20 @@ export function App() {
     });
   }, []);
 
+  // PR #974: on Electron, the desktop main process owns the picker and
+  // the import POST atomically (`pickAndImport`). The renderer never
+  // sees the path or the HMAC token; it just receives the same
+  // ImportFolderResponse shape that `importFolderProject` would
+  // produce on web, and the App-level state update is identical.
+  const handleImportFolderResponse = useCallback(async (result: import('@open-design/contracts').ImportFolderResponse) => {
+    setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
+    navigate({
+      kind: 'project',
+      projectId: result.project.id,
+      fileName: result.entryFile,
+    });
+  }, []);
+
   const handleOpenProject = useCallback((id: string) => {
     navigate({ kind: 'project', projectId: id, fileName: null });
   }, []);
@@ -578,7 +657,7 @@ export function App() {
         p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
       ),
     );
-    void patchProject(projectId, { pendingPrompt: undefined });
+    void patchProject(projectId, { pendingPrompt: null });
   }, [route]);
 
   const handleTouchProject = useCallback(() => {
@@ -639,6 +718,22 @@ export function App() {
     setSettingsInitialSection('mcpClient');
     setSettingsOpen(true);
   }, []);
+
+  // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
+  // beat the browser's default Preferences dialog. Platform-gated so
+  // meta/ctrl don't conflict across OS.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && !e.shiftKey && !e.altKey && e.key === ',') {
+        if (e.isComposing) return;
+        e.preventDefault();
+        openSettings();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [openSettings]);
 
   // Explicit enabled toggle — true = wake, false = tuck. Persists to
   // localStorage so the overlay state survives across reloads. We keep
@@ -751,6 +846,7 @@ export function App() {
           onCreateProject={handleCreateProject}
           onImportClaudeDesign={handleImportClaudeDesign}
           onImportFolder={handleImportFolder}
+          onImportFolderResponse={handleImportFolderResponse}
           onOpenProject={handleOpenProject}
           onOpenLiveArtifact={handleOpenLiveArtifact}
           onDeleteProject={handleDeleteProject}
@@ -793,6 +889,10 @@ export function App() {
             setSettingsOpen(false);
           }}
           onRefreshAgents={refreshAgents}
+          daemonMediaProviders={daemonMediaProviders}
+          daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+          mediaProvidersNotice={mediaProvidersNotice}
+          onReloadMediaProviders={reloadMediaProvidersFromDaemon}
         />
       ) : null}
       <MemoryToast onOpenMemory={() => openSettings('memory')} />

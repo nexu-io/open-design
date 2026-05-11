@@ -45,8 +45,8 @@ export interface ConnectorDetail {
    * read-only with auto approval. Used by the agent layer to gate
    * which tools are invocable. Note: this list **grows** on Composio
    * hydration (a GitHub-style provider can add tens of read tools to
-   * the catalog baseline of 2), so it is not the right anchor for a
-   * stable UI summary count — see `curatedToolNames` for that.
+   * the catalog baseline of 2), so it is not the right anchor for the
+   * advertised provider tool count — see `toolCount` for that.
    *
    * Optional in the type only to keep test fixtures terse — the daemon
    * always populates this from `connectorDefinitionToDetail` so wire
@@ -56,11 +56,11 @@ export interface ConnectorDetail {
   /**
    * Hand-curated catalog subset. Stable across hydration: never
    * extended by provider discovery, only the static catalog names.
-   * UIs surfacing a single "N tools" summary (the connector card and
-   * drawer header badges) should read this so the displayed count
-   * doesn't lurch when an API key flips on (issue #748). The full
-   * provider inventory is still discoverable in the drawer's tools
-   * section, which renders `tools` directly.
+   * This preserves the static catalog baseline for consumers that
+   * need that curated subset, but it does not represent the
+   * advertised provider inventory. UI summary badges should use
+   * `toolCount` when present, while the drawer's rendered tool rows
+   * still come from `tools` directly.
    *
    * Optional in the type only for fixture brevity, see `allowedToolNames`.
    */

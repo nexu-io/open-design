@@ -6,9 +6,12 @@ import {
   type DragEvent as ReactDragEvent,
 } from 'react';
 import { useT } from '../i18n';
+import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
   fetchProjectFileText,
+  renameProjectFile,
+  type UploadProjectFilesResult,
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
@@ -160,6 +163,7 @@ export function FileWorkspace({
   }, [openRequest]);
 
   function openFile(name: string) {
+    setUploadError(null);
     onTabsStateChange({
       tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
       active: name,
@@ -231,7 +235,14 @@ export function FileWorkspace({
     if (picked.length === 0) return;
 
     setUploadError(null);
-    const result = await uploadProjectFiles(projectId, picked);
+    let result: UploadProjectFilesResult;
+    try {
+      result = await uploadProjectFiles(projectId, picked);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
+      return;
+    }
     if (result.uploaded.length > 0) {
       await onRefreshFiles();
       const lastUploaded = result.uploaded[result.uploaded.length - 1];
@@ -322,10 +333,8 @@ export function FileWorkspace({
   // text fields, and on win/linux we don't steal Cmd+P (rare but possible
   // on remapped keyboards).
   useEffect(() => {
-    const isMac =
-      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     const onKeyDown = (e: KeyboardEvent) => {
-      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (primary && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
         if (e.isComposing) return;
         e.preventDefault();
@@ -402,6 +411,37 @@ export function FileWorkspace({
     if (failed.length > 0) {
       alert(t('workspace.deleteSelectedFilesPartial', { n: failed.length }));
     }
+  }
+
+  async function handleRename(oldName: string, nextName: string): Promise<ProjectFile | null> {
+    const hasPendingSketchConflict = Object.entries(sketches).some(
+      ([name, sketch]) => !sketch.persisted && sameFileName(name, nextName),
+    );
+    if (nextName !== oldName && hasPendingSketchConflict) {
+      throw new Error(
+        `A pending sketch named "${nextName}" is already open. Save or close it before renaming.`,
+      );
+    }
+
+    const result = await renameProjectFile(projectId, oldName, nextName);
+    const renamed = result.file;
+    await onRefreshFiles();
+
+    const nextTabs = persistedTabs.map((name) => (name === oldName ? renamed.name : name));
+    const nextActive = tabsState.active === oldName ? renamed.name : tabsState.active;
+    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+    if (activeTab === oldName) setActiveTab(renamed.name);
+
+    setSketches((curr) => {
+      const entry = curr[oldName];
+      if (!entry) return curr;
+      const next = { ...curr };
+      delete next[oldName];
+      next[renamed.name] = entry;
+      return next;
+    });
+
+    return renamed;
   }
 
   function startNewSketch() {
@@ -514,6 +554,19 @@ export function FileWorkspace({
   return (
     <div className="workspace" data-testid="file-workspace">
       <div className="ws-tabs-shell">
+        {onFocusModeChange && focusMode ? (
+          <button
+            type="button"
+            className="icon-only ws-focus-expand"
+            data-testid="workspace-focus-toggle"
+            aria-pressed={focusMode}
+            title={t('workspace.showChat')}
+            aria-label={t('workspace.showChat')}
+            onClick={() => onFocusModeChange(false)}
+          >
+            <Icon name="chevron-right" size={15} />
+          </button>
+        ) : null}
         <div
           ref={tabsBarRef}
           className="ws-tabs-bar"
@@ -604,42 +657,24 @@ export function FileWorkspace({
             );
           })}
         </div>
-        {onFocusModeChange ? (
-          <div className="ws-tabs-actions">
-            <button
-              type="button"
-              className="ws-focus-toggle"
-              data-testid="workspace-focus-toggle"
-              aria-pressed={focusMode}
-              title={focusMode ? t('workspace.showChat') : t('workspace.focusMode')}
-              onClick={() => onFocusModeChange(!focusMode)}
-            >
-              <Icon name={focusMode ? 'comment' : 'zoom-in'} size={13} />
-              <span>{focusMode ? t('workspace.showChat') : t('workspace.focusMode')}</span>
-            </button>
-          </div>
-        ) : null}
       </div>
       <div className="ws-body">
-        {/* Keep the failure banner visible across tab switches so the
-            partial-success case (some files succeed and auto-open while
-            others fail) doesn't silently drop the failure signal. The
-            banner now carries an explicit dismiss button so the user
-            can clear the stale message themselves, which is what #786
-            was really asking for: a way to drop the message rather than
-            have it pinned above an unrelated file preview forever. The
-            next upload also clears it via setUploadError(null) at the
-            top of uploadFiles(). */}
-        {uploadError ? (
-          <div className="viewer-empty viewer-empty-dismissible">
+        {/* Banner moved into DesignFilesPanel for the Design Files tab so
+            single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
+            no longer leaves a stale banner mounted above the preview.
+            Keep a fallback here that fires only when activeTab is not the
+            Design Files tab, which preserves visibility for the
+            partial-upload case where the last successful file auto-opens
+            into a viewer surface. */}
+        {uploadError && activeTab !== DESIGN_FILES_TAB ? (
+          <div className="df-upload-banner" data-testid="upload-error-banner">
             <span>{uploadError}</span>
             <button
               type="button"
-              className="ghost"
-              aria-label={t('common.close')}
+              data-testid="upload-error-dismiss"
               onClick={() => setUploadError(null)}
             >
-              {t('common.close')}
+              Dismiss
             </button>
           </div>
         ) : null}
@@ -652,12 +687,15 @@ export function FileWorkspace({
             onRefreshFiles={onRefreshFiles}
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
+            onRenameFile={handleRename}
             onDeleteFile={(name) => void handleDelete(name)}
             onDeleteFiles={handleDeleteMany}
             onUpload={() => fileInputRef.current?.click()}
             onUploadFiles={(picked) => void uploadFiles(picked)}
             onPaste={() => setShowPasteDialog(true)}
             onNewSketch={startNewSketch}
+            uploadError={uploadError}
+            onClearUploadError={() => setUploadError(null)}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -892,6 +930,10 @@ function kindIconName(
 
 function isSketchName(name: string): boolean {
   return name.endsWith('.sketch.json');
+}
+
+function sameFileName(a: string, b: string): boolean {
+  return a === b || a.toLocaleLowerCase() === b.toLocaleLowerCase();
 }
 
 function isLiveArtifactImplementationPath(name: string): boolean {

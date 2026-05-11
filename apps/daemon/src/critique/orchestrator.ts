@@ -1,9 +1,15 @@
 import type { ChildProcess } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import type Database from 'better-sqlite3';
 import type { CritiqueConfig, PanelEvent } from '@open-design/contracts/critique';
 import { panelEventToSse } from '@open-design/contracts/critique';
 import type { CritiqueSseEvent } from '@open-design/contracts/critique';
-import { parseCritiqueStream } from './parser.js';
+import { parseCritiqueStream, type ShipArtifactPayload } from './parser.js';
+import {
+  ArtifactEmptyError,
+  ArtifactTooLargeError,
+  writeShipArtifact,
+} from './artifact-writer.js';
 import {
   computeComposite,
   decideRound,
@@ -14,6 +20,7 @@ import {
   insertCritiqueRun,
   updateCritiqueRun,
   type CritiqueRunRow,
+  type CritiqueRunStatus,
 } from './persistence.js';
 import { writeTranscript } from './transcript.js';
 import {
@@ -75,7 +82,10 @@ export interface OrchestratorParams {
 }
 
 export interface OrchestratorResult {
-  status: CritiqueRunRow['status'];
+  // The orchestrator only ever returns after a run reaches a terminal
+  // outcome, so this is the public terminal-only union, not the wider
+  // CritiquePersistedStatus that admits 'running' for live DB rows.
+  status: CritiqueRunStatus;
   composite: number | null;
   rounds: CritiqueRunRow['rounds'];
   transcriptPath: string | null;
@@ -131,7 +141,19 @@ export async function runOrchestrator(
   const completedRounds: RoundState[] = [];
   let artifactPath: string | null = null;
   let shipEvent: Extract<PanelEvent, { type: 'ship' }> | null = null;
-  let finalStatus: CritiqueRunRow['status'] = 'failed';
+  // Buffered SHIP artifact body coming from the parser side-channel. The
+  // body intentionally never travels on the SSE wire (the SHIP PanelEvent
+  // doesn't carry it), so the orchestrator captures it here, writes it to
+  // disk after decideRound runs, and pins artifactPath on the run row.
+  //
+  // Wrapped in a single-property box rather than a `let pendingArtifact`
+  // so TypeScript's control-flow analysis doesn't narrow it to `never`
+  // at the read site below. The parser callback only mutates the box's
+  // `value` field; without the box, tsc with strict / noImplicitAny would
+  // see the closure assignment as opaque and conclude the field is
+  // unreachable.
+  const artifactBuffer: { value: ShipArtifactPayload | null } = { value: null };
+  let finalStatus: CritiqueRunStatus = 'failed';
   let finalComposite: number | null = null;
   let transcriptPath: string | null = null;
 
@@ -180,6 +202,15 @@ export async function runOrchestrator(
       parserMaxBlockBytes: cfg.parserMaxBlockBytes,
       projectId,
       artifactId: params.artifactId,
+      // Side-channel for the SHIP <ARTIFACT> body. The parser invokes this
+      // synchronously right before yielding the ship PanelEvent, so the
+      // orchestrator has the body in hand by the time decideRound runs.
+      // Only the LAST artifact is retained: the parser already enforces
+      // that a second SHIP becomes a parser_warning, so this branch is only
+      // hit on the legitimate first SHIP per run.
+      onArtifact: (payload: ShipArtifactPayload) => {
+        artifactBuffer.value = payload;
+      },
     };
 
     for await (const event of parseCritiqueStream(timedSource, parserOpts)) {
@@ -321,9 +352,14 @@ export async function runOrchestrator(
       finalStatus = decision === 'ship' ? 'shipped' : 'below_threshold';
       finalComposite = shippedRound.composite;
 
-      // Emit the daemon-authoritative ship event. SSE clients and the
-      // transcript see this single normalized payload, never the raw agent
-      // claim from the buffered shipEvent.
+      // Build the daemon-authoritative ship event payload now, but DO NOT
+      // emit it yet. SSE clients react to critique.ship by fetching the
+      // artifact endpoint, so the file must be on disk AND the row's
+      // artifactPath must be populated before the event goes out;
+      // otherwise the client races us and gets a 404 against a row that
+      // is about to gain its path on the next finalize call. Order:
+      //   write file -> persist artifactPath on row -> emit ship event.
+      // (lefarcen P1 on PR #1085.)
       const normalizedShip: Extract<PanelEvent, { type: 'ship' }> = {
         type: 'ship',
         runId,
@@ -333,15 +369,71 @@ export async function runOrchestrator(
         artifactRef: { projectId, artifactId: params.artifactId },
         summary: ship.summary,
       };
+
+      // Persist the SHIP artifact body now that the row is being finalized.
+      // Failures here are logged but do not block finalization: the run
+      // still goes terminal so the orchestrator's caller can drive the chat
+      // run lifecycle, and the artifact endpoint will return 404 instead of
+      // pointing at a missing file. Phase 14 (artifact backfill) will fill
+      // in older rows that were created before this code path existed.
+      const captured = artifactBuffer.value;
+      if (captured !== null) {
+        try {
+          await fs.mkdir(artifactDir, { recursive: true });
+          const written = await writeShipArtifact(
+            artifactDir,
+            captured.body,
+            captured.mime,
+            { maxBytes: cfg.parserMaxBlockBytes },
+          );
+          artifactPath = written.absPath;
+          // Pin artifactPath on the row BEFORE we emit critique.ship,
+          // so the GET /artifact endpoint sees the path the moment a
+          // client reacts to the SSE event. Without this incremental
+          // patch the row stays at artifactPath=null until the
+          // bottom-of-orchestrator updateCritiqueRun fires, which is
+          // after any client request triggered by critique.ship.
+          updateCritiqueRun(db, runId, { artifactPath });
+        } catch (err) {
+          // ArtifactTooLargeError / ArtifactEmptyError are agent-side
+          // problems (the parser already validated non-empty, so empty
+          // here means the agent shipped a CDATA-only body). Filesystem
+          // errors are environment problems. Either way, leaving
+          // artifactPath null makes the run still finalize and the ship
+          // event still emit; the artifact endpoint will 404 instead of
+          // claiming bytes that don't exist.
+          if (
+            err instanceof ArtifactTooLargeError
+            || err instanceof ArtifactEmptyError
+          ) {
+            console.warn(
+              `[critique] runId=${runId}: refusing to persist ship artifact (${err.code}): ${err.message}`,
+            );
+          } else {
+            console.warn(
+              `[critique] runId=${runId}: ship artifact write failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
+          artifactPath = null;
+        }
+      } else {
+        // SHIP arrived without an <ARTIFACT> side-channel payload. The
+        // parser refuses to yield a ship event in this state (it throws
+        // MissingArtifactError), so reaching this branch means the parser
+        // contract is violated. Surface as a warning rather than crashing
+        // the orchestrator; the transcript still records the ship event.
+        console.warn(
+          `[critique] runId=${runId}: ship event reached orchestrator without an artifact payload; parser contract violated`,
+        );
+        artifactPath = null;
+      }
+
+      // File is on disk, row knows about it. Now emit critique.ship so
+      // SSE subscribers can fetch /artifact without racing the writer.
       collectedEvents.push(normalizedShip);
       bus.emit(panelEventToSse(normalizedShip));
-
-      // artifactPath stays null until a future phase actually extracts the
-      // <SHIP><ARTIFACT> body and writes it to disk. Persisting a synthesized
-      // path that no file occupies would let UI/replay/export code dereference
-      // a missing file. The transcript still carries the ship event with the
-      // artifact reference so consumers can find the run.
-      artifactPath = null;
     } else {
       // No SHIP arrived (or the agent SHIP was rejected as malformed above).
       // Apply fallback policy over the daemon's closed rounds.

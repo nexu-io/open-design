@@ -3,6 +3,7 @@
 ## 覆盖范围
 
 - Configure execution 页面
+- Orbit 页面
 - Language 页面
 - Pets 页面
 - API protocol 迁移与切换回归
@@ -16,6 +17,7 @@
 - `apps/web/tests/components/App.mediaProviders.test.tsx`
 - `apps/web/tests/components/SettingsDialog.test.ts`
 - `apps/web/tests/components/SettingsDialog.execution.test.tsx`
+- `apps/web/tests/components/SettingsDialog.orbit.test.tsx`
 
 ## 已自动化
 
@@ -28,14 +30,14 @@
 | SET-005 | 不同 protocol 的 draft 相互隔离，`apiKey` 不会跨协议泄漏 | `SettingsDialog.execution.test.tsx`, `SettingsDialog.test.ts` |
 | SET-006 | 历史 OpenAI-compatible 已知 provider 切到 Anthropic 时，会命中对应 sibling preset | `settings-api-protocol.test.ts`, `SettingsDialog.test.ts` |
 | SET-007 | 历史 custom provider 切换 protocol 时，会保留自定义 `Base URL` 和 `Model` | `settings-api-protocol.test.ts`, `SettingsDialog.test.ts` |
-| SET-008 | BYOK 下只有必填字段合法时才允许保存，非法 `Base URL` 会阻止保存 | `SettingsDialog.execution.test.tsx`, `settings-api-protocol.test.ts` |
-| SET-009 | BYOK 保存后，配置会写入本地并在关闭后重新打开设置时正确回显 | `settings-api-protocol.test.ts` |
+| SET-008 | BYOK 下只有必填字段合法时才会触发自动保存，非法 `Base URL` 会阻止保存 | `SettingsDialog.execution.test.tsx`, `settings-api-protocol.test.ts` |
+| SET-009 | BYOK 自动保存后，配置会写入本地并在关闭后重新打开设置时正确回显 | `settings-api-protocol.test.ts` |
 | SET-010 | Azure 的 `apiVersion` 仅保留在 Azure draft 中，不污染其他协议 | `SettingsDialog.test.ts` |
-| SET-011 | BYOK 编辑后点击 `Cancel` 或点击遮罩关闭时，不会保存未提交修改 | `SettingsDialog.execution.test.tsx` |
+| SET-011 | Settings 弹窗支持右上角关闭按钮和遮罩关闭，关闭入口不会误触额外保存动作 | `SettingsDialog.execution.test.tsx` |
 | SET-012 | Azure OpenAI 页面展示 `Deployment name / API version` 专属字段，并支持保存 Azure 配置 | `SettingsDialog.execution.test.tsx` |
 | SET-013 | BYOK 支持切换到 `Custom model id` 输入路径并保存自定义 model | `SettingsDialog.execution.test.tsx` |
-| SET-014 | Local CLI 模式下只能选择已安装 agent，选择后可保存为当前执行 CLI | `SettingsDialog.execution.test.tsx` |
-| SET-015 | Local CLI 在无 agent 时显示 empty state，且不可保存 | `SettingsDialog.execution.test.tsx` |
+| SET-014 | Local CLI 模式下只能选择已安装 agent，选择后会自动保存为当前执行 CLI | `SettingsDialog.execution.test.tsx` |
+| SET-015 | Local CLI 在无 agent 时显示 empty state，且不会触发无效保存 | `SettingsDialog.execution.test.tsx` |
 | SET-016 | `Rescan` 会展示 loading 状态、阻止重复点击，并在成功后展示可用 agent 数 | `SettingsDialog.execution.test.tsx` |
 | SET-017 | `Rescan` 失败时会展示错误提示，但不破坏当前页面状态 | `SettingsDialog.execution.test.tsx` |
 | SET-018 | Configure execution 页面里的 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 可保存进配置 | `SettingsDialog.execution.test.tsx`, `SettingsDialog.test.ts` |
@@ -44,13 +46,13 @@
 | SET-021 | Media providers 会按 `已配置优先 -> Integrated 优先 -> 名称排序` 稳定展示，已配置 provider 会显示 `Configured` badge | `SettingsDialog.execution.test.tsx` |
 | SET-022 | Unsupported media providers 会以禁用行展示，不允许编辑当前不支持的 provider 配置 | `SettingsDialog.execution.test.tsx` |
 | SET-023 | Media providers 支持保存 API key / Base URL / 自定义 model，并在 `Clear` 后从保存 payload 中移除对应 provider | `SettingsDialog.execution.test.tsx` |
-| SET-024 | Media providers 编辑后点击 `Cancel` 或点击遮罩关闭时，不会保存未提交修改 | `SettingsDialog.execution.test.tsx` |
+| SET-024 | Media providers 支持右上角关闭按钮和遮罩关闭，关闭入口不会误触额外保存动作 | `SettingsDialog.execution.test.tsx` |
 | SET-025 | App 启动时如果本地已有已配置的 media providers，且 daemon 在线，会自动把配置同步到 daemon | `App.mediaProviders.test.tsx` |
 | SET-026 | Settings 保存 media providers 后，会以 `force: true` 触发 daemon 同步，并把 `onboardingCompleted` 一并落盘 | `App.mediaProviders.test.tsx` |
 | SET-027 | Connectors 页面会展示已保存的 Composio key 尾号、替换占位文案、帮助说明和 `Get API Key` 外链 | `SettingsDialog.execution.test.tsx` |
 | SET-028 | Connectors 页面支持替换已保存的 Composio key，并在未保存时展示 pending 提示 | `SettingsDialog.execution.test.tsx` |
 | SET-029 | Connectors 页面支持清空已保存的 Composio key，并在保存 payload 中移除保存态标记 | `SettingsDialog.execution.test.tsx` |
-| SET-030 | Connectors 页面编辑后点击 `Cancel` 或点击遮罩关闭时，不会保存未提交修改 | `SettingsDialog.execution.test.tsx` |
+| SET-030 | Connectors 页面支持右上角关闭按钮和遮罩关闭，关闭入口不会误触额外保存动作 | `SettingsDialog.execution.test.tsx` |
 | SET-031 | App 启动时如果本地没有待保存 key，会优先使用 daemon 返回的 Composio 已保存态展示尾号 | `App.connectors.test.tsx` |
 | SET-032 | Settings 保存 Connectors key 时，本地只保留 `apiKeyConfigured/apiKeyTail`，同时把原始 key 同步给 daemon | `App.connectors.test.tsx` |
 | SET-033 | 清空 Connectors 已保存 key 后，会把 cleared composio 配置同步给 daemon | `App.connectors.test.tsx` |
@@ -62,17 +64,17 @@
 | SET-039 | Language 页面展开下拉后，会渲染完整 locale 列表，并正确标记当前已选语言 | `SettingsDialog.execution.test.tsx` |
 | SET-040 | 在 Language 页面切换语言后，触发器文案会立即更新，同时把 locale 写入 `localStorage` 并同步 `html[lang]` | `SettingsDialog.execution.test.tsx` |
 | SET-041 | 切换到 `fa` 等 RTL 语言后，会同步更新 `html[dir=rtl]`，且语言菜单支持 `Escape` 关闭 | `SettingsDialog.execution.test.tsx` |
-| SET-042 | Language 页面不通过 `Save` 持久化；语言切换即时生效，点击 `Cancel` 也不会回滚已应用 locale | `SettingsDialog.execution.test.tsx` |
+| SET-042 | Language 页面不依赖全局保存按钮；语言切换即时生效，关闭 Settings 也不会回滚已应用 locale | `SettingsDialog.execution.test.tsx` |
 | SET-043 | 每个 locale 都覆盖了所有 curated skill、design system、prompt template id | `localized-content.test.ts` |
 | SET-044 | 每个 locale 都覆盖了要求的展示分类和 prompt tag | `localized-content.test.ts` |
 | SET-045 | Notifications 默认以 `offline` 展示；开启 completion sound 后才会显示成功/失败音选择器，并立即试听默认成功音 | `SettingsDialog.execution.test.tsx` |
 | SET-046 | Notifications 支持切换 success / failure sound，并把声音选择保存到通知配置 | `SettingsDialog.execution.test.tsx` |
 | SET-047 | Desktop notification 在授权成功后会切为 `active`，支持发送测试通知并展示发送结果文案 | `SettingsDialog.execution.test.tsx` |
 | SET-048 | Desktop notification 在权限被拒绝时，会保持禁用并展示浏览器阻止提示，不显示测试按钮 | `SettingsDialog.execution.test.tsx` |
-| SET-049 | Notifications 编辑后点击 `Cancel` 或点击遮罩关闭时，不会保存未提交修改 | `SettingsDialog.execution.test.tsx` |
+| SET-049 | Notifications 支持右上角关闭按钮和遮罩关闭，关闭入口不会误触额外保存动作 | `SettingsDialog.execution.test.tsx` |
 | SET-050 | Appearance 页面把 `System` 作为当前模式回显；它表示“跟随系统”，而不是固定亮/暗主题 | `SettingsDialog.execution.test.tsx` |
 | SET-051 | 在 Appearance 页面从 `Light/Dark` 切回 `System` 时，会移除显式 `html[data-theme]`，恢复系统跟随模式 | `SettingsDialog.execution.test.tsx` |
-| SET-052 | Appearance 的实时主题预览在点击 `Cancel` 关闭后，会回滚到已保存主题 | `SettingsDialog.execution.test.tsx` |
+| SET-052 | Appearance 的实时主题预览在立即关闭后，会回滚到已保存主题，避免未落盘预览泄漏 | `SettingsDialog.execution.test.tsx` |
 | SET-053 | 保存 `theme=system` 时，不会写死显式主题，同时会保留当前 accent color 配置 | `SettingsDialog.execution.test.tsx` |
 | SET-054 | Pets 页面默认展示 Built-in 标签页，并把 bundled pets 与 community pets 分开显示 | `SettingsDialog.execution.test.tsx` |
 | SET-055 | Pets 页面支持在 Custom 标签页编辑 `Name / Glyph / Greeting / Accent color`，实时更新预览并保存为当前自定义宠物 | `SettingsDialog.execution.test.tsx` |
@@ -85,7 +87,14 @@
 | SET-062 | Skills & Design Systems 搜索无匹配时，会展示空结果提示 | `SettingsDialog.execution.test.tsx` |
 | SET-063 | About 页面会正确展示 `Version / Channel / Runtime / Platform / Architecture` 五项只读版本信息 | `SettingsDialog.execution.test.tsx` |
 | SET-064 | About 页面在 `appVersionInfo` 缺失时，会展示版本信息不可用的降级空态 | `SettingsDialog.execution.test.tsx` |
-| SET-065 | About 页面是只读信息页；点击 `Cancel` 或遮罩关闭不会产生保存动作或脏状态 | `SettingsDialog.execution.test.tsx` |
+| SET-065 | About 页面是只读信息页；关闭按钮或遮罩关闭不会产生保存动作或脏状态 | `SettingsDialog.execution.test.tsx` |
+| SET-066 | Settings 顶部 autosave 状态会覆盖 `Saving… / All changes saved / Couldn’t save changes` 三种状态 | `SettingsDialog.execution.test.tsx` |
+| SET-067 | BYOK 页面 `Test` 按钮只有必填字段可用后才允许测试，并会展示 provider 连接测试结果 | `SettingsDialog.execution.test.tsx` |
+| SET-068 | Local CLI 页面 `Test` 按钮会使用当前选中的已安装 agent 发起连接测试，并展示 agent 响应结果 | `SettingsDialog.execution.test.tsx` |
+| SET-069 | Appearance 支持 preset accent color 和自定义色值，切换时实时预览并自动保存 `accentColor` | `SettingsDialog.execution.test.tsx` |
+| SET-070 | Orbit 页面在没有可用 connector 时锁定 Run / 开关 / 时间 / 模板控件，并通过 gate CTA 跳转到 Connectors | `SettingsDialog.orbit.test.tsx` |
+| SET-071 | Orbit 页面在 connector 可用后支持切换 daily summary、修改 run time、切换 prompt template，并自动保存 schedule 配置 | `SettingsDialog.orbit.test.tsx` |
+| SET-072 | Orbit 页面展示最近一次运行收据、统计计数、live artifact 入口，并支持复制 markdown 结果 | `SettingsDialog.orbit.test.tsx` |
 
 ## 自动化候选
 

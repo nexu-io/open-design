@@ -302,14 +302,21 @@ export async function readMaskedConfig(projectRoot: string): Promise<{ providers
 export async function writeConfig(projectRoot: string, body: unknown) {
   const incoming = isRecord(body) && isRecord(body.providers) ? body.providers : {};
   const force = Boolean(isRecord(body) && body.force === true);
+  const prior = await readStored(projectRoot);
   const next: ProviderMap = {};
   for (const id of PROVIDER_IDS) {
     const entry = incoming[id];
     if (!isRecord(entry)) continue;
-    const apiKey =
+    const incomingApiKey =
       typeof entry.apiKey === 'string' && entry.apiKey.trim()
         ? entry.apiKey.trim()
         : '';
+    const preserveApiKey = entry.preserveApiKey === true;
+    const priorApiKey =
+      typeof prior[id]?.apiKey === 'string' && prior[id].apiKey.trim()
+        ? prior[id].apiKey.trim()
+        : '';
+    const apiKey = incomingApiKey || (preserveApiKey ? priorApiKey : '');
     const baseUrl =
       typeof entry.baseUrl === 'string' && entry.baseUrl.trim()
         ? entry.baseUrl.trim()
@@ -326,7 +333,6 @@ export async function writeConfig(projectRoot: string, body: unknown) {
     };
   }
   if (Object.keys(next).length === 0) {
-    const prior = await readStored(projectRoot);
     const priorIds = Object.keys(prior).filter(
       (id) => prior[id] && (prior[id].apiKey || prior[id].baseUrl),
     );

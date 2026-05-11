@@ -1035,12 +1035,10 @@ export class ComposioConnectorProvider {
       .map((tool) => tool.name);
     const allowedToolNames = [...new Set([...staticDefinition.allowedToolNames, ...autoAllowedLiveToolNames])];
     // `curatedToolNames` mirrors the static catalog ONLY — it
-    // intentionally never picks up `autoAllowedLiveToolNames`. The
-    // wire detail and the connector card / drawer header badge read
-    // this so the "N tools" summary stays at the catalog baseline
-    // (e.g. 2 for GitHub) instead of inflating by the tens of
-    // read-only auto-approved tools that show up after Composio
-    // discovery (issue #748). The execution-time gate keeps using
+    // intentionally never picks up `autoAllowedLiveToolNames`. It
+    // preserves the static catalog baseline, while summary badges use
+    // `toolCount` when present to reflect the advertised provider
+    // inventory. The execution-time gate keeps using
     // `allowedToolNames`, so the dynamic auto-allow behavior is
     // preserved end-to-end.
     const curatedToolNames = [...staticDefinition.allowedToolNames];

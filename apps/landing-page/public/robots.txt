@@ -1,0 +1,14 @@
+# Open Design — landing page (https://open-design.ai/)
+#
+# This file is served verbatim from the apex of the Cloudflare Pages
+# deployment. The sitemap URL must match `astro.config.ts`'s `site`
+# value; @astrojs/sitemap emits the index at `/sitemap-index.xml`.
+User-agent: *
+Allow: /
+
+# The /og/ route is a screenshot surface for the Open Graph image
+# (1200x630). It already carries `<meta name="robots" content="noindex">`
+# but blocking the path here keeps it out of crawl budgets entirely.
+Disallow: /og/
+
+Sitemap: https://open-design.ai/sitemap-index.xml

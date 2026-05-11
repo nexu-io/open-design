@@ -1,4 +1,5 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
+import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
@@ -374,6 +375,116 @@ interface PublicComposioConfigResponse {
   apiKeyTail?: string;
 }
 
+interface PublicMediaProviderConfigEntry {
+  configured?: boolean;
+  apiKeyTail?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
+interface PublicMediaProviderConfigResponse {
+  providers?: Record<string, PublicMediaProviderConfigEntry>;
+}
+
+export type DaemonMediaProvidersFetchResult =
+  | {
+    status: 'ok';
+    providers: AppConfig['mediaProviders'];
+  }
+  | {
+    status: 'error';
+  };
+
+interface MediaProviderDaemonWriteEntry {
+  apiKey?: string;
+  preserveApiKey?: boolean;
+  baseUrl?: string;
+  model?: string;
+}
+
+interface MediaProviderDaemonWriteRequest {
+  providers: Record<string, MediaProviderDaemonWriteEntry>;
+  force: boolean;
+}
+
+function hasAnyDaemonManagedMediaProvider(
+  providers: Record<string, MediaProviderCredentials> | null | undefined,
+): boolean {
+  if (!providers) return false;
+  return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
+}
+
+function hasRecoverableLocalMediaProviderFields(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.baseUrl?.trim()
+    || entry?.model?.trim(),
+  );
+}
+
+function isMarkerOnlyMediaProviderEntry(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return isStoredMediaProviderEntryPresent(entry)
+    && !hasRecoverableLocalMediaProviderFields(entry);
+}
+
+export function isStoredMediaProviderEntryPresent(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.baseUrl?.trim()
+    || entry?.model?.trim()
+    || entry?.apiKeyConfigured
+    || entry?.apiKeyTail?.trim(),
+  );
+}
+
+export function isStoredMediaProviderEntryEmpty(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return !isStoredMediaProviderEntryPresent(entry);
+}
+
+function defaultBaseUrlForProvider(providerId: string): string {
+  return MEDIA_PROVIDERS.find((provider) => provider.id === providerId)?.defaultBaseUrl ?? '';
+}
+
+export function buildMediaProvidersForDaemonSave(
+  currentProviders: Record<string, MediaProviderCredentials> | undefined,
+  daemonProviders: Record<string, MediaProviderCredentials> | null | undefined,
+  options?: { force?: boolean },
+): MediaProviderDaemonWriteRequest {
+  const providers: Record<string, MediaProviderDaemonWriteEntry> = {};
+  for (const [providerId, currentEntry] of Object.entries(currentProviders ?? {})) {
+    const daemonEntry = daemonProviders?.[providerId];
+    const apiKey = currentEntry?.apiKey?.trim() ?? '';
+    const preserveApiKey = !apiKey && Boolean(
+      currentEntry?.apiKeyConfigured
+      && (daemonEntry?.apiKeyConfigured || daemonEntry?.apiKeyTail?.trim()),
+    );
+    const baseUrl =
+      currentEntry?.baseUrl?.trim()
+      || daemonEntry?.baseUrl?.trim()
+      || defaultBaseUrlForProvider(providerId);
+    const model = currentEntry?.model?.trim() || daemonEntry?.model?.trim() || '';
+    if (!apiKey && !preserveApiKey && !baseUrl && !model) continue;
+    providers[providerId] = {
+      ...(apiKey ? { apiKey } : {}),
+      ...(preserveApiKey ? { preserveApiKey: true } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(model ? { model } : {}),
+    };
+  }
+  return {
+    providers,
+    force: Boolean(options?.force),
+  };
+}
+
 export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['composio'] | null> {
   try {
     const response = await fetch('/api/connectors/composio/config');
@@ -386,6 +497,33 @@ export async function fetchComposioConfigFromDaemon(): Promise<AppConfig['compos
     };
   } catch {
     return null;
+  }
+}
+
+export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvidersFetchResult> {
+  try {
+    const response = await fetch('/api/media/config');
+    if (!response.ok) return { status: 'error' };
+    const payload = await response.json() as PublicMediaProviderConfigResponse;
+    const rawProviders = payload.providers ?? {};
+    const providers: AppConfig['mediaProviders'] = {};
+    for (const [providerId, entry] of Object.entries(rawProviders)) {
+      providers[providerId] = {
+        apiKey: '',
+        apiKeyConfigured: Boolean(entry?.configured),
+        apiKeyTail: entry?.apiKeyTail ?? '',
+        baseUrl: entry?.baseUrl ?? '',
+        ...(typeof entry?.model === 'string' && entry.model.trim()
+          ? { model: entry.model.trim() }
+          : {}),
+      };
+    }
+    return {
+      status: 'ok',
+      providers,
+    };
+  } catch {
+    return { status: 'error' };
   }
 }
 
@@ -482,25 +620,70 @@ export function mergeDaemonConfig(
   return next;
 }
 
+export function mergeDaemonMediaProviders(
+  localConfig: AppConfig,
+  daemonProviders: AppConfig['mediaProviders'] | null,
+): AppConfig {
+  if (daemonProviders == null) {
+    return { ...localConfig };
+  }
+
+  if (!hasAnyDaemonManagedMediaProvider(daemonProviders)) {
+    return {
+      ...localConfig,
+      mediaProviders: Object.fromEntries(
+        Object.entries(localConfig.mediaProviders ?? {}).filter(([, entry]) => !isMarkerOnlyMediaProviderEntry(entry)),
+      ),
+    };
+  }
+
+  const mediaProviders = { ...(localConfig.mediaProviders ?? {}) };
+  for (const [providerId, daemonEntry] of Object.entries(daemonProviders ?? {})) {
+    if (!isStoredMediaProviderEntryPresent(daemonEntry)) continue;
+    mediaProviders[providerId] = { ...daemonEntry };
+  }
+
+  return {
+    ...localConfig,
+    mediaProviders,
+  };
+}
+
 export function hasAnyConfiguredProvider(
   providers: Record<string, MediaProviderCredentials> | undefined,
 ): boolean {
   if (!providers) return false;
-  return Object.values(providers).some((entry) =>
-    Boolean(entry?.apiKey?.trim() || entry?.baseUrl?.trim()),
-  );
+  return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
+}
+
+export function shouldSyncLocalMediaProvidersToDaemon(
+  localProviders: Record<string, MediaProviderCredentials> | undefined,
+  daemonProviders: Record<string, MediaProviderCredentials> | null | undefined,
+): boolean {
+  return daemonProviders != null
+    && Object.values(localProviders ?? {}).some((entry) => hasRecoverableLocalMediaProviderFields(entry))
+    && !hasAnyDaemonManagedMediaProvider(daemonProviders);
 }
 
 export async function syncMediaProvidersToDaemon(
   providers: Record<string, MediaProviderCredentials> | undefined,
-  options?: { force?: boolean; throwOnError?: boolean },
+  options?: {
+    force?: boolean;
+    daemonProviders?: Record<string, MediaProviderCredentials> | null;
+    throwOnError?: boolean;
+  },
 ): Promise<void> {
   if (!providers) return;
   try {
+    const payload = buildMediaProvidersForDaemonSave(
+      providers,
+      options?.daemonProviders,
+      { force: options?.force },
+    );
     const response = await fetch('/api/media/config', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ providers, force: Boolean(options?.force) }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(`Failed to sync media config (${response.status})`);
   } catch {

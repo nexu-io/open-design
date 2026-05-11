@@ -12,7 +12,7 @@ if (!(Test-Path $cacheRoot)) {
 
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $cacheRoot "locks")
 
-$maxBytes = 6GB
+$maxBytes = 3GB
 $entryRoot = Join-Path $cacheRoot "entries"
 if (!(Test-Path $entryRoot)) {
   "tools-pack cache entries root does not exist; nothing to prune"
