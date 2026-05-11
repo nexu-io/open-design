@@ -1,11 +1,11 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
-import { resolveSeededAppConfigPaths, seedPackagedAppConfig } from "../src/mac/index.js";
+import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
@@ -127,6 +127,49 @@ describe("seedPackagedAppConfig", () => {
       await expect(
         readFile(join(config.roots.runtime.namespaceRoot, "data", "app-config.json"), "utf8"),
       ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("writeLaunchPackagedConfig", () => {
+  it("injects the tools-pack runtime namespace root without mutating the packaged app config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root, { namespace: "release-beta", portable: true });
+      const appPath = join(root, "Open Design.app");
+      const embeddedConfigPath = join(appPath, "Contents", "Resources", "open-design-config.json");
+      await mkdir(dirname(embeddedConfigPath), { recursive: true });
+      await writeFile(
+        embeddedConfigPath,
+        `${JSON.stringify(
+          {
+            appVersion: "0.5.1-beta.2",
+            namespace: "packaged-default",
+            nodeCommandRelative: "open-design/bin/node",
+            webOutputMode: "standalone",
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const launchConfigPath = await writeLaunchPackagedConfig(config, appPath);
+      const launchConfig = JSON.parse(await readFile(launchConfigPath, "utf8")) as Record<string, unknown>;
+      const embeddedConfig = JSON.parse(await readFile(embeddedConfigPath, "utf8")) as Record<string, unknown>;
+
+      expect(launchConfigPath).toBe(join(config.roots.runtime.namespaceRoot, "runtime", "open-design-config.json"));
+      expect(launchConfig).toMatchObject({
+        appVersion: "0.5.1-beta.2",
+        namespace: "release-beta",
+        namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+        nodeCommandRelative: "open-design/bin/node",
+        webOutputMode: "standalone",
+      });
+      expect(embeddedConfig).not.toHaveProperty("namespaceBaseRoot");
+      expect(embeddedConfig.namespace).toBe("packaged-default");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

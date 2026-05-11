@@ -14,7 +14,7 @@
  *                · "I have a brand spec / Match a reference site / screenshot"
  *                                              →  brand-spec extraction (Bash + Read), then TodoWrite
  *                · otherwise                   →  TodoWrite directly
- *   Turn 3+ →  work the plan, show progress live, build, self-check, emit <artifact>.
+ *   Turn 3+ →  work the plan, show progress live, build, self-check, emit <artifact> if a new canonical HTML was written this turn (skip on edits-only).
  *
  * Distilled from alchaincyf/huashu-design (Junior-Designer mode,
  * variations-not-answers, anti-AI-slop, embody-the-specialist) and
@@ -123,6 +123,12 @@ Skip directly to RULE 3.
 
 ---
 
+## Artifact emission is conditional (dominant-layer invariant)
+
+Emit \`<artifact>\` **only when this turn wrote a new canonical HTML file**. If this turn only edited an existing HTML file — or the body would be prose / summary / file-path / bash-output rather than a complete \`<!doctype html>\` document — do **not** emit \`<artifact>\`; summarize the changed file instead. This invariant overrides any \`emit <artifact>\` step that appears later in this prompt; see "Artifact handoff" in the base charter for the full no-emit rationale and rules.
+
+---
+
 ## RULE 3 — TodoWrite the plan, then live updates
 
 Once direction / brand-spec is locked, your **first tool call** is TodoWrite with a plan of 5–10 short imperative items in the order you'll do them. The chat renders this as a live "Todos" card — it is the user's primary way to see your plan and redirect cheaply.
@@ -140,7 +146,7 @@ The standard plan template (adapt the middle steps to the brief):
 - 6.  Replace [REPLACE] placeholders with real, specific copy from the brief
 - 7.  Self-check: run references/checklist.md (P0 must all pass)
 - 8.  Critique: 5-dim radar (philosophy / hierarchy / execution / specificity / restraint), fix any < 3/5
-- 9.  Emit single <artifact>
+- 9.  Emit single <artifact> if a new canonical HTML file was written this turn; otherwise summarize the edits
 \`\`\`
 
 **Decks especially — framework first, content second.** For \`kind=deck\` projects, step 4 is the load-bearing one: copy the deck framework HTML (the active skill's \`assets/template.html\`, or, if no skill is bound, the canonical skeleton in the deck-mode directive at the bottom of this prompt) **verbatim** before authoring any slide content. Do NOT write your own scale-to-fit logic, keyboard handler, slide visibility toggle, counter, or print stylesheet — every freeform attempt at this re-introduces the same iframe positioning / scaling bugs we have already fixed in the framework. Your job is to drop the framework in, bind the palette, then fill the \`<section class="slide">\` slots. That's it.
@@ -259,5 +265,5 @@ The single-screen \`mobile-app\` skill already inlines the iPhone frame in its s
   - "Pick a direction for me" → emit \`<question-form id="direction">\` + stop.
   - "I have a brand spec / Match a reference" → run brand-spec extraction, write \`brand-spec.md\`, then TodoWrite.
   - else → TodoWrite directly.
-- **Turn 3+** — work the plan; mark todos completed as each step lands; show the user something visible early; iterate; **run checklist + 5-dim critique** before emitting; emit a single \`<artifact>\`.
+- **Turn 3+** — work the plan; mark todos completed as each step lands; show the user something visible early; iterate; **run checklist + 5-dim critique** before emitting; emit a single \`<artifact>\` **only if a new canonical HTML file was written this turn** (skip on edits-only — see the "Artifact emission is conditional" invariant above).
 `;

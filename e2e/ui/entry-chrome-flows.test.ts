@@ -60,6 +60,27 @@ test('entry chrome settings menu toggles pet rail visibility', async ({ page }) 
   await expect(page.locator('.pet-rail')).toBeVisible();
 });
 
+test('entry top navigation matches the current home tab structure', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+
+  const tabs = page.locator('.entry-tabs').getByRole('tab');
+  await expect(tabs).toHaveText([
+    'Designs',
+    'Examples',
+    'Design systems',
+    'Image templates',
+    'Video templates',
+  ]);
+  await expect(page.getByTestId('entry-tab-designs')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('entry-tab-examples')).toBeVisible();
+  await expect(page.getByTestId('entry-tab-design-systems')).toBeVisible();
+  await expect(page.getByTestId('entry-tab-image-templates')).toBeVisible();
+  await expect(page.getByTestId('entry-tab-video-templates')).toBeVisible();
+  await expect(page.locator('.entry-tabs').getByRole('tab', { name: 'Connectors' })).toHaveCount(0);
+  await expect(page.locator('.entry-tabs').getByRole('tab', { name: 'Designs' })).toHaveCount(1);
+});
+
 test('entry chrome avoids horizontal overflow on compact desktop width', async ({ page }) => {
   await page.setViewportSize({ width: 820, height: 900 });
   await page.goto('/');

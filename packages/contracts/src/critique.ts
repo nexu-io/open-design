@@ -173,3 +173,101 @@ export function panelEventToSse(e: PanelEvent): CritiqueSseEvent {
   // data. The cast is safe by construction.
   return { event: `critique.${type}`, data: payload } as CritiqueSseEvent;
 }
+
+/**
+ * Per-round summary persisted with each critique run. Mirrors the shape the
+ * orchestrator writes via decideRound; web clients consume it through the
+ * rerun and history endpoints, so it lives in the shared contract layer.
+ */
+export interface CritiqueRoundSummary {
+  n: number;
+  composite: number;
+  mustFix: number;
+  decision: RoundDecision;
+}
+
+/**
+ * Terminal critique status persisted with each run. Superset of ShipStatus
+ * that also covers degraded / failed / legacy outcomes. The daemon's CHECK
+ * constraint also accepts the in-flight 'running' value, but that is handled
+ * inline by daemon-side code; the public contract surface is terminal-only
+ * because every consumer of this type works against finished runs.
+ */
+export type CritiqueRunStatus =
+  | ShipStatus
+  | 'degraded'
+  | 'failed'
+  | 'legacy';
+
+/**
+ * Enumeration of every terminal CritiqueRunStatus value, in the order the
+ * UI / docs / status filters typically display them: SHIP outcomes first
+ * (shipped → below_threshold → timed_out → interrupted), then quality /
+ * lifecycle exits (degraded → failed), then the historical 'legacy' tag
+ * for runs created before the feature shipped. Web consumers (status
+ * filters, analytics dashboards) iterate this constant directly so the
+ * daemon stays the single source of truth on the order.
+ */
+export const CRITIQUE_RUN_STATUSES = [
+  'shipped',
+  'below_threshold',
+  'timed_out',
+  'interrupted',
+  'degraded',
+  'failed',
+  'legacy',
+] as const satisfies readonly CritiqueRunStatus[];
+
+/**
+ * Compile-time guarantee that every `CritiqueRunStatus` variant appears in
+ * `CRITIQUE_RUN_STATUSES`. `satisfies` only proves each listed value is
+ * valid; this assertion proves the list is exhaustive, so adding a new
+ * variant to `CritiqueRunStatus` (or `ShipStatus`) without updating the
+ * array fails the build with a tuple naming the missing variants. Picked
+ * up from lefarcen P3 on PR #1016. The exported helper type is reusable
+ * by other shared enums (e.g. `PANELIST_ROLES`) once they need the same
+ * guard.
+ */
+export type AssertExhaustiveValues<T extends string, U extends readonly T[]> =
+  Exclude<T, U[number]> extends never
+    ? true
+    : ['Missing variants in array:', Exclude<T, U[number]>];
+
+const _critiqueRunStatusesExhaustive: AssertExhaustiveValues<
+  CritiqueRunStatus,
+  typeof CRITIQUE_RUN_STATUSES
+> = true;
+// Reference the binding so esbuild does not tree-shake it; the assignment
+// itself is what enforces the exhaustiveness guarantee at compile time.
+void _critiqueRunStatusesExhaustive;
+
+/**
+ * Internal-to-the-daemon row status. Adds the in-flight `'running'` value
+ * the DB CHECK constraint accepts to the public `CritiqueRunStatus` union
+ * so DB-row types can be precisely typed without inline `as X | 'running'`
+ * widens at every call site. Every public DTO continues to use the
+ * terminal-only `CritiqueRunStatus` so a future endpoint cannot leak a
+ * 'running' row through the wire. Picked up from lefarcen P2 on PR #1016.
+ */
+export type CritiquePersistedStatus = CritiqueRunStatus | 'running';
+
+/**
+ * Logical handle the daemon hands to the web layer for a critique run's
+ * shipped artifact. Web clients never see daemon filesystem paths; they
+ * fetch the artifact bytes via the `url` field, which the daemon serves
+ * with the right `Content-Type` header derived from `mime`. Returned by
+ * the rerun endpoint and the `GET /api/projects/:projectId/critique/:runId/artifact`
+ * route that streams the bytes.
+ */
+export interface CritiqueArtifactRef {
+  /** The owning project; matches the URL segment. */
+  projectId: string;
+  /** The owning critique run; matches the URL segment. */
+  runId: string;
+  /** Content-Type announced by the agent in `<ARTIFACT mime="…">`. */
+  mime: string;
+  /** Size of the artifact body in bytes, as written to disk. */
+  sizeBytes: number;
+  /** Daemon-relative HTTP path the web layer fetches to stream the bytes. */
+  url: string;
+}

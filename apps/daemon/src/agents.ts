@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -89,7 +89,117 @@ const agentCapabilities = new Map();
 // documented, non-secret runtime knobs that belong to the adapter contract.
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
-const AGENT_BIN_ENV_KEYS = new Map([['codex', 'CODEX_BIN']]);
+const AGENT_BIN_ENV_KEYS = new Map([
+  ['claude', 'CLAUDE_BIN'],
+  ['codex', 'CODEX_BIN'],
+  ['copilot', 'COPILOT_BIN'],
+  ['cursor-agent', 'CURSOR_AGENT_BIN'],
+  ['deepseek', 'DEEPSEEK_BIN'],
+  ['devin', 'DEVIN_BIN'],
+  ['gemini', 'GEMINI_BIN'],
+  ['hermes', 'HERMES_BIN'],
+  ['kimi', 'KIMI_BIN'],
+  ['kiro', 'KIRO_BIN'],
+  ['kilo', 'KILO_BIN'],
+  ['opencode', 'OPENCODE_BIN'],
+  ['pi', 'PI_BIN'],
+  ['qoder', 'QODER_BIN'],
+  ['qwen', 'QWEN_BIN'],
+  ['vibe', 'VIBE_BIN'],
+]);
+
+/** HTTPS links for the web UI when `available` is false. Keys must match `AGENT_DEFS[].id`. */
+const AGENT_INSTALL_LINKS: Record<
+  string,
+  { installUrl?: string; docsUrl?: string }
+> = {
+  claude: {
+    installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
+    docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
+  },
+  codex: {
+    installUrl: 'https://github.com/openai/codex',
+    docsUrl: 'https://developers.openai.com/codex',
+  },
+  devin: {
+    installUrl: 'https://cli.devin.ai/docs',
+    docsUrl: 'https://docs.devin.ai',
+  },
+  gemini: {
+    installUrl: 'https://github.com/google-gemini/gemini-cli',
+    docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
+  },
+  opencode: {
+    installUrl: 'https://opencode.ai/docs',
+    docsUrl: 'https://github.com/sst/opencode',
+  },
+  hermes: {
+    installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
+    docsUrl: 'https://hermes-agent.nousresearch.com/docs/',
+  },
+  kimi: {
+    installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+    docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html',
+  },
+  'cursor-agent': {
+    installUrl: 'https://cursor.com/docs/cli/overview',
+    docsUrl: 'https://docs.cursor.com/en/cli/overview',
+  },
+  qwen: {
+    installUrl: 'https://github.com/QwenLM/qwen-code',
+    docsUrl: 'https://qwenlm.github.io/qwen-code-docs/en/index',
+  },
+  qoder: {
+    installUrl: 'https://qoder.com/download',
+    docsUrl: 'https://docs.qoder.com',
+  },
+  copilot: {
+    installUrl: 'https://github.com/github/copilot-cli',
+    docsUrl: 'https://docs.github.com/en/copilot/how-tos/use-copilot-extensions/use-in-cli',
+  },
+  pi: {
+    installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
+    docsUrl: 'https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md',
+  },
+  kiro: {
+    installUrl: 'https://kiro.dev',
+    docsUrl: 'https://kiro.dev/docs/cli/',
+  },
+  kilo: {
+    installUrl: 'https://kilo.ai',
+    docsUrl: 'https://kilo.ai/docs/cli',
+  },
+  vibe: {
+    installUrl: 'https://docs.mistral.ai',
+    docsUrl: 'https://github.com/mistralai/vibe-acp',
+  },
+  deepseek: {
+    installUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI',
+    docsUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI/blob/main/README.md',
+  },
+};
+
+function installMetaForAgent(
+  agentId: string,
+): { installUrl?: string; docsUrl?: string } {
+  const meta = AGENT_INSTALL_LINKS[agentId];
+  if (!meta) return {};
+  const sanitize = (value: string | undefined): string | undefined => {
+    if (!value) return undefined;
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const installUrl = sanitize(meta.installUrl);
+  const docsUrl = sanitize(meta.docsUrl);
+  return {
+    ...(installUrl ? { installUrl } : {}),
+    ...(docsUrl ? { docsUrl } : {}),
+  };
+}
 
 // Map a user-picked reasoning effort to one the chosen model will accept.
 // Codex's CLI accepts `none | minimal | low | medium | high | xhigh`, but
@@ -217,6 +327,8 @@ export const AGENT_DEFS = [
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
       { id: 'gpt-5.3-codex', label: 'gpt-5.3-codex' },
+      { id: 'gpt-5.1', label: 'gpt-5.1' },
+      { id: 'gpt-5.1-codex-mini', label: 'gpt-5.1-codex-mini' },
       { id: 'gpt-5-codex', label: 'gpt-5-codex' },
       { id: 'gpt-5', label: 'gpt-5' },
       { id: 'o3', label: 'o3' },
@@ -330,8 +442,14 @@ export const AGENT_DEFS = [
     versionArgs: ['--version'],
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      // Gemini 3 (May 2026): top-tier reasoning + fast frontier-class.
+      // Both currently ship as previews via the Gemini CLI. Issue #981.
+      { id: 'gemini-3-pro-preview', label: 'gemini-3-pro-preview' },
+      { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' },
       { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
       { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+      // Cheapest 2.5 multimodal variant; useful for high-volume / low-latency work.
+      { id: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite' },
     ],
     // Gemini reads from stdin when `-p` is omitted and stdin is a pipe.
     // Passing the full composed prompt as a CLI arg causes ENAMETOOLONG on
@@ -355,7 +473,24 @@ export const AGENT_DEFS = [
   {
     id: 'opencode',
     name: 'OpenCode',
-    bin: 'opencode',
+    // OpenCode Desktop (https://opencode.dev) ships two binaries when
+    // installed: `opencode` is the GUI launcher (clicking it opens a
+    // desktop app, not a stdin-driven CLI), and `opencode-cli` is the
+    // headless CLI that speaks the `run --format json …` protocol the
+    // daemon expects. Resolving `opencode` first ends up spawning the
+    // desktop launcher, which doesn't read stdin and never produces
+    // JSON events — so the agent silently does nothing for any user
+    // with the desktop install (issue #814).
+    //
+    // Resolve `opencode-cli` first, then fall back to bare `opencode`
+    // for the legacy CLI-only install (no desktop app), where there is
+    // no `-cli` suffix and the bare name is the real CLI.
+    // `resolveAgentExecutable` walks `bin` then `fallbackBins` in
+    // order, so this gives us "prefer the always-CLI binary, fall
+    // back to the historical name" — same mechanism Claude Code uses
+    // to fall back to `openclaude` (issue #235).
+    bin: 'opencode-cli',
+    fallbackBins: ['opencode'],
     versionArgs: ['--version'],
     // `opencode models` prints `provider/model` per line.
     listModels: {
@@ -907,6 +1042,16 @@ export function resolveOnPath(bin) {
   return null;
 }
 
+function looksExecutableOnWindows(filePath) {
+  const ext = path.extname(filePath).trim().toUpperCase();
+  if (!ext) return false;
+  const executableExts = (process.env.PATHEXT || '.EXE;.CMD;.BAT')
+    .split(';')
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+  return executableExts.includes(ext);
+}
+
 // Resolve the first available binary for an agent definition. Tries
 // `def.bin` first, then walks `def.fallbackBins` in order. Used for
 // agents whose forks ship under a different binary name but speak the
@@ -919,22 +1064,49 @@ function configuredExecutableOverride(def, configuredEnv = {}) {
   if (typeof raw !== 'string' || raw.trim().length === 0) return null;
   const expanded = expandHomePath(raw.trim());
   if (!path.isAbsolute(expanded)) return null;
-  return existsSync(expanded) ? expanded : null;
+  try {
+    if (!statSync(expanded).isFile()) return null;
+    if (process.platform === 'win32') {
+      if (!looksExecutableOnWindows(expanded)) return null;
+    } else {
+      accessSync(expanded, constants.X_OK);
+    }
+    return expanded;
+  } catch {
+    return null;
+  }
 }
 
-export function resolveAgentExecutable(def, configuredEnv = {}) {
-  if (!def?.bin) return null;
-  const configured = configuredExecutableOverride(def, configuredEnv);
-  if (configured) return configured;
+export function inspectAgentExecutableResolution(def, configuredEnv = {}) {
+  if (!def?.bin) {
+    return {
+      configuredOverridePath: null,
+      pathResolvedPath: null,
+      selectedPath: null,
+    };
+  }
+  const configuredOverridePath = configuredExecutableOverride(def, configuredEnv);
   const candidates = [
     def.bin,
     ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
   ];
+  let pathResolvedPath = null;
   for (const bin of candidates) {
     const resolved = resolveOnPath(bin);
-    if (resolved) return resolved;
+    if (resolved) {
+      pathResolvedPath = resolved;
+      break;
+    }
   }
-  return null;
+  return {
+    configuredOverridePath,
+    pathResolvedPath,
+    selectedPath: configuredOverridePath || pathResolvedPath,
+  };
+}
+
+export function resolveAgentExecutable(def, configuredEnv = {}) {
+  return inspectAgentExecutableResolution(def, configuredEnv).selectedPath;
 }
 
 async function fetchModels(def, resolvedBin, env) {
@@ -975,6 +1147,7 @@ async function probe(def, configuredEnv = {}) {
       ...stripFns(def),
       models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
       available: false,
+      ...installMetaForAgent(def.id),
     };
   }
   const probeEnv = spawnEnvForAgent(
@@ -1021,6 +1194,7 @@ async function probe(def, configuredEnv = {}) {
     available: true,
     path: resolved,
     version,
+    ...installMetaForAgent(def.id),
   };
 }
 

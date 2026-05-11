@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
+import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
@@ -33,11 +34,13 @@ import { useProjectFileEvents, type ProjectEvent } from '../providers/project-ev
 import { composeSystemPrompt, type ResearchOptions } from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
+import { isMacPlatform } from '../utils/platform';
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
+import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
@@ -53,6 +56,7 @@ import {
   patchProject,
   saveMessage,
   saveTabs,
+  type SaveMessageOptions,
 } from '../state/projects';
 import type {
   AgentEvent,
@@ -86,6 +90,15 @@ import { ChatPane } from './ChatPane';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 import { CenteredLoader } from './Loading';
+import { ProjectActionsToolbar } from './ProjectActionsToolbar';
+import { Toast } from './Toast';
+import { useDesignMdState } from '../hooks/useDesignMdState';
+import { useFinalizeProject } from '../hooks/useFinalizeProject';
+import { useProjectDetail } from '../hooks/useProjectDetail';
+import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
+import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { effectiveMaxTokens } from '../state/maxTokens';
 
 interface Props {
   project: Project;
@@ -103,6 +116,7 @@ interface Props {
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: () => void;
+  onOpenMcpSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
   onAdoptPetInline?: (petId: string) => void;
@@ -223,6 +237,7 @@ export function ProjectView({
   onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
+  onOpenMcpSettings,
   onAdoptPetInline,
   onTogglePet,
   onOpenPetSettings,
@@ -249,6 +264,25 @@ export function ProjectView({
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
+  // bumps on file-changed SSE events, live_artifact* events, and the
+  // chat streaming-completion edge so the staleness chip stays in sync
+  // with the underlying mtimes / conversation updatedAt as the user
+  // keeps working post-finalize. The hook treats it as a dep and
+  // recomputes whenever it changes.
+  const [designMdRefreshKey, setDesignMdRefreshKey] = useState(0);
+  // ----- Continue in CLI / Finalize design package wiring (#451) -----
+  // The toast surface is shared between Finalize errors and the
+  // success/fallback toasts emitted from handleContinueInCli.
+  const projectDetail = useProjectDetail(project.id);
+  const designMdState = useDesignMdState(project.id, designMdRefreshKey);
+  const finalize = useFinalizeProject(project.id);
+  const terminalLauncher = useTerminalLaunch();
+  const [projectActionsToast, setProjectActionsToast] = useState<{
+    message: string;
+    details: string | null;
+    code?: string | null;
+  } | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
   const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
@@ -300,13 +334,26 @@ export function ProjectView({
   // the agent's Write actually completes, without the previous synthetic
   // "live" tab that was causing flicker against manual opens.
   const pendingWritesRef = useRef<Map<string, string>>(new Map());
+  // Track which conversation the current messages belong to, so we can
+  // correctly gate new-conversation creation even during async loads.
+  const messagesConversationIdRef = useRef<string | null>(null);
 
   // Load conversations on project switch. If none exist (older projects
   // pre-conversations, or a freshly created one whose default seed got
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
+    setConversations([]);
+    setActiveConversationId(null);
     setConversationLoadError(null);
+    setMessages([]);
+    setPreviewComments([]);
+    setAttachedComments([]);
+    setStreaming(false);
+    setError(null);
+    setArtifact(null);
+    savedArtifactRef.current = null;
+    pendingWritesRef.current.clear();
     (async () => {
       try {
         const list = await listConversations(project.id);
@@ -350,6 +397,7 @@ export function ProjectView({
       setMessages([]);
       setPreviewComments([]);
       setAttachedComments([]);
+      messagesConversationIdRef.current = null;
       return;
     }
     let cancelled = false;
@@ -366,6 +414,7 @@ export function ProjectView({
       setError(null);
       savedArtifactRef.current = null;
       pendingWritesRef.current.clear();
+      messagesConversationIdRef.current = activeConversationId;
     })();
     return () => {
       cancelled = true;
@@ -376,6 +425,13 @@ export function ProjectView({
     return () => {
       sendTextBufferRef.current?.cancel();
       sendTextBufferRef.current = null;
+      // Unmounts / conversation switches should only detach local stream
+      // consumers. Aborting the daemon cancel controllers here turns routine
+      // cleanup into an explicit POST /api/runs/:id/cancel, which can mark a
+      // live run canceled even when the user never clicked Stop.
+      abortRef.current?.abort();
+      abortRef.current = null;
+      cancelRef.current = null;
       for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
       reattachTextBuffersRef.current.clear();
       for (const controller of reattachControllersRef.current.values()) {
@@ -418,6 +474,12 @@ export function ProjectView({
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
     if (!(wasStreaming && !streaming)) return;
+
+    // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
+    // settled — conversation updatedAt almost certainly moved, so
+    // recompute DESIGN.md staleness even when the turn produced no
+    // file mutations or live artifacts.
+    setDesignMdRefreshKey((n) => n + 1);
 
     const last = [...messages].reverse().find((m) => m.role === 'assistant');
     if (!last) return;
@@ -533,6 +595,10 @@ export function ProjectView({
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
       setFilesRefresh((n) => n + 1);
+      // Round 7 (mrcfps): file mutations are the dominant staleness
+      // signal post-finalize — bump the refresh key so DESIGN.md
+      // staleness recomputes against the new mtimes.
+      setDesignMdRefreshKey((n) => n + 1);
       return;
     }
     const agentEvent = projectEventToAgentEvent(evt);
@@ -540,6 +606,9 @@ export function ProjectView({
     setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
     void refreshLiveArtifacts();
     onProjectsRefresh();
+    // Live artifact events come from chat-turn-emitted artifacts; they
+    // also imply the conversation transcript changed.
+    setDesignMdRefreshKey((n) => n + 1);
   }, [onProjectsRefresh, refreshLiveArtifacts]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
@@ -631,6 +700,7 @@ export function ProjectView({
       designSystemTitle,
       metadata: project.metadata,
       template,
+      streamFormat: config.mode === 'api' ? 'plain' : undefined,
     });
   }, [
     project.skillId,
@@ -638,22 +708,23 @@ export function ProjectView({
     project.metadata,
     skills,
     designSystems,
+    config.mode,
   ]);
 
   const persistMessage = useCallback(
-    (m: ChatMessage) => {
+    (m: ChatMessage, options?: SaveMessageOptions) => {
       if (!activeConversationId) return;
-      void saveMessage(project.id, activeConversationId, m);
+      void saveMessage(project.id, activeConversationId, m, options);
     },
     [project.id, activeConversationId],
   );
 
   const persistMessageById = useCallback(
-    (messageId: string) => {
+    (messageId: string, options?: SaveMessageOptions) => {
       if (!activeConversationId) return;
       setMessages((curr) => {
         const found = curr.find((m) => m.id === messageId);
-        if (found) void saveMessage(project.id, activeConversationId, found);
+        if (found) void saveMessage(project.id, activeConversationId, found, options);
         return curr;
       });
     },
@@ -661,7 +732,12 @@ export function ProjectView({
   );
 
   const updateMessageById = useCallback(
-    (messageId: string, updater: (message: ChatMessage) => ChatMessage, persist = false) => {
+    (
+      messageId: string,
+      updater: (message: ChatMessage) => ChatMessage,
+      persist = false,
+      persistOptions?: SaveMessageOptions,
+    ) => {
       setMessages((curr) => {
         let saved: ChatMessage | null = null;
         const next = curr.map((m) => {
@@ -671,7 +747,7 @@ export function ProjectView({
           return updated;
         });
         if (persist && saved && activeConversationId) {
-          void saveMessage(project.id, activeConversationId, saved);
+          void saveMessage(project.id, activeConversationId, saved, persistOptions);
         }
         return next;
       });
@@ -832,13 +908,13 @@ export function ProjectView({
             persistMessageById(message.id);
           }, 500);
         };
-        const persistNow = () => {
+        const persistNow = (options?: SaveMessageOptions) => {
           if (persistTimer) {
             clearTimeout(persistTimer);
             persistTimer = null;
           }
           textBuffer.flush();
-          persistMessageById(message.id);
+          persistMessageById(message.id, options);
         };
         const textBuffer = createBufferedTextUpdates({
           updateMessage: (updater) => updateMessageById(message.id, updater),
@@ -876,7 +952,7 @@ export function ProjectView({
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
-              persistNow();
+              persistNow({ telemetryFinalized: true });
               void refreshProjectFiles();
               onProjectsRefresh();
             },
@@ -897,7 +973,7 @@ export function ProjectView({
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
-              persistNow();
+              persistNow({ telemetryFinalized: true });
             },
           },
           onRunStatus: (runStatus) => {
@@ -920,7 +996,7 @@ export function ProjectView({
               if (abortRef.current === controller) abortRef.current = null;
               if (cancelRef.current === cancelController) cancelRef.current = null;
               setStreaming(false);
-              persistNow();
+              persistNow({ telemetryFinalized: true });
             }
           },
           onRunEventId: (lastRunEventId) => {
@@ -938,6 +1014,7 @@ export function ProjectView({
                 message.id,
                 (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
                 true,
+                { telemetryFinalized: true },
               );
             }
           })
@@ -983,7 +1060,7 @@ export function ProjectView({
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         role: 'user',
         content: prompt,
         createdAt: startedAt,
@@ -1010,7 +1087,7 @@ export function ProjectView({
               selectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const assistantId = crypto.randomUUID();
+      const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -1093,8 +1170,9 @@ export function ProjectView({
         // file the moment the agent finishes writing it. The file-creating
         // tools we care about: Write (new file), Edit (existing file —
         // surfacing the freshly-modified file is also useful).
-        if (ev.kind === 'tool_use' && (ev.name === 'Write' || ev.name === 'Edit')) {
-          const filePath = (ev.input as { file_path?: unknown } | null)?.file_path;
+        if (ev.kind === 'tool_use' && ((ev.name === 'Write' || ev.name === 'write') || ev.name === 'Edit')) {
+          const input = ev.input as { file_path?: unknown; filePath?: unknown } | null;
+          const filePath = input?.file_path ?? input?.filePath;
           if (typeof filePath === 'string' && filePath.length > 0) {
             // Preserve the full path so decideAutoOpenAfterWrite can do a
             // path-suffix match against the project's relative file paths.
@@ -1181,7 +1259,7 @@ export function ProjectView({
           updateAssistant((prev) => ({
             ...prev,
             endedAt: Date.now(),
-            runStatus: config.mode === 'api' || prev.runId ? 'succeeded' : prev.runStatus,
+            runStatus: resolveSucceededRunStatus(prev.runStatus),
           }));
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
@@ -1205,13 +1283,11 @@ export function ProjectView({
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
-                  ? produced.length > 0
-                    ? { ...m, producedFiles: produced }
-                    : m
+                  ? { ...m, producedFiles: produced }
                   : m,
               );
               const finalized = updated.find((m) => m.id === assistantId);
-              if (finalized) persistMessage(finalized);
+              if (finalized) persistMessage(finalized, { telemetryFinalized: true });
               return updated;
             });
           });
@@ -1238,7 +1314,7 @@ export function ProjectView({
           cancelRef.current = null;
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
-            if (finalized) persistMessage(finalized);
+            if (finalized) persistMessage(finalized, { telemetryFinalized: true });
             return curr;
           });
           void refreshProjectFiles();
@@ -1260,7 +1336,7 @@ export function ProjectView({
           projectId: project.id,
           conversationId: activeConversationId,
           assistantMessageId: assistantId,
-          clientRequestId: crypto.randomUUID(),
+          clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
@@ -1280,6 +1356,7 @@ export function ProjectView({
                 endedAt: isTerminalRunStatus(runStatus) ? prev.endedAt ?? Date.now() : prev.endedAt,
               }),
               true,
+              runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
           },
           onRunEventId: (lastRunEventId) => {
@@ -1339,6 +1416,18 @@ export function ProjectView({
         .replace(/^-+|-+$/g, '')
         .slice(0, 60) || 'artifact';
       const ext = artifactExtensionFor(art);
+      // Pre-write structural gate for HTML artifacts (#50, #1143). Reject
+      // bodies that obviously aren't a complete document — usually a one-line
+      // prose summary the model emitted inside `<artifact type="text/html">`
+      // when only Edit-tool changes happened this turn. Without this guard,
+      // such content lands as a phantom HTML file in the project panel.
+      if (ext === '.html') {
+        const validation = validateHtmlArtifact(art.html);
+        if (!validation.ok) {
+          setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
+          return;
+        }
+      }
       // Pick a name that doesn't collide with an existing project file.
       // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
       // so prior artifacts aren't silently overwritten.
@@ -1486,16 +1575,28 @@ export function ProjectView({
         }
         return m;
       });
-      for (const message of finalized) persistMessage(message);
+      for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
       return next;
     });
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
+    // Only block if we're sure the current conversation is empty:
+    // messages must be loaded AND match the active conversation.
+    if (
+      messagesConversationIdRef.current === activeConversationId &&
+      messages.length === 0
+    ) {
+      return;
+    }
     setConversationLoadError(null);
     try {
       const fresh = await createConversation(project.id);
       if (!fresh) throw new Error('Could not create a conversation for this project.');
+      // Eagerly clear messages and update ref so rapid clicks don't create
+      // duplicate empty conversations before the effect resolves.
+      setMessages([]);
+      messagesConversationIdRef.current = fresh.id;
       setConversations((curr) => [fresh, ...curr]);
       setActiveConversationId(fresh.id);
       setError(null);
@@ -1504,7 +1605,7 @@ export function ProjectView({
       setConversationLoadError(message);
       setError(message);
     }
-  }, [project.id]);
+  }, [project.id, activeConversationId, messages.length]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
@@ -1736,25 +1837,138 @@ export function ProjectView({
     saveChatPanelWidth(next);
   }, [applyChatPanelWidth]);
 
-  // Hand the pending prompt to ChatPane exactly once. We snapshot the value
-  // into local state on mount so it survives the ChatPane remount triggered
-  // when `activeConversationId` resolves from `null` to a real id (the
-  // `key={activeConversationId}` on ChatPane otherwise wipes the freshly
-  // seeded composer draft). Once the conversation id is in place — meaning
-  // ChatPane has remounted with the seed still available — we clear both
-  // the local snapshot and the persisted pendingPrompt so future
-  // conversation switches don't keep re-seeding the composer.
-  const [initialDraft, setInitialDraft] = useState<string | undefined>(
-    project.pendingPrompt,
+  // Hand the pending prompt to ChatPane exactly once per project. The local
+  // project-scoped snapshot survives the conversation-id remount, while the
+  // persisted pendingPrompt is cleared so refreshes and later entries do not
+  // re-seed the composer.
+  const [initialDraft, setInitialDraft] = useState<
+    { projectId: string; value: string } | undefined
+  >(
+    project.pendingPrompt
+      ? { projectId: project.id, value: project.pendingPrompt }
+      : undefined,
   );
   useEffect(() => {
-    if (initialDraft && activeConversationId) {
-      setInitialDraft(undefined);
+    const pendingPrompt = project.pendingPrompt;
+    if (!pendingPrompt) return;
+    setInitialDraft((current) =>
+      current?.projectId === project.id
+        ? current
+        : { projectId: project.id, value: pendingPrompt },
+    );
+    onClearPendingPrompt();
+  }, [project.id, project.pendingPrompt, onClearPendingPrompt]);
+  const chatInitialDraft =
+    initialDraft?.projectId === project.id ? initialDraft.value : undefined;
+
+  // Continue in CLI / Finalize design package handlers + keyboard
+  // shortcut wiring. Close to the JSX so the data flow is easy to
+  // trace from the toolbar back to its sources.
+  const handleFinalize = useCallback(() => {
+    void finalize.trigger({
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      maxTokens: effectiveMaxTokens(config),
+    }).then((result) => {
+      if (result) void designMdState.refresh();
+    });
+  }, [finalize, config, designMdState]);
+
+  const handleCancelFinalize = useCallback(() => {
+    finalize.cancel();
+  }, [finalize]);
+
+  const handleContinueInCli = useCallback(async () => {
+    const projectDir = projectDetail.resolvedDir;
+    if (!projectDir) {
+      setProjectActionsToast({
+        message: 'Working directory unavailable. Update the daemon to enable Continue in CLI.',
+        details: null,
+      });
+      return;
     }
-  }, [initialDraft, activeConversationId]);
+    const prompt = buildClipboardPrompt({
+      project: { id: project.id, name: project.name },
+      designMdState: {
+        generatedAt: designMdState.generatedAt,
+        transcriptMessageCount: designMdState.transcriptMessageCount,
+        designSystemId: designMdState.designSystemId,
+        currentArtifact: designMdState.currentArtifact,
+      },
+      projectDir,
+    });
+    const copied = await copyToClipboard(prompt);
+    if (!copied) {
+      // Clipboard write failed in both the canonical and execCommand
+      // fallback paths (locked clipboard / insecure context). Surface
+      // the prompt body in the toast so the user can manually
+      // select-and-copy. Do not open the folder — the user has nothing
+      // to paste yet.
+      setProjectActionsToast({
+        message: 'Clipboard unavailable. Copy this prompt manually, then run `claude` at the working directory.',
+        details: `Working directory: ${projectDir}`,
+        code: prompt,
+      });
+      return;
+    }
+    const launched = await terminalLauncher.open(project.id);
+    if (launched.kind === 'electron' && launched.ok) {
+      setProjectActionsToast({
+        message: 'Folder opened. Run `claude` in your terminal here and paste the prompt.',
+        details: null,
+      });
+    } else if (launched.kind === 'electron' && !launched.ok) {
+      setProjectActionsToast({
+        message: `Couldn't open the folder. Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
+        details: null,
+      });
+    } else {
+      setProjectActionsToast({
+        message: `Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
+        details: null,
+      });
+    }
+  }, [
+    project.id,
+    project.name,
+    projectDetail.resolvedDir,
+    designMdState.generatedAt,
+    designMdState.transcriptMessageCount,
+    designMdState.designSystemId,
+    designMdState.currentArtifact,
+    terminalLauncher,
+  ]);
+
+  // Lift finalize errors into the shared project-actions toast so the
+  // user sees both the daemon's category message and any upstream
+  // detail (per #450 verification commitment).
   useEffect(() => {
-    if (project.pendingPrompt) onClearPendingPrompt();
-  }, [project.pendingPrompt, onClearPendingPrompt]);
+    if (finalize.error) {
+      setProjectActionsToast({
+        message: finalize.error.message,
+        details: finalize.error.details,
+      });
+    }
+  }, [finalize.error]);
+
+  // ⌘+Shift+K (mac) / Ctrl+Shift+K (others) → Continue in CLI. Mirrors
+  // the capture-phase, platform-gated pattern from FileWorkspace's
+  // Quick Switcher shortcut. ⌘+Shift+K is free (⌘+P is the only
+  // existing primary-modifier shortcut on this surface).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        if (e.isComposing) return;
+        if (!designMdState.exists) return;
+        e.preventDefault();
+        void handleContinueInCli();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [designMdState.exists, handleContinueInCli]);
 
   return (
     <div className="app">
@@ -1796,6 +2010,14 @@ export function ProjectView({
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
         </div>
       </AppChromeHeader>
+      <ProjectActionsToolbar
+        designMdState={designMdState}
+        finalizeStatus={finalize.status}
+        onFinalize={handleFinalize}
+        onCancelFinalize={handleCancelFinalize}
+        onContinueInCli={handleContinueInCli}
+        hidden={workspaceFocused}
+      />
       <div
         ref={splitRef}
         className={[
@@ -1814,7 +2036,7 @@ export function ProjectView({
             <ChatPane
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
-              key={activeConversationId ?? 'conversation-unavailable'}
+              key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}`}
               messages={messages}
               streaming={streaming}
               error={conversationLoadError ?? error}
@@ -1830,7 +2052,7 @@ export function ProjectView({
               onSend={handleSend}
               onStop={handleStop}
               onRequestOpenFile={requestOpenFile}
-              initialDraft={initialDraft}
+              initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
                 if (streaming) return;
                 void handleSend(text, [], []);
@@ -1843,6 +2065,7 @@ export function ProjectView({
               onDeleteConversation={handleDeleteConversation}
               onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
+              onOpenMcpSettings={onOpenMcpSettings}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}
@@ -1852,6 +2075,7 @@ export function ProjectView({
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
               }}
+              onCollapse={() => setWorkspaceFocused(true)}
             />
           ) : (
             <div className="pane" data-testid="chat-pane-loading">
@@ -1897,6 +2121,14 @@ export function ProjectView({
           onFocusModeChange={setWorkspaceFocused}
         />
       </div>
+      {projectActionsToast ? (
+        <Toast
+          message={projectActionsToast.message}
+          details={projectActionsToast.details}
+          code={projectActionsToast.code}
+          onDismiss={() => setProjectActionsToast(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1924,6 +2156,10 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+export function resolveSucceededRunStatus(status: ChatMessage['runStatus']): ChatMessage['runStatus'] {
+  return status === 'failed' || status === 'canceled' ? status : 'succeeded';
 }
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;

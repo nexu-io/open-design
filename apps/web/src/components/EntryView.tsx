@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type { ConnectorDetail, ConnectorStatusResponse, ImportFolderResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -34,6 +34,7 @@ import { PetRail } from './pet/PetRail';
 import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
 import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { isMacPlatform } from '../utils/platform';
 
 type TopTab = 'designs' | 'examples' | 'design-systems' | 'image-templates' | 'video-templates';
 
@@ -46,10 +47,19 @@ interface Props {
   defaultDesignSystemId: string | null;
   config: AppConfig;
   agents: AgentInfo[];
-  loading?: boolean;
+  // Per-resource loading flags. Each tab gates its own content on whichever
+  // flag matches the data it renders, so a slow `/api/agents` probe does
+  // not block tabs that don't need agents. Templates are not gated here —
+  // the sidebar 'From template' tab renders an empty state until they
+  // arrive (fast fetch), which keeps the prop surface narrower.
+  skillsLoading?: boolean;
+  designSystemsLoading?: boolean;
+  projectsLoading?: boolean;
+  promptTemplatesLoading?: boolean;
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -213,10 +223,14 @@ export function EntryView({
   defaultDesignSystemId,
   config,
   agents,
-  loading = false,
+  skillsLoading = false,
+  designSystemsLoading = false,
+  projectsLoading = false,
+  promptTemplatesLoading = false,
   onCreateProject,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
@@ -438,6 +452,7 @@ export function EntryView({
               <Icon name="settings" size={14} />
             </span>
             <span>{t('avatar.settings')}</span>
+            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
           </button>
         </div>
       ) : null}
@@ -465,37 +480,51 @@ export function EntryView({
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
           onImportFolder={onImportFolder}
+          onImportFolderResponse={onImportFolderResponse}
           mediaProviders={config.mediaProviders}
           connectors={connectors}
           connectorsLoading={connectorsLoading}
           onOpenConnectorsTab={() => onOpenSettings('composio')}
-          loading={loading}
+          loading={skillsLoading || designSystemsLoading}
         />
         <div className="entry-side-foot">
-          <button
-            type="button"
-            className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
-            onClick={onAdoptPet}
-            title={
-              config.pet?.adopted
-                ? t('pet.changePet')
-                : t('pet.adoptCallout')
-            }
-          >
-            <span className="pet-pill-glyph" aria-hidden>
-              {config.pet?.adopted
-                ? config.pet.petId === 'custom'
-                  ? config.pet.custom.glyph || '🦄'
-                  : '🐾'
-                : '🐾'}
-            </span>
-            <span>
-              {config.pet?.adopted
-                ? t('pet.changePet')
-                : t('pet.adoptCallout')}
-            </span>
-            {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
-          </button>
+          <div className="entry-side-foot-row">
+            <button
+              type="button"
+              className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
+              onClick={onAdoptPet}
+              title={
+                config.pet?.adopted
+                  ? t('pet.changePet')
+                  : t('pet.adoptCallout')
+              }
+            >
+              <span className="pet-pill-glyph" aria-hidden>
+                {config.pet?.adopted
+                  ? config.pet.petId === 'custom'
+                    ? config.pet.custom.glyph || '🦄'
+                    : '🐾'
+                  : '🐾'}
+              </span>
+              <span className="foot-pill-pet-label">
+                {config.pet?.adopted
+                  ? t('pet.changePet')
+                  : t('pet.adoptCallout')}
+              </span>
+              {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
+            </button>
+            <a
+              className="foot-pill foot-pill-follow"
+              href="https://x.com/nexudotio"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Follow @nexudotio on X for releases and milestones"
+              aria-label="Follow @nexudotio on X"
+            >
+              <Icon name="external-link" size={12} />
+              <span className="foot-pill-follow-label">Follow @nexudotio</span>
+            </a>
+          </div>
           <button
             type="button"
             className="foot-pill"
@@ -514,17 +543,6 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
-          <a
-            className="foot-pill"
-            href="https://x.com/nexudotio"
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Follow @nexudotio on X for releases and milestones"
-            aria-label="Follow @nexudotio on X"
-          >
-            <Icon name="external-link" size={12} />
-            <span>Follow @nexudotio</span>
-          </a>
           <LanguageMenu />
         </div>
         <button
@@ -565,47 +583,65 @@ export function EntryView({
           </div>
         </div>
         <div className="entry-tab-content">
-          {loading ? (
-            <CenteredLoader label={t('entry.loadingWorkspace')} />
-          ) : (
-            <>
-              {topTab === 'designs' ? (
-                <DesignsTab
-                  projects={projects}
-                  skills={skills}
-                  designSystems={designSystems}
-                  onOpen={onOpenProject}
-                  onOpenLiveArtifact={onOpenLiveArtifact}
-                  onDelete={onDeleteProject}
-                />
-              ) : null}
-              {topTab === 'examples' ? (
-                <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
-              ) : null}
-              {topTab === 'design-systems' ? (
-                <DesignSystemsTab
-                  systems={designSystems}
-                  selectedId={defaultDesignSystemId}
-                  onSelect={onChangeDefaultDesignSystem}
-                  onPreview={previewDesignSystem}
-                />
-              ) : null}
-              {topTab === 'image-templates' ? (
-                <PromptTemplatesTab
-                  surface="image"
-                  templates={promptTemplates}
-                  onPreview={setPreviewPromptTemplate}
-                />
-              ) : null}
-              {topTab === 'video-templates' ? (
-                <PromptTemplatesTab
-                  surface="video"
-                  templates={promptTemplates}
-                  onPreview={setPreviewPromptTemplate}
-                />
-              ) : null}
-            </>
-          )}
+          {topTab === 'designs' ? (
+            // DesignsTab uses skills + designSystems for tag rendering on
+            // each card, so wait until projects + that metadata are present
+            // to avoid a flash of "No projects yet" before the real list
+            // arrives.
+            projectsLoading || skillsLoading || designSystemsLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <DesignsTab
+                projects={projects}
+                skills={skills}
+                designSystems={designSystems}
+                onOpen={onOpenProject}
+                onOpenLiveArtifact={onOpenLiveArtifact}
+                onDelete={onDeleteProject}
+              />
+            )
+          ) : null}
+          {topTab === 'examples' ? (
+            skillsLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
+            )
+          ) : null}
+          {topTab === 'design-systems' ? (
+            designSystemsLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <DesignSystemsTab
+                systems={designSystems}
+                selectedId={defaultDesignSystemId}
+                onSelect={onChangeDefaultDesignSystem}
+                onPreview={previewDesignSystem}
+              />
+            )
+          ) : null}
+          {topTab === 'image-templates' ? (
+            promptTemplatesLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <PromptTemplatesTab
+                surface="image"
+                templates={promptTemplates}
+                onPreview={setPreviewPromptTemplate}
+              />
+            )
+          ) : null}
+          {topTab === 'video-templates' ? (
+            promptTemplatesLoading ? (
+              <CenteredLoader label={t('common.loading')} />
+            ) : (
+              <PromptTemplatesTab
+                surface="video"
+                templates={promptTemplates}
+                onPreview={setPreviewPromptTemplate}
+              />
+            )
+          ) : null}
         </div>
       </main>
       {petRailHidden ? null : (

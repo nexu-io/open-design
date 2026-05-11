@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -18,6 +18,9 @@ import {
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
+export const projectFileRenameTestHooks = {
+  beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
+};
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
@@ -354,6 +357,23 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
   };
 }
 
+// Like readProjectFile but skips loading the file content into memory.
+// Used by the media streaming endpoint so large video files are never buffered.
+export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const file = await resolveSafeReal(dir, name);
+  const st = await stat(file);
+  const rel = toProjectPath(path.relative(dir, file));
+  return {
+    filePath: file,
+    name: rel,
+    size: st.size,
+    mtime: st.mtimeMs,
+    mime: mimeFor(rel),
+    kind: kindFor(rel),
+  };
+}
+
 export async function writeProjectFile(
   projectsRoot,
   projectId,
@@ -424,6 +444,169 @@ export async function deleteProjectFile(projectsRoot, projectId, name, metadata?
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
+}
+
+export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const oldName = validateProjectPath(fromName);
+  const newName = sanitizePath(toName);
+  const source = await resolveSafeReal(dir, oldName);
+  const sourceStat = await stat(source);
+  if (!sourceStat.isFile()) {
+    const err = new Error('source is not a regular file');
+    err.code = 'EISDIR';
+    throw err;
+  }
+
+  if (oldName === newName) {
+    const manifest = await readManifestForPath(dir, oldName);
+    return {
+      file: {
+        name: oldName,
+        path: oldName,
+        size: sourceStat.size,
+        mtime: sourceStat.mtimeMs,
+        kind: kindFor(oldName),
+        mime: mimeFor(oldName),
+        artifactKind: manifest?.kind,
+        artifactManifest: manifest,
+      },
+      oldName,
+      newName: oldName,
+    };
+  }
+
+  const target = await resolveSafeReal(dir, newName);
+  const targetPath = source === target ? resolveSafe(dir, newName) : target;
+
+  if (source !== target) {
+    try {
+      await stat(target);
+      const err = new Error('target file already exists');
+      err.code = 'EEXIST';
+      throw err;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+
+  const manifestRename = await prepareArtifactManifestRename(dir, oldName, newName);
+
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await projectFileRenameTestHooks.beforeCommit?.({ source, target: targetPath });
+  await renameFilePath(source, targetPath, { noOverwrite: true });
+  await commitArtifactManifestRename(manifestRename, newName);
+
+  const st = await stat(targetPath);
+  const manifest = await readManifestForPath(dir, newName);
+  return {
+    file: {
+      name: newName,
+      path: newName,
+      size: st.size,
+      mtime: st.mtimeMs,
+      kind: kindFor(newName),
+      mime: mimeFor(newName),
+      artifactKind: manifest?.kind,
+      artifactManifest: manifest,
+    },
+    oldName,
+    newName,
+  };
+}
+
+async function renameFilePath(source, target, opts = {}) {
+  const { noOverwrite = false } = opts;
+  if (source === target) return;
+  const temp = await uniqueRenameTempPath(source);
+  await rename(source, temp);
+  try {
+    if (noOverwrite) {
+      await link(temp, target);
+      try {
+        await unlink(temp);
+      } catch {
+        // Preserve the target file even if cleanup of the temp link fails.
+      }
+    } else {
+      await rename(temp, target);
+    }
+  } catch (err) {
+    try {
+      await rename(temp, source);
+    } catch {
+      // Preserve the original rename error even if restoring the source path fails.
+    }
+    throw err;
+  }
+}
+
+async function uniqueRenameTempPath(source) {
+  const dir = path.dirname(source);
+  const base = path.basename(source);
+  for (let i = 0; i < 10; i++) {
+    const temp = path.join(dir, `.od-rename-${process.pid}-${Date.now()}-${i}-${base}.tmp`);
+    try {
+      await stat(temp);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return temp;
+      throw err;
+    }
+  }
+  const err = new Error('could not allocate temporary rename path');
+  err.code = 'EEXIST';
+  throw err;
+}
+
+async function prepareArtifactManifestRename(dir, oldName, newName) {
+  const oldManifestName = artifactManifestNameFor(oldName);
+  const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch((err) => {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  });
+  if (!oldManifestPath) return null;
+
+  let raw = null;
+  try {
+    raw = await readFile(oldManifestPath, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+
+  const newManifestName = artifactManifestNameFor(newName);
+  const newManifestPath = await resolveSafeReal(dir, newManifestName);
+  const targetManifestPath = oldManifestPath === newManifestPath
+    ? resolveSafe(dir, newManifestName)
+    : newManifestPath;
+  if (oldManifestPath !== newManifestPath) {
+    try {
+      await stat(newManifestPath);
+      const err = new Error('target artifact manifest already exists');
+      err.code = 'EEXIST';
+      throw err;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+
+  return { oldManifestPath, newManifestPath: targetManifestPath, raw };
+}
+
+async function commitArtifactManifestRename(manifestRename, newName) {
+  if (!manifestRename) return;
+  const { oldManifestPath, newManifestPath, raw } = manifestRename;
+  await mkdir(path.dirname(newManifestPath), { recursive: true });
+  const parsed = parseManifest(raw);
+  if (parsed) {
+    const validated = validateArtifactManifestInput(parsed, newName);
+    if (validated.ok && validated.value) {
+      await writeFile(oldManifestPath, JSON.stringify(validated.value, null, 2));
+      await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
+      return;
+    }
+  }
+  await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
 }
 
 export async function removeProjectDir(projectsRoot, projectId) {
@@ -553,8 +736,20 @@ function toProjectPath(raw) {
   return raw.split(path.sep).join('/');
 }
 
-function isSafeId(id) {
-  return typeof id === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(id);
+// Validates an id string for use as a path segment under a daemon-managed
+// directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
+// class allows dots so ids like `my-project.v2` work, but pure-dot ids
+// (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
+// resolve to the parent directory when fed into `path.join`. Without the
+// pure-dot guard, an attacker could create a project row with id `..` (or
+// reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
+// which Express decodes before the route handler sees it) and steer
+// finalize / write operations outside `.od/projects/`.
+export function isSafeId(id) {
+  if (typeof id !== 'string') return false;
+  if (id.length === 0 || id.length > 128) return false;
+  if (/^\.+$/.test(id)) return false; // reject `.`, `..`, `...`, etc.
+  return /^[A-Za-z0-9._-]+$/.test(id);
 }
 
 const EXT_MIME = {
@@ -566,6 +761,7 @@ const EXT_MIME = {
   '.cjs': 'text/javascript; charset=utf-8',
   '.jsx': 'text/javascript; charset=utf-8',
   '.ts': 'text/typescript; charset=utf-8',
+  '.py': 'text/x-python; charset=utf-8',
   // `.tsx` previously served as `text/typescript`, which browser module
   // loaders and strict CSPs do not accept as a JavaScript MIME. Multi-file
   // React prototypes that load `.tsx` via Babel-standalone (`<script
@@ -597,6 +793,44 @@ const EXT_MIME = {
 export function mimeFor(name) {
   const ext = path.extname(name).toLowerCase();
   return EXT_MIME[ext] || 'application/octet-stream';
+}
+
+// Parses an HTTP Range header (RFC 7233) for a single byte range.
+// Returns { start, end } for a satisfiable range, 'unsatisfiable' for a
+// 416-class range, or null if the header is absent/malformed/multi-range
+// (callers fall back to a full 200 response in the null case).
+export function parseByteRange(header, fileSize) {
+  if (!header || !header.startsWith('bytes=')) return null;
+  const spec = header.slice(6).trim();
+  // Multi-range is valid RFC 7233 but uncommon for media; fall back to full.
+  if (spec.includes(',')) return null;
+  const dashIdx = spec.indexOf('-');
+  if (dashIdx === -1) return null;
+  const rawStart = spec.slice(0, dashIdx);
+  const rawEnd = spec.slice(dashIdx + 1);
+  let start, end;
+  if (rawStart === '') {
+    // Suffix range: bytes=-N → last N bytes.
+    const suffix = Number(rawEnd);
+    if (!Number.isFinite(suffix) || !Number.isInteger(suffix) || suffix <= 0) {
+      return 'unsatisfiable';
+    }
+    start = Math.max(0, fileSize - suffix);
+    end = fileSize - 1;
+  } else {
+    start = Number(rawStart);
+    if (!Number.isFinite(start) || !Number.isInteger(start) || start < 0) return null;
+    if (start >= fileSize) return 'unsatisfiable';
+    if (rawEnd === '') {
+      // Open-ended range: bytes=N- → from N to EOF.
+      end = fileSize - 1;
+    } else {
+      end = Number(rawEnd);
+      if (!Number.isFinite(end) || !Number.isInteger(end) || end < start) return null;
+      end = Math.min(end, fileSize - 1); // clamp over-long end
+    }
+  }
+  return { start, end };
 }
 
 export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {

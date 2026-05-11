@@ -1,5 +1,5 @@
-// @ts-nocheck
 import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { resolveProjectId, withActiveEcho } from '../src/mcp.js';
@@ -12,17 +12,17 @@ const PROJECTS = [
 ];
 
 describe('resolveProjectId', () => {
-  let server;
-  let baseUrl;
+  let server: http.Server;
+  let baseUrl: string;
 
   beforeAll(
     () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         const app = express();
         app.get('/api/projects', (_req, res) => res.json({ projects: PROJECTS }));
         const tmp = http.createServer();
         tmp.listen(0, '127.0.0.1', () => {
-          const { port } = tmp.address();
+          const { port } = tmp.address() as AddressInfo;
           baseUrl = `http://127.0.0.1:${port}`;
           tmp.close(() => {
             server = app.listen(port, '127.0.0.1', () => resolve());

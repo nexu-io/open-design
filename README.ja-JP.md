@@ -44,7 +44,7 @@ Anthropic の [Claude Design][cd]（2026-04-17 リリース、Opus 4.7 搭載）
 
 OD は 4 つのオープンソースプロジェクトの上に立っています：
 
-- [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) — デザイン哲学の羅針盤。Junior-Designer ワークフロー、5 ステップのブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、そしてディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」のアイデア — すべて [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) に蒸留されています。
+- [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) — デザイン哲学の羅針盤。Junior-Designer ワークフロー、5 ステップのブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、そしてディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」のアイデア — すべて [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) に蒸留されています。
 - [**`op7418/guizang-ppt-skill`**（歸藏の雑誌風 PPT Skill）](https://github.com/op7418/guizang-ppt-skill) — Deck モード。[`skills/guizang-ppt/`](skills/guizang-ppt/) 以下にオリジナルのまま同梱、元の LICENSE を保持。雑誌レイアウト、WebGL hero、P0/P1/P2 チェックリスト。
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — UX の北極星であり、最も近い同類プロジェクト。初のオープンソース Claude-Design 代替。ストリーミング artifact ループ、サンドボックス iframe プレビュー（React 18 + Babel 同梱）、ライブエージェントパネル（todo + tool calls + 中断可能な生成）、5 種類のエクスポート形式リスト（HTML / PDF / PPTX / ZIP / Markdown）を借用。形態では意図的に分岐しています — 彼らは [`pi-ai`][piai] を同梱するデスクトップ Electron アプリ、私たちは既存の CLI に委任する Web アプリ + ローカル daemon です。
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — Daemon とランタイムのアーキテクチャ。PATH スキャンによるエージェント検出、ローカル daemon を唯一の特権プロセスとする思想、agent-as-teammate の世界観。
@@ -58,7 +58,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 | **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **メディア生成** | 画像 · 動画 · 音声サーフェスがデザインループと並走。**gpt-image-2**（Azure / OpenAI）でポスター・アバター・インフォグラフィック・イラスト都市マップ · **Seedance 2.0**（ByteDance）で 15 秒のシネマティック text-to-video / image-to-video · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）で HTML→MP4 のモーショングラフィック（プロダクトリビール、キネティックタイポグラフィ、データチャート、ソーシャルオーバーレイ、ロゴアウトロ）。**93 件**のすぐ複製できる prompt ギャラリー — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames、すべて [`prompt-templates/`](prompt-templates/) にプレビュー画像と出典付きで配置。Chat の入口はコードと同じ；実体の `.mp4` / `.png` がプロジェクトワークスペースに chip として落ちます。 |
-| **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)） |
+| **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **デバイスフレーム** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — ピクセル単位で正確、Skill 間で共有、[`assets/frames/`](assets/frames/) に集約 |
 | **エージェントランタイム** | ローカル daemon がプロジェクトフォルダ内で CLI を spawn — エージェントは実際のディスク上で `Read` / `Write` / `Bash` / `WebFetch` を使用。各 adapter に Windows `ENAMETOOLONG` フォールバック（stdin / 一時 prompt ファイル）あり |
 | **インポート** | [Claude Design][cd] のエクスポート ZIP をウェルカムダイアログにドロップ — `POST /api/import/claude-design` が実プロジェクトとして展開し、Anthropic の中断箇所からエージェントが編集を続行 |
@@ -254,7 +254,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
   + （deck kind かつ Skill seed なし時） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
 ```
 
-すべてのレイヤーが組み合わせ可能で、すべてのレイヤーが編集可能なファイルです。実際の契約は [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) と [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) で確認できます。
+すべてのレイヤーが組み合わせ可能で、すべてのレイヤーが編集可能なファイルです。実際の契約は [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) と [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) で確認できます。
 
 ## アーキテクチャ
 
@@ -491,7 +491,7 @@ open-design/
 | Brutalist | 生々しい、巨大タイプ、シャドウなし、鮮烈なアクセント | Bloomberg Businessweek · Achtung |
 | Soft warm | おおらか、低コントラスト、ピーチ系ニュートラル | Notion マーケティングページ · Apple Health |
 
-完全な仕様 → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
+完全な仕様 → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)。
 
 ## メディア生成
 
@@ -581,7 +581,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 
 ## anti-AI-slop 機構
 
-以下の機構はすべて [`huashu-design`](https://github.com/alchaincyf/huashu-design) のプレイブックを OD のプロンプトスタックに移植し、Skill 副ファイルの pre-flight で各 Skill に適用可能にしたものです。実際の文言は [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) を参照：
+以下の機構はすべて [`huashu-design`](https://github.com/alchaincyf/huashu-design) のプレイブックを OD のプロンプトスタックに移植し、Skill 副ファイルの pre-flight で各 Skill に適用可能にしたものです。実際の文言は [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) を参照：
 
 - **まずフォーム。** Turn 1 は `<question-form>` のみ — thinking 禁止、tools 禁止、ナレーション禁止。ユーザーはラジオの速度でデフォルトを選択。
 - **ブランドアセットプロトコル。** ユーザーがスクリーンショットや URL を添付した場合、エージェントは 5 ステップのプロトコル（特定 · ダウンロード · grep hex · `brand-spec.md` 作成 · 復唱）を実行してから CSS を書きます。**記憶からブランドカラーを推測することは絶対にありません。**
@@ -656,7 +656,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | プロジェクト | 本リポジトリでの役割 |
 |---|---|
 | [`Claude Design`][cd] | 本リポジトリがオープンソース代替を提供するクローズドソースプロダクト。 |
-| [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) | デザイン哲学のコア。Junior-Designer ワークフロー、5 ステップブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、ディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」ライブラリ — すべて [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) と [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts) に蒸留。 |
+| [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) | デザイン哲学のコア。Junior-Designer ワークフロー、5 ステップブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、ディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」ライブラリ — すべて [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) と [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts) に蒸留。 |
 | [**`op7418/guizang-ppt-skill`**（歸藏）][guizang] | Magazine-web-PPT Skill を [`skills/guizang-ppt/`](skills/guizang-ppt/) にそのまま同梱、元の LICENSE 保持。Deck モードのデフォルト。P0/P1/P2 チェックリスト文化を他のすべての Skill に波及。 |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + adapter アーキテクチャ。PATH スキャンによるエージェント検出、ローカル daemon を唯一の特権プロセスとする思想、agent-as-teammate の世界観。モデルを採用、コードは vendor せず。 |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 初のオープンソース Claude-Design 代替、最も近い同類。採用済み UX パターン：ストリーミング artifact ループ、サンドボックス iframe プレビュー（React 18 + Babel 同梱）、ライブエージェントパネル（todo + tool calls + 中断可能）、5 種エクスポート形式リスト（HTML/PDF/PPTX/ZIP/Markdown）、ローカルファーストストレージハブ、`SKILL.md` テイスト注入。ロードマップ上の UX パターン：コメントモード精密編集、AI 出力 tweaks パネル。**[`pi-ai`][piai] は意図的に vendor していません** — open-codesign はそれをエージェントランタイムとして同梱していますが、私たちはユーザーの既存 CLI に委任します。 |
@@ -712,7 +712,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-08" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-11" alt="Open Design コントリビューター" />
 </a>
 
 初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
@@ -729,9 +729,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-08" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-08" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-11" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-11" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-11" />
   </picture>
 </a>
 

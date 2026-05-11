@@ -14,6 +14,7 @@ triggers:
   - "实时看板"
 od:
   mode: prototype
+  scenario: live
   preview:
     type: html
     entry: index.html

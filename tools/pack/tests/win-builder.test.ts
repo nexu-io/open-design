@@ -46,7 +46,7 @@ function createPaths(root: string): WinPaths {
 }
 
 describe("materializeCachedUnpackedForInstaller", () => {
-  it("overwrites cached packaged config with the current namespace config", async () => {
+  it("overwrites cached packaged config and app package version", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-builder-"));
     const cachedUnpackedRoot = join(root, "cache", "builder", "win-unpacked");
     const paths = createPaths(root);
@@ -59,16 +59,25 @@ describe("materializeCachedUnpackedForInstaller", () => {
         `${JSON.stringify({ namespace: "first", version: 1 })}\n`,
         "utf8",
       );
+      await mkdir(join(cachedUnpackedRoot, "resources", "app"), { recursive: true });
+      await writeFile(
+        join(cachedUnpackedRoot, "resources", "app", "package.json"),
+        `${JSON.stringify({ name: "open-design-packaged-app", version: "0.5.0-beta.1" })}\n`,
+        "utf8",
+      );
       await mkdir(join(paths.packagedConfigPath, ".."), { recursive: true });
       await writeFile(paths.packagedConfigPath, `${JSON.stringify({ namespace: "second", version: 1 })}\n`, "utf8");
 
-      const manifest = await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths);
+      const manifest = await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths, "0.5.0-beta.2");
 
       expect(manifest.source).toBe("namespace");
       expect(manifest.unpackedRoot).toBe(paths.unpackedRoot);
       await expect(readFile(join(paths.unpackedRoot, "Open Design.exe"), "utf8")).resolves.toBe("exe\n");
       await expect(readFile(join(paths.unpackedRoot, "resources", "open-design-config.json"), "utf8")).resolves.toContain(
         '"namespace":"second"',
+      );
+      await expect(readFile(join(paths.unpackedRoot, "resources", "app", "package.json"), "utf8")).resolves.toContain(
+        '"version": "0.5.0-beta.2"',
       );
     } finally {
       await rm(root, { force: true, recursive: true });

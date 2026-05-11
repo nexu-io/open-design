@@ -232,6 +232,9 @@ interface Props {
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: () => void;
+  // Same dialog, but landing on the External MCP tab. Forwarded to the
+  // composer's `/mcp` slash and MCP picker button.
+  onOpenMcpSettings?: () => void;
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -241,6 +244,7 @@ interface Props {
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   researchAvailable?: boolean;
+  onCollapse?: () => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -271,6 +275,7 @@ export function ChatPane({
   onDeleteConversation,
   onRenameConversation,
   onOpenSettings,
+  onOpenMcpSettings,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -278,12 +283,21 @@ export function ChatPane({
   projectMetadata,
   onProjectMetadataChange,
   researchAvailable,
+  onCollapse,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const didInitialScrollRef = useRef(false);
+  // Tracks whether the user is glued close enough to the bottom that
+  // streamed content should auto-follow. Distinct from the jump-button
+  // state below, which uses a wider threshold (120px) so the affordance
+  // stays visible for short scroll-ups. Auto-follow needs the tighter
+  // 80px cutoff: scrolling ~90px up is an intentional pause that
+  // shouldn't be yanked back the moment the next chunk streams in.
+  const pinnedToBottomRef = useRef(true);
+  const scrolledToFormRef = useRef<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
@@ -311,6 +325,7 @@ export function ChatPane({
     // A new conversation should land at the bottom (its own initial
     // scroll), not inherit the previous conversation's saved position.
     savedChatScrollRef.current = null;
+    scrolledToFormRef.current = new Set();
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -318,8 +333,28 @@ export function ChatPane({
     if (!el || didInitialScrollRef.current || messages.length === 0) return;
     didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
+      // If the last assistant message contains a question form, scroll to
+      // the form instead of the bottom, so the user sees the form first.
+      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (lastAssistantMsg?.content.includes('<question-form')) {
+        const assistantEls = el.querySelectorAll('.msg.assistant');
+        const lastAssistantEl = assistantEls[assistantEls.length - 1];
+        const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
+        if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
+          scrolledToFormRef.current.add(formEl.dataset.formId!);
+          formEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          pinnedToBottomRef.current = false;
+          setScrolledFromBottom(true);
+          return;
+        }
+        // Already handled by the auto-scroll effect — don't bottom-scroll.
+        if (formEl) return;
+      }
+      // Initial-load bottom-pin must be instant — smooth scrollTo emits
+      // intermediate scroll events that flip pinnedToBottomRef to false.
       el.scrollTop = el.scrollHeight;
       setScrolledFromBottom(false);
+      pinnedToBottomRef.current = true;
     });
     // `tab` is in the deps so that switching conversations while
     // Comments is open doesn't strand the new conversation at scrollTop:
@@ -332,14 +367,43 @@ export function ChatPane({
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
-    // Auto-scroll only when we're already pinned near the bottom — preserves
-    // a user's scrollback position when they're reading earlier output while
-    // a new turn streams in.
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distance < 80) {
+    // Auto-scroll only when the user was already pinned near the bottom,
+    // so a scrollback session reading earlier output isn't yanked to the
+    // latest message. We key off the pre-content `pinnedToBottomRef`
+    // (a ref so it doesn't itself re-fire this effect on scroll) instead
+    // of recomputing distance from the just-grown scrollHeight: a single
+    // streamed chunk can add 100+ px in one render, which made the
+    // post-content distance check skip auto-scroll even when the user
+    // was glued to the bottom. We deliberately use the tighter 80px
+    // cutoff tracked by the ref (not the wider 120px jump-button
+    // threshold) so a deliberate ~90px scroll-up isn't snapped back the
+    // next time content streams in. Issue #983.
+    if (pinnedToBottomRef.current) {
+      // If the last assistant message contains a question form, scroll to
+      // the form instead of the bottom, so the user lands on the form.
+      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (lastAssistantMsg?.content.includes('<question-form')) {
+        const assistantEls = el.querySelectorAll('.msg.assistant');
+        const lastAssistantEl = assistantEls[assistantEls.length - 1];
+        const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
+        if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
+          scrolledToFormRef.current.add(formEl.dataset.formId!);
+          formEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          pinnedToBottomRef.current = false;
+          setScrolledFromBottom(true);
+          return;
+        }
+        // Form tag in content but the DOM element isn't ready yet (partial
+        // stream) — skip bottom-scroll to avoid a jarring jump that gets
+        // undone when the form finishes rendering.
+        if (streaming) return;
+      }
+      // Streaming bottom-pin must be instant — smooth scrollTo emits
+      // intermediate scroll events that flip pinnedToBottomRef to false,
+      // breaking auto-follow for subsequent chunks.
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, error]);
+  }, [messages, error, streaming]);
 
   // Saved chat-log scroll state, preserved across tab switches. The
   // chat-log <div> is conditionally rendered so it unmounts when the
@@ -378,6 +442,7 @@ export function ChatPane({
         const distance =
           target.scrollHeight - target.scrollTop - target.clientHeight;
         setScrolledFromBottom(distance > 120);
+        pinnedToBottomRef.current = distance < 80;
       });
     }
 
@@ -397,6 +462,7 @@ export function ChatPane({
       const distance =
         target.scrollHeight - target.scrollTop - target.clientHeight;
       setScrolledFromBottom(distance > 120);
+      pinnedToBottomRef.current = distance < 80;
     }
     el.addEventListener('scroll', onScroll);
     return () => {
@@ -540,6 +606,18 @@ export function ChatPane({
           >
             <Icon name="plus" size={16} />
           </button>
+          {onCollapse ? (
+            <button
+              type="button"
+              className="icon-only"
+              data-testid="chat-collapse"
+              title={t('workspace.focusMode')}
+              aria-label={t('workspace.focusMode')}
+              onClick={onCollapse}
+            >
+              <Icon name="chevron-left" size={15} />
+            </button>
+          ) : null}
         </div>
       </div>
       {tab === 'chat' ? (
@@ -610,7 +688,11 @@ export function ChatPane({
                         onRequestOpenFile={onRequestOpenFile}
                         isLast={m.id === lastAssistantId}
                         nextUserContent={nextUserContentByAssistantId.get(m.id)}
-                        onSubmitForm={onSubmitForm}
+                        onSubmitForm={(text) => {
+                          pinnedToBottomRef.current = true;
+                          scrolledToFormRef.current = new Set();
+                          onSubmitForm?.(text);
+                        }}
                         onContinueRemainingTasks={
                           m.id === lastAssistantId && onContinueRemainingTasks
                             ? (todos) => onContinueRemainingTasks(m, todos)
@@ -644,9 +726,14 @@ export function ChatPane({
             onEnsureProject={onEnsureProject}
             commentAttachments={commentsToAttachments(attachedComments)}
             onRemoveCommentAttachment={onDetachComment}
-            onSend={onSend}
+            onSend={(prompt, attachments, commentAttachments, meta) => {
+              pinnedToBottomRef.current = true;
+              scrolledToFormRef.current = new Set();
+              onSend(prompt, attachments, commentAttachments, meta);
+            }}
             onStop={onStop}
             onOpenSettings={onOpenSettings}
+            onOpenMcpSettings={onOpenMcpSettings}
             petConfig={petConfig}
             onAdoptPet={onAdoptPet}
             onTogglePet={onTogglePet}
@@ -924,7 +1011,7 @@ function UserMessage({
         <div className="user-attachments comment-history-attachments">
           {commentAttachments.map((a) => (
             <span key={a.id} className="user-attachment staged-comment">
-              <span className="staged-name">
+              <span className="staged-name" title={`${a.elementId}: ${a.comment}`}>
                 <strong>{a.elementId}</strong>
                 <span>{a.comment}</span>
               </span>

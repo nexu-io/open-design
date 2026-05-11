@@ -71,6 +71,8 @@ export const SIDECAR_MESSAGES = Object.freeze({
   CLICK: "click",
   CONSOLE: "console",
   EVAL: "eval",
+  EXPORT_PDF: "export-pdf",
+  REGISTER_DESKTOP_AUTH: "register-desktop-auth",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
   STATUS: "status",
@@ -100,6 +102,18 @@ export type DaemonStatusSnapshot = {
   state: ServiceRuntimeState;
   updatedAt?: string;
   url: string | null;
+  /**
+   * PR #974 round 6 (mrcfps): true when the daemon's
+   * `/api/import/folder` route refuses tokenless requests. Surfaced
+   * over IPC so `tools-dev start desktop` can detect a daemon that
+   * was spawned without `OD_REQUIRE_DESKTOP_AUTH=1` (the split-start
+   * dev flow `start daemon` -> `start desktop`) and restart it
+   * before launching desktop main, instead of letting a renderer
+   * race the registration handshake. Mirrors
+   * `apps/daemon/src/server.ts#isDesktopAuthGateActive()` at the
+   * moment the STATUS request was answered.
+   */
+  desktopAuthGateActive: boolean;
 };
 
 export type WebStatusSnapshot = {
@@ -157,14 +171,55 @@ export type DesktopClickResult = {
   found: boolean;
 };
 
+export type DesktopExportPdfInput = {
+  baseHref?: string;
+  deck: boolean;
+  defaultFilename: string;
+  html: string;
+  title: string;
+};
+
+export type DesktopExportPdfResult = {
+  canceled?: boolean;
+  error?: string;
+  ok: boolean;
+  path?: string;
+};
+
 export type SidecarStatusMessage = { type: typeof SIDECAR_MESSAGES.STATUS };
 export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
 export type DesktopClickMessage = { input: DesktopClickInput; type: typeof SIDECAR_MESSAGES.CLICK };
+export type DesktopExportPdfMessage = { input: DesktopExportPdfInput; type: typeof SIDECAR_MESSAGES.EXPORT_PDF };
 
-export type DaemonSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
+// Sent by the desktop main process to the daemon over its sidecar IPC at
+// startup, before the BrowserWindow is created. The base64 string is a
+// freshly generated 32-byte secret that both processes will share for the
+// lifetime of the daemon. The daemon uses this secret to verify HMAC tokens
+// minted by the desktop main process for `POST /api/import/folder` calls
+// (PR #974: closes the renderer→arbitrary-baseDir→openPath bypass chain).
+// When the secret is registered, daemon's import-folder route requires a
+// valid per-path token; when it isn't (web-only deployments), the route
+// behaves as before.
+export type RegisterDesktopAuthInput = {
+  secret: string;
+};
+
+export type RegisterDesktopAuthMessage = {
+  input: RegisterDesktopAuthInput;
+  type: typeof SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH;
+};
+
+export type RegisterDesktopAuthResult = {
+  accepted: true;
+};
+
+export type DaemonSidecarMessage =
+  | SidecarStatusMessage
+  | SidecarShutdownMessage
+  | RegisterDesktopAuthMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -172,7 +227,8 @@ export type DesktopSidecarMessage =
   | DesktopEvalMessage
   | DesktopScreenshotMessage
   | DesktopConsoleMessage
-  | DesktopClickMessage;
+  | DesktopClickMessage
+  | DesktopExportPdfMessage;
 
 export type ShutdownResult = {
   accepted: true;
@@ -336,6 +392,37 @@ function normalizeDesktopClickInput(input: unknown): DesktopClickInput {
   return { selector: normalizeNonEmptyString(value.selector, "desktop click selector") };
 }
 
+function normalizeRegisterDesktopAuthInput(input: unknown): RegisterDesktopAuthInput {
+  const value = assertObject(input, "register-desktop-auth input");
+  assertKnownKeys(value, ["secret"], "register-desktop-auth input");
+  const secret = normalizeNonEmptyString(value.secret, "register-desktop-auth secret");
+  // Reject anything that isn't base64-shaped — the wire format is a
+  // base64-encoded random buffer minted by the desktop main process. The
+  // daemon decodes it back to bytes for HMAC. Loose validation here, not
+  // length-pinned, so the encoding (base64 vs base64url) stays caller-driven.
+  if (!/^[A-Za-z0-9+/_=-]+$/.test(secret)) {
+    throw new Error("register-desktop-auth secret must be base64-encoded");
+  }
+  return { secret };
+}
+
+function normalizeBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
+  return value;
+}
+
+function normalizeDesktopExportPdfInput(input: unknown): DesktopExportPdfInput {
+  const value = assertObject(input, "desktop PDF export input");
+  assertKnownKeys(value, ["baseHref", "deck", "defaultFilename", "html", "title"], "desktop PDF export input");
+  return {
+    ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop PDF export baseHref") }),
+    deck: normalizeBoolean(value.deck, "desktop PDF export deck"),
+    defaultFilename: normalizeNonEmptyString(value.defaultFilename, "desktop PDF export defaultFilename"),
+    html: normalizeNonEmptyString(value.html, "desktop PDF export html"),
+    title: normalizeNonEmptyString(value.title, "desktop PDF export title"),
+  };
+}
+
 function normalizeMessageType(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, `${label} type must be a non-empty string`);
@@ -349,6 +436,10 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
   if (type === SIDECAR_MESSAGES.STATUS || type === SIDECAR_MESSAGES.SHUTDOWN) {
     assertKnownKeys(value, ["type"], "daemon sidecar message");
     return { type };
+  }
+  if (type === SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    return { input: normalizeRegisterDesktopAuthInput(value.input), type };
   }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }
@@ -381,6 +472,9 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.CLICK:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopClickInput(value.input), type };
+    case SIDECAR_MESSAGES.EXPORT_PDF:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopExportPdfInput(value.input), type };
     default:
       throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown desktop sidecar message: ${type}`);
   }

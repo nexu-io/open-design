@@ -1,6 +1,6 @@
 # Quickstart
 
-<p align="center"><b>English</b> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English</b> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
 
 Run the full product locally.
 
@@ -10,6 +10,10 @@ Run the full product locally.
 - **pnpm:** `10.33.x`. The repo pins `pnpm@10.33.2` through `packageManager`; use Corepack so the pinned version is selected automatically.
 - **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native should work for most flows, but WSL2 is the safer baseline.
 - **Optional local agent CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
+
+### Local agent CLI and PATH
+
+The daemon scans your **`PATH`** (plus common user toolchain directories). If you install a CLI with **`npm install -g`** or **Homebrew** and Open Design still shows it as *not installed*, the GUI may be starting with a minimal `PATH` that does not include your global npm or Homebrew `bin` directory (common on macOS when the app is not launched from a full login shell). Ensure the executable’s directory is on `PATH` for the process that runs the daemon, then use **Rescan** in **Settings → Execution & model**.
 
 `nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 24 before running pnpm:
 
@@ -30,6 +34,129 @@ corepack enable
 corepack pnpm --version   # should print 10.33.2
 ```
 
+## Docker Setup
+
+Run Open Design in a fully containerised environment without installing Node.js or pnpm locally.
+
+### Requirements
+
+* Docker Desktop
+* Docker Compose v2
+
+Verify Docker is installed correctly:
+
+```bash
+docker compose version
+```
+
+---
+
+## Start Open Design
+
+From the repository root:
+
+```bash
+cd deploy
+docker compose up -d
+```
+
+Open the app in your browser:
+
+```text
+http://localhost:7456
+```
+
+The first startup may take a few seconds while Docker pulls the latest image.
+
+---
+
+## Common Docker Commands
+
+### View logs
+
+```bash
+docker compose logs -f
+```
+
+### Restart containers
+
+```bash
+docker compose restart
+```
+
+### Stop containers
+
+```bash
+docker compose down
+```
+
+### Pull the latest image
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Remove all local app data
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Environment Configuration
+
+Create a `deploy/.env` file to override the default configuration:
+
+```env
+# Port exposed on the host
+OPEN_DESIGN_PORT=7456
+
+# Container memory limit
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# Allowed CORS origins
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker image tag
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+```
+
+---
+
+## Persistent Storage
+
+Open Design stores projects and SQLite data inside a Docker volume:
+
+```text
+open_design_data
+```
+
+The volume is mounted to:
+
+```text
+/app/.od
+```
+
+Data persists across container restarts and image updates.
+
+Inspect the volume:
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## Notes
+
+* Docker mode is ideal for contributors who do not want a local Node.js or pnpm setup.
+* The container exposes the production daemon build directly on port `7456`.
+* For development workflows and advanced local setup, see the rest of this Quickstart guide.
+
+---
+
 ## One-shot (dev mode)
 
 ```bash
@@ -47,7 +174,7 @@ pnpm tools-dev # starts daemon + web + desktop in the background
 
 On first load, the app detects your installed code-agent CLI (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI), picks it automatically, and defaults to `web-prototype` skill + `Neutral Modern` design system. Type a prompt and hit **Send**. The agent streams into the left pane; the `<artifact>` tag is parsed out and the HTML renders live on the right. When it finishes, click **Save to disk** to persist the artifact under `./.od/artifacts/<timestamp>-<slug>/index.html`.
 
-The **Design system** dropdown ships with **129 design systems** — 2 hand-authored starters (Neutral Modern, Warm Editorial), 70 bundled product systems, and 57 design skills sourced from [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Pick one to skin every prototype in that brand's aesthetic.
+The **Design system** dropdown ships with 71 built-in systems — 2 hand-authored starters (Neutral Modern, Warm Editorial) and 69 product systems imported from [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md), grouped by category (AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive). Pick one to skin every prototype in that brand's aesthetic, and another set of 57 design skills sourced from [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills).
 
 The **Skill** dropdown groups by mode (Prototype / Deck / Template / Design system) and shows the default skill per mode with a `· default` suffix. Bundled skills:
 

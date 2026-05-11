@@ -1,5 +1,18 @@
 // @vitest-environment jsdom
 
+// Polyfill scrollTo for jsdom (not available in jsdom's HTMLElement)
+if (typeof HTMLElement.prototype.scrollTo !== 'function') {
+  HTMLElement.prototype.scrollTo = function (
+    options?: ScrollToOptions | number,
+    _y?: number,
+  ) {
+    if (typeof options === 'object' && options !== null) {
+      if (options.top !== undefined) this.scrollTop = options.top;
+      if (options.left !== undefined) this.scrollLeft = options.left;
+    }
+  };
+}
+
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
@@ -189,6 +202,36 @@ describe('chat scroll preservation across tab switches', () => {
     // must be visible immediately, not hidden until the user scrolls.
     expect(geom.scrollTop).toBe(540);
     expect(screen.getByRole('button', { name: /jump to latest/i })).toBeTruthy();
+  });
+
+  it('does not auto-scroll a short scrollback (~90px above bottom) when new content streams in', async () => {
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    const { rerender } = render(chatPaneEl(sampleMessages, null));
+    // Drain the initial-bottom-scroll rAF queued during the first render,
+    // otherwise it fires after our setUserScroll calls and re-pins the
+    // ref to true behind the test's back.
+    await flushFrame();
+
+    // User intentionally scrolls 90px up: distance = 1000 - 510 - 400 = 90.
+    // That's between the 80px auto-follow cutoff and the 120px jump-button
+    // threshold, so the user is deliberately reading slightly earlier
+    // output and should not be yanked to the latest message.
+    setUserScroll(510);
+
+    // A new assistant message streams in; scrollHeight grows.
+    const streamed: ChatMessage[] = [
+      ...sampleMessages,
+      { id: 'a3', role: 'assistant', content: 'streaming chunk', createdAt: Date.now() },
+    ];
+    setGeom({ scrollHeight: 1100 });
+    await act(async () => {
+      rerender(chatPaneEl(streamed, null));
+    });
+    await flushFrame();
+
+    // Auto-scroll must respect the user's pause: scrollTop stays where
+    // they put it instead of snapping to the new scrollHeight.
+    expect(geom.scrollTop).toBe(510);
   });
 
   it('lands new conversation at its own bottom when switching conversations off-tab', async () => {

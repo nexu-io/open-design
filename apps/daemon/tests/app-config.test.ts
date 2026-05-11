@@ -411,6 +411,136 @@ describe('app-config disabled lists', () => {
   });
 });
 
+describe('app-config telemetry prefs', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-telemetry-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('persists installationId as string', async () => {
+    await writeAppConfig(dataDir, {
+      installationId: '11111111-2222-3333-4444-555555555555',
+    });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.installationId).toBe('11111111-2222-3333-4444-555555555555');
+  });
+
+  it('clears installationId when null is sent', async () => {
+    await writeAppConfig(dataDir, { installationId: 'abc' });
+    await writeAppConfig(dataDir, { installationId: null });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.installationId).toBeNull();
+  });
+
+  it('drops installationId of wrong type', async () => {
+    await writeAppConfig(dataDir, { installationId: 12345 } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.installationId).toBeUndefined();
+  });
+
+  it('persists privacyDecisionAt as a timestamp', async () => {
+    await writeAppConfig(dataDir, { privacyDecisionAt: 1778244000000 });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.privacyDecisionAt).toBe(1778244000000);
+  });
+
+  it('clears privacyDecisionAt when null is sent', async () => {
+    await writeAppConfig(dataDir, { privacyDecisionAt: 1778244000000 });
+    await writeAppConfig(dataDir, { privacyDecisionAt: null });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.privacyDecisionAt).toBeNull();
+  });
+
+  it('drops privacyDecisionAt of wrong type', async () => {
+    await writeAppConfig(dataDir, { privacyDecisionAt: 'yesterday' } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.privacyDecisionAt).toBeUndefined();
+  });
+
+  it('persists full telemetry prefs', async () => {
+    await writeAppConfig(dataDir, {
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.telemetry).toEqual({
+      metrics: true,
+      content: true,
+      artifactManifest: false,
+    });
+  });
+
+  it('persists partial telemetry prefs and omits absent keys', async () => {
+    await writeAppConfig(dataDir, { telemetry: { metrics: true } });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.telemetry).toEqual({ metrics: true });
+  });
+
+  it('drops telemetry inner values that are not booleans', async () => {
+    await writeAppConfig(dataDir, {
+      telemetry: {
+        metrics: 'yes' as any,
+        content: 1 as any,
+        artifactManifest: true,
+      },
+    } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.telemetry).toEqual({ artifactManifest: true });
+  });
+
+  it('drops telemetry entirely when no inner key is valid', async () => {
+    await writeAppConfig(dataDir, {
+      onboardingCompleted: true,
+      telemetry: { metrics: 'yes' } as any,
+    } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.onboardingCompleted).toBe(true);
+    expect(cfg.telemetry).toBeUndefined();
+  });
+
+  it('drops unknown keys nested inside telemetry', async () => {
+    await writeAppConfig(dataDir, {
+      telemetry: { metrics: true, rogue: true } as any,
+    } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.telemetry).toEqual({ metrics: true });
+    expect(cfg.telemetry).not.toHaveProperty('rogue');
+  });
+
+  it('drops telemetry when value is not a plain object', async () => {
+    await writeAppConfig(dataDir, { telemetry: [true] } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.telemetry).toBeUndefined();
+  });
+
+  it('clears telemetry when null is sent', async () => {
+    await writeAppConfig(dataDir, {
+      telemetry: { metrics: true, content: true },
+    });
+    await writeAppConfig(dataDir, { telemetry: null } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.telemetry).toBeUndefined();
+  });
+
+  it('merges telemetry without disturbing other keys', async () => {
+    await writeAppConfig(dataDir, {
+      installationId: 'install-1',
+      telemetry: { metrics: true },
+      agentId: 'claude',
+    });
+    await writeAppConfig(dataDir, { telemetry: { content: true } });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.installationId).toBe('install-1');
+    expect(cfg.agentId).toBe('claude');
+    // telemetry is replaced (not deep-merged) — matches the agentModels semantics.
+    expect(cfg.telemetry).toEqual({ content: true });
+  });
+});
+
 describe('app-config origin guard', () => {
   let server: http.Server;
   let port: number;

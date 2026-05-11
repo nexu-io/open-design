@@ -268,6 +268,16 @@ export async function prepareWinPackagedApp(
     materialize: [],
     node,
   });
+  await writeAssembledAppEntrypoints(
+    {
+      ...paths,
+      assembledAppRoot: join(manifest.entryPath, "app"),
+      assembledMainEntryPath: join(manifest.entryPath, "app", "main.cjs"),
+      assembledPackageJsonPath: join(manifest.entryPath, "app", "package.json"),
+    },
+    packedTarballs,
+    packagedVersion,
+  );
   await writePackagedConfig(config, paths, packagedVersion);
   return { appRoot: join(manifest.entryPath, "app"), key, packagedVersion };
 }

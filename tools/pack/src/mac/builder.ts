@@ -45,6 +45,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: MacPa
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
+        macAdhocBundleSign: !config.signed,
         resourceName: WEB_STANDALONE_RESOURCE_NAME,
         standaloneSourceRoot: join(webRoot, ".next", "standalone"),
         version: 1,

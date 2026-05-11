@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>open-design — GitHub Dashboard</title>
+  <style>
+    :root {
+      --canvas: #f2f2f0;
+      --surface: #ffffff;
+      --surface-muted: #fafaf9;
+      --border: #ececea;
+      --border-strong: #e2e2df;
+      --text-primary: #0a0a0a;
+      --text-secondary: #6b6b6b;
+      --text-tertiary: #9a9a95;
+      --active-bg: #e6f4ea;
+      --active-fg: #1f8a4c;
+      --pending-bg: #fff6d6;
+      --pending-fg: #9a7b12;
+      --feature-bg: #dcebff;
+      --feature-fg: #2f66c9;
+      --danger-bg: #fdecec;
+      --danger-fg: #c0392b;
+      --green: #34a853;
+      --amber: #e8a23a;
+      --red: #d94a3d;
+      --shadow: 0 1px 2px rgba(10, 10, 10, .04), 0 1px 1px rgba(10, 10, 10, .02);
+      --radius-card: 16px;
+      --radius-tile: 12px;
+      --radius-control: 8px;
+      font-family: Geist, Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-feature-settings: "tnum", "lnum";
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--text-primary); }
+    .shell { min-height: 100vh; padding: 16px; display: grid; grid-template-columns: 256px 1fr; gap: 16px; }
+    .sidebar, .main { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
+    .sidebar { padding: 16px; display: flex; flex-direction: column; gap: 22px; }
+    .brand { height: 48px; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+    .logo { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #2f66c9, #5a8ded); color: white; display: grid; place-items: center; font-size: 18px; font-weight: 600; }
+    .group-label { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 11px; font-weight: 500; letter-spacing: .02em; text-transform: uppercase; margin-bottom: 8px; margin-top: 4px; }
+    .dot-ring { width: 14px; height: 14px; border: 1.5px dashed var(--text-tertiary); border-radius: 999px; flex: none; }
+    .nav { display: grid; gap: 4px; }
+    .nav-item { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: var(--radius-control); padding: 8px 10px; color: var(--text-secondary); font-size: 13px; text-decoration: none; transition: all .15s; }
+    .nav-item:hover { background: var(--surface-muted); }
+    .nav-item.active { background: var(--surface-muted); color: var(--text-primary); font-weight: 500; }
+    .count { border-radius: 999px; padding: 2px 8px; background: var(--surface-muted); color: var(--text-secondary); font-size: 11px; font-weight: 500; }
+    .main { overflow: hidden; }
+    .topbar { height: 48px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 14px; }
+    .topbar-title { display: flex; align-items: center; gap: 10px; }
+    .topbar-icon { width: 20px; height: 20px; opacity: .7; }
+    .content { padding: 24px 28px 32px; display: grid; gap: 24px; }
+    .page-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 600; letter-spacing: -.005em; }
+    .subtitle { margin-top: 6px; color: var(--text-secondary); font-size: 14px; line-height: 1.4; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    button, .button { border: 1px solid var(--border-strong); background: var(--surface); border-radius: var(--radius-control); padding: 8px 14px; color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+    button:hover, .button:hover { background: var(--surface-muted); }
+    button.primary, .button.primary { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); padding: 20px; }
+    .tabs { display: inline-flex; background: var(--surface-muted); border-radius: 12px; padding: 4px; gap: 4px; }
+    .tab { padding: 6px 12px; border-radius: var(--radius-control); color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all .15s; border: 1px solid transparent; text-decoration: none; }
+    .tab.active { background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); box-shadow: var(--shadow); }
+    .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+    .kpi { min-height: 84px; border: 1px solid var(--border); border-radius: var(--radius-tile); background: var(--surface-muted); padding: 14px; display: flex; flex-direction: column; }
+    .kpi-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .glyph { width: 28px; height: 28px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); display: inline-grid; place-items: center; box-shadow: var(--shadow); font-size: 14px; flex: none; }
+    .kpi-label { color: var(--text-secondary); font-size: 13px; }
+    .kpi-num { font-size: 28px; font-weight: 600; line-height: 1.1; margin-top: auto; }
+    .kpi-trend { font-size: 12px; color: var(--green); margin-top: 4px; font-weight: 500; }
+    .kpi-trend.down { color: var(--text-tertiary); }
+    .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+    .grid-full { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .card-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .tick-rule { height: 24px; margin: 8px 0 16px; background: repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 8px); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 760px; }
+    th { text-align: left; padding: 10px 12px; color: var(--text-tertiary); font-size: 11px; font-weight: 500; letter-spacing: .01em; background: var(--surface-muted); text-transform: uppercase; }
+    td { padding: 14px 12px; border-top: 1px solid var(--border); color: var(--text-secondary); }
+    td strong { color: var(--text-primary); font-weight: 500; }
+    .mono { font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace; font-size: 12px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+    .pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+    .active-pill { background: var(--active-bg); color: var(--active-fg); }
+    .pending-pill { background: var(--pending-bg); color: var(--pending-fg); }
+    .feature-pill { background: var(--feature-bg); color: var(--feature-fg); }
+    .danger-pill { background: var(--danger-bg); color: var(--danger-fg); }
+    .avatar { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--border); background: linear-gradient(135deg, #dcecff, #f8eadb); display: inline-grid; place-items: center; color: var(--text-secondary); font-size: 11px; font-weight: 500; margin-right: 8px; overflow: hidden; flex: none; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .contrib { display: grid; gap: 10px; }
+    .person { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface-muted); }
+    .person-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .person-name { font-weight: 500; font-size: 13px; color: var(--text-primary); }
+    .person-role { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .chart-container { position: relative; height: 180px; margin-top: 16px; }
+    .chart { width: 100%; height: 100%; }
+    .chart-bars { display: flex; align-items: flex-end; justify-content: space-between; height: 100%; gap: 8px; }
+    .bar { flex: 1; background: linear-gradient(180deg, var(--green) 0%, #2d8a47 100%); border-radius: 4px 4px 0 0; min-height: 4px; position: relative; transition: all .2s; }
+    .bar:hover { opacity: .85; }
+    .bar-label { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+    .trend-line { display: flex; align-items: flex-end; height: 100%; gap: 2px; }
+    .trend-point { flex: 1; background: var(--feature-fg); border-radius: 2px 2px 0 0; min-height: 2px; }
+    .issue-row { display: flex; align-items: start; gap: 12px; padding: 14px 12px; border-top: 1px solid var(--border); }
+    .issue-row:first-child { border-top: none; }
+    .issue-icon { width: 20px; height: 20px; border-radius: 999px; background: var(--active-bg); color: var(--active-fg); display: grid; place-items: center; font-size: 11px; flex: none; margin-top: 2px; }
+    .issue-icon.pr { background: var(--feature-bg); color: var(--feature-fg); }
+    .issue-content { flex: 1; min-width: 0; }
+    .issue-title { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+    .issue-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--text-tertiary); margin-top: 6px; }
+    .issue-meta span { display: flex; align-items: center; gap: 4px; }
+    .provenance-note { color: var(--text-tertiary); font-size: 12px; line-height: 1.5; padding: 4px 2px; }
+    @media (max-width: 980px) { 
+      .shell { grid-template-columns: 1fr; } 
+      .kpis { grid-template-columns: repeat(2, 1fr); } 
+      .grid { grid-template-columns: 1fr; } 
+      .sidebar { min-height: auto; } 
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" data-od-id="sidebar">
+      <div class="brand">
+        <div class="logo">OD</div>
+        <span>open-design</span>
+      </div>
+      
+      <section>
+        <div class="group-label"><span class="dot-ring"></span> Repository</div>
+        <div class="nav">
+          <a href="#overview" class="nav-item active">Overview</a>
+          <a href="#activity" class="nav-item">Activity <span class="count">5</span></a>
+          <a href="#contributors" class="nav-item">Contributors <span class="count">87</span></a>
+          <a href="#community" class="nav-item">Community</a>
+        </div>
+      </section>
+      
+      <section>
+        <div class="group-label"><span class="dot-ring"></span> Metrics</div>
+        <div class="nav">
+          <a href="#growth-chart" class="nav-item">Stars Growth</a>
+          <a href="#fork-trend" class="nav-item">Fork Activity</a>
+          <a href="#activity" class="nav-item">Issue Trends</a>
+          <a href="#activity" class="nav-item">PR Velocity</a>
+        </div>
+      </section>
+      
+      <section>
+        <div class="group-label"><span class="dot-ring"></span> Quick Links</div>
+        <div class="nav">
+          <a href="https://github.com/nexu-io/open-design" class="nav-item">GitHub Repository</a>
+          <a href="https://github.com/nexu-io/open-design#readme" class="nav-item">Documentation</a>
+          <a href="https://github.com/nexu-io/open-design/discussions" class="nav-item">Discussions</a>
+        </div>
+      </section>
+    </aside>
+    
+    <main class="main">
+      <div class="topbar" data-od-id="topbar">
+        <div class="topbar-title">
+          <svg class="topbar-icon" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          <span>open-design Dashboard</span>
+        </div>
+        <div class="actions">
+          <button>May 6, 2026</button>
+          <button>⟳ Refresh</button>
+        </div>
+      </div>
+      
+      <div class="content">
+        <header class="page-head" data-od-id="repo-header" id="overview">
+          <div>
+            <h1>nexu-io/open-design</h1>
+            <div class="subtitle">Local-first, open-source alternative to Anthropic&#x27;s Claude Design. 19 Skills · 71 brand-grade Design Systems · Generate web/desktop/mobile prototypes · slides · images · videos</div>
+          </div>
+          <div class="actions">
+            <a class="button" href="https://github.com/nexu-io/open-design">View on GitHub →</a>
+          </div>
+        </header>
+        
+        <section class="card">
+          <div class="tabs" role="tablist" aria-label="Dashboard sections">
+            <a href="#overview" class="tab active" role="tab">Metrics</a>
+            <a href="#activity" class="tab" role="tab">Activity</a>
+            <a href="#contributors" class="tab" role="tab">Contributors</a>
+            <a href="#community" class="tab" role="tab">Community</a>
+          </div>
+          
+          <div class="kpis" style="margin-top:16px" data-od-id="kpi-strip">
+            <div class="kpi">
+              <div class="kpi-top">
+                <span class="glyph">⭐</span>
+                <span class="kpi-label">Stars</span>
+              </div>
+              <div class="kpi-num">29,070</div>
+              <div class="kpi-trend">+2,847 this week</div>
+            </div>
+            
+            <div class="kpi">
+              <div class="kpi-top">
+                <span class="glyph">⑂</span>
+                <span class="kpi-label">Forks</span>
+              </div>
+              <div class="kpi-num">3,167</div>
+              <div class="kpi-trend">+218 this week</div>
+            </div>
+            
+            <div class="kpi">
+              <div class="kpi-top">
+                <span class="glyph">◎</span>
+                <span class="kpi-label">Contributors</span>
+              </div>
+              <div class="kpi-num">87</div>
+              <div class="kpi-trend">12 active</div>
+            </div>
+            
+            <div class="kpi">
+              <div class="kpi-top">
+                <span class="glyph">◌</span>
+                <span class="kpi-label">Open Issues</span>
+              </div>
+              <div class="kpi-num">230</div>
+              <div class="kpi-trend down">450 total</div>
+            </div>
+            
+            <div class="kpi">
+              <div class="kpi-top">
+                <span class="glyph">↑</span>
+                <span class="kpi-label">Pull Requests</span>
+              </div>
+              <div class="kpi-num">5</div>
+              <div class="kpi-trend down">653 total</div>
+            </div>
+          </div>
+        </section>
+        
+        <section class="grid">
+          <div class="card" data-od-id="growth-chart" id="growth-chart">
+            <div class="card-title"><span class="dot-ring"></span> Star Growth (Last 30 Days)</div>
+            <div class="chart-container">
+              <div class="chart-bars">
+                <div class="bar" style="height: 45%;">
+                  <span class="bar-label">W1</span>
+                </div>
+                <div class="bar" style="height: 62%;">
+                  <span class="bar-label">W2</span>
+                </div>
+                <div class="bar" style="height: 78%;">
+                  <span class="bar-label">W3</span>
+                </div>
+                <div class="bar" style="height: 100%;">
+                  <span class="bar-label">W4</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <aside class="card" data-od-id="contributors" id="contributors">
+            <div class="card-title"><span class="dot-ring"></span> Top Contributors</div>
+            <div class="tick-rule"></div>
+            <div class="contrib">
+              <div class="person">
+                <div class="person-info">
+                  <div class="avatar">
+                    <img src="https://avatars.githubusercontent.com/u/26423749?v=4" alt="pftom" />
+                  </div>
+                  <div>
+                    <div class="person-name">pftom</div>
+                    <div class="person-role">26 contributions</div>
+                  </div>
+                </div>
+                <span class="pill pending-pill">26</span>
+              </div>
+              <div class="person">
+                <div class="person-info">
+                  <div class="avatar">
+                    <img src="https://avatars.githubusercontent.com/u/20859779?v=4" alt="lefarcen" />
+                  </div>
+                  <div>
+                    <div class="person-name">lefarcen</div>
+                    <div class="person-role">18 contributions</div>
+                  </div>
+                </div>
+                <span class="pill pending-pill">18</span>
+              </div>
+              <div class="person">
+                <div class="person-info">
+                  <div class="avatar">
+                    <img src="https://avatars.githubusercontent.com/u/201593046?v=4" alt="Sid-Qin" />
+                  </div>
+                  <div>
+                    <div class="person-name">Sid-Qin</div>
+                    <div class="person-role">17 contributions</div>
+                  </div>
+                </div>
+                <span class="pill pending-pill">17</span>
+              </div>
+              <div class="person">
+                <div class="person-info">
+                  <div class="avatar">
+                    <img src="https://avatars.githubusercontent.com/u/3953668?v=4" alt="nettee" />
+                  </div>
+                  <div>
+                    <div class="person-name">nettee</div>
+                    <div class="person-role">10 contributions</div>
+                  </div>
+                </div>
+                <span class="pill pending-pill">10</span>
+              </div>
+              <div class="person">
+                <div class="person-info">
+                  <div class="avatar">
+                    <img src="https://avatars.githubusercontent.com/u/56862773?v=4" alt="alchemistklk" />
+                  </div>
+                  <div>
+                    <div class="person-name">alchemistklk</div>
+                    <div class="person-role">9 contributions</div>
+                  </div>
+                </div>
+                <span class="pill pending-pill">9</span>
+              </div>
+            </div>
+          </aside>
+        </section>
+        
+        <section class="grid-full">
+          <div class="card" data-od-id="activity" id="activity">
+            <div class="card-title"><span class="dot-ring"></span> Recent Activity</div>
+            <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 50px;">Type</th>
+                  <th>Title</th>
+                  <th style="width: 120px;">Status</th>
+                  <th style="width: 140px;">Author</th>
+                  <th style="width: 100px;">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <span class="issue-icon pr">PR</span>
+                  </td>
+                  <td><strong>Add Alipay merchant onboarding skill</strong></td>
+                  <td>
+                    <span class="pill feature-pill">feature</span>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center;">
+                      <span class="avatar" style="margin-right: 8px;">
+                        <img src="https://avatars.githubusercontent.com/u/238133142?v=4" alt="leilei926524-tech" />
+                      </span>
+                      <span>leilei926524-tech</span>
+                    </div>
+                  </td>
+                  <td class="mono" style="color: var(--text-tertiary);">2 hours ago</td>
+                </tr>
+                <tr>
+                  <td><span class="issue-icon issue">ISSUE</span></td>
+                  <td><strong>Add clear success feedback after saving API keys in Settings</strong></td>
+                  <td><span class="pill danger-pill">bug</span></td>
+                  <td>
+                    <div style="display: flex; align-items: center;">
+                      <span class="avatar" style="margin-right: 8px;"><img src="https://avatars.githubusercontent.com/u/237175303?v=4" alt="shangxinyu1" /></span>
+                      <span>shangxinyu1</span>
+                    </div>
+                  </td>
+                  <td class="mono" style="color: var(--text-tertiary);">2 hours ago</td>
+                </tr>
+                <tr>
+                  <td><span class="issue-icon issue">ISSUE</span></td>
+                  <td><strong>hermes json-rpc id 2: Invalid params</strong></td>
+                  <td><span class="pill danger-pill">bug</span></td>
+                  <td>
+                    <div style="display: flex; align-items: center;">
+                      <span class="avatar" style="margin-right: 8px;"><img src="https://avatars.githubusercontent.com/u/42241934?v=4" alt="zlpawn" /></span>
+                      <span>zlpawn</span>
+                    </div>
+                  </td>
+                  <td class="mono" style="color: var(--text-tertiary);">3 hours ago</td>
+                </tr>
+                <tr>
+                  <td><span class="issue-icon pr">PR</span></td>
+                  <td><strong>fix: 修复0.4.0版本聊天窗口宽度溢出问题</strong></td>
+                  <td><span class="pill active-pill">bug-fix</span></td>
+                  <td>
+                    <div style="display: flex; align-items: center;">
+                      <span class="avatar" style="margin-right: 8px;"><img src="https://avatars.githubusercontent.com/u/12208097?v=4" alt="1119302165" /></span>
+                      <span>1119302165</span>
+                    </div>
+                  </td>
+                  <td class="mono" style="color: var(--text-tertiary);">4 hours ago</td>
+                </tr>
+                <tr>
+                  <td><span class="issue-icon issue">ISSUE</span></td>
+                  <td><strong>Fix Open Design not reading the latest model list from Codex CLI</strong></td>
+                  <td><span class="pill danger-pill">bug</span></td>
+                  <td>
+                    <div style="display: flex; align-items: center;">
+                      <span class="avatar" style="margin-right: 8px;"><img src="https://avatars.githubusercontent.com/u/237175303?v=4" alt="shangxinyu1" /></span>
+                      <span>shangxinyu1</span>
+                    </div>
+                  </td>
+                  <td class="mono" style="color: var(--text-tertiary);">5 hours ago</td>
+                </tr>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </section>
+        
+        <section class="grid">
+          <div class="card" id="fork-trend">
+            <div class="card-title"><span class="dot-ring"></span> Fork Trend (Last 30 Days)</div>
+            <div class="chart-container">
+              <div class="trend-line">
+                <div class="trend-point" style="height: 35%;"></div>
+                <div class="trend-point" style="height: 42%;"></div>
+                <div class="trend-point" style="height: 48%;"></div>
+                <div class="trend-point" style="height: 55%;"></div>
+                <div class="trend-point" style="height: 61%;"></div>
+                <div class="trend-point" style="height: 68%;"></div>
+                <div class="trend-point" style="height: 74%;"></div>
+                <div class="trend-point" style="height: 82%;"></div>
+                <div class="trend-point" style="height: 88%;"></div>
+                <div class="trend-point" style="height: 95%;"></div>
+                <div class="trend-point" style="height: 100%;"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title"><span class="dot-ring"></span> Repository Stats</div>
+            <div class="tick-rule"></div>
+            <table>
+              <tbody>
+                <tr>
+                  <td><strong>Primary Language</strong></td>
+                  <td style="text-align: right;">TypeScript</td>
+                </tr>
+                <tr>
+                  <td><strong>License</strong></td>
+                  <td style="text-align: right;">Apache-2.0</td>
+                </tr>
+                <tr>
+                  <td><strong>Created</strong></td>
+                  <td style="text-align: right;">Apr 28, 2026</td>
+                </tr>
+                <tr>
+                  <td><strong>Last Updated</strong></td>
+                  <td style="text-align: right;">May 6, 2026</td>
+                </tr>
+                <tr>
+                  <td><strong>Repository Size</strong></td>
+                  <td style="text-align: right;">112 MB</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <footer class="provenance-note" data-od-id="provenance">
+          Updated May 6, 2026 from public GitHub API fields. Estimated trend data is documented in provenance.json.
+        </footer>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

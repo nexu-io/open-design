@@ -10,6 +10,13 @@ import { collectMacSizeReport } from "./report.js";
 import type { MacBuildOutput, MacPackResult, MacPackTiming } from "./types.js";
 import { ensureMacWorkspaceBuild } from "./workspace.js";
 
+function logMacBuildProgress(message: string, fields: Record<string, unknown> = {}): void {
+  const suffix = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  process.stderr.write(`[tools-pack mac] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
+}
+
 export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   const paths = resolveMacPaths(config);
   const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
@@ -17,8 +24,18 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   const timings: MacPackTiming[] = [];
   const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
+    logMacBuildProgress("phase:start", { phase });
     try {
-      return await task();
+      const result = await task();
+      logMacBuildProgress("phase:done", { durationMs: Date.now() - startedAt, phase });
+      return result;
+    } catch (error) {
+      logMacBuildProgress("phase:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
+      throw error;
     } finally {
       timings.push({ durationMs: Date.now() - startedAt, phase });
     }

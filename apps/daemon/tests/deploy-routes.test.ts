@@ -549,17 +549,23 @@ describe('deploy provider routes', () => {
             headers: { 'content-type': 'application/json' },
           });
         }
-        if (url.includes(`/pages/projects/${expectedPagesProject}/domains?`) && method === 'GET') {
+        if (url.endsWith(`/pages/projects/${expectedPagesProject}/domains/demo.example.com`) && method === 'GET') {
           domainListCount += 1;
-          const result =
-            domainListCount === 1
-              ? []
-              : [{
-                  name: 'demo.example.com',
-                  status: domainListCount === 2 ? 'pending' : 'active',
-                  validation_data: { txt_name: '_cf-custom-hostname.demo.example.com' },
-                  verification_data: { cname: `${expectedPagesProject}.pages.dev` },
-                }];
+          if (domainListCount === 1) {
+            return new Response(JSON.stringify({
+              success: false,
+              errors: [{ message: 'Custom domain not found' }],
+            }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          const result = {
+            name: 'demo.example.com',
+            status: domainListCount === 2 ? 'pending' : 'active',
+            validation_data: { txt_name: '_cf-custom-hostname.demo.example.com' },
+            verification_data: { cname: `${expectedPagesProject}.pages.dev` },
+          };
           return new Response(JSON.stringify({ success: true, result }), {
             status: 200,
             headers: { 'content-type': 'application/json' },

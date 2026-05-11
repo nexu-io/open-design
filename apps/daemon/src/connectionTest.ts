@@ -13,10 +13,8 @@
 // discover that the API key, model, base URL, or CLI is broken.
 //
 // The streaming counterpart for chat lives in `server.ts` under the
-// `/api/proxy/*/stream` routes; this module deliberately duplicates the
-// small URL/redaction helpers rather than restructure those routes (the
-// chat path is the hot path and keeping changes here local protects it
-// from accidental regressions).
+// `/api/proxy/*/stream` routes; both paths share the base URL policy from
+// contracts so Settings and daemon-side checks reject the same hosts.
 
 import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
@@ -24,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   getAgentDef,
+  inspectAgentExecutableResolution,
   resolveAgentBin,
   spawnEnvForAgent,
 } from './agents.js';
@@ -34,13 +33,19 @@ import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
-import type {
-  AgentTestRequest,
-  ConnectionTestKind,
-  ConnectionTestProtocol,
-  ConnectionTestResponse,
-  ProviderTestRequest,
+import type { AgentCliEnvPrefs } from './app-config.js';
+import {
+  isLoopbackApiHost,
+  validateBaseUrl,
+  type AgentTestRequest,
+  type ConnectionTestKind,
+  type ConnectionTestProtocol,
+  type ConnectionTestResponse,
+  type ParsedBaseUrl,
+  type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
+
+export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 const PROVIDER_TIMEOUT_MS = 12_000;
@@ -58,6 +63,56 @@ const SAMPLE_MAX_CHARS = 120;
 // before producing a visible `ok`.
 const PROVIDER_MAX_TOKENS = 100;
 const SMOKE_PROMPT = 'Reply with only: ok';
+
+function codexExecutableGuidance(
+  agentId: string,
+  configuredOverridePath: string | null,
+  pathResolvedPath: string | null,
+): string {
+  if (
+    agentId !== 'codex' ||
+    !configuredOverridePath ||
+    !pathResolvedPath ||
+    configuredOverridePath === pathResolvedPath
+  ) {
+    return '';
+  }
+  return ` Configured Codex path failed: ${configuredOverridePath}. Open Design also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+}
+
+function codexExecutableFallbackSuccessDetail(
+  configuredOverridePath: string,
+  pathResolvedPath: string,
+): string {
+  return `Configured Codex path failed: ${configuredOverridePath}. This test succeeded with the PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+}
+
+function codexConfiguredPathSuccessDetail(
+  configuredOverridePath: string,
+): string {
+  return `This test used the configured Codex path: ${configuredOverridePath}.`;
+}
+
+function codexInvalidConfiguredPathFallbackDetail(
+  configuredValue: string,
+  pathResolvedPath: string,
+): string {
+  return `Configured Codex path is invalid or not executable: ${configuredValue}. This test used the PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+}
+
+function stripCodexBinOverride(
+  prefs: AgentCliEnvPrefs | undefined,
+): AgentCliEnvPrefs | undefined {
+  if (!prefs?.codex?.CODEX_BIN) return prefs;
+  const nextCodex = { ...prefs.codex };
+  delete nextCodex.CODEX_BIN;
+  const next: AgentCliEnvPrefs = {
+    ...prefs,
+    codex: nextCodex,
+  };
+  if (Object.keys(nextCodex).length === 0) delete next.codex;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
 
 // Catches `Bearer …`, `x-api-key`/`api-key`/`x-goog-api-key` headers, and
 // `?key=…` query strings. The provider helpers all funnel error text
@@ -85,105 +140,6 @@ export function redactSecrets(
 
 type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
 type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
-
-function normalizeBracketedIpv6(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1).toLowerCase()
-    : hostname.toLowerCase();
-}
-
-function parseIpv4(hostname: string): [number, number, number, number] | null {
-  const parts = hostname.split('.');
-  if (parts.length !== 4) return null;
-  const parsed = parts.map((part) => {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const value = Number(part);
-    return value >= 0 && value <= 255 ? value : null;
-  });
-  if (parsed.some((part) => part === null)) return null;
-  return parsed as [number, number, number, number];
-}
-
-function isLoopbackIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  return Boolean(parts && parts[0] === 127);
-}
-
-function isPrivateIpv4(hostname: string): boolean {
-  const parts = parseIpv4(hostname);
-  if (!parts) return false;
-  const [a, b] = parts;
-  return (
-    (a === 169 && b === 254) ||
-    a === 10 ||
-    (a === 192 && b === 168) ||
-    (a === 172 && b >= 16 && b <= 31)
-  );
-}
-
-function ipv4MappedToDotted(hostname: string): string | null {
-  const host = normalizeBracketedIpv6(hostname);
-  const mapped = /^::ffff:(.+)$/i.exec(host)?.[1];
-  if (!mapped) return null;
-  if (parseIpv4(mapped.toLowerCase())) return mapped.toLowerCase();
-  const hexParts = mapped.split(':');
-  if (
-    hexParts.length !== 2 ||
-    !hexParts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))
-  ) {
-    return null;
-  }
-  const hi = hexParts[0];
-  const lo = hexParts[1];
-  if (!hi || !lo) return null;
-  const value =
-    (Number.parseInt(hi, 16) << 16) |
-    Number.parseInt(lo, 16);
-  return [
-    (value >>> 24) & 255,
-    (value >>> 16) & 255,
-    (value >>> 8) & 255,
-    value & 255,
-  ].join('.');
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (host === 'localhost' || host === '::1') return true;
-  if (isLoopbackIpv4(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isLoopbackIpv4(mapped));
-}
-
-function isBlockedInternalHost(hostname: string): boolean {
-  const host = normalizeBracketedIpv6(hostname);
-  if (isPrivateIpv4(host)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
-  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
-  const mapped = ipv4MappedToDotted(host);
-  return Boolean(mapped && isPrivateIpv4(mapped));
-}
-
-export function validateBaseUrl(baseUrl: string): {
-  parsed?: URL;
-  error?: string;
-  forbidden?: boolean;
-} {
-  let parsed: URL;
-  try {
-    parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
-  } catch {
-    return { error: 'Invalid baseUrl' };
-  }
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    return { error: 'Only http/https allowed' };
-  }
-  const hostname = parsed.hostname.toLowerCase();
-  if (!isLoopbackHost(hostname) && isBlockedInternalHost(hostname)) {
-    return { error: 'Internal IPs blocked', forbidden: true };
-  }
-  return { parsed };
-}
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
@@ -273,6 +229,15 @@ function inspectProviderCompletion(
     };
   }
 
+  if (protocol === 'ollama') {
+    const msg = (obj as { message?: { content?: unknown } }).message;
+    const hasContent = typeof msg?.content === 'string';
+    return {
+      valid: Array.isArray((obj as { messages?: unknown }).messages) || hasContent,
+      ...(hasContent ? { sample: truncateSample(msg?.content) } : {}),
+    };
+  }
+
   return { valid: false };
 }
 
@@ -336,11 +301,11 @@ function networkErrorToKind(err: unknown): ConnectionTestKind {
 
 async function validateLocalOpenAiModel(
   input: ProviderTestRequest,
-  parsed: URL,
+  parsed: ParsedBaseUrl,
   signal: AbortSignal,
   start: number,
 ): Promise<ConnectionTestResponse | null> {
-  if (input.protocol !== 'openai' || !isLoopbackHost(parsed.hostname)) {
+  if (input.protocol !== 'openai' || !isLoopbackApiHost(parsed.hostname)) {
     return null;
   }
 
@@ -351,6 +316,7 @@ async function validateLocalOpenAiModel(
       method: 'GET',
       headers: { authorization: `Bearer ${String(input.apiKey)}` },
       signal,
+      redirect: 'error',
     });
   } catch {
     // Local OpenAI-compatible servers vary; if model listing is unavailable,
@@ -437,18 +403,32 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         extractText: extractOpenAIMessageText,
       };
     case 'azure': {
+      const url = new URL(baseUrl);
+      const basePath = url.pathname.replace(/\/+$/, '');
+      const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
       const apiVersion =
         typeof input.apiVersion === 'string' && input.apiVersion.trim()
           ? input.apiVersion.trim()
-          : '2024-10-21';
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
+          : usesVersionedOpenAIPath
+            ? ''
+            : '2024-10-21';
+      url.pathname = usesVersionedOpenAIPath
+        ? `${basePath}/chat/completions`
+        : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+      if (usesVersionedOpenAIPath && !apiVersion) {
+        url.searchParams.delete('api-version');
+      }
+      if (apiVersion) {
+        url.searchParams.set('api-version', apiVersion);
+      }
       return {
-        url: `${trimmedBase}/openai/deployments/${encodeURIComponent(model)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`,
+        url: url.toString(),
         headers: {
           'content-type': 'application/json',
           'api-key': apiKey,
         },
         body: {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
           max_tokens: PROVIDER_MAX_TOKENS,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
@@ -458,8 +438,6 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
     }
     case 'google': {
       const trimmedBase = baseUrl.replace(/\/+$/, '');
-      // Non-streaming variant — deliberately not :streamGenerateContent so
-      // we can JSON.parse the response in one shot.
       return {
         url: `${trimmedBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
         headers: {
@@ -483,6 +461,28 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
               typeof p?.text === 'string' ? p.text : '',
             )
             .join('');
+        },
+      };
+    }
+    case 'ollama': {
+      const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+      return {
+        url: `${trimmedBase}/api/chat`,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: {
+          model,
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+        },
+        extractText: (data) => {
+          const message = (data as { message?: { content?: unknown } }).message;
+          if (message && typeof (message as { content?: unknown }).content === 'string') {
+            return (message as { content: string }).content;
+          }
+          return '';
         },
       };
     }
@@ -560,6 +560,7 @@ export async function testProviderConnection(
       headers: call.headers,
       body: JSON.stringify(call.body),
       signal: controller.signal,
+      redirect: 'error',
     });
     const latencyMs = Date.now() - start;
     if (response.ok) {
@@ -588,7 +589,7 @@ export async function testProviderConnection(
         input.protocol,
         data,
         model,
-        isLoopbackHost(validated.parsed.hostname),
+        isLoopbackApiHost(validated.parsed.hostname),
       );
       if (completion.kind) {
         const detail = redactSecrets(completion.detail ?? '', [input.apiKey]);
@@ -865,7 +866,6 @@ function attachAgentStreamHandlers(
       model: model ?? null,
       send,
       imagePaths: [],
-      uploadRoot: undefined,
     });
   } else if (def.streamFormat === 'acp-json-rpc') {
     acpSession = attachAcpSession({
@@ -914,7 +914,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-export async function testAgentConnection(
+async function testAgentConnectionInternal(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
@@ -936,6 +936,10 @@ export async function testAgentConnection(
   const configuredAgentEnv = agentCliEnvForAgent(
     validateAgentCliEnv(input.agentCliEnv),
     input.agentId,
+  );
+  const executableResolution = inspectAgentExecutableResolution(
+    def,
+    configuredAgentEnv,
   );
   const resolvedBin = resolveAgentBin(input.agentId, configuredAgentEnv);
   if (!resolvedBin) {
@@ -1104,10 +1108,17 @@ export async function testAgentConnection(
       if (winner.kind === 'spawnError') {
         const latencyMs = Date.now() - start;
         const detail = redactSecrets(winner.error.message);
+        const guidance = redactSecrets(
+          codexExecutableGuidance(
+            input.agentId,
+            executableResolution.configuredOverridePath,
+            executableResolution.pathResolvedPath,
+          ),
+        );
         const errnoCode = (winner.error as NodeJS.ErrnoException).code;
         const isMissing = errnoCode === 'ENOENT';
         console.warn(
-          `[test:agent] ${def.name} → spawn_failed: ${detail}`,
+          `[test:agent] ${def.name} → spawn_failed: ${detail}${guidance}`,
         );
         return {
           ok: false,
@@ -1115,7 +1126,7 @@ export async function testAgentConnection(
           latencyMs,
           model,
           agentName: def.name,
-          detail,
+          detail: `${detail}${guidance}`,
         };
       }
 
@@ -1141,9 +1152,16 @@ export async function testAgentConnection(
           .filter(Boolean)
           .join(' · '),
       );
+      const guidance = redactSecrets(
+        codexExecutableGuidance(
+          input.agentId,
+          executableResolution.configuredOverridePath,
+          executableResolution.pathResolvedPath,
+        ),
+      );
       const label = buffered ? 'exit_failed' : 'no_text';
       console.warn(
-        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'})`,
+        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'}${guidance})`,
       );
       return {
         ok: false,
@@ -1151,7 +1169,8 @@ export async function testAgentConnection(
         latencyMs,
         model,
         agentName: def.name,
-        detail: detail || 'Agent exited without producing assistant text',
+        detail:
+          `${detail || 'Agent exited without producing assistant text'}${guidance}`,
       };
     };
 
@@ -1254,4 +1273,90 @@ export async function testAgentConnection(
         // Best-effort cleanup; the OS reaps /tmp eventually.
       });
   }
+}
+
+export async function testAgentConnection(
+  input: AgentConnectionInput,
+): Promise<ConnectionTestResponse> {
+  const primaryResult = await testAgentConnectionInternal(input);
+  const validatedPrefs = validateAgentCliEnv(input.agentCliEnv);
+  const configuredCodexBin = validatedPrefs?.codex?.CODEX_BIN?.trim() || '';
+  const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
+  const def = getAgentDef(input.agentId);
+  const executableResolution = def
+    ? inspectAgentExecutableResolution(def, configuredAgentEnv)
+    : {
+        configuredOverridePath: null,
+        pathResolvedPath: null,
+        selectedPath: null,
+      };
+  if (
+    input.agentId === 'codex' &&
+    primaryResult.ok &&
+    configuredCodexBin
+  ) {
+    if (executableResolution.configuredOverridePath) {
+      return {
+        ...primaryResult,
+        configuredExecutablePath: executableResolution.configuredOverridePath,
+        usedExecutablePath: executableResolution.configuredOverridePath,
+        usedExecutableSource: 'configured',
+        ...(executableResolution.pathResolvedPath
+          ? { detectedExecutablePath: executableResolution.pathResolvedPath }
+          : {}),
+        detail: redactSecrets(
+          codexConfiguredPathSuccessDetail(
+            executableResolution.configuredOverridePath,
+          ),
+        ),
+      };
+    }
+    if (executableResolution.pathResolvedPath) {
+      return {
+        ...primaryResult,
+        configuredExecutablePath: configuredCodexBin,
+        detectedExecutablePath: executableResolution.pathResolvedPath,
+        usedExecutablePath: executableResolution.pathResolvedPath,
+        usedExecutableSource: 'fallback_invalid',
+        detail: redactSecrets(
+          codexInvalidConfiguredPathFallbackDetail(
+            configuredCodexBin,
+            executableResolution.pathResolvedPath,
+          ),
+        ),
+      };
+    }
+  }
+  if (
+    input.agentId !== 'codex' ||
+    primaryResult.ok ||
+    !new Set<ConnectionTestKind>(['agent_spawn_failed', 'agent_not_installed', 'unknown']).has(primaryResult.kind) ||
+    !executableResolution.configuredOverridePath ||
+    !executableResolution.pathResolvedPath ||
+    executableResolution.configuredOverridePath === executableResolution.pathResolvedPath
+  ) {
+    return primaryResult;
+  }
+  const fallbackResult = await testAgentConnectionInternal(
+    {
+      ...input,
+      agentCliEnv: stripCodexBinOverride(validatedPrefs),
+    },
+  );
+  if (!fallbackResult.ok) {
+    return primaryResult;
+  }
+  return {
+    ...fallbackResult,
+    configuredExecutablePath: executableResolution.configuredOverridePath,
+    detectedExecutablePath: executableResolution.pathResolvedPath,
+    usedExecutablePath: executableResolution.pathResolvedPath,
+    usedExecutableSource: 'fallback_failed',
+    detail: redactSecrets(
+      codexExecutableFallbackSuccessDetail(
+        executableResolution.configuredOverridePath,
+        executableResolution.pathResolvedPath,
+      ),
+    ),
+  };
 }

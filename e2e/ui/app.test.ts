@@ -291,6 +291,22 @@ for (const entry of automatedUiScenarios()) {
       await runCommentAttachmentFlow(page, entry);
       return;
     }
+    if (entry.flow === 'deck-pagination-next-prev-correctness') {
+      await runDeckPaginationNextPrevCorrectnessFlow(page);
+      return;
+    }
+    if (entry.flow === 'deck-pagination-per-file-isolated') {
+      await runDeckPaginationPerFileIsolatedFlow(page);
+      return;
+    }
+    if (entry.flow === 'uploaded-image-renders-in-preview') {
+      await runUploadedImageRendersInPreviewFlow(page);
+      return;
+    }
+    if (entry.flow === 'python-source-preview') {
+      await runPythonSourcePreviewFlow(page);
+      return;
+    }
 
     await sendPrompt(page, entry.prompt);
 
@@ -592,7 +608,7 @@ async function sendPrompt(
       await expect(input).toHaveValue(prompt, { timeout: 1500 });
       await expect(sendButton).toBeEnabled({ timeout: 1500 });
       const chatResponse = page.waitForResponse(
-        (resp: Response) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
+        isCreateRunResponse,
         { timeout: 2000 },
       );
       await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -607,7 +623,7 @@ async function sendPrompt(
         await expect(input).toHaveValue(prompt, { timeout: 1500 });
         await expect(sendButton).toBeEnabled({ timeout: 1500 });
         const chatResponse = page.waitForResponse(
-          (resp: Response) => resp.url().includes('/api/runs') && resp.request().method() === 'POST',
+          isCreateRunResponse,
           { timeout: 2000 },
         );
         await sendButton.evaluate((button: HTMLButtonElement) => button.click());
@@ -618,6 +634,16 @@ async function sendPrompt(
       }
     }
   }
+}
+
+function isCreateRunResponse(resp: Response): boolean {
+  const url = new URL(resp.url());
+  return url.pathname === '/api/runs' && resp.request().method() === 'POST';
+}
+
+function isCreateRunRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/runs' && request.method() === 'POST';
 }
 
 async function runDesignSystemSelectionFlow(
@@ -807,7 +833,7 @@ async function runCommentAttachmentFlow(
   await expect(page.getByTestId('staged-comment-attachments')).toContainText('hero-title');
 
   const runRequest = page.waitForRequest(
-    (request: Request) => request.url().includes('/api/runs') && request.method() === 'POST',
+    isCreateRunRequest,
   );
   await page.getByTestId('chat-send').click();
   const request = await runRequest;
@@ -825,6 +851,122 @@ async function runCommentAttachmentFlow(
       filePath: 'commentable-artifact.html',
     }),
   ]);
+}
+
+async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedDeckArtifact(page, projectId, 'pagination.html', 'Pagination Deck', ['Slide One', 'Slide Two', 'Slide Three']);
+  await page.reload();
+  await openDesignFile(page, 'pagination.html');
+
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Three')).toBeVisible();
+  await page.getByLabel('Previous slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+}
+
+async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedDeckArtifact(page, projectId, 'deck-alpha.html', 'Deck Alpha', ['Alpha One', 'Alpha Two']);
+  await seedDeckArtifact(page, projectId, 'deck-beta.html', 'Deck Beta', ['Beta One', 'Beta Two']);
+  await page.reload();
+
+  await openDesignFile(page, 'deck-alpha.html');
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByText('Alpha One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Alpha Two')).toBeVisible();
+
+  await page.getByTestId('design-files-tab').click();
+  await openDesignFile(page, 'deck-beta.html');
+  await expect(frame.getByText('Beta One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Beta Two')).toBeVisible();
+
+  await page.getByRole('tab', { name: /deck-alpha\.html/i }).click();
+  await expect(frame.getByText('Alpha Two')).toBeVisible();
+  await page.getByRole('tab', { name: /deck-beta\.html/i }).click();
+  await expect(frame.getByText('Beta Two')).toBeVisible();
+}
+
+async function runUploadedImageRendersInPreviewFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
+  await seedProjectFile(page, projectId, 'brand.png', pngBase64, 'base64');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'image-preview.html',
+    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="brand.png"></main></body></html>',
+  );
+  await page.reload();
+  await openDesignFile(page, 'image-preview.html');
+
+  const image = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('img', { name: 'Brand logo' });
+  await expect(image).toBeVisible();
+  await expect
+    .poll(async () => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
+    .toBe(true);
+}
+
+async function runPythonSourcePreviewFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedProjectFile(page, projectId, 'app.py', 'def greet():\n    return "hello from python"\n');
+  await page.reload();
+  await openDesignFile(page, 'app.py');
+
+  await expect(page.locator('.code-viewer')).toContainText('def greet');
+  await expect(page.locator('.code-viewer')).toContainText('hello from python');
+}
+
+async function seedDeckArtifact(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  title: string,
+  slides: string[],
+) {
+  const slideHtml = slides
+    .map((slide, index) => `<section class="slide" data-od-id="slide-${index + 1}"${index === 0 ? '' : ' hidden'}><h1>${slide}</h1></section>`)
+    .join('\n');
+  await seedProjectFile(
+    page,
+    projectId,
+    fileName,
+    `<!doctype html><html><body>${slideHtml}</body></html>`,
+    undefined,
+    {
+      version: 1,
+      kind: 'deck',
+      title,
+      entry: fileName,
+      renderer: 'deck-html',
+      exports: ['html', 'pptx'],
+    },
+  );
+}
+
+async function seedProjectFile(
+  page: Page,
+  projectId: string,
+  name: string,
+  content: string,
+  encoding?: 'base64',
+  artifactManifest?: Record<string, unknown>,
+) {
+  const response = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: {
+      name,
+      content,
+      ...(encoding ? { encoding } : {}),
+      ...(artifactManifest ? { artifactManifest } : {}),
+    },
+  });
+  expect(response.ok()).toBeTruthy();
 }
 
 async function createProjectNameOnly(
@@ -1015,12 +1157,13 @@ async function runDesignFilesUploadFlow(
     hasText: 'moodboard.png',
   });
   await expect(fileRow).toBeVisible();
-  await fileRow.click();
+  const nameBtn = fileRow.getByRole('button').first();
+  await nameBtn.click();
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
 
-  await fileRow.dblclick();
+  await nameBtn.dblclick();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
 }
 
