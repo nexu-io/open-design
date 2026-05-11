@@ -5611,7 +5611,11 @@ function TextViewer({
     }
   }
 
-  const lineCount = text ? text.split('\n').length : 0;
+  const displayText = useMemo(
+    () => (text == null ? null : formatJsonFileTextForDisplay(file, text)),
+    [file.name, file.mime, text],
+  );
+  const lineCount = displayText ? displayText.split('\n').length : 0;
 
   return (
     <div className="viewer text-viewer">
@@ -5650,14 +5654,27 @@ function TextViewer({
       <div className="viewer-body">
         {text === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : lineCount > 0 ? (
-          <CodeWithLines text={text} />
+        ) : displayText !== null && lineCount > 0 ? (
+          <CodeWithLines text={displayText} />
         ) : (
-          <pre className="viewer-source">{text}</pre>
+          <pre className="viewer-source">{displayText}</pre>
         )}
       </div>
     </div>
   );
+}
+
+function formatJsonFileTextForDisplay(file: ProjectFile, text: string): string {
+  if (!isJsonFile(file)) return text;
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+}
+
+function isJsonFile(file: ProjectFile): boolean {
+  return file.name.toLowerCase().endsWith('.json') || file.mime.toLowerCase().startsWith('application/json');
 }
 
 function MarkdownViewer({

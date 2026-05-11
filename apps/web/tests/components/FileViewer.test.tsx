@@ -58,6 +58,32 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+describe('FileViewer JSON artifacts', () => {
+  it('pretty-prints valid JSON in the text viewer', async () => {
+    const file = baseFile({
+      name: 'data.json',
+      path: 'data.json',
+      kind: 'code',
+      mime: 'application/json',
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/data.json') {
+        return new Response('{"title":"Launch Metrics","stats":{"views":42,"active":true}}');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.lines')?.textContent).toBe(
+        '{\n  "title": "Launch Metrics",\n  "stats": {\n    "views": 42,\n    "active": true\n  }\n}',
+      );
+    });
+  });
+});
+
 describe('FileViewer SVG artifacts', () => {
   it('routes SVG artifacts to the SVG viewer instead of the generic image viewer', () => {
     const file = baseFile({
