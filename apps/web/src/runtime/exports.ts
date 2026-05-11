@@ -109,9 +109,9 @@ export async function exportProjectAsPdf(opts: {
     console.warn('[exportProjectAsPdf] falling back to browser print:', err);
     opts.fallbackPdf();
     void showCompletionNotification({
-      status: 'failed',
-      title: 'Export Failed',
-      body: 'Desktop PDF export failed. Opening browser print dialog instead.',
+      status: 'succeeded',
+      title: 'PDF Export',
+      body: 'Opening browser print dialog for PDF export.',
     });
     return 'fallback';
   }
