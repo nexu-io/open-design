@@ -6455,6 +6455,7 @@ button.connector-action.is-loading {
 .design-card-name {
   font-weight: 600;
   font-size: 13px;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
