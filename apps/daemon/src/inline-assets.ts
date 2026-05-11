@@ -189,10 +189,22 @@ export function readHtmlAttr(tag: string, name: string): string | null {
 
 // HTML boolean attribute presence test — matches `<tag … name>` or
 // `<tag … name=""…>` without requiring a value, but does NOT match a
-// substring inside another attribute's value (e.g. `data-foo="disabled"`
-// must NOT count as `disabled` being set).
+// substring inside another attribute's value (e.g. `data-note="content
+// disabled stuff"` must NOT count as `disabled` being set).
+//
+// Implementation: strip quoted attribute values out of the tag first
+// (replace `"…"` and `'…'` with empty quotes), then run the lookahead
+// regex over the remaining structural-attr-only string. The lookahead
+// requires `\s|=|/?>` after the attr name, so a bare `name`,
+// `name=""`, `name="…"`, or `name/>` all match — but a substring of
+// any value cannot match because values have been stripped.
+const ATTR_VALUE_QUOTE_DOUBLE_RE = /=\s*"[^"]*"/g;
+const ATTR_VALUE_QUOTE_SINGLE_RE = /=\s*'[^']*'/g;
 export function hasBooleanHtmlAttr(tag: string, name: string): boolean {
-  return new RegExp(`\\s${name}(?=\\s|=|/?>)`, 'i').test(tag);
+  const stripped = tag
+    .replace(ATTR_VALUE_QUOTE_DOUBLE_RE, '=""')
+    .replace(ATTR_VALUE_QUOTE_SINGLE_RE, "=''");
+  return new RegExp(`\\s${name}(?=\\s|=|/?>)`, 'i').test(stripped);
 }
 
 export function escapeHtmlAttr(value: string): string {
