@@ -17,7 +17,7 @@ triggers:
   - "daily digest"
   - "morning briefing"
   - "每日简报"
-  - "每日简报"
+  - "早安简报"
   - "跨工具汇总"
 od:
   mode: prototype
