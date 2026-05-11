@@ -59,6 +59,7 @@ import {
   applyAppearanceToDocument,
   normalizeAccentColor,
 } from '../state/appearance';
+import { isAutosaveDraftOnlyChange } from '../App';
 import {
   FAILURE_SOUNDS,
   SUCCESS_SOUNDS,
@@ -1217,6 +1218,13 @@ export function SettingsDialog({
   const autosaveRetryTimerRef = useRef<number | null>(null);
   const autosavePendingFlushRef = useRef(false);
   const autosaveLatestRef = useRef<AppConfig>(cfg);
+  // Baseline used by the draft-only detector: the snapshot at the most
+  // recent successful autosave (or the initial cfg on mount). Compared
+  // against the current snapshot to decide whether the only edits
+  // since last save are intentionally-stripped fields like the
+  // Composio API key — in which case we must NOT flash "All changes
+  // saved", because the draft has not actually been persisted.
+  const autosaveLastSavedRef = useRef<AppConfig>(cfg);
   const mediaProvidersChangeVersionRef = useRef(0);
   const lastSyncedMediaProvidersVersionRef = useRef(0);
   const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
@@ -1224,6 +1232,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
+      autosaveLastSavedRef.current = cfg;
       return;
     }
     setAutosaveStatus('pending');
@@ -1247,10 +1256,27 @@ export function SettingsDialog({
       const persistOptions = {
         forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
       };
+      // Draft-only edit (e.g. the user is mid-typing the Composio API
+      // key, which only commits via the explicit "Save key" gesture):
+      // the persisted shape would be identical to what is already on
+      // disk, so a save would be a no-op that mis-reports "Saved" and
+      // makes users trust that a sensitive key was persisted when it
+      // was not. Skip the persist and settle the indicator to idle.
+      // The forced media-provider sync path still runs because that
+      // is a real outbound effect even when the persisted shape
+      // hasn't changed.
+      if (
+        !persistOptions.forceMediaProviderSync
+        && isAutosaveDraftOnlyChange(snapshot, autosaveLastSavedRef.current)
+      ) {
+        setAutosaveStatus('idle');
+        return;
+      }
       setAutosaveStatus('saving');
       void (async () => {
         try {
           await onPersist(snapshot, persistOptions);
+          autosaveLastSavedRef.current = snapshot;
           if (persistOptions.forceMediaProviderSync) {
             lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
           }
