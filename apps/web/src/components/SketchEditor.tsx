@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
-import type { SketchDocument, SketchItem } from './sketch-model';
+import type { SketchItem } from './sketch-model';
 
 export type Tool = 'select' | 'pen' | 'text' | 'rect' | 'arrow' | 'eraser';
 
@@ -10,6 +10,7 @@ interface Props {
   // changes via onItemsChange.
   items: SketchItem[];
   onItemsChange: (items: SketchItem[]) => void;
+  onClear?: () => void;
   onSave: () => Promise<void> | void;
   onCancel?: () => void;
   saving?: boolean;
@@ -20,6 +21,7 @@ interface Props {
 export function SketchEditor({
   items,
   onItemsChange,
+  onClear,
   onSave,
   onCancel,
   saving = false,
@@ -152,6 +154,10 @@ export function SketchEditor({
     onItemsChange(items.slice(0, -1));
   }
   function handleClear() {
+    if (onClear) {
+      onClear();
+      return;
+    }
     onItemsChange([]);
   }
 
@@ -223,7 +229,7 @@ export function SketchEditor({
         <button
           className="primary"
           onClick={() => void onSave()}
-          disabled={saving || items.length === 0}
+          disabled={saving || (!dirty && items.length === 0)}
         >
           {saving ? t('sketch.saving') : t('common.save')}
         </button>

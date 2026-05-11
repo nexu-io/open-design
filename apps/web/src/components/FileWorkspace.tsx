@@ -65,6 +65,7 @@ interface Props {
 interface SketchState {
   version: number;
   rawItems: unknown[];
+  discardRawItemsOnSave: boolean;
   items: SketchItem[];
   dirty: boolean;
   persisted: boolean;
@@ -460,6 +461,7 @@ export function FileWorkspace({
       [name]: {
         version: 1,
         rawItems: [],
+        discardRawItemsOnSave: false,
         items: [],
         dirty: false,
         persisted: false,
@@ -485,6 +487,7 @@ export function FileWorkspace({
         [activeTab]: {
           version: doc.version,
           rawItems: doc.rawItems,
+          discardRawItemsOnSave: false,
           items: doc.items,
           dirty: false,
           persisted: true,
@@ -505,6 +508,7 @@ export function FileWorkspace({
         ...(curr[name] ?? {
           version: 1,
           rawItems: [],
+          discardRawItemsOnSave: false,
           persisted: false,
           loaded: true,
           saving: false,
@@ -515,11 +519,34 @@ export function FileWorkspace({
     }));
   }
 
+  function clearSketch(name: string) {
+    setSketches((curr) => ({
+      ...curr,
+      [name]: {
+        ...(curr[name] ?? {
+          version: 1,
+          rawItems: [],
+          discardRawItemsOnSave: false,
+          persisted: false,
+          loaded: true,
+          saving: false,
+        }),
+        items: [],
+        dirty: true,
+        discardRawItemsOnSave: true,
+      } as SketchState,
+    }));
+  }
+
   async function saveSketch(name: string) {
     const entry = sketches[name];
     if (!entry) return;
     setSketches((curr) => ({ ...curr, [name]: { ...curr[name]!, saving: true } }));
-    const doc = buildSketchDocument(entry.version, entry.rawItems, entry.items);
+    const doc = buildSketchDocument(
+      entry.version,
+      entry.discardRawItemsOnSave ? [] : entry.rawItems,
+      entry.items,
+    );
     const file = await writeProjectTextFile(projectId, name, JSON.stringify(doc, null, 2));
     if (file) {
       setSketches((curr) => ({
@@ -528,6 +555,7 @@ export function FileWorkspace({
           ...curr[name]!,
           version: doc.version,
           rawItems: doc.items.slice(),
+          discardRawItemsOnSave: false,
           dirty: false,
           persisted: true,
           saving: false,
@@ -734,6 +762,7 @@ export function FileWorkspace({
               fileName={activeFile.name}
               items={activeSketch.items}
               onItemsChange={(items) => setSketchItems(activeFile.name, items)}
+              onClear={() => clearSketch(activeFile.name)}
               onSave={() => saveSketch(activeFile.name)}
               saving={activeSketch.saving}
               dirty={activeSketch.dirty || !activeSketch.persisted}

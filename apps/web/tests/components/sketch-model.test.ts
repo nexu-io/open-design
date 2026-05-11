@@ -75,4 +75,13 @@ describe('sketch-model', () => {
       ],
     });
   });
+
+  it('drops unsupported raw items when rebuilding from an explicit clear state', () => {
+    const rebuilt = buildSketchDocument(3, [], []);
+
+    expect(rebuilt).toEqual({
+      version: 3,
+      items: [],
+    });
+  });
 });
