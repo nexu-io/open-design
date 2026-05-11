@@ -37,4 +37,27 @@ describe('<TheaterDegraded> (Phase 8)', () => {
       expect(text.length).toBeGreaterThan(20);
     }
   });
+
+  it('assigns a unique heading id per instance via useId (PR #1314 review)', () => {
+    // Lefarcen P3: the previous hardcoded `id="theater-degraded-heading"`
+    // would produce duplicate ids when two chips render on the same page
+    // (chat history rendering several completed runs). Two chips must
+    // resolve their own `aria-labelledby` references.
+    render(
+      <div>
+        <TheaterDegraded reason="malformed_block" adapter="pi-rpc" />
+        <TheaterDegraded reason="missing_artifact" adapter="codex" />
+      </div>,
+    );
+    const sections = screen.getAllByRole('status');
+    expect(sections).toHaveLength(2);
+    const labelledByA = sections[0]!.getAttribute('aria-labelledby');
+    const labelledByB = sections[1]!.getAttribute('aria-labelledby');
+    expect(labelledByA).toBeTruthy();
+    expect(labelledByB).toBeTruthy();
+    expect(labelledByA).not.toBe(labelledByB);
+    // Each heading id is actually referenced by its own section.
+    expect(document.getElementById(labelledByA!)?.tagName).toBe('H3');
+    expect(document.getElementById(labelledByB!)?.tagName).toBe('H3');
+  });
 });

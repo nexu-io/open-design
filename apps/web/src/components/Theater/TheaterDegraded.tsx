@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
 import type { DegradedReason } from '@open-design/contracts/critique';
@@ -24,14 +25,18 @@ const REASON_KEY: Record<DegradedReason, keyof Dict> = {
  */
 export function TheaterDegraded({ reason, adapter }: Props) {
   const t = useT();
+  // Per-instance heading id so two chips on the same page (e.g. a
+  // chat history that renders multiple completed runs) keep their
+  // aria-labelledby references unambiguous. Lefarcen P3 on PR #1314.
+  const headingId = useId();
   return (
     <section
       className="theater-degraded"
       role="status"
       data-reason={reason}
-      aria-labelledby="theater-degraded-heading"
+      aria-labelledby={headingId}
     >
-      <h3 id="theater-degraded-heading" className="theater-degraded-heading">
+      <h3 id={headingId} className="theater-degraded-heading">
         {t('critiqueTheater.degradedHeading')}
       </h3>
       <p className="theater-degraded-reason">

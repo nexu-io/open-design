@@ -1083,6 +1083,7 @@ export const zhCN: Dict = {
   'critiqueTheater.replaySpeed': '回放速度',
   'critiqueTheater.readOnly': '只读',
   'critiqueTheater.shippedSummary': '已于第 {round} 轮发布 · 综合分 {composite}',
+  'critiqueTheater.interruptedSummary': '已于第 {round} 轮中断 · 最佳综合分 {composite}',
   'critiqueTheater.shippedBadge': '已发布',
   'critiqueTheater.belowThresholdBadge': '低于阈值',
   'critiqueTheater.timedOutBadge': '已超时',

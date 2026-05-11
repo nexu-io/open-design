@@ -1494,6 +1494,7 @@ export interface Dict {
   'critiqueTheater.replaySpeed': string;
   'critiqueTheater.readOnly': string;
   'critiqueTheater.shippedSummary': string;
+  'critiqueTheater.interruptedSummary': string;
   'critiqueTheater.shippedBadge': string;
   'critiqueTheater.belowThresholdBadge': string;
   'critiqueTheater.timedOutBadge': string;

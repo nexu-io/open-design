@@ -8,7 +8,20 @@ import type {
   ShipStatus,
 } from '@open-design/contracts/critique';
 
-export type CritiqueAction = PanelEvent;
+/**
+ * Synthetic reducer action the host hooks (`useCritiqueStream`,
+ * `useCritiqueReplay`) dispatch when their gating prop changes
+ * (projectId switch, enabled flip, transcriptUrl swap). Lifts the
+ * reducer back to idle so the surrounding UI cannot render a stale
+ * critique that belonged to the previous project / transcript. Lives
+ * in the action union (not as a separate setter) so the reducer
+ * remains the single source of truth for state transitions.
+ */
+export interface CritiqueResetAction {
+  type: '__reset__';
+}
+
+export type CritiqueAction = PanelEvent | CritiqueResetAction;
 
 export interface CritiqueDimScore {
   name: string;
@@ -165,6 +178,13 @@ function ensurePanelist(
  * launch consecutive runs without an explicit reset action.
  */
 export function reduce(state: CritiqueState, action: CritiqueAction): CritiqueState {
+  // Host-dispatched reset (project change, enabled flip, transcript
+  // swap) always lifts us back to idle so a stale run from a prior
+  // project/transcript cannot bleed into the new context. Lefarcen +
+  // Siri-Ray + codex P2 on PR #1314.
+  if (action.type === '__reset__') {
+    return state.phase === 'idle' ? state : initialState;
+  }
   // `run_started` is always accepted: from idle it boots a new run, and
   // mid-stream it discards any prior state and reboots cleanly (the daemon
   // does not multiplex two runs onto one SSE channel, so this only fires on
@@ -209,12 +229,23 @@ export function reduce(state: CritiqueState, action: CritiqueAction): CritiqueSt
   }
 
   switch (action.type) {
-    case 'panelist_open':
+    case 'panelist_open': {
+      // Materialize the round + an empty panelist view so TheaterStage
+      // can render the in-progress lane the instant the tag opens
+      // (lefarcen + Siri-Ray P2 on PR #1314): without this, a stream
+      // that emits only `panelist_open` after `run_started` would
+      // leave `rounds = []` and the UI would render no current
+      // round until a later `panelist_dim` arrived.
+      const rounds = withRound(state.rounds, action.round, (round) => {
+        ensurePanelist(round, action.role);
+      });
       return {
         ...state,
+        rounds,
         activePanelist: action.role,
         activeRound: action.round,
       };
+    }
     case 'panelist_dim': {
       const rounds = withRound(state.rounds, action.round, (round) => {
         const panelist = ensurePanelist(round, action.role);

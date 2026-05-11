@@ -91,6 +91,14 @@ export function useCritiqueReplay(
   // Stores the parsed events in component state so the pace effect can
   // react to them; cursor is reset because a new transcript is a new run.
   useEffect(() => {
+    // Whenever the URL changes (including swap to null), lift the
+    // reducer back to idle so a prior replay's terminal state cannot
+    // bleed into the new transcript or the "no transcript" empty
+    // state. Lefarcen + Siri-Ray + codex P2 on PR #1314: without this
+    // reset, a finished replay → null URL would leave the previous
+    // run's rounds visible while TheaterTranscript reported
+    // status: 'idle'.
+    dispatchRef.current({ type: '__reset__' });
     if (!transcriptUrl) {
       setMeta({ status: 'idle', error: null });
       setEvents(null);

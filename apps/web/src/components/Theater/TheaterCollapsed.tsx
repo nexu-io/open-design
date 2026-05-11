@@ -49,7 +49,7 @@ export function TheaterCollapsed({ state }: Props) {
           {t('critiqueTheater.interrupted')}
         </span>
         <span className="theater-collapsed-summary">
-          {t('critiqueTheater.shippedSummary', {
+          {t('critiqueTheater.interruptedSummary', {
             round: state.bestRound,
             composite: state.composite.toFixed(1),
           })}

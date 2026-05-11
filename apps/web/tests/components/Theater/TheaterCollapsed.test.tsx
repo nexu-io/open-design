@@ -72,7 +72,15 @@ describe('<TheaterCollapsed> (Phase 8)', () => {
     render(<TheaterCollapsed state={state} />);
     expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
     expect(screen.getByText('Interrupted')).toBeTruthy();
-    expect(screen.getByText(/composite 7\.9/)).toBeTruthy();
+    // Lefarcen P3 on PR #1314: the interrupted branch must NOT reuse
+    // the shipped summary copy ("Shipped at round...") since the run
+    // was specifically NOT shipped. Pin the wording so a future
+    // refactor that swaps the keys back trips this assertion.
+    expect(screen.getByText(/Interrupted at round 1/)).toBeTruthy();
+    expect(screen.getByText(/best composite 7\.9/)).toBeTruthy();
+    expect(
+      screen.queryByText((_, node) => /Shipped at round/.test(node?.textContent ?? '')),
+    ).toBeNull();
   });
 
   it('renders the failed phase with the cause-specific reason', () => {

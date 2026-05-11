@@ -153,4 +153,55 @@ describe('useCritiqueStream (Phase 7.2)', () => {
     expect(handles[0]!.closed).toBe(true);
     expect(handles[1]!.closed).toBe(false);
   });
+
+  it('resets reducer state to idle when projectId changes (PR #1314 review)', () => {
+    // Lefarcen + Siri-Ray + codex P2: a workspace switch from project
+    // A (which already streamed a critique) to project B must not
+    // leave project A's Theater state visible while waiting for B's
+    // run_started.
+    const { factory, handles } = makeFactory();
+    const sink: Harness = { state: { phase: 'idle' } };
+    const { rerender } = render(
+      <Probe projectId="proj-1" enabled factory={factory} sink={sink} />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'r1',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    expect(sink.state.phase).toBe('running');
+
+    rerender(<Probe projectId="proj-2" enabled factory={factory} sink={sink} />);
+    expect(sink.state.phase).toBe('idle');
+  });
+
+  it('resets reducer state to idle when enabled flips to false mid-run', () => {
+    const { factory, handles } = makeFactory();
+    const sink: Harness = { state: { phase: 'idle' } };
+    const { rerender } = render(
+      <Probe projectId="proj-1" enabled factory={factory} sink={sink} />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'r1',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    expect(sink.state.phase).toBe('running');
+
+    rerender(<Probe projectId="proj-1" enabled={false} factory={factory} sink={sink} />);
+    expect(sink.state.phase).toBe('idle');
+    expect(handles[0]!.closed).toBe(true);
+  });
 });

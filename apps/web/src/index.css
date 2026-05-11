@@ -11953,7 +11953,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .theater-lane[data-role="designer"] { border-left-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
 .theater-lane[data-role="critic"]   { border-left-color: color-mix(in srgb, var(--amber) 60%, var(--border)); }
-.theater-lane[data-role="brand"]    { border-left-color: color-mix(in srgb, var(--magenta, var(--accent)) 60%, var(--border)); }
+.theater-lane[data-role="brand"]    { border-left-color: color-mix(in srgb, var(--purple, var(--accent)) 60%, var(--border)); }
 .theater-lane[data-role="a11y"]     { border-left-color: color-mix(in srgb, var(--green, var(--accent)) 60%, var(--border)); }
 .theater-lane[data-role="copy"]     { border-left-color: color-mix(in srgb, var(--blue, var(--accent)) 60%, var(--border)); }
 .theater-lane-head {

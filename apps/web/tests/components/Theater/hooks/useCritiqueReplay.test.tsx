@@ -353,4 +353,37 @@ describe('useCritiqueReplay (Phase 7.3)', () => {
     expect(gunzip).toHaveBeenCalledTimes(1);
     expect(sink.state.phase).toBe('shipped');
   });
+
+  it('resets reducer state to idle when transcriptUrl flips to null after a replay (PR #1314 review)', async () => {
+    // Lefarcen + Siri-Ray + codex P2: clearing the URL after a
+    // replay reached `shipped` previously only cleared meta + events
+    // + cursor. The reducer state stayed at `shipped`, so
+    // TheaterTranscript could render stale rounds while reporting
+    // `status: 'idle'`.
+    const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
+    const { rerender } = render(
+      <Probe
+        url="/api/replay.ndjson"
+        speed="instant"
+        options={{ fetchTranscript: async () => ndjson(TRANSCRIPT) }}
+        sink={sink}
+      />,
+    );
+    await waitFor(() => {
+      expect(sink.state.phase).toBe('shipped');
+    });
+
+    rerender(
+      <Probe
+        url={null}
+        speed="instant"
+        options={{ fetchTranscript: async () => ndjson(TRANSCRIPT) }}
+        sink={sink}
+      />,
+    );
+    await waitFor(() => {
+      expect(sink.state.phase).toBe('idle');
+    });
+    expect(sink.status).toBe('idle');
+  });
 });

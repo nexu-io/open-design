@@ -1113,6 +1113,7 @@ export const en: Dict = {
   'critiqueTheater.replaySpeed': 'Replay speed',
   'critiqueTheater.readOnly': 'Read-only',
   'critiqueTheater.shippedSummary': 'Shipped at round {round} · composite {composite}',
+  'critiqueTheater.interruptedSummary': 'Interrupted at round {round} · best composite {composite}',
   'critiqueTheater.shippedBadge': 'Shipped',
   'critiqueTheater.belowThresholdBadge': 'Below threshold',
   'critiqueTheater.timedOutBadge': 'Timed out',

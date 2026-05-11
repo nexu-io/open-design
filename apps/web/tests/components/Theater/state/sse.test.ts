@@ -307,4 +307,85 @@ describe('sseToPanelEvent (Phase 7.2)', () => {
       }),
     ).toBeNull();
   });
+
+  it('drops a critique.ship frame missing variant-specific required fields (PR #1314 review)', () => {
+    // Lefarcen + Siri-Ray + codex P2: `isPanelEvent` only checks
+    // `type` and `runId`, so a frame like `{ runId: 'r' }` on the
+    // critique.ship channel would reach the reducer with composite,
+    // round, status, artifactRef all undefined. TheaterCollapsed
+    // would then call `final.composite.toFixed(1)` and crash.
+    expect(
+      sseToPanelEvent('critique.ship' as CritiqueSseEventName, { runId: 'r' }),
+    ).toBeNull();
+    // Even with most fields, missing `summary` still rejects.
+    expect(
+      sseToPanelEvent('critique.ship' as CritiqueSseEventName, {
+        runId: 'r',
+        round: 1,
+        composite: 8.6,
+        status: 'shipped',
+        artifactRef: { projectId: 'p', artifactId: 'a' },
+      }),
+    ).toBeNull();
+  });
+
+  it('accepts a fully-formed critique.ship frame', () => {
+    const action = sseToPanelEvent('critique.ship' as CritiqueSseEventName, {
+      runId: 'r',
+      round: 1,
+      composite: 8.6,
+      status: 'shipped',
+      artifactRef: { projectId: 'p', artifactId: 'a' },
+      summary: 'looks good',
+    });
+    expect(action?.type).toBe('ship');
+  });
+
+  it('drops a critique.degraded frame missing the adapter field', () => {
+    expect(
+      sseToPanelEvent('critique.degraded' as CritiqueSseEventName, {
+        runId: 'r',
+        reason: 'malformed_block',
+      }),
+    ).toBeNull();
+  });
+
+  it('drops a critique.run_started frame with an empty cast', () => {
+    expect(
+      sseToPanelEvent('critique.run_started' as CritiqueSseEventName, {
+        runId: 'r',
+        protocolVersion: 1,
+        cast: [],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      }),
+    ).toBeNull();
+  });
+
+  it('drops a critique.panelist_dim frame with non-numeric dimScore', () => {
+    expect(
+      sseToPanelEvent('critique.panelist_dim' as CritiqueSseEventName, {
+        runId: 'r',
+        round: 1,
+        role: 'critic',
+        dimName: 'contrast',
+        dimScore: 'eight',
+        dimNote: 'borderline',
+      }),
+    ).toBeNull();
+  });
+
+  it('drops a critique.round_end frame with an unknown decision value', () => {
+    expect(
+      sseToPanelEvent('critique.round_end' as CritiqueSseEventName, {
+        runId: 'r',
+        round: 1,
+        composite: 7.4,
+        mustFix: 2,
+        decision: 'maybe',
+        reason: 'unclear',
+      }),
+    ).toBeNull();
+  });
 });
