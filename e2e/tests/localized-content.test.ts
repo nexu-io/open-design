@@ -198,7 +198,13 @@ async function readDesignSystemResources(): Promise<DesignSystemResource[]> {
   const entries = await readdir(systemsRoot, { withFileTypes: true });
   const resources = await Promise.all(
     entries
-      .filter((entry) => entry.isDirectory())
+      // Skip meta-directories whose names begin with `_` (e.g. `_schema/`,
+      // which holds the shared token contract — not a brand). This mirrors
+      // the leading-underscore-is-meta convention used by Jekyll, Hugo,
+      // SCSS partials, etc. The daemon's listDesignSystems already filters
+      // these out implicitly (it requires DESIGN.md); doing the same here
+      // keeps the localized-content guard aligned with the runtime registry.
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
       .map(async (entry) => {
         assertResourceId(entry.name, `Design system directory ${entry.name}`);
         const filePath = path.join(systemsRoot, entry.name, 'DESIGN.md');
