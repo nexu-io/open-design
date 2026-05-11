@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import type http from 'node:http';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { inlineRelativeAssets } from '../src/inline-assets.js';
+import { startServer } from '../src/server.js';
 
 // ---------------------------------------------------------------------------
 // Unit — inlineRelativeAssets pure helper
@@ -165,5 +169,146 @@ describe('inlineRelativeAssets', () => {
     );
     expect(out).toContain('DEEP');
     expect(out).not.toContain('src="../../shared/util.js"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP integration — GET /api/projects/:id/export/*?inline=1
+// ---------------------------------------------------------------------------
+
+describe('GET /api/projects/:id/export/*?inline=1 route', () => {
+  let server: http.Server;
+  let baseUrl: string;
+  let projectsRoot: string;
+  const projectId = 'proj-export-inline-test';
+
+  const cssBody = 'body{color:#0a0}';
+  const jsBody = 'window.OD_EXPORT_OK = 42;';
+  const nestedJsBody = 'export const N = 7;';
+
+  beforeAll(async () => {
+    const started = (await startServer({ port: 0, returnServer: true })) as {
+      url: string;
+      server: http.Server;
+    };
+    baseUrl = started.url;
+    server = started.server;
+
+    projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
+    const dir = path.join(projectsRoot, projectId);
+    const pages = path.join(dir, 'pages');
+    const shared = path.join(dir, 'shared');
+    await mkdir(dir, { recursive: true });
+    await mkdir(pages, { recursive: true });
+    await mkdir(shared, { recursive: true });
+
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head>' +
+        '<link rel="stylesheet" href="app.css">' +
+        '<script src="app.js"></script>' +
+        '</head><body><div id="root"></div></body></html>',
+    );
+    await writeFile(path.join(dir, 'app.css'), cssBody);
+    await writeFile(path.join(dir, 'app.js'), jsBody);
+
+    await writeFile(
+      path.join(dir, 'partial.html'),
+      '<!doctype html><html><head>' +
+        '<link rel="stylesheet" href="missing.css">' +
+        '<script src="app.js"></script>' +
+        '</head><body></body></html>',
+    );
+
+    await writeFile(
+      path.join(pages, 'index.html'),
+      '<!doctype html><html><head>' +
+        '<script src="../shared/util.js"></script>' +
+        '</head></html>',
+    );
+    await writeFile(path.join(shared, 'util.js'), nestedJsBody);
+  });
+
+  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  const exportUrl = (name: string, query = 'inline=1') =>
+    `${baseUrl}/api/projects/${projectId}/export/${name}${query ? `?${query}` : ''}`;
+
+  it('returns a self-contained HTML body when ?inline=1 on a 3-file layout', async () => {
+    const res = await fetch(exportUrl('index.html'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    const body = await res.text();
+    // Wiring guard: removing the await inlineRelativeAssets(...) line in the
+    // handler fails these assertions, not just the helper-internals tests.
+    expect(body).toContain(cssBody);
+    expect(body).toContain(jsBody);
+    expect(body).not.toContain('href="app.css"');
+    expect(body).not.toContain('src="app.js"');
+    expect(body).toContain('<style data-od-inline-asset="app.css">');
+  });
+
+  it('returns 400 BAD_REQUEST when ?inline is missing', async () => {
+    const res = await fetch(exportUrl('index.html', ''));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('BAD_REQUEST');
+  });
+
+  it('returns 400 for non-canonical inline values (0, false, foo)', async () => {
+    for (const q of ['inline=0', 'inline=false', 'inline=foo', 'inline=']) {
+      const res = await fetch(exportUrl('index.html', q));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it('returns 400 UNSUPPORTED_FILE_TYPE for non-HTML files', async () => {
+    const res = await fetch(exportUrl('app.css'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('UNSUPPORTED_FILE_TYPE');
+  });
+
+  it('returns 404 FILE_NOT_FOUND for a nonexistent file', async () => {
+    const res = await fetch(exportUrl('missing.html'));
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('FILE_NOT_FOUND');
+  });
+
+  it('returns 400 BAD_REQUEST for an invalid project id (..)', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/../export/index.html?inline=1`);
+    // Express normalizes `..` segments before routing, so this should not
+    // reach our handler; the daemon's middleware or routing answers first.
+    // Either way, the request must NOT succeed at extracting a parent
+    // directory.
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+  });
+
+  it('responds 204 with Access-Control-Allow-Origin: * to a null-origin OPTIONS preflight', async () => {
+    const res = await fetch(exportUrl('index.html'), {
+      method: 'OPTIONS',
+      headers: { Origin: 'null' },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('returns 200 with the <link> tag intact when a sibling asset is missing', async () => {
+    const res = await fetch(exportUrl('partial.html'));
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('<link rel="stylesheet" href="missing.css">');
+    expect(body).toContain(jsBody);
+    expect(body).not.toContain('src="app.js"');
+  });
+
+  it('inlines a nested HTML entry (pages/index.html + ../shared/util.js)', async () => {
+    const res = await fetch(exportUrl('pages/index.html'));
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain(nestedJsBody);
+    expect(body).not.toContain('src="../shared/util.js"');
   });
 });
