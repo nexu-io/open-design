@@ -157,6 +157,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (!dirStat.isDirectory()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
       }
+      if (path.parse(normalizedPath).root === normalizedPath) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the filesystem root');
+      }
       // Prevent importing the data directory into itself (post-realpath so
       // a symlink pointing into RUNTIME_DATA_DIR is also caught). Compare
       // against the canonical alias because `normalizedPath` is the import
