@@ -25,6 +25,7 @@ const skills: SkillSummary[] = [
     upstream: null,
     hasBody: true,
     examplePrompt: 'Build a prototype.',
+    aggregatesExamples: false,
   },
 ];
 
