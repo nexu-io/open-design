@@ -349,4 +349,46 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     expect(body).toContain(nestedJsBody);
     expect(body).not.toContain('src="../shared/util.js"');
   });
+
+  it('sends Content-Security-Policy: sandbox allow-scripts to block daemon-origin privilege escalation', async () => {
+    // PR #1312 round-2 review (lefarcen P2 @ import-export-routes.ts:423):
+    // top-level browser navigation to the export URL sends no Origin
+    // header, so the daemon middleware lets it through and any JS in
+    // the exported document runs with daemon-origin privileges (access
+    // to /api/, cookies, localStorage). CSP `sandbox allow-scripts`
+    // treats the response like a sandboxed iframe with an opaque origin:
+    // scripts execute (which the export needs — that's the whole point
+    // of inlining JS) but cannot read cookies, hit /api/, or otherwise
+    // escalate to the daemon's origin.
+    const res = await fetch(exportUrl('index.html'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+  });
+
+  it('accepts inline=true / yes / on / TRUE / Yes / ON (case-insensitive accept list per decision §7)', async () => {
+    // PR #1312 round-2 review (lefarcen P3 @ export-inline-route.test.ts:262):
+    // PR body decision §7 promises `inline=true/yes/on` case-insensitive
+    // matching parseForceInline at file-viewer-render-mode.ts:59-66, but
+    // round-1 tests only exercised inline=1. Pin the full accept list.
+    for (const q of ['inline=true', 'inline=yes', 'inline=on', 'inline=TRUE', 'inline=Yes', 'inline=ON']) {
+      const res = await fetch(exportUrl('index.html', q));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('rejects an invalid project id (chars outside isSafeId char class) with 400 BAD_REQUEST', async () => {
+    // PR #1312 round-2 review (lefarcen P3 @ export-inline-route.test.ts:287):
+    // the previous `..` test was rejected by Express path normalization
+    // before the route saw it, so it didn't actually exercise the
+    // isSafeId guard. We need an id that (a) Express passes through
+    // unchanged into req.params and (b) isSafeId rejects. The `!` char
+    // is URL-safe (no percent-encoding needed) and not in isSafeId's
+    // /^[A-Za-z0-9._-]+$/ char class, so it hits the route's first
+    // checkpoint and returns the documented envelope.
+    const res = await fetch(exportUrl('index.html').replace(`/${projectId}/`, '/bad!id/'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('BAD_REQUEST');
+    expect(body.error.message).toContain('invalid project id');
+  });
 });
