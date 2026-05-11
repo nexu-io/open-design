@@ -9,6 +9,7 @@ import {
 import { stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import { Icon } from "./Icon";
+import { MessageFeedback } from "./MessageFeedback";
 import { useT } from "../i18n";
 import { unfinishedTodosFromEvents, type TodoItem } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -164,6 +165,9 @@ export function AssistantMessage({
           hasUnfinishedTodos={unfinishedTodos.length > 0}
           hasEmptyResponse={hasEmptyResponse}
         />
+        {runSucceeded && !hasEmptyResponse ? (
+          <MessageFeedback messageId={message.id} />
+        ) : null}
       </div>
     </div>
   );

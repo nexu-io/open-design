@@ -1089,6 +1089,17 @@ export const en: Dict = {
   'sketch.textPrompt': 'Text:',
   'sketch.textModalTitle': 'Add text',
 
+  'feedback.prompt': 'Was this response helpful?',
+  'feedback.thumbsUp': 'Helpful',
+  'feedback.thumbsDown': 'Not helpful',
+  'feedback.submittedPositive': 'Thanks for the feedback.',
+  'feedback.submittedNegative': "Thanks, we'll use this to improve.",
+  'feedback.commentLabel': 'What could be better? (optional)',
+  'feedback.commentPlaceholder': 'Tell us what we could have done differently',
+  'feedback.commentSubmit': 'Send comment',
+  'feedback.commentSaved': 'Comment saved',
+  'feedback.change': 'Change',
+
   'pet.title': 'Pets',
   'pet.subtitle': 'Adopt a tiny companion that floats over your workspace.',
   'pet.navTitle': 'Pets',
