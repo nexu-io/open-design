@@ -40,6 +40,17 @@ without churning code paths.
   path historically; the actual adapter registry is `runtimes/registry.ts`
   in this repo. Phase 10 routing extensions land here in
   `adapter-degraded.ts` instead.
+- **Designer weight is frozen at 0.0 until v2 cast config lands.**
+  `config.ts` exposes the panel weights as `CritiqueConfig.weights`
+  but every production deployment uses the v1 distribution
+  (designer 0 / critic 0.4 / brand 0.2 / a11y 0.2 / copy 0.2). The
+  v2 work is cross-package: the daemon adds per-skill weight
+  overrides driven off `od.critique.cast` in `SKILL.md` frontmatter
+  (this directory) and the web Settings surface adds a per-project
+  weight editor (`apps/web/src/components/Settings/`). Treat the v1
+  weights as a wire-shape invariant rather than a tuning knob;
+  changing them mid-v1 will break the `composite` numbers persisted
+  in `critique_runs`.
 
 ## When you change anything here
 
