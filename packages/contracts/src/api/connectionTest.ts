@@ -170,4 +170,11 @@ export interface ConnectionTestResponse {
   // Free-form, redacted detail line — surfaced in the `unknown`,
   // `agent_spawn_failed`, and `upstream_unavailable` copy.
   detail?: string;
+  // Optional executable-path diagnostics for Local CLI tests. Used by
+  // Settings to explain whether a saved custom path worked, was ignored,
+  // or required a PATH fallback.
+  configuredExecutablePath?: string;
+  detectedExecutablePath?: string;
+  usedExecutablePath?: string;
+  usedExecutableSource?: 'configured' | 'path' | 'fallback_invalid' | 'fallback_failed';
 }

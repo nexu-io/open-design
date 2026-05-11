@@ -22,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   getAgentDef,
+  inspectAgentExecutableResolution,
   resolveAgentBin,
   spawnEnvForAgent,
 } from './agents.js';
@@ -32,6 +33,7 @@ import { createClaudeStreamHandler } from './claude-stream.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
+import type { AgentCliEnvPrefs } from './app-config.js';
 import {
   isLoopbackApiHost,
   validateBaseUrl,
@@ -61,6 +63,56 @@ const SAMPLE_MAX_CHARS = 120;
 // before producing a visible `ok`.
 const PROVIDER_MAX_TOKENS = 100;
 const SMOKE_PROMPT = 'Reply with only: ok';
+
+function codexExecutableGuidance(
+  agentId: string,
+  configuredOverridePath: string | null,
+  pathResolvedPath: string | null,
+): string {
+  if (
+    agentId !== 'codex' ||
+    !configuredOverridePath ||
+    !pathResolvedPath ||
+    configuredOverridePath === pathResolvedPath
+  ) {
+    return '';
+  }
+  return ` Configured Codex path failed: ${configuredOverridePath}. Open Design also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+}
+
+function codexExecutableFallbackSuccessDetail(
+  configuredOverridePath: string,
+  pathResolvedPath: string,
+): string {
+  return `Configured Codex path failed: ${configuredOverridePath}. This test succeeded with the PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+}
+
+function codexConfiguredPathSuccessDetail(
+  configuredOverridePath: string,
+): string {
+  return `This test used the configured Codex path: ${configuredOverridePath}.`;
+}
+
+function codexInvalidConfiguredPathFallbackDetail(
+  configuredValue: string,
+  pathResolvedPath: string,
+): string {
+  return `Configured Codex path is invalid or not executable: ${configuredValue}. This test used the PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+}
+
+function stripCodexBinOverride(
+  prefs: AgentCliEnvPrefs | undefined,
+): AgentCliEnvPrefs | undefined {
+  if (!prefs?.codex?.CODEX_BIN) return prefs;
+  const nextCodex = { ...prefs.codex };
+  delete nextCodex.CODEX_BIN;
+  const next: AgentCliEnvPrefs = {
+    ...prefs,
+    codex: nextCodex,
+  };
+  if (Object.keys(nextCodex).length === 0) delete next.codex;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
 
 // Catches `Bearer …`, `x-api-key`/`api-key`/`x-goog-api-key` headers, and
 // `?key=…` query strings. The provider helpers all funnel error text
@@ -862,7 +914,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-export async function testAgentConnection(
+async function testAgentConnectionInternal(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
@@ -884,6 +936,10 @@ export async function testAgentConnection(
   const configuredAgentEnv = agentCliEnvForAgent(
     validateAgentCliEnv(input.agentCliEnv),
     input.agentId,
+  );
+  const executableResolution = inspectAgentExecutableResolution(
+    def,
+    configuredAgentEnv,
   );
   const resolvedBin = resolveAgentBin(input.agentId, configuredAgentEnv);
   if (!resolvedBin) {
@@ -1052,10 +1108,17 @@ export async function testAgentConnection(
       if (winner.kind === 'spawnError') {
         const latencyMs = Date.now() - start;
         const detail = redactSecrets(winner.error.message);
+        const guidance = redactSecrets(
+          codexExecutableGuidance(
+            input.agentId,
+            executableResolution.configuredOverridePath,
+            executableResolution.pathResolvedPath,
+          ),
+        );
         const errnoCode = (winner.error as NodeJS.ErrnoException).code;
         const isMissing = errnoCode === 'ENOENT';
         console.warn(
-          `[test:agent] ${def.name} → spawn_failed: ${detail}`,
+          `[test:agent] ${def.name} → spawn_failed: ${detail}${guidance}`,
         );
         return {
           ok: false,
@@ -1063,7 +1126,7 @@ export async function testAgentConnection(
           latencyMs,
           model,
           agentName: def.name,
-          detail,
+          detail: `${detail}${guidance}`,
         };
       }
 
@@ -1089,9 +1152,16 @@ export async function testAgentConnection(
           .filter(Boolean)
           .join(' · '),
       );
+      const guidance = redactSecrets(
+        codexExecutableGuidance(
+          input.agentId,
+          executableResolution.configuredOverridePath,
+          executableResolution.pathResolvedPath,
+        ),
+      );
       const label = buffered ? 'exit_failed' : 'no_text';
       console.warn(
-        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'})`,
+        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'}${guidance})`,
       );
       return {
         ok: false,
@@ -1099,7 +1169,8 @@ export async function testAgentConnection(
         latencyMs,
         model,
         agentName: def.name,
-        detail: detail || 'Agent exited without producing assistant text',
+        detail:
+          `${detail || 'Agent exited without producing assistant text'}${guidance}`,
       };
     };
 
@@ -1202,4 +1273,90 @@ export async function testAgentConnection(
         // Best-effort cleanup; the OS reaps /tmp eventually.
       });
   }
+}
+
+export async function testAgentConnection(
+  input: AgentConnectionInput,
+): Promise<ConnectionTestResponse> {
+  const primaryResult = await testAgentConnectionInternal(input);
+  const validatedPrefs = validateAgentCliEnv(input.agentCliEnv);
+  const configuredCodexBin = validatedPrefs?.codex?.CODEX_BIN?.trim() || '';
+  const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
+  const def = getAgentDef(input.agentId);
+  const executableResolution = def
+    ? inspectAgentExecutableResolution(def, configuredAgentEnv)
+    : {
+        configuredOverridePath: null,
+        pathResolvedPath: null,
+        selectedPath: null,
+      };
+  if (
+    input.agentId === 'codex' &&
+    primaryResult.ok &&
+    configuredCodexBin
+  ) {
+    if (executableResolution.configuredOverridePath) {
+      return {
+        ...primaryResult,
+        configuredExecutablePath: executableResolution.configuredOverridePath,
+        usedExecutablePath: executableResolution.configuredOverridePath,
+        usedExecutableSource: 'configured',
+        ...(executableResolution.pathResolvedPath
+          ? { detectedExecutablePath: executableResolution.pathResolvedPath }
+          : {}),
+        detail: redactSecrets(
+          codexConfiguredPathSuccessDetail(
+            executableResolution.configuredOverridePath,
+          ),
+        ),
+      };
+    }
+    if (executableResolution.pathResolvedPath) {
+      return {
+        ...primaryResult,
+        configuredExecutablePath: configuredCodexBin,
+        detectedExecutablePath: executableResolution.pathResolvedPath,
+        usedExecutablePath: executableResolution.pathResolvedPath,
+        usedExecutableSource: 'fallback_invalid',
+        detail: redactSecrets(
+          codexInvalidConfiguredPathFallbackDetail(
+            configuredCodexBin,
+            executableResolution.pathResolvedPath,
+          ),
+        ),
+      };
+    }
+  }
+  if (
+    input.agentId !== 'codex' ||
+    primaryResult.ok ||
+    !new Set<ConnectionTestKind>(['agent_spawn_failed', 'agent_not_installed', 'unknown']).has(primaryResult.kind) ||
+    !executableResolution.configuredOverridePath ||
+    !executableResolution.pathResolvedPath ||
+    executableResolution.configuredOverridePath === executableResolution.pathResolvedPath
+  ) {
+    return primaryResult;
+  }
+  const fallbackResult = await testAgentConnectionInternal(
+    {
+      ...input,
+      agentCliEnv: stripCodexBinOverride(validatedPrefs),
+    },
+  );
+  if (!fallbackResult.ok) {
+    return primaryResult;
+  }
+  return {
+    ...fallbackResult,
+    configuredExecutablePath: executableResolution.configuredOverridePath,
+    detectedExecutablePath: executableResolution.pathResolvedPath,
+    usedExecutablePath: executableResolution.pathResolvedPath,
+    usedExecutableSource: 'fallback_failed',
+    detail: redactSecrets(
+      codexExecutableFallbackSuccessDetail(
+        executableResolution.configuredOverridePath,
+        executableResolution.pathResolvedPath,
+      ),
+    ),
+  };
 }

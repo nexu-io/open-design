@@ -1223,11 +1223,133 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
         ok: true,
         kind: 'success',
         agentName: 'Codex CLI',
+        usedExecutableSource: 'configured',
+        configuredExecutablePath: bin,
+        usedExecutablePath: bin,
       });
+      expect(result.detail).toContain(`This test used the configured Codex path: ${bin}.`);
     } finally {
       process.env.PATH = oldPath;
       await fsp.rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it('surfaces when an invalid configured CODEX_BIN was ignored in favor of PATH', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,
+      async () => {
+        const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-invalid-'));
+        try {
+          const invalidBin = path.join(dir, 'codex-missing');
+          const result = await testAgentConnection({
+            agentId: 'codex',
+            agentCliEnv: {
+              codex: {
+                CODEX_BIN: invalidBin,
+              },
+            },
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+            sample: 'ok',
+            usedExecutableSource: 'fallback_invalid',
+            configuredExecutablePath: invalidBin,
+            detectedExecutablePath: expect.any(String),
+            usedExecutablePath: expect.any(String),
+          });
+          expect(result.detail).toContain(`Configured Codex path is invalid or not executable: ${invalidBin}.`);
+          expect(result.detail).toContain('This test used the PATH Codex CLI at');
+        } finally {
+          await fsp.rm(dir, { recursive: true, force: true });
+        }
+      },
+    );
+  });
+
+  it('falls back to PATH Codex during connection tests when a configured CODEX_BIN fails', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,
+      async () => {
+        const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-fallback-'));
+        try {
+          const bin = path.join(dir, 'codex-bad');
+          await fsp.writeFile(
+            bin,
+            `#!/usr/bin/env node\nconsole.error('macOS blocked this Codex binary');\nprocess.exit(1);\n`,
+          );
+          await fsp.chmod(bin, 0o755);
+
+          const result = await testAgentConnection({
+            agentId: 'codex',
+            agentCliEnv: {
+              codex: {
+                CODEX_BIN: bin,
+              },
+            },
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+            sample: 'ok',
+            usedExecutableSource: 'fallback_failed',
+            configuredExecutablePath: bin,
+            detectedExecutablePath: expect.any(String),
+            usedExecutablePath: expect.any(String),
+          });
+          expect(result.detail).toContain(`Configured Codex path failed: ${bin}.`);
+          expect(result.detail).toContain('This test succeeded with the PATH Codex CLI at');
+          expect(result.detail).toContain('Update CODEX_BIN or clear the custom path');
+        } finally {
+          await fsp.rm(dir, { recursive: true, force: true });
+        }
+      },
+    );
+  });
+
+  it('falls back to PATH Codex when a configured shim spawns ENOENT', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,
+      async () => {
+        const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-stale-shim-'));
+        try {
+          const bin = path.join(dir, 'codex-stale-shim');
+          await fsp.writeFile(
+            bin,
+            '#!/definitely/missing/node\nconsole.log("never runs");\n',
+          );
+          await fsp.chmod(bin, 0o755);
+
+          const result = await testAgentConnection({
+            agentId: 'codex',
+            agentCliEnv: {
+              codex: {
+                CODEX_BIN: bin,
+              },
+            },
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+            sample: 'ok',
+            usedExecutableSource: 'fallback_failed',
+            configuredExecutablePath: bin,
+            detectedExecutablePath: expect.any(String),
+            usedExecutablePath: expect.any(String),
+          });
+          expect(result.detail).toContain(`Configured Codex path failed: ${bin}.`);
+          expect(result.detail).toContain('This test succeeded with the PATH Codex CLI at');
+        } finally {
+          await fsp.rm(dir, { recursive: true, force: true });
+        }
+      },
+    );
   });
 
   it('reports OpenCode structured errors without treating them as raw output', async () => {
