@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { inlineRelativeAssets } from '../src/inline-assets.js';
+import { inlineRelativeAssets, type InlineAssetReader } from '../src/inline-assets.js';
 import { startServer } from '../src/server.js';
 
 // ---------------------------------------------------------------------------
@@ -342,6 +342,49 @@ describe('inlineRelativeAssets', () => {
     // Owner html is ~760 bytes. First asset's 800 stat-size pushes
     // running over 1000 → abort. So at most ONE read should fire.
     expect(reads).toBeLessThanOrEqual(2);
+  });
+
+  it('reconciles handle.size with actual content bytes — trips total abort post-read on stat-lying readers', async () => {
+    // PR #1312 round-5 (lefarcen P3 confirmed at PR-1312#issuecomment-4424868413
+    // follow-up, path-a): the helper must reconcile handle.size with the
+    // actual byte length of `content` AFTER `read()`, not just trust the
+    // stat-side number. A reader that under-reports size (stale stat,
+    // UTF-8 expansion at decode, sparse file, deliberate lie) would
+    // otherwise let many strings materialize before the concat-time
+    // guard at the bottom of the helper throws — defeating the round-4
+    // pre-buffer cap intent.
+    //
+    // Discriminator: read count. Pre-fix the helper trusts handle.size
+    // (10), so both reads complete (each returning 1000 bytes) under
+    // the reservation total of 56+10+10=76 < cap 500; the concat-time
+    // guard then catches the 2000+-byte assembly and throws 'total'.
+    // Post-fix worker 1's reconciliation trips totalAborted as soon as
+    // its actualBytes (1000) is added to runningBytes, pushing running
+    // over the cap; worker 2 then sees totalAborted and returns null
+    // without invoking read(). One read, not two.
+    //
+    // Lefarcen-confirmed path-a (drop-asset + abort + throw 'total'
+    // after Promise.all settles): preserves the round-2/3/4 graceful-
+    // fallback pattern instead of racing throws between in-flight
+    // workers.
+    let reads = 0;
+    const lyingReader: InlineAssetReader = async (_relPath: string) => ({
+      size: 10, // stat lies — actual is 100x
+      read: async () => {
+        reads += 1;
+        return 'x'.repeat(1000);
+      },
+    });
+    const html = '<script src="a.js"></script><script src="b.js"></script>';
+    await expect(
+      inlineRelativeAssets(html, 'index.html', lyingReader, {
+        maxTotalBytes: 500,
+        maxReadConcurrency: 1, // sequential so the abort timing is deterministic
+      }),
+    ).rejects.toMatchObject({ name: 'InlineAssetsLimitError', limit: 'total' });
+    // Pre-fix: 2 (helper trusts stat → both reads complete → concat catches).
+    // Post-fix: 1 (worker 1 reconciles after read, trips abort; worker 2 skipped).
+    expect(reads).toBe(1);
   });
 
   it('caps concurrent file reads at maxReadConcurrency', async () => {
