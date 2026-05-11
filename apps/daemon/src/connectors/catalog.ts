@@ -59,11 +59,11 @@ export interface ConnectorDetail {
   /**
    * The hand-curated catalog subset. Stable across hydration: never
    * extended by provider discovery, only ever the static catalog
-   * names. UIs surfacing a single "N tools" summary (the connector
-   * card / drawer header badge) should read this so the displayed
-   * count doesn't lurch when an API key flips on (issue #748). The
-   * full provider inventory is still discoverable in the drawer's
-   * tools section, which renders `tools` directly.
+   * names. This preserves the static catalog baseline for consumers
+   * that need that curated subset, but it is not the advertised
+   * provider inventory count. UI summary badges should use `toolCount`
+   * when present; the drawer's rendered tool rows still come from
+   * `tools` directly.
    *
    * Optional in the type only for fixture brevity; daemon-built
    * `ConnectorDetail` payloads always carry it.
@@ -95,10 +95,10 @@ export interface ConnectorCatalogDefinition {
   /**
    * The hand-curated subset of `allowedToolNames` that is fixed at the
    * catalog level — never extended by provider discovery (issue #748).
-   * Optional: when omitted, downstream consumers (the wire detail and
-   * the badge helper) fall back to `allowedToolNames`, which is the
-   * right behavior for non-Composio connectors that don't have a
-   * dynamic discovery layer in the first place.
+   * Optional: when omitted, serialized wire details fall back to
+   * `allowedToolNames`, which is the right preview subset for
+   * non-Composio connectors that don't have a dynamic discovery layer
+   * in the first place.
    */
   curatedToolNames?: string[];
   /** Display-only count of provider tools. This may be known before tool schemas are hydrated. */

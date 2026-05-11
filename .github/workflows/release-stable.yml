@@ -346,6 +346,59 @@ jobs:
           name: open-design-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets
 
+  build_mac_intel:
+    name: Build release mac intel x64
+    needs: [metadata, verify]
+    runs-on: macos-13
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply release package version
+        run: npm pkg set "version=${{ needs.metadata.outputs.stable_version }}" --prefix apps/packaged
+
+      - name: Build release mac intel artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-stable-intel \
+            --portable \
+            --mac-compression maximum \
+            --to all \
+            --json
+
+      - name: Prepare mac intel release assets
+        id: assets
+        env:
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-stable-intel
+        run: bash .github/scripts/release/assets/mac-intel.sh
+
+      - name: Upload mac intel release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets
+
   build_win:
     name: Build release win x64
     needs: [metadata, verify]
@@ -518,6 +571,7 @@ jobs:
       - metadata
       - verify
       - build_mac
+      - build_mac_intel
       - build_win
       - build_linux
     if: >-
@@ -527,6 +581,7 @@ jobs:
         needs.metadata.result == 'success' &&
         needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
+        needs.build_mac_intel.result == 'success' &&
         needs.build_win.result == 'success' &&
         (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
       }}
@@ -544,6 +599,7 @@ jobs:
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
       ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
       ENABLE_MAC: "true"
+      ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
       GITHUB_RELEASE_ENABLED: ${{ needs.metadata.outputs.github_release_enabled }}
       NIGHTLY_NUMBER: ${{ needs.metadata.outputs.nightly_number }}
@@ -583,6 +639,12 @@ jobs:
         with:
           name: open-design-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Download mac intel release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets/mac-intel
 
       - name: Download windows release bundle
         uses: actions/download-artifact@v8
@@ -634,6 +696,7 @@ jobs:
           all_release_dir="$RUNNER_TEMP/release-assets/all"
           mkdir -p "$all_release_dir"
           cp "$RUNNER_TEMP/release-assets/mac"/* "$all_release_dir/"
+          cp "$RUNNER_TEMP/release-assets/mac-intel"/* "$all_release_dir/"
           cp "$RUNNER_TEMP/release-assets/win"/* "$all_release_dir/"
           if [ "$ENABLE_LINUX" = "true" ]; then
             cp "$RUNNER_TEMP/release-assets/linux"/* "$all_release_dir/"
@@ -649,6 +712,8 @@ jobs:
           R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
           R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
           R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
           R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
           R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
@@ -678,6 +743,8 @@ jobs:
           R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
           R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
           R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
           R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
           R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}

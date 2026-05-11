@@ -1,4 +1,4 @@
-import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import type { AppConfig, TelemetryConfig } from '../types';
@@ -189,22 +189,16 @@ function ConsentCard({ onShare, onDecline }: ConsentProps): JSX.Element {
 
       <p className="hint">{t('settings.privacyConsentFooter')}</p>
 
-      {/* Two-column seg-control gives both buttons identical visual weight,
-          which is what GDPR/EDPB asks for ("equal prominence" between
-          accept and reject). The accept side carries the active highlight
-          to mark it as the affirmative action without making the reject
-          side smaller or dimmer. */}
       <div
-        className="seg-control"
+        className="privacy-consent-actions"
         role="group"
         aria-label={t('settings.privacyConsentKicker')}
-        style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
       >
-        <button type="button" className="seg-btn active" onClick={onShare}>
-          <span className="seg-title">{t('settings.privacyConsentShare')}</span>
+        <button type="button" className="privacy-consent-action" onClick={onShare}>
+          {t('settings.privacyConsentShare')}
         </button>
-        <button type="button" className="seg-btn" onClick={onDecline}>
-          <span className="seg-title">{t('settings.privacyConsentDecline')}</span>
+        <button type="button" className="privacy-consent-action" onClick={onDecline}>
+          {t('settings.privacyConsentDecline')}
         </button>
       </div>
     </div>

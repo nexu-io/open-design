@@ -3,7 +3,7 @@ import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design
 import express from 'express';
 import multer from 'multer';
 import { execFile, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -42,6 +42,7 @@ import {
   updateUserSkill,
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
+import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
@@ -54,6 +55,7 @@ import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
+import { handleCritiqueArtifact } from './critique/artifact-handler.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
@@ -68,6 +70,7 @@ import {
   testProviderConnection,
   validateBaseUrl,
 } from './connectionTest.js';
+import { listProviderModels } from './providerModels.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import {
   finalizeDesignPackage,
@@ -125,6 +128,11 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import {
+  RoutineService,
+  validateSchedule as validateRoutineSchedule,
+  validateTarget as validateRoutineTarget,
+} from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
   buildProjectArchive,
@@ -136,9 +144,13 @@ import {
   isSafeId,
   listFiles,
   mimeFor,
+  parseByteRange,
   projectDir,
   readProjectFile,
+  renameProjectFile,
   removeProjectDir,
+  resolveProjectDir,
+  resolveProjectFilePath,
   sanitizeName,
   searchProjectFiles,
   writeProjectFile,
@@ -157,6 +169,8 @@ import {
   getTemplate,
   insertConversation,
   insertProject,
+  insertRoutine,
+  insertRoutineRun,
   insertTemplate,
   listProjectsAwaitingInput,
   listConversations,
@@ -165,13 +179,20 @@ import {
   listMessages,
   listPreviewComments,
   listProjects,
+  listRoutines,
+  listRoutineRuns,
   listTabs,
   listTemplates,
+  getLatestRoutineRun,
+  getRoutine,
+  deleteRoutine as dbDeleteRoutine,
   openDatabase,
   setTabs,
   updateConversation,
   updatePreviewCommentStatus,
   updateProject,
+  updateRoutine,
+  updateRoutineRun,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
@@ -256,6 +277,174 @@ export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): stri
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+
+// Desktop-import auth state (PR #974 — closes the renderer→arbitrary
+// baseDir→shell.openPath bypass chain).
+//
+// When the desktop main process starts up it sends a fresh 32-byte secret
+// to the daemon over its sidecar IPC (REGISTER_DESKTOP_AUTH). The daemon
+// stores the secret in this module-scope buffer and from then on requires
+// every POST /api/import/folder request to carry an HMAC token bound to
+// the requested baseDir. The desktop main process is the only entity that
+// can mint such a token — it owns the picker dialog and the secret — so
+// renderer JS can no longer name an arbitrary baseDir even indirectly
+// through project creation.
+//
+// Round-4 P1 (lefarcen): the gate must NOT fail open. The original
+// "secret == null → accept (web-only mode)" branch let a renderer bypass
+// when the daemon restarted mid-session (new daemon boots tokenless;
+// secret in main-process memory is now stale; renderer fetches the import
+// route directly). Two coordinated mechanisms close that:
+//
+// (1) Sticky in-process flag. Once a secret has ever been registered
+//     with this daemon process, the gate stays active for the rest of
+//     the process lifetime. A `setDesktopAuthSecret(null)` call (used
+//     by tests for cleanup) does NOT relax the gate — the flag is
+//     one-way. This closes the "secret cleared but daemon kept running"
+//     branch.
+//
+// (2) Orchestrator-pinned mode via `OD_REQUIRE_DESKTOP_AUTH=1` env var.
+//     Set by `tools-dev` / `tools-pack` / `apps/packaged` whenever the
+//     daemon is spawned in a desktop-bundled flow. Daemon reads the
+//     env at module-load time. With the flag set, the gate is active
+//     from request 0 — a renderer that races to call /api/import/folder
+//     before the desktop main process has registered its secret gets
+//     a 503 transient (retry shortly), not a free pass. Closes the
+//     daemon-restart-mid-session branch.
+//
+// In standalone-daemon (web-only) deployments where neither mechanism
+// fires, the gate stays dormant and /api/import/folder behaves exactly
+// as before.
+let desktopAuthSecret: Buffer | null = null;
+let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+
+// Replay protection. Each successful import token consumes its nonce; the
+// nonce stays in this map until its expiry passes, at which point the next
+// successful verification prunes it. Bounded by token TTL × import rate.
+const consumedImportNonces = new Map<string, number>();
+
+const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
+const DESKTOP_IMPORT_TOKEN_HEADER = 'x-od-desktop-import-token';
+
+export function setDesktopAuthSecret(secret: Buffer | null): void {
+  desktopAuthSecret = secret;
+  if (secret != null) {
+    desktopAuthEverRegistered = true;
+  }
+  consumedImportNonces.clear();
+}
+
+export function isDesktopAuthRegistered(): boolean {
+  return desktopAuthSecret != null;
+}
+
+export function isDesktopAuthGateActive(): boolean {
+  return desktopAuthEverRegistered;
+}
+
+/**
+ * Test-only helper. Round-4 added a sticky-once-set flag that survives
+ * `setDesktopAuthSecret(null)` so production code can never silently
+ * relax the gate, but daemon test files share a single HTTP server
+ * across `describe` blocks and a leaked flag would 403 every other
+ * suite's `/api/import/folder` call. This resets both bits together
+ * and is intentionally not exposed in any production boot path.
+ */
+export function resetDesktopAuthForTests(): void {
+  desktopAuthSecret = null;
+  desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+  consumedImportNonces.clear();
+}
+
+function pruneExpiredImportNonces(now: number): void {
+  for (const [nonce, exp] of consumedImportNonces) {
+    if (exp <= now) consumedImportNonces.delete(nonce);
+  }
+}
+
+function timingSafeStringEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+// Token field separator. We deliberately avoid `.` because ISO 8601
+// expiry timestamps embed `.` (e.g. `2026-05-08T20:00:30.000Z`), which
+// would split into four parts and break a fixed-shape parser. `~` is
+// not part of base64url or ISO 8601 character sets, so the three
+// fields stay unambiguous and round-trip safe through the HTTP header.
+const DESKTOP_IMPORT_TOKEN_FIELD_SEP = '~';
+
+/**
+ * Pure-function HMAC mint helper. Exported for unit tests and for the
+ * desktop main process's `dialog:pick-and-import` IPC handler. The token
+ * shape is `${nonceB64url}~${expISO}~${signatureB64url}` so the daemon
+ * can split, parse the expiry, and verify the signature by recomputing
+ * `HMAC-SHA256(secret, baseDir + "\n" + nonce + "\n" + exp)`.
+ */
+export function signDesktopImportToken(
+  secret: Buffer,
+  baseDir: string,
+  options: { nonce: string; exp: string },
+): string {
+  const signature = createHmac('sha256', secret)
+    .update(`${baseDir}\n${options.nonce}\n${options.exp}`)
+    .digest('base64url');
+  return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+}
+
+type DesktopImportTokenVerification =
+  | { ok: true; nonce: string; exp: number }
+  | { ok: false; reason: string };
+
+/**
+ * Verify a desktop-minted import token against the registered secret.
+ * Returns `{ ok: false, reason }` on any structural, signature, expiry,
+ * or replay failure so the middleware can map them to a single 403 with
+ * the reason in `details`. Exported for unit tests.
+ */
+export function verifyDesktopImportToken(
+  secret: Buffer,
+  baseDir: string,
+  token: string,
+  now: number,
+  consumedNonces: Map<string, number>,
+): DesktopImportTokenVerification {
+  if (typeof token !== 'string' || token.length === 0) {
+    return { ok: false, reason: 'token missing' };
+  }
+  const parts = token.split(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+  if (parts.length !== 3) {
+    return { ok: false, reason: 'token shape invalid' };
+  }
+  const [nonce, expISO, signature] = parts;
+  if (nonce.length === 0 || expISO.length === 0 || signature.length === 0) {
+    return { ok: false, reason: 'token shape invalid' };
+  }
+  const expMs = Date.parse(expISO);
+  if (!Number.isFinite(expMs)) {
+    return { ok: false, reason: 'token expiry invalid' };
+  }
+  if (expMs <= now) {
+    return { ok: false, reason: 'token expired' };
+  }
+  // Reject obviously oversized expiry windows so a compromised desktop
+  // cannot mint long-lived tokens against a small TTL contract.
+  if (expMs - now > DESKTOP_IMPORT_TOKEN_TTL_MS * 2) {
+    return { ok: false, reason: 'token expiry exceeds permitted window' };
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${baseDir}\n${nonce}\n${expISO}`)
+    .digest('base64url');
+  if (!timingSafeStringEquals(expected, signature)) {
+    return { ok: false, reason: 'token signature invalid' };
+  }
+  if (consumedNonces.has(nonce)) {
+    return { ok: false, reason: 'token nonce already used' };
+  }
+  return { ok: true, nonce, exp: expMs };
+}
 
 export function composeLiveInstructionPrompt({
   daemonSystemPrompt,
@@ -766,6 +955,9 @@ const CRAFT_DIR = resolveDaemonResourceDir(
   'craft',
   path.join(PROJECT_ROOT, 'craft'),
 );
+// User-installed skills and design systems live under the runtime data dir
+// so they respect OD_DATA_DIR overrides (test isolation, packaged runs).
+// Defined after RUNTIME_DATA_DIR is resolved below.
 const FRAMES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'frames',
@@ -801,8 +993,22 @@ export function resolveDataDir(raw, projectRoot) {
     fs.accessSync(resolved, fs.constants.W_OK);
   } catch (err) {
     const e = err;
+    const currentUser = (() => {
+      try {
+        return os.userInfo().username;
+      } catch {
+        return process.env.USER ?? process.env.LOGNAME ?? 'unknown';
+      }
+    })();
+    const parentDir = path.dirname(resolved);
     throw new Error(
-      `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+      [
+        `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+        `Current user: ${currentUser}`,
+        `Check whether the folder or one of its parents is owned by another user, is a symlink to a protected location, or was previously created with sudo.`,
+        `Try: ls -ld "${parentDir}" "${resolved}"`,
+        `If the folder should belong to you, fix ownership/permissions, for example: sudo chown -R "${currentUser}":staff "${parentDir}" && chmod -R u+rwX "${parentDir}"`,
+      ].join(' '),
     );
   }
   return resolved;
@@ -831,20 +1037,26 @@ migrateLegacyDataDirSync({
   dataDir: RUNTIME_DATA_DIR,
 });
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
+// Critique Theater artifacts intentionally live OUTSIDE the static
+// `/artifacts` tree (which is mounted via express.static below). The
+// per-run artifact endpoint is the only sanctioned read path so the
+// project-membership / cross-project leak / size / CSP guards in
+// handleCritiqueArtifact cannot be bypassed by a caller that guesses
+// `/artifacts/<projectId>/<runId>/artifact.html`. Codex P1 on PR #1085.
+const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
+const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
+const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-// User-imported skills land here. Kept out of the repo's `skills/` so a
-// `git status` is never noisy after an import. listSkills() scans this
-// root first so a user-imported skill can shadow a built-in by the same
-// name without erasing the bundled copy.
-const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'user-skills');
-fs.mkdirSync(USER_SKILLS_DIR, { recursive: true });
-// User-imported design templates land here, mirroring USER_SKILLS_DIR for
-// the design-templates root. The two directories stay separate so the
+// User-imported design templates mirror USER_SKILLS_DIR for the
+// design-templates root. The two directories stay separate so the
 // Settings → Skills surface and the EntryView Templates surface each
 // CRUD their own slice of the user library without collision.
-const USER_DESIGN_TEMPLATES_DIR = path.join(RUNTIME_DATA_DIR, 'user-design-templates');
-fs.mkdirSync(USER_DESIGN_TEMPLATES_DIR, { recursive: true });
+const USER_DESIGN_TEMPLATES_DIR = path.join(RUNTIME_DATA_DIR, 'design-templates');
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLATES_DIR]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
 const SKILL_ROOTS = [USER_SKILLS_DIR, SKILLS_DIR];
 const DESIGN_TEMPLATE_ROOTS = [USER_DESIGN_TEMPLATES_DIR, DESIGN_TEMPLATES_DIR];
 // Lookup roots used wherever we need to resolve a skill id without caring
@@ -860,6 +1072,7 @@ const ALL_SKILL_LIKE_ROOTS = [
 ];
 
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
+let routineService = null;
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
 // Maps the OAuth `state` parameter we generated in /api/mcp/oauth/start
@@ -1889,10 +2102,19 @@ export interface StartServerOptions {
   returnServer?: boolean;
 }
 
+const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return 2 * 60 * 1000;
-  return Math.max(0, Math.floor(raw));
+  // This watchdog observes child stdout/stderr/SSE activity, not real CPU or
+  // filesystem progress. Keep the default long enough for agents that spend
+  // several minutes silently writing large artifacts.
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+  // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
+  // makes an oversized override fail almost immediately while reporting a huge
+  // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -1912,6 +2134,28 @@ export async function startServer({
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
   app.use(express.json({ limit: '4mb' }));
+
+  // Multi-directory scanning for design systems: merge built-in and
+  // user-installed roots. Built-in items win on ID collisions (higher
+  // priority per skills-protocol.md). Skills go through listSkills(SKILL_ROOTS)
+  // directly because that helper already returns the SkillSource ('user' |
+  // 'built-in') tag the SkillsSection filter expects.
+  async function listAllDesignSystems() {
+    const builtIn = (await listDesignSystems(DESIGN_SYSTEMS_DIR)).map((s) => ({
+      ...s,
+      source: 'built-in',
+    }));
+    let installed = [];
+    try {
+      installed = (await listDesignSystems(USER_DESIGN_SYSTEMS_DIR)).map(
+        (s) => ({ ...s, source: 'installed' }),
+      );
+    } catch {
+      // User directory may not exist yet or be unreadable.
+    }
+    const seen = new Set(builtIn.map((s) => s.id));
+    return [...builtIn, ...installed.filter((s) => !seen.has(s.id))];
+  }
 
   // Chrome may strip the port from the Origin header on same-origin GET
   // requests. Only use this as a fallback for safe, idempotent GET requests;
@@ -1972,6 +2216,32 @@ export async function startServer({
   configureComposioConfigStore(RUNTIME_DATA_DIR);
   composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
   composioConnectorProvider.startCatalogRefreshLoop();
+
+  // RoutineService persistence is a thin adapter over the SQLite helpers.
+  // Routines are stored as DB rows; the service holds in-memory timers and
+  // delegates "list me everything" / "record a run" back to SQLite.
+  routineService = new RoutineService({
+    list: () => listRoutines(db).map((row) => routineDbRowToContract(row, null)),
+    insertRun: (run) => {
+      insertRoutineRun(db, {
+        id: run.id,
+        routineId: run.routineId,
+        trigger: run.trigger,
+        status: run.status,
+        projectId: run.projectId,
+        conversationId: run.conversationId,
+        agentRunId: run.agentRunId,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        summary: run.summary,
+        error: run.error,
+      });
+    },
+    updateRun: (id, patch) => {
+      updateRoutineRun(db, id, patch);
+    },
+    getLatestRun: (routineId) => getLatestRoutineRun(db, routineId),
+  });
   let daemonUrl = `http://127.0.0.1:${port}`;
 
   // Boot reconcile: any critique_runs row left in 'running' state by a prior
@@ -2010,6 +2280,8 @@ export async function startServer({
       return detectAgents(config.agentCliEnv ?? {});
     })
     .catch(() => detectAgents().catch(() => {}));
+
+  routineService.start();
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -2451,11 +2723,23 @@ export async function startServer({
       // can't smuggle e.g. /etc through here. Same rule for
       // originalBaseDir / importedFrom='folder' — only the import path
       // owns those state fields.
+      //
+      // PR #974: also block client-supplied `fromTrustedPicker` here.
+      // Only the desktop HMAC-gated import flow is allowed to stamp that
+      // marker; any other route attempting to set it would let a
+      // compromised renderer launder an attacker-controlled baseDir
+      // through a future codepath that trusted the flag.
       if (metadata && typeof metadata === 'object') {
         if ('baseDir' in metadata) {
           return sendApiError(
             res, 400, 'BAD_REQUEST',
             'baseDir can only be set via POST /api/import/folder',
+          );
+        }
+        if ('fromTrustedPicker' in metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
       }
@@ -2598,12 +2882,86 @@ export async function startServer({
   // No copy, no shadow tree — the user owns the workspace and is
   // responsible for their own version control (git, time machine, etc.),
   // mirroring how Cursor / Claude Code / Aider behave.
+  //
+  // PR #974 trust boundary: when the desktop main process has registered
+  // an auth secret with the daemon (REGISTER_DESKTOP_AUTH sidecar IPC),
+  // every request here must carry an HMAC token in
+  // `X-OD-Desktop-Import-Token` that binds nonce + expiry + baseDir to
+  // the picker-originated path. Without that gate a compromised renderer
+  // could call this route directly with an arbitrary absolute path and
+  // then call `openPath(projectId)` on the resulting project to reveal
+  // attacker-chosen filesystem locations in Finder/Explorer.
   app.post('/api/import/folder', async (req, res) => {
     try {
       const { baseDir, name, skillId, designSystemId } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
+      // PR #974 round-4 P1: the gate is fail-CLOSED, not fail-open.
+      //
+      // Three branches:
+      //   1. Gate inactive (web-only daemon, no secret ever registered,
+      //      no env-var pinning): accept request as before.
+      //   2. Gate active but secret unavailable (env-var-pinned daemon
+      //      that has not yet received REGISTER_DESKTOP_AUTH, OR a
+      //      daemon-restart edge where the desktop main process holds
+      //      a secret the new daemon process doesn't know about): 503
+      //      "desktop auth required; secret not yet registered". The
+      //      renderer cannot bypass by hitting the route directly during
+      //      the desktop's startup window or after a daemon crash, and
+      //      the desktop's own pickAndImport flow can retry.
+      //   3. Gate active with secret registered: require + verify HMAC
+      //      bound to the EXACT request-body baseDir (no `.trim()` here).
+      //      Round-5 (lefarcen P3) closes the binding gap by trimming on
+      //      the DESKTOP side before signing and POSTing, so the desktop-
+      //      signed string, the request body, the HMAC-verified string,
+      //      and the realpath() input are all the same. The daemon side
+      //      retains a defensive `baseDir.trim()` below for *web-mode*
+      //      callers (no HMAC, no desktop trim) where a user-typed path
+      //      with edge whitespace would otherwise fail isAbsolute(); for
+      //      desktop traffic the trim is provably a no-op.
+      let trustedPickerImport = false;
+      if (desktopAuthEverRegistered) {
+        if (desktopAuthSecret == null) {
+          return sendApiError(
+            res,
+            503,
+            'DESKTOP_AUTH_PENDING',
+            'desktop auth required but secret not yet registered',
+            {
+              details: { hint: 'restart desktop or wait for sidecar registration' },
+              retryable: true,
+            },
+          );
+        }
+        const headerValue = req.get(DESKTOP_IMPORT_TOKEN_HEADER);
+        const token = typeof headerValue === 'string' ? headerValue : '';
+        const now = Date.now();
+        pruneExpiredImportNonces(now);
+        const verification = verifyDesktopImportToken(
+          desktopAuthSecret,
+          baseDir,
+          token,
+          now,
+          consumedImportNonces,
+        );
+        if (!verification.ok) {
+          return sendApiError(
+            res,
+            403,
+            'FORBIDDEN',
+            'desktop import token rejected',
+            { details: { reason: verification.reason } },
+          );
+        }
+        consumedImportNonces.set(verification.nonce, verification.exp);
+        trustedPickerImport = true;
+      }
+      // Round-5 (lefarcen P3): defensive trim for *web-mode* callers
+      // where the request body baseDir may carry edge whitespace
+      // (path.isAbsolute("  /foo  ") returns false). Desktop callers
+      // already trim picker output before signing so this is a no-op
+      // for them and HMAC-binding is preserved end-to-end.
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
@@ -2662,6 +3020,17 @@ export async function startServer({
           baseDir: normalizedPath,
           importedFrom: 'folder',
           entryFile,
+          // PR #974: stamp the project as trusted-picker-originated when
+          // the import passed the desktop HMAC gate. The desktop main
+          // process refuses to forward `shell.openPath` for folder-imported
+          // projects whose metadata lacks this flag, so renderer JS cannot
+          // turn an existing folder-imported project (or one created
+          // through some future bypass) into an arbitrary file-manager
+          // reveal. Web-only deployments (no secret registered) intentionally
+          // do not stamp this field — there is no `shell.openPath` surface
+          // on browser builds, so the marker only matters where the bridge
+          // exists.
+          ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
         },
         createdAt: now,
         updatedAt: now,
@@ -2688,8 +3057,9 @@ export async function startServer({
     const project = getProject(db, req.params.id);
     if (!project)
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    /** @type {import('@open-design/contracts').ProjectResponse} */
-    const body = { project };
+    const resolvedDir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    /** @type {import('@open-design/contracts').ProjectDetailResponse} */
+    const body = { project, resolvedDir };
     res.json(body);
   });
 
@@ -2712,6 +3082,20 @@ export async function startServer({
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
+        // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`
+        // is. Reject any attempt to acquire or flip it through PATCH; the
+        // import-folder route is the single source of truth. Allow PATCH
+        // bodies that re-spread the existing `true` marker (the linked-
+        // folder UI does that whenever it edits linkedDirs) — only reject
+        // when the incoming value differs from the persisted one. Per
+        // round-7 lefarcen P2.
+        if ('fromTrustedPicker' in patch.metadata
+            && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'fromTrustedPicker can only be set via POST /api/import/folder',
+          );
+        }
         if (existingMeta?.baseDir) {
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
             return sendApiError(
@@ -2724,6 +3108,12 @@ export async function startServer({
             baseDir: existingMeta.baseDir,
             ...(existingMeta.importedFrom === 'folder'
               ? { importedFrom: 'folder' }
+              : {}),
+            // Preserve the trusted-picker marker when the existing project
+            // had it, so downstream PATCH calls that omit metadata fields
+            // do not silently strip the flag and re-open the bypass.
+            ...(existingMeta.fromTrustedPicker === true
+              ? { fromTrustedPicker: true as const }
               : {}),
           };
         } else if ('baseDir' in patch.metadata) {
@@ -3385,7 +3775,7 @@ export async function startServer({
 
   app.get('/api/design-systems', async (_req, res) => {
     try {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems();
       res.json({
         designSystems: systems.map(({ body, ...rest }) => rest),
       });
@@ -3396,7 +3786,9 @@ export async function startServer({
 
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
       if (body === null)
         return res.status(404).json({ error: 'design system not found' });
       res.json({ id: req.params.id, body });
@@ -3437,7 +3829,9 @@ export async function startServer({
   // file shows up on the next view, no rebuild needed.
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
@@ -3452,7 +3846,9 @@ export async function startServer({
   // /preview: built at request time, no caching.
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body =
+        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
@@ -3642,6 +4038,71 @@ export async function startServer({
       res.type(mimeFor(target)).sendFile(target);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
+    }
+  });
+
+  // Install a skill from a GitHub URL or local path.
+  app.post('/api/skills/install', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await installFromTarget(req.body, USER_SKILLS_DIR, 'skill');
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      const skills = await listSkills(SKILL_ROOTS);
+      const skill = findSkillById(skills, req.body.source === 'github'
+        ? sanitizeRepoName(req.body.url)
+        : path.basename(fs.realpathSync.native(req.body.path)));
+      res.json({ skill: skill ? { ...skill, dir: undefined, body: undefined, hasBody: typeof skill.body === 'string' && skill.body.length > 0 } : null });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Uninstall a user-installed skill.
+  app.delete('/api/skills/:id', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await uninstallById(req.params.id, USER_SKILLS_DIR, SKILLS_DIR, 'skill');
+      if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Install a design system from a GitHub URL or local path.
+  app.post('/api/design-systems/install', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await installFromTarget(req.body, USER_DESIGN_SYSTEMS_DIR, 'design-system');
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      const systems = await listAllDesignSystems();
+      const dsId = req.body.source === 'github'
+        ? sanitizeRepoName(req.body.url)
+        : path.basename(fs.realpathSync.native(req.body.path));
+      const ds = systems.find((s) => s.id === dsId);
+      res.json({ designSystem: ds || null });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Uninstall a user-installed design system.
+  app.delete('/api/design-systems/:id', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const result = await uninstallById(req.params.id, USER_DESIGN_SYSTEMS_DIR, DESIGN_SYSTEMS_DIR, 'design-system');
+      if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 
@@ -4231,13 +4692,50 @@ export async function startServer({
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
 
-      const result = await finalizeDesignPackage(
-        db,
-        PROJECTS_DIR,
-        DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        { apiKey, baseUrl, model, maxTokens },
-      );
+      // Wire the request lifecycle into a server-side AbortController
+      // so that when the client cancels (browser fetch aborts) or
+      // disconnects, the in-flight Anthropic call inside
+      // finalizeDesignPackage is aborted instead of running to
+      // completion in the background and overwriting DESIGN.md after
+      // the UI has returned to idle. mrcfps PR #974 P1 review on
+      // server.ts:3831-3837. Note that an abort fired after the
+      // upstream response has been received but before the atomic
+      // write completes still allows the write to land — the SDK
+      // contract bounds the network round-trip, not the post-network
+      // disk handoff.
+      //
+      // We listen on `res.on('close')` because that is the canonical
+      // event that Express + Node's http server fires when the
+      // underlying socket is destroyed before the response is sent
+      // (undici fetch abort sends TCP RST). `req.on('close')` /
+      // `req.on('aborted')` are also wired as belt-and-braces but
+      // their behaviour varies by Node version when the request body
+      // has already been consumed.
+      const finalizeAbort = new AbortController();
+      const abortFromRequest = (): void => {
+        if (!finalizeAbort.signal.aborted) finalizeAbort.abort();
+      };
+      // `res.on('close')` fires when the response stream ends — either
+      // because `res.end()` was called by the success path or because
+      // the client disconnected before the response was sent. The
+      // alternative `req.on('close')` fires whenever the *request*
+      // stream finishes, which on POST routes happens as soon as
+      // Express body-parser drains the body — i.e. before the route
+      // does any work — so it cannot be used as a disconnect signal.
+      res.on('close', abortFromRequest);
+
+      let result;
+      try {
+        result = await finalizeDesignPackage(
+          db,
+          PROJECTS_DIR,
+          DESIGN_SYSTEMS_DIR,
+          req.params.id,
+          { apiKey, baseUrl, model, maxTokens, signal: finalizeAbort.signal },
+        );
+      } finally {
+        res.off('close', abortFromRequest);
+      }
       res.json(result);
     } catch (err) {
       // Concurrent finalize - the lockfile was already held by another
@@ -4483,7 +4981,7 @@ export async function startServer({
     try {
       const relPath = req.params[0];
       const project = getProject(db, req.params.id);
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -4491,6 +4989,62 @@ export async function startServer({
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
+
+      // Stat the file first without buffering so we can choose the right path.
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        req.params.id,
+        relPath,
+        project?.metadata,
+      );
+
+      // Stream video/audio with HTTP 206 Partial Content support (RFC 7233).
+      // The inline VideoViewer and AudioViewer components fetch this route;
+      // browsers require Accept-Ranges + 206 responses to play and seek media.
+      if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Type', meta.mime);
+
+        if (meta.size === 0) {
+          res.setHeader('Content-Length', '0');
+          return res.status(200).end();
+        }
+
+        const range = parseByteRange(req.headers.range, meta.size);
+
+        if (range === 'unsatisfiable') {
+          res.setHeader('Content-Range', `bytes */${meta.size}`);
+          return res.status(416).end();
+        }
+
+        let start, end, statusCode;
+        if (range) {
+          ({ start, end } = range);
+          statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+        } else {
+          start = 0;
+          end = meta.size - 1;
+          statusCode = 200;
+          res.setHeader('Content-Length', String(meta.size));
+        }
+
+        res.status(statusCode);
+        const stream = fs.createReadStream(meta.filePath, { start, end });
+        stream.on('error', (streamErr) => {
+          if (!res.headersSent) {
+            sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
+          } else {
+            res.destroy(streamErr);
+          }
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      // Non-media files: read into buffer (existing behaviour).
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -4586,6 +5140,63 @@ export async function startServer({
   app.get('/api/projects/:id/files/*', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
+
+      // Resolve path + stat without reading content so we can decide whether
+      // to stream (media) or buffer (everything else).
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        req.params.id,
+        req.params[0],
+        project?.metadata,
+      );
+
+      // Stream video and audio with HTTP 206 Partial Content support (RFC 7233).
+      // Browsers require range responses to seek/scrub media; buffering the
+      // whole file into memory would also block the process on large videos.
+      if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Type', meta.mime);
+
+        // Empty file edge case: nothing to range over.
+        if (meta.size === 0) {
+          res.setHeader('Content-Length', '0');
+          return res.status(200).end();
+        }
+
+        const range = parseByteRange(req.headers.range, meta.size);
+
+        if (range === 'unsatisfiable') {
+          res.setHeader('Content-Range', `bytes */${meta.size}`);
+          return res.status(416).end();
+        }
+
+        let start, end, statusCode;
+        if (range) {
+          ({ start, end } = range);
+          statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+        } else {
+          start = 0;
+          end = meta.size - 1;
+          statusCode = 200;
+          res.setHeader('Content-Length', String(meta.size));
+        }
+
+        res.status(statusCode);
+        const stream = fs.createReadStream(meta.filePath, { start, end });
+        stream.on('error', (streamErr) => {
+          if (!res.headersSent) {
+            sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
+          } else {
+            res.destroy(streamErr);
+          }
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      // Non-media files: read into buffer (existing behaviour).
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
@@ -4680,6 +5291,35 @@ export async function startServer({
       }
     },
   );
+
+  app.post('/api/projects/:id/files/rename', async (req, res) => {
+    try {
+      const { from, to } = req.body || {};
+      if (typeof from !== 'string' || typeof to !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
+      }
+      const project = getProject(db, req.params.id);
+      const result = await renameProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        from,
+        to,
+        project?.metadata,
+      );
+      /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
+      const body = result;
+      res.json(body);
+    } catch (err) {
+      const code = err && err.code;
+      if (code === 'ENOENT') {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+      }
+      if (code === 'EEXIST') {
+        return sendApiError(res, 409, 'FILE_EXISTS', 'target file already exists');
+      }
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
@@ -4787,6 +5427,356 @@ export async function startServer({
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });
     }
+  });
+
+  // ---------- routines ----------
+
+  // Map a DB row to the Routine contract shape. Schedule lives in
+  // schedule_json (the canonical form); when missing (rows written before
+  // that column existed) we fall back to the legacy daily-only kind/value
+  // pair with UTC as a safe default timezone.
+  function routineDbRowToContract(row, latestRun) {
+    let schedule;
+    if (row.scheduleJson) {
+      try {
+        schedule = JSON.parse(row.scheduleJson);
+      } catch {
+        schedule = null;
+      }
+    }
+    if (!schedule) {
+      // Legacy fallback: daily HH:MM in UTC.
+      schedule = {
+        kind: row.scheduleKind || 'daily',
+        time: row.scheduleValue || '09:00',
+        timezone: 'UTC',
+      };
+    }
+    const target = row.projectMode === 'reuse' && row.projectId
+      ? { mode: 'reuse', projectId: row.projectId }
+      : { mode: 'create_each_run' };
+    let lastRun = null;
+    if (latestRun) {
+      lastRun = {
+        runId: latestRun.id,
+        status: latestRun.status,
+        trigger: latestRun.trigger,
+        startedAt: latestRun.startedAt,
+        ...(latestRun.completedAt == null ? {} : { completedAt: latestRun.completedAt }),
+        projectId: latestRun.projectId,
+        conversationId: latestRun.conversationId,
+        agentRunId: latestRun.agentRunId,
+        ...(latestRun.summary ? { summary: latestRun.summary } : {}),
+      };
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      prompt: row.prompt,
+      schedule,
+      target,
+      skillId: row.skillId ?? null,
+      agentId: row.agentId ?? null,
+      enabled: row.enabled === true || row.enabled === 1,
+      nextRunAt: null,
+      lastRun,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Serialize a schedule into the kind/value/json triple stored in SQLite.
+  // schedule_value carries a kind-specific stringified scalar (minute for
+  // hourly, "HH:MM" for time-of-day kinds) so existing simple queries keep
+  // working; schedule_json is the authoritative form.
+  function scheduleToDbCols(schedule) {
+    const json = JSON.stringify(schedule);
+    let value = '';
+    if (schedule.kind === 'hourly') value = String(schedule.minute);
+    else if (schedule.kind === 'weekly') value = `${schedule.weekday}:${schedule.time}`;
+    else value = schedule.time;
+    return { scheduleKind: schedule.kind, scheduleValue: value, scheduleJson: json };
+  }
+
+  function routineFromDb(id) {
+    const row = getRoutine(db, id);
+    if (!row) return null;
+    const latest = getLatestRoutineRun(db, id);
+    const contract = routineDbRowToContract(row, latest);
+    const nextDate = routineService?.nextRunAt(id) ?? null;
+    contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+    return contract;
+  }
+
+  function validateRoutineInput(body, partial) {
+    if (!body || typeof body !== 'object') {
+      throw new Error('Request body must be an object');
+    }
+    if (!partial || body.name !== undefined) {
+      if (typeof body.name !== 'string' || !body.name.trim()) {
+        throw new Error('name is required');
+      }
+    }
+    if (!partial || body.prompt !== undefined) {
+      if (typeof body.prompt !== 'string' || !body.prompt.trim()) {
+        throw new Error('prompt is required');
+      }
+    }
+    if (!partial || body.schedule !== undefined) {
+      validateRoutineSchedule(body.schedule);
+    }
+    if (!partial || body.target !== undefined) {
+      validateRoutineTarget(body.target);
+      if (body.target.mode === 'reuse') {
+        const proj = getProject(db, body.target.projectId);
+        if (!proj) throw new Error(`target project ${body.target.projectId} not found`);
+      }
+    }
+  }
+
+  // Each routine fire: resolve agent, mint (or reuse) project + a fresh
+  // conversation, prime the user/assistant message pair, and dispatch into
+  // startChatRun. Returns the in-flight handles so the service can persist
+  // the routine_run row and observe completion.
+  routineService.setRunHandler(async ({ routine, trigger, startedAt, runId }) => {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    let agentId = routine.agentId
+      || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
+    if (!agentId) {
+      const agents = await detectAgents(appConfig.agentCliEnv ?? {}).catch(() => []);
+      agentId = agents.find((agent) => agent.available)?.id ?? null;
+    }
+    if (!agentId) {
+      throw new Error('No available agent is configured. Choose an agent in Settings first.');
+    }
+
+    const now = startedAt;
+    const stamp = formatLocalProjectTimestamp(new Date(now).toISOString());
+
+    let projectId;
+    let projectName;
+    if (routine.target.mode === 'reuse') {
+      const proj = getProject(db, routine.target.projectId);
+      if (!proj) throw new Error(`Routine target project ${routine.target.projectId} not found`);
+      projectId = proj.id;
+      projectName = proj.name;
+    } else {
+      projectId = `routine-${randomUUID()}`;
+      projectName = `${routine.name} · ${stamp}`;
+      insertProject(db, {
+        id: projectId,
+        name: projectName,
+        skillId: routine.skillId ?? null,
+        designSystemId: appConfig.designSystemId ?? null,
+        pendingPrompt: null,
+        metadata: { kind: 'other', intent: 'routine', routineId: routine.id, trigger },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const conversationId = `routine-conv-${randomUUID()}`;
+    const conversationTitle = routine.target.mode === 'reuse'
+      ? `${routine.name} · ${stamp}`
+      : projectName;
+    insertConversation(db, {
+      id: conversationId,
+      projectId,
+      title: conversationTitle,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const assistantMessageId = `routine-assistant-${randomUUID()}`;
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: `routine-${trigger}-${randomUUID()}`,
+      agentId,
+    });
+    upsertMessage(db, conversationId, {
+      id: `routine-user-${run.id}`,
+      role: 'user',
+      content: routine.prompt,
+    });
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId,
+      agentName: getAgentDef(agentId)?.name ?? agentId,
+      runId: run.id,
+      runStatus: 'queued',
+      startedAt: now,
+    });
+
+    const modelPrefs = appConfig.agentModels?.[agentId] ?? {};
+    design.runs.start(run, () => startChatRun({
+      agentId,
+      projectId,
+      conversationId: run.conversationId,
+      assistantMessageId: run.assistantMessageId,
+      clientRequestId: run.clientRequestId,
+      skillId: routine.skillId ?? null,
+      designSystemId: appConfig.designSystemId ?? null,
+      model: modelPrefs.model ?? null,
+      reasoning: modelPrefs.reasoning ?? null,
+      message: routine.prompt,
+      systemPrompt: [
+        `You are running an unattended scheduled routine named "${routine.name}".`,
+        'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. Pick reasonable defaults and finish the task.',
+      ].join('\n'),
+    }, run));
+
+    const completion = (async () => {
+      const finalStatus = await design.runs.wait(run);
+      db.prepare(`UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`)
+        .run(finalStatus.status, Date.now(), assistantMessageId);
+      return {
+        status: finalStatus.status,
+        summary: `Routine "${routine.name}" ${finalStatus.status}.`,
+      };
+    })();
+
+    return { projectId, conversationId, agentRunId: run.id, completion };
+  });
+
+  app.get('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const rows = listRoutines(db);
+      const routines = rows.map((row) => {
+        const latest = getLatestRoutineRun(db, row.id);
+        const contract = routineDbRowToContract(row, latest);
+        const nextDate = routineService?.nextRunAt(row.id) ?? null;
+        contract.nextRunAt = nextDate ? nextDate.getTime() : null;
+        return contract;
+      });
+      res.json({ routines });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.post('/api/routines', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const body = req.body || {};
+      validateRoutineInput(body, false);
+      const id = `routine-${randomUUID()}`;
+      const now = Date.now();
+      const scheduleCols = scheduleToDbCols(body.schedule);
+      insertRoutine(db, {
+        id,
+        name: body.name.trim(),
+        prompt: body.prompt,
+        ...scheduleCols,
+        projectMode: body.target.mode,
+        projectId: body.target.mode === 'reuse' ? body.target.projectId : null,
+        skillId: body.skillId ?? null,
+        agentId: body.agentId ?? null,
+        enabled: body.enabled !== false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      routineService?.rescheduleOne(id);
+      const routine = routineFromDb(id);
+      res.status(201).json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const routine = routineFromDb(req.params.id);
+    if (!routine) return res.status(404).json({ error: 'routine not found' });
+    res.json({ routine });
+  });
+
+  app.patch('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const body = req.body || {};
+      validateRoutineInput(body, true);
+      const patch = {};
+      if (body.name !== undefined) patch.name = body.name.trim();
+      if (body.prompt !== undefined) patch.prompt = body.prompt;
+      if (body.schedule !== undefined) {
+        const cols = scheduleToDbCols(body.schedule);
+        patch.scheduleKind = cols.scheduleKind;
+        patch.scheduleValue = cols.scheduleValue;
+        patch.scheduleJson = cols.scheduleJson;
+      }
+      if (body.target !== undefined) {
+        patch.projectMode = body.target.mode;
+        patch.projectId = body.target.mode === 'reuse' ? body.target.projectId : null;
+      }
+      if (body.skillId !== undefined) patch.skillId = body.skillId ?? null;
+      if (body.agentId !== undefined) patch.agentId = body.agentId ?? null;
+      if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+      updateRoutine(db, req.params.id, patch);
+      routineService?.rescheduleOne(req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.json({ routine });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.delete('/api/routines/:id', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    routineService?.unschedule(req.params.id);
+    const removed = dbDeleteRoutine(db, req.params.id);
+    if (!removed) return res.status(404).json({ error: 'routine not found' });
+    res.status(204).end();
+  });
+
+  app.post('/api/routines/:id/run', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      if (!routineService) throw new Error('routine service unavailable');
+      const existing = getRoutine(db, req.params.id);
+      if (!existing) return res.status(404).json({ error: 'routine not found' });
+      const start = await routineService.runNow(req.params.id);
+      const latest = getLatestRoutineRun(db, req.params.id);
+      const routine = routineFromDb(req.params.id);
+      res.status(202).json({
+        routine,
+        run: latest,
+        projectId: start.projectId,
+        conversationId: start.conversationId,
+        agentRunId: start.agentRunId,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
+
+  app.get('/api/routines/:id/runs', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const existing = getRoutine(db, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'routine not found' });
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const runs = listRoutineRuns(db, req.params.id, limit);
+    res.json({ runs });
   });
 
   // Native OS folder picker dialog. Returns { path: string | null }.
@@ -5156,11 +6146,12 @@ export async function startServer({
     let designSystemBody;
     let designSystemTitle;
     if (effectiveDesignSystemId) {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems();
       const summary = systems.find((s) => s.id === effectiveDesignSystemId);
       designSystemTitle = summary?.title;
       designSystemBody =
         (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
+        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         undefined;
     }
 
@@ -5217,6 +6208,7 @@ export async function startServer({
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
+      streamFormat,
       skillBody,
       skillName,
       skillMode,
@@ -6004,7 +6996,7 @@ export async function startServer({
         // same project from overwriting each other's transcript or final HTML.
         // Spec: artifacts/<projectId>/<runId>/transcript.ndjson(.gz).
         const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
-        const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
+        const critiqueArtifactDir = path.join(CRITIQUE_ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
@@ -6500,6 +7492,62 @@ export async function startServer({
   // failures so the web layer can render a categorized inline status without
   // unwrapping nested error envelopes; real 4xx/5xx here mean a malformed
   // request or daemon bug.
+  app.post('/api/provider/models', async (req, res) => {
+    const controller = new AbortController();
+    const abortIfRequestAborted = () => {
+      if ((req.aborted || !req.complete) && !res.writableEnded) {
+        controller.abort();
+      }
+    };
+    const abortIfResponseClosed = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    req.on('close', abortIfRequestAborted);
+    res.on('close', abortIfResponseClosed);
+    const body = req.body || {};
+    const protocol = body.protocol;
+    if (
+      typeof protocol !== 'string' ||
+      !['anthropic', 'openai', 'azure', 'google', 'ollama'].includes(protocol)
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'protocol must be one of anthropic|openai|azure|google|ollama',
+      );
+    }
+    if (
+      typeof body.baseUrl !== 'string' ||
+      typeof body.apiKey !== 'string' ||
+      !body.baseUrl.trim() ||
+      !body.apiKey.trim()
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'baseUrl and apiKey are required',
+      );
+    }
+    try {
+      const result = await listProviderModels({
+        protocol,
+        baseUrl: body.baseUrl,
+        apiKey: body.apiKey,
+        apiVersion:
+          typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+        signal: controller.signal,
+      });
+      return res.json(result);
+    } catch (err) {
+      console.warn(
+        `[provider:models] uncaught: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return sendApiError(res, 500, 'INTERNAL', 'Provider model discovery failed');
+    }
+  });
+
   app.post('/api/test/connection', async (req, res) => {
     const controller = new AbortController();
     const abortIfRequestAborted = () => {
@@ -6518,13 +7566,13 @@ export async function startServer({
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google',
+            'protocol must be one of anthropic|openai|azure|google|ollama',
           );
         }
         if (
@@ -6630,6 +7678,24 @@ export async function startServer({
     handleCritiqueInterrupt(db, critiqueRunRegistry),
   );
 
+  // GET /api/projects/:projectId/critique/:runId/artifact
+  // Streams the SHIP <ARTIFACT> body the orchestrator persisted, with
+  // mime derived from the file extension on disk. Cross-project leak
+  // guard mirrors the interrupt route. The web layer fetches this as
+  // the logical artifact handle so it never sees daemon paths.
+  //
+  // Response cap is threaded from cfg.parserMaxBlockBytes so a row that
+  // the orchestrator + writer accepted is always retrievable; without
+  // this, raising OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES above the
+  // hard-coded ceiling would 404 a valid artifact (codex P2 on PR #1085).
+  app.get(
+    '/api/projects/:projectId/critique/:runId/artifact',
+    handleCritiqueArtifact(db, {
+      artifactsRoot: CRITIQUE_ARTIFACTS_DIR,
+      responseCapBytes: critiqueCfg.parserMaxBlockBytes,
+    }),
+  );
+
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
   // Browser → daemon → external API. Avoids CORS issues with third-party
   // providers. This keeps BYOK setup zero-config for local users at the cost of
@@ -6729,6 +7795,44 @@ export async function startServer({
 
     const tail = buffer.trim();
     if (tail) await onFrame(collectSseFrame(tail));
+  };
+
+  // Ollama Cloud streams NDJSON (newline-delimited JSON) — each line is a
+  // complete JSON object. Parse per-line and dispatch parsed objects.
+  const streamUpstreamNdjson = async (response, onFrame) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (await onFrame({ data })) return;
+        } catch {
+          // skip unparseable lines
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        const data = JSON.parse(tail);
+        await onFrame({ data });
+      } catch {
+        // skip
+      }
+    }
   };
 
   const extractOpenAIText = (data) => {
@@ -7183,6 +8287,98 @@ export async function startServer({
     }
   });
 
+  app.post('/api/proxy/ollama/stream', async (req, res) => {
+    /** @type {Partial<ProxyStreamRequest>} */
+    const proxyBody = req.body || {};
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const validated = validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const url = `${clean}/api/chat`;
+    console.log(
+      `[proxy:ollama] ${req.method} ${validated.parsed.hostname} model=${model}`,
+    );
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const payload = {
+      model,
+      messages: payloadMessages,
+      stream: true,
+    };
+    if (typeof maxTokens === 'number' && maxTokens > 0) {
+      payload.options = { num_predict: maxTokens };
+    }
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      await streamUpstreamNdjson(response, ({ data }) => {
+        if (!data) return false;
+        if (data.done) {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        const content = data.message?.content;
+        if (typeof content === 'string' && content) {
+          sse.send('delta', { delta: content });
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err) {
+      console.error(`[proxy:ollama] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    }
+  });
+
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
   // needs to advertise the port to a parent process before any request
@@ -7195,6 +8391,7 @@ export async function startServer({
     const cleanupDaemonBackgroundWork = () => {
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
+      routineService?.stop();
     };
     const shutdownDaemonRuns = async () => {
       if (daemonShutdownStarted) return;

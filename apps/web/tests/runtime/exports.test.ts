@@ -259,7 +259,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {
-    exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
+    await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
 
     expect(openCalls).toEqual([['', '_blank']]);
     expect(mockWin.opener).toBeNull();
@@ -273,7 +273,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('preserves deck print handling inside sandboxed PDF exports', async () => {
-    exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
+    await exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
 
     expect(openCalls).toEqual([['', '_blank']]);
     expect(mockWin.opener).toBeNull();
@@ -286,7 +286,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('allows explicit trusted PDF opt-out without changing the secure default', async () => {
-    exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
+    await exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
       sandboxedPreview: false,
     });
 
@@ -301,16 +301,112 @@ describe('sandboxed preview Blob exports', () => {
 
   it('shows an alert and revokes the blob URL when the popup is blocked', async () => {
     vi.stubGlobal('window', {
-      ...window,
       open: () => null,
+      addEventListener: () => {},
     });
 
     const revokeSpy = URL.revokeObjectURL as ReturnType<typeof vi.fn>;
     revokeSpy.mockClear();
 
-    exportAsPdf('<p>test</p>', 'Blocked');
+    await exportAsPdf('<p>test</p>', 'Blocked');
 
-    expect(alert).toHaveBeenCalledWith('Popup blocked! Please allow popups for this site to export as PDF.');
+    expect(alert).toHaveBeenCalledWith('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     expect(revokeSpy).toHaveBeenCalledWith('blob:test');
+  });
+
+  it('uses the desktop native print bridge when __odDesktop.printPdf is available', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: (_url: string, _target: string, features?: string) => {
+        openCalls.push([_url, _target]);
+        openedFeatures = features;
+        return mockWin;
+      },
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'Desktop PDF');
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    expect(openCalls).toEqual([]);
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    expect(htmlArg).toContain('sandbox="allow-scripts"');
+    expect(htmlArg).not.toContain('allow-modals');
+    expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
+    // Verify the readiness handshake is present — the sandboxed iframe posts
+    // 'OD_PRINT_READY' to the parent once fonts and images are loaded.
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // Verify the parent-wrapper cache script is present so the handshake is
+    // never missed even if 'OD_PRINT_READY' fires before the listener attaches.
+    expect(htmlArg).toContain('__odPrintReady');
+    // Verify the print script is NOT injected — Electron calls
+    // webContents.print() natively, so a self-printing document would
+    // trigger a second print dialog.
+    expect(htmlArg).not.toContain('window.print()');
+  });
+
+  it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: () => mockWin,
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    // HTML with an intentionally non-loadable image to exercise the
+    // incomplete-image detection in the injected handshake.
+    const html = '<div><img src="https://example.com/will-not-load.png" alt="test"/></div>';
+    await exportAsPdf(html, 'Image Test');
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // In the sandboxed wrapper the srcdoc attribute is HTML-escaped, so the
+    // handshake script content is present as unescaped JS fragments.
+    expect(htmlArg).toContain('document.images');
+    expect(htmlArg).toContain("img.addEventListener('load'");
+    expect(htmlArg).toContain("img.addEventListener('error'");
+    expect(htmlArg).toContain('img.complete');
+    // The original font- and load-waiting logic must still be present.
+    expect(htmlArg).toContain('document.fonts');
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // The handshake posts an object with a per-export nonce to prevent
+    // spoofing by untrusted artifact code.
+    expect(htmlArg).toContain("type:'OD_PRINT_READY'");
+    expect(htmlArg).toContain("nonce:'");
+    // The cache script also validates the nonce and event source.
+    expect(htmlArg).toContain("e.data.type==='OD_PRINT_READY'");
+    expect(htmlArg).toContain("e.data.nonce===");
+    expect(htmlArg).toContain('e.source===');
+    // The parent cache should still be injected.
+    expect(htmlArg).toContain('__odPrintReady');
+    // No window.print() since the desktop bridge handles printing natively.
+    expect(htmlArg).not.toContain('window.print()');
+  });
+
+  it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: () => mockWin,
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    await exportAsPdf('<main>Trusted local document</main>', 'Trusted', {
+      sandboxedPreview: false,
+    });
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // No sandbox wrapper — the document is passed through directly.
+    expect(htmlArg).not.toContain('sandbox="allow-scripts"');
+    expect(htmlArg).toContain('<main>Trusted local document</main>');
+    // The readiness handshake must still be injected.
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // The cache must be present so waitForPrintReadyHandshake never hangs.
+    expect(htmlArg).toContain('__odPrintReady');
+    // No window.print() since the desktop bridge handles printing natively.
+    expect(htmlArg).not.toContain('window.print()');
   });
 });

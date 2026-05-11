@@ -687,7 +687,7 @@ function summarizeGroup(
 
 function toolFamily(name: string): string {
   if (name === "Edit" || name === "str_replace_edit") return "edit";
-  if (name === "Write" || name === "create_file") return "write";
+  if (name === "Write" || name === "write" || name === "create_file") return "write";
   if (name === "Read" || name === "read_file") return "read";
   if (name === "Glob" || name === "list_files") return "glob";
   if (name === "Grep") return "grep";

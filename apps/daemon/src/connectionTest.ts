@@ -177,6 +177,15 @@ function inspectProviderCompletion(
     };
   }
 
+  if (protocol === 'ollama') {
+    const msg = (obj as { message?: { content?: unknown } }).message;
+    const hasContent = typeof msg?.content === 'string';
+    return {
+      valid: Array.isArray((obj as { messages?: unknown }).messages) || hasContent,
+      ...(hasContent ? { sample: truncateSample(msg?.content) } : {}),
+    };
+  }
+
   return { valid: false };
 }
 
@@ -377,8 +386,6 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
     }
     case 'google': {
       const trimmedBase = baseUrl.replace(/\/+$/, '');
-      // Non-streaming variant — deliberately not :streamGenerateContent so
-      // we can JSON.parse the response in one shot.
       return {
         url: `${trimmedBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
         headers: {
@@ -402,6 +409,28 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
               typeof p?.text === 'string' ? p.text : '',
             )
             .join('');
+        },
+      };
+    }
+    case 'ollama': {
+      const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+      return {
+        url: `${trimmedBase}/api/chat`,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: {
+          model,
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+        },
+        extractText: (data) => {
+          const message = (data as { message?: { content?: unknown } }).message;
+          if (message && typeof (message as { content?: unknown }).content === 'string') {
+            return (message as { content: string }).content;
+          }
+          return '';
         },
       };
     }

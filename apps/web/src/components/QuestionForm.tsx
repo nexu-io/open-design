@@ -76,7 +76,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
   });
 
   return (
-    <div className={`question-form${locked ? ' question-form-locked' : ''}`}>
+    <div className={`question-form${locked ? ' question-form-locked' : ''}`} data-form-id={form.id}>
       <div className="question-form-head">
         <span className="question-form-icon" aria-hidden>?</span>
         <div className="question-form-titles">

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Release Notes v2.3.1</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --surface: #ffffff;
+      --fg: #1a1916;
+      --muted: #6b6964;
+      --border: #e8e5df;
+      --accent: #c96442;
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+      --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.55 var(--font-body); color: var(--fg); background: var(--bg); }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+    .section { padding: 72px 0; }
+    .section[data-od-id="hero"] { padding: 96px 0 84px; }
+    .section + .section { border-top: 1px solid var(--border); }
+    .topnav { position: sticky; top: 0; z-index: 10; background: color-mix(in oklch, var(--bg) 92%, transparent); border-bottom: 1px solid var(--border); backdrop-filter: blur(10px); }
+    .topnav-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; }
+    .logo { font: 600 19px/1.1 var(--font-display); letter-spacing: -0.01em; }
+    nav { display: flex; gap: 24px; }
+    nav a { text-decoration: none; color: var(--muted); font-size: 14px; }
+    nav a:hover { color: var(--fg); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 1px solid transparent; border-radius: 10px; font: 500 15px/1 var(--font-body); cursor: pointer; }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .hero { text-align: center; max-width: 80ch; margin: 0 auto; }
+    .eyebrow { margin: 0 0 14px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; font: 12px/1.2 var(--font-mono); }
+    h1 { margin: 0 auto 20px; max-width: 16ch; font: 600 clamp(40px, 6vw, 66px)/1.05 var(--font-display); letter-spacing: -0.02em; }
+    .lead { margin: 0 auto; color: var(--muted); font-size: 19px; max-width: 40ch; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h2 { margin: 0; font: 600 clamp(30px, 4vw, 44px)/1.1 var(--font-display); letter-spacing: -0.015em; }
+    .meta { color: var(--muted); font: 13px/1.4 var(--font-mono); }
+    .log-row { display: grid; grid-template-columns: 120px 1fr 140px; gap: 24px; align-items: baseline; padding: 18px 0; border-top: 1px solid var(--border); }
+    .log-row h3 { margin: 0; font-size: 19px; letter-spacing: -0.005em; }
+    .log-row p { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
+    .pull { text-align: right; }
+    .list { margin: 16px 0 0; padding: 0 0 0 18px; }
+    .list li { margin: 8px 0; }
+    .cta { text-align: center; max-width: 640px; margin: 0 auto; }
+    .cta p { color: var(--muted); margin: 14px 0 28px; }
+    .pagefoot { border-top: 1px solid var(--border); padding: 28px 0; font-size: 13px; color: var(--muted); }
+    .pagefoot .row-between { flex-wrap: wrap; }
+    .num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+    @media (max-width: 920px) {
+      .log-row { grid-template-columns: 1fr; gap: 8px; }
+      .pull { text-align: left; }
+      nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topnav" data-od-id="topnav">
+    <div class="container topnav-inner">
+      <span class="logo">Release notes</span>
+      <nav>
+        <a href="#added">Added</a>
+        <a href="#fixed">Fixed</a>
+        <a href="#upgrade-note">Upgrade note</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="section" data-od-id="hero">
+      <div class="container hero">
+        <p class="eyebrow">Release notes · Version: v2.3.1 · Date: —</p>
+        <h1>v2.3.1</h1>
+        <p class="lead">No summary provided.</p>
+      </div>
+    </section>
+
+    <section class="section" id="added" data-od-id="added">
+      <div class="container">
+        <div class="row-between" style="margin-bottom: 24px;">
+          <h2>Added</h2>
+          <span class="meta">—</span>
+        </div>
+        <article class="log-row">
+          <span class="meta num">—</span>
+          <div>
+            <h3>No additions provided</h3>
+          </div>
+          <span class="pull meta">—</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="fixed" data-od-id="fixed">
+      <div class="container">
+        <div class="row-between" style="margin-bottom: 24px;">
+          <h2>Fixed</h2>
+          <span class="meta">—</span>
+        </div>
+        <article class="log-row">
+          <span class="meta num">—</span>
+          <div>
+            <h3>No fixes provided</h3>
+          </div>
+          <span class="pull meta">—</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="breaking-changes" data-od-id="breaking-changes">
+      <div class="container">
+        <div class="row-between" style="margin-bottom: 24px;">
+          <h2>Breaking changes</h2>
+          <span class="meta">—</span>
+        </div>
+        <article class="log-row">
+          <span class="meta num">—</span>
+          <div>
+            <h3>None</h3>
+          </div>
+          <span class="pull meta">—</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="known-issues" data-od-id="known-issues">
+      <div class="container">
+        <div class="row-between" style="margin-bottom: 16px;">
+          <h2>Known issues</h2>
+          <span class="meta">—</span>
+        </div>
+        <p class="meta">None reported</p>
+      </div>
+    </section>
+
+    <section class="section" id="upgrade-note" data-od-id="upgrade-note">
+      <div class="container">
+        <div class="row-between" style="margin-bottom: 16px;">
+          <h2>Upgrade note</h2>
+          <span class="meta">—</span>
+        </div>
+        <p class="meta">No upgrade actions required based on provided information.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="pagefoot" data-od-id="footer">
+    <div class="container row-between">
+      <span>© —</span>
+      <span class="meta">Release notes · v2.3.1</span>
+    </div>
+  </footer>
+</body>
+</html>

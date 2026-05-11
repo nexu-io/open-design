@@ -48,6 +48,7 @@ type IconName =
   | 'sun-moon'
   | 'tweaks'
   | 'upload'
+  | 'trash'
   | 'zoom-in'
   | 'zoom-out';
 
@@ -464,6 +465,14 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <circle cx="11" cy="11" r="7" />
           <path d="M8 11h6" />
           <path d="m21 21-4.3-4.3" />
+        </svg>
+      );
+    case 'trash':
+      return (
+        <svg {...common}>
+          <path d="M3 6h18" />
+          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
         </svg>
       );
     default:

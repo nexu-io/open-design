@@ -107,6 +107,14 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    // PR #974 round-5 (lefarcen P2): headless packaged mode runs daemon
+    // + web only, no Electron, no privileged shell.openPath surface.
+    // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
+    // can ever satisfy (no desktop main process to register a secret),
+    // so folder import would permanently return DESKTOP_AUTH_PENDING.
+    // The Electron entry counterpart in `apps/packaged/src/index.ts`
+    // passes `true` because it does start desktop main.
+    requireDesktopAuth: false,
     webSidecarEntry: config.webSidecarEntry,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,

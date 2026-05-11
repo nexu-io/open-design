@@ -185,6 +185,32 @@ describe('media-config OpenAI OAuth fallback', () => {
     delete process.env.OD_NANOBANANA_API_KEY;
   });
 
+  it('preserves a stored apiKey when writeConfig updates only non-secret fields', async () => {
+    await writeStoredMediaConfig({
+      providers: {
+        openai: {
+          apiKey: 'stored-openai-key',
+          baseUrl: 'https://before.example/v1',
+        },
+      },
+    });
+
+    await writeConfig(projectRoot, {
+      providers: {
+        openai: {
+          preserveApiKey: true,
+          baseUrl: 'https://after.example/v1',
+        },
+      },
+      force: true,
+    });
+
+    await expect(resolveProviderConfig(projectRoot, 'openai')).resolves.toEqual({
+      apiKey: 'stored-openai-key',
+      baseUrl: 'https://after.example/v1',
+    });
+  });
+
   describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {
     let overrideRoot: string;
     let originalMediaConfigDir: string | undefined;

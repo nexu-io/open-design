@@ -135,6 +135,24 @@ describe("buildDockerArgs", () => {
     const last = args[args.length - 1];
     expect(last).not.toMatch(/--portable/);
   });
+
+  it("forwards a shell-quoted --app-version to the inner build", () => {
+    const args = buildDockerArgs(
+      { ...makeConfig(), appVersion: "0.5.0-beta.1;echo-nope" },
+      { uid: 1000, gid: 1000 },
+    );
+    const last = args[args.length - 1];
+    expect(last).toContain("--app-version '0.5.0-beta.1;echo-nope'");
+  });
+
+  it("shell-quotes apostrophes in --app-version", () => {
+    const args = buildDockerArgs(
+      { ...makeConfig(), appVersion: "0.5.0-beta.1'quoted" },
+      { uid: 1000, gid: 1000 },
+    );
+    const last = args[args.length - 1];
+    expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
+  });
 });
 
 describe("renderDesktopTemplate", () => {

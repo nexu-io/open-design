@@ -13,6 +13,7 @@ import {
   testAgentConnection,
   testProviderConnection,
 } from '../src/connectionTest.js';
+import { listProviderModels } from '../src/providerModels.js';
 import { startServer } from '../src/server.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
@@ -31,6 +32,13 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
     status: init?.status ?? 200,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+  });
+}
+
+function textResponse(body: string, init?: ResponseInit): Response {
+  return new Response(body, {
+    status: init?.status ?? 200,
+    headers: { 'content-type': 'text/plain', ...(init?.headers ?? {}) },
   });
 }
 
@@ -116,6 +124,257 @@ afterEach(() => {
 });
 
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+describe('POST /api/provider/models', () => {
+  it('lists OpenAI-compatible models from /models', async () => {
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      expect(url).toBe('https://api.openai.com/v1/models');
+      expect((init?.headers as Record<string, string>).authorization).toBe(
+        'Bearer sk-openai',
+      );
+      return jsonResponse({
+        data: [
+          { id: 'gpt-4o-mini', object: 'model' },
+          { id: 'gpt-4o', object: 'model' },
+          { id: 'gpt-4o', object: 'model' },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-openai',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      kind: 'success',
+      models: [
+        { id: 'gpt-4o', label: 'gpt-4o' },
+        { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+      ],
+    });
+  });
+
+  it('lists Anthropic models with display names and a high page limit', async () => {
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      expect(url).toBe('https://api.anthropic.com/v1/models?limit=1000');
+      expect((init?.headers as Record<string, string>)['x-api-key']).toBe(
+        'sk-ant',
+      );
+      expect((init?.headers as Record<string, string>)['anthropic-version']).toBe(
+        '2023-06-01',
+      );
+      return jsonResponse({
+        data: [
+          {
+            id: 'claude-sonnet-4-5',
+            display_name: 'Claude Sonnet 4.5',
+            type: 'model',
+          },
+          {
+            id: 'claude-haiku-4-5',
+            display_name: 'Claude Haiku 4.5',
+            type: 'model',
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-ant',
+      }),
+    });
+
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      models: [
+        { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+        { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+      ],
+    });
+  });
+
+  it('lists only Gemini models that support generateContent', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      expect(url).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=goog-key',
+      );
+      return jsonResponse({
+        models: [
+          {
+            name: 'models/gemini-custom',
+            displayName: 'Gemini Custom',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/text-embedding-004',
+            displayName: 'Embedding',
+            supportedGenerationMethods: ['embedContent'],
+          },
+          {
+            name: 'models/gemini-2.0-flash-001',
+            baseModelId: 'gemini-2.0-flash',
+            displayName: 'Gemini 2.0 Flash',
+            supportedGenerationMethods: ['generateContent', 'countTokens'],
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'goog-key',
+      }),
+    });
+
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      models: [
+        { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+        { id: 'gemini-custom', label: 'Gemini Custom' },
+      ],
+    });
+  });
+
+  it('lets unsupported contract protocols return a classified provider-models result', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'ollama',
+        baseUrl: 'https://ollama.com',
+        apiKey: 'ollama-key',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'unsupported_protocol',
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
+  });
+
+  it('maps upstream listing failures to categorized results and redacts keys', async () => {
+    for (const [status, kind, response] of [
+      [
+        401,
+        'auth_failed',
+        (apiKey: string) => jsonResponse(
+          { error: { message: `bad key ${apiKey}` } },
+          { status: 401 },
+        ),
+      ],
+      [
+        429,
+        'rate_limited',
+        (apiKey: string) => textResponse(`rate limit for ${apiKey}`, { status: 429 }),
+      ],
+      [
+        503,
+        'upstream_unavailable',
+        (apiKey: string) => textResponse(
+          `<html>temporary outage for ${apiKey}</html>`,
+          { status: 503, headers: { 'content-type': 'text/html' } },
+        ),
+      ],
+    ] as const) {
+      const apiKey = `sk-secret-models-${status}`;
+      vi.stubGlobal(
+        'fetch',
+        passThroughOrUpstream(() => response(apiKey)),
+      );
+
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey,
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ ok: false, kind, status });
+      expect(String(body.detail)).not.toContain(apiKey);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects private-network base URLs without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'http://192.168.1.5:8080/v1',
+        apiKey: 'sk-good',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ ok: false, kind: 'forbidden' });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
+  });
+
+  it('reports timeout when model listing is aborted by the probe timer', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: FetchInput, init?: FetchInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+      ),
+    );
+
+    const pending = listProviderModels({
+      protocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-timeout',
+    });
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      kind: 'timeout',
+    });
+  });
+});
 
 describe('POST /api/test/connection provider mode', () => {
   it('reports success and returns the model sample for an Anthropic 200', async () => {

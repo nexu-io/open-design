@@ -13,8 +13,11 @@ import {
 import {
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  isStoredMediaProviderEntryEmpty,
+  isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
+  mergeDaemonMediaProviders,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -34,10 +37,15 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  OrbitRunSummary,
+  OrbitStatusResponse,
   ExecMode,
+  ProviderModelOption,
+  ProviderModelsResponse,
   SkillSummary,
 } from '../types';
 import { testAgent, testApiProvider } from '../providers/connection-test';
+import { fetchProviderModels } from '../providers/provider-models';
 import { fetchConnectors, fetchSkills } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
@@ -46,6 +54,7 @@ import { McpClientSection } from './McpClientSection';
 import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
+import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import {
   applyAppearanceToDocument,
@@ -65,6 +74,7 @@ export type SettingsSection =
   | 'media'
   | 'composio'
   | 'orbit'
+  | 'routines'
   | 'integrations'
   | 'mcpClient'
   | 'language'
@@ -112,6 +122,10 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
 }
 
 export interface AgentRefreshOptions {
@@ -155,6 +169,47 @@ const SUGGESTED_MODELS_BY_PROTOCOL = {
     'MiniMax-M2',
     'mimo-v2.5-pro',
   ],
+  ollama: [
+    'cogito-2.1:671b',
+    'deepseek-v3.1:671b',
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'devstral-2:123b',
+    'devstral-small-2:24b',
+    'gemini-3-flash-preview',
+    'gemma3:4b',
+    'gemma3:12b',
+    'gemma3:27b',
+    'gemma4:31b',
+    'glm-4.6',
+    'glm-4.7',
+    'glm-5',
+    'glm-5.1',
+    'gpt-oss:20b',
+    'gpt-oss:120b',
+    'kimi-k2:1t',
+    'kimi-k2-thinking',
+    'kimi-k2.5',
+    'kimi-k2.6',
+    'minimax-m2',
+    'minimax-m2.1',
+    'minimax-m2.5',
+    'minimax-m2.7',
+    'ministral-3:3b',
+    'ministral-3:8b',
+    'ministral-3:14b',
+    'mistral-large-3:675b',
+    'nemotron-3-nano:30b',
+    'nemotron-3-super',
+    'qwen3-coder:480b',
+    'qwen3-coder-next',
+    'qwen3-next:80b',
+    'qwen3-vl:235b',
+    'qwen3-vl:235b-instruct',
+    'qwen3.5:397b',
+    'rnj-1:8b',
+  ],
   azure: [
     'gpt-4o',
     'gpt-4o-mini',
@@ -175,6 +230,7 @@ const API_PROTOCOL_TABS: Array<{
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure OpenAI' },
   { id: 'google', title: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud' },
 ];
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -182,13 +238,25 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   openai: 'OpenAI API',
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
+  ollama: 'Ollama Cloud API',
 };
+
+function sanitizeHttpsUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   anthropic: 'sk-ant-...',
   openai: 'sk-...',
   azure: 'azure key',
   google: 'AIza...',
+  ollama: 'Ollama API key',
 };
 
 type RescanNotice =
@@ -199,6 +267,11 @@ type TestState =
   | { status: 'idle' }
   | { status: 'running' }
   | { status: 'done'; result: ConnectionTestResponse };
+
+type ProviderModelsState =
+  | { status: 'idle' }
+  | { status: 'running'; cacheKey: string }
+  | { status: 'done'; cacheKey: string; result: ProviderModelsResponse };
 
 // Map a test result to the visual severity of its inline status node so
 // the same green/red/amber palette as the Rescan status applies.
@@ -230,6 +303,50 @@ export function canRunProviderConnectionTest(
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim())
   );
+}
+
+export function canFetchProviderModels(
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
+  protocol: ApiProtocol,
+): boolean {
+  return (
+    protocol !== 'azure' &&
+    protocol !== 'ollama' &&
+    Boolean(config.apiKey.trim()) &&
+    Boolean(config.baseUrl.trim()) &&
+    isValidApiBaseUrl(config.baseUrl)
+  );
+}
+
+export function providerModelsCacheKey(
+  protocol: ApiProtocol,
+  baseUrl: string,
+  apiKey: string,
+  apiVersion = '',
+): string {
+  return [
+    protocol,
+    baseUrl.trim().replace(/\/+$/, ''),
+    apiKey,
+    protocol === 'azure' ? apiVersion.trim() : '',
+  ].join('\n');
+}
+
+export function mergeProviderModelOptions(
+  fetchedModels: readonly ProviderModelOption[],
+  suggestedModelIds: readonly string[],
+): ProviderModelOption[] {
+  const seen = new Set<string>();
+  const out: ProviderModelOption[] = [];
+  const add = (model: ProviderModelOption) => {
+    const id = model.id.trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    out.push({ id, label: model.label.trim() || id });
+  };
+  for (const model of fetchedModels) add(model);
+  for (const id of suggestedModelIds) add({ id, label: id });
+  return out;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -410,6 +527,20 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   };
 }
 
+function providerModelsStatusVariant(
+  result: ProviderModelsResponse,
+): 'success' | 'warn' | 'error' {
+  if (result.ok) return 'success';
+  if (result.kind === 'rate_limited' || result.kind === 'no_models') return 'warn';
+  return 'error';
+}
+
+function apiModelOptionLabel(model: ProviderModelOption): string {
+  return model.label && model.label !== model.id
+    ? `${model.label} (${model.id})`
+    : model.id;
+}
+
 /**
  * Returns whether the modal's footer Save button should be enabled for the
  * currently active sidebar section.
@@ -521,6 +652,10 @@ export function SettingsDialog({
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState = 'idle',
+  mediaProvidersNotice,
+  onReloadMediaProviders,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [cfg, setCfg] = useState<AppConfig>(initial);
@@ -539,6 +674,12 @@ export function SettingsDialog({
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  // Scroll the right-hand content pane back to the top whenever the user
+  // picks a different settings section. Without this, switching from a
+  // long section the user had scrolled (e.g. Library) into a short one
+  // (About) keeps the previous scrollTop, so the new section's header
+  // can land out of view and the panel reads as half-loaded. Issue #634.
+  const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
@@ -549,10 +690,17 @@ export function SettingsDialog({
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
   });
+  const [providerModelsState, setProviderModelsState] =
+    useState<ProviderModelsState>({ status: 'idle' });
+  const [providerModelsCache, setProviderModelsCache] = useState<
+    Record<string, ProviderModelOption[]>
+  >({});
   const agentTestAbortRef = useRef<AbortController | null>(null);
   const providerTestAbortRef = useRef<AbortController | null>(null);
+  const providerModelsAbortRef = useRef<AbortController | null>(null);
   const agentTestRevisionRef = useRef(0);
   const providerTestRevisionRef = useRef(0);
+  const providerModelsRevisionRef = useRef(0);
   const [apiModelCustomEditing, setApiModelCustomEditing] = useState(false);
   const [agentCustomModelIds, setAgentCustomModelIds] = useState<
     ReadonlySet<string>
@@ -564,6 +712,10 @@ export function SettingsDialog({
   useEffect(() => {
     setActiveSection(initialSection);
   }, [initialSection]);
+  useEffect(() => {
+    const el = settingsContentRef.current;
+    if (el) el.scrollTop = 0;
+  }, [activeSection]);
 
   // Tests pin a result against the unsaved draft. Once the user edits any
   // field that feeds into the test, the result is no longer trustworthy —
@@ -595,12 +747,24 @@ export function SettingsDialog({
     cfg.model,
     cfg.apiVersion,
   ]);
+  useEffect(() => {
+    providerModelsRevisionRef.current += 1;
+    setProviderModelsState((state) =>
+      state.status === 'running' ? state : { status: 'idle' },
+    );
+  }, [
+    cfg.apiProtocol,
+    cfg.apiKey,
+    cfg.baseUrl,
+    cfg.apiVersion,
+  ]);
   // Releasing the abort controllers on unmount avoids the "setState after
   // unmount" warning if the dialog closes while a test is still running.
   useEffect(() => {
     return () => {
       agentTestAbortRef.current?.abort();
       providerTestAbortRef.current?.abort();
+      providerModelsAbortRef.current?.abort();
     };
   }, []);
 
@@ -780,6 +944,89 @@ export function SettingsDialog({
     }
   };
 
+  const handleFetchProviderModels = async () => {
+    if (providerModelsState.status === 'running') {
+      return;
+    }
+    if (!canFetchProviderModels(cfg, apiProtocol)) {
+      return;
+    }
+    const cacheKey = providerModelsCacheKey(
+      apiProtocol,
+      cfg.baseUrl,
+      cfg.apiKey,
+      cfg.apiVersion ?? '',
+    );
+    const cachedModels = providerModelsCache[cacheKey];
+    if (cachedModels) {
+      setProviderModelsState({
+        status: 'done',
+        cacheKey,
+        result: {
+          ok: true,
+          kind: 'success',
+          latencyMs: 0,
+          models: cachedModels,
+        },
+      });
+      return;
+    }
+    const controller = new AbortController();
+    const revision = providerModelsRevisionRef.current;
+    providerModelsAbortRef.current = controller;
+    setProviderModelsState({ status: 'running', cacheKey });
+    const clearIfStale = () => {
+      if (providerModelsAbortRef.current === controller) {
+        setProviderModelsState({ status: 'idle' });
+      }
+    };
+    try {
+      const result = await fetchProviderModels(
+        {
+          protocol: apiProtocol,
+          baseUrl: cfg.baseUrl,
+          apiKey: cfg.apiKey,
+          ...(apiProtocol === 'azure' && cfg.apiVersion?.trim()
+            ? { apiVersion: cfg.apiVersion.trim() }
+            : {}),
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (providerModelsRevisionRef.current !== revision) {
+        clearIfStale();
+        return;
+      }
+      if (result.ok && result.models?.length) {
+        setProviderModelsCache((prev) => ({
+          ...prev,
+          [cacheKey]: result.models ?? [],
+        }));
+      }
+      setProviderModelsState({ status: 'done', cacheKey, result });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (providerModelsRevisionRef.current !== revision) {
+        clearIfStale();
+        return;
+      }
+      setProviderModelsState({
+        status: 'done',
+        cacheKey,
+        result: {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          detail: err instanceof Error ? err.message : 'Model list request failed',
+        },
+      });
+    } finally {
+      if (providerModelsAbortRef.current === controller) {
+        providerModelsAbortRef.current = null;
+      }
+    }
+  };
+
   const renderTestMessage = (
     result: ConnectionTestResponse,
     kindForSuccess: 'api' | 'cli',
@@ -819,6 +1066,38 @@ export function SettingsDialog({
         });
       default:
         return t('settings.testUnknown', { detail: result.detail ?? '' });
+    }
+  };
+
+  const renderProviderModelsMessage = (
+    result: ProviderModelsResponse,
+  ): string => {
+    if (result.ok) {
+      return t('settings.fetchModelsSuccess', {
+        count: result.models?.length ?? 0,
+      });
+    }
+    switch (result.kind) {
+      case 'auth_failed':
+        return t('settings.testAuthFailed');
+      case 'forbidden':
+        return t('settings.testForbidden');
+      case 'invalid_base_url':
+        return t('settings.testInvalidBaseUrl');
+      case 'rate_limited':
+        return t('settings.testRateLimited');
+      case 'upstream_unavailable':
+        return t('settings.testUpstream', { status: result.status ?? 0 });
+      case 'timeout':
+        return t('settings.testTimeout', {
+          ms: Math.max(0, Math.round(result.latencyMs)),
+        });
+      case 'no_models':
+        return t('settings.fetchModelsEmpty');
+      case 'unsupported_protocol':
+        return t('settings.fetchModelsUnsupported');
+      default:
+        return t('settings.fetchModelsFailed', { detail: result.detail ?? '' });
     }
   };
 
@@ -979,18 +1258,39 @@ export function SettingsDialog({
           (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
-  const apiModelOptions = useMemo(
+  const providerModelsKey = useMemo(
+    () => providerModelsCacheKey(
+      apiProtocol,
+      cfg.baseUrl,
+      cfg.apiKey,
+      cfg.apiVersion ?? '',
+    ),
+    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
+  );
+  const fetchedApiModelOptions = providerModelsCache[providerModelsKey] ?? [];
+  const suggestedApiModelIds = useMemo(
     () => Array.from(new Set(
       selectedProvider?.models?.length
         ? selectedProvider.models
         : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
     )),
-    [apiProtocol, cfg.baseUrl, selectedProvider],
+    [apiProtocol, selectedProvider],
+  );
+  const apiModelOptions = useMemo(
+    () => mergeProviderModelOptions(
+      fetchedApiModelOptions,
+      suggestedApiModelIds,
+    ),
+    [fetchedApiModelOptions, suggestedApiModelIds],
+  );
+  const apiModelIds = useMemo(
+    () => apiModelOptions.map((m) => m.id),
+    [apiModelOptions],
   );
   const apiModelCustomActive =
     shouldShowCustomModelInput(
       cfg.model,
-      apiModelOptions,
+      apiModelIds,
       apiModelCustomEditing,
     );
   const apiModelSelectValue = apiModelCustomActive
@@ -1006,6 +1306,10 @@ export function SettingsDialog({
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
+    routines: {
+      title: 'Routines',
+      subtitle: 'Scheduled, unattended agent sessions that run on their own.',
+    },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
@@ -1165,6 +1469,17 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'routines' ? ' active' : ''}`}
+              onClick={() => setActiveSection('routines')}
+            >
+              <Icon name="history" size={18} />
+              <span>
+                <strong>Routines</strong>
+                <small>Schedule unattended agent runs</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
@@ -1252,7 +1567,7 @@ export function SettingsDialog({
               </span>
             </button>
           </aside>
-          <div className="settings-content">
+          <div className="settings-content" ref={settingsContentRef}>
           {activeSection === 'execution' ? (
             <>
               <div
@@ -1413,53 +1728,107 @@ export function SettingsDialog({
                   {t('settings.noAgentsDetected')}
                 </div>
               ) : (
-                <div className="agent-grid">
-                  {agents.map((a) => {
-                    const active = cfg.agentId === a.id;
-                    return (
-                      <button
-                        type="button"
-                        key={a.id}
-                        className={
-                          'agent-card' +
-                          (active ? ' active' : '') +
-                          (a.available ? '' : ' disabled')
-                        }
-                        onClick={() =>
-                          a.available && setCfg((c) => ({ ...c, agentId: a.id }))
-                        }
-                        disabled={!a.available}
-                        aria-pressed={active}
-                      >
-                        <AgentIcon id={a.id} size={40} />
-                        <div className="agent-card-body">
-                          <div className="agent-card-name">{a.name}</div>
-                          <div className="agent-card-meta">
-                            {a.available ? (
-                              a.version ? (
-                                <span title={a.path ?? ''}>{a.version}</span>
-                              ) : (
-                                <span title={a.path ?? ''}>
-                                  {t('common.installed')}
-                                </span>
-                              )
-                            ) : (
+                <>
+                  <div className="agent-grid">
+                    {agents.map((a) => {
+                      const active = cfg.agentId === a.id;
+                      if (a.available) {
+                        return (
+                          <button
+                            type="button"
+                            key={a.id}
+                            className={
+                              'agent-card' + (active ? ' active' : '')
+                            }
+                            onClick={() =>
+                              setCfg((c) => ({ ...c, agentId: a.id }))
+                            }
+                            aria-pressed={active}
+                          >
+                            <AgentIcon id={a.id} size={40} />
+                            <div className="agent-card-body">
+                              <div className="agent-card-name">{a.name}</div>
+                              <div className="agent-card-meta">
+                                {a.version ? (
+                                  <span title={a.path ?? ''}>{a.version}</span>
+                                ) : (
+                                  <span title={a.path ?? ''}>
+                                    {t('common.installed')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span
+                              className={
+                                'status-dot' + (active ? ' active' : '')
+                              }
+                              aria-hidden="true"
+                            />
+                          </button>
+                        );
+                      }
+                      const installUrl = sanitizeHttpsUrl(a.installUrl);
+                      const docsUrl = sanitizeHttpsUrl(a.docsUrl);
+                      const hasLinks = Boolean(installUrl || docsUrl);
+                      const cardLabel = `${a.name} · ${t('common.notInstalled')}`;
+                      return (
+                        <div
+                          key={a.id}
+                          className="agent-card disabled agent-card-unavailable"
+                          role="group"
+                          aria-label={cardLabel}
+                        >
+                          <AgentIcon id={a.id} size={40} />
+                          <div className="agent-card-body">
+                            <div className="agent-card-name">{a.name}</div>
+                            <div className="agent-card-meta">
                               <span className="muted">
                                 {t('common.notInstalled')}
                               </span>
-                            )}
+                            </div>
+                            {hasLinks ? (
+                              <div className="agent-card-actions">
+                                {installUrl ? (
+                                  <a
+                                    href={installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link"
+                                  >
+                                    {t('settings.agentInstall.install')}
+                                  </a>
+                                ) : null}
+                                {docsUrl ? (
+                                  <a
+                                    href={docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link"
+                                  >
+                                    {t('settings.agentInstall.docs')}
+                                  </a>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
-                        {a.available ? (
-                          <span
-                            className={'status-dot' + (active ? ' active' : '')}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                  {agents.some((x) => !x.available) ? (
+                    <div className="agent-install-guide">
+                      <p className="hint agent-install-path-hint">
+                        {t('settings.agentInstall.pathHint')}
+                      </p>
+                      <ol className="agent-install-steps">
+                        <li>{t('settings.agentInstall.stepOpenLinks')}</li>
+                        <li>{t('settings.agentInstall.stepAuth')}</li>
+                        <li>{t('settings.agentInstall.stepRescan')}</li>
+                        <li>{t('settings.agentInstall.stepSelect')}</li>
+                      </ol>
+                    </div>
+                  ) : null}
+                </>
               )}
               {(() => {
                 const selected = agents.find(
@@ -1617,36 +1986,71 @@ export function SettingsDialog({
                 <div>
                   <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
                 </div>
-                {(() => {
-                  const running = providerTestState.status === 'running';
-                  const hasRequired = canRunProviderConnectionTest(cfg);
-                  const disabled = running || !hasRequired;
-                  return (
-                    <button
-                      type="button"
-                      className={
-                        'ghost icon-btn settings-test-btn' +
-                        (running ? ' loading' : '')
-                      }
-                      onClick={() => void handleTestProvider()}
-                      disabled={disabled}
-                      title={t('settings.testTitle')}
-                    >
-                      {running ? (
-                        <>
-                          <Icon
-                            name="spinner"
-                            size={13}
-                            className="icon-spin"
-                          />
-                          <span>{t('settings.test')}</span>
-                        </>
-                      ) : (
-                        t('settings.test')
-                      )}
-                    </button>
-                  );
-                })()}
+                <div className="section-head-actions">
+                  {(() => {
+                    const running =
+                      providerModelsState.status === 'running' &&
+                      providerModelsState.cacheKey === providerModelsKey;
+                    const disabled =
+                      providerModelsState.status === 'running' ||
+                      !canFetchProviderModels(cfg, apiProtocol);
+                    return (
+                      <button
+                        type="button"
+                        className={
+                          'ghost icon-btn settings-fetch-models-btn' +
+                          (running ? ' loading' : '')
+                        }
+                        onClick={() => void handleFetchProviderModels()}
+                        disabled={disabled}
+                        title={t('settings.fetchModelsTitle')}
+                      >
+                        {running ? (
+                          <>
+                            <Icon
+                              name="spinner"
+                              size={13}
+                              className="icon-spin"
+                            />
+                            <span>{t('settings.fetchModelsRunning')}</span>
+                          </>
+                        ) : (
+                          t('settings.fetchModels')
+                        )}
+                      </button>
+                    );
+                  })()}
+                  {(() => {
+                    const running = providerTestState.status === 'running';
+                    const hasRequired = canRunProviderConnectionTest(cfg);
+                    const disabled = running || !hasRequired;
+                    return (
+                      <button
+                        type="button"
+                        className={
+                          'ghost icon-btn settings-test-btn' +
+                          (running ? ' loading' : '')
+                        }
+                        onClick={() => void handleTestProvider()}
+                        disabled={disabled}
+                        title={t('settings.testTitle')}
+                      >
+                        {running ? (
+                          <>
+                            <Icon
+                              name="spinner"
+                              size={13}
+                              className="icon-spin"
+                            />
+                            <span>{t('settings.test')}</span>
+                          </>
+                        ) : (
+                          t('settings.test')
+                        )}
+                      </button>
+                    );
+                  })()}
+                </div>
               </div>
               {providerTestState.status === 'running' ? (
                 <p
@@ -1665,6 +2069,27 @@ export function SettingsDialog({
                   role={providerTestState.result.ok ? 'status' : 'alert'}
                 >
                   {renderTestMessage(providerTestState.result, 'api')}
+                </p>
+              ) : null}
+              {providerModelsState.status === 'running' &&
+              providerModelsState.cacheKey === providerModelsKey ? (
+                <p
+                  className="settings-test-status running"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {t('settings.fetchModelsRunning')}
+                </p>
+              ) : providerModelsState.status === 'done' &&
+                providerModelsState.cacheKey === providerModelsKey ? (
+                <p
+                  className={
+                    'settings-test-status ' +
+                    providerModelsStatusVariant(providerModelsState.result)
+                  }
+                  role={providerModelsState.result.ok ? 'status' : 'alert'}
+                >
+                  {renderProviderModelsMessage(providerModelsState.result)}
                 </p>
               ) : null}
               <label className="field">
@@ -1740,7 +2165,7 @@ export function SettingsDialog({
                   }}
                 >
                   {apiModelOptions.map((m) => (
-                    <option value={m} key={m}>{m}</option>
+                    <option value={m.id} key={m.id}>{apiModelOptionLabel(m)}</option>
                   ))}
                   <option value={CUSTOM_MODEL_SENTINEL}>{t('settings.modelCustom')}</option>
                 </select>
@@ -1749,7 +2174,10 @@ export function SettingsDialog({
                 <p className="hint">{t('settings.suggestedModelsHint')}</p>
               ) : null}
               {apiProtocol === 'azure' ? (
-                <p className="hint">{t('settings.azureDeploymentModelHint')}</p>
+                <p className="hint">{t('settings.azureModelFetchHint')}</p>
+              ) : null}
+              {apiProtocol === 'ollama' ? (
+                <p className="hint">{t('settings.fetchModelsUnsupported')}</p>
               ) : null}
               {apiModelCustomActive ? (
                 <label className="field">
@@ -1805,6 +2233,8 @@ export function SettingsDialog({
             <MediaProvidersSection
               cfg={cfg}
               setCfg={setCfg}
+              mediaProvidersNotice={mediaProvidersNotice}
+              onReloadMediaProviders={onReloadMediaProviders}
               onChange={() => {
                 mediaProvidersChangeVersionRef.current += 1;
               }}
@@ -1823,11 +2253,15 @@ export function SettingsDialog({
             />
           ) : null}
 
+          {activeSection === 'routines' ? <RoutinesSection /> : null}
+
           {activeSection === 'orbit' ? (
             <OrbitSection
               cfg={cfg}
               setCfg={setCfg}
               composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
+              daemonMediaProviders={daemonMediaProviders}
+              daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
               onOpenComposioSection={() => setActiveSection('composio')}
               onLeaveForOrbitProject={(runConfig) => {
                 // Persist any in-flight Orbit edits (toggle / time) before
@@ -2404,22 +2838,6 @@ function ConnectorSection({
   );
 }
 
-interface OrbitRunSummary {
-  id?: string;
-  startedAt?: string;
-  completedAt: string;
-  trigger?: 'manual' | 'scheduled';
-  connectorsChecked: number;
-  connectorsSucceeded: number;
-  connectorsFailed: number;
-  connectorsSkipped: number;
-  artifactId?: string | null;
-  artifactProjectId?: string | null;
-  /** Identifier of the daemon run that produced this summary. Useful for log correlation. */
-  agentRunId?: string | null;
-  markdown: string;
-}
-
 interface OrbitRunStartResponse {
   projectId: string;
   agentRunId: string;
@@ -2427,8 +2845,16 @@ interface OrbitRunStartResponse {
 
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
+  options?: {
+    daemonProviders?: AppConfig['mediaProviders'] | null;
+    syncMediaProviders?: boolean;
+  },
 ): Promise<OrbitRunStartResponse> {
-  await syncMediaProvidersToDaemon(config.mediaProviders);
+  if (options?.syncMediaProviders !== false) {
+    await syncMediaProvidersToDaemon(config.mediaProviders, {
+      daemonProviders: options?.daemonProviders,
+    });
+  }
   await syncConfigToDaemon(config, { throwOnError: true });
   const response = await fetch('/api/orbit/run', { method: 'POST' });
   if (!response.ok) throw new Error('Orbit run failed');
@@ -2449,12 +2875,6 @@ export function configForManualOrbitRun(config: AppConfig): AppConfig {
 
 export function isOrbitRunDisabled(isBusy: boolean, connectedCount: number | null): boolean {
   return isBusy || connectedCount === null || connectedCount === 0;
-}
-
-interface OrbitStatusResponse {
-  running?: boolean;
-  nextRunAt?: string | null;
-  lastRun?: OrbitRunSummary | null;
 }
 
 function formatRelative(
@@ -2478,6 +2898,8 @@ function OrbitSection({
   cfg,
   setCfg,
   composioApiKeyConfigured,
+  daemonMediaProviders,
+  daemonMediaProvidersFetchState,
   onOpenComposioSection,
   onLeaveForOrbitProject,
 }: {
@@ -2488,6 +2910,8 @@ function OrbitSection({
    *  that Orbit needs Composio first; when true (key present, just no
    *  connectors yet) it nudges the user toward the connector catalog. */
   composioApiKeyConfigured: boolean;
+  daemonMediaProviders?: AppConfig['mediaProviders'] | null;
+  daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   /** Switch the parent settings dialog to the Connectors (Composio) tab.
    *  Used by the Orbit gate's primary CTA so the user can fix the
    *  prerequisite without leaving the dialog. */
@@ -2502,6 +2926,9 @@ function OrbitSection({
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [legacyLastRunTemplateSkillId, setLegacyLastRunTemplateSkillId] = useState<string | null>(null);
+  const legacyLastRunIdentity = status?.lastRun?.id
+    ?? `${status?.lastRun?.completedAt ?? ''}:${status?.lastRun?.agentRunId ?? ''}:${status?.lastRun?.markdown ?? ''}`;
   // Orbit-scenario skill templates fetched from /api/skills. We fetch on mount
   // and keep three states for graceful UX: `null` = still loading, `[]` =
   // loaded with no orbit templates available, `SkillSummary[]` = ready. If
@@ -2519,8 +2946,15 @@ function OrbitSection({
   // Once the user clicks Generate we close Settings and navigate away. The ref
   // lets late-arriving handlers no-op without React warnings.
   const isMountedRef = useRef(true);
-  useEffect(() => () => {
-    isMountedRef.current = false;
+  useEffect(() => {
+    // React Strict Mode replays mount effects in development. Reset the ref on
+    // each setup so the synthetic cleanup from the first pass does not leave
+    // async Orbit status / connector refreshes permanently thinking the panel
+    // has unmounted.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {
@@ -2611,6 +3045,17 @@ function OrbitSection({
   // were on the default. Manual runs persist this effective value before
   // launching so the daemon uses the same template the UI displays.
   const effectiveTemplateSkillId = orbit.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
+  const supportsTemplateScopedHistory = status?.lastRunsByTemplate !== undefined;
+
+  useEffect(() => {
+    const hasTemplateScopedHistory = Object.keys(status?.lastRunsByTemplate ?? {}).length > 0;
+    const hasLegacyUnscopedLastRun = Boolean(status?.lastRun && !status.lastRun.templateSkillId);
+    if (!hasLegacyUnscopedLastRun || hasTemplateScopedHistory) {
+      setLegacyLastRunTemplateSkillId(null);
+      return;
+    }
+    setLegacyLastRunTemplateSkillId((current) => current ?? (effectiveTemplateSkillId || null));
+  }, [effectiveTemplateSkillId, legacyLastRunIdentity, status]);
 
   const selectedTemplate = useMemo(() => {
     if (!effectiveTemplateSkillId || !orbitTemplates) return null;
@@ -2625,7 +3070,10 @@ function OrbitSection({
     void (async () => {
       try {
         const runConfig = configForManualOrbitRun(cfg);
-        const payload = await persistConfigAndRunOrbit(runConfig);
+        const payload = await persistConfigAndRunOrbit(runConfig, {
+          daemonProviders: daemonMediaProviders,
+          syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
+        });
         if (!payload.projectId) throw new Error('Orbit run did not return a project');
 
         onLeaveForOrbitProject(runConfig);
@@ -2648,7 +3096,18 @@ function OrbitSection({
     })();
   };
 
-  const lastRun = status?.lastRun ?? null;
+  const templateScopedLastRun = effectiveTemplateSkillId
+    ? status?.lastRunsByTemplate?.[effectiveTemplateSkillId] ?? null
+    : null;
+  const hasLegacyUnscopedLastRun = Boolean(
+    status?.lastRun
+    && !status.lastRun.templateSkillId
+    && legacyLastRunTemplateSkillId
+    && legacyLastRunTemplateSkillId === effectiveTemplateSkillId,
+  );
+  const lastRun = supportsTemplateScopedHistory
+    ? (templateScopedLastRun ?? (hasLegacyUnscopedLastRun ? status?.lastRun ?? null : null))
+    : status?.lastRun ?? null;
   const nextRunLabel = status?.nextRunAt ? new Date(status.nextRunAt).toLocaleString() : null;
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
@@ -3234,13 +3693,19 @@ function OrbitSection({
 function MediaProvidersSection({
   cfg,
   setCfg,
+  mediaProvidersNotice,
+  onReloadMediaProviders,
   onChange,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  mediaProvidersNotice?: string | null;
+  onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onChange: () => void;
 }) {
   const { t } = useI18n();
+  const [reloadRunning, setReloadRunning] = useState(false);
+  const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -3260,22 +3725,28 @@ function MediaProvidersSection({
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
       const bEntry = cfg.mediaProviders?.[b.id];
-      const aConfigured = Boolean(aEntry?.apiKey.trim() || aEntry?.baseUrl.trim());
-      const bConfigured = Boolean(bEntry?.apiKey.trim() || bEntry?.baseUrl.trim());
+      const aConfigured = isStoredMediaProviderEntryPresent(aEntry);
+      const bConfigured = isStoredMediaProviderEntryPresent(bEntry);
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       if (a.integrated !== b.integrated) return a.integrated ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
   const updateProvider = (
     provider: MediaProvider,
-    patch: { apiKey?: string; baseUrl?: string; model?: string },
+    patch: {
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      apiKeyConfigured?: boolean;
+      apiKeyTail?: string;
+    },
   ) => {
     onChange();
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
       const map = { ...(curr.mediaProviders ?? {}) };
-      if (!next.apiKey.trim() && !next.baseUrl.trim() && !next.model?.trim()) {
+      if (isStoredMediaProviderEntryEmpty(next)) {
         delete map[provider.id];
       } else {
         map[provider.id] = next;
@@ -3283,6 +3754,23 @@ function MediaProvidersSection({
       return { ...curr, mediaProviders: map };
     });
   };
+  const handleReload = async () => {
+    if (!onReloadMediaProviders || reloadRunning) return;
+    setReloadRunning(true);
+    setReloadNotice(null);
+    try {
+      const next = await onReloadMediaProviders();
+      if (!next) {
+        setReloadNotice({ kind: 'error', message: t('settings.mediaProviderReloadError') });
+        return;
+      }
+      setCfg((curr) => mergeDaemonMediaProviders(curr, next));
+      setReloadNotice({ kind: 'success', message: t('settings.mediaProviderReloadSuccess') });
+    } finally {
+      setReloadRunning(false);
+    }
+  };
+
   const toggleApiKeyVisibility = (providerId: string) => {
     setVisibleApiKeys((current) => {
       const next = new Set(current);
@@ -3302,20 +3790,46 @@ function MediaProvidersSection({
           <h3>{t('settings.mediaProviders')}</h3>
           <p className="hint">{t('settings.mediaProvidersHint')}</p>
         </div>
+        {onReloadMediaProviders ? (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void handleReload()}
+            disabled={reloadRunning}
+          >
+            {reloadRunning ? t('common.loading') : t('settings.mediaProviderReload')}
+          </button>
+        ) : null}
       </div>
+      {mediaProvidersNotice ? (
+        <p className="hint" role="alert">{mediaProvidersNotice}</p>
+      ) : null}
+      {reloadNotice ? (
+        <p className="hint" role={reloadNotice.kind === 'error' ? 'alert' : 'status'}>
+          {reloadNotice.message}
+        </p>
+      ) : null}
       <div className="media-provider-list">
         {providers.map((provider) => {
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
-          const configured = Boolean(entry.apiKey.trim() || entry.baseUrl.trim());
+          const hasPendingEdit = Boolean(entry.apiKey.trim());
+          const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
+          const tail = entry.apiKeyTail?.trim();
+          const configured = isStoredMediaProviderEntryPresent(entry);
           const disabled = !provider.integrated;
           const supportsCustomModel = provider.supportsCustomModel === true;
-          const clearable = Boolean(entry.apiKey.trim() || entry.baseUrl.trim() || entry.model?.trim());
+          const clearable = isStoredMediaProviderEntryPresent(entry);
           const apiKeyVisible = visibleApiKeys.has(provider.id);
           return (
             <div key={provider.id} className={`media-provider-row${provider.integrated ? '' : ' pending'}`}>
               <div className="media-provider-head">
                 <div className="media-provider-meta">
                   <span className="media-provider-name">{provider.label}</span>
+                  {isSavedState ? (
+                    <span className="field-status-badge" title={t('settings.connectorsSavedTitle')}>
+                      {tail ? t('settings.connectorsSavedWithTail', { tail }) : t('settings.connectorsSaved')}
+                    </span>
+                  ) : null}
                   <span className="media-provider-hint">{provider.hint}</span>
                 </div>
                 <div className="media-provider-badges">
@@ -3334,7 +3848,7 @@ function MediaProvidersSection({
                   <input
                     type={apiKeyVisible ? 'text' : 'password'}
                     value={entry.apiKey}
-                    placeholder={t('settings.mediaProviderPlaceholder')}
+                    placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
                     aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                     disabled={disabled}
                     onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
@@ -3351,9 +3865,9 @@ function MediaProvidersSection({
                     aria-pressed={apiKeyVisible}
                     onClick={() => toggleApiKeyVisibility(provider.id)}
                   >
-                    <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                  </button>
-                </div>
+                      <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                    </button>
+                  </div>
                 <input
                   value={entry.baseUrl}
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -3389,7 +3903,13 @@ function MediaProvidersSection({
                     ) {
                       return;
                     }
-                    updateProvider(provider, { apiKey: '', baseUrl: '', model: '' });
+                    updateProvider(provider, {
+                      apiKey: '',
+                      baseUrl: '',
+                      model: '',
+                      apiKeyConfigured: false,
+                      apiKeyTail: '',
+                    });
                   }}
                 >
                   {t('settings.mediaProviderClear')}
@@ -3463,7 +3983,7 @@ interface McpClient {
   // Optional one-click install action. Currently only Cursor
   // supports deeplinks of this shape.
   buildDeeplink?: (info: McpInstallInfo) => string;
-  deeplinkLabel?: string;
+  deeplinkLabel?: () => string;
 }
 
 // Path hint per OS. Localizes the "where to paste" copy so a
@@ -3528,129 +4048,96 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
 }`;
 }
 
-const MCP_CLIENTS: McpClient[] = [
-  {
-    id: 'claude',
-    label: 'Claude Code',
-    // `claude mcp add-json <name> '<json>'` takes ONLY the inner
-    // server-config object, not the full mcpServers wrapper. We
-    // inline the JSON into the command itself so the snippet is a
-    // real one-liner the user can copy and run, no template
-    // substitution. Single quotes around the JSON work in bash, zsh,
-    // PowerShell, and Git Bash; the only outlier is Windows cmd.exe,
-    // where users would need to swap to PowerShell.
-    buildMethod: () => 'CLI command',
-    buildInstruction: () => 'Run this in your terminal.',
-    buildSnippet: (info) => {
-      const inner = JSON.stringify(buildMcpStdioServerConfig(info));
-      return `claude mcp add-json --scope user open-design '${inner}'`;
-    },
-    buildSnippetLang: () => 'bash',
-  },
-  {
-    id: 'codex',
-    label: 'Codex',
-    // Codex CLI shares config between the terminal CLI and the IDE
-    // extension at ~/.codex/config.toml (TOML, not JSON, and a
-    // different table key from every other client - mcp_servers
-    // rather than mcpServers / servers / context_servers). Schema
-    // ref: https://developers.openai.com/codex/mcp.
-    //
-    // For our payload (just command + args, both strings/arrays of
-    // strings) JSON.stringify happens to produce valid TOML literal
-    // values, since TOML basic strings use the same double-quote
-    // escape rules and TOML inline arrays match JSON array syntax.
-    buildMethod: () => 'TOML config',
-    buildInstruction: (info) => {
-      const path = homeConfigPath(
-        info.platform,
-        '~/.codex/config.toml',
-        '%USERPROFILE%\\.codex\\config.toml',
-      );
-      return `Append this table to ${path}. The same config is shared between the Codex CLI and the Codex IDE extension.`;
-    },
-    buildSnippet: (info) => `[mcp_servers.open-design]
-command = ${JSON.stringify(info.command)}
-args = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
-    buildSnippetLang: () => 'toml',
-  },
-  {
-    id: 'cursor',
-    label: 'Cursor',
-    buildMethod: () => 'One-click install',
-    buildInstruction: (info) =>
-      `Click "Install in Cursor" to install with an approval dialog, or merge this JSON into ${homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json')}.`,
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-    buildDeeplink: (info) => {
-      const inner = buildMcpStdioServerConfig(info);
-      // Cursor expects the inner server-config object base64-encoded
-      // as ?config=...; the handler decodes it and pops an approval
-      // dialog before writing to mcp.json. We UTF-8-encode first so
-      // non-Latin1 chars in paths (e.g. an accented username) do not
-      // throw from btoa().
-      const encoded = utf8Btoa(JSON.stringify(inner));
-      return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
-    },
-    deeplinkLabel: 'Install in Cursor',
-  },
-  {
-    id: 'vscode',
-    label: 'VS Code',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open the Command Palette (${commandPaletteShortcut(info.platform)}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.`,
-    buildSnippet: (info) => `{
-  "servers": {
-    "open-design": {
-      "type": "stdio",
-      "command": ${JSON.stringify(info.command)},
-      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,
-      "env": ${JSON.stringify(info.env)}` : ''}
-    }
-  }
-}`,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'antigravity',
-    label: 'Antigravity',
-    buildMethod: () => 'JSON config',
-    buildInstruction: () =>
-      'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'zed',
-    label: 'Zed',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open Zed Settings (${settingsShortcut(info.platform)}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".`,
-    buildSnippet: (info) => `{
-  "context_servers": {
-    "open-design": {
-      "source": "custom",
-      "command": ${JSON.stringify(info.command)},
-      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,
-      "env": ${JSON.stringify(info.env)}` : ''}
-    }
-  }
-}`,
-    buildSnippetLang: () => 'json',
-  },
-  {
-    id: 'windsurf',
-    label: 'Windsurf',
-    buildMethod: () => 'JSON config',
-    buildInstruction: (info) =>
-      `Open ${homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json')} (or use the MCPs icon in Cascade → Configure) and merge:`,
-    buildSnippet: buildSharedMcpJson,
-    buildSnippetLang: () => 'json',
-  },
-];
-
 function IntegrationsSection() {
+  const { t } = useI18n();
+
+  const MCP_CLIENTS: McpClient[] = [
+    {
+      id: 'claude',
+      label: 'Claude Code',
+      buildMethod: () => t('settings.mcpMethodCli'),
+      buildInstruction: () => t('settings.mcpInstructionCli'),
+      buildSnippet: (info) => {
+        const inner = JSON.stringify(buildMcpStdioServerConfig(info));
+        return `claude mcp add-json --scope user open-design '${inner}'`;
+      },
+      buildSnippetLang: () => 'bash',
+    },
+    {
+      id: 'codex',
+      label: 'Codex',
+      buildMethod: () => t('settings.mcpMethodToml'),
+      buildInstruction: (info) => {
+        const path = homeConfigPath(
+          info.platform,
+          '~/.codex/config.toml',
+          '%USERPROFILE%\\.codex\\config.toml',
+        );
+        return t('settings.mcpInstructionCodex', { path });
+      },
+      buildSnippet: (info) => `[mcp_servers.open-design]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
+      buildSnippetLang: () => 'toml',
+    },
+    {
+      id: 'cursor',
+      label: 'Cursor',
+      buildMethod: () => t('settings.mcpMethodOneClick'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionCursor', {
+          path: homeConfigPath(info.platform, '~/.cursor/mcp.json', '%USERPROFILE%\\.cursor\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+      buildDeeplink: (info) => {
+        const inner = buildMcpStdioServerConfig(info);
+        const encoded = utf8Btoa(JSON.stringify(inner));
+        return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
+      },
+      deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'vscode',
+      label: 'VS Code',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionCopilot', {
+          shortcut: commandPaletteShortcut(info.platform),
+        }),
+      buildSnippet: (info) => `{\n  "servers": {\n    "open-design": {\n      "type": "stdio",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'antigravity',
+      label: 'Antigravity',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: () => t('settings.mcpInstructionAntigravity'),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'zed',
+      label: 'Zed',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionZed', {
+          shortcut: settingsShortcut(info.platform),
+        }),
+      buildSnippet: (info) => `{\n  "context_servers": {\n    "open-design": {\n      "source": "custom",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'windsurf',
+      label: 'Windsurf',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionWindsurf', {
+          path: homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+  ];
+
   const [clientId, setClientId] = useState<McpClientId>('claude');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -3746,13 +4233,8 @@ function IntegrationsSection() {
     <section className="settings-section">
       <div className="section-head">
         <div>
-          <h3>MCP server</h3>
-          <p className="hint">
-            Lets a coding agent in another repo (Claude Code, Cursor,
-            VS Code, Antigravity, Zed, Windsurf) read your Open Design
-            projects. Use it to pull a design into your app without
-            exporting a zip first.
-          </p>
+          <h3>{t('settings.mcpTitle')}</h3>
+          <p className="hint">{t('settings.mcpHint')}</p>
         </div>
       </div>
 
@@ -3762,9 +4244,7 @@ function IntegrationsSection() {
             className="empty-card"
             style={{ marginBottom: 14, color: 'var(--danger-fg, #f88)' }}
           >
-            Couldn&rsquo;t reach the local daemon to resolve install paths
-            ({infoError}). Make sure Open Design is running, then reopen this
-            panel.
+            {t('settings.mcpDaemonError', { error: infoError! })}
           </div>
         ) : null}
 
@@ -3778,11 +4258,10 @@ function IntegrationsSection() {
           >
             <strong>
               {!info.cliExists
-                ? 'Build the daemon first.'
-                : 'Node binary is missing.'}
+                ? t('settings.mcpBuildDaemon')
+                : t('settings.mcpNodeMissing')}
             </strong>{' '}
-            {info.buildHint ??
-              'apps/daemon/dist/cli.js is missing. Run `pnpm --filter @open-design/daemon build` and refresh.'}
+            {info.buildHint ?? t('settings.mcpBuildHint')}
           </div>
         ) : null}
 
@@ -3871,7 +4350,7 @@ function IntegrationsSection() {
               style={{ padding: '6px 14px', fontSize: 13 }}
             >
               <Icon name="link" size={14} />
-              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel}</span>
+              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel ? client.deeplinkLabel() : ''}</span>
             </button>
             <span
               style={{
@@ -3880,7 +4359,7 @@ function IntegrationsSection() {
                 color: 'var(--fg-2, #9aa0a6)',
               }}
             >
-              Cursor pops an approval dialog before writing the config.
+              {t('settings.mcpCursorApproval')}
             </span>
           </div>
         ) : null}
@@ -3916,8 +4395,8 @@ function IntegrationsSection() {
             <code>
               {snippet ||
                 (infoError
-                  ? '# resolving paths failed, see the error above'
-                  : '# loading install paths from the local daemon…')}
+                  ? t('settings.mcpResolvingFailed')
+                  : t('settings.mcpLoadingPaths'))}
             </code>
           </pre>
           <button
@@ -3932,10 +4411,10 @@ function IntegrationsSection() {
               padding: '4px 10px',
               fontSize: 12,
             }}
-            aria-label="Copy MCP configuration snippet"
+            aria-label={t('settings.mcpCopyAria')}
           >
             <Icon name={copied ? 'check' : 'copy'} size={14} />
-            <span style={{ marginLeft: 6 }}>{copied ? 'Copied' : 'Copy'}</span>
+            <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
           </button>
         </div>
 
@@ -3951,13 +4430,9 @@ function IntegrationsSection() {
             lineHeight: 1.5,
           }}
         >
-          <strong>Restart your client to pick up the new server.</strong>{' '}
+          <strong>{t('settings.mcpRestartNote')}</strong>{' '}
           <span style={{ color: 'var(--text-muted)' }}>
-            Most editors only load MCP servers at startup. In Cursor / VS
-            Code / Antigravity / Windsurf you can run{' '}
-            <code>Developer: Reload Window</code> from the command palette
-            instead of a full restart. Zed and Claude Code need a quit and
-            reopen.
+            {t('settings.mcpRestartDetail')}
           </span>
         </div>
 
@@ -3972,7 +4447,7 @@ function IntegrationsSection() {
               fontWeight: 600,
             }}
           >
-            What your agent can do
+            {t('settings.mcpCapabilitiesTitle')}
           </p>
           <ul
             style={{
@@ -3982,19 +4457,9 @@ function IntegrationsSection() {
               color: 'var(--text)',
             }}
           >
-            <li>
-              Read or search any file in a project (HTML, JSX, CSS, JSON,
-              SVG, Markdown).
-            </li>
-            <li>
-              Pull a design bundle in one call: the entry file plus every
-              CSS variable, component, and font it references.
-            </li>
-            <li>
-              Default to the project and file you have open in Open Design,
-              so you can say &ldquo;build this in my app&rdquo; without
-              re-stating which design.
-            </li>
+            <li>{t('settings.mcpCapabilityRead')}</li>
+            <li>{t('settings.mcpCapabilityPull')}</li>
+            <li>{t('settings.mcpCapabilityDefault')}</li>
           </ul>
         </div>
 
@@ -4006,9 +4471,7 @@ function IntegrationsSection() {
             lineHeight: 1.5,
           }}
         >
-          Open Design must be running for MCP tool calls to succeed. If
-          you started your coding agent before opening Open Design,
-          restart the agent so it can reach the live daemon.
+          {t('settings.mcpRunningNote')}
         </p>
       </div>
     </section>

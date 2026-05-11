@@ -233,6 +233,12 @@ describe('App connectors settings flows', () => {
     await waitFor(() => {
       expect(container.querySelector('.privacy-consent-banner')).toBeTruthy();
     });
+    const banner = container.querySelector('.privacy-consent-banner');
+    expect(banner?.querySelector('.seg-control')).toBeNull();
+    expect(banner?.querySelector('.seg-btn.active')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Help improve' }).className).toContain(
+      'privacy-consent-action',
+    );
   });
 
   it('hides first-run privacy consent while settings is open', async () => {

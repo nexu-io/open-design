@@ -334,6 +334,7 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   wise: 'Geldtransfer. Leuchtend grüner Akzent, freundlich und klar.',
   'x-ai': 'Elon Musks AI-Lab. Strenger Monochrom-Look, futuristischer Minimalismus.',
   xiaohongshu: 'Lifestyle-UGC-Social-Plattform. Singuläres Brand-Rot, großzügiger Radius, content-first.',
+  wechat: 'WeChat Mini Programs. Frisches Grün (#07C160), PingFang SC, Chat-Bubble-UI, Tab-Leiste.',
   zapier: 'Automatisierungsplattform. Warmes Orange, freundlich illustrationsgetrieben.',
 };
 
@@ -353,6 +354,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Fintech & Crypto': 'Fintech & Krypto',
   'E-Commerce & Retail': 'E-Commerce & Handel',
   'Media & Consumer': 'Medien & Consumer',
+  'Social & Messaging': 'Social & Messaging',
   Automotive: 'Automotive',
   'Editorial & Print': 'Editorial & Print',
   'Editorial · Studio': 'Editorial · Studio',
@@ -365,6 +367,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
 const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'clinical-case-report',
   'dcf-valuation',
+  'editorial-burgundy-principles-template',
   'flowai-live-dashboard-template',
   'html-ppt-taste-brutalist',
   'html-ppt-taste-editorial',
@@ -406,22 +409,31 @@ const DE_SKILL_IDS_WITH_EN_FALLBACK = [
   'ib-pitch-book',
   'last30days',
   'live-dashboard',
+  'login-flow',
   'orbit-general',
   'orbit-github',
   'orbit-gmail',
   'orbit-linear',
   'orbit-notion',
+  'release-notes-one-pager',
   // TODO: add localized copy for social-media-dashboard (introduced in #678).
   // Fallback for now so the localized-content coverage test passes.
   'social-media-dashboard',
   'social-media-matrix-tracker-template',
+  '8-bit-orbit-video-template',
+  'digits-fintech-swiss-template',
+  'field-notes-editorial-template',
+  'html-ppt-retro-quarterly-review',
+  'swiss-user-research-video-template',
   'web-prototype-taste-brutalist',
   'web-prototype-taste-editorial',
   'web-prototype-taste-soft',
   'waitlist-page',
   'x-research',
   'trading-analysis-dashboard-template',
+  'swiss-creative-mode-template',
   'github-dashboard',
+  'after-hours-editorial-template',
   // Curated design/creative skill catalogue (PR #955) — lightweight stubs
   // that point at upstream awesome-claude-skills / awesome-agent-skills
   // entries. The frontmatter description is English-only by design; the
@@ -561,8 +573,10 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'glassmorphism',
   'gradient',
   'huggingface',
+  'hud',
   'levels',
   'lingo',
+  'loom',
   'luxury',
   'material',
   'minimal',
@@ -590,10 +604,12 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'storytelling',
   'totality-festival',
   'tetris',
+  'trading-terminal',
   'urdu',
   'vibrant',
   'vintage',
   'webex',
+  'wechat',
 ] as const;
 
 const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {

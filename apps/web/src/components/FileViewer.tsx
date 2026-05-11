@@ -1,4 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT } from '../i18n';
@@ -389,6 +391,34 @@ export function LiveArtifactViewer({
   const [refreshSuccess, setRefreshSuccess] = useState<string | null>(null);
   const [refreshEvents, setRefreshEvents] = useState<LiveArtifactRefreshEvent[]>([]);
   const [refreshHistory, setRefreshHistory] = useState<LiveArtifactRefreshLogEntry[]>([]);
+  const [presentMenuOpen, setPresentMenuOpen] = useState(false);
+  const [inTabPresent, setInTabPresent] = useState(false);
+  const previewBodyRef = useRef<HTMLDivElement | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const presentWrapRef = useRef<HTMLDivElement | null>(null);
+  const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
+  }, []);
+  useEffect(() => {
+    if (!presentMenuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.present-wrap')) return;
+      setPresentMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPresentMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [presentMenuOpen]);
 
   useEffect(() => {
     setRefreshError(null);
@@ -545,8 +575,78 @@ export function LiveArtifactViewer({
   const currentRefreshStatus = detail?.refreshStatus ?? liveArtifact.refreshStatus;
   const isRunning = refreshing || currentRefreshStatus === 'running';
 
+  const presentInThisTab = () => {
+    setPresentMenuOpen(false);
+    setMode('preview');
+    setInTabPresent(true);
+  };
+  const presentFullscreen = () => {
+    setPresentMenuOpen(false);
+    setMode('preview');
+    const target = previewBodyRef.current ?? iframeRef.current;
+    if (target?.requestFullscreen) {
+      void target.requestFullscreen().catch(() => {});
+    }
+  };
+  const presentNewTab = () => {
+    setPresentMenuOpen(false);
+    if (typeof window === 'undefined') return;
+    window.open(liveArtifactPreviewUrl(projectId, liveArtifact.artifactId), '_blank', 'noopener,noreferrer');
+  };
+  useEffect(() => {
+    if (!inTabPresent) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setInTabPresent(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [inTabPresent]);
+
   return (
-    <div className="viewer html-viewer live-artifact-viewer">
+    <div className={`viewer html-viewer live-artifact-viewer${inTabPresent ? ' is-tab-present' : ''}`}>
+      {((node: ReactNode) => (
+        chromeActionsHost ? createPortal(node, chromeActionsHost) : node
+      ))(
+        <div className="present-wrap chrome-present-wrap" ref={presentWrapRef}>
+          <button
+            className="chrome-action chrome-action-secondary present-trigger"
+            aria-haspopup="menu"
+            aria-expanded={presentMenuOpen}
+            onClick={() => setPresentMenuOpen((v) => !v)}
+          >
+            <Icon name="present" size={13} />
+            <span>{t('fileViewer.present')}</span>
+            <Icon name="chevron-down" size={11} />
+          </button>
+          {presentMenuOpen ? (
+            <div className="present-menu" role="menu">
+              <button role="menuitem" onClick={presentInThisTab}>
+                <span className="present-icon"><Icon name="eye" size={13} /></span>{' '}
+                {t('fileViewer.presentInTab')}
+              </button>
+              <button role="menuitem" onClick={presentFullscreen}>
+                <span className="present-icon"><Icon name="play" size={13} /></span>{' '}
+                {t('fileViewer.presentFullscreen')}
+              </button>
+              <button role="menuitem" onClick={presentNewTab}>
+                <span className="present-icon"><Icon name="share" size={13} /></span>{' '}
+                {t('fileViewer.presentNewTab')}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+      {inTabPresent ? (
+        <button
+          type="button"
+          className="present-exit-btn"
+          onClick={() => setInTabPresent(false)}
+          title={t('common.exitFullscreen')}
+          aria-label={t('common.exitFullscreen')}
+        >
+          <Icon name="close" size={14} />
+        </button>
+      ) : null}
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           <button
@@ -667,20 +767,23 @@ export function LiveArtifactViewer({
           />
         ) : null}
         {mode === 'preview' ? (
-          <div
-            style={{
-              width: `${100 / previewScale}%`,
-              height: `${100 / previewScale}%`,
-              transform: `scale(${previewScale})`,
-              transformOrigin: '0 0',
-            }}
-          >
-            <iframe
-              data-testid="live-artifact-preview-frame"
-              title={liveArtifact.title}
-              sandbox="allow-scripts allow-popups"
-              src={previewUrl}
-            />
+          <div ref={previewBodyRef} className="live-artifact-preview-frame-host">
+            <div
+              style={{
+                width: `${100 / previewScale}%`,
+                height: `${100 / previewScale}%`,
+                transform: `scale(${previewScale})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              <iframe
+                ref={iframeRef}
+                data-testid="live-artifact-preview-frame"
+                title={liveArtifact.title}
+                sandbox="allow-scripts allow-popups"
+                src={previewUrl}
+              />
+            </div>
           </div>
         ) : loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
@@ -2849,6 +2952,8 @@ function HtmlViewer({
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   // Template save UX. We surface a transient "Saved" pill in the share
@@ -3062,6 +3167,11 @@ function HtmlViewer({
   const previewBodyRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
+  }, []);
 
   useEffect(() => {
     liveCommentTargetsRef.current = liveCommentTargets;
@@ -3196,6 +3306,58 @@ function HtmlViewer({
     if (!win) return;
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
   }, [inspectMode, srcDoc]);
+
+  // Mirror the bridge's `od:comment-targets` broadcast into
+  // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
+  // active. The boardMode-only useEffect below still handles its
+  // own comment-specific events (hover / click target / pod), but
+  // the targets list itself is mode-agnostic — it's just "which
+  // elements on the page carry data-od-id / data-screen-label".
+  // Without this listener Inspect mode never learns the artifact's
+  // annotation count, and the empty-state hint added for #890 would
+  // misfire (always firing in Inspect mode, even on annotated
+  // artifacts) because the comment-mode listener short-circuits on
+  // `!boardMode`. Issue #890.
+  useEffect(() => {
+    if (!inspectMode && !boardMode) {
+      setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      return;
+    }
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as
+        | {
+            type?: string;
+            targets?: Array<Partial<PreviewCommentSnapshot>>;
+          }
+        | null;
+      if (data?.type !== 'od:comment-targets' || !Array.isArray(data.targets)) return;
+      const next = new Map<string, PreviewCommentSnapshot>();
+      data.targets.forEach((item) => {
+        const elementId = String(item?.elementId || '');
+        if (!elementId) return;
+        next.set(elementId, {
+          filePath: file.name,
+          elementId,
+          selector: String(item?.selector || ''),
+          label: String(item?.label || ''),
+          text: String(item?.text || ''),
+          position: {
+            x: clampBridgeCoordinate(item?.position?.x),
+            y: clampBridgeCoordinate(item?.position?.y),
+            width: clampBridgeCoordinate(item?.position?.width),
+            height: clampBridgeCoordinate(item?.position?.height),
+          },
+          htmlHint: String(item?.htmlHint || ''),
+          selectionKind: 'element',
+          memberCount: undefined,
+        });
+      });
+      setLiveCommentTargets(next);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [inspectMode, boardMode, file.name]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
@@ -3698,6 +3860,23 @@ function HtmlViewer({
   }, [presentMenuOpen]);
 
   useEffect(() => {
+    if (!zoomMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!zoomMenuRef.current) return;
+      if (!zoomMenuRef.current.contains(e.target as Node)) setZoomMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [zoomMenuOpen]);
+
+  useEffect(() => {
     if (!shareMenuOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (!shareRef.current) return;
@@ -4010,7 +4189,7 @@ function HtmlViewer({
     }
   }
 
-  const showPresent = effectiveDeck && source !== null;
+  const showPresent = source !== null;
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
@@ -4121,6 +4300,20 @@ function HtmlViewer({
           >
             <Icon name="reload" size={14} />
           </button>
+          <div className="viewer-tabs">
+            <button
+              className={`viewer-tab ${mode === 'preview' ? 'active' : ''}`}
+              onClick={() => setMode('preview')}
+            >
+              {t('fileViewer.preview')}
+            </button>
+            <button
+              className={`viewer-tab ${mode === 'source' ? 'active' : ''}`}
+              onClick={() => setMode('source')}
+            >
+              {t('fileViewer.source')}
+            </button>
+          </div>
           {effectiveDeck ? (
             <span
               className="deck-nav"
@@ -4157,6 +4350,8 @@ function HtmlViewer({
               </button>
             </span>
           ) : null}
+        </div>
+        <div className="viewer-toolbar-actions">
           <button
             type="button"
             className={`viewer-toggle${boardMode ? ' active' : ''}`}
@@ -4178,23 +4373,6 @@ function HtmlViewer({
             <span>{t('fileViewer.tweaks')}</span>
             <span className="switch" aria-hidden />
           </button>
-        </div>
-        <div className="viewer-toolbar-actions">
-          <div className="viewer-tabs">
-            <button
-              className={`viewer-tab ${mode === 'preview' ? 'active' : ''}`}
-              onClick={() => setMode('preview')}
-            >
-              {t('fileViewer.preview')}
-            </button>
-            <button
-              className={`viewer-tab ${mode === 'source' ? 'active' : ''}`}
-              onClick={() => setMode('source')}
-            >
-              {t('fileViewer.source')}
-            </button>
-          </div>
-          <span className="viewer-divider" aria-hidden />
           {boardMode ? (
             <>
               <button
@@ -4275,15 +4453,40 @@ function HtmlViewer({
           >
             <Icon name="minus" size={14} />
           </button>
-          <button
-            type="button"
-            className="viewer-action"
-            onClick={() => setZoom(100)}
-            title={t('fileViewer.resetZoom')}
-            style={{ minWidth: 60 }}
-          >
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-          </button>
+          <div className="zoom-menu" ref={zoomMenuRef}>
+            <button
+              type="button"
+              className="viewer-action zoom-trigger"
+              aria-haspopup="menu"
+              aria-expanded={zoomMenuOpen}
+              onClick={() => setZoomMenuOpen((v) => !v)}
+              style={{ minWidth: 64 }}
+            >
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
+              <Icon name="chevron-down" size={11} />
+            </button>
+            {zoomMenuOpen ? (
+              <div className="zoom-menu-popover" role="menu">
+                {[50, 75, 100, 125, 150, 200].map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => {
+                      setZoom(level);
+                      setZoomMenuOpen(false);
+                    }}
+                  >
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                    {zoom === level ? (
+                      <Icon name="check" size={13} />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className="icon-only"
@@ -4293,11 +4496,15 @@ function HtmlViewer({
           >
             <Icon name="plus" size={14} />
           </button>
-          <span className="viewer-divider" aria-hidden />
+        </div>
+      </div>
+      {((filePrimaryActions: ReactNode) => (
+        chromeActionsHost ? createPortal(filePrimaryActions, chromeActionsHost) : filePrimaryActions
+      ))(<>
           {showPresent ? (
-            <div className="present-wrap">
+            <div className="present-wrap chrome-present-wrap">
               <button
-                className="viewer-action present-trigger"
+                className="chrome-action chrome-action-secondary present-trigger"
                 aria-haspopup="menu"
                 aria-expanded={presentMenuOpen}
                 onClick={() => setPresentMenuOpen((v) => !v)}
@@ -4325,13 +4532,14 @@ function HtmlViewer({
             </div>
           ) : null}
           {canShare ? (
-            <div className="share-menu" ref={shareRef}>
+            <div className="share-menu chrome-share-menu" ref={shareRef}>
               <button
-                className="viewer-action primary"
+                className="chrome-action chrome-action-primary"
                 aria-haspopup="menu"
                 aria-expanded={shareMenuOpen}
                 onClick={() => setShareMenuOpen((v) => !v)}
               >
+                <Icon name="share" size={13} />
                 <span>{t('fileViewer.shareLabel')}</span>
                 <Icon name="chevron-down" size={11} />
               </button>
@@ -4483,8 +4691,7 @@ function HtmlViewer({
               ) : null}
             </div>
           ) : null}
-        </div>
-      </div>
+        </>)}
       <div className="viewer-body" ref={previewBodyRef}>
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
@@ -4629,19 +4836,59 @@ function HtmlViewer({
                 error={inspectError}
               />
             ) : null}
-            {inspectMode && openHintBox && !activeInspectTarget ? (
+            {/*
+              Hint banner for Inspect / Picker modes. The bridge in
+              `apps/web/src/runtime/srcdoc.ts` posts `od:comment-targets`
+              with every element annotated with `data-od-id` /
+              `data-screen-label`, so `liveCommentTargets.size` is the
+              authoritative annotation count for the current artifact.
+
+              Two states:
+              - "has targets": the existing copy ("Click any element with
+                `data-od-id` to tune its style.") for users who just don't
+                see the crosshair cursor.
+              - "no targets" (issue #890): a freeform-generated artifact
+                (e.g. PRD → HTML through a Claude-Code-compatible CLI
+                without a skill) ships zero `data-od-id` annotations. The
+                bridge's click handler walks up to <html>, finds nothing,
+                and bails — clicks no-op silently. The static copy made
+                this look broken; the empty-state copy explains what's
+                missing and how to fix it. Mirrored across Inspect and
+                Picker because the failure surface is identical.
+            */}
+            {(inspectMode || (boardMode && boardTool === 'inspect'))
+              && openHintBox
+              && !activeInspectTarget
+              && !activeCommentTarget ? (
               <div className="inspect-empty-hint-container">
-                <div className="inspect-empty-hint" data-testid="inspect-empty-hint">
-                Click any element with <code>data-od-id</code> to tune its style.
-              </div>
-               <button
-                type="button"
-                title="Close Inspect Hint"
-                aria-label="Close Inspect Hint"
-                onClick={() => setOpenHintBox(false)}
-                className="orbit-artifact-ghost">
-                 <Icon className='' name='close' size={12} />
-               </button>
+                {liveCommentTargets.size === 0 ? (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint-no-targets"
+                  >
+                    This artifact has no <code>data-od-id</code>{' '}
+                    annotations yet — ask the agent to add them to the
+                    sections you want to{' '}
+                    {inspectMode ? 'inspect' : 'comment on'}.
+                  </div>
+                ) : (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint"
+                  >
+                    Click any element with <code>data-od-id</code> to{' '}
+                    {inspectMode ? 'tune its style' : 'leave a comment'}.
+                  </div>
+                )}
+                <button
+                  type="button"
+                  title="Close Inspect Hint"
+                  aria-label="Close Inspect Hint"
+                  onClick={() => setOpenHintBox(false)}
+                  className="orbit-artifact-ghost"
+                >
+                  <Icon className="" name="close" size={12} />
+                </button>
               </div>
             ) : null}
           </div>
