@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
+import { MemoryToast } from './components/MemoryToast';
 import { PetOverlay } from './components/pet/PetOverlay';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
@@ -34,6 +35,7 @@ import {
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { applyAppearanceToDocument } from './state/appearance';
+import { isMacPlatform } from './utils/platform';
 import {
   createProject,
   deleteProject as deleteProjectApi,
@@ -717,6 +719,22 @@ export function App() {
     setSettingsOpen(true);
   }, []);
 
+  // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
+  // beat the browser's default Preferences dialog. Platform-gated so
+  // meta/ctrl don't conflict across OS.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && !e.shiftKey && !e.altKey && e.key === ',') {
+        if (e.isComposing) return;
+        e.preventDefault();
+        openSettings();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [openSettings]);
+
   // Explicit enabled toggle — true = wake, false = tuck. Persists to
   // localStorage so the overlay state survives across reloads. We keep
   // `adopted` untouched so the entry-view CTA does not regress to
@@ -877,6 +895,7 @@ export function App() {
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
         />
       ) : null}
+      <MemoryToast onOpenMemory={() => openSettings('memory')} />
       {/* First-run privacy consent banner. It waits for daemon config
           hydration because privacyDecisionAt is daemon-owned and stripped
           from localStorage. It also yields while Settings is open so the

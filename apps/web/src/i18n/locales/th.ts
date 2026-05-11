@@ -932,6 +932,8 @@ export const th: Dict = {
   'assistant.role': 'หน่วยผู้ช่วยเหลือส่วนตัว',
   'assistant.workingLabel': 'ดำเนินระบบรับทำงานอยู่',
   'assistant.doneLabel': 'บรรลุสู่ระดับพร้อมแล้ว',
+  'assistant.emptyResponseLabel': 'No output',
+  'assistant.emptyResponseMessage': 'The provider ended the request without returning text or an artifact. Try another model or provider, check quota, or retry.',
   'assistant.unfinishedLabel': 'พ้นจากโหมดเพราะงานตกค้าง',
   'assistant.unfinishedSummary': 'งาน {n} ขั้นลืมอยู่ข้างหลัง',
   'assistant.unfinishedMore': 'ทิ้งเพิ่มมาอีก +{n}',

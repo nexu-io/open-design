@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -7,7 +8,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
 import { projectSplitClassName } from '../../src/components/ProjectView';
+import { uploadProjectFiles } from '../../src/providers/registry';
 import type { ProjectFile } from '../../src/types';
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    uploadProjectFiles: vi.fn(),
+  };
+});
+
+const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -15,16 +29,31 @@ let host: HTMLDivElement | null = null;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 afterEach(() => {
+  cleanup();
   if (root) {
     act(() => root?.unmount());
     root = null;
   }
   host?.remove();
   host = null;
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+
+function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
+  return {
+    name: 'mock.png',
+    path: 'mock.png',
+    type: 'file',
+    size: 1024,
+    mtime: 1710000000,
+    kind: 'image',
+    mime: 'image/png',
+    ...overrides,
+  };
+}
 
 function workspaceFile(name: string): ProjectFile {
   return {
@@ -120,6 +149,94 @@ describe('FileWorkspace upload input', () => {
 
     expect(markup).toContain('data-testid="design-files-upload-input"');
     expect(markup).not.toContain('accept=');
+  });
+
+  it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
+    mockedUploadProjectFiles.mockRejectedValueOnce(new Error('storage offline'));
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[baseFile()]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('design-files-upload-input'), {
+      target: { files: [new File(['mock'], 'mock.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'storage offline',
+      );
+    });
+
+    const row = screen.getByTestId('design-file-row-mock.png');
+    const nameButton = row.querySelector<HTMLButtonElement>('.df-row-name-btn');
+    if (!nameButton) throw new Error('Could not find file name button');
+    fireEvent.click(nameButton);
+
+    expect(screen.getByTestId('design-file-preview')).toBeTruthy();
+    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'storage offline',
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('upload-error-dismiss'));
+
+    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+  });
+
+  it('keeps partial upload failures visible after a successful file opens', async () => {
+    mockedUploadProjectFiles.mockResolvedValueOnce({
+      uploaded: [
+        {
+          path: 'uploaded.png',
+          name: 'uploaded.png',
+          kind: 'image',
+          size: 1024,
+        },
+      ],
+      failed: [{ name: 'failed.png', error: 'permission denied' }],
+      error: 'permission denied',
+    });
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[baseFile({ name: 'uploaded.png', path: 'uploaded.png' })]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('design-files-upload-input'), {
+      target: {
+        files: [
+          new File(['uploaded'], 'uploaded.png', { type: 'image/png' }),
+          new File(['failed'], 'failed.png', { type: 'image/png' }),
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'Uploaded 1 file(s), but 1 failed (permission denied).',
+      );
+    });
   });
 
   it('hides the workspace focus control while the chat pane is open', () => {

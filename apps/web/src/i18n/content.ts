@@ -536,9 +536,19 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   'Short Form': 'Short Form',
   Travel: 'Reise',
   'Live Artifact': 'Live-Artefakt',
+  'VFX / HTML-in-Canvas': 'VFX / HTML-in-Canvas',
 };
 
-const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = ['notion-team-dashboard-live-artifact'] as const;
+const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [
+  'notion-team-dashboard-live-artifact',
+  'hyperframes-html-in-canvas-iphone-device',
+  'hyperframes-html-in-canvas-liquid-background',
+  'hyperframes-html-in-canvas-liquid-glass',
+  'hyperframes-html-in-canvas-magnetic',
+  'hyperframes-html-in-canvas-portal-reveal',
+  'hyperframes-html-in-canvas-shatter',
+  'hyperframes-html-in-canvas-text-cursor',
+] as const;
 
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
@@ -639,6 +649,25 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'website-to-video': 'Website-zu-Video',
   wuxia: 'Wuxia',
   zhaoyun: 'Zhaoyun',
+  dashboard: 'Dashboard',
+  data: 'Daten',
+  destruction: 'Zerstörung',
+  displacement: 'Displacement',
+  hero: 'Hero',
+  'html-in-canvas': 'HTML-in-Canvas',
+  iphone: 'iPhone',
+  keynote: 'Keynote',
+  liquid: 'Liquid',
+  'liquid-glass': 'Liquid Glass',
+  macbook: 'MacBook',
+  magnetic: 'Magnetic',
+  particles: 'Partikel',
+  portal: 'Portal',
+  'product-demo': 'Produkt-Demo',
+  shader: 'Shader',
+  shatter: 'Shatter',
+  text: 'Text',
+  webgl: 'WebGL',
 };
 
 const DE_PROMPT_TEMPLATE_COPY: Record<string, LocalizedPromptTemplateCopy> = {

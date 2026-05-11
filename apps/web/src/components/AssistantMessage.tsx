@@ -72,7 +72,13 @@ export function AssistantMessage({
     | undefined;
   const produced = message.producedFiles ?? [];
   const roleLabel = assistantRoleLabel(message, t);
+  const hasEmptyResponse = events.some(
+    (e) => e.kind === "status" && e.label === "empty_response"
+  );
   const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  const runSucceeded =
+    !streaming &&
+    (message.runStatus === "succeeded" || (!message.runStatus && !!message.endedAt));
   const canContinueTodos =
     !streaming &&
     !!isLast &&
@@ -125,6 +131,7 @@ export function AssistantMessage({
                 key={i}
                 items={b.items}
                 runStreaming={streaming}
+                runSucceeded={runSucceeded}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
               />
@@ -154,6 +161,7 @@ export function AssistantMessage({
           endedAt={message.endedAt}
           usage={usage}
           hasUnfinishedTodos={unfinishedTodos.length > 0}
+          hasEmptyResponse={hasEmptyResponse}
         />
       </div>
     </div>
@@ -219,16 +227,18 @@ function AssistantFooter({
   endedAt,
   usage,
   hasUnfinishedTodos,
+  hasEmptyResponse,
 }: {
   streaming: boolean;
   startedAt: number | undefined;
   endedAt: number | undefined;
   usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
   hasUnfinishedTodos: boolean;
+  hasEmptyResponse: boolean;
 }) {
   const t = useT();
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt);
-  if (!streaming && !elapsed && !usage && !hasUnfinishedTodos) return null;
+  if (!streaming && !elapsed && !usage && !hasUnfinishedTodos && !hasEmptyResponse) return null;
   return (
     <div
       className="assistant-footer"
@@ -238,6 +248,8 @@ function AssistantFooter({
       <span className="assistant-label">
         {streaming
           ? t("assistant.workingLabel")
+          : hasEmptyResponse
+          ? t("assistant.emptyResponseLabel")
           : hasUnfinishedTodos
           ? t("assistant.unfinishedLabel")
           : t("assistant.doneLabel")}
@@ -605,11 +617,13 @@ interface ToolItem {
 function ToolGroupCard({
   items,
   runStreaming,
+  runSucceeded,
   projectFileNames,
   onRequestOpenFile,
 }: {
   items: ToolItem[];
   runStreaming: boolean;
+  runSucceeded: boolean;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
 }) {
@@ -624,14 +638,15 @@ function ToolGroupCard({
         use={items[0]!.use}
         result={items[0]!.result}
         runStreaming={runStreaming}
+        runSucceeded={runSucceeded}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
       />
     );
   }
 
-  const summary = summarizeGroup(items, t);
-  const running = items.some((it) => !it.result);
+  const summary = summarizeGroup(items, t, runStreaming, runSucceeded);
+  const running = runStreaming && items.some((it) => !it.result);
   return (
     <div className="action-card">
       <button
@@ -658,6 +673,7 @@ function ToolGroupCard({
               use={it.use}
               result={it.result}
               runStreaming={runStreaming}
+              runSucceeded={runSucceeded}
               projectFileNames={projectFileNames}
               onRequestOpenFile={onRequestOpenFile}
             />
@@ -670,13 +686,17 @@ function ToolGroupCard({
 
 function summarizeGroup(
   items: ToolItem[],
-  t: (k: keyof Dict, vars?: Record<string, string | number>) => string
+  t: (k: keyof Dict, vars?: Record<string, string | number>) => string,
+  runStreaming: boolean,
+  runSucceeded: boolean
 ): { label: string; icon: string } {
   // All items share a tool family because the grouper only merges by name.
   const name = items[0]?.use.name ?? "";
   const family = toolFamily(name);
   const icon = familyIcon(family);
-  const verbs = items.map((it) => verbForState(it, t));
+  const verbs = items.map((it) =>
+    verbForState(it, t, runStreaming, runSucceeded)
+  );
   // Roll the verbs into a comma-list with deduplicated last-state. So three
   // edits whose results are all 'Done' render as "Editing ×3, Done"; mixed
   // states render as "Editing, Reading, Done".
@@ -733,9 +753,15 @@ function countLabel(
   return n > 1 ? `${verb} ×${n}` : verb;
 }
 
-function verbForState(it: ToolItem, t: (k: keyof Dict) => string): string {
-  if (!it.result) return t("assistant.verbRunning");
-  if (it.result.isError) return t("tool.error");
+function verbForState(
+  it: ToolItem,
+  t: (k: keyof Dict) => string,
+  runStreaming = false,
+  runSucceeded = false
+): string {
+  if (!it.result && runStreaming) return t("assistant.verbRunning");
+  if (!it.result && !runSucceeded) return t("tool.error");
+  if (it.result?.isError) return t("tool.error");
   return t("tool.done");
 }
 
@@ -804,7 +830,8 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "requesting" ||
-        ev.label === "thinking"
+        ev.label === "thinking" ||
+        ev.label === "empty_response"
       )
         continue;
       const last = out[out.length - 1];

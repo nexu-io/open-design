@@ -1,13 +1,14 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { access, stat } from 'node:fs/promises';
+import { access, mkdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
+import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
 
 const execFileAsync = promisify(execFile);
@@ -16,9 +17,7 @@ const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
 const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta';
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
-const screenshotPath = resolveFromWorkspace(
-  process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
-);
+const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -110,6 +109,7 @@ macDescribe('packaged mac runtime smoke', () => {
   let started = false;
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
+    const report = await createPackagedSmokeReport('mac');
     let passed = false;
     try {
       const install = await runToolsPackJson<MacInstallResult>('install');
@@ -147,11 +147,14 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
 
+      await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await runToolsPackJson<MacInspectResult>('inspect', ['--path', screenshotPath]);
       expect(screenshot.screenshot?.path).toBe(screenshotPath);
       expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
+      await report.saveScreenshot(screenshotPath);
 
-      assertLogPathsAndContent(await runToolsPackJson<LogsResult>('logs'));
+      const logs = await runToolsPackJson<LogsResult>('logs');
+      assertLogPathsAndContent(logs);
 
       const stop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
@@ -165,6 +168,28 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(uninstall.installedAppPath).toBe(install.installedAppPath);
       expect(uninstall.removed).toBe(true);
       expect(await pathExists(install.installedAppPath)).toBe(false);
+      await report.saveSummary({
+        health: value,
+        install: {
+          detached: install.detached,
+          dmgPath: install.dmgPath,
+          installedAppPath: install.installedAppPath,
+          mountPoint: install.mountPoint,
+        },
+        logs: summarizeLogs(logs),
+        namespace,
+        screenshot: report.screenshotRelpath,
+        start: {
+          appPath: start.appPath,
+          executablePath: start.executablePath,
+          logPath: start.logPath,
+          pid: start.pid,
+          source: start.source,
+          status: start.status,
+        },
+        stop,
+        uninstall,
+      });
       passed = true;
     } finally {
       if (!passed) {
@@ -527,6 +552,18 @@ function assertLogPathsAndContent(result: LogsResult): void {
     .join('\n');
   expect(combined).not.toMatch(/ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING/);
   expect(combined).not.toMatch(/packaged runtime failed/i);
+}
+
+function summarizeLogs(result: LogsResult): Record<string, { lineCount: number; logPath: string }> {
+  return Object.fromEntries(
+    Object.entries(result.logs).map(([app, entry]) => [
+      app,
+      {
+        lineCount: entry.lines.length,
+        logPath: entry.logPath,
+      },
+    ]),
+  );
 }
 
 async function printPackagedLogs(): Promise<void> {

@@ -80,7 +80,9 @@ test('legacy known OpenAI provider switches to the matching Anthropic preset', a
   const openAiTab = protocolTabs.getByRole('tab', { name: 'OpenAI', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
   const baseUrlInput = dialog.getByLabel('Base URL');
-  const modelSelect = dialog.getByLabel('Model');
+  // Use getByRole + exact so we only match the chat "Model" picker and
+  // not the inline "Memory model" picker that sits next to it.
+  const modelSelect = dialog.getByRole('combobox', { name: 'Model', exact: true });
 
   await expect(openAiTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
@@ -151,7 +153,7 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   await dialog.getByLabel('Quick fill provider').selectOption('1');
-  await expect(dialog.getByLabel('Model')).toHaveValue('deepseek-chat');
+  await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('deepseek-chat');
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
 
   await dialog.getByRole('button', { name: 'Show' }).click();
@@ -188,7 +190,7 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue('1');
-  await expect(reopenedDialog.getByLabel('Model')).toHaveValue('deepseek-chat');
+  await expect(reopenedDialog.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('deepseek-chat');
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
 });

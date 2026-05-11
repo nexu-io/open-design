@@ -62,9 +62,14 @@
       # Wrap `od` with `--no-open` for `nix run`: the daemon package
       # builds the daemon workspace only, not `apps/web/out/`, so the
       # browser would otherwise auto-open onto an empty static dir.
+      #
+      # Set OD_DATA_DIR to a writable location when unset. The Nix store
+      # is read-only at runtime, so the daemon cannot write to its default
+      # `<projectRoot>/.od` location under `nix run`.
       apps.default = {
         type = "app";
         program = "${pkgs.writeShellScript "od-nix-run" ''
+          export OD_DATA_DIR="''${OD_DATA_DIR:-$HOME/.od}"
           exec ${daemon}/bin/od --no-open "$@"
         ''}";
         meta.description = "Open Design local daemon (`od`)";

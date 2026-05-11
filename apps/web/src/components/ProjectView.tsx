@@ -31,9 +31,14 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
-import { composeSystemPrompt, type ResearchOptions } from '@open-design/contracts';
+import {
+  composeSystemPrompt,
+  type MemorySystemPromptResponse,
+  type ResearchOptions,
+} from '@open-design/contracts';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
+import { isMacPlatform } from '../utils/platform';
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
@@ -742,12 +747,31 @@ export function ProjectView({
         }
       }
     }
+    // Fold in the auto-memory block so BYOK / API-mode chats see the
+    // same Personal-memory section a daemon-side CLI chat would. The
+    // daemon does this by calling `composeMemoryBody()` directly; the
+    // web side hits the equivalent HTTP surface so it can stay
+    // ignorant of daemon internals. Failures are swallowed — memory is
+    // best-effort, never a blocker for the chat round-trip.
+    let memoryBody: string | undefined;
+    try {
+      const resp = await fetch('/api/memory/system-prompt');
+      if (resp.ok) {
+        const json = (await resp.json()) as MemorySystemPromptResponse;
+        if (typeof json.body === 'string' && json.body.trim().length > 0) {
+          memoryBody = json.body;
+        }
+      }
+    } catch {
+      // Ignore; memory injection is best-effort.
+    }
     return composeSystemPrompt({
       skillBody,
       skillName,
       skillMode,
       designSystemBody,
       designSystemTitle,
+      memoryBody,
       metadata: project.metadata,
       template,
       streamFormat: config.mode === 'api' ? 'plain' : undefined,
@@ -1183,6 +1207,7 @@ export function ProjectView({
 
       const parser = createArtifactParser();
       let liveHtml = '';
+      let streamedText = '';
 
       const updateAssistant = (updater: (prev: ChatMessage) => ChatMessage) => {
         setMessages((curr) =>
@@ -1292,12 +1317,15 @@ export function ProjectView({
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
-        onDelta: textBuffer.appendContent,
+        onDelta: (delta: string) => {
+          streamedText += delta;
+          textBuffer.appendContent(delta);
+        },
         onAgentEvent: (ev: AgentEvent) => {
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else pushEvent(ev);
         },
-        onDone: () => {
+        onDone: (fullText = '') => {
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
@@ -1305,6 +1333,37 @@ export function ProjectView({
             if (ev.type === 'artifact:end') {
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
+          }
+          const emptyApiResponse =
+            config.mode === 'api' &&
+            !fullText.trim() &&
+            !streamedText.trim() &&
+            !liveHtml.trim();
+          if (emptyApiResponse) {
+            const diagnostic = t('assistant.emptyResponseMessage');
+            updateMessageById(
+              assistantId,
+              (prev) => ({
+                ...prev,
+                endedAt: Date.now(),
+                events: [
+                  ...(prev.events ?? []),
+                  { kind: 'status', label: 'empty_response', detail: config.model },
+                  { kind: 'text', text: diagnostic },
+                ],
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+            if (commentAttachments.length > 0) {
+              void patchAttachedStatuses(commentAttachments, 'failed');
+            }
+            setStreaming(false);
+            abortRef.current = null;
+            cancelRef.current = null;
+            void refreshProjectFiles();
+            onProjectsRefresh();
+            return;
           }
           updateAssistant((prev) => ({
             ...prev,
@@ -1415,15 +1474,85 @@ export function ProjectView({
           },
         });
       } else {
+        // Mirror the daemon chat-route memory hook for BYOK chats. The
+        // CLI path runs `extractFromMessage` BEFORE composing the prompt
+        // (so an explicit "remember: X" / "我是 X" marker in this turn's
+        // user message lands in memory in time for this turn's system
+        // prompt), then queues `extractWithLLM` on child close (so the
+        // small-model pass picks up implicit facts from the full
+        // user+assistant exchange). BYOK chats never hit that route, so
+        // we replicate both phases here against `/api/memory/extract`.
+        // Without this, the Memory tab / model picker is a no-op for
+        // BYOK users even though the UI saves model + index + entries
+        // for that mode.
+        const userText = (userMsg.content ?? '').trim();
+        // Snapshot the live BYOK chat config so the daemon can run
+        // "Same as chat" memory extraction against the same vendor /
+        // key / baseUrl / apiVersion the user is chatting with. The
+        // daemon never persists BYOK creds itself, so this per-call
+        // signal is the only way `pickProvider()` can avoid falling
+        // through to env / media-config (which is wrong for BYOK)
+        // when no explicit memory model override is set. The picker
+        // re-syncs an *explicit* override when chat config drifts;
+        // this snapshot covers the implicit "Same as chat" default.
+        const byokChatProvider =
+          config.apiProtocol && config.apiKey
+            ? {
+                provider: config.apiProtocol,
+                apiKey: config.apiKey,
+                baseUrl: config.baseUrl,
+                apiVersion:
+                  config.apiProtocol === 'azure'
+                    ? config.apiVersion ?? ''
+                    : '',
+              }
+            : undefined;
+        if (userText.length > 0) {
+          try {
+            await fetch('/api/memory/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userMessage: userText,
+                projectId: project.id,
+                conversationId: activeConversationId,
+                chatProvider: byokChatProvider,
+              }),
+            });
+          } catch {
+            // Best-effort: memory extraction must never block the
+            // chat. The daemon's SSE bus will catch up the Memory tab
+            // on the next event.
+          }
+        }
         const systemPrompt = await composedSystemPrompt();
         const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
+        let accumulatedAssistantText = '';
         void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
           onDelta: (delta) => {
+            accumulatedAssistantText += delta;
             handlers.onDelta(delta);
             handlers.onAgentEvent({ kind: 'text', text: delta });
           },
-          onDone: handlers.onDone,
+          onDone: () => {
+            handlers.onDone();
+            const assistantText = accumulatedAssistantText.trim();
+            if (userText.length === 0 || assistantText.length === 0) return;
+            void fetch('/api/memory/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userMessage: userText,
+                assistantMessage: accumulatedAssistantText,
+                projectId: project.id,
+                conversationId: activeConversationId,
+                chatProvider: byokChatProvider,
+              }),
+            }).catch(() => {
+              // Best-effort: see comment above on the pre-turn call.
+            });
+          },
           onError: handlers.onError,
         });
       }
@@ -2014,10 +2143,8 @@ export function ProjectView({
   // Quick Switcher shortcut. ⌘+Shift+K is free (⌘+P is the only
   // existing primary-modifier shortcut on this surface).
   useEffect(() => {
-    const isMac =
-      typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     const onKeyDown = (e: KeyboardEvent) => {
-      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (primary && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         if (e.isComposing) return;
         if (!designMdState.exists) return;

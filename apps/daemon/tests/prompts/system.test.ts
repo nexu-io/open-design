@@ -25,6 +25,19 @@ const liveArtifactSkillBody = [
   liveArtifactSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
 ].join('\n');
 
+const hyperframesRoot = path.join(repoRoot, 'skills/hyperframes');
+const hyperframesSkillPath = path.join(repoRoot, 'skills/hyperframes/SKILL.md');
+const hyperframesSkillMarkdown = readFileSync(hyperframesSkillPath, 'utf8');
+const hyperframesSkillBody = [
+  `> **Skill root (absolute):** \`${hyperframesRoot}\``,
+  '>',
+  '> This skill ships side files alongside `SKILL.md`. Resolve references',
+  '> like `references/html-in-canvas.md` against the skill root above.',
+  '',
+  '',
+  hyperframesSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
+].join('\n');
+
 describe('composeSystemPrompt', () => {
   it('injects live-artifact skill guidance and metadata intent', () => {
     const prompt = composeSystemPrompt({
@@ -53,6 +66,27 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('a connected `notion` connector plus a user brief that names Notion is enough to start with `notion.notion_search`');
     expect(prompt).toContain('Prefer the `live-artifact` skill workflow when available');
     expect(prompt).toContain('The first output should be a live artifact/dashboard/report');
+  });
+
+  // The daemon composer (this file) is what apps/daemon/src/server.ts wires
+  // into live chat runs. The contracts copy at packages/contracts/src/prompts
+  // /system.ts exists for non-daemon contexts and was updated in the
+  // hyperframes PR; without this test the two copies drift silently and the
+  // main HyperFrames flow misses its preflight directive in production.
+  it('injects the html-in-canvas preflight for the hyperframes skill', () => {
+    const prompt = composeSystemPrompt({
+      skillName: 'hyperframes',
+      skillMode: 'video',
+      skillBody: hyperframesSkillBody,
+      metadata: {
+        kind: 'video',
+        videoModel: 'hyperframes-html',
+      } as any,
+    });
+
+    expect(prompt).toContain('## Active skill — hyperframes');
+    expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
+    expect(prompt).toContain('`references/html-in-canvas.md`');
   });
 
   describe('artifact handoff no-emit clauses (#1143)', () => {

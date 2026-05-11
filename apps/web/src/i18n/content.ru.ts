@@ -487,9 +487,19 @@ export const RU_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   'Short Form': 'Короткий формат',
   Travel: 'Путешествия',
   'Live Artifact': 'Live-артефакт',
+  'VFX / HTML-in-Canvas': 'VFX / HTML-in-Canvas',
 };
 
-export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = ['notion-team-dashboard-live-artifact'] as const;
+export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [
+  'notion-team-dashboard-live-artifact',
+  'hyperframes-html-in-canvas-iphone-device',
+  'hyperframes-html-in-canvas-liquid-background',
+  'hyperframes-html-in-canvas-liquid-glass',
+  'hyperframes-html-in-canvas-magnetic',
+  'hyperframes-html-in-canvas-portal-reveal',
+  'hyperframes-html-in-canvas-shatter',
+  'hyperframes-html-in-canvas-text-cursor',
+] as const;
 
 export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
@@ -590,6 +600,25 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'website-to-video': 'Сайт-в-видео',
   wuxia: 'Уся',
   zhaoyun: 'Чжао Юнь',
+  dashboard: 'Дашборд',
+  data: 'Данные',
+  destruction: 'Разрушение',
+  displacement: 'Смещение',
+  hero: 'Главный герой',
+  'html-in-canvas': 'HTML-в-Canvas',
+  iphone: 'iPhone',
+  keynote: 'Keynote',
+  liquid: 'Жидкость',
+  'liquid-glass': 'Liquid Glass',
+  macbook: 'MacBook',
+  magnetic: 'Магнитный',
+  particles: 'Частицы',
+  portal: 'Портал',
+  'product-demo': 'Демо продукта',
+  shader: 'Шейдер',
+  shatter: 'Раскалывание',
+  text: 'Текст',
+  webgl: 'WebGL',
 };
 
 export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>> = {
