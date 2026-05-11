@@ -1,16 +1,20 @@
 name: Contributor Card Bot
 
+# Triggers chosen for fork-safety: every event below either targets the base
+# repo directly (issues, discussions, discussion_comment) or is the GitHub-
+# blessed fork-safe variant (pull_request_target).
+#
+# Intentionally NOT included: pull_request_review, pull_request_review_comment,
+# issue_comment. GitHub withholds repository secrets from these events when
+# they originate on forked PRs, which is precisely the path most external
+# contributor activity takes; the bot requires BOT_APP_* secrets to authenticate,
+# so wiring those events here would fail-closed exactly for the contributors we
+# want to recognize. They can be re-added later via a workflow_run handoff.
 on:
   pull_request_target:
     types: [closed]
   issues:
     types: [opened]
-  pull_request_review:
-    types: [submitted]
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
   discussion:
     types: [created]
   discussion_comment:
@@ -21,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: contributor-card-bot-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  group: contributor-card-bot-${{ github.event.pull_request.number || github.event.issue.number || github.event.discussion.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -30,9 +34,6 @@ jobs:
     if: |
       (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
       (github.event_name == 'issues' && github.event.action == 'opened') ||
-      (github.event_name == 'pull_request_review' && github.event.action == 'submitted') ||
-      (github.event_name == 'issue_comment' && github.event.action == 'created') ||
-      (github.event_name == 'pull_request_review_comment' && github.event.action == 'created') ||
       (github.event_name == 'discussion' && github.event.action == 'created') ||
       (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
       github.event_name == 'workflow_dispatch'
