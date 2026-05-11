@@ -90,6 +90,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={vi.fn()}
       />,
@@ -119,6 +120,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -156,6 +158,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -195,6 +198,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId={null}
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -224,6 +228,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
         connectors={[]}
@@ -257,6 +262,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -288,6 +294,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={emptyOnCreate}
       />,
@@ -307,6 +314,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={templates}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={templateOnCreate}
       />,
@@ -341,6 +349,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -378,6 +387,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -415,6 +425,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -495,6 +506,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,

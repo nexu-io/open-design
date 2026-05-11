@@ -26,6 +26,7 @@ describe('NewProjectPanel media provider badges', () => {
         designSystems={[]}
         defaultDesignSystemId={null}
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={vi.fn()}
         mediaProviders={{
