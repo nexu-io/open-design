@@ -286,13 +286,16 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     expect(res.status).toBeLessThan(500);
   });
 
-  it('responds 204 with Access-Control-Allow-Origin: * to a null-origin OPTIONS preflight', async () => {
-    const res = await fetch(exportUrl('index.html'), {
-      method: 'OPTIONS',
-      headers: { Origin: 'null' },
-    });
-    expect(res.status).toBe(204);
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  it('rejects null-origin requests with 403 (export is for same-origin / server-side callers only)', async () => {
+    // Unlike /raw/*, the /export/* route is NOT in the daemon's null-
+    // origin allowlist (server.ts _NULL_ORIGIN_SAFE_GET_RE). The export
+    // consumer set is the daemon UI (same-origin) and server-side
+    // screenshot tooling (no Origin header at all); sandboxed-iframe
+    // srcdoc previews fetch through /raw/ instead, where each asset has
+    // its own URL. This test pins the contract so a future change that
+    // adds /export/ to the allowlist has to update it deliberately.
+    const res = await fetch(exportUrl('index.html'), { headers: { Origin: 'null' } });
+    expect(res.status).toBe(403);
   });
 
   it('returns 200 with the <link> tag intact when a sibling asset is missing', async () => {

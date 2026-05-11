@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
+import { inlineRelativeAssets, type InlineAssetReader } from './inline-assets.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles'> {}
 
@@ -216,13 +217,15 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
 }
 
-export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'exports'> {}
+export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
 
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
+  const { readProjectFile } = ctx.projectFiles;
+  const { isSafeId } = ctx.validation;
   const {
     buildProjectArchive,
     buildBatchArchive,
@@ -342,6 +345,84 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err?.message || err),
       );
+    }
+  });
+
+  // Export endpoint: serves a self-contained HTML body with every same-
+  // project <link rel=stylesheet> / <script src> inlined. Counterpart to
+  // GET /api/projects/:id/raw/* — that route stays URL-load (one request
+  // per asset; the FileViewer iframe's default since PR #384). This route
+  // exists for explicit "Export self-contained HTML" + screenshot tooling
+  // where one HTTP response with no inter-file dependencies is the goal.
+  // Null-origin (sandboxed iframe srcdoc) callers are intentionally NOT
+  // supported — the only consumers are the daemon UI (same-origin) and
+  // server-side screenshot tooling (no Origin header). See nexu-io/
+  // open-design#368 and the architecture lock at
+  // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
+  app.get('/api/projects/:id/export/*', async (req, res) => {
+    try {
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
+      const inlineRaw =
+        typeof req.query.inline === 'string' ? req.query.inline.trim().toLowerCase() : '';
+      if (!['1', 'true', 'yes', 'on'].includes(inlineRaw)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          "query parameter 'inline=1' is required",
+        );
+      }
+
+      const project = getProject(db, req.params.id);
+      const relPath = (req.params as any)[0];
+
+      let file;
+      try {
+        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      } catch (err: any) {
+        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        return sendApiError(
+          res,
+          status,
+          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          String(err),
+        );
+      }
+
+      if (!file.mime.startsWith('text/html')) {
+        return sendApiError(
+          res,
+          400,
+          'UNSUPPORTED_FILE_TYPE',
+          'export endpoint only supports HTML files',
+        );
+      }
+
+      const fileReader: InlineAssetReader = async (sibling) => {
+        try {
+          const siblingFile = await readProjectFile(
+            PROJECTS_DIR,
+            req.params.id,
+            sibling,
+            project?.metadata,
+          );
+          return siblingFile.buffer.toString('utf8');
+        } catch {
+          return null;
+        }
+      };
+
+      const rendered = await inlineRelativeAssets(
+        file.buffer.toString('utf8'),
+        relPath,
+        fileReader,
+      );
+      res.type('text/html').send(rendered);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
