@@ -868,6 +868,7 @@ export function App() {
           config={config}
           agents={agents}
           skills={enabledFunctionalSkills}
+          designTemplates={designTemplates}
           designSystems={designSystems}
           daemonLive={daemonLive}
           onModeChange={handleModeChange}

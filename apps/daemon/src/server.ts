@@ -33,7 +33,6 @@ import {
 import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import {
   SkillImportError,
-  deleteUserSkill,
   findSkillById,
   importUserSkill,
   listSkillFiles,
@@ -3673,9 +3672,18 @@ export async function startServer({
     }
   });
 
-  // Delete a user-imported skill. Built-in skills (under SKILLS_DIR) are
-  // refused — we only allow removal of folders the daemon itself wrote
-  // under USER_SKILLS_DIR.
+  // Delete a user-managed skill — covers both shapes that put a skill under
+  // USER_SKILLS_DIR: the import path (`<slugifySkillName(name)>/SKILL.md`)
+  // and the install path (`<sanitizeRepoName(url)>/` or
+  // `<basename(realpath)>/`, possibly a symlink). Built-in skills under
+  // SKILLS_DIR stay read-only here.
+  //
+  // The earlier implementation re-slugified `skill.id` and removed
+  // `USER_SKILLS_DIR/<slug>/`, which only matched the import shape and left
+  // installed folders behind. Resolving by `skill.dir` (the absolute path
+  // listSkills already discovered) works for both, including symlinked
+  // local installs — `lstat` + `unlinkSync` never follows the symlink to
+  // the user's source tree.
   app.delete('/api/skills/:id', async (req, res) => {
     try {
       const skills = await listSkills(SKILL_ROOTS);
@@ -3688,7 +3696,32 @@ export async function startServer({
           error: { code: 'BAD_REQUEST', message: 'cannot delete a built-in skill' },
         });
       }
-      await deleteUserSkill(USER_SKILLS_DIR, skill.id);
+      const root = path.resolve(USER_SKILLS_DIR);
+      const target = path.resolve(skill.dir);
+      // Defence-in-depth: refuse to remove anything outside USER_SKILLS_DIR
+      // even though `source === 'user'` already implies it lives under that
+      // root. Catches symlinks pointing back into the user dir, unexpected
+      // root reconfiguration, etc.
+      if (target === root || !target.startsWith(root + path.sep)) {
+        return res.status(400).json({
+          error: { code: 'BAD_REQUEST', message: 'invalid skill path' },
+        });
+      }
+      try {
+        const stats = fs.lstatSync(target);
+        if (stats.isSymbolicLink()) {
+          fs.unlinkSync(target);
+        } else {
+          fs.rmSync(target, { recursive: true, force: true });
+        }
+      } catch (err) {
+        if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+          return res
+            .status(404)
+            .json({ error: { code: 'NOT_FOUND', message: 'user skill not found' } });
+        }
+        throw err;
+      }
       res.json({ ok: true });
     } catch (err) {
       if (err instanceof SkillImportError) {
@@ -4054,20 +4087,6 @@ export async function startServer({
         ? sanitizeRepoName(req.body.url)
         : path.basename(fs.realpathSync.native(req.body.path)));
       res.json({ skill: skill ? { ...skill, dir: undefined, body: undefined, hasBody: typeof skill.body === 'string' && skill.body.length > 0 } : null });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Uninstall a user-installed skill.
-  app.delete('/api/skills/:id', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
-    try {
-      const result = await uninstallById(req.params.id, USER_SKILLS_DIR, SKILLS_DIR, 'skill');
-      if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
-      res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
