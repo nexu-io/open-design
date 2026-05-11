@@ -13,7 +13,7 @@
  *                        embeds the same `:root` so the file renders
  *                        standalone in any browser.
  *
- * This file exports five check functions, each registered as its own
+ * This file exports six check functions, each registered as its own
  * entry in `pnpm guard` so failures attribute to a specific contract.
  *
  *   1. checkDesignSystemTokenFixtureSync
@@ -28,12 +28,18 @@
  *        Every brand declares every A2 token from the schema. Missing
  *        → fail (until the derive script lands; see _schema/AGENTS.md).
  *
- *   4. checkDesignSystemUnknownTokens
+ *   4. checkDesignSystemBSlotRequiredTokens
+ *        Every brand declares every B-slot token. The brand may bind
+ *        independently or alias the named sibling via `var(...)`, but
+ *        it must appear in `:root`; artifacts paste a single `:root`
+ *        block, so a missing slot resolves to nothing at runtime.
+ *
+ *   5. checkDesignSystemUnknownTokens
  *        Every token a brand declares is either in the shared schema
  *        or explicitly allowed by `BRAND_EXTENSIONS` /
  *        `BRAND_EXTENSION_PREFIXES`. Stray names → fail.
  *
- *   5. checkDesignSystemA2DefaultsParity
+ *   6. checkDesignSystemA2DefaultsParity
  *        Each A2 declaration in `_schema/defaults.css` matches the
  *        `fallback` field on the matching entry in `tokens.schema.ts`.
  *
@@ -50,6 +56,7 @@ import {
   BRAND_EXTENSION_PREFIXES,
   TOKEN_SCHEMA,
   getAllSchemaNames,
+  getBSlotNames,
   getRequiredA1Names,
   getRequiredA2Names,
   isAllowedExtension,
@@ -323,7 +330,46 @@ export async function checkDesignSystemA2RequiredTokens(): Promise<boolean> {
   return passed;
 }
 
-// ─── 4. Unknown token allowlist ─────────────────────────────────────
+// ─── 4. B-slot required tokens ──────────────────────────────────────
+
+export async function checkDesignSystemBSlotRequiredTokens(): Promise<boolean> {
+  const { sources } = await discoverBrandSources();
+  const bSlotNames = getBSlotNames();
+  const violations: string[] = [];
+
+  for (const { brand, tokensPath, tokensCss } of sources) {
+    const rootBody = extractUnscopedRootBlockBody(stripCssComments(tokensCss));
+    if (rootBody == null) continue;
+    const declared = parseTokenDeclarations(rootBody);
+
+    const missing = bSlotNames.filter((name) => !declared.has(name));
+    if (missing.length > 0) {
+      const hints = missing
+        .map((name) => {
+          const spec = TOKEN_SCHEMA.find((t) => t.name === name);
+          return spec?.aliasTo != null ? `${name} (default alias: ${spec.aliasTo})` : name;
+        })
+        .join(", ");
+      violations.push(
+        `[${brand}] ${toRepositoryPath(tokensPath)} is missing ${missing.length} B-slot token${missing.length === 1 ? "" : "s"} (alias the named sibling via var(...) or bind independently):\n  ${hints}`,
+      );
+    }
+  }
+
+  const passed = reportFailure(
+    "Design system B-slot required tokens",
+    violations,
+    "B-slot tokens (--fg-2, --meta, --surface-warm, --border-soft) let shared components target richer tiers without forking. Artifacts paste a single :root block — a missing slot resolves to nothing at runtime, so every brand must declare every B-slot, either as `var(--sibling)` (collapsed brand) or an independent value (richer brand). See design-systems/_schema/AGENTS.md.",
+  );
+  if (passed) {
+    console.log(
+      `Design system B-slot required tokens passed: ${sources.length} brand${sources.length === 1 ? "" : "s"} declare all ${bSlotNames.length} B-slot tokens.`,
+    );
+  }
+  return passed;
+}
+
+// ─── 5. Unknown token allowlist ─────────────────────────────────────
 
 export async function checkDesignSystemUnknownTokens(): Promise<boolean> {
   const { sources } = await discoverBrandSources();
@@ -366,7 +412,7 @@ export async function checkDesignSystemUnknownTokens(): Promise<boolean> {
   return passed;
 }
 
-// ─── 5. A2 defaults parity (schema fallback ↔ defaults.css) ─────────
+// ─── 6. A2 defaults parity (schema fallback ↔ defaults.css) ─────────
 
 export async function checkDesignSystemA2DefaultsParity(): Promise<boolean> {
   let defaultsCss: string;
@@ -449,6 +495,7 @@ if (isInvokedDirectly) {
     checkDesignSystemTokenFixtureSync,
     checkDesignSystemA1RequiredTokens,
     checkDesignSystemA2RequiredTokens,
+    checkDesignSystemBSlotRequiredTokens,
     checkDesignSystemUnknownTokens,
     checkDesignSystemA2DefaultsParity,
   ];

@@ -34,7 +34,7 @@ The four layers fall out of those answers:
 | **A1-identity** | brand | guard fails | `--bg`, `--fg`, `--accent`, `--font-display` |
 | **A1-structure** | brand | guard fails | type scale, `--container-max`, `--section-y-*` |
 | **A2** | brand (with fallback) | guard fails today; derive script fills tomorrow | `--motion-fast`, `--success`, `--space-4`, `--font-mono` |
-| **B-slot** | brand or schema (alias) | resolves via `var()` to a richer sibling | `--fg-2 → var(--fg)`, `--surface-warm → var(--surface)` |
+| **B-slot** | brand or schema-suggested alias | guard fails — brand must declare, either as `var(--sibling)` (collapsed) or independent value (richer) | `--fg-2 → var(--fg)`, `--surface-warm → var(--surface)` |
 
 Brand-specific tokens that fall outside the shared schema are tracked
 as **C-extensions** in `BRAND_EXTENSIONS` (per-brand allowlist) or
@@ -59,6 +59,34 @@ A1 tokens (and any A2 they want to override); the script populates A2
 slots from `defaults.css`. The guard contract does not change — every
 final `tokens.css` still contains every A2 token — but the work
 shifts from human author to script.
+
+## Why B-slot is required (and what the alias is for)
+
+Same artifact-paste constraint applies to B-slot tokens. Shared
+components reference richer tiers via `var(--fg-2)`, `var(--meta)`,
+`var(--surface-warm)`, `var(--border-soft)` — if a brand omits the
+slot, those references resolve to nothing and the artifact silently
+breaks.
+
+The `aliasTo` field on each B-slot entry is the **schema-suggested
+default**, not a runtime fallback. A brand with no opinion on the
+richer tier copies the alias verbatim into its `:root`:
+
+```
+--fg-2: var(--fg);                /* default brand: 2-level fg */
+--surface-warm: var(--surface);   /* default brand: 2-level surface */
+```
+
+A brand that does have the richer tier binds an independent value:
+
+```
+--fg-2: #3d3d3a;                  /* kami brand: dark warm */
+--surface-warm: #e8e6dc;          /* kami brand: warm sand */
+```
+
+Either form satisfies the `design-system: B-slot required tokens`
+guard. The pre-derive-script contract is identical to A2: every
+brand's `:root` declares every shared slot.
 
 ## C → B-slot → A2 promotion path
 
