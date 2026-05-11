@@ -160,6 +160,114 @@ describe('useCritiqueReplay (Phase 7.3)', () => {
     expect(sink.state.phase).toBe('idle');
   });
 
+  it('resumes dispatch when speed flips from paused to instant', async () => {
+    // Lefarcen P1 (#1307 review): the previous revision tied the
+    // entire playback path to the parse effect's deps, so a
+    // `paused` -> `instant` flip never re-fired and the held events
+    // sat undispatched. Splitting parse/pace effects fixes this; the
+    // test pins the regression.
+    const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
+    const { rerender } = render(
+      <Probe
+        url="/api/replay.ndjson"
+        speed="paused"
+        options={{ fetchTranscript: async () => ndjson(TRANSCRIPT) }}
+        sink={sink}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(sink.status).toBe('playing');
+    });
+    expect(sink.state.phase).toBe('idle');
+
+    rerender(
+      <Probe
+        url="/api/replay.ndjson"
+        speed="instant"
+        options={{ fetchTranscript: async () => ndjson(TRANSCRIPT) }}
+        sink={sink}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(sink.status).toBe('done');
+    });
+    expect(sink.state.phase).toBe('shipped');
+  });
+
+  it('preserves the playback cursor across pause/resume cycles in intervalMs mode', async () => {
+    // Drive one event manually, pause, then resume: the second tick
+    // must dispatch event #2 (not event #1). Cursor-survival across
+    // speed flips is the load-bearing property of the parse/pace
+    // split.
+    const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
+    const queue: Array<{ delay: number; fn: () => void }> = [];
+    const setTimeoutFn = ((fn: () => void, delay: number) => {
+      queue.push({ delay, fn });
+      return queue.length as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    const clearTimeoutFn = (() => undefined) as typeof clearTimeout;
+
+    const { rerender } = render(
+      <Probe
+        url="/api/replay.ndjson"
+        speed={{ intervalMs: 500 }}
+        options={{
+          fetchTranscript: async () => ndjson(TRANSCRIPT),
+          setTimeoutFn,
+          clearTimeoutFn,
+        }}
+        sink={sink}
+      />,
+    );
+
+    // First event dispatches synchronously after parse; the second
+    // is scheduled in the queue.
+    await waitFor(() => {
+      expect(queue.length).toBeGreaterThan(0);
+    });
+    expect(sink.state.phase).toBe('running');
+
+    // Flip to paused: pending timer is cancelled, status stays
+    // playing, no dispatches happen.
+    rerender(
+      <Probe
+        url="/api/replay.ndjson"
+        speed="paused"
+        options={{
+          fetchTranscript: async () => ndjson(TRANSCRIPT),
+          setTimeoutFn,
+          clearTimeoutFn,
+        }}
+        sink={sink}
+      />,
+    );
+    // Pause cleanup drops timers but the cursor stays at 1.
+    queue.length = 0;
+
+    // Flip to instant: drains from event index 1 to end (NOT index 0
+    // again — that would double-dispatch the run_started and reset
+    // the reducer).
+    rerender(
+      <Probe
+        url="/api/replay.ndjson"
+        speed="instant"
+        options={{
+          fetchTranscript: async () => ndjson(TRANSCRIPT),
+          setTimeoutFn,
+          clearTimeoutFn,
+        }}
+        sink={sink}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(sink.status).toBe('done');
+    });
+    expect(sink.state.phase).toBe('shipped');
+  });
+
   it('reports done with idle state on an empty transcript', async () => {
     const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
     render(

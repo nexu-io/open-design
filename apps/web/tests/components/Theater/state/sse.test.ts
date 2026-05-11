@@ -263,4 +263,48 @@ describe('sseToPanelEvent (Phase 7.2)', () => {
     expect(sseToPanelEvent('critique.run_started' as CritiqueSseEventName, 'oops')).toBeNull();
     expect(sseToPanelEvent('critique.run_started' as CritiqueSseEventName, 42)).toBeNull();
   });
+
+  it('refuses to let a payload-provided `type` override the channel-derived one', () => {
+    // Lefarcen P1 (#1307 review): without this guard a malformed or
+    // compromised SSE frame on the `critique.run_started` channel
+    // could carry { type: 'ship', ... } in its payload and end up
+    // dispatched as a ship action. The spread order pins `type` last
+    // AND we re-validate via isPanelEvent before returning.
+    const action = sseToPanelEvent('critique.run_started' as CritiqueSseEventName, {
+      type: 'ship', // hostile field
+      runId: RUN_ID,
+      protocolVersion: 1,
+      cast: ['critic'],
+      maxRounds: 3,
+      threshold: 8,
+      scale: 10,
+    });
+    expect(action).not.toBeNull();
+    expect(action?.type).toBe('run_started');
+  });
+
+  it('drops a payload that does not carry the required runId (isPanelEvent guard)', () => {
+    expect(
+      sseToPanelEvent('critique.run_started' as CritiqueSseEventName, {
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      }),
+    ).toBeNull();
+  });
+
+  it('drops a payload with an empty runId string', () => {
+    expect(
+      sseToPanelEvent('critique.run_started' as CritiqueSseEventName, {
+        runId: '',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      }),
+    ).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import {
   CRITIQUE_SSE_EVENT_NAMES,
+  isPanelEvent,
   type CritiqueSseEvent,
   type CritiqueSseEventName,
   type PanelEvent,
@@ -35,11 +36,26 @@ export function critiqueEventsUrl(projectId: string): string {
  * the reducer consumes. The daemon emits one channel per event name with
  * the payload (sans `type`) as JSON; this is the inverse of
  * `panelEventToSse` in the contracts package.
+ *
+ * Two defensive moves matter here:
+ *
+ *   1. The SSE channel name is authoritative for `type`. A payload-provided
+ *      `type` (malformed or compromised frame) must NOT override the
+ *      channel-derived value, so we spread `data` first and pin `type`
+ *      last. Otherwise a daemon bug or a man-in-the-middle could route a
+ *      `critique.run_started` channel into a `ship` action shape.
+ *
+ *   2. The result has to pass `isPanelEvent` before it leaves this
+ *      function. That predicate is the contract-level source of truth for
+ *      "this is a recognised event with a non-empty runId"; if the cast
+ *      fails (missing runId, unknown type), we drop the frame and the
+ *      reducer never sees it.
  */
 export function sseToPanelEvent(eventName: CritiqueSseEventName, data: unknown): PanelEvent | null {
   if (data === null || typeof data !== 'object') return null;
-  const type = eventName.slice('critique.'.length) as PanelEvent['type'];
-  return { type, ...(data as Record<string, unknown>) } as PanelEvent;
+  const type = eventName.slice('critique.'.length);
+  const candidate = { ...(data as Record<string, unknown>), type };
+  return isPanelEvent(candidate) ? candidate : null;
 }
 
 /**

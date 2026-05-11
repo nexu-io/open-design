@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 
 import { isPanelEvent, type PanelEvent } from '@open-design/contracts/critique';
@@ -28,7 +28,8 @@ export interface UseCritiqueReplayOptions {
   /**
    * Test seam: substitute setTimeout for fake timers. Defaults to the
    * platform `setTimeout`. The hook never uses `setInterval` because the
-   * per-event delay can vary (e.g. `live` paces by recorded timestamps).
+   * per-event delay can vary in future (recorded-timestamp pacing for
+   * `live` once transcripts carry timestamps).
    */
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
@@ -50,14 +51,19 @@ export type ReplayStatus = 'idle' | 'loading' | 'playing' | 'done' | 'error';
  * every line into a `PanelEvent`, then dispatch each one at the cadence
  * selected by `speed`:
  *
- *  - `'instant'` — flush every event synchronously after parse, useful for
+ *  - `'instant'` — flush every remaining event synchronously, useful for
  *    test fixtures and for opening a finished run already at its terminal
  *    state.
- *  - `'live'` — pace events by their relative offset from the first event in
- *    the transcript so playback feels like the original run.
  *  - `{ intervalMs: N }` — fixed N-ms delay between events (debug mode).
+ *  - `'live'` — placeholder for the future "playback at the original
+ *    recorded cadence" path. Current transcripts don't carry per-event
+ *    timestamps, so for now this behaves like `{ intervalMs: 0 }` (events
+ *    drained on successive microtasks via setTimeoutFn). The honest
+ *    timestamp-driven implementation is queued as a Phase 7+ follow-up.
  *  - `'paused'` — load the transcript but hold every event until the speed
- *    is changed.
+ *    is changed to one of the values above; the cursor is preserved
+ *    across pause/resume cycles so flipping to `instant` flushes the
+ *    remaining events from wherever playback was suspended.
  *
  * The hook owns its own reducer (separate from `useCritiqueStream`) so a UI
  * can mount both in parallel: live next to a replay of a prior run.
@@ -69,31 +75,34 @@ export function useCritiqueReplay(
 ): UseCritiqueReplayResult {
   const [state, dispatch] = useReducer(reduce, initialState);
   const [meta, setMeta] = useStableMeta();
+  const [events, setEvents] = useState<PanelEvent[] | null>(null);
 
   const dispatchRef = useRef(dispatch);
   useEffect(() => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
 
-  // Capture the latest speed without re-running the load effect — we want
-  // changing speed to retime in-flight playback, not refetch the transcript.
-  const speedRef = useRef(speed);
-  speedRef.current = speed;
+  // Playback cursor lives in a ref so pause -> resume picks up where the
+  // last tick left off instead of replaying from the start. A fresh
+  // transcript URL resets it to zero (see the parse effect below).
+  const cursorRef = useRef(0);
 
+  // Parse effect: own the fetch + parse. Runs only when the URL changes.
+  // Stores the parsed events in component state so the pace effect can
+  // react to them; cursor is reset because a new transcript is a new run.
   useEffect(() => {
     if (!transcriptUrl) {
       setMeta({ status: 'idle', error: null });
+      setEvents(null);
+      cursorRef.current = 0;
       return;
     }
-
     let cancelled = false;
     const fetcher = options.fetchTranscript ?? defaultFetch;
     const gunzip = options.gunzip ?? defaultGunzip;
-    const setT = options.setTimeoutFn ?? setTimeout;
-    const clearT = options.clearTimeoutFn ?? clearTimeout;
-    const timers: Array<ReturnType<typeof setTimeout>> = [];
-
     setMeta({ status: 'loading', error: null });
+    cursorRef.current = 0;
+    setEvents(null);
 
     (async () => {
       let raw: string;
@@ -115,55 +124,87 @@ export function useCritiqueReplay(
         });
         return;
       }
-
-      const events = parseTranscript(raw);
       if (cancelled) return;
-      if (events.length === 0) {
-        setMeta({ status: 'done', error: null });
-        return;
-      }
-
-      setMeta({ status: 'playing', error: null });
-
-      const currentSpeed = speedRef.current;
-      if (currentSpeed === 'instant') {
-        for (const evt of events) dispatchRef.current(evt);
-        setMeta({ status: 'done', error: null });
-        return;
-      }
-      if (currentSpeed === 'paused') {
-        return;
-      }
-
-      const baseDelay = typeof currentSpeed === 'object' ? currentSpeed.intervalMs : 0;
-      let cursor = 0;
-      const step = () => {
-        if (cancelled) return;
-        if (cursor >= events.length) {
-          setMeta({ status: 'done', error: null });
-          return;
-        }
-        dispatchRef.current(events[cursor]!);
-        cursor += 1;
-        if (cursor < events.length) {
-          timers.push(setT(step, baseDelay) as ReturnType<typeof setTimeout>);
-        } else {
-          setMeta({ status: 'done', error: null });
-        }
-      };
-      // First event fires synchronously so `playing` is visibly distinct from
-      // `loading`; subsequent events are paced by `baseDelay`.
-      step();
+      const parsed = parseTranscript(raw);
+      setEvents(parsed);
     })().catch(() => {
-      // Swallow — already surfaced via setMeta inside the async block.
+      // Already surfaced via setMeta inside the async block.
     });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcriptUrl]);
+
+  // Pace effect: react to both the parsed-events list AND speed changes.
+  // Cleanup cancels any in-flight setTimeout, but the cursor ref survives
+  // so toggling speed from `paused` to `instant` resumes from the current
+  // position instead of restarting from zero.
+  useEffect(() => {
+    if (!events) return;
+    if (events.length === 0) {
+      setMeta({ status: 'done', error: null });
+      return;
+    }
+    if (cursorRef.current >= events.length) {
+      setMeta({ status: 'done', error: null });
+      return;
+    }
+    if (speed === 'paused') {
+      // Holding: surface a non-terminal status so the UI can distinguish
+      // "fetched and ready" from "fetching" or "done". The reducer is
+      // untouched; the user picks a non-paused speed to advance.
+      setMeta({ status: 'playing', error: null });
+      return;
+    }
+
+    setMeta({ status: 'playing', error: null });
+
+    if (speed === 'instant') {
+      while (cursorRef.current < events.length) {
+        dispatchRef.current(events[cursorRef.current]!);
+        cursorRef.current += 1;
+      }
+      setMeta({ status: 'done', error: null });
+      return;
+    }
+
+    const setT = options.setTimeoutFn ?? setTimeout;
+    const clearT = options.clearTimeoutFn ?? clearTimeout;
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    let cancelled = false;
+    // `live` is reserved for recorded-cadence playback; until transcripts
+    // carry per-event timestamps it behaves like a zero-delay tick.
+    const baseDelay = speed === 'live'
+      ? 0
+      : typeof speed === 'object' ? speed.intervalMs : 0;
+
+    const step = () => {
+      if (cancelled) return;
+      if (cursorRef.current >= events.length) {
+        setMeta({ status: 'done', error: null });
+        return;
+      }
+      dispatchRef.current(events[cursorRef.current]!);
+      cursorRef.current += 1;
+      if (cursorRef.current < events.length) {
+        timers.push(setT(step, baseDelay) as ReturnType<typeof setTimeout>);
+      } else {
+        setMeta({ status: 'done', error: null });
+      }
+    };
+    // First event fires synchronously so `playing` is visibly distinct
+    // from the parse-effect's `loading`; subsequent events pace via the
+    // timer seam.
+    step();
 
     return () => {
       cancelled = true;
       for (const id of timers) clearT(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcriptUrl]);
+  }, [events, speed]);
 
   return { state, dispatch, status: meta.status, error: meta.error };
 }
