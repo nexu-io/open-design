@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeSketchBounds, parseSketchDocument } from '../../src/components/sketch-model';
+import {
+  buildSketchDocument,
+  computeSketchBounds,
+  parseSketchDocument,
+  parseSketchWorkspaceDocument,
+} from '../../src/components/sketch-model';
 
 describe('sketch-model', () => {
   it('tolerates malformed text items from sketch json when computing bounds', () => {
@@ -46,6 +51,28 @@ describe('sketch-model', () => {
       minY: -20,
       maxX: 20,
       maxY: 7.2,
+    });
+  });
+
+  it('preserves unsupported raw items and version when rebuilding a workspace sketch document', () => {
+    const parsed = parseSketchWorkspaceDocument(JSON.stringify({
+      version: 3,
+      items: [
+        { kind: 'pen', points: [{ x: 1, y: 2 }], color: '#111', size: 2 },
+        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
+        { kind: 'text', x: 20, y: 32, text: 'hello', color: '#222', size: 16 },
+      ],
+    }));
+
+    const rebuilt = buildSketchDocument(parsed.version, parsed.rawItems, parsed.items);
+
+    expect(rebuilt).toEqual({
+      version: 3,
+      items: [
+        { kind: 'pen', points: [{ x: 1, y: 2 }], color: '#111', size: 2 },
+        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
+        { kind: 'text', x: 20, y: 32, text: 'hello', color: '#222', size: 16 },
+      ],
     });
   });
 });

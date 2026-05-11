@@ -42,8 +42,14 @@ export interface SketchTextItem {
 export type SketchItem = SketchStroke | SketchRectShape | SketchArrowShape | SketchTextItem;
 
 export interface SketchDocument {
-  version: 1;
+  version: number;
+  items: unknown[];
+}
+
+export interface ParsedSketchWorkspaceDocument {
+  version: number;
   items: SketchItem[];
+  rawItems: unknown[];
 }
 
 const MAX_ABS_COORDINATE = 100_000;
@@ -51,19 +57,77 @@ const MAX_ITEM_SIZE = 4_096;
 const DEFAULT_SKETCH_COLOR = '#1c1b1a';
 const DEFAULT_SKETCH_SHAPE_SIZE = 2;
 const DEFAULT_SKETCH_TEXT_SIZE = 16;
+const DEFAULT_SKETCH_VERSION = 1;
 
 export function parseSketchDocument(text: string | null): SketchItem[] {
-  if (!text) return [];
+  return parseSketchWorkspaceDocument(text).items;
+}
+
+export function parseSketchWorkspaceDocument(
+  text: string | null,
+): ParsedSketchWorkspaceDocument {
+  if (!text) return emptyParsedSketchWorkspaceDocument();
   try {
-    const parsed = JSON.parse(text) as SketchDocument | { items?: unknown };
-    if (!isSketchRecord(parsed) || !Array.isArray(parsed.items)) return [];
-    return parsed.items.flatMap((item) => {
-      const normalized = normalizeSketchItem(item);
-      return normalized ? [normalized] : [];
-    });
+    const parsed: unknown = JSON.parse(text);
+    if (!isSketchRecord(parsed) || !Array.isArray(parsed.items)) {
+      return emptyParsedSketchWorkspaceDocument();
+    }
+    const rawItems = parsed.items.slice();
+    return {
+      version: normalizeSketchVersion(parsed['version']),
+      rawItems,
+      items: rawItems.flatMap((item) => {
+        const normalized = normalizeSketchItem(item);
+        return normalized ? [normalized] : [];
+      }),
+    };
   } catch {
-    return [];
+    return emptyParsedSketchWorkspaceDocument();
   }
+}
+
+export function buildSketchDocument(
+  version: number,
+  rawItems: readonly unknown[],
+  items: SketchItem[],
+): SketchDocument {
+  const mergedItems: unknown[] = [];
+  let nextKnownItem = 0;
+
+  for (const rawItem of rawItems) {
+    if (normalizeSketchItem(rawItem)) {
+      if (nextKnownItem < items.length) {
+        mergedItems.push(items[nextKnownItem]!);
+      }
+      nextKnownItem += 1;
+      continue;
+    }
+    mergedItems.push(rawItem);
+  }
+
+  while (nextKnownItem < items.length) {
+    mergedItems.push(items[nextKnownItem]!);
+    nextKnownItem += 1;
+  }
+
+  return {
+    version: normalizeSketchVersion(version),
+    items: mergedItems,
+  };
+}
+
+function emptyParsedSketchWorkspaceDocument(): ParsedSketchWorkspaceDocument {
+  return {
+    version: DEFAULT_SKETCH_VERSION,
+    items: [],
+    rawItems: [],
+  };
+}
+
+function normalizeSketchVersion(value: unknown): number {
+  const numeric = readSketchNumber(value);
+  if (numeric === null || numeric < DEFAULT_SKETCH_VERSION) return DEFAULT_SKETCH_VERSION;
+  return Math.trunc(numeric);
 }
 
 export function isSketchJsonFileName(name: string): boolean {

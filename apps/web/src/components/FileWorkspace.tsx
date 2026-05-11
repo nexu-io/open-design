@@ -34,9 +34,9 @@ import { PasteTextDialog } from './PasteTextDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import {
+  buildSketchDocument,
   isSketchJsonFileName,
-  parseSketchDocument,
-  type SketchDocument,
+  parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
 
@@ -63,6 +63,8 @@ interface Props {
 }
 
 interface SketchState {
+  version: number;
+  rawItems: unknown[];
   items: SketchItem[];
   dirty: boolean;
   persisted: boolean;
@@ -455,7 +457,15 @@ export function FileWorkspace({
     const name = `sketch-${stamp}.sketch.json`;
     setSketches((curr) => ({
       ...curr,
-      [name]: { items: [], dirty: false, persisted: false, loaded: true, saving: false },
+      [name]: {
+        version: 1,
+        rawItems: [],
+        items: [],
+        dirty: false,
+        persisted: false,
+        loaded: true,
+        saving: false,
+      },
     }));
     activatePending(name);
   }
@@ -469,11 +479,13 @@ export function FileWorkspace({
     let cancelled = false;
     void fetchProjectFileText(projectId, activeTab).then((text) => {
       if (cancelled) return;
-      const items = parseSketchDocument(text);
+      const doc = parseSketchWorkspaceDocument(text);
       setSketches((curr) => ({
         ...curr,
         [activeTab]: {
-          items,
+          version: doc.version,
+          rawItems: doc.rawItems,
+          items: doc.items,
           dirty: false,
           persisted: true,
           loaded: true,
@@ -490,7 +502,13 @@ export function FileWorkspace({
     setSketches((curr) => ({
       ...curr,
       [name]: {
-        ...(curr[name] ?? { persisted: false, loaded: true, saving: false }),
+        ...(curr[name] ?? {
+          version: 1,
+          rawItems: [],
+          persisted: false,
+          loaded: true,
+          saving: false,
+        }),
         items,
         dirty: true,
       } as SketchState,
@@ -501,12 +519,19 @@ export function FileWorkspace({
     const entry = sketches[name];
     if (!entry) return;
     setSketches((curr) => ({ ...curr, [name]: { ...curr[name]!, saving: true } }));
-    const doc: SketchDocument = { version: 1, items: entry.items };
+    const doc = buildSketchDocument(entry.version, entry.rawItems, entry.items);
     const file = await writeProjectTextFile(projectId, name, JSON.stringify(doc, null, 2));
     if (file) {
       setSketches((curr) => ({
         ...curr,
-        [name]: { ...curr[name]!, dirty: false, persisted: true, saving: false },
+        [name]: {
+          ...curr[name]!,
+          version: doc.version,
+          rawItems: doc.items.slice(),
+          dirty: false,
+          persisted: true,
+          saving: false,
+        },
       }));
       // Promote the previously-pending sketch into the persisted tab list.
       onTabsStateChange({
