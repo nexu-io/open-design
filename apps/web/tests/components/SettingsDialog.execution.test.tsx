@@ -962,10 +962,23 @@ describe('SettingsDialog media providers interactions', () => {
     );
 
     expect(screen.getAllByText('Unsupported').length).toBeGreaterThan(0);
+    const falApiKey = screen.getByLabelText('Fal.ai API key') as HTMLInputElement;
+    const falBaseUrl = screen.getByLabelText('Fal.ai Base URL') as HTMLInputElement;
+    expect(falApiKey.disabled).toBe(true);
+    expect(falBaseUrl.disabled).toBe(true);
+  });
+
+  it('renders Black Forest Labs as an integrated provider with editable fields', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'media' },
+    );
+
     const bflApiKey = screen.getByLabelText('Black Forest Labs API key') as HTMLInputElement;
     const bflBaseUrl = screen.getByLabelText('Black Forest Labs Base URL') as HTMLInputElement;
-    expect(bflApiKey.disabled).toBe(true);
-    expect(bflBaseUrl.disabled).toBe(true);
+    expect(bflApiKey.disabled).toBe(false);
+    expect(bflBaseUrl.disabled).toBe(false);
+    expect(screen.getAllByText('Integrated').length).toBeGreaterThan(0);
   });
 
   it('clears an existing provider config and removes it from the persisted payload', async () => {

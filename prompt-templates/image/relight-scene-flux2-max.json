@@ -1,0 +1,23 @@
+{
+  "id": "relight-scene-flux2-max",
+  "surface": "image",
+  "title": "Relight",
+  "summary": "Transform the lighting in any image — change direction, intensity, and mood while preserving the subject and composition. Image-to-image: pass `--image <path>` to the generator. Default direction is soft front; swap for chiaroscuro, dramatic side, rim backlight, golden hour, blue hour, moody noir, studio three-point, etc.",
+  "category": "Edit",
+  "tags": [
+    "i2i",
+    "lighting",
+    "edit",
+    "relight"
+  ],
+  "model": "flux-2-max",
+  "aspect": "3:2",
+  "prompt": "Relight the scene with soft front lighting, creating natural shadows and highlights while preserving the original subject and composition.",
+  "previewImageUrl": "https://raw.githubusercontent.com/keremnalbant/open-design/feat/bfl-flux2-integration/prompt-templates/image/relight-scene-flux2-max.preview.png",
+  "source": {
+    "repo": "black-forest-labs/flux-playground",
+    "license": "Apache-2.0",
+    "author": "BFL Playground",
+    "url": "https://playground.bfl.ai"
+  }
+}

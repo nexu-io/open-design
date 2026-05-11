@@ -1217,20 +1217,20 @@ function sniffImageExt(bytes: Buffer): string {
   return '.png';
 }
 
-function bflAspectFor(aspect?: string): string {
-  if (
-    aspect === '1:1'
-    || aspect === '16:9'
-    || aspect === '9:16'
-    || aspect === '4:3'
-    || aspect === '3:4'
-    || aspect === '3:2'
-    || aspect === '2:3'
-    || aspect === '21:9'
-  ) {
-    return aspect;
-  }
-  return '1:1';
+
+const BFL_FLUX2_DIMS: Record<string, [number, number]> = {
+  '1:1': [1024, 1024],
+  '16:9': [1440, 816],
+  '9:16': [816, 1440],
+  '4:3': [1184, 880],
+  '3:4': [880, 1184],
+  '3:2': [1248, 832],
+  '2:3': [832, 1248],
+  '21:9': [1568, 672],
+};
+
+function bflFlux2Dims(aspect?: string): [number, number] {
+  return BFL_FLUX2_DIMS[aspect ?? ''] ?? BFL_FLUX2_DIMS['1:1']!;
 }
 
 function bflStripDataUrlPrefix(dataUrl: string): string {
@@ -1247,10 +1247,11 @@ async function renderBFLImage(ctx: MediaContext, credentials: ProviderConfig, on
   const baseUrl = (credentials.baseUrl || 'https://api.bfl.ai').replace(/\/$/, '');
   const model = ctx.model;
   const promptText = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
-  const aspect = bflAspectFor(ctx.aspect);
+  const [width, height] = bflFlux2Dims(ctx.aspect);
   const body: JsonRecord = {
     prompt: promptText,
-    aspect_ratio: aspect,
+    width,
+    height,
   };
   if (ctx.imageRef && ctx.imageRef.dataUrl) {
     body.input_image = bflStripDataUrlPrefix(ctx.imageRef.dataUrl);
@@ -1261,7 +1262,6 @@ async function renderBFLImage(ctx: MediaContext, credentials: ProviderConfig, on
     onProgress(`bfl ${model} ${mode} request submitted; polling status…`);
   }
 
-  // POST request → { id, polling_url }
   const postResp = await fetch(`${baseUrl}/v1/${encodeURIComponent(model)}`, {
     method: 'POST',
     headers: {
@@ -1323,6 +1323,7 @@ async function renderBFLImage(ctx: MediaContext, credentials: ProviderConfig, on
     }
     if (
       lastStatus === 'Error'
+      || lastStatus === 'Failed'
       || lastStatus === 'Content Moderated'
       || lastStatus === 'Request Moderated'
       || lastStatus === 'Task not found'
@@ -1345,7 +1346,7 @@ async function renderBFLImage(ctx: MediaContext, credentials: ProviderConfig, on
   const seedNote = typeof seedSeen === 'number' ? ` · seed=${seedSeen}` : '';
   return {
     bytes,
-    providerNote: `bfl/${model} · ${aspect}${seedNote} · ${bytes.length} bytes`,
+    providerNote: `bfl/${model} · ${width}x${height}${seedNote} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }

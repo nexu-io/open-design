@@ -1,0 +1,23 @@
+{
+  "id": "move-camera-angle-flux2-max",
+  "surface": "image",
+  "title": "Move Camera",
+  "summary": "Reveal new aspects of a scene by re-staging the camera. Image-to-image: pass `--image <path>` to the generator with a reference shot and the model will hold subject + environment consistent while changing the angle. Default angle is bird's-eye top-down; edit the prompt to try low-angle, dutch tilt, over-the-shoulder, worm's-eye, etc.",
+  "category": "Edit",
+  "tags": [
+    "i2i",
+    "camera",
+    "edit",
+    "scene"
+  ],
+  "model": "flux-2-max",
+  "aspect": "1:1",
+  "prompt": "Move the camera to a bird's-eye top-down angle, revealing new aspects of the scene while maintaining the subject and environment consistency.",
+  "previewImageUrl": "https://raw.githubusercontent.com/keremnalbant/open-design/feat/bfl-flux2-integration/prompt-templates/image/move-camera-angle-flux2-max.preview.png",
+  "source": {
+    "repo": "black-forest-labs/flux-playground",
+    "license": "Apache-2.0",
+    "author": "BFL Playground",
+    "url": "https://playground.bfl.ai"
+  }
+}

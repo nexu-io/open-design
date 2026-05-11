@@ -1,0 +1,23 @@
+{
+  "id": "hex-palette-vibes-flux2-max",
+  "surface": "image",
+  "title": "Hex Color Palette",
+  "summary": "Drive the mood and aesthetic of the image using a list of hex codes. Useful for brand consistency, editorial shoots, or locking a specific vibe. Default palette is editorial neutrals; swap the hex list in the prompt for any brand palette.",
+  "category": "Brand",
+  "tags": [
+    "hex-color",
+    "brand",
+    "editorial",
+    "palette"
+  ],
+  "model": "flux-2-max",
+  "aspect": "1:1",
+  "prompt": "Create an image that is pure vibes, think like Editorial, cars, 2000s ads, you can use some colors from this palette #07130e, #556659, #b9b5d0, #f3f1e6, #dedbc9, #afaa92, #ffffff",
+  "previewImageUrl": "https://raw.githubusercontent.com/keremnalbant/open-design/feat/bfl-flux2-integration/prompt-templates/image/hex-palette-vibes-flux2-max.preview.png",
+  "source": {
+    "repo": "black-forest-labs/flux-playground",
+    "license": "Apache-2.0",
+    "author": "BFL Playground",
+    "url": "https://playground.bfl.ai"
+  }
+}
