@@ -4272,13 +4272,10 @@ code {
 }
 .template-option {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
+  align-items: center;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  cursor: pointer;
   text-align: left;
   transition: border-color 120ms ease, background 120ms ease;
 }
@@ -4287,6 +4284,33 @@ code {
   border-color: var(--accent);
   background: var(--accent-tint);
 }
+.template-option-select {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.template-option-delete {
+  flex: none;
+  padding: 4px 10px;
+  margin-right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.template-option:hover .template-option-delete { opacity: 1; }
+.template-option-delete:hover { color: var(--danger, #e53e3e); }
 .template-radio {
   flex: none;
   margin-top: 2px;

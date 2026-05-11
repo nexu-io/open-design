@@ -93,6 +93,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
+  onDeleteTemplate: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
@@ -152,6 +153,7 @@ export function NewProjectPanel({
   designSystems,
   defaultDesignSystemId,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   onCreate,
   onImportClaudeDesign,
@@ -653,6 +655,7 @@ export function NewProjectPanel({
               templates={templates}
               value={templateId}
               onChange={setTemplateId}
+              onDelete={onDeleteTemplate}
             />
             <ToggleRow
               label={t('newproj.toggleAnimations')}
@@ -1010,10 +1013,12 @@ function TemplatePicker({
   templates,
   value,
   onChange,
+  onDelete,
 }: {
   templates: ProjectTemplate[];
   value: string | null;
   onChange: (id: string | null) => void;
+  onDelete: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
   return (
@@ -1041,6 +1046,10 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
+                onDelete={async () => {
+                  const ok = await onDelete(tpl.id);
+                  if (ok && value === tpl.id) onChange(null);
+                }}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1351,27 +1360,40 @@ function PromptTemplateAvatar({
 function TemplateOption({
   active,
   onClick,
+  onDelete,
   name,
   description,
 }: {
   active: boolean;
   onClick: () => void;
+  onDelete: () => void;
   name: string;
   description: string;
 }) {
   return (
-    <button
-      type="button"
-      className={`template-option${active ? ' active' : ''}`}
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      <span className={`template-radio${active ? ' active' : ''}`} aria-hidden />
-      <span className="template-option-text">
-        <span className="template-option-name">{name}</span>
-        <span className="template-option-desc">{description}</span>
-      </span>
-    </button>
+    <div className={`template-option${active ? ' active' : ''}`}>
+      <button
+        type="button"
+        className="template-option-select"
+        onClick={onClick}
+        aria-pressed={active}
+      >
+        <span className={`template-radio${active ? ' active' : ''}`} aria-hidden />
+        <span className="template-option-text">
+          <span className="template-option-name">{name}</span>
+          <span className="template-option-desc">{description}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="template-option-delete"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        title="Delete template"
+        aria-label={`Delete template ${name}`}
+      >
+        ✕
+      </button>
+    </div>
   );
 }
 
