@@ -761,6 +761,9 @@ export function FileWorkspace({
             <SketchEditor
               fileName={activeFile.name}
               items={activeSketch.items}
+              hasPreservedRawItems={
+                !activeSketch.discardRawItemsOnSave && activeSketch.rawItems.length > activeSketch.items.length
+              }
               onItemsChange={(items) => setSketchItems(activeFile.name, items)}
               onClear={() => clearSketch(activeFile.name)}
               onSave={() => saveSketch(activeFile.name)}

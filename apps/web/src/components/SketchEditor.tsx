@@ -9,6 +9,7 @@ interface Props {
   // tab and back doesn't lose the in-progress sketch. The editor only reports
   // changes via onItemsChange.
   items: SketchItem[];
+  hasPreservedRawItems?: boolean;
   onItemsChange: (items: SketchItem[]) => void;
   onClear?: () => void;
   onSave: () => Promise<void> | void;
@@ -20,6 +21,7 @@ interface Props {
 
 export function SketchEditor({
   items,
+  hasPreservedRawItems = false,
   onItemsChange,
   onClear,
   onSave,
@@ -161,6 +163,9 @@ export function SketchEditor({
     onItemsChange([]);
   }
 
+  const canClear = items.length > 0 || hasPreservedRawItems;
+  const canSave = dirty || items.length > 0 || hasPreservedRawItems;
+
   function submitTextModal() {
     const text = textModalValue.trim();
     const anchor = textAnchorRef.current;
@@ -213,7 +218,7 @@ export function SketchEditor({
         <button className="ghost" onClick={handleUndo} disabled={items.length === 0}>
           {t('sketch.undo')}
         </button>
-        <button className="ghost" onClick={handleClear} disabled={items.length === 0}>
+        <button className="ghost" onClick={handleClear} disabled={!canClear}>
           {t('sketch.clear')}
         </button>
         <span className="sketch-spacer" />
@@ -229,7 +234,7 @@ export function SketchEditor({
         <button
           className="primary"
           onClick={() => void onSave()}
-          disabled={saving || (!dirty && items.length === 0)}
+          disabled={saving || !canSave}
         >
           {saving ? t('sketch.saving') : t('common.save')}
         </button>

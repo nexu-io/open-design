@@ -537,6 +537,109 @@ describe('FileWorkspace sketch round-trip', () => {
     expect(savedDoc).toEqual(sourceDoc);
   });
 
+  it('keeps Save and Clear available for unsupported-only sketch files', async () => {
+    const sourceDoc = {
+      version: 3,
+      items: [
+        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
+        return new Response(JSON.stringify(sourceDoc), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            file: {
+              ...workspaceFile('diagram.sketch.json'),
+              kind: 'sketch',
+              mime: 'application/json',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        files={[
+          baseFile({
+            name: 'diagram.sketch.json',
+            path: 'diagram.sketch.json',
+            kind: 'sketch',
+            mime: 'application/json',
+          }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const clearButton = await screen.findByRole('button', { name: 'Clear' });
+    const saveButton = await screen.findByRole('button', { name: 'Save' });
+    await waitFor(() => {
+      expect(clearButton.hasAttribute('disabled')).toBe(false);
+      expect(saveButton.hasAttribute('disabled')).toBe(false);
+    });
+
+    fireEvent.click(clearButton);
+    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(true));
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      const writeCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === '/api/projects/project-1/files' &&
+          init &&
+          typeof init === 'object' &&
+          init.method === 'POST',
+      );
+      expect(writeCall).toBeTruthy();
+    });
+
+    const writeCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === '/api/projects/project-1/files' &&
+        init &&
+        typeof init === 'object' &&
+        init.method === 'POST',
+    );
+    if (!writeCall) throw new Error('Expected sketch save request');
+    const [, init] = writeCall;
+    const payload = JSON.parse(String((init as RequestInit).body)) as {
+      name: string;
+      content: string;
+    };
+    const savedDoc = JSON.parse(payload.content) as {
+      version: number;
+      items: Array<Record<string, unknown>>;
+    };
+
+    expect(savedDoc).toEqual({
+      version: 3,
+      items: [],
+    });
+  });
+
   it('does not resurrect unsupported sketch items after clearing and saving', async () => {
     const sourceDoc = {
       version: 3,
