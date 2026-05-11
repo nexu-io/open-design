@@ -22,6 +22,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane and mac beta release artifact preparation surface.
+- `tools/pr` is the maintainer PR-duty control plane: a thin `gh` wrapper that encodes this repo's review-lane derivation, forbidden-surface flags, lane checklists, and validation-command suggestions.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
 
 ## Inactive or placeholder directories
@@ -46,8 +47,8 @@ This file is the single source of truth for agents entering this repository. Rea
 
 ## Root command boundary
 
-- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, and `pnpm tools-pack`.
-- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
+- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-pr`.
+- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...` / `pnpm tools-pr ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
 
 ## Boundary constraints
@@ -78,6 +79,19 @@ This file is the single source of truth for agents entering this repository. Rea
 - Before reviewing changes under `apps/`, `packages/`, `tools/`, or `e2e/`, read that directory's `AGENTS.md` and apply its local boundaries.
 - Blocking review feedback should focus on correctness, security/secrets, data integrity, repository boundary violations, contract/migration breakage, missing required validation, or high-risk maintainability issues.
 - Only maintainers may close a PR instead of requesting changes, and only when the change is not salvageable on the existing branch (wrong target product, foreign test harness, DOM/API assumptions absent from this repo, or scripts that conflict with lifecycle rules).
+
+## PR-duty tooling
+
+`pnpm tools-pr` is the maintainer-only control plane for PR-duty work on this repo. It is a thin `gh` wrapper that encodes repo-specific knowledge — review-lane derivation, forbidden-surface flags, per-lane checklists, validation-command suggestions, and a fixed dictionary of factual classify tags (`bot-only-approval`, `needs-rebase`, `stale-approval`, `unresolved-changes-requested`, `awaiting-*` timing, `org-member`, etc.). The tool is read-only on the PR surface: it never approves, merges, comments, or closes; those side effects stay in explicit `gh` invocations the maintainer runs.
+
+Common subcommands:
+
+- `pnpm tools-pr list` — triage the open queue by lane and review-state bucket.
+- `pnpm tools-pr view <num>` — factual review brief for a single PR.
+- `pnpm tools-pr classify --all` — script-level tag JSON for the whole open queue (entry point for cron / digest consumers); per-PR `classify <num>` for spot checks.
+- `pnpm tools-pr assignment` — assigner-perspective ownership + idle-time / blocker view across the queue.
+
+For the full tag dictionary, operational playbook (direct merge / duplicate-title / awaiting-author / org-member / agent-review flows), comment templates, language-detection rules, and tool-design constraints (precision boundaries, factual-output rule, retry + pagination strategy), see [`tools/pr/AGENTS.md`](tools/pr/AGENTS.md).
 
 ## Validation strategy
 
@@ -123,6 +137,14 @@ pnpm typecheck
 ```
 
 ```bash
+pnpm tools-pr list
+pnpm tools-pr list --bucket=merge-ready,approved-blocked
+pnpm tools-pr list --lane=skill,contract --json
+pnpm tools-pr view 1180
+pnpm tools-pr view 1180 --json
+```
+
+```bash
 pnpm --filter @open-design/web typecheck
 pnpm --filter @open-design/web test
 pnpm --filter @open-design/web build
@@ -131,6 +153,7 @@ pnpm --filter @open-design/daemon build
 pnpm --filter @open-design/desktop build
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack build
+pnpm --filter @open-design/tools-pr build
 ```
 
 ```bash

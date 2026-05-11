@@ -80,6 +80,7 @@ import {
   readManualEditStyles,
 } from '../edit-mode/source-patches';
 import type { ManualEditBridgeMessage, ManualEditHistoryEntry, ManualEditPatch, ManualEditTarget } from '../edit-mode/types';
+import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
@@ -352,6 +353,9 @@ export function FileViewer({
     return <AudioViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'sketch') {
+    if (isRenderableSketchJson(file)) {
+      return <SketchViewer projectId={projectId} file={file} />;
+    }
     return <ImageViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'text' || file.kind === 'code') {
@@ -5388,6 +5392,31 @@ function ImageViewer({
       </div>
       <div className="viewer-body image-body">
         <img alt={file.name} src={url} />
+      </div>
+    </div>
+  );
+}
+
+function SketchViewer({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: ProjectFile;
+}) {
+  const t = useT();
+  return (
+    <div className="viewer image-viewer sketch-viewer">
+      <div className="viewer-toolbar">
+        <div className="viewer-toolbar-left">
+          <span className="viewer-meta">
+            {t('fileViewer.sketchMeta', { size: humanSize(file.size) })}
+          </span>
+        </div>
+        <FileActions projectId={projectId} file={file} />
+      </div>
+      <div className="viewer-body image-body">
+        <SketchPreview projectId={projectId} file={file} className="viewer-sketch-preview" />
       </div>
     </div>
   );

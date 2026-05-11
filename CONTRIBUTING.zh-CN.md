@@ -278,6 +278,22 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 
 ---
 
+## 想成为 Maintainer
+
+如果你已经在持续贡献并想了解成为 Maintainer 的路径——完整规则在 **[`MAINTAINERS.md`](MAINTAINERS.md)**。简版如下：
+
+- Maintainer 可以 review、approve、关闭 issue。Merge 按钮保留在 Core Team——**你的 approve 仍算作 merge 所需的那一个 approve**。
+- 门槛：**≥ 20 个 merged PR** + 公开的账号质量检查（防 bot / 防小号）+ Core Team 对贡献质量的判断。**没有申请表**——Core Team 在内部识别候选人后会主动联系。
+- **没有 quota，没有 SLA，没有固定任期。** 退出很容易也可逆（Emeritus → 生活忙完后回归）。
+- 全部门槛阈值、提名流程、退出规则、早期项目例外条款都在 [`MAINTAINERS.md`](MAINTAINERS.md)——上面任何一条勾起兴趣的话，去读那份文档。
+
+tl;dr：好好提 PR、认真 review、在 [Discussions][discussions] / [Discord][discord] 多冒泡，剩下的自然会发生。
+
+[discussions]: https://github.com/nexu-io/open-design/discussions
+[discord]: https://discord.gg/qhbcCH8Am4
+
+---
+
 ## License
 
 提交贡献即代表你同意你的贡献按本仓库的 [Apache-2.0 License](LICENSE) 授权。例外是 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下的所有文件，保留它们原始的 MIT license 和原作者 [op7418](https://github.com/op7418) 的归属。

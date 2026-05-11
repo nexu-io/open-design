@@ -261,6 +261,23 @@ Wenn Sie nicht sicher sind, ob eine Idee passt, öffnen Sie vor dem Code eine Di
 
 ---
 
+<!-- Machine-translated section; native-speaker review welcome via PR. -->
+## Maintainer werden
+
+Wenn Sie kontinuierlich beigetragen haben und wissen möchten, wie der Weg zum Maintainer aussieht, finden Sie die Regeln in **[`MAINTAINERS.md`](MAINTAINERS.md)**. Die Kurzfassung:
+
+- Ein Maintainer kann Issues prüfen, freigeben und schließen. Der Merge-Button bleibt beim Core Team — Ihre Freigabe zählt jedoch als die für den Merge erforderliche Freigabe.
+- Die Hürde liegt bei **≥ 20 merged PRs** plus einer veröffentlichten Account-Qualitätsprüfung (Anti-Bot, Anti-Sock-Puppet) plus einer Einschätzung des Core Teams zur Qualität der Beiträge. Es gibt kein Bewerbungsformular; das Core Team bringt Kandidatinnen und Kandidaten intern zur Sprache und meldet sich.
+- Es gibt **keine Quoten, keine SLAs und keine feste Amtszeit.** Ein Rücktritt ist einfach und reversibel (Emeritus → Rückkehr, sobald sich das Leben wieder beruhigt).
+- Alle Schwellenwerte, der Nominierungsablauf, die Regeln zum Rücktritt und die Ausnahmeregelung für die frühe Projektphase stehen in [`MAINTAINERS.md`](MAINTAINERS.md). Lesen Sie dieses Dokument, falls Sie etwas davon interessiert.
+
+Das tl;dr: Liefern Sie gute PRs, prüfen Sie sorgfältig, halten Sie sich in [Discussions][discussions] / [Discord][discord] auf — und der Rest ergibt sich von selbst.
+
+[discussions]: https://github.com/nexu-io/open-design/discussions
+[discord]: https://discord.gg/qhbcCH8Am4
+
+---
+
 ## Lizenz
 
 Mit Ihrem Beitrag erklären Sie sich einverstanden, dass er unter der [Apache-2.0-Lizenz](LICENSE) dieses Repositories steht. Ausnahme sind Dateien in [`skills/guizang-ppt/`](skills/guizang-ppt/), die ihre ursprüngliche MIT-Lizenz und Autorenschaft von [op7418](https://github.com/op7418) behalten.

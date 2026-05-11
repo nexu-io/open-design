@@ -38,7 +38,30 @@ function extractBridgeScript(srcdoc: string): string {
   return match[1];
 }
 
-function setupBridgeDom(bodyHtml: string, mode: 'inspect' | 'comment') {
+function markVisible(win: { document: Document }, selector: string): void {
+  const el = win.document.querySelector(selector);
+  if (!el) throw new Error(`selector not found: ${selector}`);
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      x: 10,
+      y: 20,
+      width: 120,
+      height: 48,
+      top: 20,
+      right: 130,
+      bottom: 68,
+      left: 10,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+function setupBridgeDom(
+  bodyHtml: string,
+  mode: 'inspect' | 'comment',
+  visibleSelectors: string[] = [],
+) {
   const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     inspectBridge: mode === 'inspect',
     commentBridge: mode === 'comment',
@@ -61,6 +84,7 @@ function setupBridgeDom(bodyHtml: string, mode: 'inspect' | 'comment') {
     configurable: true,
     value: { postMessage: parentPostMessage },
   });
+  visibleSelectors.forEach((selector) => markVisible(win, selector));
 
   // Run the bridge IIFE inside the jsdom window so its `document` /
   // `window` refer to our DOM. We don't use `runScripts: 'dangerously'`
@@ -147,5 +171,93 @@ describe('selection bridge — empty annotation surface (#890)', () => {
       .filter((message) => message?.type === 'od:comment-target');
     expect(clickMessages).toHaveLength(1);
     expect(clickMessages[0].elementId).toBe('hero');
+  });
+
+  it('does not invent fallback targets in Inspect mode for unannotated elements', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<main><button id="cta">Launch</button></main>',
+      'inspect',
+      ['#cta'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+
+    win.document.getElementById('cta')!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    const clickMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-target');
+    expect(clickMessages).toEqual([]);
+  });
+
+  it('uses a DOM selector fallback for Picker mode when elements are unannotated', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<main><button id="cta">Launch</button></main>',
+      'comment',
+      ['#cta'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+
+    win.document.getElementById('cta')!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    const clickMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-target');
+    expect(clickMessages).toHaveLength(1);
+    expect(clickMessages[0].elementId).toBe('dom:body > main:nth-of-type(1) > button:nth-of-type(1)');
+    expect(clickMessages[0].selector).toBe('body > main:nth-of-type(1) > button:nth-of-type(1)');
+    expect(clickMessages[0].text).toBe('Launch');
+  });
+
+  it('does not use Picker DOM fallback on mixed annotated and unannotated pages', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<main><section data-od-id="hero">Hero</section><button id="cta">Launch</button></main>',
+      'comment',
+      ['#cta'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+
+    win.document.getElementById('cta')!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    const clickMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-target');
+    expect(clickMessages).toEqual([]);
+  });
+
+  it('broadcasts DOM fallback targets in comment mode so Pods can hit-test unannotated pages', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<main><section id="card"><h2>Card</h2></section></main>',
+      'comment',
+      ['#card'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+
+    const targetMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-targets');
+    expect(targetMessages.length).toBeGreaterThan(0);
+    const last = targetMessages.at(-1);
+    expect(last.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          elementId: 'dom:body > main:nth-of-type(1) > section:nth-of-type(1)',
+          selector: 'body > main:nth-of-type(1) > section:nth-of-type(1)',
+          text: 'Card',
+        }),
+      ]),
+    );
   });
 });

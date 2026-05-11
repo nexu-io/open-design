@@ -68,6 +68,8 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
+  "tools/pr/bin/tools-pr.mjs",
+  "tools/pr/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
@@ -236,7 +238,12 @@ async function checkTestLayout(): Promise<boolean> {
 
 const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
 const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
-const e2eAllowedScripts = ["test", "typecheck"];
+const e2eAllowedScripts = [
+  "test",
+  "test:ui:critical",
+  "test:ui:extended",
+  "typecheck",
+];
 
 async function collectRepositoryFiles(directory: string, skippedDirectoryNames = new Set<string>()): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -369,6 +376,7 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
+  ["pr", "directory"],
 ]);
 
 async function checkToolsLayout(): Promise<boolean> {
@@ -382,7 +390,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, and pack/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and pr/`);
       continue;
     }
 

@@ -1618,10 +1618,34 @@ export function ProjectView({
       });
       if (file) {
         setFilesRefresh((n) => n + 1);
+        // Surface the daemon's stub-guard warning when it fires in `warn`
+        // mode (the default). Without this the warning would land in the
+        // file metadata silently and the user would never see that the
+        // model shipped a placeholder.
+        if (file.stubGuardWarning) {
+          setError(
+            `Saved "${file.name}", but the model may have shipped a placeholder: ` +
+              `${file.stubGuardWarning.message}`,
+          );
+        }
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
         requestOpenFile(file.name);
+      } else {
+        // writeProjectTextFile collapses non-OK responses (including
+        // 422 ARTIFACT_REGRESSION from reject-mode stub-guard) to null.
+        // Surfacing the structured error requires changing that helper's
+        // return contract for all callers — out of scope here. Until then,
+        // a generic banner makes the failure observable instead of silent.
+        // Allow the user to retry by clearing the saved-artifact ref so a
+        // retry attempt re-enters this code path.
+        savedArtifactRef.current = '';
+        setError(
+          `Couldn't save artifact "${fileName}". The daemon refused the write — ` +
+            'this is most likely OD_ARTIFACT_STUB_GUARD=reject catching a placeholder body. ' +
+            'Check the daemon logs for the structured ARTIFACT_REGRESSION details.',
+        );
       }
     },
     [project.id, projectFiles, requestOpenFile],
@@ -1764,6 +1788,13 @@ export function ProjectView({
     async (id: string) => {
       const ok = await deleteConversationApi(project.id, id);
       if (!ok) return;
+      // The deleted conversation may have owned an unanswered
+      // `<question-form>`, which the daemon counts toward the project's
+      // `needsInput` flag in `/api/projects`. Home cards render that
+      // flag from the cached projects payload, so without refreshing
+      // it here the `Needs input` badge survives the deletion until
+      // the next manual reload.
+      onProjectsRefresh();
       setConversations((curr) => {
         const next = curr.filter((c) => c.id !== id);
         if (next.length === 0) {
@@ -1781,7 +1812,7 @@ export function ProjectView({
         return next;
       });
     },
-    [project.id, activeConversationId],
+    [project.id, activeConversationId, onProjectsRefresh],
   );
 
   const handleRenameConversation = useCallback(

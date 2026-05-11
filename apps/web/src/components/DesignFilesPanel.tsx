@@ -5,6 +5,7 @@ import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -961,10 +962,13 @@ function DfPreview({
 }) {
   const t = useT();
   const url = projectFileUrl(projectId, file.name);
+  const rendersSketchJson = isRenderableSketchJson(file);
   return (
     <aside className="df-preview">
       <div className="df-preview-thumb">
-        {file.kind === 'image' || file.kind === 'sketch' ? (
+        {rendersSketchJson ? (
+          <SketchPreview projectId={projectId} file={file} />
+        ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
           <iframe title={file.name} src={url} sandbox="allow-scripts" />

@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids'> {}
@@ -900,6 +901,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         const body = { file: meta };
         res.json(body);
       } catch (err: any) {
+        if (err instanceof ArtifactRegressionError) {
+          return sendApiError(res, 422, 'ARTIFACT_REGRESSION', err.message, {
+            details: {
+              identifier: err.identifier,
+              newSize: err.newSize,
+              priorSize: err.priorSize,
+              priorName: err.priorName,
+            },
+          });
+        }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },

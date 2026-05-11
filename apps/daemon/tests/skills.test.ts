@@ -102,6 +102,34 @@ describe('listSkills', () => {
     expect(skill.body).toContain('`OD_TOOL_TOKEN`');
   });
 
+  it('includes the agent-browser skill as an external CLI integration', async () => {
+    const skills = await listSkills(skillsRoot);
+    const skill = skills.find((entry: { id: string }) => entry.id === 'agent-browser');
+
+    if (!skill) throw new Error('agent-browser skill not found');
+    expect(skill).toMatchObject({
+      id: 'agent-browser',
+      name: 'agent-browser',
+      mode: 'prototype',
+      previewType: 'markdown',
+      designSystemRequired: false,
+      upstream: 'https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md',
+    });
+    expect(skill.triggers).toContain('test this web app');
+    expect(skill.body).toContain('agent-browser skills get core');
+    expect(skill.body).toContain('Never print full upstream guides into chat or tool output');
+    expect(skill.body).toContain('`agent-browser` must attach to an existing CDP endpoint');
+    expect(skill.body).toContain('curl -fsS http://127.0.0.1:9223/json/version');
+    expect(skill.body).toContain('open -na "Google Chrome" --args');
+    expect(skill.body).toContain('for i in {1..20}');
+    expect(skill.body).toContain('agent-browser connect http://127.0.0.1:9223');
+    expect(skill.body).toContain('Never run\n`agent-browser open` before `agent-browser connect`');
+    expect(skill.body).toContain('--remote-debugging-port=9223');
+    expect(skill.body).toContain('Chrome crashed before CDP became available');
+    expect(skill.body).toContain('command -v agent-browser');
+    expect(skill.body).toContain('Open Design Smoke Path');
+  });
+
   it('includes the DCF valuation, X research, and Last30Days research skills', async () => {
     const skills = await listSkills(designTemplatesRoot);
     const byId = new Map(

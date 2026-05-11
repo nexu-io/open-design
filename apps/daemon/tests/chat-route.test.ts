@@ -276,10 +276,10 @@ setInterval(() => {}, 1000);
           eventsController.abort();
           const statusBody = await waitForRunStatus(baseUrl, runId);
 
-          expect(eventsBody).toContain('event: agent');
-          expect(eventsBody).toContain('"type":"status"');
           expect(eventsBody).toContain('event: error');
           expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
           expect(statusBody.status).toBe('failed');
         },
       );

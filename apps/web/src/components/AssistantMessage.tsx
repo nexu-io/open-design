@@ -6,6 +6,7 @@ import {
   splitOnQuestionForms,
   type QuestionForm,
 } from "../artifacts/question-form";
+import { stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import { Icon } from "./Icon";
 import { useT } from "../i18n";
@@ -841,17 +842,6 @@ function buildBlocks(events: AgentEvent[]): Block[] {
     }
   }
   return out;
-}
-
-function stripArtifact(content: string): string {
-  const open = content.indexOf("<artifact");
-  if (open === -1) return content;
-  const closeTag = content.indexOf(">", open);
-  const end = content.indexOf("</artifact>", closeTag);
-  return (
-    content.slice(0, open) +
-    content.slice(end === -1 ? content.length : end + 11)
-  ).trim();
 }
 
 // Split prose into alternating plain-text and `<system-reminder>` segments.

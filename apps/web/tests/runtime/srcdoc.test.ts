@@ -189,4 +189,19 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).not.toContain('<script data-od-source-path=');
     expect(srcdoc.indexOf('data-od-source-path="path-0"')).toBeLessThan(srcdoc.indexOf('document.body.prepend'));
   });
+
+  it('injects only the manual edit bridge when edit mode is enabled without picker bridges', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      editBridge: true,
+    });
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-source-path=');
+    expect(srcdoc).toContain('data-od-edit-bridge');
+    expect(srcdoc).not.toContain('data-od-selection-bridge');
+    expect(srcdoc).not.toContain("type: 'od:comment-target'");
+    expect(srcdoc).not.toContain("type: 'od:inspect-overrides'");
+  });
 });
