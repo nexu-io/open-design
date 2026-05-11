@@ -119,8 +119,11 @@ describe('htmlNeedsSandboxShim', () => {
     expect(
       htmlNeedsSandboxShim('<script type=text/babel src="components/Icon.jsx"></script>'),
     ).toBe(true);
-    // Unquoted must still respect the trailing word-boundary anchor — a
-    // `type=text/babel-other` value remains a non-match (defensive).
+    // Trailing `\b` rejects word continuations: `type=text/babelish` does
+    // not match because `l`→`i` is a word-internal transition. Hyphenated
+    // variants like `type=text/babel-other` still match per the helper
+    // docstring (`l`→`-` is a word boundary) — that's the documented safe
+    // false-positive direction, so it is intentionally not asserted here.
     expect(htmlNeedsSandboxShim('<script type=text/babelish></script>')).toBe(false);
   });
 
