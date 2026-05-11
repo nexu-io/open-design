@@ -440,7 +440,6 @@ const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
   'cisco',
   'claymorphism',
   'clean',
-  'cockpit',
   'colorful',
   'contemporary',
   'corporate',
