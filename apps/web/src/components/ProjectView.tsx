@@ -1615,6 +1615,13 @@ export function ProjectView({
     async (id: string) => {
       const ok = await deleteConversationApi(project.id, id);
       if (!ok) return;
+      // The deleted conversation may have owned an unanswered
+      // `<question-form>`, which the daemon counts toward the project's
+      // `needsInput` flag in `/api/projects`. Home cards render that
+      // flag from the cached projects payload, so without refreshing
+      // it here the `Needs input` badge survives the deletion until
+      // the next manual reload.
+      onProjectsRefresh();
       setConversations((curr) => {
         const next = curr.filter((c) => c.id !== id);
         if (next.length === 0) {
@@ -1632,7 +1639,7 @@ export function ProjectView({
         return next;
       });
     },
-    [project.id, activeConversationId],
+    [project.id, activeConversationId, onProjectsRefresh],
   );
 
   const handleRenameConversation = useCallback(
