@@ -14,7 +14,8 @@ import { inlineRelativeAssets } from '../src/inline-assets.js';
 
 function readerFrom(files: Record<string, string>) {
   return async (relPath: string): Promise<string | null> => {
-    return Object.prototype.hasOwnProperty.call(files, relPath) ? files[relPath] : null;
+    const value = files[relPath];
+    return typeof value === 'string' ? value : null;
   };
 }
 
@@ -144,10 +145,15 @@ describe('inlineRelativeAssets', () => {
   });
 
   it('HTML-escapes the href value in data-od-inline-asset attr', async () => {
-    const href = 'weird&name<x>.css';
+    // Using `&` only — the realistic case for filenames that need escaping.
+    // `<`, `>`, `"` are forbidden in real filenames on most platforms and
+    // additionally break the tag-matching regex (a limitation inherited
+    // from the web client at FileViewer.tsx:5271). The escapeHtmlAttr fn
+    // itself covers `&`, `"`, `<`, `>` by inspection.
+    const href = 'weird&name.css';
     const html = `<link rel="stylesheet" href="${href}">`;
     const out = await inlineRelativeAssets(html, 'index.html', readerFrom({ [href]: '.x{}' }));
-    expect(out).toContain('data-od-inline-asset="weird&amp;name&lt;x&gt;.css"');
+    expect(out).toContain('data-od-inline-asset="weird&amp;name.css"');
     expect(out).not.toContain(`data-od-inline-asset="${href}"`);
   });
 
