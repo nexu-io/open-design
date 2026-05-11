@@ -851,7 +851,10 @@ export function createAgentSink(): AgentSink {
 
 interface AgentSpawnHandle {
   child: ReturnType<typeof spawn>;
-  acpSession?: { hasFatalError?: () => boolean } | null;
+  acpSession?: {
+    hasFatalError?: () => boolean;
+    completedSuccessfully?: () => boolean;
+  } | null;
 }
 
 function attachAgentStreamHandlers(
@@ -863,7 +866,10 @@ function attachAgentStreamHandlers(
   send: (event: string, payload: unknown) => void,
   appendRawStdout?: (chunk: string) => void,
 ): AgentSpawnHandle {
-  let acpSession: { hasFatalError?: () => boolean } | null = null;
+  let acpSession: {
+    hasFatalError?: () => boolean;
+    completedSuccessfully?: () => boolean;
+  } | null = null;
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
   if (def.streamFormat === 'claude-stream-json') {
@@ -1152,7 +1158,17 @@ async function testAgentConnectionInternal(
 
       const latencyMs = Date.now() - start;
       const buffered = sink.getText().trim();
-      const exitedCleanly = winner.code === 0 && !winner.signal;
+      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
+      // Terminal) are now SIGTERM'd from attachAcpSession after a clean
+      // prompt completion, which sets `winner.signal === 'SIGTERM'`. For
+      // those runs we trust the ACP-level success signal so connection
+      // tests don't report `agent_spawn_failed` despite a healthy
+      // assistant response (see #1265 / #1286).
+      const acpCleanCompletion =
+        typeof acpSession?.completedSuccessfully === 'function' &&
+        acpSession.completedSuccessfully();
+      const exitedCleanly =
+        (winner.code === 0 && !winner.signal) || acpCleanCompletion;
       if (buffered) {
         const rawSample = truncateSample(buffered);
         if (rawSample && isLikelyModelErrorText(rawSample)) {
