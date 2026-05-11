@@ -90,8 +90,8 @@ function validateTelemetry(raw: unknown): TelemetryPrefs | undefined {
 }
 
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'])],
-  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'OPENAI_API_KEY'])],
+  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL'])],
+  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
   ['deepseek', new Set(['DEEPSEEK_BIN'])],

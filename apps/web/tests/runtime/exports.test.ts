@@ -134,6 +134,17 @@ describe('buildDesignHandoffContent', () => {
     expect(screens.get('marketing.html')).toBe('landing-page');
     expect(screens.get('dashboard.html')).toBe('product-screen');
   });
+
+  it('keeps frame wrapper HTML out of client export manifest screens', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Framed App',
+      entryFile: 'index.html',
+      files: ['index.html', 'frames/iphone-15-pro.html', 'browser-chrome.html', 'src/app.css'],
+    }));
+
+    expect(manifest.sourceFiles.html).toEqual(['browser-chrome.html', 'frames/iphone-15-pro.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
+  });
 });
 
 describe('exportProjectAsPdf', () => {

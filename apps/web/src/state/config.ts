@@ -557,8 +557,22 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'privacyDecisionAt',
 ]);
 
+const AGENT_CLI_SECRET_ENV_KEYS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
+
+function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
+  if (!agentCliEnv) return agentCliEnv;
+  const sanitized: NonNullable<AppConfig['agentCliEnv']> = {};
+  for (const [agentId, env] of Object.entries(agentCliEnv)) {
+    const safeEnv = Object.fromEntries(
+      Object.entries(env ?? {}).filter(([key]) => !AGENT_CLI_SECRET_ENV_KEYS.has(key)),
+    );
+    sanitized[agentId] = safeEnv;
+  }
+  return sanitized;
+}
+
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config };
+  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }
@@ -711,7 +725,7 @@ export async function syncConfigToDaemon(
     onboardingCompleted: config.onboardingCompleted,
     agentId: config.agentId,
     agentModels: config.agentModels,
-    agentCliEnv: config.agentCliEnv,
+    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
     skillId: config.skillId,
     designSystemId: config.designSystemId,
     disabledSkills: config.disabledSkills,

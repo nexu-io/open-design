@@ -46,9 +46,16 @@ export function exportAsHtml(html: string, title: string): void {
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
 }
 
+const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame|iphone[-_\w]*|ipad[-_\w]*|phone|mobile-frame|tablet-frame)\.html?$/i;
+
+function isFrameWrapperHtmlFile(file: string): boolean {
+  return FRAME_WRAPPER_FILE_RE.test(file);
+}
+
 type DesignFileMap = {
   files: string[];
   htmlFiles: string[];
+  screenHtmlFiles: string[];
   cssFiles: string[];
   jsFiles: string[];
   assetFiles: string[];
@@ -58,10 +65,14 @@ type DesignFileMap = {
 function designFileMap(entryFile: string, files?: string[]): DesignFileMap {
   const all = Array.from(new Set([entryFile, ...(files ?? [])])).sort((a, b) => a.localeCompare(b));
   const htmlFiles = all.filter((name) => /\.html?$/i.test(name));
+  const screenHtmlFiles = htmlFiles.filter((name) => !isFrameWrapperHtmlFile(name));
   const cssFiles = all.filter((name) => /\.css$/i.test(name));
   const jsFiles = all.filter((name) => /\.[cm]?[jt]sx?$/i.test(name));
   const assetFiles = all.filter((name) => !htmlFiles.includes(name) && !cssFiles.includes(name) && !jsFiles.includes(name));
-  return { files: all, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile };
+  const preferredEntryFile = !isFrameWrapperHtmlFile(entryFile)
+    ? entryFile
+    : screenHtmlFiles.find((name) => /(^|\/)index\.html$/i.test(name)) || screenHtmlFiles[0] || entryFile;
+  return { files: all, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile: preferredEntryFile };
 }
 
 export function buildDesignManifestContent(opts: {
@@ -72,8 +83,8 @@ export function buildDesignManifestContent(opts: {
 }): string {
   const title = opts.title || 'Open Design artifact';
   const entryFile = opts.entryFile || 'index.html';
-  const { files, htmlFiles, cssFiles, jsFiles, assetFiles } = designFileMap(entryFile, opts.files);
-  const screenFiles = htmlFiles.length > 0 ? htmlFiles : [entryFile];
+  const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles } = designFileMap(entryFile, opts.files);
+  const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
     schema: 'open-design.design-manifest.v1',
     title,

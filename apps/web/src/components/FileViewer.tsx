@@ -339,7 +339,7 @@ function previewViewportStyle(
   };
 }
 
-function effectivePreviewScale(
+export function effectivePreviewScale(
   viewport: PreviewViewportId,
   previewScale: number,
   canvasSize?: PreviewCanvasSize,
@@ -3309,6 +3309,7 @@ function HtmlViewer({
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const overlayPreviewScale = effectivePreviewScale(previewViewport, previewScale, previewBodySize);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
@@ -4920,7 +4921,7 @@ function HtmlViewer({
                 hoveredTarget={hoveredCommentTarget}
                 activeTarget={activeCommentTarget}
                 boardTool={boardTool}
-                scale={previewScale}
+                scale={overlayPreviewScale}
                 strokePoints={strokePoints}
                 onOpenComment={(comment, snapshot) => {
                   setActiveCommentTarget(snapshot);

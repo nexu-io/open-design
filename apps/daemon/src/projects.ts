@@ -357,19 +357,31 @@ function addDesignManifest(zip, entries, projectLabel) {
   });
 }
 
+const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame|iphone[-_\w]*|ipad[-_\w]*|phone|mobile-frame|tablet-frame)\.html?$/i;
+
+function isFrameWrapperHtmlFile(file: string): boolean {
+  return FRAME_WRAPPER_FILE_RE.test(file);
+}
+
 function projectFileMap(entries) {
   const files = entries.map((entry) => entry.relPath).sort((a, b) => a.localeCompare(b));
   const htmlFiles = files.filter((name) => /\.html?$/i.test(name));
+  const screenHtmlFiles = htmlFiles.filter((name) => !isFrameWrapperHtmlFile(name));
   const cssFiles = files.filter((name) => /\.css$/i.test(name));
   const jsFiles = files.filter((name) => /\.[cm]?[jt]sx?$/i.test(name));
   const assetFiles = files.filter((name) => !htmlFiles.includes(name) && !cssFiles.includes(name) && !jsFiles.includes(name));
-  const entryFile = htmlFiles.find((name) => /(^|\/)index\.html$/i.test(name)) || htmlFiles[0] || files[0] || 'index.html';
-  return { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile };
+  const entryFile = screenHtmlFiles.find((name) => /(^|\/)index\.html$/i.test(name))
+    || screenHtmlFiles[0]
+    || htmlFiles.find((name) => /(^|\/)index\.html$/i.test(name))
+    || htmlFiles[0]
+    || files[0]
+    || 'index.html';
+  return { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile };
 }
 
 function buildDesignManifest(entries, projectLabel) {
-  const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
-  const screenFiles = htmlFiles.length > 0 ? htmlFiles : [entryFile];
+  const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
+  const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
     schema: 'open-design.design-manifest.v1',
     title: projectLabel || 'Open Design project',

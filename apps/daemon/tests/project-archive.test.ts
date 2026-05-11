@@ -115,7 +115,8 @@ describe('buildProjectArchive', () => {
     expect(manifest.schema).toBe('open-design.design-manifest.v1');
     expect(manifest.entryFile).toBe('index.html');
     expect(manifest.sourceFiles.css).toEqual(['src/app.css']);
-    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['frames/phone.html', 'index.html']);
+    expect(manifest.sourceFiles.html).toEqual(['frames/phone.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
     expect(manifest.appModules.join(' ')).toContain('domain-specific in-app modules');
     expect(manifest.osWidgets.join(' ')).toContain('home-screen');
     expect(manifest.responsiveViewports).toContainEqual({
@@ -143,6 +144,22 @@ describe('buildProjectArchive', () => {
     expect(screens.get('home.html')).not.toBe('landing-page');
     expect(screens.get('marketing.html')).toBe('landing-page');
     expect(screens.get('dashboard.html')).toBe('product-screen');
+  });
+
+  it('keeps frame wrapper HTML out of daemon archive manifest screens', async () => {
+    const dir = path.join(projectsRoot, projectId, 'framed-app');
+    await mkdir(path.join(dir, 'frames'), { recursive: true });
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html>app');
+    await writeFile(path.join(dir, 'frames', 'iphone-15-pro.html'), '<!doctype html>frame');
+    await writeFile(path.join(dir, 'browser-chrome.html'), '<!doctype html>browser frame');
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'framed-app');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+
+    expect(manifest.sourceFiles.html).toEqual(['browser-chrome.html', 'frames/iphone-15-pro.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
   });
 
   it('does not overwrite an existing design handoff file', async () => {

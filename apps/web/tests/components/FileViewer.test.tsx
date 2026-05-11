@@ -23,6 +23,7 @@ import {
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  effectivePreviewScale,
   parseInspectOverridesFromSource,
   serializeInspectOverrides,
   updateInspectOverride,
@@ -57,6 +58,17 @@ function deferredResponse() {
   });
   return { promise, resolve };
 }
+
+describe('FileViewer preview scale', () => {
+  it('uses the requested zoom for desktop preview overlays', () => {
+    expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
+  });
+
+  it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
+    expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
+    expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  });
+});
 
 describe('FileViewer SVG artifacts', () => {
   it('routes SVG artifacts to the SVG viewer instead of the generic image viewer', () => {
