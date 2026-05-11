@@ -1273,4 +1273,36 @@ describe('connection test timeout overrides', () => {
       warn.mockRestore();
     }
   });
+
+  // Regression: a previous version of resolveConnectionTestTimeoutMs
+  // accepted any positive integer, but Node's setTimeout silently
+  // clamps delays above 2^31-1 to ~1 ms (with a TimeoutOverflowWarning).
+  // An override that meant to extend the budget would instead make
+  // every connection test fail almost immediately — the safety
+  // timeout would be effectively disarmed.
+  it('rejects values above the Node setTimeout maximum (2^31-1)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const tooLarge = '3000000000'; // ~50 minutes; exceeds 2_147_483_647 ms
+      expect(
+        resolveConnectionTestTimeoutMs('OD_CONNECTION_TEST_AGENT_TIMEOUT_MS', 45_000, {
+          OD_CONNECTION_TEST_AGENT_TIMEOUT_MS: tooLarge,
+        }),
+      ).toBe(45_000);
+      // The exact maximum is still accepted; anything past it is not.
+      expect(
+        resolveConnectionTestTimeoutMs('OD_CONNECTION_TEST_AGENT_TIMEOUT_MS', 45_000, {
+          OD_CONNECTION_TEST_AGENT_TIMEOUT_MS: '2147483647',
+        }),
+      ).toBe(2_147_483_647);
+      expect(
+        resolveConnectionTestTimeoutMs('OD_CONNECTION_TEST_AGENT_TIMEOUT_MS', 45_000, {
+          OD_CONNECTION_TEST_AGENT_TIMEOUT_MS: '2147483648',
+        }),
+      ).toBe(45_000);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

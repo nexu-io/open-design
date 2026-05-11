@@ -54,6 +54,13 @@ const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 // run, so 45 s leaves headroom without making a hung child invisible.
 // Override with OD_CONNECTION_TEST_AGENT_TIMEOUT_MS.
 const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
+// Node's `setTimeout` silently clamps any delay above this to ~1 ms
+// (with a TimeoutOverflowWarning), so an override meant to *extend*
+// the budget — e.g. `OD_CONNECTION_TEST_AGENT_TIMEOUT_MS=3000000000` —
+// would actually make every connection test fail almost immediately.
+// Reject above the cap so the safety timeout cannot be accidentally
+// disarmed by an oversized env value.
+const MAX_CONNECTION_TEST_TIMEOUT_MS = 2_147_483_647;
 
 export function resolveConnectionTestTimeoutMs(
   key: 'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
@@ -63,9 +70,9 @@ export function resolveConnectionTestTimeoutMs(
   const raw = env[key];
   if (raw === undefined || raw === '') return fallback;
   const n = Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+  if (!Number.isSafeInteger(n) || n < 1 || n > MAX_CONNECTION_TEST_TIMEOUT_MS) {
     console.warn(
-      `connection-test: ignoring ${key}=${JSON.stringify(raw)} (must be a positive integer ms); using ${fallback}ms`,
+      `connection-test: ignoring ${key}=${JSON.stringify(raw)} (must be a positive integer between 1 and ${MAX_CONNECTION_TEST_TIMEOUT_MS} ms); using ${fallback}ms`,
     );
     return fallback;
   }
