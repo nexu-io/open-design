@@ -366,4 +366,34 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
     });
     expect(secondResp.status).toBe(200);
   });
+
+  it('catches stub rewrites of legacy sidecar-less HTML priors (mrcfps R6)', async () => {
+    const projectId = await createProject('legacy');
+
+    // Seed a "legacy" file by POSTing without artifactManifest — the
+    // route writes the body but no .artifact.json. Mirrors any HTML that
+    // pre-dates the sidecar era or was uploaded outside the artifact-tag
+    // flow (Write tool, paste-text, manual import).
+    const legacyResp = await postFile(projectId, {
+      name: 'dashboard.html',
+      content: htmlBody(20_000),
+      // no artifactManifest -> no sidecar on disk
+    });
+    expect(legacyResp.status).toBe(200);
+
+    // Now an agent emits a stub artifact with the matching identifier.
+    // Without the legacy fallback, the guard would skip the sidecar-less
+    // prior and let this through as a "first emission".
+    const stubResp = await postFile(projectId, {
+      name: 'dashboard-2.html',
+      content: '<html><body>see dashboard.html</body></html>',
+      artifactManifest: manifestFor('dashboard'),
+    });
+    expect(stubResp.status).toBe(422);
+    const body = (await stubResp.json()) as {
+      error: { code: string; details?: { priorName?: string } };
+    };
+    expect(body.error.code).toBe('ARTIFACT_REGRESSION');
+    expect(body.error.details?.priorName).toBe('dashboard.html');
+  });
 });

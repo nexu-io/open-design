@@ -120,8 +120,8 @@ export function artifactIdentifiersMatch(a: string, b: string): boolean {
 
 // Reads the canonical identifier from a sibling's `.artifact.json`
 // sidecar. Returns null when the sidecar is absent, malformed, or
-// missing a string identifier — callers treat null as "this file isn't
-// a verifiable artifact prior" and skip it.
+// missing a string identifier — callers fall back to filename-derived
+// inference for legacy artifacts that pre-date the sidecar era.
 async function readSidecarIdentifier(scanDir: string, entryName: string): Promise<string | null> {
   try {
     const raw = await readFile(path.join(scanDir, `${entryName}.artifact.json`), 'utf8');
@@ -131,6 +131,19 @@ async function readSidecarIdentifier(scanDir: string, entryName: string): Promis
   } catch {
     return null;
   }
+}
+
+// Strips the frontend's `-N` collision suffix and the `.html` / `.htm`
+// extension to recover the per-lineage basename. Used as a fallback
+// identifier for legacy HTML artifacts that don't have a sidecar yet
+// (anything written before the manifest era, or HTML pasted/uploaded
+// outside the artifact-tag flow). `inferLegacyManifest` already treats
+// these as html-kind artifacts elsewhere; we mirror that so the guard
+// doesn't silently let a stub overwrite them.
+const SYNTHETIC_IDENTIFIER_SUFFIX = /(?:-\d+)?\.html?$/;
+
+function syntheticIdentifierFromFilename(name: string): string {
+  return name.replace(SYNTHETIC_IDENTIFIER_SUFFIX, '');
 }
 
 // Finds prior HTML siblings on disk that share an identifier with a
@@ -168,12 +181,19 @@ export async function findPriorArtifactSiblings(
     // it as a prior. Without this check, distinct identifiers that share
     // a sibling-name namespace (most reachably the empty-slug fallback,
     // where 测试 and 首页 both land in artifact*.html) would falsely
-    // warn/reject across each other. Files without a sidecar are skipped
-    // to keep the guard conservative — they weren't written via the
-    // artifact-tag path that this guard targets.
+    // warn/reject across each other. For legacy HTML artifacts written
+    // before the sidecar era (or HTML uploaded outside the artifact-tag
+    // flow), we fall back to a filename-derived synthetic identifier —
+    // `inferLegacyManifest` treats those files as html-kind artifacts
+    // elsewhere, so the guard should too. The canonical-anchor rule in
+    // `artifactIdentifiersMatch` keeps the bridge safe: synthetic IDs
+    // come from already-slugified filenames, so they bridge raw inputs
+    // only via legitimate slug-equivalence, not via truncation collision
+    // or empty-slug conflation.
     const sidecarIdentifier = await readSidecarIdentifier(scanDir, entry.name);
-    if (sidecarIdentifier === null) continue;
-    if (!artifactIdentifiersMatch(identifier, sidecarIdentifier)) continue;
+    const candidateIdentifier = sidecarIdentifier ?? syntheticIdentifierFromFilename(entry.name);
+    if (candidateIdentifier.length === 0) continue;
+    if (!artifactIdentifiersMatch(identifier, candidateIdentifier)) continue;
     try {
       const st = await stat(path.join(scanDir, entry.name));
       results.push({ name: entry.name, size: st.size });

@@ -214,15 +214,36 @@ describe('findPriorArtifactSiblings', () => {
     expect(priors).toEqual([]);
   });
 
-  it('skips files without a sidecar (likely not artifact-tag-authored)', async () => {
+  it('falls back to filename-derived identifier for legacy sidecar-less HTML (mrcfps R6)', async () => {
     const dir = await makeDir();
-    // Bare HTML file with no .artifact.json — could be a paste-text upload
-    // or a hand-edited file. Without sidecar provenance the guard can't
-    // verify the identifier, so we treat it as not-a-prior to avoid
-    // false-positive rejections.
+    // Pre-sidecar legacy file — `inferLegacyManifest` treats it as
+    // html-kind elsewhere, so the guard should too. Without this
+    // fallback, a stub overwrite of a legacy `dashboard.html` would
+    // bypass the guard as a "first emission".
     await writeFile(path.join(dir, 'dashboard.html'), 'a'.repeat(40_000));
 
     const priors = await findPriorArtifactSiblings(dir, 'dashboard');
+    expect(priors.map((p) => p.name)).toEqual(['dashboard.html']);
+  });
+
+  it('legacy fallback bridges raw <-> slug per artifactIdentifiersMatch rules', async () => {
+    const dir = await makeDir();
+    // Legacy file basename is the canonical slug form. Input identifier
+    // "Landing Page" must still bridge to it via slug-equivalence, just
+    // like the sidecar case.
+    await writeFile(path.join(dir, 'landing-page.html'), 'a'.repeat(40_000));
+
+    const priors = await findPriorArtifactSiblings(dir, 'Landing Page');
+    expect(priors.map((p) => p.name)).toEqual(['landing-page.html']);
+  });
+
+  it('legacy fallback does NOT bridge unrelated identifiers via filename inference', async () => {
+    const dir = await makeDir();
+    // Legacy file basename `dashboard` should not match identifier
+    // `legacy-dashboard` even though both are slug-form.
+    await writeFile(path.join(dir, 'dashboard.html'), 'a'.repeat(40_000));
+
+    const priors = await findPriorArtifactSiblings(dir, 'legacy-dashboard');
     expect(priors).toEqual([]);
   });
 });
