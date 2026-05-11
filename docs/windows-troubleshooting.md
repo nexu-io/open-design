@@ -63,13 +63,17 @@ corepack enable
 corepack pnpm --version   # should print 10.33.2
 ```
 
+> **Note:** If `corepack enable` fails with `EPERM` or `EACCES` (common when Node is installed under `C:\Program Files\nodejs`), use the npm-global fallback in the next section instead.
+
+
+
 ### Fix (npm global — alternative)
 
 If Corepack is not available:
 
 ```powershell
-npm install -g pnpm
-pnpm -v   # should print 10.33.x
+npm install -g pnpm@10.33.2
+pnpm -v   # should print 10.33.2
 ```
 
 ---
@@ -128,7 +132,15 @@ Install **Build Tools for Visual Studio 2022** with the following workloads:
 
 Download: [https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
 
-After installation, open a **fresh** PowerShell window and re-run `pnpm install`.
+If you see `gyp ERR! find Python`, verify Python is installed:
+
+```powershell
+python --version   # or py --version
+```
+
+If missing, install Python 3.x from [python.org](https://www.python.org/downloads/) and ensure it's on PATH.
+
+After installing all build tools, open a **fresh** PowerShell window and re-run `pnpm install`.
 
 ---
 
@@ -183,9 +195,12 @@ Run these commands in PowerShell before opening an issue. Include the output in 
 ```powershell
 node -v
 pnpm -v
-where pnpm
-where node
-where opencode-cli
+where.exe pnpm
+where.exe node
+where.exe opencode
+corepack --version
+python --version   # or py --version
+Get-ExecutionPolicy -List
 ```
 
 ---
@@ -195,9 +210,9 @@ where opencode-cli
 OpenCode is one of the local agent CLIs Open Design can drive. If you want to use it:
 
 ```powershell
-npm install -g opencode
-where opencode-cli   # should show C:\Users\YOUR_USERNAME\AppData\Roaming\npm\opencode-cli.cmd
-opencode-cli --version
+npm install -g opencode-ai
+where.exe opencode   # should show C:\Users\YOUR_USERNAME\AppData\Roaming\npm\opencode.cmd
+opencode --version
 ```
 
-If Open Design still shows OpenCode as *not installed* in **Settings → Execution & model**, click **Rescan** after confirming the `opencode-cli.cmd` directory is on your user `PATH`.
+If Open Design still shows OpenCode as *not installed* in **Settings → Execution & model**, click **Rescan** after confirming the `opencode.cmd` directory is on your user `PATH`.
