@@ -531,3 +531,30 @@ describe('NewProjectPanel design system defaults', () => {
     );
   });
 });
+
+describe('NewProjectPanel template deletion', () => {
+  beforeEach(() => {
+    globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+    Element.prototype.scrollIntoView = () => {};
+  });
+
+  it('calls onDeleteTemplate when user clicks delete button', async () => {
+    const onDelete = vi.fn().mockResolvedValue(true);
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    const deleteBtn = screen.getByLabelText(/delete template/i);
+    fireEvent.click(deleteBtn);
+    expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+  });
+});
