@@ -27,8 +27,8 @@ vi.mock('../../src/runtimes/invocation.js', () => ({
     (execAgentFileMock as unknown as (...args: unknown[]) => unknown)(...args),
 }));
 
-vi.mock('../../src/runtimes/executables.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/runtimes/executables.ts')>();
+vi.mock('../../src/runtimes/executables.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/runtimes/executables.js')>();
   return {
     ...actual,
     resolveAgentExecutable: (...args: Parameters<typeof actual.resolveAgentExecutable>) =>
