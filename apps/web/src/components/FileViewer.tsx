@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
-import { useT } from '../i18n';
-import type { Dict } from '../i18n/types';
+import { useT, useI18n } from '../i18n';
+import type { Dict, Locale } from '../i18n/types';
 import {
   fetchLiveArtifact,
   fetchLiveArtifactCode,
@@ -1046,20 +1046,44 @@ function formatAbsoluteDateTime(iso: string | number | undefined): string | null
   }
 }
 
-function formatRelativeTime(iso: string | number | undefined, now = Date.now()): string | null {
+function formatRelativeTime(
+  iso: string | number | undefined,
+  now = Date.now(),
+  locale: Locale = 'en',
+  t?: TranslateFn,
+): string | null {
   if (iso === undefined || iso === null) return null;
   const ms = typeof iso === 'number' ? iso : new Date(iso).getTime();
   if (Number.isNaN(ms)) return null;
   const deltaSec = Math.round((ms - now) / 1000);
   const abs = Math.abs(deltaSec);
-  const suffix = deltaSec <= 0 ? ' ago' : ' from now';
-  if (abs < 5) return 'just now';
-  if (abs < 60) return `${abs}s${suffix}`;
-  if (abs < 3600) return `${Math.round(abs / 60)}m${suffix}`;
-  if (abs < 86400) return `${Math.round(abs / 3600)}h${suffix}`;
-  if (abs < 86400 * 30) return `${Math.round(abs / 86400)}d${suffix}`;
-  if (abs < 86400 * 365) return `${Math.round(abs / (86400 * 30))}mo${suffix}`;
-  return `${Math.round(abs / (86400 * 365))}y${suffix}`;
+  if (abs < 5) {
+    // "just now" lives in the i18n dict because Intl.RelativeTimeFormat's
+    // "0 seconds ago" reads awkwardly in narrow style and we want a
+    // single canonical translation per locale. Fall back to the English
+    // literal only when called without t (background utilities, tests).
+    return t ? t('liveArtifact.refresh.justNow') : 'just now';
+  }
+  // Intl.RelativeTimeFormat handles tense (past / future), pluralisation,
+  // and word-order per locale so the panel matches the rest of the
+  // localised UI instead of mixing in English units like `5s ago`.
+  // `style: 'narrow'` keeps the English output close to the historical
+  // `5s ago` shape; `numeric: 'always'` forces numeric output so we
+  // don't get "yesterday" / "now" mixed in unexpectedly with the
+  // bucketing above.
+  let rtf: Intl.RelativeTimeFormat;
+  try {
+    rtf = new Intl.RelativeTimeFormat(locale, { style: 'narrow', numeric: 'always' });
+  } catch {
+    rtf = new Intl.RelativeTimeFormat('en', { style: 'narrow', numeric: 'always' });
+  }
+  const value = deltaSec; // negative = past, positive = future
+  if (abs < 60) return rtf.format(value, 'second');
+  if (abs < 3600) return rtf.format(Math.round(value / 60), 'minute');
+  if (abs < 86400) return rtf.format(Math.round(value / 3600), 'hour');
+  if (abs < 86400 * 30) return rtf.format(Math.round(value / 86400), 'day');
+  if (abs < 86400 * 365) return rtf.format(Math.round(value / (86400 * 30)), 'month');
+  return rtf.format(Math.round(value / (86400 * 365)), 'year');
 }
 
 function formatDurationMs(ms: number | undefined): string | null {
@@ -1165,6 +1189,7 @@ export function LiveArtifactRefreshHistoryPanel({
   persistedEvents?: LiveArtifactRefreshLogEntry[];
 }) {
   const t = useT();
+  const { locale } = useI18n();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -1211,7 +1236,7 @@ export function LiveArtifactRefreshHistoryPanel({
             {lastRefreshedAt ? (
               <>
                 <span className="live-artifact-refresh-value">
-                  {formatRelativeTime(lastRefreshedAt, now) ?? '—'}
+                  {formatRelativeTime(lastRefreshedAt, now, locale, t) ?? '—'}
                 </span>
                 <span
                   className="live-artifact-refresh-sub"
@@ -1235,12 +1260,16 @@ export function LiveArtifactRefreshHistoryPanel({
           iso={createdAt}
           emptyLabel={t('liveArtifact.refresh.factUnknown')}
           now={now}
+          locale={locale}
+          t={t}
         />
         <LiveArtifactRefreshFact
           label={t('liveArtifact.refresh.factLastUpdated')}
           iso={updatedAt}
           emptyLabel={t('liveArtifact.refresh.factUnknown')}
           now={now}
+          locale={locale}
+          t={t}
         />
       </section>
 
@@ -1276,7 +1305,7 @@ export function LiveArtifactRefreshHistoryPanel({
                       </span>
                       <strong>{event.step}</strong>
                       <span className="live-artifact-refresh-event-time">
-                        {formatRelativeTime(event.startedAt, now)
+                        {formatRelativeTime(event.startedAt, now, locale, t)
                           ?? t('liveArtifact.refresh.justNow')}
                       </span>
                     </div>
@@ -1324,7 +1353,7 @@ export function LiveArtifactRefreshHistoryPanel({
                         className="live-artifact-refresh-event-time"
                         title={formatAbsoluteDateTime(event.at) ?? undefined}
                       >
-                        {formatRelativeTime(event.at, now) ?? ''}
+                        {formatRelativeTime(event.at, now, locale, t) ?? ''}
                       </span>
                     </div>
                     <div className="live-artifact-refresh-event-detail">
@@ -1409,6 +1438,8 @@ function LiveArtifactRefreshFact({
   helper,
   emptyLabel,
   now,
+  locale,
+  t,
 }: {
   label: string;
   iso?: string;
@@ -1416,8 +1447,10 @@ function LiveArtifactRefreshFact({
   helper?: string;
   emptyLabel?: string;
   now?: number;
+  locale?: Locale;
+  t?: TranslateFn;
 }) {
-  const relative = iso !== undefined ? formatRelativeTime(iso, now) : null;
+  const relative = iso !== undefined ? formatRelativeTime(iso, now, locale, t) : null;
   const absolute = iso !== undefined ? formatAbsoluteDateTime(iso) : null;
   const resolved = value ?? relative ?? emptyLabel ?? '—';
   const sub = helper ?? (iso !== undefined ? absolute ?? '' : '');

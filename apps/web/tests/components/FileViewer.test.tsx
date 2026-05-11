@@ -1913,7 +1913,12 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
         <LiveArtifactRefreshHistoryPanel
           liveArtifact={baseLiveArtifact({
             refreshStatus: 'succeeded',
-            lastRefreshedAt: undefined,
+            // Real lastRefreshedAt + non-empty session events so the
+            // relative-time path also runs under zh-CN; the lefarcen
+            // P1 review specifically called out that the formerly
+            // hardcoded `Xs ago` / `Xm ago` strings would still leak
+            // English under a Chinese UI without this.
+            lastRefreshedAt: new Date(now - 45_000).toISOString(),
             document: {
               format: 'html_template_v1',
               templatePath: 'template.html',
@@ -1952,7 +1957,6 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
 
     // Hero
     expect(markup).toContain('上次刷新');
-    expect(markup).toContain('从未');
     // Session activity section
     expect(markup).toContain('会话活动');
     expect(markup).toContain('本标签页打开期间观察到的事件');
@@ -1978,5 +1982,34 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
     expect(markup).not.toContain('Persisted refresh history');
     expect(markup).not.toContain('Document source');
     expect(markup).not.toContain('Advanced debug metadata');
+    // Relative-time output must be Chinese, not English. The lefarcen
+    // P1 review pointed out that formatRelativeTime was hardcoding
+    // English units (`Xs ago`), so a 45s-old hero metric would still
+    // read `45s ago` even with every label translated. Assert against
+    // the Chinese past-tense suffix `前` and rule out the English
+    // suffixes the legacy function emitted.
+    expect(markup).toContain('前');
+    expect(markup).not.toContain(' ago');
+    expect(markup).not.toContain('from now');
+    expect(markup).not.toMatch(/\b\d+s ago\b/);
+    expect(markup).not.toMatch(/\b\d+m ago\b/);
+  });
+
+  it('renders the zh-CN empty hero ("从未") when lastRefreshedAt is missing', () => {
+    const markup = renderToStaticMarkup(
+      <I18nProvider initial="zh-CN">
+        <LiveArtifactRefreshHistoryPanel
+          liveArtifact={baseLiveArtifact({ refreshStatus: 'never', lastRefreshedAt: undefined })}
+          fallbackRefreshStatus="never"
+          isRunning={false}
+          sessionEvents={[]}
+        />
+      </I18nProvider>,
+    );
+
+    expect(markup).toContain('上次刷新');
+    expect(markup).toContain('从未');
+    expect(markup).not.toContain('Last refreshed');
+    expect(markup).not.toContain('>Never<');
   });
 });
