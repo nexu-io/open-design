@@ -13,77 +13,108 @@ export interface InlineAssetReader {
   (relPath: string): Promise<string | null>;
 }
 
-interface Replacement {
-  from: string;
-  to: string;
-}
-
 export async function inlineRelativeAssets(
   html: string,
   ownerFileName: string,
   fileReader: InlineAssetReader,
 ): Promise<string> {
-  const replacements: Array<Promise<Replacement | null>> = [];
+  // Each candidate records the exact byte span in the ORIGINAL html. We
+  // never mutate-then-rescan, so a tag literal that happens to appear
+  // inside an inlined asset body is left untouched.
+  //
+  // Two divergences from apps/web/src/components/FileViewer.tsx:5265-5314:
+  //
+  // 1. Position-based, single-pass concat (vs. `.reduce` over `.replace`).
+  //    The web client's reduce-over-replace re-scans the mutated string
+  //    on each pass, which (a) replaces only the first occurrence of a
+  //    duplicate tag and (b) corrupts already-inlined bodies that contain
+  //    another tag's literal substring. This helper avoids both by
+  //    operating on captured indices in the original input.
+  // 2. Duplicate identical tags: this helper inlines every occurrence
+  //    (the web client's first-match-only is a side-effect of `.replace`
+  //    semantics). The web inline path is on a deprecation track since
+  //    PR #384 made URL-load the default, so the divergence is
+  //    forward-pointing.
+  interface Candidate {
+    start: number;
+    end: number;
+    replacement: Promise<string | null>;
+  }
 
-  const linkTags = html.match(/<link\b[^>]*>/gi) ?? [];
-  for (const tag of linkTags) {
+  const candidates: Candidate[] = [];
+
+  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
+    const tag = match[0];
+    const start = match.index!;
     const rel = readHtmlAttr(tag, 'rel');
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     const resolved = resolveProjectRelativePath(ownerFileName, href);
     if (!resolved) continue;
-    replacements.push(
-      fileReader(resolved).then<Replacement | null>((css) =>
-        css == null
-          ? null
-          : {
-              from: tag,
-              to:
-                `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
-                `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
-            },
+    candidates.push({
+      start,
+      end: start + tag.length,
+      replacement: fileReader(resolved).then((css) =>
+        css == null ? null : buildInlineStyleBlock(tag, href, css),
       ),
-    );
+    });
   }
 
-  const scriptTags =
-    html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
-  for (const tag of scriptTags) {
+  for (const match of html.matchAll(
+    /<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi,
+  )) {
+    const tag = match[0];
+    const start = match.index!;
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
     const resolved = resolveProjectRelativePath(ownerFileName, src);
     if (!resolved) continue;
-    replacements.push(
-      fileReader(resolved).then<Replacement | null>((js) => {
-        if (js == null) return null;
-        const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
-        const attrs = open
-          .replace(/^<script/i, '')
-          .replace(/>$/i, '')
-          .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
-        return {
-          from: tag,
-          to: `<script${attrs}>\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`,
-        };
-      }),
-    );
+    candidates.push({
+      start,
+      end: start + tag.length,
+      replacement: fileReader(resolved).then((js) =>
+        js == null ? null : buildInlineScriptBlock(tag, js),
+      ),
+    });
   }
 
-  const resolvedReplacements = (await Promise.all(replacements)).filter(
-    (item): item is Replacement => item !== null,
-  );
+  if (candidates.length === 0) return html;
 
-  // Divergence from apps/web/src/components/FileViewer.tsx:5313: the web
-  // client uses `.replace(from, () => to)`, which replaces only the first
-  // occurrence. That produces inconsistent output when a document has
-  // duplicate identical tags — one inlined, the rest left as URL refs.
-  // This helper replaces every occurrence. The web inline path is on a
-  // deprecation track (URL-load is the default since PR #384), so the
-  // divergence is forward-pointing.
-  return resolvedReplacements.reduce(
-    (next, { from, to }) => replaceAllOccurrences(next, from, to),
-    html,
+  // Sort by start so we can splice slices of the original html in order.
+  // Link and script regions cannot overlap in a well-formed document
+  // (the HTML parser disallows nested <script> / <link>), so we don't
+  // need overlap-resolution logic.
+  candidates.sort((a, b) => a.start - b.start);
+
+  const resolved = await Promise.all(candidates.map((c) => c.replacement));
+
+  const parts: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const { start, end } = candidates[i]!;
+    const replacement = resolved[i];
+    parts.push(html.slice(cursor, start));
+    parts.push(replacement ?? html.slice(start, end));
+    cursor = end;
+  }
+  parts.push(html.slice(cursor));
+  return parts.join('');
+}
+
+function buildInlineStyleBlock(_tag: string, href: string, css: string): string {
+  return (
+    `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
+    `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`
   );
+}
+
+function buildInlineScriptBlock(tag: string, js: string): string {
+  const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
+  const attrs = open
+    .replace(/^<script/i, '')
+    .replace(/>$/i, '')
+    .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
+  return `<script${attrs}>\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`;
 }
 
 export function baseDirFor(fileName: string): string {
@@ -118,6 +149,3 @@ export function escapeHtmlAttr(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
-function replaceAllOccurrences(source: string, from: string, to: string): string {
-  return source.split(from).join(to);
-}
