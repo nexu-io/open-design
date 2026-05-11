@@ -75,8 +75,39 @@ async function probe(
       timeout: 3000,
     });
     version = String(stdout).trim().split('\n')[0] ?? null;
-  } catch {
-    // binary exists but --version failed; still mark available
+  } catch (err) {
+    // The path resolved on disk but spawning the binary failed. If the
+    // OS rejected the spawn outright (ENOENT for a vanished target,
+    // EACCES for a stripped-x bit, ENOTDIR for a broken parent), the
+    // CLI cannot actually be invoked — mark it unavailable so the
+    // Settings UI does not keep advertising a ghost entry after the
+    // user has uninstalled the real binary (issue #658). Typical
+    // shapes this catches:
+    //   - macOS/Linux: `which codex` returns a stale wrapper shim, but
+    //     the underlying `node` / Python interpreter the shim invokes
+    //     is gone, so `execFile` rejects with ENOENT.
+    //   - Windows: a leftover `.CMD` shim still exists on PATH but
+    //     points at a deleted target; spawn fails with ENOENT.
+    //   - Permissions: the binary file is there but no longer
+    //     executable.
+    // Any other failure (the binary spawns but `--version` returns
+    // non-zero, or stderr noise, or a timeout) still falls through to
+    // the previous "available, version unknown" behaviour so adapters
+    // whose `--version` flag is unsupported keep working.
+    const spawnErrorCode = (err as NodeJS.ErrnoException)?.code;
+    if (
+      spawnErrorCode === 'ENOENT'
+      || spawnErrorCode === 'EACCES'
+      || spawnErrorCode === 'ENOTDIR'
+    ) {
+      return {
+        ...stripFns(def),
+        models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
+        available: false,
+        ...installMetaForAgent(def.id),
+      };
+    }
+    // binary exists and spawned but --version failed; still mark available
   }
   // Probe `--help` once per agent and record which flags the installed CLI
   // advertises. Cached on `agentCapabilities` for buildArgs to consult.
