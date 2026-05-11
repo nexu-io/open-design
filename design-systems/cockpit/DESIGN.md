@@ -5,7 +5,7 @@
 
 ---
 
-## Visual Theme & Atmosphere
+## 1. Visual Theme & Atmosphere
 
 A **modern glass cockpit** aesthetic — where every pixel serves situational awareness. Clean data presentation, unambiguous status encoding, and zero decorative noise. The design language says: *"You are in control. Here is everything you need."*
 
@@ -24,7 +24,7 @@ Garmin G3000/G5000 integrated flight decks, Boeing 787 Primary Flight Display, A
 
 ---
 
-## Color Palette
+## 2. Color Palette & Roles
 
 ### Surface Palette
 
@@ -91,7 +91,7 @@ Dark mode is the **native and only mode**. Glass cockpits operate in all lightin
 
 ---
 
-## Typography Rules
+## 3. Typography Rules
 
 ### Font Stacks
 
@@ -125,7 +125,7 @@ Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas
 
 ---
 
-## Component Stylings
+## 4. Component Stylings
 
 ### Primary Flight Display (PFD) Panel
 
@@ -258,7 +258,7 @@ Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas
 
 ---
 
-## Layout Principles
+## 5. Layout Principles
 
 ### Grid System
 
@@ -286,7 +286,7 @@ Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas
 
 ---
 
-## Depth & Elevation
+## 6. Depth & Elevation
 
 Glass cockpits use **flat design with subtle depth cues**:
 
@@ -299,7 +299,7 @@ Glass cockpits use **flat design with subtle depth cues**:
 
 ---
 
-## Do's and Don'ts
+## 7. Do's and Don'ts
 
 ### ✅ Do's
 
@@ -324,7 +324,7 @@ Glass cockpits use **flat design with subtle depth cues**:
 
 ---
 
-## Responsive Behavior
+## 8. Responsive Behavior
 
 - **Viewport-relative scaling** — all panels scale proportionally
 - **Critical readouts** (altitude, speed, heading) remain visible at all viewport sizes
@@ -335,7 +335,7 @@ Glass cockpits use **flat design with subtle depth cues**:
 
 ---
 
-## Agent Prompt Guide
+## 9. Agent Prompt Guide
 
 When generating cockpit-style interfaces, prompt the model to:
 
