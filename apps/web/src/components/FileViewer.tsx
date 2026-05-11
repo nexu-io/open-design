@@ -5587,16 +5587,21 @@ function TextViewer({
     };
   }, [projectId, file.name, file.mtime, reloadKey]);
 
+  const displayText = useMemo(
+    () => (text == null ? null : formatJsonForPreview(file.name, text)),
+    [text, file.name],
+  );
+
   async function copy() {
-    if (text == null) return;
+    if (displayText == null) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(displayText);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
       // best-effort fallback
       const ta = document.createElement('textarea');
-      ta.value = text;
+      ta.value = displayText;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
@@ -5611,7 +5616,7 @@ function TextViewer({
     }
   }
 
-  const lineCount = text ? text.split('\n').length : 0;
+  const lineCount = displayText ? displayText.split('\n').length : 0;
 
   return (
     <div className="viewer text-viewer">
@@ -5648,16 +5653,25 @@ function TextViewer({
         </div>
       </div>
       <div className="viewer-body">
-        {text === null ? (
+        {displayText === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : lineCount > 0 ? (
-          <CodeWithLines text={text} />
+          <CodeWithLines text={displayText} />
         ) : (
-          <pre className="viewer-source">{text}</pre>
+          <pre className="viewer-source">{displayText}</pre>
         )}
       </div>
     </div>
   );
+}
+
+export function formatJsonForPreview(fileName: string, text: string): string {
+  if (!fileName.toLowerCase().endsWith('.json')) return text;
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
 }
 
 function MarkdownViewer({

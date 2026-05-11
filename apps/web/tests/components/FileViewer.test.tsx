@@ -23,6 +23,7 @@ import {
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  formatJsonForPreview,
   parseInspectOverridesFromSource,
   serializeInspectOverrides,
   updateInspectOverride,
@@ -1313,5 +1314,36 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
     // Source count + duration are humanized (3.8s), not raw ms
     expect(markup).toContain('2 sources updated');
     expect(markup).toContain('3.8s');
+  });
+});
+
+describe('formatJsonForPreview', () => {
+  it('pretty-prints minified JSON for .json files with two-space indentation', () => {
+    const minified = '{"a":1,"b":[2,3],"c":{"d":4}}';
+
+    expect(formatJsonForPreview('payload.json', minified)).toBe(
+      '{\n  "a": 1,\n  "b": [\n    2,\n    3\n  ],\n  "c": {\n    "d": 4\n  }\n}',
+    );
+  });
+
+  it('matches by extension case-insensitively', () => {
+    expect(formatJsonForPreview('Payload.JSON', '{"a":1}')).toBe('{\n  "a": 1\n}');
+  });
+
+  it('returns the original text when the file is not .json', () => {
+    const minified = '{"a":1}';
+
+    expect(formatJsonForPreview('notes.txt', minified)).toBe(minified);
+    expect(formatJsonForPreview('config.json5', minified)).toBe(minified);
+  });
+
+  it('falls back to raw text when JSON parsing fails (e.g. comments / trailing commas)', () => {
+    const withComment = '{\n  // inline comment\n  "a": 1,\n}';
+
+    expect(formatJsonForPreview('config.json', withComment)).toBe(withComment);
+  });
+
+  it('preserves empty input without crashing', () => {
+    expect(formatJsonForPreview('empty.json', '')).toBe('');
   });
 });
