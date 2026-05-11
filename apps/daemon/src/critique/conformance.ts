@@ -72,7 +72,22 @@ export type ConformanceDegradedReason =
   | 'incomplete_panel';
 
 export type ConformanceOutcome =
-  | { kind: 'shipped'; round: number; composite: number; events: PanelEvent[] }
+  | {
+      kind: 'shipped';
+      round: number;
+      composite: number;
+      events: PanelEvent[];
+      /**
+       * Artifact bytes the parser handed back via the `onArtifact`
+       * callback for the SHIP event. Callers that want to pin
+       * MIME / byte-length / hash on the nightly cycle read this
+       * directly. Always set on `shipped` because the parser rejects
+       * a missing-artifact SHIP with `MissingArtifactError` upstream
+       * (lefarcen P2 on PR #1317: previously captured-but-never-
+       * returned, masked by a `void shipPayload` lint trick).
+       */
+      artifact: ShipArtifactPayload | null;
+    }
   | { kind: 'degraded'; reason: ConformanceDegradedReason; events: PanelEvent[] }
   | { kind: 'failed'; cause: 'no_ship' | 'unexpected_error'; events: PanelEvent[]; error?: string };
 
@@ -153,6 +168,7 @@ export async function runAdapterConformance(
           round: event.round,
           composite: event.composite,
           events,
+          artifact: shipPayload,
         };
       }
     }
@@ -172,11 +188,6 @@ export async function runAdapterConformance(
       error: err instanceof Error ? err.message : String(err),
     };
   }
-  // Silence the unused-locals lint: shipPayload is filled by the
-  // onArtifact callback but only the parser-yielded SHIP event drives
-  // routing here, so the body is informational for callers that need
-  // it later (e.g. a follow-up that asserts artifact bytes round-trip).
-  void shipPayload;
 
   return { kind: 'failed', cause: 'no_ship', events };
 }
