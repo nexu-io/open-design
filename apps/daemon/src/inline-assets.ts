@@ -225,10 +225,28 @@ export async function inlineRelativeAssets(
         runningBytes -= handle.size;
         return null;
       }
-      if (Buffer.byteLength(content, 'utf8') > maxAssetBytes) {
+      const actualBytes = Buffer.byteLength(content, 'utf8');
+      if (actualBytes > maxAssetBytes) {
         // Defensive: handle.size may have been stale or the reader
         // ignored its own promise. Refund and drop the inlining.
         runningBytes -= handle.size;
+        return null;
+      }
+      // PR #1312 round-5 (lefarcen P3 confirmed path-a): reconcile the
+      // pre-read reservation with the actual content byte length. A
+      // stat-lying reader (stale stat, UTF-8 decode expansion, sparse
+      // file, deliberate under-report) could otherwise let many strings
+      // materialize before the concat-time guard catches it. The per-
+      // asset check above protects against single-asset blow-up; this
+      // adjustment + re-check guards the running total.
+      runningBytes += actualBytes - handle.size;
+      if (runningBytes > maxTotalBytes) {
+        // Drop this asset's inlining (tag stays as URL ref), set the
+        // abort flag so subsequent workers skip their read(), let
+        // Promise.all settle, then throw 'total' below. No throw-
+        // before-settle race — matches the round-2/3/4 graceful-
+        // fallback pattern.
+        totalAborted = true;
         return null;
       }
       return p.build(content);
