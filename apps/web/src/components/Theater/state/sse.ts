@@ -1,5 +1,6 @@
 import {
   CRITIQUE_SSE_EVENT_NAMES,
+  PANELIST_ROLES,
   isPanelEvent,
   type CritiqueSseEvent,
   type CritiqueSseEventName,
@@ -7,6 +8,39 @@ import {
 } from '@open-design/contracts/critique';
 
 import type { CritiqueAction } from './reducer';
+
+// Runtime literal sets for the union types `contracts` only exports as
+// TypeScript types (`ShipStatus`, `DegradedReason`, `FailedCause`,
+// `ParserWarningKind`). The variant guard below uses these to reject
+// frames whose enum-shaped field is unknown, e.g. a malformed or
+// compromised frame with `role: "__proto__"` or `status: "wat"`. The
+// arrays must stay in sync with the type unions in
+// `packages/contracts/src/critique.ts`. The locale alignment test plus
+// the surface coverage walker in apps/web/tests/components/Theater/
+// catch drift between the two on the next CI run.
+const SHIP_STATUSES = new Set<string>(['shipped', 'below_threshold', 'timed_out', 'interrupted']);
+const DEGRADED_REASONS = new Set<string>([
+  'malformed_block',
+  'oversize_block',
+  'adapter_unsupported',
+  'protocol_version_mismatch',
+  'missing_artifact',
+]);
+const FAILED_CAUSES = new Set<string>([
+  'cli_exit_nonzero',
+  'per_round_timeout',
+  'total_timeout',
+  'orchestrator_internal',
+]);
+const PARSER_WARNING_KINDS = new Set<string>([
+  'weak_debate',
+  'unknown_role',
+  'score_clamped',
+  'composite_mismatch',
+  'duplicate_ship',
+]);
+const ROUND_DECISIONS = new Set<string>(['continue', 'ship']);
+const PANELIST_ROLE_SET = new Set<string>(PANELIST_ROLES);
 
 export interface CritiqueEventsConnection {
   close(): void;
@@ -56,56 +90,63 @@ export function critiqueEventsUrl(projectId: string): string {
  *  `{ type: 'ship', runId: 'r' }` would slip through to the reducer with every
  *  other field undefined and crash downstream code that calls
  *  `final.composite.toFixed(1)`. This second-pass filter enforces the shape
- *  of each variant before the action is dispatched (lefarcen + Siri-Ray +
- *  codex P2 on PR #1314). */
-function hasValidVariantShape(event: PanelEvent): boolean {
+ *  AND the enum membership of each variant before the action is dispatched
+ *  (lefarcen + Siri-Ray + codex P2 on PR #1314, plus lefarcen P2 on PR
+ *  #1316 re: a malformed `role: "__proto__"` frame walking past the
+ *  string-only check and indexing Object.prototype as a panelist view).
+ *  Exported so the replay-transcript parser in `useCritiqueReplay`
+ *  applies the same rejection rules as the live SSE path. */
+export function hasValidVariantShape(event: PanelEvent): boolean {
   switch (event.type) {
     case 'run_started':
       return typeof event.protocolVersion === 'number'
         && Array.isArray(event.cast) && event.cast.length > 0
-        && event.cast.every((r) => typeof r === 'string')
+        && event.cast.every((r) => typeof r === 'string' && PANELIST_ROLE_SET.has(r))
         && typeof event.maxRounds === 'number'
         && typeof event.threshold === 'number'
         && typeof event.scale === 'number';
     case 'panelist_open':
-      return typeof event.round === 'number' && typeof event.role === 'string';
+      return typeof event.round === 'number'
+        && typeof event.role === 'string' && PANELIST_ROLE_SET.has(event.role);
     case 'panelist_dim':
       return typeof event.round === 'number'
-        && typeof event.role === 'string'
+        && typeof event.role === 'string' && PANELIST_ROLE_SET.has(event.role)
         && typeof event.dimName === 'string'
         && typeof event.dimScore === 'number'
         && typeof event.dimNote === 'string';
     case 'panelist_must_fix':
       return typeof event.round === 'number'
-        && typeof event.role === 'string'
+        && typeof event.role === 'string' && PANELIST_ROLE_SET.has(event.role)
         && typeof event.text === 'string';
     case 'panelist_close':
       return typeof event.round === 'number'
-        && typeof event.role === 'string'
+        && typeof event.role === 'string' && PANELIST_ROLE_SET.has(event.role)
         && typeof event.score === 'number';
     case 'round_end':
       return typeof event.round === 'number'
         && typeof event.composite === 'number'
         && typeof event.mustFix === 'number'
-        && (event.decision === 'continue' || event.decision === 'ship')
+        && typeof event.decision === 'string' && ROUND_DECISIONS.has(event.decision)
         && typeof event.reason === 'string';
     case 'ship':
       return typeof event.round === 'number'
         && typeof event.composite === 'number'
-        && typeof event.status === 'string'
+        && typeof event.status === 'string' && SHIP_STATUSES.has(event.status)
         && event.artifactRef !== null
         && typeof event.artifactRef === 'object'
         && typeof (event.artifactRef as { projectId?: unknown }).projectId === 'string'
         && typeof (event.artifactRef as { artifactId?: unknown }).artifactId === 'string'
         && typeof event.summary === 'string';
     case 'degraded':
-      return typeof event.reason === 'string' && typeof event.adapter === 'string';
+      return typeof event.reason === 'string' && DEGRADED_REASONS.has(event.reason)
+        && typeof event.adapter === 'string';
     case 'interrupted':
       return typeof event.bestRound === 'number' && typeof event.composite === 'number';
     case 'failed':
-      return typeof event.cause === 'string';
+      return typeof event.cause === 'string' && FAILED_CAUSES.has(event.cause);
     case 'parser_warning':
-      return typeof event.kind === 'string' && typeof event.position === 'number';
+      return typeof event.kind === 'string' && PARSER_WARNING_KINDS.has(event.kind)
+        && typeof event.position === 'number';
   }
 }
 

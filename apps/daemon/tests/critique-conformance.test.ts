@@ -118,4 +118,120 @@ describe('adapter conformance harness (Phase 10)', () => {
     expect(ship.artifactRef.projectId).toBe('proj-conformance');
     expect(ship.artifactRef.artifactId).toBe('artifact-conformance');
   });
+
+  it('classifies an oversize block as degraded oversize_block (lefarcen P2)', async () => {
+    // The synthetic-good transcript is fine under the default 256 KB
+    // block budget. Replay it through the harness with a tiny budget so
+    // the parser throws OversizeBlockError on the first ARTIFACT body
+    // and the harness has to surface `degraded: oversize_block`.
+    const outcome = await runAdapterConformance({
+      adapterId: 'synthetic-oversize',
+      runId: 'run-oversize',
+      source: syntheticGoodStream(),
+      parserMaxBlockBytes: 256,
+    });
+    expect(outcome.kind).toBe('degraded');
+    if (outcome.kind !== 'degraded') return;
+    expect(outcome.reason).toBe('oversize_block');
+    expect(isDegraded('synthetic-oversize')).toBe(true);
+  });
+
+  it('classifies an adapter that throws mid-stream as failed unexpected_error (lefarcen P2)', async () => {
+    class AdapterBoom extends Error {
+      constructor() {
+        super('adapter blew up');
+        this.name = 'AdapterBoom';
+      }
+    }
+    async function* throwing(): AsyncIterable<string> {
+      yield '<CRITIQUE_RUN version="1" runId="run-boom" projectId="p" artifactId="a">\n';
+      yield '<ROUND n="1">\n';
+      throw new AdapterBoom();
+    }
+    const outcome = await runAdapterConformance({
+      adapterId: 'synthetic-throwing',
+      runId: 'run-boom',
+      source: throwing(),
+    });
+    expect(outcome.kind).toBe('failed');
+    if (outcome.kind !== 'failed') return;
+    expect(outcome.cause).toBe('unexpected_error');
+    expect(outcome.error).toContain('adapter blew up');
+    // The adapter is NOT marked degraded here: an unexpected throw is a
+    // failure to evaluate, not evidence of a malformed stream. A real
+    // policy could choose to mark it after N consecutive throws; the
+    // harness leaves that decision to the caller.
+    expect(isDegraded('synthetic-throwing')).toBe(false);
+  });
+
+  it('classifies a clean SHIP that arrived alongside parser warnings as degraded parser_warning (lefarcen P2)', async () => {
+    // A panelist score outside [0, scale] makes the parser yield a
+    // `parser_warning` with kind=`score_clamped` BEFORE the panelist
+    // closes. The harness must promote the run to degraded even though
+    // a syntactically valid SHIP arrives later.
+    async function* withClampedScore(): AsyncIterable<string> {
+      yield '<CRITIQUE_RUN version="1" maxRounds="1" threshold="0.1" scale="10">\n';
+      yield '  <ROUND n="1">\n';
+      // designer must include an ARTIFACT in round 1 (parser invariant).
+      yield '    <PANELIST role="designer">\n';
+      yield '      <ARTIFACT mime="text/html"><![CDATA[<p>x</p>]]></ARTIFACT>\n';
+      yield '    </PANELIST>\n';
+      // Out-of-range score on `critic` triggers score_clamped warning.
+      yield '    <PANELIST role="critic" score="99"><DIM name="x" score="6">n</DIM></PANELIST>\n';
+      yield '    <PANELIST role="brand" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
+      yield '    <PANELIST role="a11y" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
+      yield '    <PANELIST role="copy" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
+      yield '    <ROUND_END n="1" composite="6.0" must_fix="0" decision="ship">\n';
+      yield '      <REASON>ok</REASON>\n';
+      yield '    </ROUND_END>\n';
+      yield '  </ROUND>\n';
+      yield '  <SHIP round="1" composite="6.0" status="shipped">\n';
+      yield '    <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>\n';
+      yield '    <SUMMARY>ok</SUMMARY>\n';
+      yield '  </SHIP>\n';
+      yield '</CRITIQUE_RUN>\n';
+    }
+    const outcome = await runAdapterConformance({
+      adapterId: 'synthetic-warned',
+      runId: 'run-warned',
+      source: withClampedScore(),
+    });
+    expect(outcome.kind).toBe('degraded');
+    if (outcome.kind !== 'degraded') return;
+    expect(outcome.reason).toBe('parser_warning');
+    expect(outcome.events.some((e) => e.type === 'parser_warning')).toBe(true);
+    expect(isDegraded('synthetic-warned')).toBe(true);
+  });
+
+  it('classifies a SHIP that arrived before every panelist closed as degraded incomplete_panel (codex P2)', async () => {
+    // run_started declares the full 5-role cast, but only `designer`
+    // and `critic` ever emit panelist_close. The parser does not reject
+    // this on its own; the harness is the gate that catches it.
+    async function* incomplete(): AsyncIterable<string> {
+      yield '<CRITIQUE_RUN version="1" maxRounds="1" threshold="0.1" scale="10">\n';
+      yield '  <ROUND n="1">\n';
+      yield '    <PANELIST role="designer">\n';
+      yield '      <ARTIFACT mime="text/html"><![CDATA[<p>x</p>]]></ARTIFACT>\n';
+      yield '    </PANELIST>\n';
+      yield '    <PANELIST role="critic" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
+      yield '    <ROUND_END n="1" composite="6.0" must_fix="0" decision="ship">\n';
+      yield '      <REASON>ok</REASON>\n';
+      yield '    </ROUND_END>\n';
+      yield '  </ROUND>\n';
+      yield '  <SHIP round="1" composite="6.0" status="shipped">\n';
+      yield '    <ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT>\n';
+      yield '    <SUMMARY>ok</SUMMARY>\n';
+      yield '  </SHIP>\n';
+      yield '</CRITIQUE_RUN>\n';
+    }
+    const outcome = await runAdapterConformance({
+      adapterId: 'synthetic-incomplete',
+      runId: 'run-incomplete',
+      source: incomplete(),
+    });
+    expect(outcome.kind).toBe('degraded');
+    if (outcome.kind !== 'degraded') return;
+    expect(outcome.reason).toBe('incomplete_panel');
+    expect(isDegraded('synthetic-incomplete')).toBe(true);
+  });
 });

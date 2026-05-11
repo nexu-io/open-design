@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CritiqueTheaterMount } from '../../../src/components/Theater/CritiqueTheaterMount';
@@ -66,9 +66,16 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     expect(screen.getByRole('region').getAttribute('data-phase')).toBe('running');
   });
 
-  it('flips the kill button to pending and synthesizes interrupted on click', () => {
+  it('flips the kill button to pending and synthesizes interrupted on click', async () => {
     const { factory, handles } = makeFactory();
-    render(<CritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />);
+    render(
+      <CritiqueTheaterMount
+        projectId="p-1"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={vi.fn(async () => new Response(null, { status: 204 }))}
+      />,
+    );
     act(() => {
       handles[0]!.send({
         type: 'run_started',
@@ -92,9 +99,12 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
 
-    // Phase flips to interrupted -> collapsed surface mounts in place
-    // of the live stage.
-    expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    // Daemon ack lands asynchronously: the dispatch waits for the
+    // POST response before terminalizing (Siri-Ray + lefarcen P1 on
+    // PR #1316). Wait for the collapsed surface to appear.
+    await waitFor(() => {
+      expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    });
     expect(screen.getByText('Interrupted')).toBeTruthy();
   });
 
@@ -151,10 +161,13 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     expect(fetchCalls[0]!.init.method).toBe('POST');
   });
 
-  it('swallows a rejected interrupt fetch and still moves the UI to interrupted', () => {
-    // If the daemon endpoint has not landed yet (Phase 15), the
-    // user's click should still flip the UI; the warning surfaces
-    // on the dev console rather than tearing the React tree.
+  it('leaves the UI in running phase when the daemon rejects the interrupt (Siri-Ray P1 on PR #1316)', async () => {
+    // Previously a rejected fetch (network error OR 404 / 409 from
+    // the daemon) still optimistically terminalized the run, which
+    // meant a real later SSE event for the same run was ignored by
+    // the sticky `interrupted` phase. The new flow only terminalizes
+    // on a successful daemon ack; rejection clears interruptPending
+    // so the user can retry and the live run keeps emitting SSE.
     const { factory, handles } = makeFactory();
     const fetchInterrupt = vi.fn(async () => {
       throw new Error('boom');
@@ -179,12 +192,53 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
       });
     });
     fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
-    // Optimistic dispatch already fired so the collapsed surface
-    // mounts in place of the live stage.
-    expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    // Wait for the rejected promise to resolve through the catch
+    // handler. The button should clear back to enabled, and the
+    // theater should NOT have terminalized.
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: 'Interrupt' }) as HTMLButtonElement;
+      expect(btn.disabled).toBe(false);
+    });
+    expect(screen.getByRole('region').getAttribute('data-phase')).toBe('running');
   });
 
-  it('resets interruptPending when a fresh run starts after an interrupt (codex P2 on PR #1315)', () => {
+  it('leaves the UI in running phase when the daemon returns a non-2xx response (Siri-Ray P1 on PR #1316)', async () => {
+    // Same as the rejection case but for an HTTP failure: fetch
+    // resolves with `ok: false` instead of throwing, and the old
+    // flow swallowed that too. The new flow treats every non-2xx
+    // as "do not terminalize".
+    const { factory, handles } = makeFactory();
+    const fetchInterrupt = vi.fn(
+      async () => new Response(null, { status: 404 }),
+    );
+    render(
+      <CritiqueTheaterMount
+        projectId="proj-1"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={fetchInterrupt}
+      />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-abc',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: 'Interrupt' }) as HTMLButtonElement;
+      expect(btn.disabled).toBe(false);
+    });
+    expect(screen.getByRole('region').getAttribute('data-phase')).toBe('running');
+  });
+
+  it('resets interruptPending when a fresh run starts after an interrupt (codex P2 on PR #1315)', async () => {
     // Previously `interruptPending` stayed true forever once clicked,
     // so a second run on the same mount would render the kill
     // button stuck in the "Interrupting…" state.
@@ -209,7 +263,10 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
       });
     });
     fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
-    expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    // Daemon ack is async; wait for the collapsed surface to mount.
+    await waitFor(() => {
+      expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    });
 
     // Daemon emits a fresh run_started for the next rerun. The
     // collapsed badge should give way to a live stage with a fresh

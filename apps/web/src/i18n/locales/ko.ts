@@ -1011,6 +1011,7 @@ export const ko: Dict = {
   'critiqueTheater.replaySpeed': '리플레이 속도',
   'critiqueTheater.readOnly': '읽기 전용',
   'critiqueTheater.shippedSummary': '{round} 라운드에서 배포 · 종합 {composite}',
+  'critiqueTheater.interruptedSummary': '{round} 라운드에서 중단 · 최고 종합 {composite}',
   'critiqueTheater.shippedBadge': '배포됨',
   'critiqueTheater.belowThresholdBadge': '임계값 미달',
   'critiqueTheater.timedOutBadge': '시간 초과',

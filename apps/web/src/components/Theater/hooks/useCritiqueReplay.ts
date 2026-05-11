@@ -9,6 +9,7 @@ import {
   type CritiqueAction,
   type CritiqueState,
 } from '../state/reducer';
+import { hasValidVariantShape } from '../state/sse';
 
 export type ReplaySpeed = 'paused' | 'instant' | 'live' | { intervalMs: number };
 
@@ -240,7 +241,13 @@ function parseTranscript(raw: string): PanelEvent[] {
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed);
-      if (isPanelEvent(parsed)) out.push(parsed);
+      // Match the live SSE path: pass both the shallow contracts predicate
+      // (known `type`, non-empty `runId`) and the variant-level guard
+      // (required fields, enum membership for role / status / cause /
+      // reason / kind). A corrupt transcript line like `{type:'ship',
+      // runId:'r'}` would otherwise be dispatched and crash the reducer
+      // on `composite.toFixed()` (lefarcen + codex P2 on PR #1316).
+      if (isPanelEvent(parsed) && hasValidVariantShape(parsed)) out.push(parsed);
     } catch {
       // Tolerate stray lines; the orchestrator writes one event per line so
       // a bad line is recoverable. Production loggers should record the
