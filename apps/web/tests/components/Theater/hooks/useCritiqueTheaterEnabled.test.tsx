@@ -106,4 +106,98 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     });
     expect(sink.enabled).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Failure-mode coverage (lefarcen P2 on PR #1320). The hook + setter both
+  // intentionally swallow these errors in production so a private-mode browser
+  // or a stripped CustomEvent shim does not crash the React tree. The tests
+  // below pin that behavior so the swallow is not silently traded for a throw
+  // in a future refactor.
+  // ---------------------------------------------------------------------------
+
+  it('returns false and does not throw when stored JSON is a non-object value (array)', () => {
+    // `JSON.parse('[1,2,3]')` is a valid array, not an object. The hook must
+    // not treat that as a config blob; the `critiqueTheaterEnabled` lookup
+    // would fall through to `undefined` and the function should return false.
+    window.localStorage.setItem('open-design:config', '[1,2,3]');
+    const sink: { enabled?: boolean } = {};
+    render(<Probe sink={sink} />);
+    expect(sink.enabled).toBe(false);
+  });
+
+  it('returns false and does not throw when stored JSON parses to null', () => {
+    // `null` is JSON-valid and `typeof null === 'object'` in JS, so the
+    // guard has to check for null explicitly. If it did not, `null.critique...`
+    // would throw on read.
+    window.localStorage.setItem('open-design:config', 'null');
+    const sink: { enabled?: boolean } = {};
+    render(<Probe sink={sink} />);
+    expect(sink.enabled).toBe(false);
+  });
+
+  it('returns false when localStorage.getItem throws (private mode / disabled storage)', () => {
+    const original = window.localStorage.getItem;
+    const restore = () => {
+      Object.defineProperty(window.localStorage, 'getItem', {
+        configurable: true,
+        value: original,
+      });
+    };
+    try {
+      Object.defineProperty(window.localStorage, 'getItem', {
+        configurable: true,
+        value: () => {
+          throw new DOMException(
+            'storage disabled (synthetic)',
+            'SecurityError',
+          );
+        },
+      });
+      const sink: { enabled?: boolean } = {};
+      render(<Probe sink={sink} />);
+      // Hook swallows the throw; UI sees `false` and the rest of the app
+      // keeps running.
+      expect(sink.enabled).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still emits the same-tab CustomEvent when localStorage.setItem throws (quota / disabled storage)', () => {
+    // setCritiqueTheaterEnabled writes localStorage first and then dispatches
+    // the same-tab event. If the write throws (quota exceeded, private mode),
+    // the production code falls through to the dispatch so every mounted
+    // hook in the session still updates even though the value cannot
+    // persist across reloads. Verify the dispatch still fires.
+    const original = window.localStorage.setItem;
+    const restore = () => {
+      Object.defineProperty(window.localStorage, 'setItem', {
+        configurable: true,
+        value: original,
+      });
+    };
+    try {
+      Object.defineProperty(window.localStorage, 'setItem', {
+        configurable: true,
+        value: () => {
+          throw new DOMException(
+            'quota exceeded (synthetic)',
+            'QuotaExceededError',
+          );
+        },
+      });
+
+      const sink: { enabled?: boolean } = {};
+      render(<Probe sink={sink} />);
+      expect(sink.enabled).toBe(false);
+      act(() => {
+        setCritiqueTheaterEnabled(true);
+      });
+      // The dispatch path is exercised even though localStorage rejected
+      // the write: every mounted hook updates from the in-session event.
+      expect(sink.enabled).toBe(true);
+    } finally {
+      restore();
+    }
+  });
 });
