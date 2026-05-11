@@ -381,11 +381,29 @@ function buildDesignManifest(entries, projectLabel) {
       scriptsAndComponents: jsFiles,
       assets: assetFiles,
     },
-    screens: screenFiles.map((file) => ({
-      file,
-      role: /landing|marketing|home|index/i.test(file) ? 'primary-or-landing' : 'screen',
-      implementationNote: 'Preserve visual hierarchy, responsive behavior, and interactive states from this screen.',
-    })),
+    screens: screenFiles.map((file) => {
+      const isIndex = /(^|\/)index\.html?$/i.test(file);
+      const isLanding = /(^|\/)(landing|marketing|home)\.html?$/i.test(file) || /landing|marketing/i.test(file);
+      const isOsWidget = /widget|live-activity|lock-screen|home-screen/i.test(file);
+      const isApp = /app|dashboard|workspace|generator|translator|editor|screen/i.test(file);
+      return {
+        file,
+        role: isIndex && screenFiles.length > 1 ? 'launcher-overview' : isLanding ? 'landing-page' : isOsWidget ? 'os-widget-surface' : isApp ? 'product-screen' : 'screen',
+        implementationNote: isIndex && screenFiles.length > 1
+          ? 'Use this as the navigation/overview entry only; implement each linked screen file as its own route/surface.'
+          : 'Preserve visual hierarchy, responsive behavior, and interactive states from this screen.',
+      };
+    }),
+    screenFilePolicy: {
+      mode: 'screen-file-first',
+      entryFileRole: screenFiles.length > 1 && /(^|\/)index\.html?$/i.test(entryFile) ? 'launcher-overview' : 'primary-screen',
+      rules: [
+        'Each distinct user-facing screen or surface must be delivered and implemented as its own file/route.',
+        'If a landing page is present or requested, keep it in landing.html and do not merge it into the product app screen.',
+        'When multiple HTML screens exist, index.html is a launcher/overview only; it must not be treated as the combined final UI.',
+        'Keep product app screens, landing pages, platform screens, and OS widget surfaces separate in production code.',
+      ],
+    },
     appModules: [
       'Identify domain-specific in-app modules from the exported UI; do not reduce them to generic cards.',
       'For each major module, implement purpose, default/loading/empty/error/success states, and responsive behavior.',
@@ -486,7 +504,9 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
-- A self-contained \`${entryFile}\` is acceptable only when its CSS and JS are structured enough to extract tokens, components, states, and behavior.
+- Screen-file-first: when multiple user-facing surfaces exist, implement each HTML screen as its own route/file. Treat \`index.html\` as a launcher/overview when the manifest marks it that way, not as a combined final UI.
+- If \`landing.html\`, app screens, platform screens, or OS widget files exist, preserve those boundaries in the target app instead of merging them into one page.
+- A single self-contained \`${entryFile}\` is acceptable only when the export truly contains one user-facing screen and its CSS/JS are structured enough to extract tokens, components, states, and behavior.
 - If separate \`css/\` or \`js/\` files exist, treat them as source of truth for token/component/interactions before porting to React, Vue, SwiftUI, Compose, or another target stack.
 - In-app modules/components are product UI blocks inside the app. OS widgets are home-screen/lock-screen/quick-access surfaces outside the app. Do not merge those concepts.
 
@@ -496,13 +516,14 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - ${accentLikelyBrandLed ? 'A stylesheet or design/token file was detected; inspect it for canonical color variables before choosing framework theme tokens.' : 'No obvious token stylesheet was detected; sample colors from the entry file and convert them into named tokens before coding.'}
 
 ## Implementation sequence for AI coding tools
-1. Open \`${entryFile}\` and \`${DESIGN_MANIFEST_FILENAME}\`; identify screens/sections/components before coding.
-2. Extract a token table from CSS/root styles and inline styles before building framework components.
-3. Build product screens and domain-specific in-app modules from largest layout regions down to controls; avoid starting with isolated atoms that lose spatial intent.
-4. Port responsive behavior across the modern viewport matrix and test each semantic breakpoint before cleanup.
-5. Port interactions and states, then replace static placeholders only with real app data or functional equivalents.
-6. Keep optional landing page and OS widget surfaces as separate surfaces if present.
-7. Compare final screenshots against the export at 360×800, 390×844, 430×932, 820×1180, 1024×768, 1366×768, 1440×900, and 1920×1080 before declaring done.
+1. Open \`${entryFile}\` and \`${DESIGN_MANIFEST_FILENAME}\`; identify every screen file, launcher/overview file, app module, and interaction before coding.
+2. If multiple HTML screens exist, map them to separate routes/surfaces first; do not merge \`landing.html\`, product app screens, platform screens, or OS widgets into one route.
+3. Extract a token table from CSS/root styles and inline styles before building framework components.
+4. Build product screens and domain-specific in-app modules from largest layout regions down to controls; avoid starting with isolated atoms that lose spatial intent.
+5. Port responsive behavior across the modern viewport matrix and test each semantic breakpoint before cleanup.
+6. Port interactions and states, then replace static placeholders only with real app data or functional equivalents.
+7. Keep optional landing page and OS widget surfaces as separate surfaces if present.
+8. Compare final screenshots against the export at 360×800, 390×844, 430×932, 820×1180, 1024×768, 1366×768, 1440×900, and 1920×1080 before declaring done.
 
 ## Entry points
 ${list(htmlFiles)}
@@ -518,14 +539,15 @@ ${list(assetFiles)}
 
 ## Coding checklist for AI tools
 1. Inspect \`${entryFile}\` and \`${DESIGN_MANIFEST_FILENAME}\` first and identify reusable components before coding.
-2. Extract design tokens into the target stack: colors, type scale, spacing, radius, shadows, and motion.
-3. Implement layout with real 2025–2026 responsive breakpoints, fluid type/spacing, and container-query-aware component behavior; test with no horizontal overflow.
-4. Preserve interactive controls, hover/focus/pressed states, form behavior, validation, and copy actions where present.
-5. Implement domain-specific in-app modules with real states; do not flatten them into generic cards.
-6. Keep landing page, product screens, and OS widget/quick-access surfaces separate when present.
-7. Confirm the production result visually matches the exported design before refactoring internals.
-8. Reject implementation shortcuts that flatten the design into generic cards, generic gradients, placeholder stats, or framework-default typography.
-9. If a detail is ambiguous, keep the exported HTML/CSS/JS behavior rather than inventing a new pattern.
+2. Implement each user-facing screen file as its own route/surface; keep launcher, landing, app, platform, and OS widget files separate.
+3. Extract design tokens into the target stack: colors, type scale, spacing, radius, shadows, and motion.
+4. Implement layout with real 2025–2026 responsive breakpoints, fluid type/spacing, and container-query-aware component behavior; test with no horizontal overflow.
+5. Preserve interactive controls, hover/focus/pressed states, form behavior, validation, and copy actions where present.
+6. Implement domain-specific in-app modules with real states; do not flatten them into generic cards.
+7. Keep landing page, product screens, and OS widget/quick-access surfaces separate when present.
+8. Confirm the production result visually matches the exported design before refactoring internals.
+9. Reject implementation shortcuts that flatten the design into generic cards, generic gradients, placeholder stats, or framework-default typography.
+10. If a detail is ambiguous, keep the exported HTML/CSS/JS behavior rather than inventing a new pattern.
 `;
 }
 

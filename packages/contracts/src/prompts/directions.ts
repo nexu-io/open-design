@@ -79,7 +79,7 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
     id: 'modern-minimal',
     label: 'Modern minimal — Linear / Vercel',
     mood:
-      'Quiet, precise, software-native. System fonts, near-greyscale palette, a single saturated accent. The chrome disappears so content is the only thing that registers.',
+      'Quiet, precise, software-native. System fonts, crisp neutral foundations, and a small but visible product palette (primary + secondary + status/accent) so the interface feels shipped rather than greyscale. The chrome stays restrained while interaction states, illustrations, charts, and product moments carry color.',
     references: ['Linear', 'Vercel', 'Notion 2024', 'Stripe docs'],
     displayFont:
       "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
@@ -97,15 +97,15 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
       'tight letter-spacing on display sizes (-0.02em)',
       'hairline borders only, no shadows except dropdowns/modals',
       'mono numerics with `font-variant-numeric: tabular-nums`',
-      'sticky frosted nav, content-led layouts (no hero illustrations)',
-      'one accent: links + primary CTA, nothing else',
+      'sticky frosted nav, content-led layouts with one product illustration, device mockup, or data visualization when it clarifies the product',
+      'controlled color system: primary action color + one secondary signal + status colors; avoid monochrome/unstyled outputs, but never flood every card with gradients',
     ],
   },
   {
     id: 'human-approachable',
     label: 'Human / approachable — Airbnb / Duolingo systems',
     mood:
-      'Friendly and tactile without the generic cozy canvas. Uses a clean neutral background, product-led accent color, generous radii, and clear hierarchy. Good for consumer tools, marketplaces, wellness, education, and indie SaaS when the brand has not supplied a palette.',
+      'Friendly and tactile without the generic cozy canvas. Uses a clean neutral background, product-led color system, generous radii, and clear hierarchy. Good for consumer tools, marketplaces, wellness, education, translation, AI assistants, and indie SaaS when the brand has not supplied a palette.',
     references: ['Airbnb', 'Duolingo product surfaces', 'Miro', 'Mercury'],
     displayFont:
       "'Söhne', 'Avenir Next', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
@@ -122,8 +122,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
     posture: [
       'sans display with strong weight contrast, system body for readability',
       'comfortable radii (12–18px) paired with crisp grid alignment',
-      'single accent used for primary CTA + one product signal only',
-      'subtle elevation only on interactive cards, never full-page color washes',
+      'primary action color plus a secondary/domain accent and clear status colors; use color to separate panels, states, and product moments',
+      'subtle elevation only on interactive cards; tasteful gradients/glows are allowed for hero/device/product moments, never as a full-page beige/pastel wash',
       'avoid generic pastel/beige gradients; use real product screenshots, data, or labelled placeholders',
     ],
   },

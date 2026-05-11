@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Responsive design handoff improvements: tablet/mobile preview auto-fit, 2025–2026 responsive viewport matrix, landing page and OS widgets metadata chips, stricter cross-platform file output contracts, and DESIGN-HANDOFF/DESIGN-MANIFEST exports for coding-tool implementation.
+- Screen-file-first design handoff policy: landing pages, app/product screens, platform surfaces, and OS widget surfaces are exported as distinct HTML files with matching handoff/manifest guidance instead of being merged into one long artifact.
 
 ## [0.6.0] - 2026-05-09
 
