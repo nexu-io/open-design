@@ -101,9 +101,31 @@ export async function inlineRelativeAssets(
   return parts.join('');
 }
 
-function buildInlineStyleBlock(_tag: string, href: string, css: string): string {
+// Attrs that affect <style> semantics and must be carried across from
+// the source <link rel=stylesheet> so the inlined output matches the
+// behavior of the original URL-loaded stylesheet:
+//   - media        — media query (e.g. `media="print"` for print-only)
+//   - title        — alternate stylesheet sets
+//   - disabled     — boolean: initial disabled state
+//   - nonce        — CSP nonce passthrough
+// All four are valid on both <link rel=stylesheet> and <style>. Other
+// <link> attrs (rel, href, type, crossorigin, integrity, referrerpolicy)
+// don't apply to <style> and are intentionally dropped.
+const STYLE_PRESERVED_LINK_ATTRS = ['media', 'title', 'nonce'] as const;
+const STYLE_PRESERVED_BOOLEAN_ATTRS = ['disabled'] as const;
+
+function buildInlineStyleBlock(tag: string, href: string, css: string): string {
+  const carried: string[] = [];
+  for (const name of STYLE_PRESERVED_LINK_ATTRS) {
+    const value = readHtmlAttr(tag, name);
+    if (value != null) carried.push(`${name}="${escapeHtmlAttr(value)}"`);
+  }
+  for (const name of STYLE_PRESERVED_BOOLEAN_ATTRS) {
+    if (hasBooleanHtmlAttr(tag, name)) carried.push(name);
+  }
+  const attrString = carried.length === 0 ? '' : ` ${carried.join(' ')}`;
   return (
-    `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
+    `<style data-od-inline-asset="${escapeHtmlAttr(href)}"${attrString}>\n` +
     `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`
   );
 }
@@ -139,6 +161,14 @@ export function resolveProjectRelativePath(
 export function readHtmlAttr(tag: string, name: string): string | null {
   const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
   return match?.[2] ?? null;
+}
+
+// HTML boolean attribute presence test — matches `<tag … name>` or
+// `<tag … name=""…>` without requiring a value, but does NOT match a
+// substring inside another attribute's value (e.g. `data-foo="disabled"`
+// must NOT count as `disabled` being set).
+export function hasBooleanHtmlAttr(tag: string, name: string): boolean {
+  return new RegExp(`\\s${name}(?=\\s|=|/?>)`, 'i').test(tag);
 }
 
 export function escapeHtmlAttr(value: string): string {
