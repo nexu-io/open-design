@@ -250,20 +250,28 @@ test('home design card deletion supports cancel and confirm flows', async ({ pag
   const designCard = homeDesignCard(page, projectName);
   await expect(designCard).toBeVisible();
 
-  page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain(projectName);
-    await dialog.dismiss();
-  });
+  // Project delete now surfaces an in-app React confirm dialog instead
+  // of the native `window.confirm(...)` (the old `page.once('dialog')`
+  // handler will never fire for the React modal). Drive the new dialog
+  // by its alertdialog role and the cancel/confirm testids.
+
+  // Cancel flow: open the dialog, cancel, card remains.
   await designCard.hover();
   await designCard.getByRole('button', { name: new RegExp(`delete project ${escapeRegExp(projectName)}`, 'i') }).click();
+  const cancelFlowDialog = page.getByRole('alertdialog');
+  await expect(cancelFlowDialog).toBeVisible();
+  await expect(cancelFlowDialog).toContainText(projectName);
+  await page.getByTestId('confirm-dialog-cancel').click();
+  await expect(cancelFlowDialog).toHaveCount(0);
   await expect(designCard).toBeVisible();
 
-  page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain(projectName);
-    await dialog.accept();
-  });
+  // Confirm flow: open the dialog, confirm, card removed.
   await designCard.hover();
   await designCard.getByRole('button', { name: new RegExp(`delete project ${escapeRegExp(projectName)}`, 'i') }).click();
+  const confirmFlowDialog = page.getByRole('alertdialog');
+  await expect(confirmFlowDialog).toBeVisible();
+  await expect(confirmFlowDialog).toContainText(projectName);
+  await page.getByTestId('confirm-dialog-confirm').click();
   await expect(homeDesignCard(page, projectName)).toHaveCount(0);
 
   const response = await page.request.get(`/api/projects/${projectId}`);

@@ -34,6 +34,7 @@ export function ConfirmDialog({
 }: Props): JSX.Element | null {
   const titleId = useId();
   const messageId = useId();
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   // Stash the latest cancel handler in a ref so the open-effect below can
@@ -54,6 +55,25 @@ export function ConfirmDialog({
       if (event.key === 'Escape') {
         event.stopPropagation();
         onCancelRef.current();
+        return;
+      }
+      if (event.key === 'Tab') {
+        // Trap Tab inside the alertdialog. Native confirm(...) blocks all
+        // background interaction; an in-app modal that lets Tab walk out
+        // to the host page is a non-modal modal and lets keyboard users
+        // activate unrelated controls (e.g. another project card) before
+        // resolving the destructive prompt. Cycle between the two
+        // buttons in both directions.
+        const cancel = cancelRef.current;
+        const confirm = confirmRef.current;
+        if (!cancel || !confirm) return;
+        event.preventDefault();
+        const active = document.activeElement;
+        if (event.shiftKey) {
+          (active === cancel ? confirm : cancel).focus();
+        } else {
+          (active === confirm ? cancel : confirm).focus();
+        }
       }
     }
     document.addEventListener('keydown', onKey);
@@ -64,8 +84,17 @@ export function ConfirmDialog({
       // host inputs lands cleanly.
       const previous = previousFocusRef.current;
       previousFocusRef.current = null;
-      if (previous && typeof previous.focus === 'function') {
+      if (previous && previous.isConnected && typeof previous.focus === 'function') {
         previous.focus();
+      } else {
+        // Trigger was unmounted while the dialog was open — typical for
+        // destructive flows where confirming removes the host element
+        // (project card → its delete button) in the same React batch.
+        // Focusing a detached node is a no-op and leaves Electron's
+        // focus tracker stranded, which is the very regression this
+        // dialog exists to prevent. Park focus on the document body so
+        // the next user input has a valid focus owner to route from.
+        document.body.focus({ preventScroll: true });
       }
     };
   }, [open]);
@@ -86,6 +115,7 @@ export function ConfirmDialog({
         <p id={messageId} className="hint">{message}</p>
         <div className="row">
           <button
+            ref={cancelRef}
             type="button"
             onClick={onCancel}
             data-testid="confirm-dialog-cancel"
