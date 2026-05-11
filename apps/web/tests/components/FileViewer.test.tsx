@@ -135,6 +135,32 @@ describe('FileViewer JSON artifacts', () => {
     });
   });
 
+  it('keeps raw JSON when pretty-printing would round a high-precision exponent', async () => {
+    const file = baseFile({
+      name: 'data.json',
+      path: 'data.json',
+      kind: 'code',
+      mime: 'application/json',
+    });
+    const rawJson = '{"ratio":1.234567890123456789e2,"name":"precise"}';
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/data.json') {
+        return new Response(rawJson);
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+
+    await waitFor(() => {
+      const displayedText = container.querySelector('.lines')?.textContent ?? '';
+      expect(displayedText).toBe(rawJson);
+      expect(displayedText).toContain('1.234567890123456789e2');
+      expect(displayedText).not.toContain('123.45678901234568');
+    });
+  });
+
   it('keeps raw JSON when pretty-printing would erase signed negative zero', async () => {
     const file = baseFile({
       name: 'data.json',

@@ -5679,6 +5679,7 @@ function formatJsonFileTextForDisplay(file: ProjectFile, text: string): string {
 function hasPrecisionSensitiveJsonNumberText(text: string): boolean {
   let inString = false;
   let escaped = false;
+  const numberTokenPattern = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
   for (let i = 0; i < text.length;) {
     const char = text[i];
     if (inString) {
@@ -5699,7 +5700,8 @@ function hasPrecisionSensitiveJsonNumberText(text: string): boolean {
       continue;
     }
 
-    const match = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(i));
+    numberTokenPattern.lastIndex = i;
+    const match = numberTokenPattern.exec(text);
     if (!match) {
       i += 1;
       continue;
@@ -5708,7 +5710,7 @@ function hasPrecisionSensitiveJsonNumberText(text: string): boolean {
     const token = match[0];
     if (isSignedNegativeZeroJsonNumberToken(token)) return true;
     if (/[.eE]/.test(token) && isPrecisionSensitiveJsonNumberToken(token)) return true;
-    i += token.length;
+    i = numberTokenPattern.lastIndex;
   }
   return false;
 }
