@@ -1,6 +1,10 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
-import { inlineRelativeAssets, type InlineAssetReader } from './inline-assets.js';
+import {
+  InlineAssetsLimitError,
+  inlineRelativeAssets,
+  type InlineAssetReader,
+} from './inline-assets.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles'> {}
 
@@ -410,8 +414,8 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (!file.mime.startsWith('text/html')) {
         return sendApiError(
           res,
-          400,
-          'UNSUPPORTED_FILE_TYPE',
+          415,
+          'UNSUPPORTED_MEDIA_TYPE',
           'export endpoint only supports HTML files',
         );
       }
@@ -446,6 +450,14 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       res.setHeader('Content-Security-Policy', 'sandbox allow-scripts');
       res.type('text/html').send(rendered);
     } catch (err: any) {
+      // PR #1312 round-3 (lefarcen P2): the inliner's cap-enforcement
+      // throws InlineAssetsLimitError when the owner HTML, candidate
+      // count, or assembled output exceeds the module-level limits.
+      // Map every such throw to a 413 PAYLOAD_TOO_LARGE envelope so
+      // callers see a structured error rather than a generic 400.
+      if (err instanceof InlineAssetsLimitError || err?.name === 'InlineAssetsLimitError') {
+        return sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', String(err));
+      }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });

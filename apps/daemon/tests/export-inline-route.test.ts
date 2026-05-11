@@ -438,11 +438,16 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     }
   });
 
-  it('returns 400 UNSUPPORTED_FILE_TYPE for non-HTML files', async () => {
+  it('returns 415 UNSUPPORTED_MEDIA_TYPE for non-HTML files', async () => {
+    // Drift fix discovered in PR #1312 round-3: the round-1 code emitted
+    // `UNSUPPORTED_FILE_TYPE` (status 400) which is not a registered
+    // ApiErrorCode in packages/contracts/src/errors.ts. The canonical
+    // code for "wrong content type" is UNSUPPORTED_MEDIA_TYPE with HTTP
+    // 415, so the route now uses both.
     const res = await fetch(exportUrl('app.css'));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(415);
     const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe('UNSUPPORTED_FILE_TYPE');
+    expect(body.error.code).toBe('UNSUPPORTED_MEDIA_TYPE');
   });
 
   it('returns 404 FILE_NOT_FOUND for a nonexistent file', async () => {

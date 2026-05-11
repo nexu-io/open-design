@@ -50,15 +50,45 @@ export interface InlineOptions {
   maxReadConcurrency?: number;
 }
 
+// Module-level defaults. PR #1312 round-3 (lefarcen P2): the daemon is
+// local-first, but the helper still needs defensive caps to prevent
+// a pathological project (or a future non-trusted caller) from
+// causing unbounded read fanout / memory blow-up. These values let
+// any realistic developer project through while rejecting clearly
+// pathological inputs.
+export const MAX_INLINE_OWNER_BYTES = 2 * 1024 * 1024; // 2 MiB
+export const MAX_INLINE_ASSET_BYTES = 5 * 1024 * 1024; // 5 MiB per asset
+export const MAX_INLINE_CANDIDATES = 500; // <link>/<script src> matches
+export const MAX_INLINE_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MiB output
+export const MAX_INLINE_READ_CONCURRENCY = 8; // simultaneous fileReader calls
+
+/**
+ * Thrown by `inlineRelativeAssets` when a configured cap is exceeded.
+ * The route handler maps every `InlineAssetsLimitError` to a 413
+ * `PAYLOAD_TOO_LARGE` envelope; the `limit` field identifies which
+ * cap fired so logs/clients can disambiguate.
+ */
+export class InlineAssetsLimitError extends Error {
+  constructor(
+    message: string,
+    public readonly limit: 'owner' | 'asset' | 'candidates' | 'total',
+  ) {
+    super(message);
+    this.name = 'InlineAssetsLimitError';
+  }
+}
+
 export async function inlineRelativeAssets(
   html: string,
   ownerFileName: string,
   fileReader: InlineAssetReader,
-  _opts: InlineOptions = {},
+  opts: InlineOptions = {},
 ): Promise<string> {
-  // Each candidate records the exact byte span in the ORIGINAL html. We
-  // never mutate-then-rescan, so a tag literal that happens to appear
-  // inside an inlined asset body is left untouched.
+  // Each pending entry records the exact byte span in the ORIGINAL html
+  // plus the builder that turns the asset's content into the
+  // replacement string. We never mutate-then-rescan, so a tag literal
+  // that happens to appear inside an inlined asset body is left
+  // untouched.
   //
   // Two divergences from apps/web/src/components/FileViewer.tsx:5265-5314:
   //
@@ -73,13 +103,28 @@ export async function inlineRelativeAssets(
   //    semantics). The web inline path is on a deprecation track since
   //    PR #384 made URL-load the default, so the divergence is
   //    forward-pointing.
-  interface Candidate {
-    start: number;
-    end: number;
-    replacement: Promise<string | null>;
+  const maxOwnerBytes = opts.maxOwnerBytes ?? MAX_INLINE_OWNER_BYTES;
+  const maxAssetBytes = opts.maxAssetBytes ?? MAX_INLINE_ASSET_BYTES;
+  const maxCandidates = opts.maxCandidates ?? MAX_INLINE_CANDIDATES;
+  const maxTotalBytes = opts.maxTotalBytes ?? MAX_INLINE_TOTAL_BYTES;
+  const maxReadConcurrency = opts.maxReadConcurrency ?? MAX_INLINE_READ_CONCURRENCY;
+
+  const ownerBytes = Buffer.byteLength(html, 'utf8');
+  if (ownerBytes > maxOwnerBytes) {
+    throw new InlineAssetsLimitError(
+      `owner html ${ownerBytes} bytes exceeds maxOwnerBytes ${maxOwnerBytes}`,
+      'owner',
+    );
   }
 
-  const candidates: Candidate[] = [];
+  interface Pending {
+    start: number;
+    end: number;
+    resolved: string;
+    build: (content: string) => string;
+  }
+
+  const pending: Pending[] = [];
 
   for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
     const tag = match[0];
@@ -89,12 +134,11 @@ export async function inlineRelativeAssets(
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     const resolved = resolveProjectRelativePath(ownerFileName, href);
     if (!resolved) continue;
-    candidates.push({
+    pending.push({
       start,
       end: start + tag.length,
-      replacement: fileReader(resolved).then((css) =>
-        css == null ? null : buildInlineStyleBlock(tag, href, css),
-      ),
+      resolved,
+      build: (css) => buildInlineStyleBlock(tag, href, css),
     });
   }
 
@@ -107,36 +151,98 @@ export async function inlineRelativeAssets(
     if (!src) continue;
     const resolved = resolveProjectRelativePath(ownerFileName, src);
     if (!resolved) continue;
-    candidates.push({
+    pending.push({
       start,
       end: start + tag.length,
-      replacement: fileReader(resolved).then((js) =>
-        js == null ? null : buildInlineScriptBlock(tag, js),
-      ),
+      resolved,
+      build: (js) => buildInlineScriptBlock(tag, js),
     });
   }
 
-  if (candidates.length === 0) return html;
+  if (pending.length === 0) return html;
+
+  if (pending.length > maxCandidates) {
+    throw new InlineAssetsLimitError(
+      `found ${pending.length} candidates, exceeds maxCandidates ${maxCandidates}`,
+      'candidates',
+    );
+  }
 
   // Sort by start so we can splice slices of the original html in order.
   // Link and script regions cannot overlap in a well-formed document
   // (the HTML parser disallows nested <script> / <link>), so we don't
   // need overlap-resolution logic.
-  candidates.sort((a, b) => a.start - b.start);
+  pending.sort((a, b) => a.start - b.start);
 
-  const resolved = await Promise.all(candidates.map((c) => c.replacement));
+  const replacements = await runWithConcurrency(
+    pending,
+    maxReadConcurrency,
+    async (p) => {
+      const content = await fileReader(p.resolved);
+      if (content == null) return null;
+      if (Buffer.byteLength(content, 'utf8') > maxAssetBytes) return null;
+      return p.build(content);
+    },
+  );
 
+  // Concat slices in one pass with a running output-size guard. The
+  // guard counts both the original-html slices we preserve and the
+  // replacement strings we inject, since either side can blow past
+  // maxTotalBytes (a wildly large owner with no inlinings, or a
+  // small owner with one giant inlined asset).
   const parts: string[] = [];
   let cursor = 0;
-  for (let i = 0; i < candidates.length; i++) {
-    const { start, end } = candidates[i]!;
-    const replacement = resolved[i];
-    parts.push(html.slice(cursor, start));
-    parts.push(replacement ?? html.slice(start, end));
+  let totalBytes = 0;
+  const guard = (segment: string) => {
+    totalBytes += Buffer.byteLength(segment, 'utf8');
+    if (totalBytes > maxTotalBytes) {
+      throw new InlineAssetsLimitError(
+        `assembled output ${totalBytes} bytes exceeds maxTotalBytes ${maxTotalBytes}`,
+        'total',
+      );
+    }
+  };
+  for (let i = 0; i < pending.length; i++) {
+    const { start, end } = pending[i]!;
+    const replacement = replacements[i];
+    const before = html.slice(cursor, start);
+    guard(before);
+    parts.push(before);
+    const inject = replacement ?? html.slice(start, end);
+    guard(inject);
+    parts.push(inject);
     cursor = end;
   }
-  parts.push(html.slice(cursor));
+  const tail = html.slice(cursor);
+  guard(tail);
+  parts.push(tail);
   return parts.join('');
+}
+
+/**
+ * Run `fn` over `items` with at most `limit` invocations in flight at
+ * any moment. Order of `items` and of the returned results is
+ * preserved. Used to bound concurrent fileReader calls so a project
+ * with hundreds of `<link>`/`<script>` tags doesn't open hundreds of
+ * file descriptors simultaneously.
+ */
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (true) {
+      const idx = next++;
+      if (idx >= items.length) return;
+      out[idx] = await fn(items[idx]!);
+    }
+  }
+  const workers = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return out;
 }
 
 // Attrs that affect <style> semantics and must be carried across from
