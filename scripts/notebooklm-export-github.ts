@@ -6,7 +6,7 @@
  *   pnpm exec tsx scripts/notebooklm-export-github.ts --repo owner/name [--out path] [--issues open|closed|all] [--prs open|closed|all] [--limit 50]
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -99,22 +99,27 @@ function runGhIssueJson(repo: string, state: IssueStateFlag, limit: number): GhI
     "body"
   ];
 
-  try {
-    const out = execFileSync("gh", [...baseArgs, "--json", jsonFields.join(",")], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    const parsed = JSON.parse(out) as unknown;
+  const result = spawnSync("gh", [...baseArgs, "--json", jsonFields.join(",")], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  if (result.status === 0) {
+    const parsed = JSON.parse(result.stdout ?? "null") as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed as GhItem[];
-  } catch (e: any) {
-    // Some repos disable issues (e.g. github/.github). In that case, allow PR-only
-    // exports to continue by treating issues as an empty bucket.
-    const stderr = (e?.stderr ? String(e.stderr) : "") + (e?.message ? `\n${String(e.message)}` : "");
-    if (/disabled issues/i.test(stderr) || /has disabled issues/i.test(stderr)) return [];
-    if (e?.stderr) process.stderr.write(String(e.stderr));
-    throw e;
   }
+
+  const stderr = String(result.stderr ?? result.error?.message ?? "");
+  // Some repos disable issues (e.g. github/.github). Treat that as an empty bucket
+  // so PR-only exports can continue quietly.
+  if (/disabled issues/i.test(stderr) || /has disabled issues/i.test(stderr)) return [];
+
+  const err = new Error(`gh issue list failed for ${repo} (${state})`);
+  (err as Error & { stderr?: string; stdout?: string; cause?: unknown }).stderr = stderr;
+  (err as Error & { stderr?: string; stdout?: string; cause?: unknown }).stdout = String(result.stdout ?? "");
+  (err as Error & { stderr?: string; stdout?: string; cause?: unknown }).cause = result.error ?? undefined;
+  throw err;
 }
 
 function runGhPrJson(repo: string, state: PrStateFlag, limit: number): GhItem[] {
