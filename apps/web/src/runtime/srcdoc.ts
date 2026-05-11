@@ -216,7 +216,7 @@ function annotateManualEditSourcePaths(doc: string): string {
   try {
     const parsed = new DOMParser().parseFromString(doc, 'text/html');
     parsed.body.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR).forEach((el) => {
-      if (el.hasAttribute('data-od-id')) return;
+      if (el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)) return;
       const path = sourcePathForElement(el);
       if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
     });
