@@ -230,7 +230,7 @@ describe('ExamplesTab', () => {
     fireEvent.mouseEnter(card);
 
     await waitFor(() => {
-      expect(fetchSkillExample).toHaveBeenCalledWith('live-dashboard');
+      expect(fetchSkillExample).toHaveBeenCalledWith('live-dashboard', 'html');
       expect(shareButton.disabled).toBe(false);
     });
 
