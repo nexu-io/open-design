@@ -440,6 +440,19 @@ export const AGENT_DEFS = [
     name: 'Gemini CLI',
     bin: 'gemini',
     versionArgs: ['--version'],
+    // Issue #978: Gemini CLI builds before the `--output-format
+    // stream-json` flag stabilized (~0.30) reject our buildArgs with
+    // a yargs `Unknown arguments: output-format, outputFormat` error.
+    // On macOS the GUI app's PATH order means a stale
+    // `/usr/local/bin/gemini` (left over from an old `npm i -g
+    // @google/gemini-cli`) wins over a modern Homebrew/nvm install,
+    // and the spawn fails with cryptic help-output. Setting
+    // `minVersion` opts this entry into the version-aware resolver
+    // (`chooseExecutableByMinVersion`) which walks every `gemini` on
+    // PATH + toolchain dirs, picks the first that meets this floor,
+    // and caches the choice so the chat-time spawn lands on the same
+    // binary detection chose.
+    minVersion: '0.30.0',
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       // Gemini 3 (May 2026): top-tier reasoning + fast frontier-class.
@@ -1109,6 +1122,164 @@ export function resolveAgentExecutable(def, configuredEnv = {}) {
   return inspectAgentExecutableResolution(def, configuredEnv).selectedPath;
 }
 
+// Enumerate every absolute path on PATH + user toolchain dirs where
+// `bin` resolves. Used by the version-aware resolver to skip stale
+// installs (#978): a user with both `/usr/local/bin/gemini=0.1.12`
+// (legacy `npm i -g`) and `/opt/homebrew/bin/gemini=0.40.1` (current)
+// would otherwise have the GUI app pick the older one because the
+// system PATH segment runs ahead of the toolchain segment, even
+// though the modern binary is also resolvable.
+//
+// Mirrors `resolveOnPath` semantics — same dir order, same Windows
+// PATHEXT walk, same de-dupe — but returns every match rather than
+// the first.
+export function enumerateOnPath(bin) {
+  if (!bin) return [];
+  const exts =
+    process.platform === 'win32'
+      ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+      : [''];
+  const dirs = resolvePathDirs();
+  const out = [];
+  const seen = new Set();
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const full = path.join(dir, bin + ext);
+      if (!full || seen.has(full)) continue;
+      seen.add(full);
+      if (existsSync(full)) out.push(full);
+    }
+  }
+  return out;
+}
+
+// Compare two version strings by their leading `major.minor.patch`
+// tuple. Returns -1 / 0 / 1 in the usual semver-compare convention.
+// Tolerates pre-release / build / `v`-prefix noise (`'v0.40.1'`,
+// `'0.40.1-rc.2'`, `'0.40.1+meta'`) so the resolver doesn't reject
+// otherwise-valid Gemini CLI versions just because the upstream tags
+// shipped that way.
+//
+// Returns `null` when either side is unparseable. The caller MUST
+// distinguish that from `0` (equal) — folding both into "passes the
+// floor" let an old `gemini` that prints a banner like
+// `gemini version 0.1.12` (instead of bare `0.1.12`) sneak past the
+// minVersion check and re-introduce #978. Only callers that have
+// their own fall-through path can safely treat null as "skip this
+// candidate".
+export function compareSemver(a, b) {
+  const parse = (raw) => {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim().replace(/^v/i, '');
+    // Anchor `^` so a banner like `gemini version 0.1.12` no longer
+    // reads as the bare semver `0.1.12` — that misread was the P1 in
+    // mrcfps + lefarcen's review of #1007: an old Gemini whose
+    // `--version` prints prose with embedded numbers would otherwise
+    // pass the minVersion floor and shadow a modern install.
+    const match = trimmed.match(/^(\d+)\.(\d+)\.(\d+)/);
+    if (!match) return null;
+    return [Number(match[1]), Number(match[2]), Number(match[3])];
+  };
+  const aParts = parse(a);
+  const bParts = parse(b);
+  if (!aParts || !bParts) return null;
+  for (let i = 0; i < 3; i++) {
+    if (aParts[i] !== bParts[i]) return aParts[i] > bParts[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+// Module-level cache keyed by agent id. Populated by `probe()` when
+// the def opts into version-aware resolution; consulted by
+// `resolveAgentBin()` so the synchronous chat-time spawn picks the
+// same binary the async detection chose.
+const resolvedAgentBinCache = new Map();
+
+// Strip the cache for a given agent id (or all when called bare).
+// Exposed so tests don't have to fight cross-test bleed when they
+// shadow PATH for `chooseExecutableByMinVersion` runs.
+export function clearResolvedAgentBinCache(id) {
+  if (id) resolvedAgentBinCache.delete(id);
+  else resolvedAgentBinCache.clear();
+}
+
+// Walk every candidate binary on PATH + toolchain dirs, run
+// `--version` on each in parallel, and return the first absolute
+// path whose version is at or above `def.minVersion`. Falls through
+// to the first-found path when no candidate meets the minimum so the
+// existing detection error path (cryptic, but visible) still fires
+// instead of silently swallowing the spawn intent. When the explicit
+// `<AGENT>_BIN` override is configured, the override wins
+// unconditionally — the user has already opted out of auto-pick.
+//
+// Returns `{ resolved: string|null, version: string|null,
+// fromOverride: boolean }` so the caller can (a) short-circuit the
+// second `--version` exec in `probe()` (the version we just probed
+// here is exactly the one the API response should ship) and (b)
+// know whether the result is a request-scoped override path — those
+// must not be cached, otherwise clearing the override leaves a stale
+// pin pointing at a path the user explicitly opted out of.
+export async function chooseExecutableByMinVersion(def, configuredEnv, env) {
+  const configured = configuredExecutableOverride(def, configuredEnv);
+  if (configured) return { resolved: configured, version: null, fromOverride: true };
+  const bins = [
+    def.bin,
+    ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
+  ].filter((bin) => typeof bin === 'string' && bin.length > 0);
+  const candidates = [];
+  const seen = new Set();
+  for (const bin of bins) {
+    for (const found of enumerateOnPath(bin)) {
+      if (seen.has(found)) continue;
+      seen.add(found);
+      candidates.push(found);
+    }
+  }
+  if (candidates.length === 0) return { resolved: null, version: null, fromOverride: false };
+  // Probe versions in parallel with a short timeout so a hung old
+  // binary doesn't block detection. 1500ms is generous for a
+  // local CLI's `--version` path which is typically <50ms.
+  const probes = await Promise.all(
+    candidates.map(async (candidate) => {
+      try {
+        const { stdout } = await execAgentFile(candidate, def.versionArgs, {
+          env,
+          timeout: 1500,
+        });
+        const version = String(stdout || '').trim().split('\n')[0] || '';
+        return { path: candidate, version };
+      } catch {
+        return { path: candidate, version: null };
+      }
+    }),
+  );
+  for (const result of probes) {
+    if (!result.version) continue;
+    // `compareSemver` returns `null` for unparseable inputs (see
+    // its comment). Treat that as "this candidate's version is not
+    // confidently comparable with the floor" — skip it so a banner
+    // like `gemini version 0.1.12` doesn't accidentally pass the
+    // floor and re-introduce #978. The fall-through below still
+    // runs the spawn against the first candidate so the existing
+    // detection error path stays visible.
+    const cmp = compareSemver(result.version, def.minVersion);
+    if (cmp !== null && cmp >= 0) {
+      return { resolved: result.path, version: result.version, fromOverride: false };
+    }
+  }
+  // No candidate met the minimum — fall through to the first-found
+  // path so the spawn still happens (and the existing yargs/argv
+  // mismatch error surfaces). Returning null here would silently
+  // drop the agent from detection even though a binary IS present;
+  // worse UX than the cryptic-but-visible failure.
+  const fallback = probes[0];
+  return {
+    resolved: fallback?.path ?? candidates[0],
+    version: fallback?.version ?? null,
+    fromOverride: false,
+  };
+}
+
 async function fetchModels(def, resolvedBin, env) {
   if (typeof def.fetchModels === 'function') {
     try {
@@ -1141,15 +1312,6 @@ async function fetchModels(def, resolvedBin, env) {
 }
 
 async function probe(def, configuredEnv = {}) {
-  const resolved = resolveAgentExecutable(def, configuredEnv);
-  if (!resolved) {
-    return {
-      ...stripFns(def),
-      models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
-      available: false,
-      ...installMetaForAgent(def.id),
-    };
-  }
   const probeEnv = spawnEnvForAgent(
     def.id,
     {
@@ -1158,15 +1320,67 @@ async function probe(def, configuredEnv = {}) {
     },
     configuredEnv,
   );
+  let resolved = null;
+  // Versions get probed twice without this fast-path: once to pick
+  // the best candidate, once for the API response. When
+  // `chooseExecutableByMinVersion` runs `--version` itself, its
+  // result is the answer — reuse it instead of re-execing.
   let version = null;
-  try {
-    const { stdout } = await execAgentFile(resolved, def.versionArgs, {
-      env: probeEnv,
-      timeout: 3000,
-    });
-    version = stdout.trim().split('\n')[0];
-  } catch {
-    // binary exists but --version failed; still mark available
+  if (def.minVersion) {
+    // Version-aware resolution: walk all candidates, skip ones too
+    // old to support the args buildArgs ships. See #978 for the
+    // canonical scenario (stale `/usr/local/bin/gemini=0.1.12`
+    // shadowing a modern Homebrew/nvm install on macOS GUI launches).
+    const picked = await chooseExecutableByMinVersion(def, configuredEnv, probeEnv);
+    resolved = picked.resolved;
+    version = picked.version;
+    if (resolved && !picked.fromOverride) {
+      // Cache so the synchronous chat-time `resolveAgentBin` returns
+      // the same path the async detection chose. Without this, chat
+      // would re-resolve via the first-match `resolveAgentExecutable`
+      // and pick the stale binary even though detection skipped it.
+      resolvedAgentBinCache.set(def.id, { resolved, version });
+    } else if (!resolved) {
+      // Detection couldn't resolve a binary this pass — clear the
+      // cache so a previously-cached path doesn't survive an
+      // uninstall / PATH change / override clear. Without this,
+      // `detectAgents()` would correctly report Gemini unavailable
+      // while `resolveAgentBin()` still returned the stale cached
+      // path, and chat / connection-test would keep spawning the
+      // binary that no longer exists. mrcfps + codex review of
+      // #1007.
+      resolvedAgentBinCache.delete(def.id);
+    }
+    // When `picked.fromOverride` is true the cache is intentionally
+    // left as-is: the result is a request-scoped <AGENT>_BIN path
+    // the user can clear at any time, so writing it to the cache
+    // turns the escape hatch one-way (clear the env and chat still
+    // spawns the override path, even though the env that opted in
+    // is gone). Preserving the previous auto-pick instead keeps the
+    // override reversible — clearing it falls back to the last
+    // version-aware pick the resolver actually walked candidates
+    // for. lefarcen review of #1007.
+  } else {
+    resolved = resolveAgentExecutable(def, configuredEnv);
+  }
+  if (!resolved) {
+    return {
+      ...stripFns(def),
+      models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
+      available: false,
+      ...installMetaForAgent(def.id),
+    };
+  }
+  if (version == null) {
+    try {
+      const { stdout } = await execAgentFile(resolved, def.versionArgs, {
+        env: probeEnv,
+        timeout: 3000,
+      });
+      version = stdout.trim().split('\n')[0];
+    } catch {
+      // binary exists but --version failed; still mark available
+    }
   }
   // Probe `--help` once per agent and record which flags the installed CLI
   // advertises. Cached on `agentCapabilities` for buildArgs to consult.
@@ -1462,9 +1676,29 @@ export function checkWindowsDirectExeCommandLineBudget(def, resolvedBin, args) {
 // Used by the chat handler so spawn() gets the same executable that
 // detection reported as available — fixes Windows ENOENT when the bare
 // bin name isn't on the child process's PATH (issue #10).
+//
+// For agents that opted into version-aware resolution via `def.minVersion`
+// (currently just gemini, see #978), prefer the path the async detection
+// already chose. Without this, chat would re-resolve via the
+// first-match `resolveAgentExecutable` and pick the same stale binary
+// detection skipped, putting the user back into the cryptic
+// `Unknown arguments: output-format, outputFormat` failure.
+//
+// IMPORTANT: an explicit `<AGENT>_BIN` configured override (passed
+// per-request from `/api/chat` and `/api/test/connection`) always
+// wins over the cache. Without this guard, a cached auto-pick from
+// an earlier detect would shadow a request-scoped override the user
+// changed afterwards — re-introducing the problem #978's escape
+// hatch is supposed to solve. mrcfps + lefarcen review of #1007.
 export function resolveAgentBin(id, configuredEnv = {}) {
   const def = getAgentDef(id);
   if (!def?.bin) return null;
+  if (def.minVersion) {
+    const configured = configuredExecutableOverride(def, configuredEnv);
+    if (configured) return configured;
+    const cached = resolvedAgentBinCache.get(id);
+    if (cached?.resolved) return cached.resolved;
+  }
   return resolveAgentExecutable(def, configuredEnv);
 }
 

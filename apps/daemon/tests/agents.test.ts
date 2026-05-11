@@ -15,8 +15,13 @@ import {
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
+  chooseExecutableByMinVersion,
+  clearResolvedAgentBinCache,
+  compareSemver,
   detectAgents,
+  enumerateOnPath,
   inspectAgentExecutableResolution,
+  resolveAgentBin,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
@@ -2212,4 +2217,494 @@ test('spawnEnvForAgent does not mutate the input env', () => {
 
   assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
   assert.notEqual(env, original);
+});
+
+// ---- Issue #978: Gemini binary version-aware resolution -------------------
+// Older `gemini-cli` builds (notably 0.1.12 from a long-ago `npm i -g
+// @google/gemini-cli`) reject the daemon's `--output-format stream-json`
+// args with a yargs `Unknown arguments: output-format, outputFormat`
+// error. On macOS GUI launches, system PATH (`/usr/bin:/bin:/usr/sbin:
+// /sbin:/usr/local/bin`) runs ahead of the toolchain dirs we prepend
+// for #346/#614 — so a stale `/usr/local/bin/gemini` shadows the
+// modern Homebrew/nvm install and the spawn lands on cryptic help
+// output. The version-aware resolver walks every candidate, picks the
+// first that meets `def.minVersion`, and caches the choice so the
+// chat-time spawn lands on the same binary detection chose.
+
+test('compareSemver returns -1 / 0 / 1 by leading major.minor.patch', () => {
+  assert.equal(compareSemver('0.40.1', '0.30.0'), 1);
+  assert.equal(compareSemver('0.30.0', '0.40.1'), -1);
+  assert.equal(compareSemver('1.0.0', '0.99.99'), 1);
+  assert.equal(compareSemver('0.40.1', '0.40.1'), 0);
+});
+
+test('compareSemver tolerates v-prefix and pre-release / build noise', () => {
+  // gemini-cli has shipped tags like `v0.40.1` and `0.40.1-rc.2` in
+  // the wild — the resolver shouldn't disqualify either of those.
+  assert.equal(compareSemver('v0.40.1', '0.30.0'), 1);
+  assert.equal(compareSemver('0.40.1-rc.2', '0.30.0'), 1);
+  assert.equal(compareSemver('0.40.1+meta', '0.40.1'), 0);
+});
+
+test('compareSemver returns null for unparseable input so the resolver can skip the candidate', () => {
+  // P1 from mrcfps + lefarcen review of #1007: returning 0 (equal)
+  // for unparseable strings let a banner-style version like
+  // `gemini version 0.1.12` pass the >= 0 floor in
+  // `chooseExecutableByMinVersion` and shadow a modern install.
+  // Switching to null forces the resolver to distinguish parse
+  // failure from genuine equality; the gate becomes
+  // `cmp !== null && cmp >= 0`.
+  assert.equal(compareSemver('not-a-version', '0.30.0'), null);
+  assert.equal(compareSemver('0.30.0', null), null);
+  assert.equal(compareSemver(undefined, '0.30.0'), null);
+});
+
+test('compareSemver only matches a leading bare semver (no banner-prose pass-through)', () => {
+  // The exact failure shape that re-introduced #978 in the original
+  // implementation. The fix anchors the regex to `^` so prose
+  // wrapping the numbers no longer reads as a clean version. Any
+  // future change that loosens that anchor would re-admit the
+  // shadowing scenario.
+  assert.equal(compareSemver('gemini version 0.1.12', '0.30.0'), null);
+  assert.equal(compareSemver('Gemini CLI 0.40.1 (build x)', '0.30.0'), null);
+});
+
+fsTest(
+  'enumerateOnPath returns every directory containing the binary, in PATH order',
+  () => {
+    const home = isolateAgentHome();
+    const dirA = mkdtempSync(join(tmpdir(), 'od-enumerate-a-'));
+    const dirB = mkdtempSync(join(tmpdir(), 'od-enumerate-b-'));
+    try {
+      writeFileSync(join(dirA, 'gemini'), '');
+      writeFileSync(join(dirB, 'gemini'), '');
+      chmodSync(join(dirA, 'gemini'), 0o755);
+      chmodSync(join(dirB, 'gemini'), 0o755);
+      process.env.PATH = `${dirA}:${dirB}`;
+
+      const found = enumerateOnPath('gemini');
+      // Order matters — the resolver picks the first entry that
+      // meets minVersion, so PATH precedence has to come through
+      // unchanged (this is what gives the user-installed modern
+      // binary a chance to win when it sits later in the order).
+      assert.deepEqual(found, [join(dirA, 'gemini'), join(dirB, 'gemini')]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(dirA, { recursive: true, force: true });
+      rmSync(dirB, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'enumerateOnPath returns an empty list when the binary is missing',
+  () => {
+    const home = isolateAgentHome();
+    const dir = mkdtempSync(join(tmpdir(), 'od-enumerate-empty-'));
+    try {
+      process.env.PATH = dir;
+      assert.deepEqual(enumerateOnPath('gemini'), []);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+// Helper: write an executable shell script that prints `versionOutput`
+// when invoked with `--version`. Lets us simulate the multi-install
+// scenario from #978 (and the banner-style version regression
+// flagged by #1007 reviewers) without depending on a real gemini
+// binary. `versionOutput` is the *full* line printed — pass a clean
+// semver to mimic modern Gemini, or wrap it in prose
+// (`'gemini version 0.1.12'`) to mimic the banner pattern that the
+// resolver must skip.
+function writeFakeVersionCli(dir: string, name: string, versionOutput: string): string {
+  const filePath = join(dir, name);
+  const script = `#!/bin/sh
+case "$1" in
+  --version) echo "${versionOutput}";;
+  *) echo "noop";;
+esac
+`;
+  writeFileSync(filePath, script);
+  chmodSync(filePath, 0o755);
+  return filePath;
+}
+
+// Pin OD_AGENT_HOME to an empty temp directory for the duration of
+// a resolver test so `userToolchainDirs()` resolves to nothing and
+// PATH is the only source of agent binaries. Without this, on a
+// developer/CI machine that has a real `gemini` under Homebrew /
+// nvm / asdf / npm-global, "missing binary" assertions can fail and
+// "exact list" assertions can pick up the extra real candidates.
+// lefarcen review of #1007.
+function isolateAgentHome(): string {
+  const home = mkdtempSync(join(tmpdir(), 'od-agent-home-'));
+  process.env.OD_AGENT_HOME = home;
+  return home;
+}
+
+fsTest(
+  'chooseExecutableByMinVersion picks the newer candidate even when an older one is on PATH first (#978)',
+  async () => {
+    const home = isolateAgentHome();
+    const oldDir = mkdtempSync(join(tmpdir(), 'od-gemini-old-'));
+    const newDir = mkdtempSync(join(tmpdir(), 'od-gemini-new-'));
+    try {
+      const oldPath = writeFakeVersionCli(oldDir, 'gemini', '0.1.12');
+      const newPath = writeFakeVersionCli(newDir, 'gemini', '0.40.1');
+      // Mirror the issue's PATH order: stale `/usr/local/bin` style
+      // entry first, modern toolchain entry second.
+      process.env.PATH = `${oldDir}:${newDir}`;
+
+      const def = minimalAgentDef({
+        id: 'gemini',
+        bin: 'gemini',
+        minVersion: '0.30.0',
+        versionArgs: ['--version'],
+      });
+      const picked = await chooseExecutableByMinVersion(def, {}, process.env);
+
+      assert.equal(picked.resolved, newPath);
+      assert.equal(picked.version, '0.40.1');
+      // Defensive: don't accept the stale binary just because it
+      // happens to come first in PATH order.
+      assert.notEqual(picked.resolved, oldPath);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(oldDir, { recursive: true, force: true });
+      rmSync(newDir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'chooseExecutableByMinVersion skips a banner-style version output and accepts the next candidate (#1007 P1)',
+  async () => {
+    // P1 from the #1007 review: an old `gemini` whose `--version`
+    // prints prose like `gemini version 0.1.12` (rather than bare
+    // semver) used to slip past `compareSemver === 0` and shadow a
+    // modern install. After switching the helper to return null on
+    // unparseable input, this candidate must be skipped.
+    const home = isolateAgentHome();
+    const oldDir = mkdtempSync(join(tmpdir(), 'od-gemini-banner-'));
+    const newDir = mkdtempSync(join(tmpdir(), 'od-gemini-modern-'));
+    try {
+      const bannerPath = writeFakeVersionCli(
+        oldDir,
+        'gemini',
+        'gemini version 0.1.12',
+      );
+      const modernPath = writeFakeVersionCli(newDir, 'gemini', '0.40.1');
+      process.env.PATH = `${oldDir}:${newDir}`;
+
+      const def = minimalAgentDef({
+        id: 'gemini',
+        bin: 'gemini',
+        minVersion: '0.30.0',
+        versionArgs: ['--version'],
+      });
+      const picked = await chooseExecutableByMinVersion(def, {}, process.env);
+
+      assert.equal(picked.resolved, modernPath);
+      assert.equal(picked.version, '0.40.1');
+      assert.notEqual(picked.resolved, bannerPath);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(oldDir, { recursive: true, force: true });
+      rmSync(newDir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'chooseExecutableByMinVersion falls back to first-found when no candidate meets minVersion',
+  async () => {
+    // No modern install anywhere — the resolver must NOT silently
+    // drop the agent. Returning the first-found candidate keeps the
+    // existing detection-error path firing (cryptic, but visible)
+    // and gives the user a path to surface the failure in the UI.
+    const home = isolateAgentHome();
+    const dir = mkdtempSync(join(tmpdir(), 'od-gemini-stale-only-'));
+    try {
+      const stalePath = writeFakeVersionCli(dir, 'gemini', '0.1.12');
+      process.env.PATH = dir;
+
+      const def = minimalAgentDef({
+        id: 'gemini',
+        bin: 'gemini',
+        minVersion: '0.30.0',
+        versionArgs: ['--version'],
+      });
+      const picked = await chooseExecutableByMinVersion(def, {}, process.env);
+
+      assert.equal(picked.resolved, stalePath);
+      assert.equal(picked.version, '0.1.12');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'chooseExecutableByMinVersion honors a configured GEMINI_BIN override without running version probes',
+  async () => {
+    // The explicit override is the user's escape hatch — they've
+    // already opted out of auto-pick, so the resolver must respect
+    // their choice even if the pinned binary fails the version
+    // floor (e.g. they're knowingly testing an old build).
+    const home = isolateAgentHome();
+    const newDir = mkdtempSync(join(tmpdir(), 'od-gemini-override-new-'));
+    const pinDir = mkdtempSync(join(tmpdir(), 'od-gemini-override-pin-'));
+    try {
+      writeFakeVersionCli(newDir, 'gemini', '0.40.1');
+      const pinPath = writeFakeVersionCli(pinDir, 'gemini', '0.1.12');
+      // PATH includes the modern install — the override has to win
+      // anyway since the user pinned the old one explicitly.
+      process.env.PATH = newDir;
+
+      const def = minimalAgentDef({
+        id: 'gemini',
+        bin: 'gemini',
+        minVersion: '0.30.0',
+        versionArgs: ['--version'],
+      });
+      const picked = await chooseExecutableByMinVersion(
+        def,
+        { GEMINI_BIN: pinPath },
+        process.env,
+      );
+
+      assert.equal(picked.resolved, pinPath);
+      // The override path skips `--version` entirely (we trust the
+      // user) — the version slot should come back null so the
+      // caller knows to probe separately if it needs the version.
+      assert.equal(picked.version, null);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(newDir, { recursive: true, force: true });
+      rmSync(pinDir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'chooseExecutableByMinVersion returns null resolved when no candidate exists',
+  async () => {
+    const home = isolateAgentHome();
+    const dir = mkdtempSync(join(tmpdir(), 'od-gemini-empty-'));
+    try {
+      process.env.PATH = dir;
+
+      const def = minimalAgentDef({
+        id: 'gemini',
+        bin: 'gemini',
+        minVersion: '0.30.0',
+        versionArgs: ['--version'],
+      });
+      const picked = await chooseExecutableByMinVersion(def, {}, process.env);
+
+      assert.equal(picked.resolved, null);
+      assert.equal(picked.version, null);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'detectAgents + resolveAgentBin returns the modern gemini even when an older one shadows it on PATH (#978)',
+  async () => {
+    // End-to-end pin: probe runs the smart resolver, caches the
+    // pick, and the chat-time `resolveAgentBin` call returns the
+    // same path. Without the cache, chat would re-resolve via the
+    // first-match `resolveAgentExecutable` and pick the stale
+    // binary again.
+    const home = isolateAgentHome();
+    const oldDir = mkdtempSync(join(tmpdir(), 'od-gemini-e2e-old-'));
+    const newDir = mkdtempSync(join(tmpdir(), 'od-gemini-e2e-new-'));
+    try {
+      const oldPath = writeFakeVersionCli(oldDir, 'gemini', '0.1.12');
+      const newPath = writeFakeVersionCli(newDir, 'gemini', '0.40.1');
+      process.env.PATH = `${oldDir}:${newDir}`;
+      clearResolvedAgentBinCache('gemini');
+
+      const agents = await detectAgents({});
+      const gemini = agents.find((agent: { id: string }) => agent.id === 'gemini');
+      assert.ok(gemini, 'detectAgents must surface gemini');
+      assert.equal(gemini.available, true);
+      assert.equal(gemini.path, newPath);
+      assert.equal(gemini.version, '0.40.1');
+
+      // Chat-time spawn resolution consults the cache so it lands on
+      // the same binary — without this, the chat would re-resolve
+      // via first-match and pick the stale 0.1.12 again.
+      const spawnPath = resolveAgentBin('gemini', {});
+      assert.equal(spawnPath, newPath);
+      assert.notEqual(spawnPath, oldPath);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(oldDir, { recursive: true, force: true });
+      rmSync(newDir, { recursive: true, force: true });
+      clearResolvedAgentBinCache('gemini');
+    }
+  },
+);
+
+fsTest(
+  'detectAgents clears the cache when no candidate resolves so resolveAgentBin no longer returns a stale path (#1007 P2)',
+  async () => {
+    // P2 from mrcfps + codex review of #1007: the cache was only
+    // populated on success and never cleared, so a previously
+    // cached Gemini path could survive an uninstall / PATH change.
+    // After this fix, a probe pass that finds no binary clears the
+    // cache, and `resolveAgentBin` falls back to the sync
+    // first-match resolver — which also returns null for an empty
+    // PATH, keeping detection and chat in sync.
+    const home = isolateAgentHome();
+    const installDir = mkdtempSync(join(tmpdir(), 'od-gemini-cache-install-'));
+    const emptyDir = mkdtempSync(join(tmpdir(), 'od-gemini-cache-empty-'));
+    try {
+      const installedPath = writeFakeVersionCli(installDir, 'gemini', '0.40.1');
+      // First detect: gemini is on PATH and modern → cached.
+      process.env.PATH = installDir;
+      clearResolvedAgentBinCache('gemini');
+      let agents = await detectAgents({});
+      let gemini = agents.find((a: { id: string }) => a.id === 'gemini');
+      assert.equal(gemini.available, true);
+      assert.equal(gemini.path, installedPath);
+      assert.equal(resolveAgentBin('gemini', {}), installedPath);
+
+      // Simulate the user uninstalling / cleaning up: PATH no
+      // longer contains gemini.
+      process.env.PATH = emptyDir;
+      agents = await detectAgents({});
+      gemini = agents.find((a: { id: string }) => a.id === 'gemini');
+      assert.equal(gemini.available, false);
+      // Without the cache-clear, resolveAgentBin would still
+      // return `installedPath` here even though detection just
+      // reported the agent unavailable — chat / connection-test
+      // would keep spawning a binary that no longer exists.
+      assert.equal(resolveAgentBin('gemini', {}), null);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(installDir, { recursive: true, force: true });
+      rmSync(emptyDir, { recursive: true, force: true });
+      clearResolvedAgentBinCache('gemini');
+    }
+  },
+);
+
+fsTest(
+  'resolveAgentBin honors a request-scoped GEMINI_BIN override even when the cache is populated (#1007 P2)',
+  async () => {
+    // P2 from mrcfps + lefarcen review of #1007: the cache was
+    // consulted before `configuredEnv`, so a request-scoped
+    // override (passed by `/api/chat` and `/api/test/connection`)
+    // got ignored once detection had populated the cache. After
+    // this fix, `configuredExecutableOverride` is checked first
+    // and the explicit override always wins.
+    const home = isolateAgentHome();
+    const autoDir = mkdtempSync(join(tmpdir(), 'od-gemini-override-auto-'));
+    const pinDir = mkdtempSync(join(tmpdir(), 'od-gemini-override-pin-'));
+    try {
+      const autoPath = writeFakeVersionCli(autoDir, 'gemini', '0.40.1');
+      const pinPath = writeFakeVersionCli(pinDir, 'gemini', '0.40.2');
+      // Detection auto-picks the autoDir install and caches it.
+      process.env.PATH = autoDir;
+      clearResolvedAgentBinCache('gemini');
+      await detectAgents({});
+      assert.equal(resolveAgentBin('gemini', {}), autoPath);
+
+      // The user later pins GEMINI_BIN at a different binary via
+      // request-scoped env. Without checking the override before
+      // the cache, resolveAgentBin would keep returning autoPath.
+      assert.equal(
+        resolveAgentBin('gemini', { GEMINI_BIN: pinPath }),
+        pinPath,
+      );
+      // Defensive: the cache is left untouched — the next request
+      // without the override still returns the auto-picked path,
+      // so the override stays scoped to whatever caller set it.
+      assert.equal(resolveAgentBin('gemini', {}), autoPath);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(autoDir, { recursive: true, force: true });
+      rmSync(pinDir, { recursive: true, force: true });
+      clearResolvedAgentBinCache('gemini');
+    }
+  },
+);
+
+test(
+  'detectAgents with GEMINI_BIN does not poison the cache; clearing the override returns to the auto-pick (#1007 P2 lefarcen)',
+  async () => {
+    // Without this guard, `chooseExecutableByMinVersion` would
+    // return the override path AND `probe()`'s cache write would
+    // record it. A subsequent `resolveAgentBin('gemini', {})`
+    // (request without the env var) would then read the override
+    // back out of the cache — turning the escape hatch one-way:
+    // the user cleared GEMINI_BIN but chat still spawns the
+    // override binary. After the fix, `probe()` skips the cache
+    // write when the resolver returns `fromOverride: true`, so
+    // the cache stays pinned to the last version-aware auto-pick
+    // and the override is reversible.
+    const home = isolateAgentHome();
+    const autoDir = mkdtempSync(join(tmpdir(), 'od-gemini-poison-auto-'));
+    const pinDir = mkdtempSync(join(tmpdir(), 'od-gemini-poison-pin-'));
+    try {
+      const autoPath = writeFakeVersionCli(autoDir, 'gemini', '0.40.1');
+      const pinPath = writeFakeVersionCli(pinDir, 'gemini', '0.40.2');
+      // Step 1: detect without override → cache = autoPath.
+      process.env.PATH = autoDir;
+      clearResolvedAgentBinCache('gemini');
+      await detectAgents({});
+      assert.equal(resolveAgentBin('gemini', {}), autoPath);
+
+      // Step 2: detect WITH override → resolves to pinPath for
+      // the settings/UI response, but must NOT overwrite the
+      // cache the auto-pick populated above.
+      const overrideResults = await detectAgents({
+        gemini: { GEMINI_BIN: pinPath },
+      });
+      const overrideGemini = overrideResults.find(
+        (agent) => agent.id === 'gemini',
+      );
+      assert.equal(overrideGemini?.path, pinPath);
+
+      // Step 3: a later request without the override clears its
+      // env. resolveAgentBin reads the cache; with the poisoning
+      // fix the cache is still autoPath, so the result is the
+      // last-known auto-pick, not the pinned override.
+      assert.equal(resolveAgentBin('gemini', {}), autoPath);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(autoDir, { recursive: true, force: true });
+      rmSync(pinDir, { recursive: true, force: true });
+      clearResolvedAgentBinCache('gemini');
+    }
+  },
+);
+
+test('Gemini AGENT_DEF declares minVersion so the version-aware resolver kicks in (#978)', () => {
+  // Pinned here as a regression guard so a future cleanup that
+  // strips the field doesn't silently put the GUI app back into the
+  // "stale `/usr/local/bin/gemini` shadows modern install" failure
+  // mode.
+  const minVersion = gemini.minVersion;
+  assert.ok(
+    typeof minVersion === 'string' && minVersion.length > 0,
+    'gemini.minVersion must be a non-empty string',
+  );
+  // Sanity: the floor must read as ≥ 0.30 — that's the cited
+  // baseline in #978 where `--output-format stream-json` shipped in
+  // a stable form. Lowering it would re-admit the broken builds.
+  const cmp = compareSemver(minVersion, '0.30.0');
+  assert.ok(
+    cmp !== null && cmp >= 0,
+    `gemini.minVersion (${minVersion}) must be ≥ 0.30.0`,
+  );
 });
