@@ -11832,6 +11832,303 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--amber);
 }
 
+/* ---------------------------------------------------------------------
+ * Critique Theater (Phase 8). Role-keyed tinting via `data-role` so the
+ * components hold no hex literals — the lane just declares which role
+ * it represents and the cascade picks the right hue from
+ * existing semantic tokens. Phase 9 will add the settings toggle that
+ * gates the surrounding mount points.
+ * ------------------------------------------------------------------- */
+.theater-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.theater-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.theater-stage-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.theater-stage-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.theater-stage-round { display: contents; }
+.theater-stage-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.theater-round-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  border-bottom: 1px dashed var(--border);
+}
+.theater-round-divider[data-status="in-progress"] {
+  color: var(--text);
+}
+.theater-round-score { font-variant-numeric: tabular-nums; }
+.theater-round-score[data-meets-threshold="true"] { color: var(--text-strong); }
+.theater-round-score[data-meets-threshold="false"] { color: var(--amber); }
+.theater-round-score-value { font-weight: 600; }
+.theater-round-score-scale { opacity: 0.7; }
+
+.theater-score-ticker {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+.theater-score-row {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 40px;
+  flex: 0 0 auto;
+}
+.theater-score-tick {
+  width: 6px;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 2px;
+}
+.theater-score-tick[data-meets-threshold="true"] {
+  background: var(--accent);
+}
+.theater-score-threshold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.theater-score-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.theater-score-value {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.theater-score-threshold-label { font-size: 10.5px; }
+
+.theater-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border);
+  background: var(--bg-panel);
+}
+.theater-lane[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+}
+.theater-lane[data-role="designer"] { border-left-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.theater-lane[data-role="critic"]   { border-left-color: color-mix(in srgb, var(--amber) 60%, var(--border)); }
+.theater-lane[data-role="brand"]    { border-left-color: color-mix(in srgb, var(--magenta, var(--accent)) 60%, var(--border)); }
+.theater-lane[data-role="a11y"]     { border-left-color: color-mix(in srgb, var(--green, var(--accent)) 60%, var(--border)); }
+.theater-lane[data-role="copy"]     { border-left-color: color-mix(in srgb, var(--blue, var(--accent)) 60%, var(--border)); }
+.theater-lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.theater-lane-role {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.theater-lane-mustfix {
+  font-size: 11px;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+.theater-lane-rounds {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.theater-lane-round {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.theater-lane-round[data-state="pending"] { opacity: 0.5; }
+.theater-lane-round[data-state="open"][data-current="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
+  color: var(--text);
+}
+.theater-lane-round-n { font-weight: 600; }
+.theater-lane-round-score { font-weight: 600; color: var(--text-strong); }
+.theater-lane-round-dims {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+.theater-lane-round-dim {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--amber) 60%, transparent);
+}
+.theater-lane-round-dim[data-meets-half="true"] {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.theater-interrupt {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.theater-interrupt:hover { background: var(--bg-subtle); }
+.theater-interrupt:disabled { opacity: 0.6; cursor: default; }
+.theater-interrupt[data-pending="true"] {
+  background: color-mix(in srgb, var(--amber) 12%, var(--bg-subtle));
+}
+
+.theater-degraded {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: color-mix(in srgb, var(--amber) 8%, var(--bg-subtle));
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--border));
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.theater-degraded-heading {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.theater-degraded-reason { margin: 0; font-size: 11.5px; color: var(--text-muted); }
+
+.theater-collapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 4px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.theater-collapsed[data-phase="shipped"][data-ship-status="shipped"] {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.theater-collapsed[data-phase="interrupted"],
+.theater-collapsed[data-phase="shipped"][data-ship-status="below_threshold"],
+.theater-collapsed[data-phase="shipped"][data-ship-status="timed_out"],
+.theater-collapsed[data-phase="failed"] {
+  background: color-mix(in srgb, var(--amber) 10%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--border));
+}
+.theater-collapsed-badge {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.theater-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.theater-transcript-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.theater-transcript-readonly {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.theater-transcript-speed-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.theater-transcript-speed {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text);
+}
+.theater-transcript-loading,
+.theater-transcript-empty,
+.theater-transcript-error { margin: 0; font-size: 12px; color: var(--text-muted); }
+.theater-transcript-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* prefers-reduced-motion: dampen the ticker pulse and lane transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .theater-score-tick,
+  .theater-lane,
+  .theater-lane-round { transition: none !important; }
+}
+
 .unfinished-todos {
   margin-top: 10px;
   width: min(520px, 100%);
