@@ -43,6 +43,7 @@
     "express": "^4.19.2",
     "jszip": "^3.10.1",
     "multer": "^2.1.1",
+    "playwright": "^1.59.1",
     "undici": "^7.16.0"
   },
   "devDependencies": {

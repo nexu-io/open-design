@@ -71,6 +71,7 @@ import {
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
+import { convertHtmlToPptx, isLibreOfficeAvailable } from './html-to-pptx.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
@@ -2514,6 +2515,100 @@ export async function startServer({
     projectStore: projectStoreDeps,
     exports: projectExportDeps,
   });
+
+  // PPTX export: HTML → PDF → PPTX via Playwright + LibreOffice.
+  // Each slide is rendered by Chromium, captured as a PDF page, then embedded
+  // in PPTX for 100% visual fidelity.
+  app.post('/api/projects/:id/export/pptx', async (req, res) => {
+    const { fileId, aspectRatio = '16:9' } = req.body || {};
+    if (typeof fileId !== 'string' || !fileId.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'fileId is required');
+    }
+
+    const sse = createSseResponse(res);
+    const ac = new AbortController();
+
+    // Abort immediately when the client disconnects, not just on SSE send failure
+    req.on('close', () => {
+      if (!res.writableEnded) ac.abort(new Error('client disconnected'));
+    });
+
+    try {
+      const projectId = req.params.id;
+      const project = getProject(db, projectId);
+      if (!project) {
+        sse.send('error', { code: 'PROJECT_NOT_FOUND', message: 'Project not found' });
+        sse.end();
+        return;
+      }
+
+      const projectPath = path.resolve(PROJECTS_DIR, projectId);
+      const htmlFilePath = path.resolve(projectPath, fileId);
+
+      // Confine to project directory
+      if (!htmlFilePath.startsWith(projectPath + path.sep) && htmlFilePath !== projectPath) {
+        sse.send('error', { code: 'BAD_REQUEST', message: 'fileId must be within the project directory' });
+        sse.end();
+        return;
+      }
+
+      if (!fs.existsSync(htmlFilePath)) {
+        sse.send('error', { code: 'FILE_NOT_FOUND', message: `File not found: ${fileId}` });
+        sse.end();
+        return;
+      }
+
+      sse.send('status', { status: 'converting', slide: 0 });
+
+      const baseName = fileId.replace(/\.[^.]+$/, '');
+      const outputPptxPath = path.join(projectPath, `${baseName}.pptx`);
+
+      const result = await convertHtmlToPptx({
+        htmlPath: htmlFilePath,
+        outputPath: outputPptxPath,
+        aspectRatio,
+        signal: ac.signal,
+        onProgress: (slide, total) => {
+          if (ac.signal.aborted) return;
+          const ok = sse.send('progress', { slide, total, status: 'converting' });
+          if (ok === false) ac.abort(new Error('client disconnected'));
+        },
+      });
+
+      sse.send('done', {
+        path: result.path,
+        slideCount: result.slideCount,
+        sizeBytes: result.sizeBytes,
+        fileName: path.basename(result.path),
+      });
+      sse.end();
+    } catch (err: any) {
+      if (ac.signal.aborted) {
+        sse.end();
+        return;
+      }
+      const isLibreOfficeMissing = err?.message?.includes('LibreOffice not found');
+      if (isLibreOfficeMissing) {
+        sse.send('error', {
+          code: 'LIBREOFFICE_UNAVAILABLE',
+          message: 'LibreOffice is not installed. Install it with: brew install libreoffice (macOS) or sudo apt install libreoffice (Linux).',
+        });
+      } else {
+        sse.send('error', {
+          code: 'PPTX_CONVERSION_FAILED',
+          message: err?.message || String(err),
+        });
+      }
+      sse.end();
+    }
+  });
+
+  // Check if LibreOffice is available on the system
+  app.get('/api/projects/:id/check-libreoffice', async (_req, res) => {
+    const available = await isLibreOfficeAvailable();
+    res.json({ available });
+  });
+
   registerProjectFileRoutes(app, {
     db,
     http: httpDeps,
