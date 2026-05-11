@@ -48,7 +48,7 @@ const platforms = {
   },
   macIntel: {
     enabled: enabled("ENABLE_MAC_INTEL"),
-    signed: false,
+    signed: env.MAC_INTEL_SIGNED === "true",
   },
 };
 

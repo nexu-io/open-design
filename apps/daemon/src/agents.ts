@@ -1077,19 +1077,36 @@ function configuredExecutableOverride(def, configuredEnv = {}) {
   }
 }
 
-export function resolveAgentExecutable(def, configuredEnv = {}) {
-  if (!def?.bin) return null;
-  const configured = configuredExecutableOverride(def, configuredEnv);
-  if (configured) return configured;
+export function inspectAgentExecutableResolution(def, configuredEnv = {}) {
+  if (!def?.bin) {
+    return {
+      configuredOverridePath: null,
+      pathResolvedPath: null,
+      selectedPath: null,
+    };
+  }
+  const configuredOverridePath = configuredExecutableOverride(def, configuredEnv);
   const candidates = [
     def.bin,
     ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
   ];
+  let pathResolvedPath = null;
   for (const bin of candidates) {
     const resolved = resolveOnPath(bin);
-    if (resolved) return resolved;
+    if (resolved) {
+      pathResolvedPath = resolved;
+      break;
+    }
   }
-  return null;
+  return {
+    configuredOverridePath,
+    pathResolvedPath,
+    selectedPath: configuredOverridePath || pathResolvedPath,
+  };
+}
+
+export function resolveAgentExecutable(def, configuredEnv = {}) {
+  return inspectAgentExecutableResolution(def, configuredEnv).selectedPath;
 }
 
 async function fetchModels(def, resolvedBin, env) {

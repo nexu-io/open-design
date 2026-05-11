@@ -784,6 +784,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const consoleEntries: DesktopConsoleEntry[] = [];
   const window = new BrowserWindow({
     height: 900,
+    // Below this size the project page's left/right split (chat
+    // composer + designs panel + preview pane) overlaps and the top
+    // navigation clips, so prevent Electron from honoring user drags
+    // that would shrink the window past the usable breakpoint.
+    minHeight: 600,
+    minWidth: 900,
     show: true,
     title: "Open Design",
     ...MAC_WINDOW_CHROME,

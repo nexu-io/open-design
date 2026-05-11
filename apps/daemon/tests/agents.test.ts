@@ -16,6 +16,7 @@ import {
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
   detectAgents,
+  inspectAgentExecutableResolution,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../src/agents.js';
@@ -1948,6 +1949,33 @@ test('resolveAgentExecutable prefers a configured CODEX_BIN override over PATH r
     );
 
     assert.equal(resolved, configured);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('inspectAgentExecutableResolution reports configured and PATH Codex binaries separately', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-inspect-'));
+  try {
+    const configured = join(dir, 'codex-custom');
+    const fallback = join(dir, 'codex');
+    writeFileSync(configured, '#!/bin/sh\nexit 0\n');
+    writeFileSync(fallback, '#!/bin/sh\nexit 0\n');
+    chmodSync(configured, 0o755);
+    chmodSync(fallback, 0o755);
+    process.env.PATH = dir;
+    process.env.OD_AGENT_HOME = dir;
+
+    const resolution = inspectAgentExecutableResolution(
+      minimalAgentDef({ id: 'codex', bin: 'codex' }),
+      { CODEX_BIN: configured },
+    );
+
+    assert.deepEqual(resolution, {
+      configuredOverridePath: configured,
+      pathResolvedPath: fallback,
+      selectedPath: configured,
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
