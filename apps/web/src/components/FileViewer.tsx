@@ -5667,10 +5667,21 @@ function TextViewer({
 function formatJsonFileTextForDisplay(file: ProjectFile, text: string): string {
   if (!isJsonFile(file)) return text;
   try {
-    return JSON.stringify(JSON.parse(text), null, 2);
+    const parsed = JSON.parse(text) as unknown;
+    if (hasUnsafeJsonNumber(parsed)) return text;
+    return JSON.stringify(parsed, null, 2);
   } catch {
     return text;
   }
+}
+
+function hasUnsafeJsonNumber(value: unknown): boolean {
+  if (typeof value === 'number') {
+    return !Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value));
+  }
+  if (Array.isArray(value)) return value.some(hasUnsafeJsonNumber);
+  if (value && typeof value === 'object') return Object.values(value).some(hasUnsafeJsonNumber);
+  return false;
 }
 
 function isJsonFile(file: ProjectFile): boolean {
