@@ -48,12 +48,19 @@ export interface SketchDocument {
 
 const MAX_ABS_COORDINATE = 100_000;
 const MAX_ITEM_SIZE = 4_096;
+const DEFAULT_SKETCH_COLOR = '#1c1b1a';
+const DEFAULT_SKETCH_SHAPE_SIZE = 2;
+const DEFAULT_SKETCH_TEXT_SIZE = 16;
 
 export function parseSketchDocument(text: string | null): SketchItem[] {
   if (!text) return [];
   try {
-    const parsed = JSON.parse(text) as SketchDocument | { items?: SketchItem[] };
-    return Array.isArray(parsed.items) ? parsed.items : [];
+    const parsed = JSON.parse(text) as SketchDocument | { items?: unknown };
+    if (!isSketchRecord(parsed) || !Array.isArray(parsed.items)) return [];
+    return parsed.items.flatMap((item) => {
+      const normalized = normalizeSketchItem(item);
+      return normalized ? [normalized] : [];
+    });
   } catch {
     return [];
   }
@@ -126,19 +133,126 @@ export function computeSketchBounds(items: SketchItem[]): {
 }
 
 export function clampSketchNumber(value: unknown): number {
-  if (typeof value !== 'number' && typeof value !== 'string') return 0;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
+  const numeric = readSketchNumber(value);
+  if (numeric === null) return 0;
   return Math.max(-MAX_ABS_COORDINATE, Math.min(MAX_ABS_COORDINATE, numeric));
 }
 
 export function clampSketchSize(value: unknown): number {
-  if (typeof value !== 'number' && typeof value !== 'string') return 1;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 1;
+  const numeric = readSketchNumber(value);
+  if (numeric === null) return 1;
   return Math.max(1, Math.min(MAX_ITEM_SIZE, numeric));
 }
 
 export function normalizeSketchText(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function isSketchRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readSketchNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeSketchCoordinate(value: unknown): number | null {
+  const numeric = readSketchNumber(value);
+  return numeric === null ? null : clampSketchNumber(numeric);
+}
+
+function normalizeSketchShapeSize(value: unknown): number {
+  const numeric = readSketchNumber(value);
+  return numeric === null ? DEFAULT_SKETCH_SHAPE_SIZE : clampSketchSize(numeric);
+}
+
+function normalizeSketchTextSize(value: unknown): number {
+  const numeric = readSketchNumber(value);
+  return numeric === null ? DEFAULT_SKETCH_TEXT_SIZE : clampSketchSize(numeric);
+}
+
+function normalizeSketchColor(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value : DEFAULT_SKETCH_COLOR;
+}
+
+function normalizeSketchPoint(value: unknown): SketchPoint | null {
+  if (!isSketchRecord(value)) return null;
+  const x = normalizeSketchCoordinate(value.x);
+  const y = normalizeSketchCoordinate(value.y);
+  if (x === null || y === null) return null;
+  return { x, y };
+}
+
+function normalizeSketchItem(value: unknown): SketchItem | null {
+  if (!isSketchRecord(value) || typeof value.kind !== 'string') return null;
+  if (value.kind === 'pen') return normalizeSketchPen(value);
+  if (value.kind === 'rect') return normalizeSketchRect(value);
+  if (value.kind === 'arrow') return normalizeSketchArrow(value);
+  if (value.kind === 'text') return normalizeSketchTextItem(value);
+  return null;
+}
+
+function normalizeSketchPen(value: Record<string, unknown>): SketchStroke | null {
+  if (!Array.isArray(value.points)) return null;
+  const points = value.points.flatMap((point) => {
+    const normalized = normalizeSketchPoint(point);
+    return normalized ? [normalized] : [];
+  });
+  if (points.length === 0) return null;
+  return {
+    kind: 'pen',
+    points,
+    color: normalizeSketchColor(value.color),
+    size: normalizeSketchShapeSize(value.size),
+  };
+}
+
+function normalizeSketchRect(value: Record<string, unknown>): SketchRectShape | null {
+  const x = normalizeSketchCoordinate(value.x);
+  const y = normalizeSketchCoordinate(value.y);
+  const w = normalizeSketchCoordinate(value.w);
+  const h = normalizeSketchCoordinate(value.h);
+  if (x === null || y === null || w === null || h === null) return null;
+  return {
+    kind: 'rect',
+    x,
+    y,
+    w,
+    h,
+    color: normalizeSketchColor(value.color),
+    size: normalizeSketchShapeSize(value.size),
+  };
+}
+
+function normalizeSketchArrow(value: Record<string, unknown>): SketchArrowShape | null {
+  const x1 = normalizeSketchCoordinate(value.x1);
+  const y1 = normalizeSketchCoordinate(value.y1);
+  const x2 = normalizeSketchCoordinate(value.x2);
+  const y2 = normalizeSketchCoordinate(value.y2);
+  if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+  return {
+    kind: 'arrow',
+    x1,
+    y1,
+    x2,
+    y2,
+    color: normalizeSketchColor(value.color),
+    size: normalizeSketchShapeSize(value.size),
+  };
+}
+
+function normalizeSketchTextItem(value: Record<string, unknown>): SketchTextItem | null {
+  const x = normalizeSketchCoordinate(value.x);
+  const y = normalizeSketchCoordinate(value.y);
+  if (x === null || y === null) return null;
+  return {
+    kind: 'text',
+    x,
+    y,
+    text: normalizeSketchText(value.text),
+    color: normalizeSketchColor(value.color),
+    size: normalizeSketchTextSize(value.size),
+  };
 }

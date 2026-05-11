@@ -15,6 +15,19 @@ const DEFAULT_WIDTH = 320;
 const DEFAULT_HEIGHT = 200;
 const VIEWBOX_PADDING = 24;
 
+export function computeSketchPreviewGeometry(items: SketchItem[]) {
+  const { minX, minY, maxX, maxY } = computeSketchBounds(items);
+  const viewBoxX = Math.min(0, minX - VIEWBOX_PADDING);
+  const viewBoxY = Math.min(0, minY - VIEWBOX_PADDING);
+  return {
+    items,
+    viewBoxX,
+    viewBoxY,
+    viewBoxWidth: Math.max(DEFAULT_WIDTH, maxX + VIEWBOX_PADDING - viewBoxX),
+    viewBoxHeight: Math.max(DEFAULT_HEIGHT, maxY + VIEWBOX_PADDING - viewBoxY),
+  };
+}
+
 export function isRenderableSketchJson(file: Pick<ProjectFile, 'kind' | 'name'>): boolean {
   return file.kind === 'sketch' && isSketchJsonFileName(file.name);
 }
@@ -45,14 +58,7 @@ export function SketchPreview({
 
   const geometry = useMemo(() => {
     const resolvedItems = items ?? [];
-    const { minX, minY, maxX, maxY } = computeSketchBounds(resolvedItems);
-    return {
-      items: resolvedItems,
-      viewBoxX: Math.min(0, minX - VIEWBOX_PADDING),
-      viewBoxY: Math.min(0, minY - VIEWBOX_PADDING),
-      viewBoxWidth: Math.max(DEFAULT_WIDTH, maxX - minX + VIEWBOX_PADDING * 2),
-      viewBoxHeight: Math.max(DEFAULT_HEIGHT, maxY - minY + VIEWBOX_PADDING * 2),
-    };
+    return computeSketchPreviewGeometry(resolvedItems);
   }, [items]);
 
   if (!isRenderableSketchJson(file)) return null;
