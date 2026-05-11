@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Client-Server Flow Template
+    Usage: Left clients + Right servers, bidirectional arrows for key interactions
+    Scenarios: Request-response architecture, Frontend-backend flow, C/S protocol stack, API calls
+    Supports: 2-3 client modules (left) + 2-4 server modules (right) + 3-5 key interactions (middle)
+    Key convention: Each module card = Name + 1 line description; Each arrow = Action label (e.g. "Login" / "Return JWT"); DO NOT draw arrows without labels
+    -->
+    <defs>
+                <marker id="csArrowRight" markerWidth="10" markerHeight="10" refX="9" refY="5"
+                orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L10,5 L0,10 Z" fill="#3B82F6"/>
+        </marker>
+        <marker id="csArrowLeft" markerWidth="10" markerHeight="10" refX="9" refY="5"
+                orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L10,5 L0,10 Z" fill="#10B981"/>
+        </marker>
+        <filter id="csShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="58" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="28" font-weight="700" fill="#0F172A">Client-Server Flow</text>
+    <text x="60" y="84" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#64748B">Client-Server Flow · Left side initiates requests, right side responds hierarchically</text>
+    <g id="client-group">
+    <!-- Left side: Client Group -->
+    <rect x="60" y="130" width="320" height="520" rx="16" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+    <rect x="60" y="130" width="320" height="44" rx="16" fill="#3B82F6"/>
+    <rect x="60" y="158" width="320" height="16" fill="#3B82F6"/>
+    <text x="220" y="160" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="700" fill="#FFFFFF">CLIENT</text>
+    <g id="client-1">
+    <!-- Client Module 1: Web -->
+    <g filter="url(#csShadow)">
+        <rect x="90" y="200" width="260" height="100" rx="10" fill="#FFFFFF" stroke="#D4DFF7" stroke-width="1"/>
+    </g>
+    <rect x="90" y="200" width="6" height="100" fill="#3B82F6"/>
+    <text x="112" y="226" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#0F172A">Web Browser</text>
+    <text x="112" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">React SPA UI &amp; Interaction</text>
+    <text x="112" y="272" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">HTTPS + JWT Auth</text>
+    <text x="112" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Protocol: HTTPS / WebSocket</text>
+        </g>
+    <g id="client-2">
+    <!-- Client Module 2: Mobile -->
+    <g filter="url(#csShadow)">
+        <rect x="90" y="320" width="260" height="100" rx="10" fill="#FFFFFF" stroke="#D4DFF7" stroke-width="1"/>
+    </g>
+    <rect x="90" y="320" width="6" height="100" fill="#3B82F6"/>
+    <text x="112" y="346" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#0F172A">Mobile App</text>
+    <text x="112" y="372" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">iOS/Android Native Client</text>
+    <text x="112" y="392" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Offline Cache Supported</text>
+    <text x="112" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Protocol: HTTP/2 / Push</text>
+        </g>
+    <g id="client-3">
+    <!-- Client Module 3: Third-party -->
+    <g filter="url(#csShadow)">
+        <rect x="90" y="440" width="260" height="100" rx="10" fill="#FFFFFF" stroke="#D4DFF7" stroke-width="1"/>
+    </g>
+    <rect x="90" y="440" width="6" height="100" fill="#3B82F6"/>
+    <text x="112" y="466" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#0F172A">3rd Party Client</text>
+    <text x="112" y="492" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Open API Access</text>
+    <text x="112" y="512" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">OAuth2 / API Key Auth</text>
+    <text x="112" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Protocol: HTTPS / Webhook</text>
+        </g>
+    </g>
+    <g id="server-group">
+    <!-- Right side: Server Group -->
+    <rect x="900" y="130" width="320" height="520" rx="16" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5"/>
+    <rect x="900" y="130" width="320" height="44" rx="16" fill="#10B981"/>
+    <rect x="900" y="158" width="320" height="16" fill="#10B981"/>
+    <text x="1060" y="160" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="700" fill="#FFFFFF">SERVER</text>
+    <g id="server-1">
+    <!-- Server Module 1: Gateway -->
+    <g filter="url(#csShadow)">
+        <rect x="930" y="200" width="260" height="100" rx="10" fill="#FFFFFF" stroke="#CDEAD3" stroke-width="1"/>
+    </g>
+    <rect x="930" y="200" width="6" height="100" fill="#10B981"/>
+    <text x="952" y="226" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#0F172A">API Gateway</text>
+    <text x="952" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Auth &amp; Rate Limiting</text>
+    <text x="952" y="272" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Routing &amp; Tracing</text>
+    <text x="952" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Kong / Envoy</text>
+        </g>
+    <g id="server-2">
+    <!-- Server Module 2: Services -->
+    <g filter="url(#csShadow)">
+        <rect x="930" y="320" width="260" height="100" rx="10" fill="#FFFFFF" stroke="#CDEAD3" stroke-width="1"/>
+    </g>
+    <rect x="930" y="320" width="6" height="100" fill="#10B981"/>
+    <text x="952" y="346" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#0F172A">Microservices</text>
+    <text x="952" y="372" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Domain Service Cluster</text>
+    <text x="952" y="392" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">gRPC Internal Comm.</text>
+    <text x="952" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Go / Java / Node</text>
+        </g>
+    <g id="server-3">
+    <!-- Server Module 3: Data -->
+    <g filter="url(#csShadow)">
+        <rect x="930" y="440" width="260" height="100" rx="10" fill="#FFFFFF" stroke="#CDEAD3" stroke-width="1"/>
+    </g>
+    <rect x="930" y="440" width="6" height="100" fill="#10B981"/>
+    <text x="952" y="466" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#0F172A">Database Layer</text>
+    <text x="952" y="492" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Primary/Replica &amp; Cache</text>
+    <text x="952" y="512" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#475569">Hot/Cold Data Tiering</text>
+    <text x="952" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">PostgreSQL / Redis / S3</text>
+        </g>
+    </g>
+    <g id="interactions">
+    <!-- Middle Communication Channel Labels -->
+    <text x="640" y="160" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="700" fill="#0F172A">Key Interactions</text>
+    <text x="640" y="180" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Key Interactions</text>
+    <g id="interaction-1">
+    <!-- Interaction 1: Login Request -->
+    <line x1="380" y1="250" x2="926" y2="250" stroke="#3B82F6" stroke-width="2.5" marker-end="url(#csArrowRight)"/>
+    <rect x="500" y="216" width="280" height="26" rx="11" fill="#FFFFFF" stroke="#3B82F6" stroke-width="1"/>
+    <text x="640" y="234" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="700" fill="#3B82F6">① Login Request · POST /auth/login</text>
+        </g>
+    <g id="interaction-2">
+    <!-- Interaction 2: Return Token -->
+    <line x1="926" y1="290" x2="384" y2="290" stroke="#10B981" stroke-width="2.5" marker-end="url(#csArrowLeft)"/>
+    <rect x="500" y="302" width="280" height="26" rx="11" fill="#FFFFFF" stroke="#10B981" stroke-width="1"/>
+    <text x="640" y="318" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="700" fill="#10B981">② Return JWT Token · 2xx Response</text>
+        </g>
+    <g id="interaction-3">
+    <!-- Interaction 3: Business Call -->
+    <line x1="380" y1="370" x2="926" y2="370" stroke="#3B82F6" stroke-width="2.5" marker-end="url(#csArrowRight)"/>
+    <rect x="500" y="336" width="280" height="26" rx="11" fill="#FFFFFF" stroke="#3B82F6" stroke-width="1"/>
+    <text x="640" y="354" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="700" fill="#3B82F6">③ Business Call · GET /api/resources</text>
+        </g>
+    <g id="interaction-4">
+    <!-- Interaction 4: Data Return -->
+    <line x1="926" y1="410" x2="384" y2="410" stroke="#10B981" stroke-width="2.5" marker-end="url(#csArrowLeft)"/>
+    <rect x="500" y="422" width="280" height="26" rx="11" fill="#FFFFFF" stroke="#10B981" stroke-width="1"/>
+    <text x="640" y="438" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="700" fill="#10B981">④ Return Data · JSON Payload</text>
+        </g>
+    <g id="interaction-5">
+    <!-- Interaction 5: Push -->
+    <line x1="926" y1="490" x2="384" y2="490" stroke="#10B981" stroke-width="2.5" marker-end="url(#csArrowLeft)"/>
+    <rect x="500" y="502" width="280" height="26" rx="11" fill="#FFFFFF" stroke="#10B981" stroke-width="1"/>
+    <text x="640" y="518" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="700" fill="#10B981">⑤ Real-time Push · WebSocket / SSE</text>
+        </g>
+    </g>
+    <!-- Footer Note -->
+    <text x="60" y="685" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#64748B">Blue arrow = Client request; Green arrow = Server response; Every arrow MUST have an action label, do not draw bare lines</text>
+</svg>

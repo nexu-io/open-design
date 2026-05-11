@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 章节页 - 重庆两江新区发改委风格 -->
+
+    <defs>
+        <!-- 深蓝背景渐变 -->
+        <linearGradient id="gradChapter" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#003366;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#002244;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001a33;stop-opacity:1" />
+        </linearGradient>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topDecoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#8B0000;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#DAA520;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="url(#gradChapter)"/>
+
+    <!-- 装饰元素 - 几何图案 -->
+    <circle cx="1200" cy="100" r="250" fill="#FFFFFF" fill-opacity="0.02"/>
+    <circle cx="80" cy="620" r="300" fill="#FFFFFF" fill-opacity="0.02"/>
+    <circle cx="640" cy="360" r="400" fill="#FFFFFF" fill-opacity="0.015"/>
+
+    <!-- 顶部金红渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topDecoGrad)"/>
+
+    <!-- 网格装饰线 -->
+    <line x1="0" y1="240" x2="1280" y2="240" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+    <line x1="0" y1="480" x2="1280" y2="480" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+    <line x1="426" y1="0" x2="426" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+    <line x1="854" y1="0" x2="854" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+
+    <!-- 左侧装饰竖条 -->
+    <rect x="100" y="260" width="6" height="200" fill="#DAA520" fill-opacity="0.8"/>
+
+    <!-- 章节内容 -->
+    <g transform="translate(640, 360)">
+        <!-- 章节编号 - 大号半透明背景 -->
+        <text x="0" y="-60" text-anchor="middle" font-family="Arial" font-size="160" font-weight="bold" fill="#FFFFFF" fill-opacity="0.06">
+            0{{CHAPTER_NUM}}
+        </text>
+        
+        <!-- 装饰方块 -->
+        <rect x="-50" y="0" width="100" height="6" fill="#DAA520"/>
+        
+        <!-- 章节标题 -->
+        <text x="0" y="70" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF">
+            {{CHAPTER_TITLE}}
+        </text>
+        
+        <!-- 英文标题/副标题 -->
+        <text x="0" y="120" text-anchor="middle" font-family="Arial" font-size="22" fill="#FFFFFF" fill-opacity="0.6" letter-spacing="3">
+            {{CHAPTER_SUBTITLE}}
+        </text>
+    </g>
+
+    <!-- 底部装饰 -->
+    <rect x="0" y="680" width="1280" height="40" fill="#8B0000" fill-opacity="0.6"/>
+    <text x="640" y="707" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" fill-opacity="0.8">
+        {{ORGANIZATION}}
+    </text>
+
+</svg>

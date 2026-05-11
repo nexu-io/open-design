@@ -287,6 +287,9 @@ interface Props {
   liveHtml?: string;
   isDeck?: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
+  pptxExporting?: boolean;
+  pptxProgress?: { slide: number; total: number } | null;
+  pptxExportSuccess?: string | null;
   streaming?: boolean;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
@@ -301,6 +304,9 @@ export function FileViewer({
   liveHtml,
   isDeck,
   onExportAsPptx,
+  pptxExporting,
+  pptxProgress,
+  pptxExportSuccess,
   streaming,
   previewComments = [],
   onSavePreviewComment,
@@ -321,6 +327,9 @@ export function FileViewer({
         liveHtml={liveHtml}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
+        pptxExporting={pptxExporting}
+        pptxProgress={pptxProgress}
+        pptxExportSuccess={pptxExportSuccess}
         streaming={Boolean(streaming)}
         previewComments={previewComments}
         onSavePreviewComment={onSavePreviewComment}
@@ -2822,6 +2831,9 @@ function HtmlViewer({
   liveHtml,
   isDeck,
   onExportAsPptx,
+  pptxExporting,
+  pptxProgress,
+  pptxExportSuccess,
   streaming,
   previewComments = [],
   onSavePreviewComment,
@@ -2834,6 +2846,9 @@ function HtmlViewer({
   liveHtml?: string;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
+  pptxExporting?: boolean;
+  pptxProgress?: { slide: number; total: number } | null;
+  pptxExportSuccess?: string | null;
   streaming: boolean;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
@@ -4008,7 +4023,7 @@ function HtmlViewer({
   const showPresent = effectiveDeck && source !== null;
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
-  const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
+  const canPptx = canShare && Boolean(onExportAsPptx) && !streaming && !pptxExporting;
   const boardAvailable = source !== null;
   const activeDeployment = deployResult || deployment;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
@@ -4353,11 +4368,11 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={!canPptx}
                     title={
-                      onExportAsPptx
-                        ? streaming
-                          ? t('fileViewer.exportPptxBusy')
-                          : t('fileViewer.exportPptxHint')
-                        : t('fileViewer.exportPptxNa')
+                      pptxExporting
+                        ? t('fileViewer.exportPptxConverting')
+                        : onExportAsPptx
+                          ? t('fileViewer.exportPptxHint')
+                          : t('fileViewer.exportPptxNa')
                     }
                     onClick={() => {
                       setShareMenuOpen(false);
@@ -4365,7 +4380,11 @@ function HtmlViewer({
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="present" size={14} /></span>
-                    <span>{t('fileViewer.exportPptx') + '…'}</span>
+                    <span>
+                      {pptxExporting && pptxProgress
+                        ? `${t('fileViewer.exportPptxConverting')} ${pptxProgress.slide}/${pptxProgress.total}`
+                        : t('fileViewer.exportPptx') + '…'}
+                    </span>
                   </button>
                   <div className="share-menu-divider" />
                   <button
@@ -4966,6 +4985,12 @@ function HtmlViewer({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+      {pptxExportSuccess ? (
+        <div className="pptx-export-success">
+          <Icon name="check" size={13} />
+          <span>{pptxExportSuccess}</span>
         </div>
       ) : null}
     </div>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+  <rect x="72" y="84" width="112" height="8" rx="4" fill="#C00000" />
+  <image x="1016" y="44" width="192" height="52" xlink:href="logo.png" preserveAspectRatio="xMaxYMid meet" />
+
+  <text x="96" y="244" fill="#C00000" fill-opacity="0.14" font-family="Arial, sans-serif" font-size="176" font-weight="700">{{CHAPTER_NUM}}</text>
+  <text x="96" y="316" fill="#111827" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="42" font-weight="700">{{CHAPTER_TITLE}}</text>
+  <text x="96" y="364" fill="#6B7280" font-family="Arial, sans-serif" font-size="18">DIGITAL TRANSFORMATION / CHINA TELECOM</text>
+  <rect x="96" y="398" width="164" height="6" rx="3" fill="#C00000" />
+
+  <rect x="96" y="446" width="252" height="86" rx="20" fill="#F8FAFC" stroke="#E5E7EB" stroke-width="2" />
+  <rect x="124" y="478" width="92" height="4" rx="2" fill="#C00000" />
+  <text x="124" y="514" fill="#6B7280" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="15">章节过渡页</text>
+
+  <rect x="852" y="132" width="356" height="356" rx="28" fill="#F8FAFC" stroke="#E5E7EB" stroke-width="2" />
+  <rect x="888" y="186" width="132" height="4" rx="2" fill="#C00000" />
+  <rect x="900" y="248" width="186" height="4" rx="2" fill="#C00000" fill-opacity="0.78" />
+  <rect x="900" y="270" width="144" height="4" rx="2" fill="#E55B5B" fill-opacity="0.6" />
+  <rect x="900" y="292" width="206" height="4" rx="2" fill="#C00000" fill-opacity="0.4" />
+  <rect x="900" y="342" width="228" height="4" rx="2" fill="#C00000" fill-opacity="0.22" />
+  <rect x="900" y="360" width="176" height="4" rx="2" fill="#E55B5B" fill-opacity="0.34" />
+  <rect x="900" y="378" width="252" height="4" rx="2" fill="#C00000" fill-opacity="0.16" />
+  <circle cx="934" cy="424" r="8" fill="#C00000" fill-opacity="0.18" />
+  <circle cx="966" cy="424" r="8" fill="#C00000" fill-opacity="0.32" />
+  <circle cx="998" cy="424" r="8" fill="#C00000" fill-opacity="0.48" />
+
+  <image x="0" y="590" width="1280" height="130" xlink:href="footer_ribbon.png" preserveAspectRatio="xMidYMid slice" />
+</svg>

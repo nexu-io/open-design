@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Radar Chart with Data Dashboard Template
+    Purpose: Multi-dimensional capability assessment, competitor benchmarking
+    Use cases: Product evaluation, performance reviews, feature comparisons
+    Supports: 6 dimensions, 2 comparison entities, integrated data table
+    -->
+    <defs>
+        <!-- Product A Gradient (Indigo) -->
+        <linearGradient id="gradProdA" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#4F46E5" stop-opacity="0.65" />
+            <stop offset="100%" stop-color="#4338CA" stop-opacity="0.25" />
+        </linearGradient>
+        <!-- Product B Gradient (Rose) -->
+        <linearGradient id="gradProdB" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#F43F5E" stop-opacity="0.65" />
+            <stop offset="100%" stop-color="#BE123C" stop-opacity="0.25" />
+        </linearGradient>
+        <!-- Modern Shadow -->
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Comprehensive Capability Assessment</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">PRODUCT A VS PRODUCT B · SIX-DIMENSIONAL ANALYSIS</text>
+    <!-- chart-plot-area: radar | center: 500,380 | radius: 220 -->
+    <!-- ==================== Radar Chart ==================== -->
+    <g id="radarChart" transform="translate(500, 380)">
+        <!-- Concentric Background Grids (Zebra filled for contrast) -->
+        <polygon points="0,-220 190.5,-110 190.5,110 0,220 -190.5,110 -190.5,-110" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+        <polygon points="0,-176 152.4,-88 152.4,88 0,176 -152.4,88 -152.4,-88" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1.5"/>
+        <polygon points="0,-132 114.3,-66 114.3,66 0,132 -114.3,66 -114.3,-66" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+        <polygon points="0,-88 76.2,-44 76.2,44 0,88 -76.2,44 -76.2,-44" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1.5"/>
+        <polygon points="0,-44 38.1,-22 38.1,22 0,44 -38.1,22 -38.1,-22" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+        <!-- Axis Lines -->
+        <line x1="0" y1="0" x2="0" y2="-220" stroke="#CBD5E1" stroke-width="1.5"/>
+        <line x1="0" y1="0" x2="190.5" y2="-110" stroke="#CBD5E1" stroke-width="1.5"/>
+        <line x1="0" y1="0" x2="190.5" y2="110" stroke="#CBD5E1" stroke-width="1.5"/>
+        <line x1="0" y1="0" x2="0" y2="220" stroke="#CBD5E1" stroke-width="1.5"/>
+        <line x1="0" y1="0" x2="-190.5" y2="110" stroke="#CBD5E1" stroke-width="1.5"/>
+        <line x1="0" y1="0" x2="-190.5" y2="-110" stroke="#CBD5E1" stroke-width="1.5"/>
+        <!-- Axis Scale Markers -->
+        <text x="6" y="-40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#94A3B8">20</text>
+        <text x="6" y="-84" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#94A3B8">40</text>
+        <text x="6" y="-128" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#94A3B8">60</text>
+        <text x="6" y="-172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#94A3B8">80</text>
+        <text x="6" y="-216" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#94A3B8">100</text>
+        <!-- Product B Area (Drawn first to sit behind Product A) -->
+        <polygon points="0,-165 171.5,-99 161.9,93.5 0,176 -133.4,77 -123.8,-71.5" fill="url(#gradProdB)" stroke="#F43F5E" stroke-width="3"/>
+        <circle cx="0" cy="-165" r="5" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5"/>
+        <circle cx="171.5" cy="-99" r="5" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5"/>
+        <circle cx="161.9" cy="93.5" r="5" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5"/>
+        <circle cx="0" cy="176" r="5" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5"/>
+        <circle cx="-133.4" cy="77" r="5" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5"/>
+        <circle cx="-123.8" cy="-71.5" r="5" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5"/>
+        <!-- Product A Area -->
+        <polygon points="0,-198 162,-93.5 143,82.5 0,154 -152.4,88 -167.7,-96.8" fill="url(#gradProdA)" stroke="#4F46E5" stroke-width="3" filter="url(#cardShadow)"/>
+        <circle cx="0" cy="-198" r="5" fill="#FFFFFF" stroke="#4F46E5" stroke-width="2.5"/>
+        <circle cx="162" cy="-93.5" r="5" fill="#FFFFFF" stroke="#4F46E5" stroke-width="2.5"/>
+        <circle cx="143" cy="82.5" r="5" fill="#FFFFFF" stroke="#4F46E5" stroke-width="2.5"/>
+        <circle cx="0" cy="154" r="5" fill="#FFFFFF" stroke="#4F46E5" stroke-width="2.5"/>
+        <circle cx="-152.4" cy="88" r="5" fill="#FFFFFF" stroke="#4F46E5" stroke-width="2.5"/>
+        <circle cx="-167.7" cy="-96.8" r="5" fill="#FFFFFF" stroke="#4F46E5" stroke-width="2.5"/>
+        <!-- Dimension Labels -->
+        <text x="0" y="-240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="middle">Performance</text>
+        <text x="210" y="-115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="start">Security</text>
+        <text x="210" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="start">Usability</text>
+        <text x="0" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="middle">Pricing</text>
+        <text x="-210" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="end">Support</text>
+        <text x="-210" y="-115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="end">Innovation</text>
+    </g>
+    <!-- ==================== Data Dashboard Table ==================== -->
+    <g id="dataDashboard">
+        <rect x="850" y="150" width="380" height="390" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <!-- Table Title -->
+        <text x="880" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Competitor Benchmark</text>
+        <!-- Table Headers & Legend -->
+        <line x1="850" y1="210" x2="1230" y2="210" stroke="#E2E8F0" stroke-width="1.5"/>
+        <text x="880" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#64748B" letter-spacing="1">METRIC</text>
+        <rect x="980" y="225" width="12" height="12" rx="3" fill="#4F46E5"/>
+        <text x="998" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#0F172A">PROD A</text>
+        <rect x="1065" y="225" width="12" height="12" rx="3" fill="#F43F5E"/>
+        <text x="1083" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#0F172A">PROD B</text>
+        <text x="1160" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#64748B" letter-spacing="1">LEAD</text>
+        <line x1="850" y1="250" x2="1230" y2="250" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- Row 1: Performance -->
+        <text x="880" y="285" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0F172A">Performance</text>
+        <text x="998" y="285" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#312E81">90%</text>
+        <text x="1083" y="285" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">75%</text>
+        <rect x="1155" y="268" width="36" height="24" rx="12" fill="#E0E7FF"/>
+        <text x="1173" y="285" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#4338CA" text-anchor="middle">A</text>
+        <line x1="880" y1="300" x2="1200" y2="300" stroke="#F1F5F9" stroke-width="1"/>
+        <!-- Row 2: Security -->
+        <text x="880" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0F172A">Security</text>
+        <text x="998" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">85%</text>
+        <text x="1083" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#881337">90%</text>
+        <rect x="1155" y="313" width="36" height="24" rx="12" fill="#FFE4E6"/>
+        <text x="1173" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#BE123C" text-anchor="middle">B</text>
+        <line x1="880" y1="345" x2="1200" y2="345" stroke="#F1F5F9" stroke-width="1"/>
+        <!-- Row 3: Usability -->
+        <text x="880" y="375" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0F172A">Usability</text>
+        <text x="998" y="375" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">75%</text>
+        <text x="1083" y="375" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#881337">85%</text>
+        <rect x="1155" y="358" width="36" height="24" rx="12" fill="#FFE4E6"/>
+        <text x="1173" y="375" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#BE123C" text-anchor="middle">B</text>
+        <line x1="880" y1="390" x2="1200" y2="390" stroke="#F1F5F9" stroke-width="1"/>
+        <!-- Row 4: Pricing -->
+        <text x="880" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0F172A">Pricing</text>
+        <text x="998" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">70%</text>
+        <text x="1083" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#881337">80%</text>
+        <rect x="1155" y="403" width="36" height="24" rx="12" fill="#FFE4E6"/>
+        <text x="1173" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#BE123C" text-anchor="middle">B</text>
+        <line x1="880" y1="435" x2="1200" y2="435" stroke="#F1F5F9" stroke-width="1"/>
+        <!-- Row 5: Support -->
+        <text x="880" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0F172A">Support</text>
+        <text x="998" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#312E81">80%</text>
+        <text x="1083" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">70%</text>
+        <rect x="1155" y="448" width="36" height="24" rx="12" fill="#E0E7FF"/>
+        <text x="1173" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#4338CA" text-anchor="middle">A</text>
+        <line x1="880" y1="480" x2="1200" y2="480" stroke="#F1F5F9" stroke-width="1"/>
+        <!-- Row 6: Innovation -->
+        <text x="880" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0F172A">Innovation</text>
+        <text x="998" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#312E81">88%</text>
+        <text x="1083" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">65%</text>
+        <rect x="1155" y="493" width="36" height="24" rx="12" fill="#E0E7FF"/>
+        <text x="1173" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#4338CA" text-anchor="middle">A</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="60" y="685" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Data Source: Product Evaluation Report 2025</text>
+</svg>

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 目录页 - Anthropic 风格 -->
+    
+    <defs>
+        <linearGradient id="sideAccent" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#D97757"/>
+            <stop offset="100%" style="stop-color:#E8956F"/>
+        </linearGradient>
+    </defs>
+    
+    <!-- 白色背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    
+    <!-- 左侧渐变装饰条 -->
+    <rect x="0" y="0" width="8" height="720" fill="url(#sideAccent)"/>
+    
+    <!-- 页面标签 -->
+    <text x="60" y="55" font-family="Arial, sans-serif" font-size="14" font-weight="500" fill="#D97757" letter-spacing="2">
+        AGENDA
+    </text>
+    
+    <!-- 页面标题 -->
+    <text x="60" y="100" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#1A1A2E">
+        {{PAGE_TITLE}}
+    </text>
+    
+    <!-- 分隔线 -->
+    <line x1="60" y1="130" x2="300" y2="130" stroke="#E2E8F0" stroke-width="2"/>
+    
+    <!-- 目录项列表 -->
+    <g font-family="Arial, sans-serif">
+        <!-- 第1章 -->
+        <g>
+            <circle cx="90" cy="200" r="24" fill="#D97757"/>
+            <text x="90" y="207" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+            <text x="130" y="195" font-size="20" font-weight="600" fill="#1A1A2E">{{TOC_ITEM_1_TITLE}}</text>
+            <text x="130" y="218" font-size="16" fill="#64748B">{{TOC_ITEM_1_DESC}}</text>
+        </g>
+        
+        <!-- 第2章 -->
+        <g>
+            <circle cx="90" cy="285" r="24" fill="#D97757"/>
+            <text x="90" y="292" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
+            <text x="130" y="280" font-size="20" font-weight="600" fill="#1A1A2E">{{TOC_ITEM_2_TITLE}}</text>
+            <text x="130" y="303" font-size="16" fill="#64748B">{{TOC_ITEM_2_DESC}}</text>
+        </g>
+        
+        <!-- 第3章 -->
+        <g>
+            <circle cx="90" cy="370" r="24" fill="#D97757"/>
+            <text x="90" y="377" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
+            <text x="130" y="365" font-size="20" font-weight="600" fill="#1A1A2E">{{TOC_ITEM_3_TITLE}}</text>
+            <text x="130" y="388" font-size="16" fill="#64748B">{{TOC_ITEM_3_DESC}}</text>
+        </g>
+        
+        <!-- 第4章 -->
+        <g>
+            <circle cx="90" cy="455" r="24" fill="#D97757"/>
+            <text x="90" y="462" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">4</text>
+            <text x="130" y="450" font-size="20" font-weight="600" fill="#1A1A2E">{{TOC_ITEM_4_TITLE}}</text>
+            <text x="130" y="473" font-size="16" fill="#64748B">{{TOC_ITEM_4_DESC}}</text>
+        </g>
+        
+        <!-- 第5章 -->
+        <g>
+            <circle cx="90" cy="540" r="24" fill="#D97757"/>
+            <text x="90" y="547" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">5</text>
+            <text x="130" y="535" font-size="20" font-weight="600" fill="#1A1A2E">{{TOC_ITEM_5_TITLE}}</text>
+            <text x="130" y="558" font-size="16" fill="#64748B">{{TOC_ITEM_5_DESC}}</text>
+        </g>
+        
+        <!-- 第6章 -->
+        <g>
+            <circle cx="90" cy="625" r="24" fill="#D97757"/>
+            <text x="90" y="632" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">6</text>
+            <text x="130" y="620" font-size="20" font-weight="600" fill="#1A1A2E">{{TOC_ITEM_6_TITLE}}</text>
+            <text x="130" y="643" font-size="16" fill="#64748B">{{TOC_ITEM_6_DESC}}</text>
+        </g>
+    </g>
+    
+    <!-- 右侧复杂度递增示意图 -->
+    <g transform="translate(850, 200)">
+        <!-- 背景卡片 -->
+        <rect x="0" y="0" width="350" height="400" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" rx="16"/>
+        
+        <!-- 第一层 - Single LLM -->
+        <rect x="40" y="40" width="270" height="50" fill="#4A90D9" fill-opacity="0.1" stroke="#4A90D9" stroke-width="2" rx="8"/>
+        <text x="175" y="72" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#4A90D9" text-anchor="middle">Single LLM Call</text>
+        
+        <!-- 箭头1 -->
+        <path d="M175,90 L175,120" stroke="#64748B" stroke-width="2" stroke-dasharray="4,2"/>
+        <polygon points="175,130 170,120 180,120" fill="#64748B"/>
+        
+        <!-- 第二层 - Workflows -->
+        <rect x="40" y="135" width="270" height="50" fill="#4A90D9" fill-opacity="0.2" stroke="#4A90D9" stroke-width="2" rx="8"/>
+        <text x="175" y="167" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#4A90D9" text-anchor="middle">Workflows</text>
+        
+        <!-- 箭头2 -->
+        <path d="M175,185 L175,215" stroke="#64748B" stroke-width="2" stroke-dasharray="4,2"/>
+        <polygon points="175,225 170,215 180,215" fill="#64748B"/>
+        
+        <!-- 第三层 - Autonomous Agents -->
+        <rect x="40" y="230" width="270" height="50" fill="#D97757" fill-opacity="0.2" stroke="#D97757" stroke-width="2" rx="8"/>
+        <text x="175" y="262" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#D97757" text-anchor="middle">Autonomous Agents</text>
+        
+        <!-- 说明文字 -->
+        <text x="175" y="320" font-family="Arial, sans-serif" font-size="14" fill="#64748B" text-anchor="middle">复杂度递增</text>
+        <text x="175" y="342" font-family="Arial, sans-serif" font-size="14" fill="#64748B" text-anchor="middle">按需升级</text>
+        
+        <!-- 侧边箭头 -->
+        <path d="M320,100 L340,170 L320,240" stroke="#E2E8F0" stroke-width="2" fill="none"/>
+    </g>
+    
+    <!-- 页码 -->
+    <text x="640" y="695" font-family="Arial, sans-serif" font-size="14" fill="#64748B" text-anchor="middle">
+        {{PAGE_NUM}} / {{TOTAL_PAGES}}
+    </text>
+
+</svg>

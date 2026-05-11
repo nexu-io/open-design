@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Pareto Chart Template
+    Purpose: 80/20 analysis, identify key factors
+    Use cases: Quality issue analysis, sales contribution, cost structure, defect attribution
+    Supports: Bar chart + cumulative line chart combination
+    -->
+    <defs>
+        <!-- Gradient for the "Vital Few" (Top 80% contributors) -->
+        <linearGradient id="vitalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#818CF8"/> <!-- Indigo-400 -->
+            <stop offset="100%" stop-color="#4F46E5"/> <!-- Indigo-600 -->
+        </linearGradient>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title Area -->
+    <text x="640" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="800" fill="#0F172A" text-anchor="middle">Product Quality Issue Pareto Analysis</text>
+    <text x="640" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" font-weight="700" fill="#64748B" letter-spacing="1" text-anchor="middle">2025 Q4 — CUSTOMER COMPLAINT ATTRIBUTION (TOTAL: 1,000 CASES)</text>
+    <!-- Legend -->
+    <g id="legend" transform="translate(150, 110)">
+        <!-- Bar: Vital Few -->
+        <rect x="0" y="0" width="24" height="12" fill="url(#vitalGrad)" rx="2"/>
+        <text x="32" y="10" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Vital Few (80%)</text>
+        <!-- Bar: Trivial Many -->
+        <rect x="150" y="0" width="24" height="12" fill="#CBD5E1" rx="2"/>
+        <text x="182" y="10" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Trivial Many</text>
+        <!-- Line: Cumulative -->
+        <line x1="290" y1="6" x2="320" y2="6" stroke="#F43F5E" stroke-width="3"/>
+        <circle cx="305" cy="6" r="4" fill="#FFFFFF" stroke="#F43F5E" stroke-width="2"/>
+        <text x="330" y="10" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Cumulative %</text>
+    </g>
+    <!-- ==================== Axes and Grids ==================== -->
+    <!-- X-axis -->
+    <line x1="130" y1="580" x2="1150" y2="580" stroke="#CBD5E1" stroke-width="2"/>
+    <!-- Y-axis (Left - Count) -->
+    <line x1="130" y1="130" x2="130" y2="580" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="70" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90, 70, 360)">Complaint Count</text>
+    <text x="115" y="584" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">0</text>
+    <text x="115" y="484" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">100</text>
+    <text x="115" y="384" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">200</text>
+    <text x="115" y="284" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">300</text>
+    <text x="115" y="184" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">400</text>
+    <!-- Y-axis (Right - Percentage) -->
+    <line x1="1150" y1="130" x2="1150" y2="580" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="1210" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#F43F5E" text-anchor="middle" transform="rotate(90, 1210, 360)">Cumulative %</text>
+    <text x="1165" y="584" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#F43F5E">0%</text>
+    <text x="1165" y="494" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#F43F5E">20%</text>
+    <text x="1165" y="404" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#F43F5E">40%</text>
+    <text x="1165" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#F43F5E">60%</text>
+    <text x="1165" y="224" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#F43F5E">80%</text>
+    <text x="1165" y="134" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#F43F5E">100%</text>
+    <!-- Horizontal Grid Lines -->
+    <line x1="130" y1="490" x2="1150" y2="490" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4 4"/>
+    <line x1="130" y1="400" x2="1150" y2="400" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4 4"/>
+    <line x1="130" y1="310" x2="1150" y2="310" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4 4"/>
+    <!-- 80% Reference Line -->
+    <line x1="130" y1="220" x2="1150" y2="220" stroke="#F43F5E" stroke-width="1.5" stroke-dasharray="6 4" stroke-opacity="0.6"/>
+    <!-- Divider between Vital Few and Trivial Many -->
+    <line x1="660" y1="130" x2="660" y2="580" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="6 4" stroke-opacity="0.8"/>
+    <text x="645" y="150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="end">VITAL FEW (84%)</text>
+    <text x="675" y="150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#94A3B8" text-anchor="start">TRIVIAL MANY (16%)</text>
+    <!-- chart-plot-area: 130,130,1150,580 -->
+    <!-- ==================== Bar Data ==================== -->
+    <!-- 1. Function Error: 350 (35%) - Cumulative 35% -->
+    <rect x="180" y="230" width="80" height="350" fill="url(#vitalGrad)" rx="4"/>
+    <text x="220" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#4F46E5" text-anchor="middle">350</text>
+    <text x="220" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Function Error</text>
+    <text x="220" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">35%</text>
+    <!-- 2. Appearance: 220 (22%) - Cumulative 57% -->
+    <rect x="310" y="360" width="80" height="220" fill="url(#vitalGrad)" rx="4"/>
+    <text x="350" y="345" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#4F46E5" text-anchor="middle">220</text>
+    <text x="350" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Appearance</text>
+    <text x="350" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">22%</text>
+    <!-- 3. Missing Parts: 150 (15%) - Cumulative 72% -->
+    <rect x="440" y="430" width="80" height="150" fill="url(#vitalGrad)" rx="4"/>
+    <text x="480" y="415" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#4F46E5" text-anchor="middle">150</text>
+    <text x="480" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Missing Parts</text>
+    <text x="480" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">15%</text>
+    <!-- 4. Ship Damage: 120 (12%) - Cumulative 84% -->
+    <rect x="570" y="460" width="80" height="120" fill="url(#vitalGrad)" rx="4"/>
+    <text x="610" y="445" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#4F46E5" text-anchor="middle">120</text>
+    <text x="610" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Ship Damage</text>
+    <text x="610" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">12%</text>
+    <!-- 5. Manual Error: 70 (7%) - Cumulative 91% -->
+    <rect x="700" y="510" width="80" height="70" fill="#CBD5E1" rx="4"/>
+    <text x="740" y="495" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#64748B" text-anchor="middle">70</text>
+    <text x="740" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Manual Error</text>
+    <text x="740" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">7%</text>
+    <!-- 6. Packaging: 50 (5%) - Cumulative 96% -->
+    <rect x="830" y="530" width="80" height="50" fill="#CBD5E1" rx="4"/>
+    <text x="870" y="515" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#64748B" text-anchor="middle">50</text>
+    <text x="870" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Packaging</text>
+    <text x="870" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">5%</text>
+    <!-- 7. Other: 40 (4%) - Cumulative 100% -->
+    <rect x="960" y="540" width="80" height="40" fill="#CBD5E1" rx="4"/>
+    <text x="1000" y="525" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#64748B" text-anchor="middle">40</text>
+    <text x="1000" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B" text-anchor="middle">Other</text>
+    <text x="1000" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">4%</text>
+    <!-- ==================== Cumulative Line Chart ==================== -->
+    <polyline points="220,422.5 350,323.5 480,256 610,202 740,170.5 870,148 1000,130" 
+              fill="none" stroke="#F43F5E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#FFFFFF" stroke="#F43F5E" stroke-width="2.5">
+        <circle cx="220" cy="422.5" r="5"/>
+        <circle cx="350" cy="323.5" r="5"/>
+        <circle cx="480" cy="256" r="5"/>
+        <circle cx="610" cy="202" r="5"/>
+        <circle cx="740" cy="170.5" r="5"/>
+        <circle cx="870" cy="148" r="5"/>
+        <circle cx="1000" cy="130" r="5"/>
+    </g>
+    <text x="220" y="405" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">35%</text>
+    <text x="350" y="306" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">57%</text>
+    <text x="480" y="238" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">72%</text>
+    <text x="610" y="184" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">84%</text>
+    <text x="740" y="152" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">91%</text>
+    <text x="870" y="130" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">96%</text>
+    <text x="1000" y="112" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">100%</text>
+    <!-- ==================== Insight Box ==================== -->
+    <rect x="130" y="650" width="1020" height="46" rx="8" fill="#FFF1F2" stroke="#FDA4AF" stroke-width="1.5"/>
+    <text x="150" y="678" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#9F1239">Key Finding:</text>
+    <text x="245" y="678" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#BE123C">Top 4 issues account for 84% of complaints — Prioritize resolution</text>
+    <text x="700" y="678" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#F43F5E">| Action: Enhance QC process, optimize packaging, enforce part checks</text>
+</svg>

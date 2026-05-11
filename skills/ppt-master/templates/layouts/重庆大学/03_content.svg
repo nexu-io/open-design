@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <defs>
+    <!-- 顶部斜切渐变 -->
+    <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#004A82"/>
+      <stop offset="100%" stop-color="#006BB7"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1280" height="720" fill="#FAFCFF"/>
+  
+  <!-- 顶部斜切蓝色装饰带（左高右低） -->
+  <polygon points="0,0 1280,0 1280,70 0,90" fill="url(#headerGradient)"/>
+  
+  <!-- 斜切带下方的浅色过渡 -->
+  <polygon points="0,90 1280,70 1280,85 0,105" fill="#E3F2FD"/>
+  
+  <!-- 页面标题 -->
+  <text x="60" y="55" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="24" font-weight="bold">{{PAGE_TITLE}}</text>
+  
+  <!-- Logo（右上角，在斜切带上） -->
+  <image x="1040" y="12" width="200" height="50" xlink:href="重庆大学logo2.png" preserveAspectRatio="xMidYMid meet"/>
+  
+  <!-- 左侧金色装饰竖线（贯穿内容区） -->
+  <rect x="40" y="130" width="3" height="480" fill="#D4A84B" fill-opacity="0.6"/>
+  
+  <!-- 核心观点条 -->
+  <rect x="60" y="120" width="1160" height="50" fill="#E3F2FD" rx="6"/>
+  <rect x="60" y="120" width="4" height="50" fill="#006BB7"/>
+  <text x="80" y="152" fill="#006BB7" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="bold">核心观点</text>
+  <text x="170" y="152" fill="#333D4A" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15">{{KEY_MESSAGE}}</text>
+  
+  <!-- 内容区域占位 -->
+  <rect x="60" y="190" width="1160" height="440" fill="#FFFFFF" stroke="#E3F2FD" stroke-width="2" rx="8"/>
+  <text x="640" y="410" text-anchor="middle" fill="#B0C4D4" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16">{{CONTENT_AREA}}</text>
+  
+  <!-- 底部波浪装饰 -->
+  <path d="M0,690 Q160,680 320,690 T640,680 T960,690 T1280,680 L1280,720 L0,720 Z" fill="#006BB7" fill-opacity="0.05"/>
+  
+  <!-- 页脚区域 -->
+  <rect x="0" y="650" width="1280" height="70" fill="#FAFCFF"/>
+  
+  <!-- 页脚左侧：数据来源 -->
+  <text x="60" y="685" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="11">数据来源：{{SOURCE}}</text>
+  
+  <!-- 页脚中部：章节名称 -->
+  <text x="640" y="685" text-anchor="middle" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12">{{SECTION_NAME}}</text>
+  
+  <!-- 页脚右侧：页码（金色装饰） -->
+  <rect x="1180" y="665" width="40" height="28" fill="#006BB7" rx="4"/>
+  <text x="1200" y="685" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="13" font-weight="bold">{{PAGE_NUM}}</text>
+  
+  <!-- 左下角金色光点 -->
+  <circle cx="50" cy="670" r="3" fill="#D4A84B" fill-opacity="0.5"/>
+</svg>

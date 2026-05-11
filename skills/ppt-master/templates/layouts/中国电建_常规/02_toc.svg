@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 目录页 - 中国电建经典风格 -->
+
+    <defs>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:1" />
+        </linearGradient>
+        <!-- 左侧装饰渐变 -->
+        <linearGradient id="sideGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 白色背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)"/>
+
+    <!-- 左侧装饰区域 -->
+    <rect x="0" y="0" width="280" height="720" fill="#00418D" fill-opacity="0.03"/>
+    <rect x="0" y="0" width="8" height="720" fill="url(#sideGrad)"/>
+    <rect x="16" y="100" width="3" height="520" fill="#4A90D9" fill-opacity="0.5"/>
+
+    <!-- 页面标题 -->
+    <text x="60" y="80" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="36" font-weight="bold" fill="#00418D">
+        目 录
+    </text>
+    <text x="60" y="110" font-family="Arial, sans-serif" font-size="16" fill="#4A90D9" letter-spacing="3">
+        CONTENTS
+    </text>
+
+    <!-- 装饰分隔线 -->
+    <line x1="60" y1="130" x2="180" y2="130" stroke="#00418D" stroke-width="3"/>
+    <line x1="180" y1="130" x2="220" y2="130" stroke="#C41E3A" stroke-width="2"/>
+
+    <!-- 目录项 1 -->
+    <g>
+        <text x="320" y="200" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00418D">01</text>
+        <rect x="390" y="175" width="3" height="40" fill="#00418D"/>
+        <text x="410" y="195" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1A1A1A">{{TOC_ITEM_1_TITLE}}</text>
+        <text x="410" y="220" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#718096">{{TOC_ITEM_1_DESC}}</text>
+        <line x1="410" y1="235" x2="800" y2="235" stroke="#E4E7EB" stroke-width="1"/>
+    </g>
+
+    <!-- 目录项 2 -->
+    <g>
+        <text x="320" y="300" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00418D">02</text>
+        <rect x="390" y="275" width="3" height="40" fill="#00418D"/>
+        <text x="410" y="295" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1A1A1A">{{TOC_ITEM_2_TITLE}}</text>
+        <text x="410" y="320" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#718096">{{TOC_ITEM_2_DESC}}</text>
+        <line x1="410" y1="335" x2="800" y2="335" stroke="#E4E7EB" stroke-width="1"/>
+    </g>
+
+    <!-- 目录项 3 -->
+    <g>
+        <text x="320" y="400" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00418D">03</text>
+        <rect x="390" y="375" width="3" height="40" fill="#00418D"/>
+        <text x="410" y="395" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1A1A1A">{{TOC_ITEM_3_TITLE}}</text>
+        <text x="410" y="420" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#718096">{{TOC_ITEM_3_DESC}}</text>
+        <line x1="410" y1="435" x2="800" y2="435" stroke="#E4E7EB" stroke-width="1"/>
+    </g>
+
+    <!-- 目录项 4 -->
+    <g>
+        <text x="320" y="500" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00418D">04</text>
+        <rect x="390" y="475" width="3" height="40" fill="#00418D"/>
+        <text x="410" y="495" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1A1A1A">{{TOC_ITEM_4_TITLE}}</text>
+        <text x="410" y="520" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#718096">{{TOC_ITEM_4_DESC}}</text>
+        <line x1="410" y1="535" x2="800" y2="535" stroke="#E4E7EB" stroke-width="1"/>
+    </g>
+
+    <!-- 目录项 5 -->
+    <g>
+        <text x="320" y="600" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00418D">05</text>
+        <rect x="390" y="575" width="3" height="40" fill="#00418D"/>
+        <text x="410" y="595" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1A1A1A">{{TOC_ITEM_5_TITLE}}</text>
+        <text x="410" y="620" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#718096">{{TOC_ITEM_5_DESC}}</text>
+    </g>
+
+    <!-- 右侧数据展示区 -->
+    <rect x="880" y="160" width="340" height="460" fill="#F4F6F8" rx="8"/>
+    <rect x="880" y="160" width="6" height="460" fill="#00418D"/>
+    
+    <!-- 企业数据 -->
+    <text x="1050" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#00418D" fill-opacity="0.15">{{STAT_1}}</text>
+    <text x="1050" y="300" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#4A5568">{{STAT_1_LABEL}}</text>
+    
+    <line x1="920" y1="340" x2="1180" y2="340" stroke="#E4E7EB" stroke-width="1"/>
+    
+    <text x="1050" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#C41E3A" fill-opacity="0.15">{{STAT_2}}</text>
+    <text x="1050" y="460" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#4A5568">{{STAT_2_LABEL}}</text>
+    
+    <line x1="920" y1="500" x2="1180" y2="500" stroke="#E4E7EB" stroke-width="1"/>
+    
+    <text x="1050" y="570" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00418D" fill-opacity="0.12">{{STAT_3}}</text>
+    <text x="1050" y="600" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#4A5568">{{STAT_3_LABEL}}</text>
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#00418D"/>
+
+    <!-- 页码 -->
+    <text x="640" y="695" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#718096">{{PAGE_NUM}}</text>
+
+    <!-- 企业标识 -->
+    <text x="1220" y="695" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#718096">POWERCHINA</text>
+
+</svg>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - 中汽研风格 -->
+
+    <!-- 背景层 - 使用封面背景图（AI生成或用户提供） -->
+    <image href="../images/{{COVER_BG_IMAGE}}" x="0" y="0" width="1280" height="720"
+        preserveAspectRatio="xMidYMid slice" />
+
+    <!-- 半透明遮罩层 - 增强文字可读性 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#001F4D" fill-opacity="0.4" />
+
+    <!-- 顶部装饰线 -->
+    <rect x="0" y="0" width="1280" height="4" fill="#FFFFFF" fill-opacity="0.3" />
+
+    <!-- 大型Logo - 居中偏上 -->
+    <image href="../images/{{LOGO_LARGE}}" x="344" y="120" width="592" height="238"
+        preserveAspectRatio="xMidYMid meet" />
+
+    <!-- 主标题区域 -->
+    <text x="640" y="440" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="48"
+        font-weight="bold" fill="#FFFFFF">
+        {{TITLE}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="640" y="500" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="26"
+        fill="#FFFFFF" fill-opacity="0.85">
+        {{SUBTITLE}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="440" y1="540" x2="840" y2="540" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.4" />
+
+    <!-- 单位名称（中文） -->
+    <text x="640" y="590" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22"
+        fill="#FFFFFF" fill-opacity="0.9">
+        {{AUTHOR}}
+    </text>
+
+    <!-- 单位名称（英文） - 可选 -->
+    <text x="640" y="625" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#FFFFFF"
+        fill-opacity="0.7">
+        {{AUTHOR_EN}}
+    </text>
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#004098" />
+
+</svg>

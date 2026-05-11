@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Ansoff Matrix Template
+    Purpose: Product and market growth strategy planning
+    Use cases: Strategic planning, marketing expansion, risk assessment
+    Design Principles: 4 quadrant grid mapped across Existing/New Markets and Existing/New Products
+    -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Growth Strategy Framework</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">ANSOFF MATRIX: MARKETS VS PRODUCTS STRATEGY</text>
+    <!-- ==================== Axis & Labels ==================== -->
+    <g transform="translate(180, 160)">
+        <!-- Y-Axis: Markets -->
+        <text x="-40" y="220" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A" transform="rotate(-90 -40,220)" letter-spacing="2">MARKETS</text>
+        <text x="-20" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" transform="rotate(-90 -20,120)">NEW</text>
+        <text x="-20" y="340" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" transform="rotate(-90 -20,340)">EXISTING</text>
+        <!-- X-Axis: Products/Services -->
+        <text x="440" y="-30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="middle" letter-spacing="2">PRODUCTS &amp; SERVICES</text>
+        <text x="220" y="-10" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" text-anchor="middle">EXISTING</text>
+        <text x="660" y="-10" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" text-anchor="middle">NEW</text>
+        <!-- Quadrant Dividers -->
+        <rect x="0" y="0" width="880" height="440" fill="none" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="440" y1="0" x2="440" y2="440" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="0" y1="220" x2="880" y2="220" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- ==================== Quadrant 1: Market Development (Top Left, New Market / Existing Product) ==================== -->
+        <g transform="translate(0, 0)">
+            <rect width="440" height="220" fill="#F8FAFC"/>
+            <text x="30" y="50" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#2563EB">Market Development</text>
+            <text x="30" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#3B82F6" letter-spacing="1">MODERATE RISK</text>
+            <circle cx="40" cy="120" r="4" fill="#64748B"/>
+            <text x="55" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Expansion into European markets.</text>
+            <circle cx="40" cy="150" r="4" fill="#64748B"/>
+            <text x="55" y="155" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Targeting Enterprise segment.</text>
+        </g>
+        <!-- ==================== Quadrant 2: Diversification (Top Right, New Market / New Product) ==================== -->
+        <g transform="translate(440, 0)">
+            <rect width="440" height="220" fill="#FFF1F2"/>
+            <text x="30" y="50" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#E11D48">Diversification</text>
+            <text x="30" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#F43F5E" letter-spacing="1">HIGH RISK</text>
+            <circle cx="40" cy="120" r="4" fill="#64748B"/>
+            <text x="55" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Launch B2C consumer hardware line.</text>
+            <circle cx="40" cy="150" r="4" fill="#64748B"/>
+            <text x="55" y="155" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Acquire startup in new vertical.</text>
+        </g>
+        <!-- ==================== Quadrant 3: Market Penetration (Bottom Left, Existing Market / Existing Product) ==================== -->
+        <g transform="translate(0, 220)">
+            <rect width="440" height="220" fill="#ECFDF5"/>
+            <text x="30" y="50" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#059669">Market Penetration</text>
+            <text x="30" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#10B981" letter-spacing="1">LOW RISK</text>
+            <circle cx="40" cy="120" r="4" fill="#64748B"/>
+            <text x="55" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Increase marketing ad spend by 20%.</text>
+            <circle cx="40" cy="150" r="4" fill="#64748B"/>
+            <text x="55" y="155" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Implement customer loyalty program.</text>
+        </g>
+        <!-- ==================== Quadrant 4: Product Development (Bottom Right, Existing Market / New Product) ==================== -->
+        <g transform="translate(440, 220)">
+            <rect width="440" height="220" fill="#F5F3FF"/>
+            <text x="30" y="50" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#7C3AED">Product Development</text>
+            <text x="30" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#8B5CF6" letter-spacing="1">MODERATE RISK</text>
+            <circle cx="40" cy="120" r="4" fill="#64748B"/>
+            <text x="55" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Add AI-powered analytics module.</text>
+            <circle cx="40" cy="150" r="4" fill="#64748B"/>
+            <text x="55" y="155" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Launch mobile application version.</text>
+        </g>
+    </g>
+</svg>

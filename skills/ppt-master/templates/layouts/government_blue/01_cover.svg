@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - 政府蓝风格 (优化版) -->
+
+    <defs>
+        <!-- 深蓝渐变背景 -->
+        <linearGradient id="coverBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#0050B3;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#003D8F;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001F4D;stop-opacity:1" />
+        </linearGradient>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#00B4D8;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0050B3;stop-opacity:1" />
+        </linearGradient>
+        <!-- 左侧装饰渐变 -->
+        <linearGradient id="sideGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#00B4D8;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#0077B6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00B4D8;stop-opacity:1" />
+        </linearGradient>
+        <!-- 网格图案 -->
+        <pattern id="gridPattern" width="60" height="60" patternUnits="userSpaceOnUse">
+            <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.08"/>
+        </pattern>
+    </defs>
+
+    <!-- 背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#coverBgGrad)" />
+    
+    <!-- 科技网格纹理 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#gridPattern)" />
+
+    <!-- 装饰元素 - 几何图案 -->
+    <circle cx="1150" cy="120" r="200" fill="#FFFFFF" fill-opacity="0.03" />
+    <circle cx="1200" cy="80" r="120" fill="#00B4D8" fill-opacity="0.05" />
+    <circle cx="150" cy="600" r="250" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="80" cy="650" r="150" fill="#00B4D8" fill-opacity="0.04" />
+
+    <!-- 对角线装饰 -->
+    <line x1="900" y1="0" x2="1280" y2="380" stroke="#00B4D8" stroke-width="1" stroke-opacity="0.15" />
+    <line x1="950" y1="0" x2="1280" y2="330" stroke="#00B4D8" stroke-width="1" stroke-opacity="0.1" />
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)" />
+
+    <!-- 左侧装饰竖条 -->
+    <rect x="0" y="180" width="8" height="360" fill="url(#sideGrad)" />
+    <rect x="16" y="220" width="3" height="280" fill="#00B4D8" fill-opacity="0.5" />
+
+    <!-- 主标题区域背景 -->
+    <rect x="0" y="260" width="900" height="180" fill="#000000" fill-opacity="0.25" />
+    <rect x="0" y="260" width="8" height="180" fill="#00B4D8" />
+
+    <!-- 主标题 -->
+    <text x="60" y="340" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="52" font-weight="bold" fill="#FFFFFF">
+        {{TITLE}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="60" y="400" font-family="Microsoft YaHei, Arial, sans-serif" font-size="26" fill="#90E0EF">
+        {{SUBTITLE}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="60" y1="480" x2="400" y2="480" stroke="#00B4D8" stroke-width="2" stroke-opacity="0.8" />
+
+    <!-- 汇报人信息 -->
+    <text x="60" y="530" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#FFFFFF" fill-opacity="0.9">
+        汇报人：{{PRESENTER}}
+    </text>
+
+    <!-- 单位名称 -->
+    <text x="60" y="570" font-family="Microsoft YaHei, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.7">
+        {{ORGANIZATION}}
+    </text>
+
+    <!-- 日期 -->
+    <text x="60" y="610" font-family="Arial, Microsoft YaHei, sans-serif" font-size="16" fill="#90E0EF" fill-opacity="0.8">
+        {{DATE}}
+    </text>
+
+    <!-- 底部装饰区域 -->
+    <rect x="0" y="700" width="1280" height="20" fill="#003366" />
+    <rect x="0" y="700" width="400" height="20" fill="url(#topGrad)" fill-opacity="0.6" />
+
+    <!-- 右下角Logo区域 -->
+    <text x="1200" y="680" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="#FFFFFF" fill-opacity="0.5">
+        {{ORG_SHORT}}
+    </text>
+
+</svg>

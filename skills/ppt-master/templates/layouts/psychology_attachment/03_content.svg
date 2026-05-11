@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="#F8FAFC" />
+
+    <!-- 左侧装饰条 -->
+    <rect x="0" y="0" width="8" height="720" fill="#2E5C8E" />
+
+    <!-- 标题区域 -->
+    <text x="60" y="75" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="28" font-weight="bold"
+        fill="#1E293B">
+        {{PAGE_TITLE}}
+    </text>
+    <text x="60" y="105" font-family="system-ui, sans-serif" font-size="16" fill="#64748B">
+        {{TITLE_EN}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="60" y1="125" x2="500" y2="125" stroke="#E5E7EB" stroke-width="2" />
+
+    <!-- ==================== 内容区域 ==================== -->
+    <!-- 
+    AI 灵活布局区
+    可用空间: x=60, y=140, width=1180, height=490
+    请根据实际内容选择合适的布局模式：
+    - 三栏并列（每栏 360px + 间距 40px）
+    - 左右分栏（左 560px + 间距 60px + 右 580px）
+    - 垂直堆叠（层级结构）
+    - 四格对比（依恋类型）
+    - 单栏居中
+  -->
+    <rect x="60" y="140" width="1180" height="490" fill="none" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="8,4"
+        rx="8" />
+    <text x="650" y="390" text-anchor="middle" fill="#CBD5E1" font-family="PingFang SC, Microsoft YaHei, sans-serif"
+        font-size="14">
+        {{CONTENT_AREA}}
+    </text>
+
+    <!-- 页码 -->
+    <text x="1220" y="700" font-family="system-ui, sans-serif" font-size="14" fill="#9CA3AF"
+        text-anchor="end">{{PAGE_NUM}}</text>
+</svg>

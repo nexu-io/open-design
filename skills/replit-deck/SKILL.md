@@ -43,7 +43,7 @@ od:
       type: integer
       default: 6
       min: 3
-      max: 20
+      max: 30
       # 6 is a board-update baseline. Memos and campaign decks usually land
       # at 3–4 (see example-holm / example-bluehouse). Long-form chapters
       # (atlas) can run 8–12. Don't pad to hit the default.
@@ -109,7 +109,7 @@ Default 6 slides. Write the rhythm BEFORE any HTML, for example (helix, 6 slides
 06  closing         one bold number or CTA
 ```
 
-Show this to the user. Redirecting at this stage is cheap.
+**Show this to the user and STOP.** Do NOT copy the seed or write any HTML until the user approves the rhythm. Redirecting at this stage is cheap.
 
 ### Step 3 — Copy seed, bind theme
 
@@ -118,11 +118,26 @@ Show this to the user. Redirecting at this stage is cheap.
 3. Replace `<title>`.
 4. Delete the placeholder slides in the body (the seed ships with 3 demo slides). Keep the chrome (counter / progress / hint).
 
-### Step 4 — Paste layouts, fill real copy
+### Step 4 — Paste layouts, fill real copy — ONE SLIDE AT A TIME
 
-For each planned slide, copy the matching `<section>` from `references/layouts.md`. Replace every `[REPLACE]` with specific copy — never leave placeholders, never use lorem. If a slide feels empty, pick a different layout.
+**CRITICAL: Each turn writes exactly ONE slide. Each turn gets exactly ONE TodoWrite item.**
 
-Tag each slide with `data-screen-label="01 Cover"`, `"02 Metrics"`, etc., in presentation order.
+Wrong: creating 6 TodoWrite items at once like "Fill slide 1, Fill slide 2, ..., Fill slide 6" → agent tries to execute all → context overflow → crash.
+
+Correct pattern:
+- Turn 1: `TodoWrite: - Emit outline (JSON)` → outline only, no HTML
+- Turn 2: `TodoWrite: - Fill slide 1 (Cover)` → write slide 1 → stop
+- Turn 3: `TodoWrite: - Fill slide 2 (Metrics)` → write slide 2 → stop
+- ... repeat for each slide
+
+**Never create more than one TodoWrite item in a single turn.**
+
+For each slide:
+1. Copy the matching `<section>` from `references/layouts.md`
+2. Replace every `[REPLACE]` with specific copy — never leave placeholders, never use lorem
+3. If a slide feels empty, pick a different layout
+4. Tag with `data-screen-label="01 Cover"`, `"02 Metrics"`, etc.
+5. Move to the next slide
 
 ### Step 5 — Self-check
 
@@ -147,11 +162,20 @@ If any `style="--accent:..."` or theme override appears on individual slides, re
 
 One sentence before the artifact. Stop after `</artifact>`.
 
+## Visual quality standards
+
+This is a premium deck export. Every visual element must look polished and intentional:
+
+- **Data charts** (bar, line, pie, comparison): use HTML Canvas inside the slide. Canvas renders as a sharp bitmap at 600 DPI in the PDF→PPTX pipeline. Use the theme's colors for fills, axes, and labels. Add grid lines, value labels, and smooth curves — no flat bare-bones charts.
+- **Images**: prefer high-quality Unsplash photos for hero slides. Use `https://` URLs. No broken or low-resolution placeholders.
+- **Typography**: large bold headlines, generous spacing, real copy only (no lorem ipsum).
+- **Layout**: never leave a slide feeling empty or template-like. Use generous gaps, thoughtful alignment, and meaningful whitespace.
+
 ## Hard rules
 
 - **One theme per deck.** `data-theme` set on `<body>` — never override per-slide.
 - **Numbers are real or absent.** No invented metrics. Use `—` or a grey block as an honest placeholder.
-- **Display face follows theme.** helix/world-dark/world-mint/bluehouse use the sans Display; holm/vance/atlas use the serif Display; bevel uses the Y2K display. Do not swap. (Authoritative source: the `--font-display` token of each theme in `assets/template.html` — if this list ever disagrees with the template, the template wins.)
+- **Standard PPT fonts only.** All themes use the same sans-serif stack: headings in bold (PingFang SC Bold / Microsoft YaHei Bold / Segoe UI Bold / Arial Bold), body in regular (PingFang SC / Microsoft YaHei / Segoe UI / Arial). Do NOT import Google Fonts or use serif display faces — the original Replit templates used varied display faces, but for PPT export fidelity, stick to the standard presentation font stack.
 - **Accent appears 1–2× per slide max.** Never a gradient-spam.
 - **Never rewrite the nav script.** Five iframe bugs it solves are not obvious.
 - **Keep it one HTML file.** Inline all CSS. No external fonts — the system stack in each theme is deliberate.

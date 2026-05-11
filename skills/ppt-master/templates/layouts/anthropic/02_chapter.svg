@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 章节页 - Anthropic 风格 -->
+    
+    <defs>
+        <!-- 背景渐变 -->
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#1A1A2E"/>
+            <stop offset="50%" style="stop-color:#16213E"/>
+            <stop offset="100%" style="stop-color:#0F0F1A"/>
+        </linearGradient>
+        <!-- 橙色渐变 -->
+        <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#D97757"/>
+            <stop offset="100%" style="stop-color:#E8956F"/>
+        </linearGradient>
+        <!-- 光晕 -->
+        <radialGradient id="glowOrange" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#D97757;stop-opacity:0.25"/>
+            <stop offset="100%" style="stop-color:#D97757;stop-opacity:0"/>
+        </radialGradient>
+    </defs>
+    
+    <!-- 渐变背景 -->
+    <rect width="1280" height="720" fill="url(#bgGradient)"/>
+    
+    <!-- 网格装饰线 -->
+    <g stroke="#FFFFFF" stroke-opacity="0.03" stroke-width="1">
+        <line x1="0" y1="180" x2="1280" y2="180"/>
+        <line x1="0" y1="360" x2="1280" y2="360"/>
+        <line x1="0" y1="540" x2="1280" y2="540"/>
+        <line x1="320" y1="0" x2="320" y2="720"/>
+        <line x1="640" y1="0" x2="640" y2="720"/>
+        <line x1="960" y1="0" x2="960" y2="720"/>
+    </g>
+    
+    <!-- 光晕效果 -->
+    <ellipse cx="640" cy="360" rx="400" ry="300" fill="url(#glowOrange)"/>
+    
+    <!-- 装饰圆形 -->
+    <circle cx="200" cy="200" r="80" fill="#4A90D9" fill-opacity="0.05"/>
+    <circle cx="1080" cy="520" r="100" fill="#D97757" fill-opacity="0.05"/>
+    
+    <!-- 章节编号背景 -->
+    <text x="640" y="280" text-anchor="middle" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="#FFFFFF" fill-opacity="0.03">
+        {{CHAPTER_NUM}}
+    </text>
+    
+    <!-- SECTION 标签 -->
+    <text x="640" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="500" fill="#D97757" letter-spacing="4">
+        SECTION {{CHAPTER_NUM}}
+    </text>
+    
+    <!-- 装饰线 -->
+    <rect x="540" y="320" width="200" height="3" fill="url(#accentGradient)" rx="1.5"/>
+    
+    <!-- 章节标题 -->
+    <text x="640" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF">
+        {{CHAPTER_TITLE}}
+    </text>
+    
+    <!-- 章节描述 -->
+    <text x="640" y="460" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#FFFFFF" fill-opacity="0.7">
+        {{CHAPTER_DESC}}
+    </text>
+    
+    <!-- 底部装饰线 -->
+    <rect x="60" y="650" width="1160" height="1" fill="#FFFFFF" fill-opacity="0.1"/>
+    
+    <!-- 页码 -->
+    <text x="640" y="690" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#64748B">
+        {{PAGE_NUM}} / {{TOTAL_PAGES}}
+    </text>
+
+</svg>

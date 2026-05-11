@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Project Schedule Table Template
+    Purpose: Project timeline, task ownership, and status tracking
+    Use cases: Implementation plans, quarterly OKR tracking, roadmap tables
+    Design Principles: Visual integration (table + Gantt), weak borders, status highlighting
+    -->
+    <defs>
+        <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="1"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.05"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Enterprise System Implementation Plan</text>
+    <text x="60" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">PROJECT SCHEDULE TABLE · H1 2025</text>
+    <!-- ==================== Table Structure ==================== -->
+    <g id="tableArea" transform="translate(60, 150)">
+        <!-- Table Header -->
+        <line x1="0" y1="35" x2="1160" y2="35" stroke="#CBD5E1" stroke-width="2"/>
+        <text x="10" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1">PHASE &amp; TASK DESCRIPTION</text>
+        <text x="360" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1">OWNER</text>
+        <text x="500" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1" text-anchor="middle">STATUS</text>
+        <!-- Timeline Header (Months) -->
+        <text x="640" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="middle">JAN</text>
+        <text x="730" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="middle">FEB</text>
+        <text x="820" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="middle">MAR</text>
+        <text x="910" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="middle">APR</text>
+        <text x="1000" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="middle">MAY</text>
+        <text x="1090" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" text-anchor="middle">JUN</text>
+        <!-- Vertical grid lines for timeline section only (very subtle) -->
+        <line x1="595" y1="35" x2="595" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="685" y1="35" x2="685" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="775" y1="35" x2="775" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="865" y1="35" x2="865" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="955" y1="35" x2="955" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="1045" y1="35" x2="1045" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="1135" y1="35" x2="1135" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <!-- Data Rows (Row height = 50px) -->
+        <!-- Phase 1 Header (Emphasized row) -->
+        <rect x="0" y="45" width="1160" height="40" fill="#F8FAFC"/>
+        <text x="10" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">Phase 1: Architecture Design &amp; Planning</text>
+        <!-- Phase Timeline Bar -->
+        <rect x="605" y="55" width="160" height="20" fill="#E2E8F0" rx="4"/>
+        <!-- Task 1.1 -->
+        <line x1="0" y1="135" x2="1160" y2="135" stroke="#F1F5F9" stroke-width="1"/>
+        <circle cx="20" cy="110" r="4" fill="#94A3B8"/>
+        <text x="35" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">Requirements Gathering</text>
+        <text x="360" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569">Product Team</text>
+        <rect x="460" y="98" width="80" height="24" rx="12" fill="#ECFDF5" filter="url(#badgeShadow)"/>
+        <text x="500" y="114" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#059669" text-anchor="middle">Completed</text>
+        <!-- Task Bar (Jan) -->
+        <rect x="605" y="102" width="70" height="16" fill="#10B981" rx="4"/>
+        <!-- Task 1.2 -->
+        <line x1="0" y1="185" x2="1160" y2="185" stroke="#F1F5F9" stroke-width="1"/>
+        <circle cx="20" cy="160" r="4" fill="#94A3B8"/>
+        <text x="35" y="165" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">System Architecture Review</text>
+        <text x="360" y="165" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569">Tech Lead</text>
+        <rect x="460" y="148" width="80" height="24" rx="12" fill="#ECFDF5" filter="url(#badgeShadow)"/>
+        <text x="500" y="164" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#059669" text-anchor="middle">Completed</text>
+        <!-- Task Bar (Jan-Feb) -->
+        <rect x="650" y="152" width="115" height="16" fill="#10B981" rx="4"/>
+        <!-- Phase 2 Header -->
+        <rect x="0" y="195" width="1160" height="40" fill="#F8FAFC"/>
+        <text x="10" y="220" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">Phase 2: Core Module Development</text>
+        <rect x="695" y="205" width="250" height="20" fill="#E2E8F0" rx="4"/>
+        <!-- Task 2.1 -->
+        <line x1="0" y1="285" x2="1160" y2="285" stroke="#F1F5F9" stroke-width="1"/>
+        <circle cx="20" cy="260" r="4" fill="#94A3B8"/>
+        <text x="35" y="265" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">Database Migration Scripts</text>
+        <text x="360" y="265" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569">Data Engine</text>
+        <rect x="460" y="248" width="80" height="24" rx="12" fill="#EFF6FF" filter="url(#badgeShadow)"/>
+        <text x="500" y="264" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#2563EB" text-anchor="middle">In Progress</text>
+        <!-- Task Bar (Feb-Mar) -->
+        <rect x="695" y="252" width="160" height="16" fill="#3B82F6" rx="4"/>
+        <!-- Progress overlay inside the bar -->
+        <rect x="695" y="252" width="120" height="16" fill="#1D4ED8" rx="4"/>
+        <!-- Task 2.2 -->
+        <line x1="0" y1="335" x2="1160" y2="335" stroke="#F1F5F9" stroke-width="1"/>
+        <circle cx="20" cy="310" r="4" fill="#94A3B8"/>
+        <text x="35" y="315" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">API Gateway Integration</text>
+        <text x="360" y="315" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569">Backend Dev</text>
+        <rect x="460" y="298" width="80" height="24" rx="12" fill="#FFF1F2" filter="url(#badgeShadow)"/>
+        <text x="500" y="314" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#E11D48" text-anchor="middle">Delayed</text>
+        <rect x="785" y="302" width="160" height="16" fill="#F43F5E" rx="4"/>
+        <!-- Phase 3 Header -->
+        <rect x="0" y="345" width="1160" height="40" fill="#F8FAFC"/>
+        <text x="10" y="370" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">Phase 3: Testing &amp; UAT</text>
+        <rect x="965" y="355" width="160" height="20" fill="#E2E8F0" rx="4"/>
+        <!-- Task 3.1 -->
+        <circle cx="20" cy="410" r="4" fill="#94A3B8"/>
+        <text x="35" y="415" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">Beta User Acceptance Testing</text>
+        <text x="360" y="415" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569">QA &amp; Product</text>
+        <rect x="460" y="398" width="80" height="24" rx="12" fill="#F1F5F9"/>
+        <text x="500" y="414" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#64748B" text-anchor="middle">Planned</text>
+        <rect x="965" y="402" width="160" height="16" fill="#CBD5E1" rx="4"/>
+        <!-- Bottom Line -->
+        <line x1="0" y1="440" x2="1160" y2="440" stroke="#0F172A" stroke-width="2"/>
+    </g>
+    <!-- Milestone Callout -->
+    <g transform="translate(60, 630)">
+        <rect width="1160" height="50" fill="#EFF6FF" rx="6"/>
+        <text x="20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#1E40AF">Critical Milestone:</text>
+        <text x="160" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#1D4ED8">Production Release scheduled for June 30, 2025. Ensure API Gateway delays are resolved before May.</text>
+    </g>
+    <!-- Footer -->
+    <text x="1220" y="700" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: Jira Project Tracker · Auto-updated</text>
+</svg>

@@ -648,6 +648,7 @@ export const hu: Dict = {
   'fileViewer.empty': 'Válassz fájlt a megtekintéshez.',
   'fileViewer.loading': 'Betöltés…',
   'fileViewer.exportPptx': 'Exportálás PPTX-ként',
+  'fileViewer.exportPptxConverting': 'Converting…',
   'fileViewer.openInNewTab': 'Megnyitás új lapon',
   'fileViewer.copyPath': 'Útvonal másolása',
   'fileViewer.copied': 'Másolva!',

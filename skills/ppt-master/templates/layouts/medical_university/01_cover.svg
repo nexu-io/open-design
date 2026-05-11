@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- ==================== 顶部装饰区域 ==================== -->
+    <!-- 医学蓝主横条 -->
+    <rect x="0" y="0" width="1280" height="100" fill="#0066B3" />
+    <!-- 左侧橙色竖条装饰 -->
+    <rect x="0" y="0" width="6" height="100" fill="#FF6B35" />
+
+    <!-- 顶部装饰：心电图波形线（医疗元素） -->
+    <path d="M40 50 L100 50 L120 20 L140 80 L160 40 L180 60 L200 50 L280 50" stroke="#FFFFFF" stroke-width="2"
+        stroke-opacity="0.3" fill="none" />
+
+    <!-- 右上角 Logo/校徽区域占位 -->
+    <rect x="1080" y="25" width="160" height="50" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.3"
+        rx="4" />
+    <text x="1160" y="58" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="16" font-weight="bold">
+        {{LOGO}}
+    </text>
+
+    <!-- ==================== 主内容区域 ==================== -->
+    <!-- 主标题 -->
+    <text x="640" y="320" text-anchor="middle" fill="#004080" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="52" font-weight="bold">
+        {{TITLE}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="640" y="385" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="26">
+        {{SUBTITLE}}
+    </text>
+
+    <!-- 装饰分割线 -->
+    <line x1="420" y1="425" x2="860" y2="425" stroke="#0066B3" stroke-width="2" />
+    <circle cx="640" cy="425" r="6" fill="#00A86B" />
+    <!-- 左右装饰小圆点 -->
+    <circle cx="420" cy="425" r="4" fill="#0066B3" />
+    <circle cx="860" cy="425" r="4" fill="#0066B3" />
+
+    <!-- ==================== 汇报人信息区域 ==================== -->
+    <!-- 汇报人 -->
+    <text x="640" y="490" text-anchor="middle" fill="#333333" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="22">
+        汇报人：{{AUTHOR}}
+    </text>
+
+    <!-- 科室/导师 -->
+    <text x="640" y="528" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="18">
+        {{DEPARTMENT}}　｜　指导老师：{{ADVISOR}}
+    </text>
+
+    <!-- 机构名称 -->
+    <text x="640" y="570" text-anchor="middle" fill="#0066B3" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="20" font-weight="bold">
+        {{INSTITUTION}}
+    </text>
+
+    <!-- ==================== 底部信息 ==================== -->
+    <rect x="0" y="665" width="1280" height="55" fill="#F5F7FA" />
+    <!-- 底部装饰线 -->
+    <rect x="0" y="665" width="1280" height="3" fill="#0066B3" />
+    <text x="640" y="700" text-anchor="middle" fill="#999999" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="14">
+        {{DATE}}
+    </text>
+</svg>

@@ -1,0 +1,37 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+  <!-- Top Red Strip -->
+  <rect x="0" y="0" width="1280" height="4" fill="#C00000" />
+
+  <!-- Header Area -->
+  <rect x="0" y="4" width="1280" height="76" fill="#FFFFFF" />
+  <line x1="0" y1="80" x2="1280" y2="80" stroke="#E7E6E6" stroke-width="1" />
+
+  <!-- Left Red Accent Bar -->
+  <rect x="50" y="20" width="8" height="40" fill="#C00000" />
+
+  <!-- Page Title -->
+  <text x="72" y="52" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="32" font-weight="bold" fill="#000000">{{PAGE_TITLE}}</text>
+
+  <!-- Content Area -->
+  <rect x="50" y="95" width="1180" height="560" rx="4" ry="4" fill="#FFFFFF" stroke="#E7E6E6" stroke-width="1" stroke-dasharray="5 5" />
+
+  <!-- Content Area Placeholder -->
+  <text x="640" y="380" text-anchor="middle" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="20" fill="#CCCCCC">{{CONTENT_AREA}}</text>
+
+  <!-- Footer -->
+  <rect x="0" y="680" width="1280" height="40" fill="#F2F2F2" />
+  <rect x="0" y="680" width="4" height="40" fill="#C00000" />
+
+  <!-- Section Name -->
+  <text x="60" y="706" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="14" fill="#666666">{{SECTION_NAME}}</text>
+
+  <!-- Source -->
+  <text x="640" y="706" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="12" fill="#999999" text-anchor="middle">{{SOURCE}}</text>
+
+  <!-- Page Number -->
+  <rect x="1210" y="688" width="30" height="24" fill="#C00000" />
+  <text x="1225" y="706" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF">{{PAGE_NUM}}</text>
+</svg>

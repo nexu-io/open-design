@@ -1,0 +1,22 @@
+<!--
+tags: [engine, ride, trip, journey, road, street, vehicle, motorcycle, motorbike, transport]
+category: Vehicles
+version: "1.39"
+unicode: "eeb6"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M2 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M16 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M7.5 14h5l4 -4h-10.5m1.5 4l4 -4" />
+  <path d="M13 6h2l1.5 3l2 4" />
+</svg>

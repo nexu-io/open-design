@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+  <rect x="0" y="32" width="158" height="64" rx="24" fill="#C00000" />
+  <rect x="114" y="32" width="1166" height="64" fill="#C00000" />
+  <rect x="206" y="39" width="1074" height="50" rx="22" fill="#D9D9D9" />
+
+  <text x="40" y="73" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="22" font-weight="700">{{SECTION_NAME}}</text>
+  <text x="228" y="72" fill="#2B2F33" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="24" font-weight="700">{{PAGE_TITLE}}</text>
+  <image x="1032" y="38" width="176" height="48" xlink:href="logo.png" preserveAspectRatio="xMidYMid meet" />
+
+  <rect x="72" y="132" width="1136" height="486" rx="24" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" stroke-dasharray="8 8" />
+  <text x="640" y="386" text-anchor="middle" fill="#9CA3AF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="20">{{CONTENT_AREA}}</text>
+  <rect x="1078" y="552" width="72" height="4" rx="2" fill="#C00000" />
+  <rect x="1042" y="572" width="132" height="4" rx="2" fill="#C00000" fill-opacity="0.24" />
+  <rect x="1072" y="590" width="102" height="4" rx="2" fill="#E55B5B" fill-opacity="0.36" />
+
+  <line x1="72" y1="650" x2="1208" y2="650" stroke="#D1D5DB" stroke-width="1" />
+  <text x="72" y="676" fill="#6B7280" font-family="Arial, sans-serif" font-size="13">{{SOURCE}}</text>
+  <text x="1208" y="676" text-anchor="end" fill="#6B7280" font-family="Arial, sans-serif" font-size="13">{{PAGE_NUM}}</text>
+</svg>

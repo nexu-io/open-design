@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- 模板: 章节页 - 像素复古风格 -->
+  
+  <defs>
+    <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowBlue" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 深空黑背景 -->
+  <rect width="1280" height="720" fill="#0D1117" />
+  
+  <!-- 背景扫描线（低透明度） -->
+  <line x1="0" y1="100" x2="1280" y2="100" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="200" x2="1280" y2="200" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="300" x2="1280" y2="300" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="400" x2="1280" y2="400" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="500" x2="1280" y2="500" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  
+  <!-- 顶部装饰线（粗） -->
+  <rect x="0" y="0" width="1280" height="8" fill="#39FF14" fill-opacity="0.8" />
+  <rect x="0" y="8" width="1280" height="4" fill="#39FF14" fill-opacity="0.4" />
+  
+  <!-- 左侧装饰竖线 -->
+  <rect x="60" y="100" width="4" height="520" fill="#39FF14" fill-opacity="0.3" />
+  <rect x="80" y="150" width="2" height="420" fill="#00D4FF" fill-opacity="0.2" />
+  
+  <!-- 大号章节编号区域 -->
+  <g transform="translate(150, 200)">
+    <!-- 编号背景框 -->
+    <rect x="0" y="0" width="200" height="200" fill="#161B22" stroke="#39FF14" stroke-width="4" />
+    <!-- 像素角装饰 -->
+    <rect x="-8" y="-8" width="24" height="8" fill="#39FF14" />
+    <rect x="-8" y="-8" width="8" height="24" fill="#39FF14" />
+    <rect x="184" y="-8" width="24" height="8" fill="#39FF14" />
+    <rect x="200" y="-8" width="8" height="24" fill="#39FF14" />
+    <rect x="-8" y="200" width="24" height="8" fill="#39FF14" />
+    <rect x="-8" y="184" width="8" height="24" fill="#39FF14" />
+    <rect x="184" y="200" width="24" height="8" fill="#39FF14" />
+    <rect x="200" y="184" width="8" height="24" fill="#39FF14" />
+    <!-- 章节编号 -->
+    <text x="100" y="140" text-anchor="middle" font-family="Consolas, Monaco, monospace" font-size="96" font-weight="bold" fill="#39FF14" filter="url(#glowGreen)">
+      {{CHAPTER_NUM}}
+    </text>
+  </g>
+  
+  <!-- 章节标题区域 -->
+  <g transform="translate(420, 240)">
+    <!-- 标题标签 -->
+    <rect x="0" y="0" width="120" height="30" fill="#39FF14" />
+    <text x="60" y="22" text-anchor="middle" font-family="Consolas, monospace" font-size="14" font-weight="bold" fill="#0D1117">CHAPTER</text>
+    
+    <!-- 主标题 -->
+    <text x="0" y="90" font-family="Consolas, Monaco, monospace" font-size="48" font-weight="bold" fill="#FFFFFF">
+      {{CHAPTER_TITLE}}
+    </text>
+    
+    <!-- 英文副标题 -->
+    <text x="0" y="140" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" fill="#8B949E">
+      {{CHAPTER_TITLE_EN}}
+    </text>
+    
+    <!-- 装饰线 -->
+    <rect x="0" y="160" width="400" height="3" fill="#00D4FF" fill-opacity="0.6" />
+  </g>
+  
+  <!-- 右侧装饰元素 -->
+  <g transform="translate(1000, 150)">
+    <!-- 像素方块矩阵 -->
+    <rect x="0" y="0" width="20" height="20" fill="#39FF14" fill-opacity="0.8" />
+    <rect x="25" y="0" width="20" height="20" fill="#39FF14" fill-opacity="0.5" />
+    <rect x="50" y="0" width="20" height="20" fill="#39FF14" fill-opacity="0.3" />
+    <rect x="0" y="25" width="20" height="20" fill="#39FF14" fill-opacity="0.5" />
+    <rect x="25" y="25" width="20" height="20" fill="#39FF14" fill-opacity="0.3" />
+    <rect x="0" y="50" width="20" height="20" fill="#39FF14" fill-opacity="0.3" />
+    
+    <!-- 粉色像素矩阵 -->
+    <rect x="150" y="300" width="20" height="20" fill="#FF2E97" fill-opacity="0.3" />
+    <rect x="175" y="300" width="20" height="20" fill="#FF2E97" fill-opacity="0.5" />
+    <rect x="200" y="300" width="20" height="20" fill="#FF2E97" fill-opacity="0.8" />
+    <rect x="175" y="325" width="20" height="20" fill="#FF2E97" fill-opacity="0.3" />
+    <rect x="200" y="325" width="20" height="20" fill="#FF2E97" fill-opacity="0.5" />
+    <rect x="200" y="350" width="20" height="20" fill="#FF2E97" fill-opacity="0.3" />
+  </g>
+  
+  <!-- 底部信息栏 -->
+  <g transform="translate(60, 580)">
+    <!-- 进度条背景 -->
+    <rect x="0" y="0" width="1160" height="40" fill="#161B22" stroke="#30363D" stroke-width="1" />
+    <!-- 进度填充（示例为章节1，20%） -->
+    <rect x="2" y="2" width="232" height="36" fill="#39FF14" fill-opacity="0.3" />
+    <!-- 章节指示器 -->
+    <circle cx="116" cy="20" r="8" fill="#39FF14" />
+    <text x="116" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="10" fill="#0D1117" font-weight="bold">1</text>
+    
+    <circle cx="348" cy="20" r="8" fill="#30363D" />
+    <text x="348" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="10" fill="#8B949E">2</text>
+    
+    <circle cx="580" cy="20" r="8" fill="#30363D" />
+    <text x="580" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="10" fill="#8B949E">3</text>
+    
+    <circle cx="812" cy="20" r="8" fill="#30363D" />
+    <text x="812" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="10" fill="#8B949E">4</text>
+    
+    <circle cx="1044" cy="20" r="8" fill="#30363D" />
+    <text x="1044" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="10" fill="#8B949E">5</text>
+  </g>
+  
+  <!-- 底部装饰线 -->
+  <rect x="0" y="712" width="1280" height="4" fill="#39FF14" fill-opacity="0.4" />
+  <rect x="0" y="716" width="1280" height="4" fill="#39FF14" fill-opacity="0.8" />
+  
+  <!-- 页码 -->
+  <text x="60" y="680" font-family="Consolas, monospace" font-size="14" fill="#8B949E">{{PAGE_NUM}}/{{TOTAL_PAGES}}</text>
+  <text x="1220" y="680" text-anchor="end" font-family="Consolas, monospace" font-size="14" fill="#39FF14">LOADING...</text>
+
+</svg>

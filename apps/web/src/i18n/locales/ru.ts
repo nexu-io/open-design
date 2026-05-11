@@ -660,6 +660,7 @@ export const ru: Dict = {
   'fileViewer.empty': 'Выберите файл для просмотра.',
   'fileViewer.loading': 'Загрузка…',
   'fileViewer.exportPptx': 'Экспорт в PPTX',
+  'fileViewer.exportPptxConverting': 'Conversion en cours…',
   'fileViewer.openInNewTab': 'Открыть в новой вкладке',
   'fileViewer.copyPath': 'Копировать путь',
   'fileViewer.copied': 'Скопировано!',

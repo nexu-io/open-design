@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Dual-Axis Line Chart Template
+    Usage: Display time-series changes of two metrics with different dimensions
+    Scenarios: Temperature/humidity monitoring, sales/profit ratio, traffic/conversion analysis, etc.
+    Example Data: Temperature (°C) + Relative Humidity (%)
+    Colors: Left axis warm coral (solid line with dots) | Right axis cool blue (dashed line with squares)
+    Canvas: 1280x720 (16:9)
+    -->
+    <defs>
+        <!-- Data point shadow -->
+        <filter id="dotShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="1" result="offsetBlur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- Temperature curve area gradient -->
+        <linearGradient id="tempAreaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#E17055;stop-opacity:0.15" />
+            <stop offset="100%" style="stop-color:#E17055;stop-opacity:0.02" />
+        </linearGradient>
+        <!-- Humidity curve area gradient -->
+        <linearGradient id="humidAreaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#0984E3;stop-opacity:0.12" />
+            <stop offset="100%" style="stop-color:#0984E3;stop-opacity:0.02" />
+        </linearGradient>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A">Revenue &amp; Profit Margin Trend Analysis</text>
+    <text x="60" y="105" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="16" fill="#64748B">Financial Performance · Q1-Q4 FY2025</text>
+    <!-- Phase annotation background (alternating color bands) -->
+    <rect x="140" y="130" width="158" height="40" fill="#E17055" fill-opacity="0.08" rx="6"/>
+    <rect x="298" y="130" width="237" height="40" fill="#E17055" fill-opacity="0.12" rx="6"/>
+    <rect x="535" y="130" width="158" height="40" fill="#0984E3" fill-opacity="0.08" rx="6"/>
+    <rect x="693" y="130" width="237" height="40" fill="#0984E3" fill-opacity="0.12" rx="6"/>
+    <rect x="930" y="130" width="158" height="40" fill="#6C5CE7" fill-opacity="0.08" rx="6"/>
+    <!-- Phase text annotations -->
+    <text x="219" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="600" fill="#DC2626" text-anchor="middle">Phase 01: Product Launch</text>
+    <text x="416.5" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="600" fill="#DC2626" text-anchor="middle">Phase 02: Rapid Growth</text>
+    <text x="614" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="600" fill="#2563EB" text-anchor="middle">Phase 03: Market Correction</text>
+    <text x="811.5" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="600" fill="#2563EB" text-anchor="middle">Phase 04: Stabilization</text>
+    <text x="1009" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="600" fill="#6C5CE7" text-anchor="middle">Phase 05: Recovery</text>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Phase separator background color bands (alternating in chart) -->
+        <rect x="140" y="190" width="158" height="390" fill="#E17055" fill-opacity="0.03"/>
+        <rect x="298" y="190" width="237" height="390" fill="#E17055" fill-opacity="0.06"/>
+        <rect x="535" y="190" width="158" height="390" fill="#0984E3" fill-opacity="0.03"/>
+        <rect x="693" y="190" width="237" height="390" fill="#0984E3" fill-opacity="0.06"/>
+        <rect x="930" y="190" width="158" height="390" fill="#6C5CE7" fill-opacity="0.03"/>
+        <!-- Phase separator lines -->
+        <line x1="298" y1="190" x2="298" y2="580" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5,5"/>
+        <line x1="535" y1="190" x2="535" y2="580" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5,5"/>
+        <line x1="693" y1="190" x2="693" y2="580" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5,5"/>
+        <line x1="930" y1="190" x2="930" y2="580" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5,5"/>
+        <!-- Horizontal grid lines (aligned exactly with scale) -->
+        <line x1="140" y1="580" x2="1088" y2="580" stroke="#CBD5E1" stroke-width="1.5"/>
+        <line x1="140" y1="502" x2="1088" y2="502" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="424" x2="1088" y2="424" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="346" x2="1088" y2="346" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="268" x2="1088" y2="268" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="190" x2="1088" y2="190" stroke="#CBD5E1" stroke-width="1.5"/>
+        <!-- Left Y-axis - Temperature Scale (°C) -->
+        <text x="50" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#E17055" text-anchor="middle">0</text>
+        <text x="50" y="507" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#E17055" text-anchor="middle">20</text>
+        <text x="50" y="429" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#E17055" text-anchor="middle">40</text>
+        <text x="50" y="351" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#E17055" text-anchor="middle">60</text>
+        <text x="50" y="273" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#E17055" text-anchor="middle">80</text>
+        <text x="50" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#E17055" text-anchor="middle">100</text>
+        <!-- Left Y-axis Title -->
+        <text x="30" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="bold" fill="#E17055" text-anchor="middle" transform="rotate(-90, 30, 385)">Revenue ($M)</text>
+        <!-- Right Y-axis - Humidity Scale (%) -->
+        <text x="1190" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0984E3" text-anchor="middle">0%</text>
+        <text x="1190" y="507" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#0984E3" text-anchor="middle">10%</text>
+        <text x="1190" y="429" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#0984E3" text-anchor="middle">20%</text>
+        <text x="1190" y="351" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#0984E3" text-anchor="middle">30%</text>
+        <text x="1190" y="273" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#0984E3" text-anchor="middle">40%</text>
+        <text x="1190" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0984E3" text-anchor="middle">50%</text>
+        <!-- Right Y-axis Title -->
+        <text x="1250" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="bold" fill="#0984E3" text-anchor="middle" transform="rotate(90, 1250, 385)">Profit Margin (%)</text>
+        <!-- Axes -->
+        <line x1="140" y1="190" x2="140" y2="580" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="140" y1="580" x2="1088" y2="580" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="1088" y1="190" x2="1088" y2="580" stroke="#94A3B8" stroke-width="2"/>
+        <!-- X-axis time labels -->
+        <text x="140" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#475569" text-anchor="middle">Jan</text>
+        <text x="298" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#475569" text-anchor="middle">Mar</text>
+        <text x="535" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#475569" text-anchor="middle">Jun</text>
+        <text x="693" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#475569" text-anchor="middle">Sep</text>
+        <text x="930" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#475569" text-anchor="middle">Nov</text>
+        <text x="1088" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#475569" text-anchor="middle">Dec</text>
+        <!-- X-axis Title -->
+        <text x="614" y="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="bold" fill="#475569" text-anchor="middle">Timeline (Months)</text>
+        <!-- Temperature area fill -->
+        <polygon points="140,372 298,203 535,203 693,528 930,528 1088,372 1088,580 140,580" 
+                 fill="url(#tempAreaGrad)"/>
+        <!-- Temperature curve (coral solid line + dots) -->
+        <polyline points="140,372 298,203 535,203 693,528 930,528 1088,372" 
+                  fill="none" stroke="#E17055" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Temperature data points (dots) -->
+        <circle cx="140" cy="372" r="6" fill="#E17055" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <circle cx="298" cy="203" r="6" fill="#E17055" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <circle cx="535" cy="203" r="6" fill="#E17055" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <circle cx="693" cy="528" r="6" fill="#E17055" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <circle cx="930" cy="528" r="6" fill="#E17055" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <circle cx="1088" cy="372" r="6" fill="#E17055" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <!-- Humidity area fill -->
+        <polygon points="140,327 298,248 535,248 693,463 930,463 1088,327 1088,580 140,580" 
+                 fill="url(#humidAreaGrad)"/>
+        <!-- Humidity curve (blue dashed line + square points) -->
+        <polyline points="140,327 298,248 535,248 693,463 930,463 1088,327" 
+                  fill="none" stroke="#0984E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,5"/>
+        <!-- Humidity data points (squares) -->
+        <rect x="134" y="321" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <rect x="292" y="242" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <rect x="529" y="242" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <rect x="687" y="457" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <rect x="924" y="457" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <rect x="1082" y="321" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2.5" filter="url(#dotShadow)"/>
+        <!-- Key data annotations (colored labels, consistent with curve colors) -->
+        <!-- Start point - Temp 20℃ -->
+        <rect x="148" y="354" width="46" height="22" fill="#E17055" rx="4"/>
+        <text x="171" y="369" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">$53M</text>
+        <!-- Start point - Hum 65% -->
+        <rect x="148" y="304" width="46" height="22" fill="#0984E3" rx="4"/>
+        <text x="171" y="319" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">15%</text>
+        <!-- High temp point - Temp 85℃ -->
+        <rect x="306" y="184" width="46" height="22" fill="#E17055" rx="4"/>
+        <text x="329" y="199" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">$96M</text>
+        <!-- High hum point - Hum 85% -->
+        <rect x="395" y="229" width="46" height="22" fill="#0984E3" rx="4"/>
+        <text x="418" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">35%</text>
+        <!-- Low temp point - Temp -40℃ -->
+        <rect x="700" y="510" width="52" height="22" fill="#E17055" rx="4"/>
+        <text x="726" y="525" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">$13M</text>
+        <!-- Low hum point - Hum 30% -->
+        <rect x="790" y="445" width="46" height="22" fill="#0984E3" rx="4"/>
+        <text x="813" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">8%</text>
+        <!-- Reset point - Temp 20℃ -->
+        <rect x="1018" y="354" width="46" height="22" fill="#E17055" rx="4"/>
+        <text x="1041" y="369" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">$53M</text>
+        <!-- Reset point - Hum 65% -->
+        <rect x="1018" y="304" width="46" height="22" fill="#0984E3" rx="4"/>
+        <text x="1041" y="319" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">15%</text>
+    </g>
+    <!-- Legend -->
+    <g id="legend">
+        <rect x="420" y="660" width="440" height="45" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" rx="10"/>
+        <!-- Temperature legend (coral solid line + dots) -->
+        <line x1="450" y1="682" x2="490" y2="682" stroke="#E17055" stroke-width="3"/>
+        <circle cx="470" cy="682" r="5" fill="#E17055" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="505" y="687" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="600" fill="#E17055">Revenue ($M)</text>
+        <!-- Humidity legend (blue dashed line + squares) -->
+        <line x1="650" y1="682" x2="690" y2="682" stroke="#0984E3" stroke-width="2.5" stroke-dasharray="8,5"/>
+        <rect x="664" y="676" width="12" height="12" rx="2" fill="#0984E3" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="705" y="687" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="600" fill="#0984E3">Profit Margin (%)</text>
+    </g>
+</svg>

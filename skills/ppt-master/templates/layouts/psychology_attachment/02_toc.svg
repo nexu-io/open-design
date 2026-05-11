@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="#F8FAFC" />
+
+    <!-- 左侧装饰条 -->
+    <rect x="0" y="0" width="8" height="720" fill="#2E5C8E" />
+
+    <!-- 标题 -->
+    <text x="60" y="80" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="32" font-weight="bold"
+        fill="#1E293B">
+        内容概览
+    </text>
+    <text x="60" y="110" font-family="system-ui, sans-serif" font-size="16" fill="#64748B">
+        Contents Overview
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="60" y1="130" x2="400" y2="130" stroke="#E5E7EB" stroke-width="2" />
+
+    <!-- 章节列表 -->
+    <g font-family="PingFang SC, Microsoft YaHei, sans-serif">
+        <!-- 章节1 -->
+        <g transform="translate(60, 170)">
+            <path fill="#2E5C8E"
+                d="M8,0 H42 A8,8 0 0 1 50,8 V42 A8,8 0 0 1 42,50 H8 A8,8 0 0 1 0,42 V8 A8,8 0 0 1 8,0 Z" />
+            <text x="25" y="33" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Ⅰ</text>
+            <text x="70" y="22" font-size="20" font-weight="600" fill="#1E293B">{{TOC_ITEM_1_TITLE}}</text>
+            <text x="70" y="44" font-size="14" fill="#64748B">{{TOC_ITEM_1_DESC}}</text>
+        </g>
+
+        <!-- 章节2 -->
+        <g transform="translate(60, 250)">
+            <path fill="#3D8B7A"
+                d="M8,0 H42 A8,8 0 0 1 50,8 V42 A8,8 0 0 1 42,50 H8 A8,8 0 0 1 0,42 V8 A8,8 0 0 1 8,0 Z" />
+            <text x="25" y="33" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Ⅱ</text>
+            <text x="70" y="22" font-size="20" font-weight="600" fill="#1E293B">{{TOC_ITEM_2_TITLE}}</text>
+            <text x="70" y="44" font-size="14" fill="#64748B">{{TOC_ITEM_2_DESC}}</text>
+        </g>
+
+        <!-- 章节3 -->
+        <g transform="translate(60, 330)">
+            <path fill="#E07843"
+                d="M8,0 H42 A8,8 0 0 1 50,8 V42 A8,8 0 0 1 42,50 H8 A8,8 0 0 1 0,42 V8 A8,8 0 0 1 8,0 Z" />
+            <text x="25" y="33" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Ⅲ</text>
+            <text x="70" y="22" font-size="20" font-weight="600" fill="#1E293B">{{TOC_ITEM_3_TITLE}}</text>
+            <text x="70" y="44" font-size="14" fill="#64748B">{{TOC_ITEM_3_DESC}}</text>
+        </g>
+
+        <!-- 章节4 -->
+        <g transform="translate(60, 410)">
+            <path fill="#64748B"
+                d="M8,0 H42 A8,8 0 0 1 50,8 V42 A8,8 0 0 1 42,50 H8 A8,8 0 0 1 0,42 V8 A8,8 0 0 1 8,0 Z" />
+            <text x="25" y="33" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Ⅳ</text>
+            <text x="70" y="22" font-size="20" font-weight="600" fill="#1E293B">{{TOC_ITEM_4_TITLE}}</text>
+            <text x="70" y="44" font-size="14" fill="#64748B">{{TOC_ITEM_4_DESC}}</text>
+        </g>
+
+        <!-- 章节5 -->
+        <g transform="translate(60, 490)">
+            <path fill="#B54545"
+                d="M8,0 H42 A8,8 0 0 1 50,8 V42 A8,8 0 0 1 42,50 H8 A8,8 0 0 1 0,42 V8 A8,8 0 0 1 8,0 Z" />
+            <text x="25" y="33" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Ⅴ</text>
+            <text x="70" y="22" font-size="20" font-weight="600" fill="#1E293B">{{TOC_ITEM_5_TITLE}}</text>
+            <text x="70" y="44" font-size="14" fill="#64748B">{{TOC_ITEM_5_DESC}}</text>
+        </g>
+    </g>
+
+    <!-- 中间分隔线 -->
+    <line x1="620" y1="150" x2="620" y2="600" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="6,4" />
+
+    <!-- 右侧学习目标卡片 -->
+    <g transform="translate(680, 170)" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+        <text x="0" y="0" font-size="18" font-weight="600" fill="#2E5C8E">
+            📎 学习目标
+        </text>
+
+        <!-- 卡片背景 -->
+        <rect x="0" y="20" width="520" height="420" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1" />
+
+        <!-- 目标1 -->
+        <g transform="translate(30, 60)">
+            <circle cx="8" cy="8" r="8" fill="#3D8B7A" />
+            <text x="8" y="12" font-size="12" fill="#FFFFFF" text-anchor="middle">1</text>
+            <text x="30" y="12" font-size="17" fill="#374151">{{GOAL_1}}</text>
+            <text x="30" y="38" font-size="14" fill="#6B7280">{{GOAL_1_DESC}}</text>
+        </g>
+
+        <!-- 目标2 -->
+        <g transform="translate(30, 130)">
+            <circle cx="8" cy="8" r="8" fill="#3D8B7A" />
+            <text x="8" y="12" font-size="12" fill="#FFFFFF" text-anchor="middle">2</text>
+            <text x="30" y="12" font-size="17" fill="#374151">{{GOAL_2}}</text>
+            <text x="30" y="38" font-size="14" fill="#6B7280">{{GOAL_2_DESC}}</text>
+        </g>
+
+        <!-- 目标3 -->
+        <g transform="translate(30, 200)">
+            <circle cx="8" cy="8" r="8" fill="#3D8B7A" />
+            <text x="8" y="12" font-size="12" fill="#FFFFFF" text-anchor="middle">3</text>
+            <text x="30" y="12" font-size="17" fill="#374151">{{GOAL_3}}</text>
+            <text x="30" y="38" font-size="14" fill="#6B7280">{{GOAL_3_DESC}}</text>
+        </g>
+
+        <!-- 目标4 -->
+        <g transform="translate(30, 270)">
+            <circle cx="8" cy="8" r="8" fill="#3D8B7A" />
+            <text x="8" y="12" font-size="12" fill="#FFFFFF" text-anchor="middle">4</text>
+            <text x="30" y="12" font-size="17" fill="#374151">{{GOAL_4}}</text>
+            <text x="30" y="38" font-size="14" fill="#6B7280">{{GOAL_4_DESC}}</text>
+        </g>
+    </g>
+
+    <!-- 页码 -->
+    <text x="1220" y="685" font-family="system-ui, sans-serif" font-size="14" fill="#9CA3AF" text-anchor="end">02</text>
+</svg>

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Agenda / Table of Contents Template
+    Purpose: Presentation roadmap and meeting structure
+    Use cases: Title slides, executive summaries, section dividers
+    Design Principles: Large typography for numbers, clean separator lines, high-contrast readability
+    -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="120" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="42" font-weight="900" fill="#0F172A">Meeting Agenda</text>
+    <text x="120" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="700" fill="#3B82F6" letter-spacing="2">Q3 STRATEGIC ALIGNMENT &amp; REVIEW</text>
+    <line x1="120" y1="180" x2="1160" y2="180" stroke="#0F172A" stroke-width="4"/>
+    <!-- ==================== Agenda Items ==================== -->
+    <g transform="translate(120, 220)">
+        <!-- Item 01 -->
+        <g transform="translate(0, 0)">
+            <text x="0" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#E2E8F0">01</text>
+            <text x="100" y="35" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#0F172A">Executive Summary &amp; Q3 Performance</text>
+            <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" fill="#64748B">High-level overview of revenue targets, key metrics, and major wins from the last quarter.</text>
+            <text x="960" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#3B82F6" text-anchor="end">10 MINS</text>
+            <line x1="0" y1="90" x2="1040" y2="90" stroke="#F1F5F9" stroke-width="2"/>
+        </g>
+        <!-- Item 02 -->
+        <g transform="translate(0, 110)">
+            <text x="0" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#E2E8F0">02</text>
+            <text x="100" y="35" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#0F172A">Product Roadmap Updates</text>
+            <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" fill="#64748B">Review of upcoming features, delayed items, and engineering resource allocation.</text>
+            <text x="960" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#3B82F6" text-anchor="end">20 MINS</text>
+            <line x1="0" y1="90" x2="1040" y2="90" stroke="#F1F5F9" stroke-width="2"/>
+        </g>
+        <!-- Item 03 -->
+        <g transform="translate(0, 220)">
+            <text x="0" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#E2E8F0">03</text>
+            <text x="100" y="35" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#0F172A">Competitive Market Analysis</text>
+            <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" fill="#64748B">Deep dive into recent moves by Competitor A and our strategic response plan.</text>
+            <text x="960" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#3B82F6" text-anchor="end">15 MINS</text>
+            <line x1="0" y1="90" x2="1040" y2="90" stroke="#F1F5F9" stroke-width="2"/>
+        </g>
+        <!-- Item 04 -->
+        <g transform="translate(0, 330)">
+            <text x="0" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#E2E8F0">04</text>
+            <text x="100" y="35" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#0F172A">Q4 Goals &amp; OKR Planning</text>
+            <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" fill="#64748B">Collaborative session to finalize departmental objectives and assign ownership.</text>
+            <text x="960" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#3B82F6" text-anchor="end">30 MINS</text>
+            <line x1="0" y1="90" x2="1040" y2="90" stroke="#0F172A" stroke-width="2"/>
+        </g>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1160" y="680" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Presenter: Management Team · Total Duration: 75 Mins</text>
+</svg>

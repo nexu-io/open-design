@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 目录页 - 中国电建现代风 (POWERCHINA Modern) -->
+    
+    <defs>
+        <!-- 背景渐变: 浅灰蓝 -->
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#F8F9FA;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#E9ECEF;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- 装饰渐变: 深蓝 -> 科技蓝 -->
+        <linearGradient id="decoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#00418D;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0066CC;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景层 -->
+    <rect width="1280" height="720" fill="url(#bgGrad)"/>
+
+    <!-- 顶栏 -->
+    <rect x="0" y="0" width="1280" height="8" fill="url(#decoGrad)"/>
+
+    <!-- 标题区 (Title Component) -->
+    <g transform="translate(80, 80)">
+        <text x="0" y="0" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="48" font-weight="bold" fill="#00418D" letter-spacing="4">
+            目录
+        </text>
+        <text x="0" y="32" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#B0C4DE" letter-spacing="8">
+            AGENDA
+        </text>
+        <line x1="0" y1="42" x2="120" y2="42" stroke="#C41E3A" stroke-width="4"/>
+    </g>
+
+    <!-- Logo (右上角) -->
+    <text x="1200" y="60" text-anchor="end" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#495057" letter-spacing="2">
+        POWERCHINA
+    </text>
+
+    <!-- 目录时间轴 (Timeline Layout) -->
+    <g transform="translate(0, 200)">
+        
+        <!-- 连接线 -->
+        <line x1="80" y1="120" x2="1200" y2="120" stroke="#CED4DA" stroke-width="2" stroke-dasharray="8,8"/>
+        
+        <!-- Item 01 -->
+        <g transform="translate(130, 0)">
+            <circle cx="20" cy="120" r="12" fill="#FFFFFF" stroke="#00418D" stroke-width="4"/>
+            <text x="20" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E9ECEF">01</text>
+            <text x="20" y="100" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#00418D">
+                {{TOC_ITEM_1_TITLE}}
+            </text>
+            <text x="20" y="160" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6C757D">
+                {{TOC_ITEM_1_DESC}}
+            </text>
+        </g>
+
+        <!-- Item 02 -->
+        <g transform="translate(380, 0)">
+            <circle cx="20" cy="120" r="12" fill="#FFFFFF" stroke="#00418D" stroke-width="4"/>
+            <text x="20" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E9ECEF">02</text>
+            <text x="20" y="100" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#00418D">
+                {{TOC_ITEM_2_TITLE}}
+            </text>
+            <text x="20" y="160" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6C757D">
+                {{TOC_ITEM_2_DESC}}
+            </text>
+        </g>
+
+        <!-- Item 03 -->
+        <g transform="translate(630, 0)">
+            <circle cx="20" cy="120" r="12" fill="#FFFFFF" stroke="#0066CC" stroke-width="4"/>
+            <text x="20" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E9ECEF">03</text>
+            <text x="20" y="100" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#0066CC">
+                {{TOC_ITEM_3_TITLE}}
+            </text>
+             <text x="20" y="160" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6C757D">
+                {{TOC_ITEM_3_DESC}}
+            </text>
+        </g>
+        
+        <!-- Item 04 -->
+        <g transform="translate(880, 0)">
+            <circle cx="20" cy="120" r="12" fill="#FFFFFF" stroke="#4A90D9" stroke-width="4"/>
+            <text x="20" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E9ECEF">04</text>
+            <text x="20" y="100" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#4A90D9">
+                {{TOC_ITEM_4_TITLE}}
+            </text>
+             <text x="20" y="160" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6C757D">
+                {{TOC_ITEM_4_DESC}}
+            </text>
+        </g>
+
+    </g>
+
+    <!-- 底部数据区 -->
+    <g transform="translate(0, 520)">
+        <rect width="1280" height="200" fill="#001F45"/>
+        <text x="80" y="60" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" opacity="0.6">
+            关键数据 | KEY FIGURES
+        </text>
+        <line x1="80" y1="80" x2="1200" y2="80" stroke="#FFFFFF" stroke-opacity="0.2"/>
+        
+        <!-- Stat 1 -->
+        <text x="120" y="140" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF">
+            {{STAT_1}}
+        </text>
+        <text x="120" y="170" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#B0C4DE">
+            {{STAT_1_LABEL}}
+        </text>
+
+        <!-- Stat 2 -->
+        <text x="400" y="140" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#C41E3A">
+            {{STAT_2}}
+        </text>
+        <text x="400" y="170" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#B0C4DE">
+            {{STAT_2_LABEL}}
+        </text>
+
+        <!-- Stat 3 -->
+        <text x="700" y="140" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#0066CC">
+            {{STAT_3}}
+        </text>
+        <text x="700" y="170" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#B0C4DE">
+            {{STAT_3_LABEL}}
+        </text>
+        
+    </g>
+
+</svg>

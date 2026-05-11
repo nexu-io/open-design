@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <defs>
+    <!-- 顶部斜切渐变 -->
+    <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#004A82"/>
+      <stop offset="100%" stop-color="#006BB7"/>
+    </linearGradient>
+    <!-- 金色渐变 -->
+    <linearGradient id="goldAccent" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E8C675"/>
+      <stop offset="100%" stop-color="#C49A3D"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1280" height="720" fill="#FAFCFF"/>
+  
+  <!-- 顶部斜切蓝色装饰带 -->
+  <polygon points="0,0 1280,0 1280,80 0,100" fill="url(#headerGradient)"/>
+  <polygon points="0,100 1280,80 1280,95 0,115" fill="#E3F2FD"/>
+  
+  <!-- 页面标题 -->
+  <text x="60" y="60" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="26" font-weight="bold">{{TOC_TITLE}}</text>
+  
+  <!-- Logo -->
+  <image x="1040" y="15" width="200" height="50" xlink:href="重庆大学logo2.png" preserveAspectRatio="xMidYMid meet"/>
+  
+  <!-- 目录内容区 -->
+  <!-- 左侧大号数字区域 -->
+  
+  <!-- 目录项 1 -->
+  <text x="80" y="200" fill="#006BB7" fill-opacity="0.15" font-family="Arial, sans-serif" font-size="80" font-weight="bold">01</text>
+  <rect x="170" y="160" width="4" height="60" fill="url(#goldAccent)"/>
+  <text x="190" y="195" fill="#1A2E44" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="bold">{{TOC_ITEM_1_TITLE}}</text>
+  <text x="190" y="225" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{TOC_ITEM_1_DESC}}</text>
+  
+  <!-- 目录项 2 -->
+  <text x="700" y="200" fill="#006BB7" fill-opacity="0.15" font-family="Arial, sans-serif" font-size="80" font-weight="bold">02</text>
+  <rect x="790" y="160" width="4" height="60" fill="url(#goldAccent)"/>
+  <text x="810" y="195" fill="#1A2E44" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="bold">{{TOC_ITEM_2_TITLE}}</text>
+  <text x="810" y="225" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{TOC_ITEM_2_DESC}}</text>
+  
+  <!-- 目录项 3 -->
+  <text x="80" y="340" fill="#006BB7" fill-opacity="0.15" font-family="Arial, sans-serif" font-size="80" font-weight="bold">03</text>
+  <rect x="170" y="300" width="4" height="60" fill="url(#goldAccent)"/>
+  <text x="190" y="335" fill="#1A2E44" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="bold">{{TOC_ITEM_3_TITLE}}</text>
+  <text x="190" y="365" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{TOC_ITEM_3_DESC}}</text>
+  
+  <!-- 目录项 4 -->
+  <text x="700" y="340" fill="#006BB7" fill-opacity="0.15" font-family="Arial, sans-serif" font-size="80" font-weight="bold">04</text>
+  <rect x="790" y="300" width="4" height="60" fill="url(#goldAccent)"/>
+  <text x="810" y="335" fill="#1A2E44" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="bold">{{TOC_ITEM_4_TITLE}}</text>
+  <text x="810" y="365" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{TOC_ITEM_4_DESC}}</text>
+  
+  <!-- 目录项 5 -->
+  <text x="80" y="480" fill="#006BB7" fill-opacity="0.15" font-family="Arial, sans-serif" font-size="80" font-weight="bold">05</text>
+  <rect x="170" y="440" width="4" height="60" fill="url(#goldAccent)"/>
+  <text x="190" y="475" fill="#1A2E44" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="bold">{{TOC_ITEM_5_TITLE}}</text>
+  <text x="190" y="505" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{TOC_ITEM_5_DESC}}</text>
+  
+  <!-- 目录项 6（可选，更淡化） -->
+  <text x="700" y="480" fill="#006BB7" fill-opacity="0.08" font-family="Arial, sans-serif" font-size="80" font-weight="bold">06</text>
+  <rect x="790" y="440" width="4" height="60" fill="#D0D7E0"/>
+  <text x="810" y="475" fill="#A0AEC0" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="bold">{{TOC_ITEM_6_TITLE}}</text>
+  <text x="810" y="505" fill="#B0BCC8" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{TOC_ITEM_6_DESC}}</text>
+  
+  <!-- 底部波浪装饰 -->
+  <path d="M0,680 Q160,665 320,680 T640,665 T960,680 T1280,665 L1280,720 L0,720 Z" fill="#006BB7" fill-opacity="0.06"/>
+  
+  <!-- 页脚 -->
+  <text x="640" y="680" text-anchor="middle" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12">目录 · CONTENTS</text>
+  
+  <!-- 页码 -->
+  <rect x="1180" y="655" width="40" height="28" fill="#006BB7" rx="4"/>
+  <text x="1200" y="675" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="13" font-weight="bold">{{PAGE_NUM}}</text>
+  
+  <!-- 左下角金色光点 -->
+  <circle cx="50" cy="670" r="3" fill="#D4A84B" fill-opacity="0.5"/>
+  <circle cx="80" cy="690" r="2" fill="#D4A84B" fill-opacity="0.4"/>
+</svg>

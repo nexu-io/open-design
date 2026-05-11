@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Fishbone / Ishikawa Diagram Template
+    Usage: Root cause analysis, problem diagnosis
+    Scenarios: Quality management, fault analysis, 6M methodology
+    Supports: 6 branches (4-6 recommended)
+    -->
+    <defs>
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="headGlow" x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#EF4444" flood-opacity="0.25" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <linearGradient id="headGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#EF4444;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#DC2626;stop-opacity:1"/>
+        </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="640" y="46" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="28" font-weight="700" fill="#0F172A">Root Cause Analysis Framework</text>
+    <text x="640" y="70" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" fill="#64748B">Fishbone Diagram · Systematic diagnosis across six key dimensions</text>
+    <!-- Main Spine: Fixed visibility by using solid stroke instead of gradient -->
+    <line x1="90" y1="370" x2="1058" y2="370" stroke="#64748B" stroke-width="5" stroke-linecap="round"/>
+    <!-- Fish Head -->
+    <polygon points="1048,370 1098,322 1098,418" fill="url(#headGrad)" filter="url(#headGlow)"/>
+    <rect x="1098" y="322" width="130" height="96" rx="12" fill="url(#headGrad)" filter="url(#headGlow)"/>
+    <text x="1163" y="362" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" font-weight="800" fill="#FFFFFF">Core</text>
+    <text x="1163" y="390" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" font-weight="800" fill="#FFFFFF">Problem</text>
+    <!-- ============ Branch 1: Process (Top-Left, Base=230) ============ -->
+    <line x1="230" y1="370" x2="130" y2="130" stroke="#8B5CF6" stroke-width="3" stroke-linecap="round"/>
+    <rect x="68" y="88" width="124" height="40" rx="20" fill="#8B5CF6" filter="url(#cardShadow)"/>
+    <text x="130" y="114" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#FFFFFF">Process</text>
+    <line x1="159" y1="200" x2="153" y2="200" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/>
+    <rect x="17" y="188" width="136" height="26" rx="13" fill="#8B5CF6" fill-opacity="0.08" stroke="#8B5CF6" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="85" y="205" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#8B5CF6">Workflow Bottleneck</text>
+    <line x1="183" y1="258" x2="177" y2="258" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/>
+    <rect x="41" y="246" width="136" height="26" rx="13" fill="#8B5CF6" fill-opacity="0.08" stroke="#8B5CF6" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="109" y="263" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#8B5CF6">Inefficient Steps</text>
+    <line x1="207" y1="316" x2="201" y2="316" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/>
+    <rect x="65" y="304" width="136" height="26" rx="13" fill="#8B5CF6" fill-opacity="0.08" stroke="#8B5CF6" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="133" y="321" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#8B5CF6">Lack of Standards</text>
+    <!-- ============ Branch 2: People (Top-Mid, Base=510) ============ -->
+    <line x1="510" y1="370" x2="410" y2="130" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+    <rect x="348" y="88" width="124" height="40" rx="20" fill="#10B981" filter="url(#cardShadow)"/>
+    <text x="410" y="114" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#FFFFFF">People</text>
+    <line x1="439" y1="200" x2="433" y2="200" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <rect x="297" y="188" width="136" height="26" rx="13" fill="#10B981" fill-opacity="0.08" stroke="#10B981" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="365" y="205" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#10B981">Skill Deficiency</text>
+    <line x1="463" y1="258" x2="457" y2="258" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <rect x="321" y="246" width="136" height="26" rx="13" fill="#10B981" fill-opacity="0.08" stroke="#10B981" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="389" y="263" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#10B981">Low Engagement</text>
+    <line x1="487" y1="316" x2="481" y2="316" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <rect x="345" y="304" width="136" height="26" rx="13" fill="#10B981" fill-opacity="0.08" stroke="#10B981" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="413" y="321" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#10B981">High Turnover</text>
+    <!-- ============ Branch 3: System (Top-Right, Base=790) ============ -->
+    <line x1="790" y1="370" x2="690" y2="130" stroke="#F59E0B" stroke-width="3" stroke-linecap="round"/>
+    <rect x="628" y="88" width="124" height="40" rx="20" fill="#F59E0B" filter="url(#cardShadow)"/>
+    <text x="690" y="114" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#FFFFFF">System</text>
+    <line x1="719" y1="200" x2="713" y2="200" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+    <rect x="577" y="188" width="136" height="26" rx="13" fill="#F59E0B" fill-opacity="0.08" stroke="#F59E0B" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="645" y="205" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#F59E0B">Legacy System</text>
+    <line x1="743" y1="258" x2="737" y2="258" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+    <rect x="601" y="246" width="136" height="26" rx="13" fill="#F59E0B" fill-opacity="0.08" stroke="#F59E0B" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="669" y="263" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#F59E0B">System Integration</text>
+    <line x1="767" y1="316" x2="761" y2="316" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+    <rect x="625" y="304" width="136" height="26" rx="13" fill="#F59E0B" fill-opacity="0.08" stroke="#F59E0B" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="693" y="321" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#F59E0B">Data Silos</text>
+    <!-- ============ Branch 4: Environment (Bottom-Left, Base=230) ============ -->
+    <line x1="230" y1="370" x2="130" y2="610" stroke="#3B82F6" stroke-width="3" stroke-linecap="round"/>
+    <rect x="68" y="610" width="124" height="40" rx="20" fill="#3B82F6" filter="url(#cardShadow)"/>
+    <text x="130" y="636" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#FFFFFF">Environment</text>
+    <line x1="207" y1="425" x2="201" y2="425" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+    <rect x="65" y="413" width="136" height="26" rx="13" fill="#3B82F6" fill-opacity="0.08" stroke="#3B82F6" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="133" y="430" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#3B82F6">Market Volatility</text>
+    <line x1="183" y1="483" x2="177" y2="483" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+    <rect x="41" y="471" width="136" height="26" rx="13" fill="#3B82F6" fill-opacity="0.08" stroke="#3B82F6" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="109" y="488" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#3B82F6">Regulatory Changes</text>
+    <line x1="159" y1="541" x2="153" y2="541" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+    <rect x="17" y="529" width="136" height="26" rx="13" fill="#3B82F6" fill-opacity="0.08" stroke="#3B82F6" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="85" y="546" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#3B82F6">Competitor Action</text>
+    <!-- ============ Branch 5: Policy (Bottom-Mid, Base=510) ============ -->
+    <line x1="510" y1="370" x2="410" y2="610" stroke="#F97316" stroke-width="3" stroke-linecap="round"/>
+    <rect x="348" y="610" width="124" height="40" rx="20" fill="#F97316" filter="url(#cardShadow)"/>
+    <text x="410" y="636" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#FFFFFF">Policy</text>
+    <line x1="487" y1="425" x2="481" y2="425" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+    <rect x="345" y="413" width="136" height="26" rx="13" fill="#F97316" fill-opacity="0.08" stroke="#F97316" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="413" y="430" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#F97316">Unclear Guidelines</text>
+    <line x1="463" y1="483" x2="457" y2="483" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+    <rect x="321" y="471" width="136" height="26" rx="13" fill="#F97316" fill-opacity="0.08" stroke="#F97316" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="389" y="488" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#F97316">Rigid Procedures</text>
+    <line x1="439" y1="541" x2="433" y2="541" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+    <rect x="297" y="529" width="136" height="26" rx="13" fill="#F97316" fill-opacity="0.08" stroke="#F97316" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="365" y="546" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#F97316">Compliance Risks</text>
+    <!-- ============ Branch 6: Material (Bottom-Right, Base=790) ============ -->
+    <line x1="790" y1="370" x2="690" y2="610" stroke="#6366F1" stroke-width="3" stroke-linecap="round"/>
+    <rect x="628" y="610" width="124" height="40" rx="20" fill="#6366F1" filter="url(#cardShadow)"/>
+    <text x="690" y="636" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#FFFFFF">Material</text>
+    <line x1="767" y1="425" x2="761" y2="425" stroke="#6366F1" stroke-width="2" stroke-linecap="round"/>
+    <rect x="625" y="413" width="136" height="26" rx="13" fill="#6366F1" fill-opacity="0.08" stroke="#6366F1" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="693" y="430" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#6366F1">Resource Shortage</text>
+    <line x1="743" y1="483" x2="737" y2="483" stroke="#6366F1" stroke-width="2" stroke-linecap="round"/>
+    <rect x="601" y="471" width="136" height="26" rx="13" fill="#6366F1" fill-opacity="0.08" stroke="#6366F1" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="669" y="488" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#6366F1">Supply Chain Issues</text>
+    <line x1="719" y1="541" x2="713" y2="541" stroke="#6366F1" stroke-width="2" stroke-linecap="round"/>
+    <rect x="577" y="529" width="136" height="26" rx="13" fill="#6366F1" fill-opacity="0.08" stroke="#6366F1" stroke-width="1.2" stroke-opacity="0.4"/>
+    <text x="645" y="546" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="600" fill="#6366F1">Quality Defects</text>
+    <!-- Footer Note -->
+    <text x="640" y="700" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" fill="#94A3B8">Fishbone Diagram: Systematically trace the root causes across multiple problem dimensions</text>
+</svg>

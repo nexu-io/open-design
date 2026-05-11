@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <!-- 背景：全屏深蓝，营造过渡感和沉浸感 -->
+  <rect width="1280" height="720" fill="#003366"/>
+  
+  <!-- 背景装饰：右侧几何图形，增加层次 -->
+  <path d="M800 0 L1280 0 L1280 720 L600 720 Z" fill="#004080" fill-opacity="0.3"/>
+  <rect x="1200" y="0" width="80" height="720" fill="#002244" fill-opacity="0.2"/>
+  
+  <!-- 左侧红色装饰条 -->
+  <rect x="0" y="240" width="12" height="240" fill="#CC0000"/>
+  
+  <!-- ==================== 章节信息区域 ==================== -->
+  <!-- 章节编号：大号数字，半透明背景字 -->
+  <text x="120" y="480" fill="#FFFFFF" fill-opacity="0.08" font-family="Microsoft YaHei, Arial, sans-serif" font-size="280" font-weight="bold">
+    {{CHAPTER_NUM}}
+  </text>
+  
+  <!-- 章节标题：醒目白色 -->
+  <text x="380" y="340" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif" font-size="56" font-weight="bold">
+    {{CHAPTER_TITLE}}
+  </text>
+  
+  <!-- 章节描述/摘要：浅灰色 -->
+  <text x="380" y="410" fill="#E8F4FC" font-family="Microsoft YaHei, Arial, sans-serif" font-size="24">
+    {{CHAPTER_DESC}}
+  </text>
+  
+  <!-- 装饰线条 -->
+  <line x1="380" y1="265" x2="500" y2="265" stroke="#CC0000" stroke-width="6"/>
+  
+  <!-- 底部信息 -->
+  <text x="1240" y="680" text-anchor="end" fill="#FFFFFF" fill-opacity="0.4" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18">
+    {{TITLE}}
+  </text>
+</svg>

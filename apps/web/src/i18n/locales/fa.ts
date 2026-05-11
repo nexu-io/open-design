@@ -661,6 +661,7 @@ export const fa: Dict = {
   'fileViewer.empty': 'یک فایل را برای مشاهده انتخاب کنید.',
   'fileViewer.loading': 'در حال بارگذاری…',
   'fileViewer.exportPptx': 'صادرکردن به PPTX',
+  'fileViewer.exportPptxConverting': 'Converting…',
   'fileViewer.openInNewTab': 'باز کردن در تب جدید',
   'fileViewer.copyPath': 'کپی مسیر',
   'fileViewer.copied': 'کپی شد!',

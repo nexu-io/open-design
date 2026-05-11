@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- 模板: 封面页 - 像素复古风格 -->
+  
+  <defs>
+    <!-- 霓虹绿发光效果 -->
+    <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <!-- 赛博粉发光效果 -->
+    <filter id="glowPink" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <!-- 电光蓝发光效果 -->
+    <filter id="glowBlue" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 深空黑背景 -->
+  <rect width="1280" height="720" fill="#0D1117" />
+  
+  <!-- 扫描线网格背景（低透明度） -->
+  <line x1="0" y1="60" x2="1280" y2="60" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="0" y1="120" x2="1280" y2="120" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="0" y1="180" x2="1280" y2="180" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="0" y1="540" x2="1280" y2="540" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="0" y1="660" x2="1280" y2="660" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="60" y1="0" x2="60" y2="720" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  <line x1="1220" y1="0" x2="1220" y2="720" stroke="#39FF14" stroke-width="1" stroke-opacity="0.1" />
+  
+  <!-- 顶部装饰线（霓虹双线） -->
+  <rect x="40" y="30" width="1200" height="8" fill="#39FF14" fill-opacity="0.8" />
+  <rect x="40" y="42" width="1200" height="4" fill="#39FF14" fill-opacity="0.4" />
+  
+  <!-- 左上角像素装饰 -->
+  <rect x="40" y="60" width="16" height="16" fill="#39FF14" />
+  <rect x="60" y="60" width="16" height="16" fill="#39FF14" fill-opacity="0.6" />
+  <rect x="80" y="60" width="16" height="16" fill="#39FF14" fill-opacity="0.3" />
+  
+  <!-- 右上角像素装饰 -->
+  <rect x="1184" y="60" width="16" height="16" fill="#FF2E97" fill-opacity="0.3" />
+  <rect x="1204" y="60" width="16" height="16" fill="#FF2E97" fill-opacity="0.6" />
+  <rect x="1224" y="60" width="16" height="16" fill="#FF2E97" />
+  
+  <!-- 中央像素风控制台图形 -->
+  <g transform="translate(540, 140)">
+    <!-- 控制台外壳 -->
+    <rect x="0" y="0" width="200" height="80" fill="#161B22" stroke="#39FF14" stroke-width="3" rx="8" />
+    <!-- 左侧按钮（绿色发光） -->
+    <rect x="25" y="20" width="40" height="40" fill="#0D1117" stroke="#8B949E" stroke-width="2" rx="4" />
+    <circle cx="45" cy="40" r="12" fill="#39FF14" filter="url(#glowGreen)" />
+    <!-- 右侧按钮（粉色方块） -->
+    <rect x="135" y="20" width="40" height="40" fill="#0D1117" stroke="#8B949E" stroke-width="2" rx="4" />
+    <rect x="147" y="32" width="16" height="16" fill="#FF2E97" />
+    <!-- 中间连接条 -->
+    <rect x="85" y="35" width="30" height="10" fill="#00D4FF" rx="2" />
+  </g>
+  
+  <!-- 主标题（霓虹发光） -->
+  <text x="640" y="320" text-anchor="middle" font-family="Consolas, Monaco, monospace" font-size="52" font-weight="bold" fill="#39FF14" filter="url(#glowGreen)">
+    {{TITLE}}
+  </text>
+  
+  <!-- 副标题 -->
+  <text x="640" y="380" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei, sans-serif" font-size="28" fill="#E6EDF3">
+    {{SUBTITLE}}
+  </text>
+  
+  <!-- 分隔线 -->
+  <rect x="440" y="410" width="400" height="3" fill="#00D4FF" fill-opacity="0.8" />
+  
+  <!-- 功能按钮组 -->
+  <g transform="translate(290, 460)">
+    <rect x="0" y="0" width="140" height="40" fill="#161B22" stroke="#39FF14" stroke-width="2" />
+    <text x="70" y="27" text-anchor="middle" font-family="Consolas, monospace" font-size="16" fill="#39FF14">💾 SAVE</text>
+  </g>
+  <g transform="translate(450, 460)">
+    <rect x="0" y="0" width="140" height="40" fill="#161B22" stroke="#00D4FF" stroke-width="2" />
+    <text x="70" y="27" text-anchor="middle" font-family="Consolas, monospace" font-size="16" fill="#00D4FF">🔀 BRANCH</text>
+  </g>
+  <g transform="translate(610, 460)">
+    <rect x="0" y="0" width="140" height="40" fill="#161B22" stroke="#FF2E97" stroke-width="2" />
+    <text x="70" y="27" text-anchor="middle" font-family="Consolas, monospace" font-size="16" fill="#FF2E97">⏪ REVERT</text>
+  </g>
+  <g transform="translate(770, 460)">
+    <rect x="0" y="0" width="140" height="40" fill="#161B22" stroke="#FFD700" stroke-width="2" />
+    <text x="70" y="27" text-anchor="middle" font-family="Consolas, monospace" font-size="16" fill="#FFD700">🤝 COLLAB</text>
+  </g>
+  
+  <!-- 底部提示语 -->
+  <text x="640" y="580" text-anchor="middle" font-family="Consolas, Monaco, monospace" font-size="24" fill="#8B949E">
+    ▶ PRESS START TO LEARN ◀
+  </text>
+  
+  <!-- 作者/单位信息 -->
+  <text x="640" y="620" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="18" fill="#8B949E">
+    {{AUTHOR}}
+  </text>
+  
+  <!-- 左下角像素装饰 -->
+  <rect x="40" y="640" width="12" height="12" fill="#39FF14" />
+  <rect x="56" y="640" width="12" height="12" fill="#39FF14" fill-opacity="0.6" />
+  <rect x="72" y="640" width="12" height="12" fill="#39FF14" fill-opacity="0.3" />
+  
+  <!-- 右下角像素装饰 -->
+  <rect x="1196" y="640" width="12" height="12" fill="#FF2E97" fill-opacity="0.3" />
+  <rect x="1212" y="640" width="12" height="12" fill="#FF2E97" fill-opacity="0.6" />
+  <rect x="1228" y="640" width="12" height="12" fill="#FF2E97" />
+  
+  <!-- 版本号 -->
+  <text x="1200" y="660" text-anchor="end" font-family="Consolas, monospace" font-size="14" fill="#8B949E">
+    {{VERSION}}
+  </text>
+  
+  <!-- 页码 -->
+  <text x="60" y="660" font-family="Consolas, monospace" font-size="14" fill="#8B949E">
+    01/{{TOTAL_PAGES}}
+  </text>
+  
+  <!-- 底部装饰线（霓虹双线） -->
+  <rect x="40" y="680" width="1200" height="4" fill="#39FF14" fill-opacity="0.4" />
+  <rect x="40" y="688" width="1200" height="8" fill="#39FF14" fill-opacity="0.8" />
+
+</svg>

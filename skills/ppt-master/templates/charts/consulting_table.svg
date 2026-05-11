@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Consulting Data Table Template (Visual Integration)
+    Purpose: High-density data presentation with visual aids, favored by consulting firms
+    Use cases: Financial reports, regional performance, sales tracking
+    Design Principles: Left-align text, right-align numbers, weak borders, visual integration
+    -->
+    <defs>
+        <!-- Shadow for the emphasized Total block -->
+        <filter id="highlightShadow" x="-5%" y="-15%" width="110%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <!-- Gradient for Visual Data Bars -->
+        <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#3B82F6"/>
+            <stop offset="100%" stop-color="#2563EB"/>
+        </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Global Revenue Performance</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">Q4 2025 · FINANCIAL DATA SUMMARY REPORT</text>
+    <!-- ==================== Table Structure ==================== -->
+    <g id="tableArea" transform="translate(80, 150)">
+        <!-- Table Header (Weak borders, no vertical lines) -->
+        <line x1="0" y1="35" x2="1120" y2="35" stroke="#CBD5E1" stroke-width="2"/>
+        <text x="20" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1">REGION / MARKET</text>
+        <text x="320" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1" text-anchor="middle">STATUS</text>
+        <text x="620" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1" text-anchor="end">REVENUE (USD)</text>
+        <text x="820" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1" text-anchor="end">YOY GROWTH</text>
+        <text x="880" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1">MARKET SHARE (VISUAL)</text>
+        <!-- Data Rows (Alternating faint background for readability, no borders) -->
+        <!-- Row 1 -->
+        <rect x="0" y="45" width="1120" height="60" fill="#F8FAFC" rx="6"/>
+        <!-- Left aligned: Variable length text -->
+        <text x="20" y="81" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">North America</text>
+        <!-- Center aligned: Uniform text -->
+        <rect x="280" y="65" width="80" height="24" rx="12" fill="#ECFDF5"/>
+        <text x="320" y="82" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#059669" text-anchor="middle">Active</text>
+        <!-- Right aligned: Large numbers -->
+        <text x="620" y="82" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="600" fill="#0F172A" text-anchor="end">$ 124,500,000</text>
+        <!-- Right aligned: Percentages -->
+        <text x="820" y="82" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#10B981" text-anchor="end">+ 12.4%</text>
+        <!-- Visual Integration: Data Bar -->
+        <rect x="880" y="70" width="200" height="12" rx="6" fill="#E2E8F0"/>
+        <rect x="880" y="70" width="160" height="12" rx="6" fill="url(#barGrad)"/>
+        <text x="1090" y="81" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748B">42%</text>
+        <!-- Row 2 -->
+        <!-- Left aligned: Variable length text -->
+        <text x="20" y="141" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Europe &amp; Middle East</text>
+        <!-- Center aligned: Uniform text -->
+        <rect x="280" y="125" width="80" height="24" rx="12" fill="#ECFDF5"/>
+        <text x="320" y="142" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#059669" text-anchor="middle">Active</text>
+        <!-- Right aligned: Large numbers -->
+        <text x="620" y="142" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="600" fill="#0F172A" text-anchor="end">$ 89,200,000</text>
+        <!-- Right aligned: Percentages -->
+        <text x="820" y="142" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#10B981" text-anchor="end">+ 8.1%</text>
+        <!-- Visual Integration: Data Bar -->
+        <rect x="880" y="130" width="200" height="12" rx="6" fill="#E2E8F0"/>
+        <rect x="880" y="130" width="115" height="12" rx="6" fill="#60A5FA"/>
+        <text x="1090" y="141" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748B">30%</text>
+        <!-- Row 3 -->
+        <rect x="0" y="165" width="1120" height="60" fill="#F8FAFC" rx="6"/>
+        <!-- Left aligned: Variable length text -->
+        <text x="20" y="201" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Asia Pacific</text>
+        <!-- Center aligned: Uniform text -->
+        <rect x="280" y="185" width="80" height="24" rx="12" fill="#FFF1F2"/>
+        <text x="320" y="202" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#E11D48" text-anchor="middle">Warning</text>
+        <!-- Right aligned: Large numbers -->
+        <text x="620" y="202" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="600" fill="#0F172A" text-anchor="end">$ 45,600,000</text>
+        <!-- Right aligned: Percentages -->
+        <text x="820" y="202" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#F43F5E" text-anchor="end">- 3.2%</text>
+        <!-- Visual Integration: Data Bar -->
+        <rect x="880" y="190" width="200" height="12" rx="6" fill="#E2E8F0"/>
+        <rect x="880" y="190" width="60" height="12" rx="6" fill="#F43F5E"/>
+        <text x="1090" y="201" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748B">15%</text>
+        <!-- Row 4 -->
+        <!-- Left aligned: Variable length text -->
+        <text x="20" y="261" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Latin America</text>
+        <!-- Center aligned: Uniform text -->
+        <rect x="280" y="245" width="80" height="24" rx="12" fill="#FFFBEB"/>
+        <text x="320" y="262" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#D97706" text-anchor="middle">Pending</text>
+        <!-- Right aligned: Large numbers -->
+        <text x="620" y="262" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="600" fill="#0F172A" text-anchor="end">$ 22,400,000</text>
+        <!-- Right aligned: Percentages -->
+        <text x="820" y="262" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#10B981" text-anchor="end">+ 15.6%</text>
+        <!-- Visual Integration: Data Bar -->
+        <rect x="880" y="250" width="200" height="12" rx="6" fill="#E2E8F0"/>
+        <rect x="880" y="250" width="30" height="12" rx="6" fill="#F59E0B"/>
+        <text x="1090" y="261" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748B">8%</text>
+        <!-- Row 5 -->
+        <rect x="0" y="285" width="1120" height="60" fill="#F8FAFC" rx="6"/>
+        <!-- Left aligned: Variable length text -->
+        <text x="20" y="321" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Africa</text>
+        <!-- Center aligned: Uniform text -->
+        <rect x="280" y="305" width="80" height="24" rx="12" fill="#F1F5F9"/>
+        <text x="320" y="322" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#475569" text-anchor="middle">Emerging</text>
+        <!-- Right aligned: Large numbers -->
+        <text x="620" y="322" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="600" fill="#0F172A" text-anchor="end">$ 12,100,000</text>
+        <!-- Right aligned: Percentages -->
+        <text x="820" y="322" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#10B981" text-anchor="end">+ 22.8%</text>
+        <!-- Visual Integration: Data Bar -->
+        <rect x="880" y="310" width="200" height="12" rx="6" fill="#E2E8F0"/>
+        <rect x="880" y="310" width="20" height="12" rx="6" fill="#94A3B8"/>
+        <text x="1090" y="321" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748B">5%</text>
+        <!-- ==================== Emphasized Total Row ==================== -->
+        <!-- Thick separator line to emphasize the bottom block -->
+        <line x1="0" y1="370" x2="1120" y2="370" stroke="#0F172A" stroke-width="3"/>
+        <!-- Emphasized background card -->
+        <g filter="url(#highlightShadow)">
+            <rect x="0" y="390" width="1120" height="70" fill="#0F172A" rx="8"/>
+            <!-- Accent line -->
+            <rect x="0" y="390" width="6" height="70" fill="#3B82F6" rx="3"/>
+        </g>
+        <text x="20" y="432" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" letter-spacing="1">GLOBAL TOTAL</text>
+        <text x="320" y="432" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#94A3B8" text-anchor="middle">5 REGIONS</text>
+        <!-- Highly emphasized total number -->
+        <text x="620" y="434" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="end">$ 293,800,000</text>
+        <text x="820" y="432" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="800" fill="#34D399" text-anchor="end">+ 8.7%</text>
+        <rect x="880" y="420" width="200" height="12" rx="6" fill="#1E293B"/>
+        <rect x="880" y="420" width="200" height="12" rx="6" fill="url(#barGrad)"/>
+        <text x="1090" y="431" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#FFFFFF">100%</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1200" y="690" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: Internal Finance System · Generated automatically</text>
+</svg>

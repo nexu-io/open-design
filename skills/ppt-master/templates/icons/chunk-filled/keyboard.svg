@@ -1,0 +1,13 @@
+<svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 3H3V5H0V3Z" fill="currentColor"/>
+<path d="M0 11H3V13H0V11Z" fill="currentColor"/>
+<path d="M5 11H11V13H5V11Z" fill="currentColor"/>
+<path d="M16 11H13V13H16V11Z" fill="currentColor"/>
+<path d="M7 3H5V5H7V3Z" fill="currentColor"/>
+<path d="M9 3H11V5H9V3Z" fill="currentColor"/>
+<path d="M16 3H13V5H16V3Z" fill="currentColor"/>
+<path d="M0 7H3V9H0V7Z" fill="currentColor"/>
+<path d="M7 7H5V9H7V7Z" fill="currentColor"/>
+<path d="M9 7H11V9H9V7Z" fill="currentColor"/>
+<path d="M16 7H13V9H16V7Z" fill="currentColor"/>
+</svg>

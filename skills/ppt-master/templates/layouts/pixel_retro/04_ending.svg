@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- 模板: 结束页 - 像素复古风格 -->
+  
+  <defs>
+    <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowYellow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 深空黑背景 -->
+  <rect width="1280" height="720" fill="#0D1117" />
+  
+  <!-- 顶部装饰线（加粗） -->
+  <rect x="0" y="0" width="1280" height="4" fill="#39FF14" fill-opacity="0.8" />
+  <rect x="0" y="4" width="1280" height="2" fill="#39FF14" fill-opacity="0.4" />
+  
+  <!-- 背景扫描线 -->
+  <line x1="0" y1="120" x2="1280" y2="120" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="240" x2="1280" y2="240" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="360" x2="1280" y2="360" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="480" x2="1280" y2="480" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#39FF14" stroke-width="1" stroke-opacity="0.05" />
+  
+  <!-- 主标题（霓虹发光） -->
+  <text x="640" y="80" text-anchor="middle" font-family="Consolas, Monaco, monospace" font-size="48" font-weight="bold" fill="#39FF14" filter="url(#glowGreen)">
+    🎯 {{THANK_YOU}}
+  </text>
+  <text x="640" y="115" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei, sans-serif" font-size="20" fill="#8B949E">
+    {{END_SUBTITLE}}
+  </text>
+  
+  <!-- 三栏总结卡片 -->
+  
+  <!-- 卡片 1 -->
+  <g transform="translate(60, 160)">
+    <rect x="0" y="0" width="380" height="280" fill="#161B22" stroke="#39FF14" stroke-width="3" />
+    <!-- 序号方块 -->
+    <rect x="0" y="0" width="60" height="60" fill="#39FF14" />
+    <text x="30" y="42" text-anchor="middle" font-family="Consolas, monospace" font-size="32" font-weight="bold" fill="#0D1117">1</text>
+    <!-- 标题 -->
+    <text x="80" y="40" font-family="Consolas, monospace" font-size="22" font-weight="bold" fill="#39FF14">{{SUMMARY_1_TITLE}}</text>
+    <!-- 分隔线 -->
+    <rect x="20" y="70" width="340" height="2" fill="#30363D" />
+    <!-- 内容 -->
+    <text x="30" y="110" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="18" fill="#E6EDF3">{{SUMMARY_1_LINE_1}}</text>
+    <text x="30" y="145" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="18" fill="#E6EDF3">{{SUMMARY_1_LINE_2}}</text>
+    <text x="30" y="180" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="18" fill="#E6EDF3">{{SUMMARY_1_LINE_3}}</text>
+    <!-- 进度条 -->
+    <rect x="30" y="220" width="320" height="25" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+    <rect x="32" y="222" width="288" height="21" fill="#39FF14" fill-opacity="0.8" />
+    <text x="300" y="239" font-family="Consolas, monospace" font-size="14" fill="#0D1117" font-weight="bold">90%</text>
+    <text x="30" y="260" font-family="Consolas, monospace" font-size="12" fill="#8B949E">{{SUMMARY_1_STAT}}</text>
+  </g>
+  
+  <!-- 卡片 2 -->
+  <g transform="translate(460, 160)">
+    <rect x="0" y="0" width="380" height="280" fill="#161B22" stroke="#00D4FF" stroke-width="3" />
+    <rect x="0" y="0" width="60" height="60" fill="#00D4FF" />
+    <text x="30" y="42" text-anchor="middle" font-family="Consolas, monospace" font-size="32" font-weight="bold" fill="#0D1117">2</text>
+    <text x="80" y="40" font-family="Consolas, monospace" font-size="22" font-weight="bold" fill="#00D4FF">{{SUMMARY_2_TITLE}}</text>
+    <rect x="20" y="70" width="340" height="2" fill="#30363D" />
+    <!-- 功能列表 -->
+    <g transform="translate(30, 90)">
+      <rect x="0" y="0" width="320" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="15" y="24" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="16" fill="#E6EDF3">{{FEATURE_1}}</text>
+      
+      <rect x="0" y="42" width="320" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="15" y="66" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="16" fill="#E6EDF3">{{FEATURE_2}}</text>
+      
+      <rect x="0" y="84" width="320" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="15" y="108" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="16" fill="#E6EDF3">{{FEATURE_3}}</text>
+      
+      <rect x="0" y="126" width="320" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="15" y="150" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="16" fill="#E6EDF3">{{FEATURE_4}}</text>
+    </g>
+  </g>
+  
+  <!-- 卡片 3 -->
+  <g transform="translate(860, 160)">
+    <rect x="0" y="0" width="380" height="280" fill="#161B22" stroke="#FF2E97" stroke-width="3" />
+    <rect x="0" y="0" width="60" height="60" fill="#FF2E97" />
+    <text x="30" y="42" text-anchor="middle" font-family="Consolas, monospace" font-size="32" font-weight="bold" fill="#0D1117">3</text>
+    <text x="80" y="40" font-family="Consolas, monospace" font-size="22" font-weight="bold" fill="#FF2E97">{{SUMMARY_3_TITLE}}</text>
+    <rect x="20" y="70" width="340" height="2" fill="#30363D" />
+    <!-- 对比表格 -->
+    <g transform="translate(30, 90)">
+      <!-- 表头 -->
+      <rect x="0" y="0" width="155" height="35" fill="#39FF14" fill-opacity="0.2" />
+      <text x="77" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="16" fill="#39FF14" font-weight="bold">{{COMPARE_A}}</text>
+      <rect x="165" y="0" width="155" height="35" fill="#FF2E97" fill-opacity="0.2" />
+      <text x="242" y="24" text-anchor="middle" font-family="Consolas, monospace" font-size="16" fill="#FF2E97" font-weight="bold">{{COMPARE_B}}</text>
+      <!-- 行 1 -->
+      <rect x="0" y="42" width="155" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="77" y="66" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="14" fill="#E6EDF3">{{ROW_1_A}}</text>
+      <rect x="165" y="42" width="155" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="242" y="66" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="14" fill="#E6EDF3">{{ROW_1_B}}</text>
+      <!-- 行 2 -->
+      <rect x="0" y="84" width="155" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="77" y="108" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="14" fill="#E6EDF3">{{ROW_2_A}}</text>
+      <rect x="165" y="84" width="155" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="242" y="108" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="14" fill="#E6EDF3">{{ROW_2_B}}</text>
+      <!-- 行 3 -->
+      <rect x="0" y="126" width="155" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="77" y="150" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="14" fill="#E6EDF3">{{ROW_3_A}}</text>
+      <rect x="165" y="126" width="155" height="35" fill="#0D1117" stroke="#30363D" stroke-width="1" />
+      <text x="242" y="150" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="14" fill="#E6EDF3">{{ROW_3_B}}</text>
+    </g>
+  </g>
+  
+  <!-- 结束语卡片 -->
+  <g transform="translate(60, 480)">
+    <rect x="0" y="0" width="1160" height="120" fill="#161B22" stroke="#FFD700" stroke-width="3" />
+    <!-- 顶部高亮条 -->
+    <rect x="0" y="0" width="1160" height="50" fill="#FFD700" fill-opacity="0.1" />
+    <text x="580" y="35" text-anchor="middle" font-family="Consolas, monospace" font-size="24" fill="#FFD700" filter="url(#glowYellow)">
+      🎮 {{CTA_TEXT}}
+    </text>
+    <!-- 说明文字 -->
+    <text x="580" y="80" text-anchor="middle" font-family="-apple-system, Microsoft YaHei, sans-serif" font-size="18" fill="#E6EDF3">
+      {{CONTACT_INFO}}
+    </text>
+    <!-- 按钮组 -->
+    <g transform="translate(400, 90)">
+      <rect x="0" y="0" width="180" height="25" fill="#39FF14" stroke="#39FF14" stroke-width="2" />
+      <text x="90" y="18" text-anchor="middle" font-family="Consolas, monospace" font-size="14" fill="#0D1117" font-weight="bold">GAME SAVED ✓</text>
+    </g>
+    <g transform="translate(600, 90)">
+      <rect x="0" y="0" width="180" height="25" fill="#0D1117" stroke="#39FF14" stroke-width="2" />
+      <text x="90" y="18" text-anchor="middle" font-family="Consolas, monospace" font-size="14" fill="#39FF14">CONTINUE →</text>
+    </g>
+  </g>
+  
+  <!-- 底部装饰线 -->
+  <rect x="0" y="712" width="1280" height="4" fill="#39FF14" fill-opacity="0.4" />
+  <rect x="0" y="716" width="1280" height="4" fill="#39FF14" fill-opacity="0.8" />
+  
+  <!-- 左下角像素装饰 -->
+  <rect x="40" y="640" width="12" height="12" fill="#39FF14" />
+  <rect x="56" y="640" width="12" height="12" fill="#39FF14" fill-opacity="0.6" />
+  <rect x="72" y="640" width="12" height="12" fill="#39FF14" fill-opacity="0.3" />
+  
+  <!-- 右下角像素装饰 -->
+  <rect x="1196" y="640" width="12" height="12" fill="#FF2E97" fill-opacity="0.3" />
+  <rect x="1212" y="640" width="12" height="12" fill="#FF2E97" fill-opacity="0.6" />
+  <rect x="1228" y="640" width="12" height="12" fill="#FF2E97" />
+  
+  <!-- 页码 -->
+  <text x="60" y="690" font-family="Consolas, monospace" font-size="14" fill="#8B949E">{{PAGE_NUM}}/{{TOTAL_PAGES}}</text>
+  
+  <!-- 结束标识 -->
+  <text x="1220" y="690" text-anchor="end" font-family="Consolas, monospace" font-size="14" fill="#39FF14">
+    THE END - Thank You! 🎉
+  </text>
+
+</svg>

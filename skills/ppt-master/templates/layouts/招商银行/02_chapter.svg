@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#A61120"/>
+
+  <circle cx="1010" cy="344" r="286" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-opacity="0.06"/>
+  <circle cx="1042" cy="344" r="184" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-opacity="0.05"/>
+  <circle cx="140" cy="620" r="170" fill="#7F0B17" fill-opacity="0.4"/>
+  <rect x="738" y="0" width="542" height="720" fill="#7F0B17" fill-opacity="0.16"/>
+
+  <image href="logo_white.png" x="948" y="42" width="250" height="60"/>
+  <line x1="904" y1="118" x2="1204" y2="118" stroke="#FFFFFF" stroke-width="1.5" stroke-opacity="0.18"/>
+
+  <rect x="96" y="144" width="10" height="320" fill="#FFFFFF" fill-opacity="0.9"/>
+  <rect x="122" y="144" width="2" height="320" fill="#FFFFFF" fill-opacity="0.45"/>
+
+  <text x="154" y="258" fill="#FFFFFF" fill-opacity="0.12" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="220" font-weight="700">
+    {{CHAPTER_NUM}}
+  </text>
+  <text x="154" y="334" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="46" font-weight="700">
+    {{CHAPTER_TITLE}}
+  </text>
+  <text x="154" y="392" fill="#FFFFFF" fill-opacity="0.82" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="20">
+    {{CHAPTER_DESC}}
+  </text>
+  <line x1="154" y1="432" x2="486" y2="432" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.45"/>
+  <line x1="840" y1="520" x2="1188" y2="520" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.12"/>
+  <line x1="886" y1="548" x2="1188" y2="548" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.09"/>
+  <line x1="934" y1="576" x2="1188" y2="576" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.07"/>
+</svg>

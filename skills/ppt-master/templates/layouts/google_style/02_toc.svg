@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 目录页 - Google 风格 -->
+
+    <defs>
+        <!-- 顶部四色渐变条 -->
+        <linearGradient id="topGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4285F4;stop-opacity:1" />
+            <stop offset="33%" style="stop-color:#EA4335;stop-opacity:1" />
+            <stop offset="66%" style="stop-color:#FBBC04;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#34A853;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 白色背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- 顶部四色渐变条 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGradient)" />
+
+    <!-- 页面标题 -->
+    <text x="60" y="85" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="46" font-weight="700" fill="#1A237E">
+        Contents
+    </text>
+
+    <!-- 蓝色标题下划线 -->
+    <rect x="60" y="100" width="120" height="4" rx="2" fill="#4285F4" />
+
+    <!-- 章节列表区域 -->
+    <g transform="translate(60, 160)">
+        <!-- 章节 1 -->
+        <g transform="translate(0, 0)">
+            <circle cx="20" cy="30" r="16" fill="#4285F4" />
+            <text x="20" y="36" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">01</text>
+            <text x="55" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="600" fill="#1A237E">{{TOC_ITEM_1_TITLE}}</text>
+        </g>
+
+        <!-- 章节 2 -->
+        <g transform="translate(0, 80)">
+            <circle cx="20" cy="30" r="16" fill="#EA4335" />
+            <text x="20" y="36" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">02</text>
+            <text x="55" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="600" fill="#1A237E">{{TOC_ITEM_2_TITLE}}</text>
+        </g>
+
+        <!-- 章节 3 -->
+        <g transform="translate(0, 160)">
+            <circle cx="20" cy="30" r="16" fill="#FBBC04" />
+            <text x="20" y="36" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="700" fill="#1A237E" text-anchor="middle">03</text>
+            <text x="55" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="600" fill="#1A237E">{{TOC_ITEM_3_TITLE}}</text>
+        </g>
+
+        <!-- 章节 4 -->
+        <g transform="translate(0, 240)">
+            <circle cx="20" cy="30" r="16" fill="#34A853" />
+            <text x="20" y="36" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">04</text>
+            <text x="55" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="600" fill="#1A237E">{{TOC_ITEM_4_TITLE}}</text>
+        </g>
+
+        <!-- 章节 5 (可选) -->
+        <g transform="translate(0, 320)">
+            <circle cx="20" cy="30" r="16" fill="#4285F4" />
+            <text x="20" y="36" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">05</text>
+            <text x="55" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="600" fill="#1A237E">{{TOC_ITEM_5_TITLE}}</text>
+        </g>
+    </g>
+
+    <!-- 右侧装饰区域 - 可用于放置统计数据或装饰图形 -->
+    <g transform="translate(750, 180)">
+        <!-- 装饰圆形 -->
+        <circle cx="200" cy="150" r="180" fill="#4285F4" fill-opacity="0.05" />
+        <circle cx="220" cy="180" r="120" fill="#34A853" fill-opacity="0.05" />
+        <circle cx="180" cy="220" r="80" fill="#FBBC04" fill-opacity="0.08" />
+        
+        <!-- 可选：右侧统计信息 -->
+        <rect x="60" y="300" width="400" height="150" rx="12" fill="#F8F9FA" />
+        <text x="260" y="350" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="500" fill="#5F6368" text-anchor="middle">{{STATS_AREA}}</text>
+        <text x="260" y="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="400" fill="#9AA0A6" text-anchor="middle">(可选统计区域)</text>
+    </g>
+
+    <!-- 底部四色圆点装饰 -->
+    <g transform="translate(640, 680)">
+        <circle cx="-60" cy="0" r="6" fill="#4285F4" />
+        <circle cx="-30" cy="0" r="6" fill="#EA4335" />
+        <circle cx="0" cy="0" r="6" fill="#FBBC04" />
+        <circle cx="30" cy="0" r="6" fill="#34A853" />
+        <circle cx="60" cy="0" r="6" fill="#4285F4" />
+    </g>
+
+</svg>

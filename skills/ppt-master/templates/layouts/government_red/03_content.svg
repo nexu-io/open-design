@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 - 重庆两江新区发改委风格 -->
+
+    <defs>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#8B0000;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#003366;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 白色背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)" />
+
+    <!-- 页眉导航栏 -->
+    <!-- 章节序号块 - 政府红正方形 -->
+    <rect x="60" y="30" width="50" height="50" fill="#8B0000" />
+    <text x="85" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFFFFF">{{CHAPTER_NUM}}</text>
+
+    <!-- 页面标题 -->
+    <text x="130" y="65" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#1A1A1A">{{PAGE_TITLE}}</text>
+
+    <!-- 右上角单位标识 -->
+    <text x="1220" y="55" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="12" fill="#718096">{{ORG_SHORT}}</text>
+    <rect x="1107" y="60" width="113" height="2" fill="#8B0000" fill-opacity="0.3"/>
+
+    <!-- 内容区域 - 灵活布局，由 Executor 根据实际内容自由设计 -->
+    <!-- 可使用的布局模式：
+       - 单栏文字列表
+       - 左右双栏对比
+       - 卡片式分块（如 2×2 四宫格）
+       - 图文混排（左图右文、上图下文、通栏图）
+       - 表格
+       - 时间轴
+       - 流程图
+  -->
+    <rect x="60" y="100" width="1160" height="560" fill="none" stroke="#E4E7EB" stroke-width="2" stroke-dasharray="8,8" />
+    <text x="640" y="360" text-anchor="middle" fill="#CBD5E1" font-size="18" font-family="Microsoft YaHei, sans-serif">
+        {{CONTENT_AREA}}
+    </text>
+    <text x="640" y="395" text-anchor="middle" fill="#CBD5E1" font-size="14" font-family="Microsoft YaHei, sans-serif">
+        (由 Executor 根据实际内容自由布局)
+    </text>
+
+    <!-- 常用设计元素参考 -->
+    <!-- 色块容器: <rect fill="#F5F7FA" rx="8"/> -->
+    <!-- 强调色块: <rect fill="#8B0000"/> -->
+    <!-- 辅助色块: <rect fill="#003366"/> -->
+    <!-- 圆点列表: <circle r="5" fill="#8B0000"/> -->
+    <!-- 分隔线: <line stroke="#E4E7EB" stroke-width="1"/> -->
+    <!-- 金色点缀: <rect fill="#DAA520"/> -->
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#8B0000" />
+
+    <!-- 页码 -->
+    <text x="640" y="695" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#718096">{{PAGE_NUM}}</text>
+
+    <!-- 底部单位名称 -->
+    <text x="1220" y="695" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="12" fill="#718096" fill-opacity="0.6">{{ORG_SHORT}}</text>
+
+</svg>

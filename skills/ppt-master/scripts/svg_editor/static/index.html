@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPT Master - Visual Edit</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="panel-left">
+            <div class="panel-header">Slides</div>
+            <div id="slide-list"></div>
+        </div>
+        <div id="panel-center">
+            <div id="svg-container">
+                <div id="rubber-band-overlay"></div>
+                <div id="svg-placeholder">Select a slide on the left to begin</div>
+                <div id="svg-content" style="display:none;"></div>
+            </div>
+        </div>
+        <div id="panel-right">
+            <div class="panel-header">Annotations</div>
+            <div id="selection-info">
+                <div class="section-label">Selected element</div>
+                <div id="selected-element" class="empty">Click an element on the slide to select it</div>
+                <div id="element-props" style="display:none;"></div>
+            </div>
+            <div id="annotation-input" style="display:none;">
+                <div class="section-label">Edit instruction</div>
+                <textarea id="annotation-text" placeholder="Describe how the AI should modify this element..."></textarea>
+                <button id="btn-add-annotation">Add annotation</button>
+            </div>
+            <div id="annotation-list">
+                <div class="section-label">Annotations on this slide</div>
+                <div id="annotations"></div>
+            </div>
+            <button id="btn-save" class="btn-save">Submit annotations</button>
+        </div>
+    </div>
+    <div id="modal-overlay" style="display:none;">
+        <div id="modal">
+            <div id="modal-message"></div>
+            <div id="modal-buttons">
+                <button id="modal-confirm">Submit</button>
+                <button id="modal-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

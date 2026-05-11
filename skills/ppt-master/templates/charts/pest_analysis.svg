@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    PESTLE Analysis Template
+    Purpose: Macro-environmental strategic analysis
+    Use cases: Market entry strategy, business environment scanning, strategic planning
+    Design Principles: 4 clean vertical pillars with distinctive accent colors and structured text hierarchy
+    -->
+    <defs>
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.04"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">PEST Macro-Environment Analysis</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">EXTERNAL STRATEGIC FACTORS IMPACTING MARKET ENTRY</text>
+    <!-- ==================== PEST Columns ==================== -->
+    <g transform="translate(80, 150)">
+        <!-- 1. Political (P) -->
+        <g transform="translate(0, 0)">
+            <!-- Background Card -->
+            <rect width="260" height="480" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <!-- Header Block -->
+            <rect width="260" height="120" rx="12" fill="#EFF6FF"/>
+            <!-- To cover bottom rounded corners of the header -->
+            <rect y="100" width="260" height="20" fill="#EFF6FF"/>
+            <text x="130" y="55" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#2563EB" text-anchor="middle">P</text>
+            <text x="130" y="90" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#1E3A8A" text-anchor="middle">POLITICAL</text>
+            <line x1="20" y1="120" x2="240" y2="120" stroke="#BFDBFE" stroke-width="2"/>
+            <!-- Bullet Points -->
+            <circle cx="30" cy="160" r="4" fill="#3B82F6"/>
+            <text x="45" y="165" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Trade Tariffs</text>
+            <text x="45" y="185" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Pending cross-border trade</text>
+            <text x="45" y="205" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">regulations affecting COGS.</text>
+            <circle cx="30" cy="240" r="4" fill="#3B82F6"/>
+            <text x="45" y="245" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Data Privacy Laws</text>
+            <text x="45" y="265" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Strict GDPR compliance</text>
+            <text x="45" y="285" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">required for EU expansion.</text>
+            <circle cx="30" cy="320" r="4" fill="#3B82F6"/>
+            <text x="45" y="325" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Government Subsidies</text>
+            <text x="45" y="345" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">New grants available for</text>
+            <text x="45" y="365" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">green tech initiatives.</text>
+        </g>
+        <!-- 2. Economic (E) -->
+        <g transform="translate(286, 0)">
+            <rect width="260" height="480" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <rect width="260" height="120" rx="12" fill="#ECFDF5"/>
+            <rect y="100" width="260" height="20" fill="#ECFDF5"/>
+            <text x="130" y="55" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#059669" text-anchor="middle">E</text>
+            <text x="130" y="90" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#064E3B" text-anchor="middle">ECONOMIC</text>
+            <line x1="20" y1="120" x2="240" y2="120" stroke="#A7F3D0" stroke-width="2"/>
+            <!-- Bullet Points -->
+            <circle cx="30" cy="160" r="4" fill="#10B981"/>
+            <text x="45" y="165" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Inflation Rates</text>
+            <text x="45" y="185" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Rising inflation decreasing</text>
+            <text x="45" y="205" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">consumer purchasing power.</text>
+            <circle cx="30" cy="240" r="4" fill="#10B981"/>
+            <text x="45" y="245" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Exchange Rates</text>
+            <text x="45" y="265" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Currency volatility impacting</text>
+            <text x="45" y="285" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">export profit margins.</text>
+            <circle cx="30" cy="320" r="4" fill="#10B981"/>
+            <text x="45" y="325" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Interest Rates</text>
+            <text x="45" y="345" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Higher borrowing costs</text>
+            <text x="45" y="365" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">for upcoming capital project.</text>
+        </g>
+        <!-- 3. Social (S) -->
+        <g transform="translate(572, 0)">
+            <rect width="260" height="480" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <rect width="260" height="120" rx="12" fill="#FFFBEB"/>
+            <rect y="100" width="260" height="20" fill="#FFFBEB"/>
+            <text x="130" y="55" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#D97706" text-anchor="middle">S</text>
+            <text x="130" y="90" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#78350F" text-anchor="middle">SOCIAL</text>
+            <line x1="20" y1="120" x2="240" y2="120" stroke="#FDE68A" stroke-width="2"/>
+            <!-- Bullet Points -->
+            <circle cx="30" cy="160" r="4" fill="#F59E0B"/>
+            <text x="45" y="165" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Demographic Shifts</text>
+            <text x="45" y="185" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Aging population creates</text>
+            <text x="45" y="205" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">demand for healthcare tech.</text>
+            <circle cx="30" cy="240" r="4" fill="#F59E0B"/>
+            <text x="45" y="245" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Workplace Trends</text>
+            <text x="45" y="265" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Permanent shift towards</text>
+            <text x="45" y="285" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">hybrid and remote work.</text>
+            <circle cx="30" cy="320" r="4" fill="#F59E0B"/>
+            <text x="45" y="325" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Consumer Attitudes</text>
+            <text x="45" y="345" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Increasing preference for</text>
+            <text x="45" y="365" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">sustainable products.</text>
+        </g>
+        <!-- 4. Technological (T) -->
+        <g transform="translate(858, 0)">
+            <rect width="260" height="480" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <rect width="260" height="120" rx="12" fill="#F3E8FF"/>
+            <rect y="100" width="260" height="20" fill="#F3E8FF"/>
+            <text x="130" y="55" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="48" font-weight="900" fill="#9333EA" text-anchor="middle">T</text>
+            <text x="130" y="90" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#4C1D95" text-anchor="middle">TECHNOLOGICAL</text>
+            <line x1="20" y1="120" x2="240" y2="120" stroke="#D8B4FE" stroke-width="2"/>
+            <!-- Bullet Points -->
+            <circle cx="30" cy="160" r="4" fill="#A855F7"/>
+            <text x="45" y="165" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">AI Automation</text>
+            <text x="45" y="185" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Generative AI threatening</text>
+            <text x="45" y="205" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">legacy software models.</text>
+            <circle cx="30" cy="240" r="4" fill="#A855F7"/>
+            <text x="45" y="245" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Infrastructure</text>
+            <text x="45" y="265" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">5G rollout enables new</text>
+            <text x="45" y="285" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">IoT product capabilities.</text>
+            <circle cx="30" cy="320" r="4" fill="#A855F7"/>
+            <text x="45" y="325" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#0F172A">Cybersecurity Risk</text>
+            <text x="45" y="345" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Escalating threat landscape</text>
+            <text x="45" y="365" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">requires higher R&amp;D spend.</text>
+        </g>
+    </g>
+</svg>

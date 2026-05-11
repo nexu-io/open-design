@@ -648,6 +648,7 @@ export const ar: Dict = {
   'fileViewer.empty': 'اختر ملفاً لعرضه.',
   'fileViewer.loading': 'جاري التحميل...',
   'fileViewer.exportPptx': 'تصدير كـ PPTX',
+  'fileViewer.exportPptxConverting': 'Converting…',
   'fileViewer.openInNewTab': 'فتح في علامة تبويب جديدة',
   'fileViewer.copyPath': 'نسخ المسار',
   'fileViewer.copied': 'تم النسخ!',

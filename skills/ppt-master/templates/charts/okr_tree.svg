@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    OKR Goal Tree Template
+    Purpose: Hierarchical cascading of objectives and key results
+    Use cases: Corporate goal setting, quarterly planning, team alignment
+    Design Principles: Top-down tree structure connecting a main Objective to multiple Key Results and Action Items
+    -->
+    <defs>
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.05"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="640" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A" text-anchor="middle">Quarterly OKR Alignment</text>
+    <text x="640" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1" text-anchor="middle">OBJECTIVES &amp; KEY RESULTS (Q4 2025)</text>
+    <!-- ==================== Connecting Lines ==================== -->
+    <g transform="translate(640, 150)">
+        <!-- Vertical line from Objective down to horizontal bus -->
+        <line x1="0" y1="80" x2="0" y2="140" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- Horizontal bus -->
+        <line x1="-350" y1="140" x2="350" y2="140" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- Vertical lines down to Key Results -->
+        <line x1="-350" y1="140" x2="-350" y2="180" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="0" y1="140" x2="0" y2="180" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="350" y1="140" x2="350" y2="180" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- Vertical lines from Key Results down to Initiatives -->
+        <line x1="-350" y1="300" x2="-350" y2="340" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="0" y1="300" x2="0" y2="340" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="350" y1="300" x2="350" y2="340" stroke="#CBD5E1" stroke-width="2"/>
+    </g>
+    <!-- ==================== Level 1: Objective (O) ==================== -->
+    <g transform="translate(640, 150)" filter="url(#shadow)">
+        <rect x="-240" y="0" width="480" height="80" rx="12" fill="#0F172A"/>
+        <rect x="-240" y="0" width="12" height="80" fill="#3B82F6"/> <!-- Left Accent -->
+        <text x="-210" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">OBJECTIVE:</text>
+        <text x="-30" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="700" fill="#EFF6FF">Become the #1 Enterprise AI Platform</text>
+    </g>
+    <!-- ==================== Level 2: Key Results (KR) ==================== -->
+    <!-- KR 1 -->
+    <g transform="translate(290, 330)" filter="url(#shadow)">
+        <rect x="-160" y="0" width="320" height="120" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+        <rect x="-160" y="0" width="320" height="30" fill="#EFF6FF"/> <!-- Header Area -->
+        <text x="-140" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#2563EB" letter-spacing="1">KEY RESULT 1</text>
+        <text x="-140" y="60" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Increase ARR by $5M</text>
+        <text x="-140" y="85" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">Targeting top-tier financial</text>
+        <text x="-140" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">institutions.</text>
+    </g>
+    <!-- KR 2 -->
+    <g transform="translate(640, 330)" filter="url(#shadow)">
+        <rect x="-160" y="0" width="320" height="120" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+        <rect x="-160" y="0" width="320" height="30" fill="#ECFDF5"/>
+        <text x="-140" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#059669" letter-spacing="1">KEY RESULT 2</text>
+        <text x="-140" y="60" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Launch Generative API v2</text>
+        <text x="-140" y="85" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">Reduce latency to &lt;200ms</text>
+        <text x="-140" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">for all endpoints.</text>
+    </g>
+    <!-- KR 3 -->
+    <g transform="translate(990, 330)" filter="url(#shadow)">
+        <rect x="-160" y="0" width="320" height="120" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+        <rect x="-160" y="0" width="320" height="30" fill="#FFFBEB"/>
+        <text x="-140" y="20" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#D97706" letter-spacing="1">KEY RESULT 3</text>
+        <text x="-140" y="60" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Achieve 95% CSAT Score</text>
+        <text x="-140" y="85" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">Improve customer support</text>
+        <text x="-140" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">response time to 5 minutes.</text>
+    </g>
+    <!-- ==================== Level 3: Initiatives (Tasks) ==================== -->
+    <!-- Initiatives for KR 1 -->
+    <g transform="translate(290, 490)">
+        <rect x="-160" y="0" width="320" height="40" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-140" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">• Hire 5 Enterprise AEs</text>
+        <rect x="-160" y="50" width="320" height="40" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-140" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">• Launch NY Outbound Campaign</text>
+    </g>
+    <!-- Initiatives for KR 2 -->
+    <g transform="translate(640, 490)">
+        <rect x="-160" y="0" width="320" height="40" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-140" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">• Finalize LLM quantization</text>
+        <rect x="-160" y="50" width="320" height="40" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-140" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">• Complete security audit</text>
+    </g>
+    <!-- Initiatives for KR 3 -->
+    <g transform="translate(990, 490)">
+        <rect x="-160" y="0" width="320" height="40" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-140" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">• Deploy AI chatbot for Tier 1</text>
+        <rect x="-160" y="50" width="320" height="40" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-140" y="75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">• Rewrite onboarding docs</text>
+    </g>
+</svg>

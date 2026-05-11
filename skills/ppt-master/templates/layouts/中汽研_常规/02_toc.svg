@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 目录页 - 中汽研风格 -->
+  
+    <!-- 白色背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+  
+    <!-- 顶部深蓝色装饰线 -->
+    <rect x="0" y="0" width="1280" height="4" fill="#004098"/>
+  
+    <!-- 导航栏区域 -->
+    <rect x="60" y="30" width="50" height="50" fill="#004098"/>
+    <text x="85" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFFFFF">目</text>
+    <text x="130" y="65" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#333333">目 录</text>
+    <image href="../images/{{LOGO_HEADER}}" x="1107" y="30" width="113" height="50" preserveAspectRatio="xMidYMid meet"/>
+  
+    <!-- 左侧装饰竖线 -->
+    <rect x="300" y="140" width="4" height="480" fill="#004098"/>
+  
+    <!-- 目录项 - 第1章 -->
+    <g>
+        <text x="330" y="195" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">01</text>
+        <text x="385" y="195" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">||</text>
+        <text x="430" y="195" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#333333">{{TOC_ITEM_1_TITLE}}</text>
+        <text x="430" y="228" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#666666">{{TOC_ITEM_1_DESC}}</text>
+    </g>
+  
+    <!-- 目录项 - 第2章 -->
+    <g>
+        <text x="330" y="295" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">02</text>
+        <text x="385" y="295" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">||</text>
+        <text x="430" y="295" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#333333">{{TOC_ITEM_2_TITLE}}</text>
+        <text x="430" y="328" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#666666">{{TOC_ITEM_2_DESC}}</text>
+    </g>
+  
+    <!-- 目录项 - 第3章 -->
+    <g>
+        <text x="330" y="395" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">03</text>
+        <text x="385" y="395" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">||</text>
+        <text x="430" y="395" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#333333">{{TOC_ITEM_3_TITLE}}</text>
+        <text x="430" y="428" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#666666">{{TOC_ITEM_3_DESC}}</text>
+    </g>
+  
+    <!-- 目录项 - 第4章 -->
+    <g>
+        <text x="330" y="495" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">04</text>
+        <text x="385" y="495" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">||</text>
+        <text x="430" y="495" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#333333">{{TOC_ITEM_4_TITLE}}</text>
+        <text x="430" y="528" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#666666">{{TOC_ITEM_4_DESC}}</text>
+    </g>
+  
+    <!-- 目录项 - 第5章 -->
+    <g>
+        <text x="330" y="595" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">05</text>
+        <text x="385" y="595" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#004098">||</text>
+        <text x="430" y="595" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" fill="#333333">{{TOC_ITEM_5_TITLE}}</text>
+        <text x="430" y="628" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#666666">{{TOC_ITEM_5_DESC}}</text>
+    </g>
+  
+    <!-- 右侧装饰元素（可选统计区） -->
+    <rect x="900" y="180" width="280" height="400" fill="#F5F5F5" fill-opacity="0.5" rx="8"/>
+    <text x="1040" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="120" font-weight="bold" fill="#004098" fill-opacity="0.1">{{STAT_NUMBER_1}}</text>
+    <text x="1040" y="400" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="18" fill="#666666">{{STAT_LABEL_1}}</text>
+    <text x="1040" y="450" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#004098" fill-opacity="0.15">{{STAT_NUMBER_2}}</text>
+    <text x="1040" y="480" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#666666">{{STAT_LABEL_2}}</text>
+  
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#004098"/>
+  
+    <!-- 页码 -->
+    <text x="1220" y="705" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="#999999">{{PAGE_NUM}}</text>
+  
+</svg>

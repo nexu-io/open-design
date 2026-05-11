@@ -648,6 +648,7 @@ export const pl: Dict = {
   'fileViewer.empty': 'Wybierz plik, aby go wyświetlić.',
   'fileViewer.loading': 'Ładowanie…',
   'fileViewer.exportPptx': 'Eksportuj jako PPTX',
+  'fileViewer.exportPptxConverting': 'Converting…',
   'fileViewer.openInNewTab': 'Otwórz w nowej karcie',
   'fileViewer.copyPath': 'Kopiuj ścieżkę',
   'fileViewer.copied': 'Skopiowano!',

@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Business Process Flowchart Template
+    Purpose: Business process mapping, decision trees, operations guide
+    Use cases: SOPs, development pipelines, approval workflows
+    -->
+    <defs>
+        <!-- Modern Tailwind Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
+            <feOffset dx="0" dy="3" result="offsetblur" />
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor" />
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow" />
+            <feMerge>
+                <feMergeNode in="shadow" />
+                <feMergeNode in="SourceGraphic" />
+            </feMerge>
+        </filter>
+        <!-- Arrow Markers -->
+        <marker id="arrowMain" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+            <path d="M 0,0 L 10,5 L 0,10 Z" fill="#64748B" />
+        </marker>
+        <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+            <path d="M 0,0 L 10,5 L 0,10 Z" fill="#F97316" />
+        </marker>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC" />
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Business Process Flow</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1.5">STANDARD OPERATING PROCEDURE · PIPELINE FLOWCHART</text>
+    <!-- ==================== Process Arrows ==================== -->
+    <g>
+        <!-- Start -> Req -->
+        <line x1="200" y1="200" x2="275" y2="200" stroke="#64748B" stroke-width="3" marker-end="url(#arrowMain)" />
+        <!-- Req -> Decision -->
+        <line x1="460" y1="200" x2="535" y2="200" stroke="#64748B" stroke-width="3" marker-end="url(#arrowMain)" />
+        <!-- Decision -> Design (Yes) -->
+        <line x1="700" y1="200" x2="795" y2="200" stroke="#64748B" stroke-width="3" marker-end="url(#arrowMain)" />
+        <rect x="735" y="188" width="30" height="24" rx="4" fill="#F8FAFC" />
+        <text x="750" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#10B981" text-anchor="middle">Yes</text>
+        <!-- Decision -> Re-eval (No) -->
+        <line x1="620" y1="250" x2="620" y2="315" stroke="#F97316" stroke-width="3" marker-end="url(#arrowOrange)" />
+        <rect x="605" y="270" width="30" height="24" rx="4" fill="#F8FAFC" />
+        <text x="620" y="287" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#EF4444" text-anchor="middle">No</text>
+        <!-- Re-eval -> Req (Loop back) -->
+        <path d="M 530,360 L 370,360 L 370,245" fill="none" stroke="#F97316" stroke-width="3" stroke-dasharray="6 4" marker-end="url(#arrowOrange)" />
+        <!-- Design -> Dev -->
+        <line x1="890" y1="240" x2="890" y2="315" stroke="#64748B" stroke-width="3" marker-end="url(#arrowMain)" />
+        <!-- Dev -> Test -->
+        <line x1="890" y1="400" x2="890" y2="475" stroke="#64748B" stroke-width="3" marker-end="url(#arrowMain)" />
+        <!-- Test -> Complete -->
+        <line x1="980" y1="520" x2="1055" y2="520" stroke="#64748B" stroke-width="3" marker-end="url(#arrowMain)" />
+    </g>
+    <!-- ==================== Process Nodes ==================== -->
+    <g id="processFlowNodes">
+        <!-- Start Node -->
+        <rect x="60" y="160" width="140" height="80" rx="40" fill="#334155" filter="url(#cardShadow)" />
+        <text x="130" y="198" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" text-anchor="middle">Start</text>
+        <text x="130" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#94A3B8" text-anchor="middle">Initiation</text>
+        <!-- Requirements Node -->
+        <rect x="280" y="160" width="180" height="80" rx="10" fill="#3B82F6" filter="url(#cardShadow)" />
+        <text x="370" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#FFFFFF" text-anchor="middle">Requirements</text>
+        <rect x="330" y="210" width="80" height="20" rx="10" fill="#1D4ED8" fill-opacity="0.5" />
+        <text x="370" y="224" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#DBEAFE" text-anchor="middle">1-2 Days</text>
+        <!-- Decision Node -->
+        <path d="M 620,150 L 700,200 L 620,250 L 540,200 Z" fill="#F59E0B" filter="url(#cardShadow)" />
+        <text x="620" y="196" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">Feasible?</text>
+        <text x="620" y="216" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FEF3C7" text-anchor="middle">Review</text>
+        <!-- Solution Design Node -->
+        <rect x="800" y="160" width="180" height="80" rx="10" fill="#3B82F6" filter="url(#cardShadow)" />
+        <text x="890" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#FFFFFF" text-anchor="middle">Solution Design</text>
+        <rect x="850" y="210" width="80" height="20" rx="10" fill="#1D4ED8" fill-opacity="0.5" />
+        <text x="890" y="224" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#DBEAFE" text-anchor="middle">3-5 Days</text>
+        <!-- Development Node -->
+        <rect x="800" y="320" width="180" height="80" rx="10" fill="#3B82F6" filter="url(#cardShadow)" />
+        <text x="890" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#FFFFFF" text-anchor="middle">Development</text>
+        <rect x="850" y="370" width="80" height="20" rx="10" fill="#1D4ED8" fill-opacity="0.5" />
+        <text x="890" y="384" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#DBEAFE" text-anchor="middle">7-14 Days</text>
+        <!-- Testing Node -->
+        <rect x="800" y="480" width="180" height="80" rx="10" fill="#3B82F6" filter="url(#cardShadow)" />
+        <text x="890" y="515" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#FFFFFF" text-anchor="middle">Testing</text>
+        <rect x="850" y="530" width="80" height="20" rx="10" fill="#1D4ED8" fill-opacity="0.5" />
+        <text x="890" y="544" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#DBEAFE" text-anchor="middle">2-3 Days</text>
+        <!-- Exception Node (Re-evaluate) -->
+        <rect x="530" y="320" width="180" height="80" rx="10" fill="#FFFFFF" stroke="#F97316" stroke-width="2.5" filter="url(#cardShadow)" />
+        <text x="620" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#C2410C" text-anchor="middle">Re-evaluate</text>
+        <rect x="575" y="370" width="90" height="20" rx="10" fill="#FFEDD5" />
+        <text x="620" y="384" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#9A3412" text-anchor="middle">Adjust Scope</text>
+        <!-- Complete Node -->
+        <rect x="1060" y="480" width="140" height="80" rx="40" fill="#334155" filter="url(#cardShadow)" />
+        <text x="1130" y="518" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" text-anchor="middle">Complete</text>
+        <text x="1130" y="538" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#94A3B8" text-anchor="middle">Deployment</text>
+    </g>
+    <!-- ==================== Data Panels ==================== -->
+    <!-- Legend Box -->
+    <rect x="60" y="460" width="200" height="180" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)" />
+    <text x="160" y="495" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#0F172A" text-anchor="middle">Legend</text>
+    <rect x="80" y="520" width="30" height="20" rx="4" fill="#3B82F6" />
+    <text x="125" y="535" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Process Step</text>
+    <path d="M 95,555 L 115,565 L 95,575 L 75,565 Z" fill="#F59E0B" />
+    <text x="125" y="570" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Decision Node</text>
+    <rect x="80" y="590" width="30" height="20" rx="4" fill="#FFFFFF" stroke="#F97316" stroke-width="2" />
+    <text x="125" y="605" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Exception / Loop</text>
+    <!-- Metrics Box -->
+    <rect x="280" y="460" width="240" height="180" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)" />
+    <text x="400" y="495" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#0F172A" text-anchor="middle">Time Metrics</text>
+    <line x1="300" y1="510" x2="500" y2="510" stroke="#E2E8F0" stroke-width="1.5" />
+    <text x="300" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Total Cycle:</text>
+    <text x="500" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#2563EB" text-anchor="end">13-24 Days</text>
+    <text x="300" y="570" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Key Steps:</text>
+    <text x="500" y="570" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#2563EB" text-anchor="end">4</text>
+    <text x="300" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Decisions:</text>
+    <text x="500" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#F59E0B" text-anchor="end">1</text>
+    <text x="300" y="630" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Risk Level:</text>
+    <text x="500" y="630" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#10B981" text-anchor="end">Low</text>
+    <!-- ==================== Footer ==================== -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Process Version: v2.1 | Last Updated: 2025-11-09 | Process Management System</text>
+</svg>

@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Bar Chart Template
+    Usage: Category data comparison
+    Scenarios: Sales comparison, regional ranking, annual data comparison
+    Supports: 6 bars (adjustable to 3-8)
+    -->
+    <defs>
+        <!-- Bar gradient -->
+        <linearGradient id="barGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="barGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="barGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#F59E0B;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#D97706;stop-opacity:1" />
+        </linearGradient>
+        <!-- Shadow -->
+        <filter id="barShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="1" result="offsetBlur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A">Regional Sales Comparison</text>
+    <text x="60" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="18" fill="#64748B">Q3 2025 · Unit: Millions</text>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Y-axis Grid Lines -->
+        <line x1="140" y1="550" x2="1160" y2="550" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="450" x2="1160" y2="450" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="350" x2="1160" y2="350" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="250" x2="1160" y2="250" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="150" x2="1160" y2="150" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- Y-axis Labels -->
+        <text x="125" y="555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">0</text>
+        <text x="125" y="455" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">50</text>
+        <text x="125" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">100</text>
+        <text x="125" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">150</text>
+        <text x="125" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">200</text>
+        <!-- X and Y axes -->
+        <line x1="140" y1="150" x2="140" y2="550" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="140" y1="550" x2="1160" y2="550" stroke="#94A3B8" stroke-width="2"/>
+        <!-- chart-plot-area: 140,150,1160,550 -->
+        <!-- Bar Data (Bar width 50px, gap 130px, total gap 180px) -->
+        <!-- Bar 1: East - 185M (370px height, 100M=200px) -->
+        <g id="bar-1">
+            <rect x="220" y="180" width="50" height="370" rx="4" fill="url(#barGrad1)" filter="url(#barShadow)"/>
+            <text x="245" y="165" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" font-weight="600" fill="#0F172A" text-anchor="middle">185</text>
+            <text x="245" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" fill="#475569" text-anchor="middle">East</text>
+        </g>
+        <!-- Bar 2: South - 142M -->
+        <g id="bar-2">
+            <rect x="400" y="266" width="50" height="284" rx="4" fill="url(#barGrad1)" filter="url(#barShadow)"/>
+            <text x="425" y="251" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" font-weight="600" fill="#0F172A" text-anchor="middle">142</text>
+            <text x="425" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" fill="#475569" text-anchor="middle">South</text>
+        </g>
+        <!-- Bar 3: North - 128M -->
+        <g id="bar-3">
+            <rect x="580" y="294" width="50" height="256" rx="4" fill="url(#barGrad1)" filter="url(#barShadow)"/>
+            <text x="605" y="279" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" font-weight="600" fill="#0F172A" text-anchor="middle">128</text>
+            <text x="605" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" fill="#475569" text-anchor="middle">North</text>
+        </g>
+        <!-- Bar 4: Southwest - 96M -->
+        <g id="bar-4">
+            <rect x="760" y="358" width="50" height="192" rx="4" fill="url(#barGrad2)" filter="url(#barShadow)"/>
+            <text x="785" y="343" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" font-weight="600" fill="#0F172A" text-anchor="middle">96</text>
+            <text x="785" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" fill="#475569" text-anchor="middle">Southwest</text>
+        </g>
+        <!-- Bar 5: Central - 73M -->
+        <g id="bar-5">
+            <rect x="940" y="404" width="50" height="146" rx="4" fill="url(#barGrad2)" filter="url(#barShadow)"/>
+            <text x="965" y="389" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" font-weight="600" fill="#0F172A" text-anchor="middle">73</text>
+            <text x="965" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" fill="#475569" text-anchor="middle">Central</text>
+        </g>
+        <!-- Bar 6: Northeast - 52M -->
+        <g id="bar-6">
+            <rect x="1120" y="446" width="50" height="104" rx="4" fill="url(#barGrad3)" filter="url(#barShadow)"/>
+            <text x="1145" y="431" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" font-weight="600" fill="#0F172A" text-anchor="middle">52</text>
+            <text x="1145" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="16" fill="#475569" text-anchor="middle">Northeast</text>
+        </g>
+    </g>
+    <!-- Legend -->
+    <g id="legend">
+        <g id="legend-high">
+            <rect x="920" y="620" width="16" height="16" rx="2" fill="url(#barGrad1)"/>
+            <text x="945" y="632" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="14" fill="#475569">High Growth Region (&gt;100M)</text>
+        </g>
+        <g id="legend-mid">
+            <rect x="920" y="645" width="16" height="16" rx="2" fill="url(#barGrad2)"/>
+            <text x="945" y="657" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="14" fill="#475569">Stable Region (50-100M)</text>
+        </g>
+        <g id="legend-low">
+            <rect x="920" y="670" width="16" height="16" rx="2" fill="url(#barGrad3)"/>
+            <text x="945" y="682" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="14" fill="#475569">Potential Region (&lt;50M)</text>
+        </g>
+    </g>
+    <!-- Data Source -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" fill="#94A3B8">Data Source: Sales Department Statistics</text>
+</svg>

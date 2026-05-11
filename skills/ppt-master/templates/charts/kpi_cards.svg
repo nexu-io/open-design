@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    KPI Cards Template - 2x2 Layout
+    Usage: Display key performance indicators
+    Scenarios: Financial metrics, business dashboards, growth rates
+    Supports: 4 main metric cards
+    -->
+    <defs>
+        <!-- Standard Drop Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title Area -->
+    <text x="60" y="75" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="36" font-weight="800" fill="#0F172A" letter-spacing="-0.5">Key Performance Indicators</text>
+    <text x="60" y="105" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" font-weight="600" fill="#64748B" letter-spacing="1">FY 2025 · QUARTERLY BUSINESS REVIEW</text>
+    <!-- KPI Cards 2x2 Layout - 40px spacing -->
+    <!-- Card 1 - Top Left (Revenue) -->
+    <g filter="url(#cardShadow)">
+        <rect x="60" y="150" width="560" height="250" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="76" y="170" width="6" height="80" rx="3" fill="#3B82F6"/>
+        <text x="100" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#475569" letter-spacing="0.2">Total Revenue</text>
+        <text x="100" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#94A3B8">Gross Billings</text>
+        <!-- Main Value -->
+        <text x="100" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="72" font-weight="800" fill="#0F172A" letter-spacing="-2">$245.5</text>
+        <text x="350" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="28" font-weight="600" fill="#64748B">M</text>
+        <!-- Trend -->
+        <circle cx="115" cy="350" r="18" fill="#ECFDF5"/>
+        <polygon points="115,343 121,357 109,357" fill="#10B981"/>
+        <text x="145" y="358" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#10B981">+18.5%</text>
+        <text x="240" y="357" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#94A3B8">vs. last year</text>
+    </g>
+    <!-- Card 2 - Top Right (Users) -->
+    <g filter="url(#cardShadow)">
+        <rect x="660" y="150" width="560" height="250" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="676" y="170" width="6" height="80" rx="3" fill="#10B981"/>
+        <text x="700" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#475569" letter-spacing="0.2">Active Users</text>
+        <text x="700" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#94A3B8">Monthly Active Users</text>
+        <!-- Main Value -->
+        <text x="700" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="72" font-weight="800" fill="#0F172A" letter-spacing="-2">1.28</text>
+        <text x="850" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="28" font-weight="600" fill="#64748B">M</text>
+        <!-- Trend -->
+        <circle cx="715" cy="350" r="18" fill="#ECFDF5"/>
+        <polygon points="715,343 721,357 709,357" fill="#10B981"/>
+        <text x="745" y="358" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#10B981">+12.3%</text>
+        <text x="840" y="357" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#94A3B8">vs. last month</text>
+    </g>
+    <!-- Card 3 - Bottom Left (Avg Order Value) -->
+    <g filter="url(#cardShadow)">
+        <rect x="60" y="440" width="560" height="250" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="76" y="460" width="6" height="80" rx="3" fill="#F59E0B"/>
+        <text x="100" y="485" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#475569" letter-spacing="0.2">Avg Order Value</text>
+        <text x="100" y="508" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#94A3B8">Per User Revenue</text>
+        <!-- Main Value -->
+        <text x="100" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="72" font-weight="800" fill="#0F172A" letter-spacing="-2">$43.2</text>
+        <!-- Trend (Negative) -->
+        <circle cx="115" cy="640" r="18" fill="#FFF1F2"/>
+        <polygon points="115,647 121,633 109,633" fill="#F43F5E"/>
+        <text x="145" y="648" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#F43F5E">-3.2%</text>
+        <text x="220" y="647" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#94A3B8">vs. last month</text>
+    </g>
+    <!-- Card 4 - Bottom Right (Conversion Rate) -->
+    <g filter="url(#cardShadow)">
+        <rect x="660" y="440" width="560" height="250" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="676" y="460" width="6" height="80" rx="3" fill="#8B5CF6"/>
+        <text x="700" y="485" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#475569" letter-spacing="0.2">Conversion Rate</text>
+        <text x="700" y="508" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#94A3B8">Paid Conversion</text>
+        <!-- Main Value -->
+        <text x="700" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="72" font-weight="800" fill="#0F172A" letter-spacing="-2">8.7%</text>
+        <!-- Trend -->
+        <circle cx="715" cy="640" r="18" fill="#ECFDF5"/>
+        <polygon points="715,633 721,647 709,647" fill="#10B981"/>
+        <text x="745" y="648" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#10B981">+0.8%</text>
+        <text x="825" y="647" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#94A3B8">pt increase</text>
+    </g>
+    <!-- Data Source -->
+    <text x="1220" y="705" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="500" fill="#94A3B8" text-anchor="end">Source: Internal Financial Dashboard · As of Q4 2025</text>
+</svg>

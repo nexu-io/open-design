@@ -1,0 +1,257 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Bubble Chart Template
+    Usage: 3D data visualization (X, Y, bubble size)
+    Scenarios: Market size vs growth vs share, risk assessment, competitor analysis
+    Supports: Multiple bubbles, size represents 3rd dimension
+    -->
+    <defs>
+        <!-- Bubble Gradient (Blue) -->
+        <radialGradient id="bubbleGrad1" cx="30%" cy="30%">
+            <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:0.7" />
+        </radialGradient>
+        <!-- Bubble Gradient (Green) -->
+        <radialGradient id="bubbleGrad2" cx="30%" cy="30%">
+            <stop offset="0%" style="stop-color:#34D399;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#059669;stop-opacity:0.7" />
+        </radialGradient>
+        <!-- Bubble Gradient (Orange) -->
+        <radialGradient id="bubbleGrad3" cx="30%" cy="30%">
+            <stop offset="0%" style="stop-color:#FBBF24;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#D97706;stop-opacity:0.7" />
+        </radialGradient>
+        <!-- Bubble Gradient (Purple) -->
+        <radialGradient id="bubbleGrad4" cx="30%" cy="30%">
+            <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:0.7" />
+        </radialGradient>
+        <!-- Bubble Gradient (Red) -->
+        <radialGradient id="bubbleGrad5" cx="30%" cy="30%">
+            <stop offset="0%" style="stop-color:#FB7185;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#E11D48;stop-opacity:0.7" />
+        </radialGradient>
+        <!-- Bubble Shadow -->
+        <filter id="bubbleShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="3" result="offsetBlur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A">Product Line Market Positioning</text>
+    <text x="60" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="18" fill="#64748B">Market Size vs Growth vs Share · Bubble Size = Market Share</text>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Quadrant Background -->
+        <rect x="160" y="130" width="440" height="215" fill="#FFF1F2" opacity="0.3"/>
+        <rect x="600" y="130" width="440" height="215" fill="#ECFDF5" opacity="0.3"/>
+        <rect x="160" y="345" width="440" height="215" fill="#FFFBEB" opacity="0.3"/>
+        <rect x="600" y="345" width="440" height="215" fill="#EFF6FF" opacity="0.3"/>
+        <!-- Quadrant Labels -->
+        <text x="380" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" fill="#DC2626" text-anchor="middle">Low Size · High Growth</text>
+        <text x="380" y="178" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#FB7185" text-anchor="middle">Star Product ⭐</text>
+        <text x="820" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" fill="#059669" text-anchor="middle">High Size · High Growth</text>
+        <text x="820" y="178" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#34D399" text-anchor="middle">Bull Product 🐂</text>
+        <text x="380" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" fill="#D97706" text-anchor="middle">Low Size · Low Growth</text>
+        <text x="380" y="548" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#FBBF24" text-anchor="middle">Problem Product ❓</text>
+        <text x="820" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" fill="#2563EB" text-anchor="middle">High Size · Low Growth</text>
+        <text x="820" y="548" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#60A5FA" text-anchor="middle">Cash Cow 💰</text>
+        <!-- Grid Lines -->
+        <line x1="160" y1="345" x2="1040" y2="345" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="6,3"/>
+        <line x1="600" y1="130" x2="600" y2="560" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="6,3"/>
+        <!-- Y-axis Grid Lines -->
+        <line x1="160" y1="200" x2="1040" y2="200" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="160" y1="270" x2="1040" y2="270" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="160" y1="420" x2="1040" y2="420" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="160" y1="490" x2="1040" y2="490" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- X-axis Grid Lines -->
+        <line x1="280" y1="130" x2="280" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="400" y1="130" x2="400" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="520" y1="130" x2="520" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="720" y1="130" x2="720" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="840" y1="130" x2="840" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="960" y1="130" x2="960" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- Y-axis Labels -->
+        <text x="145" y="565" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">-10%</text>
+        <text x="145" y="495" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">0%</text>
+        <text x="145" y="425" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">10%</text>
+        <text x="145" y="350" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">20%</text>
+        <text x="145" y="275" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">30%</text>
+        <text x="145" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">40%</text>
+        <text x="145" y="135" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">50%</text>
+        <!-- Y-axis Title -->
+        <text x="35" y="345" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="15" fill="#475569" text-anchor="middle" transform="rotate(-90, 35, 345)">Market Growth Rate (%)</text>
+        <!-- X-axis Labels -->
+        <text x="160" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">0</text>
+        <text x="280" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">20</text>
+        <text x="400" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">40</text>
+        <text x="520" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">60</text>
+        <text x="600" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">80</text>
+        <text x="720" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">100</text>
+        <text x="840" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">120</text>
+        <text x="960" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">140</text>
+        <text x="1040" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="middle">160</text>
+        <!-- X-axis Title -->
+        <text x="600" y="625" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="15" fill="#475569" text-anchor="middle">Market Size (100M)</text>
+        <!-- Axes -->
+        <line x1="160" y1="130" x2="160" y2="560" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="160" y1="560" x2="1040" y2="560" stroke="#94A3B8" stroke-width="2"/>
+        <!-- 
+        Bubble Data:
+        X: Market Size (100M) 0-160, every 20 = 120px
+        Y: Growth Rate -10% to 50%, every 10% = 70px, baseline (0%) at y=490
+        Size: Market Share 5%-35%, radius 15-60px
+        Product A: Size 120, Growth 35%, Share 28% -> x=820, y=245, r=50
+        Product B: Size 85, Growth 25%, Share 18% -> x=630, y=315, r=38
+        Product C: Size 45, Growth 42%, Share 12% -> x=430, y=196, r=28
+        Product D: Size 130, Growth 8%, Share 25% -> x=880, y=434, r=45
+        Product E: Size 30, Growth -5%, Share 8% -> x=340, y=525, r=22
+        Product F: Size 65, Growth 15%, Share 9% -> x=550, y=385, r=24
+        -->
+        <!-- Bubble F: Product F (Green, Middle) -->
+        <g id="bubble-f">
+            <circle cx="550" cy="385" r="24" fill="url(#bubbleGrad2)" filter="url(#bubbleShadow)"/>
+            <text x="550" y="390" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">F</text>
+        </g>
+        <!-- Bubble E: Product E (Red, Problem Quadrant) -->
+        <g id="bubble-e">
+            <circle cx="340" cy="525" r="22" fill="url(#bubbleGrad5)" filter="url(#bubbleShadow)"/>
+            <text x="340" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">E</text>
+        </g>
+        <!-- Bubble C: Product C (Orange, Star Quadrant) -->
+        <g id="bubble-c">
+            <circle cx="430" cy="196" r="28" fill="url(#bubbleGrad3)" filter="url(#bubbleShadow)"/>
+            <text x="430" y="201" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" font-weight="600" fill="#FFFFFF" text-anchor="middle">C</text>
+        </g>
+        <!-- Bubble B: Product B (Purple, Bull Quadrant Edge) -->
+        <g id="bubble-b">
+            <circle cx="630" cy="315" r="38" fill="url(#bubbleGrad4)" filter="url(#bubbleShadow)"/>
+            <text x="630" y="320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="13" font-weight="600" fill="#FFFFFF" text-anchor="middle">B</text>
+        </g>
+        <!-- Bubble D: Product D (Blue, Cash Cow Quadrant) -->
+        <g id="bubble-d">
+            <circle cx="880" cy="434" r="45" fill="url(#bubbleGrad1)" filter="url(#bubbleShadow)"/>
+            <text x="880" y="439" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="14" font-weight="600" fill="#FFFFFF" text-anchor="middle">D</text>
+        </g>
+        <!-- Bubble A: Product A (Green, Max, Bull Quadrant) -->
+        <g id="bubble-a">
+            <circle cx="820" cy="245" r="50" fill="url(#bubbleGrad2)" filter="url(#bubbleShadow)"/>
+            <text x="820" y="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="15" font-weight="600" fill="#FFFFFF" text-anchor="middle">A</text>
+        </g>
+    </g>
+    <!-- Product List -->
+    <g id="productList" transform="translate(1060, 130)">
+        <rect x="0" y="0" width="180" height="320" rx="8" fill="#F8F9FA" stroke="#E0E0E0" stroke-width="1"/>
+        <text x="90" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">Product List</text>
+        <line x1="15" y1="42" x2="165" y2="42" stroke="#E0E0E0" stroke-width="1"/>
+        <!-- Product A -->
+        <g id="list-item-a">
+            <circle cx="30" cy="70" r="12" fill="url(#bubbleGrad2)"/>
+            <text x="50" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="13" font-weight="600" fill="#0F172A">Product A</text>
+            <text x="50" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">12B | +35% | 28%</text>
+        </g>
+        <!-- Product B -->
+        <g id="list-item-b">
+            <circle cx="30" cy="115" r="10" fill="url(#bubbleGrad4)"/>
+            <text x="50" y="111" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="13" font-weight="600" fill="#0F172A">Product B</text>
+            <text x="50" y="127" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">8.5B | +25% | 18%</text>
+        </g>
+        <!-- Product C -->
+        <g id="list-item-c">
+            <circle cx="30" cy="160" r="8" fill="url(#bubbleGrad3)"/>
+            <text x="50" y="156" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="13" font-weight="600" fill="#0F172A">Product C</text>
+            <text x="50" y="172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">4.5B | +42% | 12%</text>
+        </g>
+        <!-- Product D -->
+        <g id="list-item-d">
+            <circle cx="30" cy="205" r="11" fill="url(#bubbleGrad1)"/>
+            <text x="50" y="201" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="13" font-weight="600" fill="#0F172A">Product D</text>
+            <text x="50" y="217" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">13B | +8% | 25%</text>
+        </g>
+        <!-- Product E -->
+        <g id="list-item-e">
+            <circle cx="30" cy="250" r="7" fill="url(#bubbleGrad5)"/>
+            <text x="50" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="13" font-weight="600" fill="#0F172A">Product E</text>
+            <text x="50" y="262" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">3B | -5% | 8%</text>
+        </g>
+        <!-- Product F -->
+        <g id="list-item-f">
+            <circle cx="30" cy="295" r="7" fill="url(#bubbleGrad2)"/>
+            <text x="50" y="291" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="13" font-weight="600" fill="#0F172A">Product F</text>
+            <text x="50" y="307" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">6.5B | +15% | 9%</text>
+        </g>
+    </g>
+    <!-- Bubble Size Legend -->
+    <g id="sizeLegend" transform="translate(1060, 470)">
+        <rect x="0" y="0" width="180" height="90" rx="8" fill="#F8F9FA" stroke="#E0E0E0" stroke-width="1"/>
+        <text x="90" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#64748B" text-anchor="middle">Bubble Size = Market Share</text>
+        <circle cx="40" cy="60" r="10" fill="#CBD5E1"/>
+        <text x="40" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="10" fill="#64748B" text-anchor="middle">10%</text>
+        <circle cx="90" cy="55" r="18" fill="#CBD5E1"/>
+        <text x="90" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="10" fill="#64748B" text-anchor="middle">20%</text>
+        <circle cx="145" cy="48" r="25" fill="#CBD5E1"/>
+        <text x="145" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="10" fill="#64748B" text-anchor="middle">30%</text>
+    </g>
+    <!-- Data Source -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="14" fill="#94A3B8">Data Source: Market Research Department</text>
+</svg>

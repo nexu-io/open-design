@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - 重庆两江新区发改委风格 -->
+
+    <defs>
+        <!-- 深蓝渐变背景 -->
+        <linearGradient id="coverBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#003366;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#002244;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001a33;stop-opacity:1" />
+        </linearGradient>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topDecoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#8B0000;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#DAA520;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#coverBgGrad)" />
+
+    <!-- 装饰元素 - 几何图案 -->
+    <circle cx="1200" cy="100" r="300" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="80" cy="650" r="200" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="640" cy="360" r="450" fill="#FFFFFF" fill-opacity="0.015" />
+
+    <!-- 网格装饰线 -->
+    <line x1="0" y1="180" x2="1280" y2="180" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="0" y1="540" x2="1280" y2="540" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="320" y1="0" x2="320" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="960" y1="0" x2="960" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+
+    <!-- 顶部金色装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topDecoGrad)" />
+
+    <!-- 左侧装饰竖条 -->
+    <rect x="60" y="200" width="6" height="320" fill="#DAA520" fill-opacity="0.6" />
+
+    <!-- 主标题区域 -->
+    <text x="640" y="300" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="52" font-weight="bold" fill="#FFFFFF">
+        {{TITLE}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="640" y="370" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="28" fill="#FFFFFF" fill-opacity="0.85">
+        {{SUBTITLE}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="440" y1="420" x2="840" y2="420" stroke="#DAA520" stroke-width="2" stroke-opacity="0.8" />
+
+    <!-- 单位名称（中文） -->
+    <text x="640" y="490" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="24" fill="#FFFFFF" fill-opacity="0.9">
+        {{AUTHOR}}
+    </text>
+
+    <!-- 单位名称（英文） -->
+    <text x="640" y="530" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#FFFFFF" fill-opacity="0.6">
+        {{AUTHOR_EN}}
+    </text>
+
+    <!-- 日期 -->
+    <text x="640" y="620" text-anchor="middle" font-family="Arial, Microsoft YaHei, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.7">
+        {{DATE}}
+    </text>
+
+    <!-- 底部装饰区域 -->
+    <rect x="0" y="690" width="1280" height="30" fill="#8B0000" fill-opacity="0.8" />
+    <text x="640" y="712" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" fill-opacity="0.8">
+        {{ORGANIZATION}}
+    </text>
+
+</svg>

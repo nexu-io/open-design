@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#8F0F1B"/>
+  <image href="cover_bg.png" x="0" y="0" width="1280" height="720" preserveAspectRatio="xMidYMid slice"/>
+  <rect width="1280" height="720" fill="#7F0B17" fill-opacity="0.22"/>
+
+
+  <text x="640" y="260" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="54" font-weight="700">
+    {{THANK_YOU}}
+  </text>
+  <text x="640" y="316" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.88" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="20">
+    {{ENDING_SUBTITLE}}
+  </text>
+  <text x="640" y="362" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.8" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="16">
+    {{CLOSING_MESSAGE}}
+  </text>
+
+  <rect x="338" y="420" width="604" height="150" rx="10" fill="#FFFFFF" fill-opacity="0.12" stroke="#FFFFFF" stroke-width="1.5" stroke-opacity="0.28"/>
+  <rect x="338" y="420" width="604" height="4" fill="#FFFFFF" fill-opacity="0.2" rx="2"/>
+  <text x="640" y="462" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="22" font-weight="700">
+    {{CONTACT_NAME}}
+  </text>
+  <text x="640" y="492" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.88" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="16">
+    {{DEPARTMENT}}
+  </text>
+  <line x1="480" y1="510" x2="800" y2="510" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2"/>
+  <text x="560" y="540" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.82" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14">
+    {{CONTACT_EMAIL}}
+  </text>
+  <text x="720" y="540" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.82" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14">
+    {{CONTACT_PHONE}}
+  </text>
+
+  <line x1="460" y1="610" x2="820" y2="610" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.4"/>
+  <text x="640" y="648" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.84" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14" letter-spacing="3">
+    {{BRAND_LINE}}
+  </text>
+</svg>

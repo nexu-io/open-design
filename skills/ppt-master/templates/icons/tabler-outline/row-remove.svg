@@ -1,0 +1,21 @@
+<!--
+tags: [delete, remove, erase, clear, subtract, eliminate, minus, cancel, discard, drop]
+category: Database
+version: "2.24"
+unicode: "fafe"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6v4a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1" />
+  <path d="M10 16l4 4" />
+  <path d="M10 20l4 -4" />
+</svg>

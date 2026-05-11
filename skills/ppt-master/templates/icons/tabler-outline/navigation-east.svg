@@ -1,0 +1,21 @@
+<!--
+tags: [rightward, orient, eastward, sunrise, asia, oriental, eastbound, longitude, eastside, directional]
+category: Map
+version: "2.37"
+unicode: "fcba"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14 3h-4v6h4" />
+  <path d="M10 6h2.5" />
+  <path d="M16 21l-4 -8l-4 8l4 -2l4 2" />
+</svg>

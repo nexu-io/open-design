@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <defs>
+        <linearGradient id="chapterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#2E5C8E" />
+            <stop offset="100%" style="stop-color:#1E3A5F" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景渐变 -->
+    <rect width="1280" height="720" fill="url(#chapterGradient)" />
+
+    <!-- 装饰同心圆 -->
+    <circle cx="1100" cy="150" r="200" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.1" />
+    <circle cx="1100" cy="150" r="150" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.1" />
+    <circle cx="1100" cy="150" r="100" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.1" />
+    <circle cx="180" cy="600" r="120" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.1" />
+    <circle cx="180" cy="600" r="80" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.1" />
+
+    <!-- 装饰斜线 -->
+    <line x1="0" y1="200" x2="300" y2="350" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="0" y1="250" x2="250" y2="400" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="980" y1="720" x2="1280" y2="520" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="1030" y1="720" x2="1280" y2="570" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+
+    <!-- 大号章节编号（背景） -->
+    <text x="640" y="220" font-family="system-ui, sans-serif" font-size="120" font-weight="bold" fill="#FFFFFF"
+        fill-opacity="0.15" text-anchor="middle">
+        {{CHAPTER_NUM}}
+    </text>
+
+    <!-- 章节标签 -->
+    <rect x="560" y="280" width="160" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.2" />
+    <text x="640" y="307" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" fill="#FFFFFF"
+        text-anchor="middle">
+        CHAPTER {{CHAPTER_NUM}}
+    </text>
+
+    <!-- 章节标题 -->
+    <text x="640" y="390" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="48" font-weight="bold"
+        fill="#FFFFFF" text-anchor="middle">
+        {{CHAPTER_TITLE}}
+    </text>
+
+    <!-- 英文副标题 -->
+    <text x="640" y="440" font-family="system-ui, sans-serif" font-size="24" fill="#94A3B8" text-anchor="middle">
+        {{CHAPTER_EN}}
+    </text>
+
+    <!-- 装饰线 -->
+    <rect x="540" y="470" width="200" height="3" rx="1.5" fill="#E07843" />
+
+    <!-- 引言卡片 -->
+    <rect x="240" y="510" width="800" height="100" rx="12" fill="#FFFFFF" fill-opacity="0.1" />
+    <rect x="240" y="510" width="4" height="100" rx="2" fill="#3D8B7A" />
+
+    <text x="270" y="550" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" fill="#E5E7EB"
+        font-style="italic">
+        "{{QUOTE}}"
+    </text>
+    <text x="270" y="585" font-family="system-ui, sans-serif" font-size="14" fill="#94A3B8">
+        —— {{QUOTE_AUTHOR}}
+    </text>
+
+    <!-- 关键词标签 -->
+    <g font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" fill="#CBD5E1">
+        <rect x="390" y="640" width="100" height="28" rx="14" fill="#FFFFFF" fill-opacity="0.1" />
+        <text x="440" y="659" text-anchor="middle">{{TAG_1}}</text>
+
+        <rect x="510" y="640" width="80" height="28" rx="14" fill="#FFFFFF" fill-opacity="0.1" />
+        <text x="550" y="659" text-anchor="middle">{{TAG_2}}</text>
+
+        <rect x="610" y="640" width="100" height="28" rx="14" fill="#FFFFFF" fill-opacity="0.1" />
+        <text x="660" y="659" text-anchor="middle">{{TAG_3}}</text>
+
+        <rect x="730" y="640" width="120" height="28" rx="14" fill="#FFFFFF" fill-opacity="0.1" />
+        <text x="790" y="659" text-anchor="middle">{{TAG_4}}</text>
+    </g>
+
+    <!-- 页码 -->
+    <text x="1220" y="685" font-family="system-ui, sans-serif" font-size="14" fill="#64748B"
+        text-anchor="end">{{PAGE_NUM}}</text>
+</svg>

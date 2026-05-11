@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Vertical List Template
+    Purpose: Feature listing, vertical roadmap, key points
+    Use cases: Core strengths, key findings, checklists
+    Feature: Gradient tracking line, overlapping nodes, semantic Tailwind styling
+    -->
+    <defs>
+        <!-- Background Gradient -->
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#FAFBFC"/>
+            <stop offset="100%" stop-color="#F1F5F9"/>
+        </linearGradient>
+        <!-- Track Gradient -->
+        <linearGradient id="lineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#8B5CF6"/>
+            <stop offset="25%" stop-color="#6366F1"/>
+            <stop offset="50%" stop-color="#0EA5E9"/>
+            <stop offset="75%" stop-color="#10B981"/>
+            <stop offset="100%" stop-color="#F59E0B"/>
+        </linearGradient>
+        <!-- Card Shadow -->
+        <filter id="cardShadow" x="-5%" y="-15%" width="110%" height="135%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.06"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="url(#bgGrad)"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Five Core Competitive Advantages</text>
+    <text x="60" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">CORE STRENGTHS · BUILDING A DIFFERENTIATED COMPETITIVE MOAT</text>
+    <!-- ==================== Main Track ==================== -->
+    <line x1="160" y1="115" x2="160" y2="635" stroke="url(#lineGrad)" stroke-width="4" stroke-linecap="round"/>
+    <!-- Bottom Arrow -->
+    <polygon points="160,646 168,632 152,632" fill="#F59E0B"/>
+    <!-- ==================== Item 01 ==================== -->
+    <!-- Node -->
+    <circle cx="160" cy="155" r="32" fill="#8B5CF6" opacity="0.15"/>
+    <circle cx="160" cy="155" r="22" fill="#8B5CF6"/>
+    <text x="160" y="161" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF">01</text>
+    <!-- Connector -->
+    <line x1="192" y1="155" x2="230" y2="155" stroke="#8B5CF6" stroke-width="2.5" stroke-dasharray="4,3"/>
+    <!-- Card -->
+    <g filter="url(#cardShadow)">
+        <rect x="230" y="115" width="990" height="80" rx="10" fill="#FFFFFF"/>
+        <rect x="230" y="115" width="6" height="80" rx="3" fill="#8B5CF6"/>
+    </g>
+    <text x="260" y="145" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Brand Influence</text>
+    <text x="260" y="172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Industry-leading brand awareness and reputation, top 3 brand value for three consecutive years.</text>
+    <!-- Watermark -->
+    <text x="1200" y="172" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="900" fill="#8B5CF6" fill-opacity="0.06" letter-spacing="2">BRAND</text>
+    <!-- ==================== Item 02 ==================== -->
+    <!-- Node -->
+    <circle cx="160" cy="265" r="32" fill="#6366F1" opacity="0.15"/>
+    <circle cx="160" cy="265" r="22" fill="#6366F1"/>
+    <text x="160" y="271" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF">02</text>
+    <!-- Connector -->
+    <line x1="192" y1="265" x2="230" y2="265" stroke="#6366F1" stroke-width="2.5" stroke-dasharray="4,3"/>
+    <!-- Card -->
+    <g filter="url(#cardShadow)">
+        <rect x="230" y="225" width="990" height="80" rx="10" fill="#FFFFFF"/>
+        <rect x="230" y="225" width="6" height="80" rx="3" fill="#6366F1"/>
+    </g>
+    <text x="260" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">R&amp;D Capabilities</text>
+    <text x="260" y="282" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Consistent 15%+ R&amp;D investment, 500+ proprietary patents, driven by AI and Big Data.</text>
+    <!-- Watermark -->
+    <text x="1200" y="282" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="900" fill="#6366F1" fill-opacity="0.06" letter-spacing="2">TECH</text>
+    <!-- ==================== Item 03 ==================== -->
+    <!-- Node -->
+    <circle cx="160" cy="375" r="32" fill="#0EA5E9" opacity="0.15"/>
+    <circle cx="160" cy="375" r="22" fill="#0EA5E9"/>
+    <text x="160" y="381" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF">03</text>
+    <!-- Connector -->
+    <line x1="192" y1="375" x2="230" y2="375" stroke="#0EA5E9" stroke-width="2.5" stroke-dasharray="4,3"/>
+    <!-- Card -->
+    <g filter="url(#cardShadow)">
+        <rect x="230" y="335" width="990" height="80" rx="10" fill="#FFFFFF"/>
+        <rect x="230" y="335" width="6" height="80" rx="3" fill="#0EA5E9"/>
+    </g>
+    <text x="260" y="365" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Supply Chain Management</text>
+    <text x="260" y="392" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Global supply chain and smart warehousing, covering 300+ cities with 40% faster delivery times.</text>
+    <!-- Watermark -->
+    <text x="1200" y="392" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="900" fill="#0EA5E9" fill-opacity="0.06" letter-spacing="2">SUPPLY</text>
+    <!-- ==================== Item 04 ==================== -->
+    <!-- Node -->
+    <circle cx="160" cy="485" r="32" fill="#10B981" opacity="0.15"/>
+    <circle cx="160" cy="485" r="22" fill="#10B981"/>
+    <text x="160" y="491" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF">04</text>
+    <!-- Connector -->
+    <line x1="192" y1="485" x2="230" y2="485" stroke="#10B981" stroke-width="2.5" stroke-dasharray="4,3"/>
+    <!-- Card -->
+    <g filter="url(#cardShadow)">
+        <rect x="230" y="445" width="990" height="80" rx="10" fill="#FFFFFF"/>
+        <rect x="230" y="445" width="6" height="80" rx="3" fill="#10B981"/>
+    </g>
+    <text x="260" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Customer Service System</text>
+    <text x="260" y="502" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">24/7 rapid response mechanism, sustained 96%+ customer satisfaction, and industry-leading NPS.</text>
+    <!-- Watermark -->
+    <text x="1200" y="502" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="900" fill="#10B981" fill-opacity="0.06" letter-spacing="2">SERVICE</text>
+    <!-- ==================== Item 05 ==================== -->
+    <!-- Node -->
+    <circle cx="160" cy="595" r="32" fill="#F59E0B" opacity="0.15"/>
+    <circle cx="160" cy="595" r="22" fill="#F59E0B"/>
+    <text x="160" y="601" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF">05</text>
+    <!-- Connector -->
+    <line x1="192" y1="595" x2="230" y2="595" stroke="#F59E0B" stroke-width="2.5" stroke-dasharray="4,3"/>
+    <!-- Card -->
+    <g filter="url(#cardShadow)">
+        <rect x="230" y="555" width="990" height="80" rx="10" fill="#FFFFFF"/>
+        <rect x="230" y="555" width="6" height="80" rx="3" fill="#F59E0B"/>
+    </g>
+    <text x="260" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Innovation &amp; Intelligence</text>
+    <text x="260" y="612" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">AI-empowered business decisions, launching 10+ innovative solutions annually to lead industry change.</text>
+    <!-- Watermark -->
+    <text x="1200" y="612" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="900" fill="#F59E0B" fill-opacity="0.06" letter-spacing="2">INNOVATION</text>
+    <!-- ==================== Footer ==================== -->
+    <text x="640" y="690" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Note: The vertical axis indicates priority order, while the expanded cards detail the key competitive strengths.</text>
+</svg>

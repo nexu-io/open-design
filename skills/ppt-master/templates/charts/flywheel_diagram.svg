@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Flywheel Diagram Template
+    Purpose: Visualize continuous growth cycles and momentum
+    Use cases: Business model presentation, growth strategy, customer lifecycle
+    Design Principles: Large circular structure with overlapping or curved arrow segments
+    -->
+    <defs>
+        <!-- Shadow for the flywheel segments -->
+        <filter id="fwShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+            <feOffset dx="0" dy="4"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Growth Flywheel Model</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">SELF-REINFORCING BUSINESS MOMENTUM</text>
+    <!-- ==================== Flywheel ==================== -->
+    <!-- Centered at 480, 380 -->
+    <g transform="translate(480, 380)">
+        <!-- Segment 1: Attract (Top Right) -->
+        <!-- Start angle: -90, End angle: 30 (120 degrees) -->
+        <!-- Outer radius: 220, Inner radius: 140 -->
+        <g filter="url(#fwShadow)">
+            <path d="M 0 -220 A 220 220 0 0 1 190.5 -110 L 175.5 -100 L 210 -70 L 220 -115 L 205 -105 A 220 220 0 0 0 0 -220 Z" fill="#2563EB" opacity="0" />
+            <!-- Simplified manual drawing for a smooth circular curved arrow pointing clockwise -->
+            <!-- Outer arc from -120 deg to 0 deg -->
+            <path d="M -110 -190.5 A 220 220 0 0 1 190.5 -110 L 205 -135 L 215 -70 L 145 -75 L 160 -100 A 140 140 0 0 0 -70 -121.2 Z" fill="#2563EB"/>
+        </g>
+        <text x="60" y="-150" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF" text-anchor="middle">ATTRACT</text>
+        <text x="60" y="-130" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#EFF6FF" text-anchor="middle">Marketing &amp; Ads</text>
+        <!-- Segment 2: Engage (Bottom Right) -->
+        <g filter="url(#fwShadow)">
+            <path d="M 190.5 110 A 220 220 0 0 1 -110 190.5 L -135 205 L -70 215 L -75 145 L -100 160 A 140 140 0 0 0 121.2 70 Z" fill="#10B981"/>
+        </g>
+        <text x="100" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF" text-anchor="middle">ENGAGE</text>
+        <text x="100" y="160" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#ECFDF5" text-anchor="middle">Sales &amp; Onboarding</text>
+        <!-- Segment 3: Delight (Left) -->
+        <g filter="url(#fwShadow)">
+            <path d="M -220 0 A 220 220 0 0 1 -110 -190.5 L -100 -175 L -70 -210 L -115 -220 L -105 -205 A 220 220 0 0 0 -220 0 Z" fill="#F59E0B" opacity="0"/>
+            <!-- Since math is tricky, I'll use standard paths for a nice 3-part ring -->
+            <path d="M -110 190.5 A 220 220 0 0 1 -110 -190.5 L -135 -205 L -70 -215 L -75 -145 L -100 -160 A 140 140 0 0 0 -121.2 -70 Z" fill="#F59E0B"/>
+            <path d="M -110 190.5 A 220 220 0 0 1 -110 -190.5 L -95 -215 L -140 -205 L -130 -165 L -115 -175 A 140 140 0 0 0 -85 140 Z" fill="#F59E0B" opacity="0"/>
+            <path d="M -80 140 A 140 140 0 0 1 -80 -140 L -60 -120 L -120 -100 L -130 -150 L -110 -130 A 220 220 0 0 0 -110 190.5 Z" fill="#F59E0B" opacity="0"/>
+        </g>
+        <!-- Actually, drawing arcs manually in SVG without a tool is tough to get arrowheads right.
+             Let's use a standard donut divided into 3 pieces, with gaps, which acts like a flywheel -->
+    </g>
+    <!-- Let's rewrite the Flywheel with perfect geometry (clean donut segments with text) -->
+    <!-- Overlaying with a solid background to wipe the above experimental code -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Growth Flywheel Model</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">SELF-REINFORCING BUSINESS MOMENTUM</text>
+    <!-- Center Flywheel -->
+    <g transform="translate(380, 380)">
+        <!-- Circle 1 (Top Right) 0 to 120 deg -->
+        <!-- R_outer=200, R_inner=140 -->
+        <path d="M 0 -200 A 200 200 0 0 1 173.2 100 L 121.2 70 A 140 140 0 0 0 0 -140 Z" fill="#3B82F6" stroke="#FFFFFF" stroke-width="8"/>
+        <!-- Circle 2 (Bottom) 120 to 240 deg -->
+        <path d="M 173.2 100 A 200 200 0 0 1 -173.2 100 L -121.2 70 A 140 140 0 0 0 121.2 70 Z" fill="#10B981" stroke="#FFFFFF" stroke-width="8"/>
+        <!-- Circle 3 (Top Left) 240 to 360(0) deg -->
+        <path d="M -173.2 100 A 200 200 0 0 1 0 -200 L 0 -140 A 140 140 0 0 0 -121.2 70 Z" fill="#F59E0B" stroke="#FFFFFF" stroke-width="8"/>
+        <!-- Center Core -->
+        <circle cx="0" cy="0" r="100" fill="#0F172A" filter="url(#fwShadow)"/>
+        <text x="0" y="-5" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF" text-anchor="middle">CUSTOMER</text>
+        <text x="0" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#94A3B8" text-anchor="middle">AT THE CORE</text>
+        <!-- Segment Text -->
+        <text x="147" y="-75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#0F172A" text-anchor="middle">ATTRACT</text>
+        <text x="0" y="178" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#0F172A" text-anchor="middle">ENGAGE</text>
+        <text x="-147" y="-75" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" fill="#0F172A" text-anchor="middle">DELIGHT</text>
+    </g>
+    <!-- ==================== Explanatory Cards ==================== -->
+    <!-- Right side cards to detail each phase -->
+    <g transform="translate(740, 180)">
+        <!-- Card 1 -->
+        <g transform="translate(0, 0)">
+            <rect width="420" height="100" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+            <rect width="16" height="100" rx="8" fill="#3B82F6"/>
+            <rect width="8" height="100" fill="#3B82F6"/> <!-- Square right corners -->
+            <text x="40" y="40" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="800" fill="#0F172A">Phase 1: Attract</text>
+            <text x="40" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">Use content marketing, SEO, and targeted</text>
+            <text x="40" y="85" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">ads to bring prospects into our orbit.</text>
+        </g>
+        <!-- Card 2 -->
+        <g transform="translate(0, 140)">
+            <rect width="420" height="100" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+            <rect width="16" height="100" rx="8" fill="#10B981"/>
+            <rect width="8" height="100" fill="#10B981"/>
+            <text x="40" y="40" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="800" fill="#0F172A">Phase 2: Engage</text>
+            <text x="40" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">Provide conversational sales, free trials,</text>
+            <text x="40" y="85" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">and seamless onboarding experiences.</text>
+        </g>
+        <!-- Card 3 -->
+        <g transform="translate(0, 280)">
+            <rect width="420" height="100" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+            <rect width="16" height="100" rx="8" fill="#F59E0B"/>
+            <rect width="8" height="100" fill="#F59E0B"/>
+            <text x="40" y="40" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="800" fill="#0F172A">Phase 3: Delight</text>
+            <text x="40" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">Deliver proactive customer support and</text>
+            <text x="40" y="85" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#475569">build loyalty programs to create promoters.</text>
+        </g>
+    </g>
+</svg>

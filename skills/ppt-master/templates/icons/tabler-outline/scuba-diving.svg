@@ -1,0 +1,21 @@
+<!--
+tags: [dive, diving, water, open water, underwater, scuba, athletic, fitness, exercise, game]
+category: Sport
+version: "2.42"
+unicode: "fd4e"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M19 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
+  <path d="M2 2l3 3l1.5 4l3.5 2l6 2l1 4l2.5 3" />
+  <path d="M11 8l4.5 1.5" />
+</svg>

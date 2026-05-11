@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - 中国电建经典风格 -->
+
+    <defs>
+        <!-- 深蓝渐变背景 -->
+        <linearGradient id="coverBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#00418D;stop-opacity:1" />
+            <stop offset="40%" style="stop-color:#003270;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001F45;stop-opacity:1" />
+        </linearGradient>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:1" />
+        </linearGradient>
+        <!-- 左侧装饰渐变 -->
+        <linearGradient id="sideGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#0066CC;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#4A90D9;stop-opacity:1" />
+        </linearGradient>
+        <!-- 斜线图案 - 工程感 -->
+        <pattern id="diagLines" width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="40" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03"/>
+        </pattern>
+    </defs>
+
+    <!-- 背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#coverBgGrad)" />
+    
+    <!-- 工程感斜线纹理 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#diagLines)" />
+
+    <!-- 装饰元素 - 几何图案 -->
+    <circle cx="1150" cy="150" r="250" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="1200" cy="100" r="150" fill="#4A90D9" fill-opacity="0.04" />
+    <circle cx="100" cy="620" r="200" fill="#FFFFFF" fill-opacity="0.02" />
+
+    <!-- 对角线装饰 -->
+    <line x1="800" y1="0" x2="1280" y2="480" stroke="#4A90D9" stroke-width="1" stroke-opacity="0.1" />
+    <line x1="850" y1="0" x2="1280" y2="430" stroke="#4A90D9" stroke-width="1" stroke-opacity="0.08" />
+    <line x1="900" y1="0" x2="1280" y2="380" stroke="#4A90D9" stroke-width="1" stroke-opacity="0.06" />
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)" />
+
+    <!-- 左侧装饰竖条组 -->
+    <rect x="0" y="150" width="10" height="420" fill="url(#sideGrad)" />
+    <rect x="18" y="180" width="4" height="360" fill="#4A90D9" fill-opacity="0.5" />
+    <rect x="28" y="210" width="2" height="300" fill="#4A90D9" fill-opacity="0.3" />
+
+    <!-- 企业英文名称 - 顶部 -->
+    <text x="1220" y="50" text-anchor="end" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" fill-opacity="0.6" letter-spacing="4">
+        POWERCHINA
+    </text>
+
+    <!-- 主标题区域背景 -->
+    <rect x="0" y="280" width="950" height="160" fill="#000000" fill-opacity="0.2" />
+    <rect x="0" y="280" width="10" height="160" fill="#C41E3A" />
+
+    <!-- 主标题 -->
+    <text x="60" y="350" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF">
+        {{TITLE}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="60" y="410" font-family="Microsoft YaHei, Arial, sans-serif" font-size="24" fill="#4A90D9">
+        {{SUBTITLE}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="60" y1="480" x2="300" y2="480" stroke="#4A90D9" stroke-width="2" />
+    <line x1="300" y1="480" x2="400" y2="480" stroke="#C41E3A" stroke-width="2" />
+
+    <!-- 汇报单位 -->
+    <text x="60" y="530" font-family="Microsoft YaHei, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.9">
+        {{AUTHOR}}
+    </text>
+
+    <!-- 汇报人 -->
+    <text x="60" y="565" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#FFFFFF" fill-opacity="0.7">
+        汇报人：{{PRESENTER}}
+    </text>
+
+    <!-- 日期 -->
+    <text x="60" y="600" font-family="Arial, Microsoft YaHei, sans-serif" font-size="16" fill="#4A90D9" fill-opacity="0.8">
+        {{DATE}}
+    </text>
+
+    <!-- 底部装饰区域 -->
+    <rect x="0" y="690" width="1280" height="30" fill="#002B5C" />
+    <rect x="0" y="690" width="200" height="30" fill="#C41E3A" />
+    
+    <!-- 底部企业名称 -->
+    <text x="640" y="712" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" fill-opacity="0.8">
+        中国电力建设集团有限公司  POWERCHINA
+    </text>
+
+</svg>

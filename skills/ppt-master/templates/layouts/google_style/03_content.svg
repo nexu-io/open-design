@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 - Google 风格 -->
+
+    <defs>
+        <!-- 顶部四色渐变条 -->
+        <linearGradient id="topGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4285F4;stop-opacity:1" />
+            <stop offset="33%" style="stop-color:#EA4335;stop-opacity:1" />
+            <stop offset="66%" style="stop-color:#FBBC04;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#34A853;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 白色背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- 顶部四色渐变条 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGradient)" />
+
+    <!-- 页面标题 -->
+    <text x="60" y="85" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="46" font-weight="700" fill="#1A237E">
+        {{PAGE_TITLE}}
+    </text>
+
+    <!-- 蓝色标题下划线 -->
+    <rect x="60" y="100" width="120" height="4" rx="2" fill="#4285F4" />
+
+    <!-- 内容区域 - 灵活布局占位 -->
+    <!-- 
+        可使用的布局模式：
+        - KPI 网格 (2×2 或 2×3)
+        - 左文右图 / 左图右文
+        - 三栏卡片
+        - 四象限
+        - 上下分区
+        - Dashboard 风格
+        - 列表 + 说明
+    -->
+    <rect x="60" y="130" width="1160" height="520" fill="none" stroke="#E8EAED" stroke-width="2" stroke-dasharray="8,8" />
+    <text x="640" y="380" text-anchor="middle" fill="#9AA0A6" font-size="18" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+        {{CONTENT_AREA}}
+    </text>
+    <text x="640" y="420" text-anchor="middle" fill="#9AA0A6" font-size="14" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+        (由 Executor 根据实际内容自由布局)
+    </text>
+
+    <!-- 常用设计元素参考 -->
+    <!-- 
+        KPI 卡片: <rect rx="16" stroke="#4285F4" stroke-width="3" fill="#FFFFFF"/>
+        浅灰背景块: <rect rx="12" fill="#F8F9FA"/>
+        品牌色圆点: <circle r="12" fill="#4285F4"/>
+        分隔线: <line stroke="#E8EAED" stroke-width="1"/>
+        数据数字: font-size="56" font-weight="700" fill="#4285F4"
+        数据标签: font-size="16" font-weight="500" fill="#5F6368"
+    -->
+
+    <!-- 底部四色圆点装饰 -->
+    <g transform="translate(640, 680)">
+        <circle cx="-60" cy="0" r="6" fill="#4285F4" />
+        <circle cx="-30" cy="0" r="6" fill="#EA4335" />
+        <circle cx="0" cy="0" r="6" fill="#FBBC04" />
+        <circle cx="30" cy="0" r="6" fill="#34A853" />
+        <circle cx="60" cy="0" r="6" fill="#4285F4" />
+    </g>
+
+    <!-- 页码（可选） -->
+    <text x="1220" y="695" text-anchor="end" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="14" fill="#9AA0A6">
+        {{PAGE_NUM}}
+    </text>
+
+</svg>

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 结束页 - 政府蓝风格 (优化版) -->
+
+    <defs>
+        <!-- 深蓝背景渐变 -->
+        <linearGradient id="endBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#0050B3;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#003D8F;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001F4D;stop-opacity:1" />
+        </linearGradient>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#00B4D8;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0050B3;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#endBgGrad)" />
+
+    <!-- 装饰元素 - 几何图案 -->
+    <circle cx="100" cy="120" r="200" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="1180" cy="600" r="250" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="640" cy="360" r="350" fill="#00B4D8" fill-opacity="0.02" />
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)" />
+
+    <!-- 网格装饰 -->
+    <line x1="0" y1="180" x2="1280" y2="180" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03" />
+    <line x1="0" y1="360" x2="1280" y2="360" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03" />
+    <line x1="0" y1="540" x2="1280" y2="540" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03" />
+    <line x1="320" y1="0" x2="320" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03" />
+    <line x1="640" y1="0" x2="640" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03" />
+    <line x1="960" y1="0" x2="960" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03" />
+
+    <!-- 波浪曲线装饰 -->
+    <path d="M 0 580 Q 320 620 640 580 T 1280 580" fill="none" stroke="#00B4D8" stroke-width="2" stroke-opacity="0.2"/>
+    <path d="M 0 600 Q 320 640 640 600 T 1280 600" fill="none" stroke="#00B4D8" stroke-width="1" stroke-opacity="0.15"/>
+    <path d="M 0 620 Q 320 660 640 620 T 1280 620" fill="none" stroke="#90E0EF" stroke-width="1" stroke-opacity="0.1"/>
+
+    <!-- 左侧装饰竖条 -->
+    <rect x="100" y="240" width="6" height="240" fill="#00B4D8" fill-opacity="0.6" />
+    <rect x="112" y="260" width="3" height="200" fill="#90E0EF" fill-opacity="0.4" />
+
+    <!-- 感谢语（中文） -->
+    <text x="640" y="300" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="64" font-weight="bold" fill="#FFFFFF" letter-spacing="8">
+        {{THANK_YOU}}
+    </text>
+
+    <!-- 感谢语（英文） -->
+    <text x="640" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" fill="#90E0EF" letter-spacing="6">
+        {{THANK_YOU_EN}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="490" y1="400" x2="600" y2="400" stroke="#00B4D8" stroke-width="2"/>
+    <circle cx="640" cy="400" r="4" fill="#00B4D8"/>
+    <line x1="680" y1="400" x2="790" y2="400" stroke="#00B4D8" stroke-width="2"/>
+
+    <!-- 欢迎指正 -->
+    <text x="640" y="460" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="28" fill="#FFFFFF" fill-opacity="0.9">
+        欢迎批评指正
+    </text>
+
+    <!-- 单位信息 -->
+    <text x="640" y="520" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.7">
+        {{ORGANIZATION}}
+    </text>
+
+    <!-- 联系信息 -->
+    <text x="640" y="560" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#90E0EF" fill-opacity="0.8">
+        {{CONTACT_INFO}}
+    </text>
+
+    <!-- 底部装饰区域 -->
+    <rect x="0" y="680" width="1280" height="40" fill="#001F4D" fill-opacity="0.6" />
+    <rect x="0" y="680" width="400" height="40" fill="url(#topGrad)" fill-opacity="0.3" />
+
+</svg>

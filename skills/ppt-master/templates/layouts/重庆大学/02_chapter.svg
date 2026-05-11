@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <defs>
+    <!-- 天际渐变 -->
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3A9BD9"/>
+      <stop offset="100%" stop-color="#006BB7" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 深邃蓝全屏背景 -->
+  <rect width="1280" height="720" fill="#004A82"/>
+  
+  <!-- 右上角斜切浅色区域（天际） -->
+  <polygon points="700,0 1280,0 1280,400 1000,0" fill="url(#skyGradient)" fill-opacity="0.3"/>
+  <polygon points="850,0 1280,0 1280,280" fill="#3A9BD9" fill-opacity="0.15"/>
+  
+  <!-- 底部波浪装饰 -->
+  <path d="M0,680 Q200,660 400,680 T800,660 T1200,680 L1280,680 L1280,720 L0,720 Z" fill="#006BB7" fill-opacity="0.3"/>
+  <path d="M0,695 Q200,680 400,695 T800,680 T1200,695 L1280,695 L1280,720 L0,720 Z" fill="#FFFFFF" fill-opacity="0.05"/>
+  
+  <!-- 左侧大号半透明章节编号 -->
+  <text x="60" y="580" fill="#FFFFFF" fill-opacity="0.06" font-family="Arial, sans-serif" font-size="400" font-weight="bold">{{CHAPTER_NUM}}</text>
+  
+  <!-- 金色装饰竖线 -->
+  <rect x="60" y="200" width="4" height="120" fill="#D4A84B"/>
+  
+  <!-- CHAPTER 标签 -->
+  <text x="80" y="240" fill="#D4A84B" font-family="Arial, sans-serif" font-size="16" font-weight="bold" letter-spacing="4">CHAPTER</text>
+  
+  <!-- 章节编号 -->
+  <text x="80" y="300" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="72" font-weight="bold">{{CHAPTER_NUM}}</text>
+  
+  <!-- 金色装饰横线 -->
+  <rect x="80" y="330" width="100" height="3" fill="#D4A84B"/>
+  
+  <!-- 章节主标题 -->
+  <text x="80" y="420" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="44" font-weight="bold">{{CHAPTER_TITLE}}</text>
+  
+  <!-- 章节描述 -->
+  <text x="80" y="480" fill="#FFFFFF" fill-opacity="0.7" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18">{{CHAPTER_DESC}}</text>
+  
+  <!-- 金色光点装饰 -->
+  <circle cx="1150" cy="100" r="4" fill="#D4A84B" fill-opacity="0.6"/>
+  <circle cx="1200" cy="150" r="3" fill="#D4A84B" fill-opacity="0.4"/>
+  <circle cx="1100" cy="180" r="5" fill="#D4A84B" fill-opacity="0.5"/>
+  
+  <!-- 右下角 Logo（白色版本） -->
+  <image x="1020" y="640" width="220" height="60" xlink:href="重庆大学logo2.png" preserveAspectRatio="xMidYMid meet"/>
+  
+  <!-- 底部金色装饰线 -->
+  <rect x="80" y="640" width="200" height="2" fill="#D4A84B" fill-opacity="0.5"/>
+</svg>

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    BCG Matrix Template (Growth-Share Matrix)
+    Purpose: Portfolio management and product lifecycle strategy
+    Use cases: Corporate strategy, product portfolio analysis, resource allocation
+    Design Principles: 4 quadrants (Star, Cash Cow, Question Mark, Dog) with strong visual distinctness
+    -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Product Portfolio Strategy</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">BCG GROWTH-SHARE MATRIX ANALYSIS</text>
+    <!-- ==================== Axis & Labels ==================== -->
+    <g transform="translate(180, 160)">
+        <!-- Y-Axis: Market Growth Rate -->
+        <line x1="0" y1="0" x2="0" y2="440" stroke="#0F172A" stroke-width="4"/>
+        <polygon points="-8,-12 8,-12 0,-24" fill="#0F172A"/>
+        <text x="-40" y="220" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A" transform="rotate(-90 -40,220)" letter-spacing="2">MARKET GROWTH RATE</text>
+        <text x="-20" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" transform="rotate(-90 -20,440)">LOW</text>
+        <text x="-20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" transform="rotate(-90 -20,30)">HIGH</text>
+        <!-- X-Axis: Relative Market Share -->
+        <line x1="0" y1="440" x2="880" y2="440" stroke="#0F172A" stroke-width="4"/>
+        <polygon points="892,-8 892,8 904,0" fill="#0F172A" transform="translate(0, 440)"/>
+        <text x="440" y="490" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="middle" letter-spacing="2">RELATIVE MARKET SHARE</text>
+        <!-- BCG X-Axis is reversed: High on the left, Low on the right -->
+        <text x="30" y="470" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B">HIGH</text>
+        <text x="850" y="470" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#64748B" text-anchor="end">LOW</text>
+        <!-- Quadrant Dividers -->
+        <line x1="440" y1="0" x2="440" y2="440" stroke="#94A3B8" stroke-width="2" stroke-dasharray="8 8"/>
+        <line x1="0" y1="220" x2="880" y2="220" stroke="#94A3B8" stroke-width="2" stroke-dasharray="8 8"/>
+        <!-- ==================== Quadrant 1: Stars (Top Left) ==================== -->
+        <g transform="translate(20, 20)">
+            <rect width="400" height="180" rx="12" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="2"/>
+            <text x="30" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#2563EB">STARS</text>
+            <text x="30" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#3B82F6">HIGH GROWTH · HIGH SHARE</text>
+            <!-- Content -->
+            <circle cx="40" cy="110" r="4" fill="#2563EB"/>
+            <text x="55" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Flagship SaaS Platform</text>
+            <circle cx="40" cy="140" r="4" fill="#2563EB"/>
+            <text x="55" y="145" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Enterprise API Gateway</text>
+        </g>
+        <!-- ==================== Quadrant 2: Question Marks (Top Right) ==================== -->
+        <g transform="translate(460, 20)">
+            <rect width="400" height="180" rx="12" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="2"/>
+            <text x="30" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#7C3AED">QUESTION MARKS</text>
+            <text x="30" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#8B5CF6">HIGH GROWTH · LOW SHARE</text>
+            <!-- Content -->
+            <circle cx="40" cy="110" r="4" fill="#7C3AED"/>
+            <text x="55" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">AI Generative Engine v1.0</text>
+            <circle cx="40" cy="140" r="4" fill="#7C3AED"/>
+            <text x="55" y="145" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Mobile App Subscription</text>
+        </g>
+        <!-- ==================== Quadrant 3: Cash Cows (Bottom Left) ==================== -->
+        <g transform="translate(20, 240)">
+            <rect width="400" height="180" rx="12" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="2"/>
+            <text x="30" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#059669">CASH COWS</text>
+            <text x="30" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#10B981">LOW GROWTH · HIGH SHARE</text>
+            <!-- Content -->
+            <circle cx="40" cy="110" r="4" fill="#059669"/>
+            <text x="55" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Legacy On-Premise Software</text>
+            <circle cx="40" cy="140" r="4" fill="#059669"/>
+            <text x="55" y="145" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Data Center Hosting Services</text>
+        </g>
+        <!-- ==================== Quadrant 4: Dogs (Bottom Right) ==================== -->
+        <g transform="translate(460, 240)">
+            <rect width="400" height="180" rx="12" fill="#FEF2F2" stroke="#FECACA" stroke-width="2"/>
+            <text x="30" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="900" fill="#DC2626">DOGS</text>
+            <text x="30" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#EF4444">LOW GROWTH · LOW SHARE</text>
+            <!-- Content -->
+            <circle cx="40" cy="110" r="4" fill="#DC2626"/>
+            <text x="55" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Discontinued Hardware Line</text>
+            <circle cx="40" cy="140" r="4" fill="#DC2626"/>
+            <text x="55" y="145" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Old Consulting Services</text>
+        </g>
+    </g>
+</svg>

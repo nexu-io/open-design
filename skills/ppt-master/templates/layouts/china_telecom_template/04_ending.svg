@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+  <image x="72" y="34" width="214" height="58" xlink:href="logo.png" />
+  <text x="96" y="274" fill="#111827" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="40" font-weight="700">{{THANK_YOU}}</text>
+  <text x="96" y="324" fill="#6B7280" font-family="Arial, sans-serif" font-size="18">{{ENDING_SUBTITLE}}</text>
+  <rect x="96" y="352" width="192" height="6" rx="3" fill="#C00000" />
+  <text x="96" y="420" fill="#2B2F33" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="18">{{CONTACT_INFO}}</text>
+
+  <rect x="838" y="156" width="370" height="266" rx="28" fill="#F8FAFC" stroke="#E5E7EB" stroke-width="2" />
+  <rect x="874" y="204" width="88" height="4" rx="2" fill="#C00000" />
+  <image x="888" y="252" width="268" height="92" xlink:href="slogan_red.png" preserveAspectRatio="xMidYMid meet" />
+  <image x="872" y="356" width="304" height="84" xlink:href="skyline_bg.png" preserveAspectRatio="xMidYMid meet" />
+
+  <image x="0" y="554" width="1280" height="166" xlink:href="footer_ribbon.png" preserveAspectRatio="xMidYMid slice" />
+  <text x="1208" y="676" text-anchor="end" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="13">{{PAGE_NUM}}</text>
+</svg>

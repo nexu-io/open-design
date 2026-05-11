@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 结束页 - Google 风格 -->
+
+    <defs>
+        <!-- 背景渐变 -->
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#F8F9FA;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#E8F5E9;stop-opacity:0.5" />
+        </linearGradient>
+
+        <!-- 标题渐变 -->
+        <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#1A73E8;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0D47A1;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 渐变背景 -->
+    <rect width="1280" height="720" fill="url(#bgGradient)" />
+
+    <!-- 装饰圆形 -->
+    <circle cx="100" cy="100" r="60" fill="#4285F4" fill-opacity="0.12" />
+    <circle cx="1180" cy="100" r="45" fill="#EA4335" fill-opacity="0.12" />
+    <circle cx="100" cy="620" r="50" fill="#FBBC04" fill-opacity="0.12" />
+    <circle cx="1180" cy="620" r="55" fill="#34A853" fill-opacity="0.12" />
+
+    <!-- 中央内容卡片 -->
+    <rect x="240" y="140" width="800" height="440" rx="24" fill="#FFFFFF" stroke="#E8EAED" stroke-width="1" />
+
+    <!-- Thank You 标题 -->
+    <text x="640" y="240" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="64" font-weight="700" fill="url(#textGradient)" text-anchor="middle">
+        {{THANK_YOU}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="640" y="290" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="400" fill="#5F6368" text-anchor="middle">
+        {{ENDING_SUBTITLE}}
+    </text>
+
+    <!-- 四色分隔线 -->
+    <g transform="translate(640, 320)">
+        <line x1="-120" y1="0" x2="-40" y2="0" stroke="#4285F4" stroke-width="4" stroke-linecap="round" />
+        <line x1="-30" y1="0" x2="30" y2="0" stroke="#EA4335" stroke-width="4" stroke-linecap="round" />
+        <line x1="40" y1="0" x2="120" y2="0" stroke="#34A853" stroke-width="4" stroke-linecap="round" />
+    </g>
+
+    <!-- 感谢列表 -->
+    <g transform="translate(300, 370)">
+        <!-- 感谢项 1 -->
+        <circle cx="20" cy="0" r="10" fill="#4285F4" />
+        <text x="45" y="5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="600" fill="#1A237E">
+            {{THANKS_PERSON_1}}
+        </text>
+        <text x="45" y="28" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="400" fill="#5F6368">
+            {{THANKS_REASON_1}}
+        </text>
+    </g>
+
+    <g transform="translate(300, 450)">
+        <!-- 感谢项 2 -->
+        <circle cx="20" cy="0" r="10" fill="#34A853" />
+        <text x="45" y="5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="600" fill="#1A237E">
+            {{THANKS_PERSON_2}}
+        </text>
+        <text x="45" y="28" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="400" fill="#5F6368">
+            {{THANKS_REASON_2}}
+        </text>
+    </g>
+
+    <g transform="translate(300, 530)">
+        <!-- 感谢项 3 -->
+        <circle cx="20" cy="0" r="10" fill="#FBBC04" />
+        <text x="45" y="5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="600" fill="#1A237E">
+            {{THANKS_PERSON_3}}
+        </text>
+        <text x="45" y="28" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="400" fill="#5F6368">
+            {{THANKS_REASON_3}}
+        </text>
+    </g>
+
+    <!-- 结语 -->
+    <text x="640" y="650" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="500" fill="#5F6368" text-anchor="middle">
+        {{CONTACT_INFO}}
+    </text>
+
+    <!-- 底部四色圆点装饰 -->
+    <g transform="translate(640, 690)">
+        <circle cx="-60" cy="0" r="6" fill="#4285F4" />
+        <circle cx="-30" cy="0" r="6" fill="#EA4335" />
+        <circle cx="0" cy="0" r="6" fill="#FBBC04" />
+        <circle cx="30" cy="0" r="6" fill="#34A853" />
+        <circle cx="60" cy="0" r="6" fill="#4285F4" />
+    </g>
+
+</svg>

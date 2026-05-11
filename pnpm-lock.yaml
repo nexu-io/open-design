@@ -59,6 +59,9 @@ importers:
       multer:
         specifier: ^1.4.5-lts.1
         version: 1.4.5-lts.2
+      playwright:
+        specifier: ^1.50.0
+        version: 1.59.1
       undici:
         specifier: ^7.16.0
         version: 7.25.0

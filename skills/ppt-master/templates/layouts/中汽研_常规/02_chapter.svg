@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 章节页 - 中汽研风格 -->
+
+    <defs>
+        <!-- 深蓝背景渐变 -->
+        <linearGradient id="gradChapter" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#004098;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#002A55;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="url(#gradChapter)"/>
+
+    <!-- 装饰元素 - 几何图案 -->
+    <circle cx="1200" cy="100" r="200" fill="#FFFFFF" fill-opacity="0.03"/>
+    <circle cx="100" cy="620" r="250" fill="#FFFFFF" fill-opacity="0.03"/>
+
+    <!-- 水平装饰线 -->
+    <line x1="100" y1="360" x2="1180" y2="360" stroke="white" stroke-width="1" stroke-opacity="0.1"/>
+
+    <!-- 章节内容 -->
+    <g transform="translate(640, 360)">
+        <!-- 章节编号 - 大号半透明背景 -->
+        <text x="0" y="-40" text-anchor="middle" font-family="Arial" font-size="120" font-weight="bold" fill="white" fill-opacity="0.08">
+            0{{CHAPTER_NUM}}
+        </text>
+        
+        <!-- 装饰方块 -->
+        <rect x="-40" y="10" width="80" height="6" fill="#FFFFFF"/>
+        
+        <!-- 章节标题 -->
+        <text x="0" y="80" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="48" font-weight="bold" fill="white">
+            {{CHAPTER_TITLE}}
+        </text>
+        
+        <!-- 英文标题/副标题 -->
+        <text x="0" y="130" text-anchor="middle" font-family="Arial" font-size="24" fill="#FFFFFF" fill-opacity="0.7" letter-spacing="2">
+            {{CHAPTER_SUBTITLE}}
+        </text>
+    </g>
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#FFFFFF" fill-opacity="0.3"/>
+
+</svg>

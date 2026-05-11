@@ -57,7 +57,8 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
     mood:
       'Print-magazine feel. Generous whitespace, large serif headlines, restrained palette of off-white paper + ink + a single warm accent. Confident, quietly intelligent.',
     references: ['Monocle', 'The Financial Times Weekend', 'NYT Magazine', 'It\'s Nice That'],
-    displayFont: "'Iowan Old Style', 'Charter', Georgia, serif",
+    displayFont:
+      "Georgia, 'Times New Roman', serif",
     bodyFont:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
     palette: {
@@ -82,9 +83,9 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
       'Quiet, precise, software-native. System fonts, near-greyscale palette, a single saturated accent. The chrome disappears so content is the only thing that registers.',
     references: ['Linear', 'Vercel', 'Notion 2024', 'Stripe docs'],
     displayFont:
-      "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
+      "-apple-system, BlinkMacSystemFont, 'Segoe UI Bold', 'Segoe UI', system-ui, sans-serif",
     bodyFont:
-      "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
+      "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
     palette: {
       bg:      'oklch(99% 0.002 240)',
       surface: 'oklch(100% 0 0)',
@@ -108,9 +109,9 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
       'Cream backgrounds, soft accent, gentle radii. Reads like a thoughtful product magazine — friendly without being cute. Good for fintech, wellness, indie SaaS.',
     references: ['Stripe pre-2020', 'Headspace', 'Substack', 'Mercury'],
     displayFont:
-      "'Tiempos Headline', 'Newsreader', 'Iowan Old Style', Georgia, serif",
+      "Georgia, 'Times New Roman', serif",
     bodyFont:
-      "'Söhne', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+      "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
     palette: {
       bg:      'oklch(97% 0.018 70)',     // warm cream
       surface: 'oklch(99% 0.008 70)',
@@ -134,10 +135,10 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
       'Data-dense, monospace-friendly, dark or light + grid. Made for engineers and operators who want information per square inch, not vibes.',
     references: ['Datadog', 'GitHub', 'Cloudflare dashboard', 'Sentry'],
     displayFont:
-      "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif",
+      "-apple-system, BlinkMacSystemFont, 'Segoe UI Bold', 'Segoe UI', system-ui, sans-serif",
     bodyFont:
-      "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif",
-    monoFont: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace",
+      "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+    monoFont: "ui-monospace, Menlo, Consolas, monospace",
     palette: {
       bg:      'oklch(98% 0.005 250)',
       surface: 'oklch(100% 0 0)',
@@ -161,9 +162,9 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
       'Loud type. Visible grid. System sans + a single oversized serif. Deliberate ugliness as confidence. Great for art, indie, agency, manifesto pages.',
     references: ['Are.na', 'Yale Center for British Art', 'mschf', 'Read.cv'],
     displayFont:
-      "'Times New Roman', 'Iowan Old Style', Georgia, serif",
+      "'Times New Roman', Georgia, serif",
     bodyFont:
-      "ui-monospace, 'IBM Plex Mono', 'JetBrains Mono', Menlo, monospace",
+      "ui-monospace, Menlo, Consolas, monospace",
     palette: {
       bg:      'oklch(96% 0.004 100)',    // off-white printer paper
       surface: 'oklch(100% 0 0)',

@@ -650,6 +650,7 @@ export const zhTW: Dict = {
   'fileViewer.empty': '請選擇一個檔案檢視。',
   'fileViewer.loading': '載入中…',
   'fileViewer.exportPptx': '匯出為 PPTX',
+  'fileViewer.exportPptxConverting': '转换中…',
   'fileViewer.openInNewTab': '在新分頁中開啟',
   'fileViewer.copyPath': '複製路徑',
   'fileViewer.copied': '已複製！',

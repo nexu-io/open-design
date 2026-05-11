@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Snake Flow Diagram Template
+    Purpose: S-shaped journey, long process phases
+    Use cases: Customer journey, lifecycle, multi-stage workflows
+    Feature: 8-node continuous loop with Tailwind spectrum
+    -->
+    <defs>
+        <!-- Card Drop Shadow -->
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- Node Glow -->
+        <filter id="nodeGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="640" y="60" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Customer Lifecycle Journey</text>
+    <text x="640" y="90" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">CUSTOMER JOURNEY · 8-STEP KEY TOUCHPOINT SNAKE FLOW</text>
+    <!-- ==================== Track & Flow Background ==================== -->
+    <!-- Base Track -->
+    <path d="M 160,190 L 1120,190 A 145,145 0 0,1 1120,480 L 160,480" fill="none" stroke="#F1F5F9" stroke-width="16" stroke-linecap="round"/>
+    <!-- Inner Rail -->
+    <path d="M 160,190 L 1120,190 A 145,145 0 0,1 1120,480 L 160,480" fill="none" stroke="#CBD5E1" stroke-width="2" stroke-linecap="round"/>
+    <!-- Directional Chevron Markers -->
+    <!-- Top Track (Rightward) -->
+    <polyline points="316,182 324,190 316,198" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="636,182 644,190 636,198" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="956,182 964,190 956,198" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Arc (Downward) -->
+    <polyline points="1257,327 1265,335 1273,327" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Bottom Track (Leftward) -->
+    <polyline points="964,472 956,480 964,488" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="644,472 636,480 644,488" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="324,472 316,480 324,488" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- ==================== Connection Lines (Node to Card) ==================== -->
+    <line x1="160" y1="232" x2="160" y2="245" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="480" y1="232" x2="480" y2="245" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="800" y1="232" x2="800" y2="245" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="1120" y1="232" x2="1120" y2="245" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="1120" y1="522" x2="1120" y2="535" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="800" y1="522" x2="800" y2="535" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="480" y1="522" x2="480" y2="535" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <line x1="160" y1="522" x2="160" y2="535" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4,2"/>
+    <!-- ==================== Nodes & Cards ==================== -->
+    <!-- Node 01: Awareness (#6366F1) -->
+    <g transform="translate(0,0)">
+        <rect x="40" y="245" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="160" y="270" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Awareness</text>
+        <text x="160" y="292" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Ad reach &amp; brand exposure</text>
+        <text x="160" y="308" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">across targeted channels.</text>
+        <circle cx="160" cy="190" r="42" fill="#6366F1" fill-opacity="0.15"/>
+        <circle cx="160" cy="190" r="34" fill="#FFFFFF" stroke="#6366F1" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="160" cy="190" r="28" fill="#6366F1"/>
+        <text x="160" y="197" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">01</text>
+    </g>
+    <!-- Node 02: Interest (#8B5CF6) -->
+    <g transform="translate(0,0)">
+        <rect x="360" y="245" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="480" y="270" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Interest</text>
+        <text x="480" y="292" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">High-quality content</text>
+        <text x="480" y="308" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">to engage and educate.</text>
+        <circle cx="480" cy="190" r="42" fill="#8B5CF6" fill-opacity="0.15"/>
+        <circle cx="480" cy="190" r="34" fill="#FFFFFF" stroke="#8B5CF6" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="480" cy="190" r="28" fill="#8B5CF6"/>
+        <text x="480" y="197" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">02</text>
+    </g>
+    <!-- Node 03: Consideration (#3B82F6) -->
+    <g transform="translate(0,0)">
+        <rect x="680" y="245" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="800" y="270" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Consideration</text>
+        <text x="800" y="292" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Product comparisons and</text>
+        <text x="800" y="308" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">evaluating alternatives.</text>
+        <circle cx="800" cy="190" r="42" fill="#3B82F6" fill-opacity="0.15"/>
+        <circle cx="800" cy="190" r="34" fill="#FFFFFF" stroke="#3B82F6" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="800" cy="190" r="28" fill="#3B82F6"/>
+        <text x="800" y="197" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">03</text>
+    </g>
+    <!-- Node 04: Purchase (#0EA5E9) -->
+    <g transform="translate(0,0)">
+        <rect x="1000" y="245" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="1120" y="270" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Purchase</text>
+        <text x="1120" y="292" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Seamless checkout and</text>
+        <text x="1120" y="308" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">initial conversion flow.</text>
+        <circle cx="1120" cy="190" r="42" fill="#0EA5E9" fill-opacity="0.15"/>
+        <circle cx="1120" cy="190" r="34" fill="#FFFFFF" stroke="#0EA5E9" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="1120" cy="190" r="28" fill="#0EA5E9"/>
+        <text x="1120" y="197" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">04</text>
+    </g>
+    <!-- Node 05: Experience (#10B981) -->
+    <g transform="translate(0,0)">
+        <rect x="1000" y="535" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="1120" y="560" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Experience</text>
+        <text x="1120" y="582" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Value delivery and smooth</text>
+        <text x="1120" y="598" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">product onboarding.</text>
+        <circle cx="1120" cy="480" r="42" fill="#10B981" fill-opacity="0.15"/>
+        <circle cx="1120" cy="480" r="34" fill="#FFFFFF" stroke="#10B981" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="1120" cy="480" r="28" fill="#10B981"/>
+        <text x="1120" y="487" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">05</text>
+    </g>
+    <!-- Node 06: Support (#F59E0B) -->
+    <g transform="translate(0,0)">
+        <rect x="680" y="535" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="800" y="560" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Support</text>
+        <text x="800" y="582" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Proactive issue resolution</text>
+        <text x="800" y="598" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">and responsive help desk.</text>
+        <circle cx="800" cy="480" r="42" fill="#F59E0B" fill-opacity="0.15"/>
+        <circle cx="800" cy="480" r="34" fill="#FFFFFF" stroke="#F59E0B" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="800" cy="480" r="28" fill="#F59E0B"/>
+        <text x="800" y="487" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">06</text>
+    </g>
+    <!-- Node 07: Loyalty (#F97316) -->
+    <g transform="translate(0,0)">
+        <rect x="360" y="535" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="480" y="560" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Loyalty</text>
+        <text x="480" y="582" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Value realization driving</text>
+        <text x="480" y="598" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">repeat purchase behavior.</text>
+        <circle cx="480" cy="480" r="42" fill="#F97316" fill-opacity="0.15"/>
+        <circle cx="480" cy="480" r="34" fill="#FFFFFF" stroke="#F97316" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="480" cy="480" r="28" fill="#F97316"/>
+        <text x="480" y="487" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">07</text>
+    </g>
+    <!-- Node 08: Advocacy (#F43F5E) -->
+    <g transform="translate(0,0)">
+        <rect x="40" y="535" width="240" height="75" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="160" y="560" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Advocacy</text>
+        <text x="160" y="582" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Word-of-mouth referrals</text>
+        <text x="160" y="598" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">and organic growth loops.</text>
+        <circle cx="160" cy="480" r="42" fill="#F43F5E" fill-opacity="0.15"/>
+        <circle cx="160" cy="480" r="34" fill="#FFFFFF" stroke="#F43F5E" stroke-width="4" filter="url(#nodeGlow)"/>
+        <circle cx="160" cy="480" r="28" fill="#F43F5E"/>
+        <text x="160" y="487" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">08</text>
+    </g>
+    <!-- ==================== Summary Insight Card ==================== -->
+    <g transform="translate(0,0)">
+        <rect x="100" y="635" width="1080" height="60" rx="12" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+        <text x="640" y="660" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#3730A3">Full Lifecycle Loop</text>
+        <text x="640" y="680" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#4F46E5">From initial awareness to organic advocacy, building a self-sustaining growth flywheel. Average LTV increased by 3.2x.</text>
+    </g>
+</svg>

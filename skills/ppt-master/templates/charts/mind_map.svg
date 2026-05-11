@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Mind Map Chart Template
+    Usage: Central theme diverging into multiple branches
+    Scenarios: Strategy breakdown, knowledge architecture, brainstorming
+    Supports: 1 Center + 4 Branches + 3 Sub-items per branch
+    -->
+    <defs>
+        <linearGradient id="centerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#6366F1"/> <!-- Indigo-500 -->
+            <stop offset="100%" stop-color="#4338CA"/> <!-- Indigo-700 -->
+        </linearGradient>
+        <radialGradient id="bgGlow" cx="50%" cy="50%" r="40%">
+            <stop offset="0%" stop-color="#E0E7FF" stop-opacity="0.8"/> <!-- Indigo-100 -->
+            <stop offset="100%" stop-color="#F8FAFC" stop-opacity="0"/>
+        </radialGradient>
+        <!-- Drop Shadows -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="branchShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="3" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.12" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="centerShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background + Center Aura -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <circle cx="640" cy="360" r="300" fill="url(#bgGlow)"/>
+    <!-- Title -->
+    <text x="60" y="65" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="32" font-weight="800" fill="#0F172A">Product Strategy Mind Map</text>
+    <text x="60" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="600" fill="#64748B" letter-spacing="1.5">STRATEGIC BREAKDOWN · FOUR CORE DIMENSIONS</text>
+    <!-- Decorative Rings -->
+    <circle cx="640" cy="360" r="112" fill="none" stroke="#6366F1" stroke-width="1.5" stroke-opacity="0.12"/>
+    <circle cx="640" cy="360" r="160" fill="none" stroke="#6366F1" stroke-width="1.5" stroke-opacity="0.06"/>
+    <!-- ===== Main Curves: Center to Branches ===== -->
+    <!-- Top Right -->
+    <path d="M 703,330 C 795,280 880,225 930,195" stroke="#10B981" stroke-width="3" fill="none" stroke-opacity="0.35"/>
+    <!-- Bottom Right -->
+    <path d="M 703,390 C 795,440 880,495 930,525" stroke="#F59E0B" stroke-width="3" fill="none" stroke-opacity="0.35"/>
+    <!-- Top Left -->
+    <path d="M 577,330 C 485,280 400,225 350,195" stroke="#3B82F6" stroke-width="3" fill="none" stroke-opacity="0.35"/>
+    <!-- Bottom Left -->
+    <path d="M 577,390 C 485,440 400,495 350,525" stroke="#F43F5E" stroke-width="3" fill="none" stroke-opacity="0.35"/>
+    <!-- ===== Thin Lines: Branches to Sub-items ===== -->
+    <!-- Top Right (Product) -->
+    <line x1="1050" y1="195" x2="1075" y2="156" stroke="#10B981" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="1050" y1="195" x2="1075" y2="200" stroke="#10B981" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="1050" y1="195" x2="1075" y2="244" stroke="#10B981" stroke-width="1.5" stroke-opacity="0.3"/>
+    <!-- Bottom Right (Market) -->
+    <line x1="1050" y1="525" x2="1075" y2="476" stroke="#F59E0B" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="1050" y1="525" x2="1075" y2="520" stroke="#F59E0B" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="1050" y1="525" x2="1075" y2="564" stroke="#F59E0B" stroke-width="1.5" stroke-opacity="0.3"/>
+    <!-- Top Left (Technology) -->
+    <line x1="230" y1="195" x2="205" y2="156" stroke="#3B82F6" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="230" y1="195" x2="205" y2="200" stroke="#3B82F6" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="230" y1="195" x2="205" y2="244" stroke="#3B82F6" stroke-width="1.5" stroke-opacity="0.3"/>
+    <!-- Bottom Left (Operations) -->
+    <line x1="230" y1="525" x2="205" y2="476" stroke="#F43F5E" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="230" y1="525" x2="205" y2="520" stroke="#F43F5E" stroke-width="1.5" stroke-opacity="0.3"/>
+    <line x1="230" y1="525" x2="205" y2="564" stroke="#F43F5E" stroke-width="1.5" stroke-opacity="0.3"/>
+    <!-- ===== Sub-item Cards ===== -->
+    <!-- Top Right (Product) Cards -->
+    <g filter="url(#cardShadow)">
+        <rect x="1075" y="139" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="1075" y="139" width="5" height="34" rx="2.5" fill="#10B981"/>
+        <text x="1090" y="161" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">UX Optimization</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="1075" y="183" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="1075" y="183" width="5" height="34" rx="2.5" fill="#10B981"/>
+        <text x="1090" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Feature Roadmap</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="1075" y="227" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="1075" y="227" width="5" height="34" rx="2.5" fill="#10B981"/>
+        <text x="1090" y="249" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Quality Standards</text>
+    </g>
+    <!-- Bottom Right (Market) Cards -->
+    <g filter="url(#cardShadow)">
+        <rect x="1075" y="459" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="1075" y="459" width="5" height="34" rx="2.5" fill="#F59E0B"/>
+        <text x="1090" y="481" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Brand Positioning</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="1075" y="503" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="1075" y="503" width="5" height="34" rx="2.5" fill="#F59E0B"/>
+        <text x="1090" y="525" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Channel Expansion</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="1075" y="547" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="1075" y="547" width="5" height="34" rx="2.5" fill="#F59E0B"/>
+        <text x="1090" y="569" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Competitor Analysis</text>
+    </g>
+    <!-- Top Left (Technology) Cards (Right Aligned Text) -->
+    <g filter="url(#cardShadow)">
+        <rect x="40" y="139" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="200" y="139" width="5" height="34" rx="2.5" fill="#3B82F6"/>
+        <text x="190" y="161" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Architecture Upgrade</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="40" y="183" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="200" y="183" width="5" height="34" rx="2.5" fill="#3B82F6"/>
+        <text x="190" y="205" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">AI Integration</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="40" y="227" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="200" y="227" width="5" height="34" rx="2.5" fill="#3B82F6"/>
+        <text x="190" y="249" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Security &amp; Compliance</text>
+    </g>
+    <!-- Bottom Left (Operations) Cards (Right Aligned Text) -->
+    <g filter="url(#cardShadow)">
+        <rect x="40" y="459" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="200" y="459" width="5" height="34" rx="2.5" fill="#F43F5E"/>
+        <text x="190" y="481" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">User Growth Strategy</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="40" y="503" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="200" y="503" width="5" height="34" rx="2.5" fill="#F43F5E"/>
+        <text x="190" y="525" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Supply Chain Mgt</text>
+    </g>
+    <g filter="url(#cardShadow)">
+        <rect x="40" y="547" width="165" height="34" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <rect x="200" y="547" width="5" height="34" rx="2.5" fill="#F43F5E"/>
+        <text x="190" y="569" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#0F172A">Data-driven Decisions</text>
+    </g>
+    <!-- ===== Branch Nodes ===== -->
+    <!-- Top Right (Product) -->
+    <g filter="url(#branchShadow)">
+        <rect x="930" y="170" width="120" height="50" rx="25" fill="#10B981"/>
+        <text x="990" y="201" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Product</text>
+    </g>
+    <!-- Bottom Right (Market) -->
+    <g filter="url(#branchShadow)">
+        <rect x="930" y="500" width="120" height="50" rx="25" fill="#F59E0B"/>
+        <text x="990" y="531" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Market</text>
+    </g>
+    <!-- Top Left (Technology) -->
+    <g filter="url(#branchShadow)">
+        <rect x="230" y="170" width="120" height="50" rx="25" fill="#3B82F6"/>
+        <text x="290" y="201" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Technology</text>
+    </g>
+    <!-- Bottom Left (Operations) -->
+    <g filter="url(#branchShadow)">
+        <rect x="230" y="500" width="120" height="50" rx="25" fill="#F43F5E"/>
+        <text x="290" y="531" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Operations</text>
+    </g>
+    <!-- ===== Center Node ===== -->
+    <g filter="url(#centerShadow)">
+        <circle cx="640" cy="360" r="75" fill="url(#centerGrad)"/>
+        <text x="640" y="352" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="800" fill="#FFFFFF">Product</text>
+        <text x="640" y="380" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="800" fill="#FFFFFF">Strategy</text>
+    </g>
+    <!-- Footer -->
+    <text x="640" y="700" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#94A3B8">
+        Core theme branching into four primary dimensions, each expanding into specific strategic initiatives.
+    </text>
+</svg>

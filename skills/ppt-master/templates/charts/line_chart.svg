@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Line Chart Template
+    Usage: Trend and variation visualization
+    Scenarios: Time-series analysis, growth trends, multi-metric comparison
+    Supports: Dual line comparison
+    -->
+    <defs>
+        <!-- Line Gradients -->
+        <linearGradient id="lineGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#2563EB;stop-opacity:1" /> <!-- Blue-600 -->
+            <stop offset="100%" style="stop-color:#60A5FA;stop-opacity:1" /> <!-- Blue-400 -->
+        </linearGradient>
+        <linearGradient id="lineGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#059669;stop-opacity:1" /> <!-- Emerald-600 -->
+            <stop offset="100%" style="stop-color:#34D399;stop-opacity:1" /> <!-- Emerald-400 -->
+        </linearGradient>
+        <!-- Area Fill Gradients -->
+        <linearGradient id="areaGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:0.25" />
+            <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:0.02" />
+        </linearGradient>
+        <linearGradient id="areaGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#10B981;stop-opacity:0.25" />
+            <stop offset="100%" style="stop-color:#10B981;stop-opacity:0.02" />
+        </linearGradient>
+        <!-- Data Node Shadow -->
+        <filter id="dotShadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="60" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="800" fill="#0F172A">Revenue &amp; Net Profit Trend</text>
+    <text x="60" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="16" font-weight="600" fill="#64748B" letter-spacing="1">FISCAL YEAR 2025 · JAN TO DEC · VALUES IN USD MILLIONS</text>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Grid Lines -->
+        <line x1="140" y1="550" x2="1160" y2="550" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <line x1="140" y1="470" x2="1160" y2="470" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <line x1="140" y1="390" x2="1160" y2="390" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <line x1="140" y1="310" x2="1160" y2="310" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <line x1="140" y1="230" x2="1160" y2="230" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <line x1="140" y1="150" x2="1160" y2="150" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <!-- Y Axis Labels -->
+        <text x="120" y="555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="500" fill="#94A3B8" text-anchor="end">0</text>
+        <text x="120" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="500" fill="#94A3B8" text-anchor="end">20</text>
+        <text x="120" y="395" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="500" fill="#94A3B8" text-anchor="end">40</text>
+        <text x="120" y="315" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="500" fill="#94A3B8" text-anchor="end">60</text>
+        <text x="120" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="500" fill="#94A3B8" text-anchor="end">80</text>
+        <text x="120" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="500" fill="#94A3B8" text-anchor="end">100</text>
+        <!-- Axes -->
+        <line x1="140" y1="150" x2="140" y2="550" stroke="#CBD5E1" stroke-width="2"/>
+        <line x1="140" y1="550" x2="1160" y2="550" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- X Axis Labels (Jan - Dec) -->
+        <text x="225" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Jan</text>
+        <text x="310" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Feb</text>
+        <text x="395" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Mar</text>
+        <text x="480" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Apr</text>
+        <text x="565" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">May</text>
+        <text x="650" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Jun</text>
+        <text x="735" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Jul</text>
+        <text x="820" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Aug</text>
+        <text x="905" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Sep</text>
+        <text x="990" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Oct</text>
+        <text x="1075" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Nov</text>
+        <text x="1160" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">Dec</text>
+        <!-- chart-plot-area: 140,150,1160,550 -->
+        <!-- Area 1 (Revenue) -->
+        <path d="M 225,422 L 310,398 L 395,370 L 480,342 L 565,318 L 650,302 L 735,278 L 820,250 L 905,238 L 990,222 L 1075,198 L 1160,182 L 1160,550 L 225,550 Z" 
+              fill="url(#areaGrad1)"/>
+        <!-- Line 1 (Revenue) -->
+        <polyline points="225,422 310,398 395,370 480,342 565,318 650,302 735,278 820,250 905,238 990,222 1075,198 1160,182" 
+                  fill="none" stroke="url(#lineGrad1)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Line 1 Data Nodes -->
+        <g stroke="#FFFFFF" stroke-width="2.5" fill="#3B82F6" filter="url(#dotShadow)">
+            <circle cx="225" cy="422" r="6"/>
+            <circle cx="310" cy="398" r="6"/>
+            <circle cx="395" cy="370" r="6"/>
+            <circle cx="480" cy="342" r="6"/>
+            <circle cx="565" cy="318" r="6"/>
+            <circle cx="650" cy="302" r="6"/>
+            <circle cx="735" cy="278" r="6"/>
+            <circle cx="820" cy="250" r="6"/>
+            <circle cx="905" cy="238" r="6"/>
+            <circle cx="990" cy="222" r="6"/>
+            <circle cx="1075" cy="198" r="6"/>
+            <circle cx="1160" cy="182" r="6"/>
+        </g>
+        <!-- Area 2 (Profit) -->
+        <path d="M 225,502 L 310,490 L 395,478 L 480,462 L 565,450 L 650,438 L 735,422 L 820,406 L 905,398 L 990,382 L 1075,358 L 1160,342 L 1160,550 L 225,550 Z" 
+              fill="url(#areaGrad2)"/>
+        <!-- Line 2 (Profit) -->
+        <polyline points="225,502 310,490 395,478 480,462 565,450 650,438 735,422 820,406 905,398 990,382 1075,358 1160,342" 
+                  fill="none" stroke="url(#lineGrad2)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Line 2 Data Nodes -->
+        <g stroke="#FFFFFF" stroke-width="2.5" fill="#10B981" filter="url(#dotShadow)">
+            <circle cx="225" cy="502" r="6"/>
+            <circle cx="310" cy="490" r="6"/>
+            <circle cx="395" cy="478" r="6"/>
+            <circle cx="480" cy="462" r="6"/>
+            <circle cx="565" cy="450" r="6"/>
+            <circle cx="650" cy="438" r="6"/>
+            <circle cx="735" cy="422" r="6"/>
+            <circle cx="820" cy="406" r="6"/>
+            <circle cx="905" cy="398" r="6"/>
+            <circle cx="990" cy="382" r="6"/>
+            <circle cx="1075" cy="358" r="6"/>
+            <circle cx="1160" cy="342" r="6"/>
+        </g>
+    </g>
+    <!-- Legend -->
+    <g id="legend">
+        <!-- Revenue Legend -->
+        <line x1="880" y1="630" x2="910" y2="630" stroke="#3B82F6" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="895" cy="630" r="6" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="925" y="635" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="600" fill="#475569">Revenue</text>
+        <!-- Profit Legend -->
+        <line x1="1030" y1="630" x2="1060" y2="630" stroke="#10B981" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="1045" cy="630" r="6" fill="#10B981" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="1075" y="635" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="600" fill="#475569">Net Profit</text>
+    </g>
+    <!-- Source Footer -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="13" font-weight="500" fill="#94A3B8">Source: Corporate Finance Department</text>
+</svg>

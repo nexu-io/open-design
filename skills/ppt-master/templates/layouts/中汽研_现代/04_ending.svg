@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 结束页 (Future Tech Ending) -->
+
+    <defs>
+        <!-- 主背景渐变 -->
+        <radialGradient id="gradEnd" cx="50%" cy="50%" r="70%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#003366;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001529;stop-opacity:1" />
+        </radialGradient>
+        
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+            <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+            </feMerge>
+        </filter>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="url(#gradEnd)" />
+    
+    <!-- 装饰: 中心光圈 -->
+    <g transform="translate(640, 360)">
+        <circle r="250" fill="none" stroke="#1890FF" stroke-width="1" stroke-opacity="0.3" />
+        <circle r="230" fill="none" stroke="#00E5FF" stroke-width="1" stroke-opacity="0.2" stroke-dasharray="40,20" />
+        <circle r="280" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.05" />
+    </g>
+
+    <!-- 内容 -->
+    <g transform="translate(640, 320)">
+        
+        <!-- Logo -->
+        <image href="../images/{{LOGO_LARGE}}" x="-150" y="-140" width="300" height="100" preserveAspectRatio="xMidYMid meet"/>
+        
+        <!-- 感谢词 -->
+        <text x="0" y="40" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="56" font-weight="bold" fill="#FFFFFF" letter-spacing="4">
+            {{THANK_YOU}}
+        </text>
+        
+        <text x="0" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#00E5FF" letter-spacing="2">
+            {{THANK_YOU_EN}}
+        </text>
+
+        <!-- 联系信息卡 -->
+         <rect x="-300" y="160" width="600" height="1" fill="#FFFFFF" fill-opacity="0.2" />
+         
+         <text x="0" y="200" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#FFFFFF" fill-opacity="0.9">
+            {{AUTHOR}}
+        </text>
+        
+        <text x="0" y="240" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#A0AEC0">
+            {{CONTACT_INFO}}
+        </text>
+        
+    </g>
+
+    <!-- 底部版权 -->
+    <text x="640" y="680" text-anchor="middle" font-family="Arial" font-size="12" fill="#FFFFFF" opacity="0.3">
+        {{COPYRIGHT}}
+    </text>
+
+</svg>

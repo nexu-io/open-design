@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 - 中国电建现代风 (POWERCHINA Modern) -->
+
+    <defs>
+        <!-- 标签背景渐变 -->
+        <linearGradient id="tagGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#00418D;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#003270;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景: 工程白 -->
+    <rect width="1280" height="720" fill="#F8F9FA"/>
+    
+    <!-- 装饰网格 (Subtle Grid) -->
+    <defs>
+        <pattern id="lightGrid" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+            <line x1="100" y1="0" x2="100" y2="100" stroke="#000000" stroke-opacity="0.03" stroke-width="1"/>
+            <line x1="0" y1="100" x2="100" y2="100" stroke="#000000" stroke-opacity="0.03" stroke-width="1"/>
+        </pattern>
+    </defs>
+    <rect width="1280" height="720" fill="url(#lightGrid)"/>
+
+    <!-- 顶部导航栏 (Console Style) -->
+    <rect width="1280" height="60" fill="#FFFFFF" stroke="#E9ECEF" stroke-width="1"/>
+    <rect width="1280" height="4" fill="#00418D"/>
+
+    <!-- 章节标签 (Tag) -->
+    <path d="M40,0 L160,0 L140,50 L40,50 Z" fill="url(#tagGrad)"/>
+    <text x="100" y="32" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFFFFF">
+        0{{CHAPTER_NUM}}
+    </text>
+
+    <!-- 页面标题 -->
+    <text x="180" y="38" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#1A202C">
+        {{PAGE_TITLE}}
+    </text>
+
+    <!-- 装饰分隔符 -->
+    <rect x="160" y="15" width="2" height="30" fill="#C41E3A"/>
+
+    <!-- Logo (右上角) -->
+    <rect x="1100" y="10" width="160" height="40" fill="#F1F3F5" rx="4"/>
+    <text x="1180" y="36" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#495057">
+        POWERCHINA
+    </text>
+
+    <!-- 内容区域框架 (Frame) -->
+    <rect x="40" y="80" width="1200" height="580" fill="#FFFFFF" stroke="#DEE2E6" stroke-width="1" rx="4"/>
+    
+    <!-- 瞄准框装饰 (Corner Marks) -->
+    <path d="M40,100 L40,80 L60,80" fill="none" stroke="#00418D" stroke-width="3"/>
+    <path d="M1240,100 L1240,80 L1220,80" fill="none" stroke="#00418D" stroke-width="3"/>
+    <path d="M40,640 L40,660 L60,660" fill="none" stroke="#00418D" stroke-width="3"/>
+    <path d="M1240,640 L1240,660 L1220,660" fill="none" stroke="#00418D" stroke-width="3"/>
+
+    <!-- 内容区文字 -->
+    <text x="640" y="360" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#CED4DA">
+        {{CONTENT_AREA}}
+    </text>
+
+    <!-- 底部状态栏 -->
+    <rect x="0" y="680" width="1280" height="40" fill="#F8F9FA"/>
+    <rect x="0" y="680" width="300" height="4" fill="#0066CC"/>
+    
+    <!-- 页码 -->
+    <text x="1240" y="705" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#495057">
+        {{PAGE_NUM}}
+    </text>
+
+    <!-- 来源 -->
+    <text x="40" y="705" font-family="Microsoft YaHei, sans-serif" font-size="12" fill="#ADB5BD">
+        来源：{{SOURCE}}
+    </text>
+
+</svg>

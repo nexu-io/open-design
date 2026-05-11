@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Treemap Chart Template
+    Purpose: Hierarchical data proportion visualization
+    Use cases: Budget allocation, market share, storage analysis, portfolio
+    Feature: Mathematical bento-grid layout, semantic Tailwind palettes, soft shadows
+    -->
+    <defs>
+        <!-- Treemap Tile Shadow -->
+        <filter id="treemapShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- UI Card Shadow -->
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FAFBFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Annual Budget Allocation</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">2025 BUDGET · TOTAL $12.0M · AREA REPRESENTS ALLOCATION %</text>
+    <!-- ==================== Treemap Area (1000x480) ==================== -->
+    <g id="treemapArea" transform="translate(60, 130)">
+        <!-- 1. HUMAN RESOURCES (40%) - Sky Palette -->
+        <g id="hr_cost">
+            <!-- 1.1 Salaries & Benefits (28%) -->
+            <rect x="0" y="0" width="400" height="336" rx="8" fill="#0284C7" filter="url(#treemapShadow)"/>
+            <text x="20" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#E0F2FE" letter-spacing="1">HUMAN RESOURCES (40%)</text>
+            <text x="200" y="170" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#FFFFFF" text-anchor="middle">Salaries &amp; Benefits</text>
+            <text x="200" y="210" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="800" fill="#FFFFFF" text-anchor="middle">$3.36M</text>
+            <text x="200" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="700" fill="#BAE6FD" text-anchor="middle">28% of total</text>
+            <!-- 1.2 Training (6%) -->
+            <rect x="0" y="340" width="198" height="140" rx="8" fill="#0EA5E9" filter="url(#treemapShadow)"/>
+            <text x="99" y="395" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">Training</text>
+            <text x="99" y="425" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#FFFFFF" text-anchor="middle">$0.72M</text>
+            <text x="99" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#E0F2FE" text-anchor="middle">6%</text>
+            <!-- 1.3 Recruitment (6%) -->
+            <rect x="202" y="340" width="198" height="140" rx="8" fill="#38BDF8" filter="url(#treemapShadow)"/>
+            <text x="301" y="395" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">Recruitment</text>
+            <text x="301" y="425" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#FFFFFF" text-anchor="middle">$0.72M</text>
+            <text x="301" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#E0F2FE" text-anchor="middle">6%</text>
+        </g>
+        <!-- 2. OPERATIONS (25%) - Emerald Palette -->
+        <g id="operation_cost">
+            <!-- 2.1 Office Space (12.5%) -->
+            <rect x="404" y="0" width="296" height="200" rx="8" fill="#059669" filter="url(#treemapShadow)"/>
+            <text x="424" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#D1FAE5" letter-spacing="1">OPERATIONS (25%)</text>
+            <text x="552" y="110" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" text-anchor="middle">Office Space</text>
+            <text x="552" y="145" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#FFFFFF" text-anchor="middle">$1.50M</text>
+            <text x="552" y="170" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#A7F3D0" text-anchor="middle">12.5%</text>
+            <!-- 2.2 Equipment (7.5%) -->
+            <rect x="704" y="0" width="176" height="200" rx="8" fill="#10B981" filter="url(#treemapShadow)"/>
+            <text x="792" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">Equipment</text>
+            <text x="792" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#FFFFFF" text-anchor="middle">$0.90M</text>
+            <text x="792" y="150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#A7F3D0" text-anchor="middle">7.5%</text>
+            <!-- 2.3 Daily Ops (5%) -->
+            <rect x="884" y="0" width="116" height="200" rx="8" fill="#34D399" filter="url(#treemapShadow)"/>
+            <text x="942" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#FFFFFF" text-anchor="middle">Daily Ops</text>
+            <text x="942" y="120" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" text-anchor="middle">$0.60M</text>
+            <text x="942" y="145" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#A7F3D0" text-anchor="middle">5%</text>
+        </g>
+        <!-- 3. MARKETING (20%) - Amber Palette -->
+        <g id="marketing_cost">
+            <!-- 3.1 Advertising (12%) -->
+            <rect x="404" y="204" width="356" height="156" rx="8" fill="#D97706" filter="url(#treemapShadow)"/>
+            <text x="424" y="236" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#FEF3C7" letter-spacing="1">MARKETING (20%)</text>
+            <text x="582" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" text-anchor="middle">Advertising</text>
+            <text x="582" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">$1.44M</text>
+            <!-- 3.2 Brand Events (8%) -->
+            <rect x="764" y="204" width="236" height="156" rx="8" fill="#F59E0B" filter="url(#treemapShadow)"/>
+            <text x="882" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" text-anchor="middle">Brand Events</text>
+            <text x="882" y="315" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#FFFFFF" text-anchor="middle">$0.96M</text>
+            <text x="882" y="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#FEF3C7" text-anchor="middle">8%</text>
+        </g>
+        <!-- 4. R&D (10%) - Violet Palette -->
+        <g id="rd_cost">
+            <rect x="404" y="364" width="296" height="116" rx="8" fill="#7C3AED" filter="url(#treemapShadow)"/>
+            <text x="424" y="396" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#EDE9FE" letter-spacing="1">R&amp;D (10%)</text>
+            <text x="552" y="440" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">$1.20M</text>
+        </g>
+        <!-- 5. OTHER (5%) - Slate Palette -->
+        <g id="other_cost">
+            <rect x="704" y="364" width="296" height="116" rx="8" fill="#64748B" filter="url(#treemapShadow)"/>
+            <text x="724" y="396" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#F1F5F9" letter-spacing="1">OTHER (5%)</text>
+            <text x="852" y="440" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">$0.60M</text>
+        </g>
+    </g>
+    <!-- ==================== UI Panels ==================== -->
+    <!-- Dashboard Legend Panel -->
+    <g id="legend" transform="translate(1080, 130)">
+        <rect x="0" y="0" width="160" height="260" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="80" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#0F172A" text-anchor="middle" letter-spacing="0.5">BUDGET SUMMARY</text>
+        <line x1="20" y1="50" x2="140" y2="50" stroke="#F1F5F9" stroke-width="2"/>
+        <rect x="20" y="65" width="16" height="16" rx="4" fill="#0284C7"/>
+        <text x="46" y="78" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#475569">HR (40%)</text>
+        <rect x="20" y="95" width="16" height="16" rx="4" fill="#059669"/>
+        <text x="46" y="108" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#475569">Ops (25%)</text>
+        <rect x="20" y="125" width="16" height="16" rx="4" fill="#D97706"/>
+        <text x="46" y="138" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#475569">Market (20%)</text>
+        <rect x="20" y="155" width="16" height="16" rx="4" fill="#7C3AED"/>
+        <text x="46" y="168" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#475569">R&amp;D (10%)</text>
+        <rect x="20" y="185" width="16" height="16" rx="4" fill="#64748B"/>
+        <text x="46" y="198" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#475569">Other (5%)</text>
+        <line x1="20" y1="215" x2="140" y2="215" stroke="#F1F5F9" stroke-width="2"/>
+        <text x="80" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#0F172A" text-anchor="middle">Total: $12.0M</text>
+    </g>
+    <!-- Info Panel -->
+    <g id="note" transform="translate(1080, 410)">
+        <rect x="0" y="0" width="160" height="90" rx="12" fill="#F0F9FF" stroke="#BAE6FD" stroke-width="1.5"/>
+        <text x="16" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#0284C7" letter-spacing="0.5">HOW TO READ</text>
+        <text x="16" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#475569">Area size directly</text>
+        <text x="16" y="64" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#475569">represents the</text>
+        <text x="16" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#475569">budget allocation %</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="60" y="690" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Data Source: Finance Dept Annual Budget Report</text>
+</svg>

@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Gauge Chart Template
+    Usage: Single metric attainment display
+    Scenarios: KPI completion, health index, performance score
+    Supports: 3 gauges side by side
+    -->
+    <defs>
+        <!-- Background Arc Gradient -->
+        <linearGradient id="bgArcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#E2E8F0;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#F1F5F9;stop-opacity:1" />
+        </linearGradient>
+        <!-- Excellent Gradient (Emerald) -->
+        <linearGradient id="excellentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+        </linearGradient>
+        <!-- Good Gradient (Blue) -->
+        <linearGradient id="goodGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+        </linearGradient>
+        <!-- Warning Gradient (Amber) -->
+        <linearGradient id="warningGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#F59E0B;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#D97706;stop-opacity:1" />
+        </linearGradient>
+        <!-- Danger Gradient (Red) -->
+        <linearGradient id="dangerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#EF4444;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#DC2626;stop-opacity:1" />
+        </linearGradient>
+        <!-- Needle Shadow -->
+        <filter id="needleShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.25" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <!-- Card Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="640" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="700" fill="#0F172A" text-anchor="middle">Core Business KPI Dashboard</text>
+    <text x="640" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="18" fill="#64748B" text-anchor="middle">Q4 Performance Real-time Data</text>
+    <!-- Gauge 1: Sales Completion 85% -->
+    <g id="gauge1" transform="translate(220, 380)">
+        <!-- Background Arc -->
+        <path d="M -150,0 A 150,150 0 0,1 150,0" fill="none" stroke="#E2E8F0" stroke-width="30" stroke-linecap="round"/>
+        <!-- Scales (0-60% Red, 60-80% Amber, 80-100% Emerald) -->
+        <path d="M -150,0 A 150,150 0 0,1 -46.35,-142.65" fill="none" stroke="#FECACA" stroke-width="30" stroke-linecap="round"/>
+        <path d="M -46.35,-142.65 A 150,150 0 0,1 58.68,-138.05" fill="none" stroke="#FDE68A" stroke-width="30" stroke-linecap="round"/>
+        <path d="M 58.68,-138.05 A 150,150 0 0,1 150,0" fill="none" stroke="#A7F3D0" stroke-width="30" stroke-linecap="round"/>
+        <!-- Value Arc 85% -->
+        <path d="M -150,0 A 150,150 0 0,1 103.95,-108.45" fill="none" stroke="url(#excellentGrad)" stroke-width="30" stroke-linecap="round"/>
+        <!-- Tick Marks -->
+        <line x1="-135" y1="0" x2="-120" y2="0" stroke="#64748B" stroke-width="2"/>
+        <line x1="-95.5" y1="-95.5" x2="-84.85" y2="-84.85" stroke="#64748B" stroke-width="2"/>
+        <line x1="0" y1="-135" x2="0" y2="-120" stroke="#64748B" stroke-width="2"/>
+        <line x1="95.5" y1="-95.5" x2="84.85" y2="-84.85" stroke="#64748B" stroke-width="2"/>
+        <line x1="135" y1="0" x2="120" y2="0" stroke="#64748B" stroke-width="2"/>
+        <!-- Tick Labels -->
+        <text x="-155" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">0%</text>
+        <text x="0" y="-155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">50%</text>
+        <text x="155" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">100%</text>
+        <!-- Needle (85% = 153°, start from -90°) -->
+        <g transform="rotate(63)">
+            <path d="M 0,-100 L -8,0 L 0,15 L 8,0 Z" fill="#0F172A" filter="url(#needleShadow)"/>
+        </g>
+        <circle cx="0" cy="0" r="15" fill="#0F172A"/>
+        <circle cx="0" cy="0" r="8" fill="#FFFFFF"/>
+        <!-- Center Value -->
+        <text x="0" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="48" font-weight="700" fill="#10B981" text-anchor="middle">85%</text>
+        <!-- Title -->
+        <text x="0" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A" text-anchor="middle">Sales Target Attainment</text>
+        <!-- Status Tag -->
+        <rect x="-40" y="115" width="80" height="26" rx="13" fill="#D1FAE5"/>
+        <text x="0" y="133" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#10B981" text-anchor="middle">Excellent</text>
+    </g>
+    <!-- Gauge 2: Customer Satisfaction 72% -->
+    <g id="gauge2" transform="translate(640, 380)">
+        <!-- Background Arc -->
+        <path d="M -150,0 A 150,150 0 0,1 150,0" fill="none" stroke="#E2E8F0" stroke-width="30" stroke-linecap="round"/>
+        <!-- Scales -->
+        <path d="M -150,0 A 150,150 0 0,1 -46.35,-142.65" fill="none" stroke="#FECACA" stroke-width="30" stroke-linecap="round"/>
+        <path d="M -46.35,-142.65 A 150,150 0 0,1 58.68,-138.05" fill="none" stroke="#FDE68A" stroke-width="30" stroke-linecap="round"/>
+        <path d="M 58.68,-138.05 A 150,150 0 0,1 150,0" fill="none" stroke="#A7F3D0" stroke-width="30" stroke-linecap="round"/>
+        <!-- Value Arc 72% -->
+        <path d="M -150,0 A 150,150 0 0,1 24.93,-147.91" fill="none" stroke="url(#goodGrad)" stroke-width="30" stroke-linecap="round"/>
+        <!-- Tick Marks -->
+        <line x1="-135" y1="0" x2="-120" y2="0" stroke="#64748B" stroke-width="2"/>
+        <line x1="-95.5" y1="-95.5" x2="-84.85" y2="-84.85" stroke="#64748B" stroke-width="2"/>
+        <line x1="0" y1="-135" x2="0" y2="-120" stroke="#64748B" stroke-width="2"/>
+        <line x1="95.5" y1="-95.5" x2="84.85" y2="-84.85" stroke="#64748B" stroke-width="2"/>
+        <line x1="135" y1="0" x2="120" y2="0" stroke="#64748B" stroke-width="2"/>
+        <!-- Tick Labels -->
+        <text x="-155" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">0%</text>
+        <text x="0" y="-155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">50%</text>
+        <text x="155" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">100%</text>
+        <!-- Needle -->
+        <g transform="rotate(39.6)">
+            <path d="M 0,-100 L -8,0 L 0,15 L 8,0 Z" fill="#0F172A" filter="url(#needleShadow)"/>
+        </g>
+        <circle cx="0" cy="0" r="15" fill="#0F172A"/>
+        <circle cx="0" cy="0" r="8" fill="#FFFFFF"/>
+        <!-- Center Value -->
+        <text x="0" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="48" font-weight="700" fill="#3B82F6" text-anchor="middle">72%</text>
+        <!-- Title -->
+        <text x="0" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A" text-anchor="middle">Customer Satisfaction</text>
+        <!-- Status Tag -->
+        <rect x="-35" y="115" width="70" height="26" rx="13" fill="#DBEAFE"/>
+        <text x="0" y="133" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#3B82F6" text-anchor="middle">Good</text>
+    </g>
+    <!-- Gauge 3: Inventory Turnover 58% -->
+    <g id="gauge3" transform="translate(1060, 380)">
+        <!-- Background Arc -->
+        <path d="M -150,0 A 150,150 0 0,1 150,0" fill="none" stroke="#E2E8F0" stroke-width="30" stroke-linecap="round"/>
+        <!-- Scales -->
+        <path d="M -150,0 A 150,150 0 0,1 -46.35,-142.65" fill="none" stroke="#FECACA" stroke-width="30" stroke-linecap="round"/>
+        <path d="M -46.35,-142.65 A 150,150 0 0,1 58.68,-138.05" fill="none" stroke="#FDE68A" stroke-width="30" stroke-linecap="round"/>
+        <path d="M 58.68,-138.05 A 150,150 0 0,1 150,0" fill="none" stroke="#A7F3D0" stroke-width="30" stroke-linecap="round"/>
+        <!-- Value Arc 58% -->
+        <path d="M -150,0 A 150,150 0 0,1 -58.36,-138.17" fill="none" stroke="url(#warningGrad)" stroke-width="30" stroke-linecap="round"/>
+        <!-- Tick Marks -->
+        <line x1="-135" y1="0" x2="-120" y2="0" stroke="#64748B" stroke-width="2"/>
+        <line x1="-95.5" y1="-95.5" x2="-84.85" y2="-84.85" stroke="#64748B" stroke-width="2"/>
+        <line x1="0" y1="-135" x2="0" y2="-120" stroke="#64748B" stroke-width="2"/>
+        <line x1="95.5" y1="-95.5" x2="84.85" y2="-84.85" stroke="#64748B" stroke-width="2"/>
+        <line x1="135" y1="0" x2="120" y2="0" stroke="#64748B" stroke-width="2"/>
+        <!-- Tick Labels -->
+        <text x="-155" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">0%</text>
+        <text x="0" y="-155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">50%</text>
+        <text x="155" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">100%</text>
+        <!-- Needle -->
+        <g transform="rotate(14.4)">
+            <path d="M 0,-100 L -8,0 L 0,15 L 8,0 Z" fill="#0F172A" filter="url(#needleShadow)"/>
+        </g>
+        <circle cx="0" cy="0" r="15" fill="#0F172A"/>
+        <circle cx="0" cy="0" r="8" fill="#FFFFFF"/>
+        <!-- Center Value -->
+        <text x="0" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="48" font-weight="700" fill="#F59E0B" text-anchor="middle">58%</text>
+        <!-- Title -->
+        <text x="0" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A" text-anchor="middle">Inventory Turnover</text>
+        <!-- Status Tag -->
+        <rect x="-40" y="115" width="80" height="26" rx="13" fill="#FEF3C7"/>
+        <text x="0" y="133" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#F59E0B" text-anchor="middle">Warning</text>
+    </g>
+    <!-- Legend -->
+    <g id="legendBar" transform="translate(340, 600)">
+        <rect x="0" y="0" width="600" height="40" rx="8" fill="#FFFFFF" filter="url(#cardShadow)"/>
+        <rect x="30" y="12" width="16" height="16" rx="3" fill="#FECACA"/>
+        <text x="55" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#475569">Critical (0-60%)</text>
+        <rect x="180" y="12" width="16" height="16" rx="3" fill="#FDE68A"/>
+        <text x="205" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#475569">Warning (60-80%)</text>
+        <rect x="340" y="12" width="16" height="16" rx="3" fill="#A7F3D0"/>
+        <text x="365" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#475569">Target (80-100%)</text>
+        <text x="500" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#94A3B8">Benchmark: 80%</text>
+    </g>
+    <!-- Data Source -->
+    <text x="640" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" fill="#94A3B8" text-anchor="middle">Source: Business Intelligence Platform · Live Data</text>
+</svg>

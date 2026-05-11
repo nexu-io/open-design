@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Area Chart Template
+    Usage: Trend changes, cumulative data display
+    Scenarios: Traffic trends, cumulative sales, inventory changes, user growth
+    Supports: 12 time points × 2 series (adjustable)
+    Difference from Line Chart: Filled area emphasizes cumulative volume and changes
+    -->
+    <defs>
+        <!-- Area fill gradient (Blue series) -->
+        <linearGradient id="areaGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:0.6" />
+            <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:0.1" />
+        </linearGradient>
+        <!-- Area fill gradient (Green series) -->
+        <linearGradient id="areaGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#10B981;stop-opacity:0.5" />
+            <stop offset="100%" style="stop-color:#10B981;stop-opacity:0.05" />
+        </linearGradient>
+        <!-- Data point shadow -->
+        <filter id="dotShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="1" result="offsetBlur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.2" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A">Website Traffic Trend Analysis</text>
+    <text x="60" y="105" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="18" fill="#64748B">2025 Monthly Data · Unit: 10K Visits</text>
+    <!-- Legend -->
+    <g id="legend" transform="translate(950, 70)">
+        <line x1="0" y1="10" x2="30" y2="10" stroke="#3B82F6" stroke-width="3"/>
+        <circle cx="15" cy="10" r="5" fill="#3B82F6"/>
+        <text x="40" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="15" fill="#475569">PC Visits</text>
+        <line x1="150" y1="10" x2="180" y2="10" stroke="#10B981" stroke-width="3"/>
+        <circle cx="165" cy="10" r="5" fill="#10B981"/>
+        <text x="190" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="15" fill="#475569">Mobile Visits</text>
+    </g>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Y-axis Grid Lines -->
+        <line x1="120" y1="560" x2="1200" y2="560" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="120" y1="470" x2="1200" y2="470" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="120" y1="380" x2="1200" y2="380" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="120" y1="290" x2="1200" y2="290" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="120" y1="200" x2="1200" y2="200" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- Y-axis Labels -->
+        <text x="105" y="565" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">0</text>
+        <text x="105" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">200</text>
+        <text x="105" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">400</text>
+        <text x="105" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">600</text>
+        <text x="105" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">800</text>
+        <!-- Axes -->
+        <line x1="120" y1="160" x2="120" y2="560" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="120" y1="560" x2="1200" y2="560" stroke="#94A3B8" stroke-width="2"/>
+        <!-- X-axis Labels (12 months) -->
+        <!-- Distance between each month: (1200-120)/12 = 90px -->
+        <text x="165" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Jan</text>
+        <text x="255" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Feb</text>
+        <text x="345" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Mar</text>
+        <text x="435" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Apr</text>
+        <text x="525" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">May</text>
+        <text x="615" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Jun</text>
+        <text x="705" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Jul</text>
+        <text x="795" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Aug</text>
+        <text x="885" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Sep</text>
+        <text x="975" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Oct</text>
+        <text x="1065" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Nov</text>
+        <text x="1155" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="middle">Dec</text>
+        <!-- chart-plot-area: 120,160,1200,560 -->
+        <!-- 
+        Data Points Calculation:
+        X: 165, 255, 345, 435, 525, 615, 705, 795, 885, 975, 1065, 1155
+        Y: 560 - (Value/200)*90  (Every 200 units=90px)
+        PC Data: 320, 280, 350, 420, 480, 520, 580, 620, 550, 490, 460, 520
+        Mobile Data: 180, 160, 210, 280, 350, 420, 480, 540, 500, 460, 430, 490
+        -->
+        <!-- Area 1: PC (Blue) -->
+        <path d="M 165,560 
+                 L 165,416 L 255,434 L 345,402.5 L 435,371 L 525,344 L 615,326 L 705,299 L 795,281 L 885,312.5 L 975,339.5 L 1065,353 L 1155,326 
+                 L 1155,560 Z" 
+              fill="url(#areaGrad1)"/>
+        <!-- Line 1: PC -->
+        <path d="M 165,416 L 255,434 L 345,402.5 L 435,371 L 525,344 L 615,326 L 705,299 L 795,281 L 885,312.5 L 975,339.5 L 1065,353 L 1155,326" 
+              fill="none" stroke="#3B82F6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Area 2: Mobile (Green) -->
+        <path d="M 165,560 
+                 L 165,479 L 255,488 L 345,465.5 L 435,434 L 525,402.5 L 615,371 L 705,344 L 795,317 L 885,335 L 975,353 L 1065,366.5 L 1155,339.5 
+                 L 1155,560 Z" 
+              fill="url(#areaGrad2)"/>
+        <!-- Line 2: Mobile -->
+        <path d="M 165,479 L 255,488 L 345,465.5 L 435,434 L 525,402.5 L 615,371 L 705,344 L 795,317 L 885,335 L 975,353 L 1065,366.5 L 1155,339.5" 
+              fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- PC Data Points -->
+        <circle cx="165" cy="416" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="255" cy="434" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="345" cy="402.5" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="435" cy="371" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="525" cy="344" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="615" cy="326" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="705" cy="299" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="795" cy="281" r="6" fill="#3B82F6" stroke="#FFFFFF" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="885" cy="312.5" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="975" cy="339.5" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="1065" cy="353" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="1155" cy="326" r="5" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2" filter="url(#dotShadow)"/>
+        <!-- Mobile Data Points -->
+        <circle cx="165" cy="479" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="255" cy="488" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="345" cy="465.5" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="435" cy="434" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="525" cy="402.5" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="615" cy="371" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="705" cy="344" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="795" cy="317" r="6" fill="#10B981" stroke="#FFFFFF" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="885" cy="335" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="975" cy="353" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="1065" cy="366.5" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <circle cx="1155" cy="339.5" r="5" fill="#FFFFFF" stroke="#10B981" stroke-width="2" filter="url(#dotShadow)"/>
+        <!-- Peak Label (Aug) -->
+        <g>
+            <rect x="755" y="225" width="80" height="45" rx="6" fill="#3B82F6"/>
+            <text x="795" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="14" font-weight="600" fill="#FFFFFF" text-anchor="middle">Peak</text>
+            <text x="795" y="262" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="13" fill="#FFFFFF" text-anchor="middle">6.2M</text>
+            <path d="M 795,270 L 790,281 L 800,281 Z" fill="#3B82F6"/>
+        </g>
+    </g>
+    <!-- Stat Cards -->
+    <g id="statsCards" transform="translate(60, 620)">
+        <!-- Card 1: Total Visits -->
+        <g id="card-total-visits">
+            <rect x="0" y="0" width="200" height="70" rx="8" fill="#F8F9FA" stroke="#E0E0E0" stroke-width="1"/>
+            <text x="20" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="14" fill="#64748B">Total Annual Visits</text>
+            <text x="20" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="24" font-weight="bold" fill="#0F172A">102.4M</text>
+        </g>
+        <!-- Card 2: PC Share -->
+        <g id="card-pc-share">
+            <rect x="220" y="0" width="180" height="70" rx="8" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1"/>
+            <text x="240" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="14" fill="#2563EB">PC Share</text>
+            <text x="240" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="24" font-weight="bold" fill="#3B82F6">55.8%</text>
+        </g>
+        <!-- Card 3: Mobile Share -->
+        <g id="card-mobile-share">
+            <rect x="420" y="0" width="180" height="70" rx="8" fill="#ECFDF5" stroke="#34D399" stroke-width="1"/>
+            <text x="440" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="14" fill="#059669">Mobile Share</text>
+            <text x="440" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="24" font-weight="bold" fill="#34D399">44.2%</text>
+        </g>
+        <!-- Card 4: YoY Growth -->
+        <g id="card-yoy-growth">
+            <rect x="620" y="0" width="180" height="70" rx="8" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1"/>
+            <text x="640" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="14" fill="#D97706">YoY Growth</text>
+            <text x="640" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="24" font-weight="bold" fill="#F59E0B">+23.5%</text>
+        </g>
+    </g>
+    <!-- Data Source -->
+    <text x="1220" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="14" fill="#94A3B8" text-anchor="end">Data Source: Website Analytics Platform</text>
+</svg>

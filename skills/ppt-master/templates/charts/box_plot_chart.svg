@@ -1,0 +1,245 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Box Plot Template
+    Usage: Data distribution visualization, statistical analysis
+    Scenarios: Salary distribution, grade analysis, quality control, outlier detection
+    Supports: 5 groups of box plot comparison
+    -->
+    <defs>
+        <!-- Box Gradient -->
+        <linearGradient id="boxGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="boxGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#34D399;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="boxGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#FBBF24;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#D97706;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="boxGrad4" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="boxGrad5" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#FB7185;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#E11D48;stop-opacity:1" />
+        </linearGradient>
+        <!-- Shadow -->
+        <filter id="boxShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="1" result="offsetBlur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.12" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A">Salary Distribution by Department</text>
+    <text x="60" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="18" fill="#64748B">2025 Salary Report · Unit: 10K/Year</text>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Y-axis Grid Lines -->
+        <line x1="140" y1="550" x2="1000" y2="550" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="480" x2="1000" y2="480" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="410" x2="1000" y2="410" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="340" x2="1000" y2="340" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="270" x2="1000" y2="270" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="200" x2="1000" y2="200" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="130" x2="1000" y2="130" stroke="#E0E0E0" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- Y-axis Labels -->
+        <text x="125" y="555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">0</text>
+        <text x="125" y="485" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">10</text>
+        <text x="125" y="415" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">20</text>
+        <text x="125" y="345" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">30</text>
+        <text x="125" y="275" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">40</text>
+        <text x="125" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">50</text>
+        <text x="125" y="135" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">60</text>
+        <!-- Y-axis Title -->
+        <text x="45" y="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="15" fill="#475569" text-anchor="middle" transform="rotate(-90, 45, 340)">Annual Salary (10K)</text>
+        <!-- Axes -->
+        <line x1="140" y1="130" x2="140" y2="550" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="140" y1="550" x2="1000" y2="550" stroke="#94A3B8" stroke-width="2"/>
+        <!-- 
+        Box Plot Description:
+        - Box width: 80px
+        - Box gap: 100px
+        - 100K = 70px
+        Data (Min, Q1, Median, Q3, Max):
+        Tech: 15, 25, 35, 45, 58 + Outlier 8
+        Product: 12, 22, 28, 38, 50
+        Design: 10, 18, 24, 32, 42
+        Marketing: 8, 15, 22, 30, 45 + Outlier 55
+        Operations: 8, 14, 20, 26, 38
+        -->
+        <!-- Box Plot 1: Tech (Blue) -->
+        <g id="box1" transform="translate(230, 0)">
+            <!-- Upper Whisker (max=58) -->
+            <line x1="0" y1="143.4" x2="0" y2="235" stroke="#2563EB" stroke-width="2"/>
+            <line x1="-20" y1="143.4" x2="20" y2="143.4" stroke="#2563EB" stroke-width="2"/>
+            <!-- Box (Q1=25 to Q3=45) -->
+            <rect x="-40" y="235" width="80" height="140" rx="4" fill="url(#boxGrad1)" filter="url(#boxShadow)"/>
+            <!-- Median Line (median=35) -->
+            <line x1="-40" y1="305" x2="40" y2="305" stroke="#FFFFFF" stroke-width="3"/>
+            <!-- Lower Whisker (min=15) -->
+            <line x1="0" y1="375" x2="0" y2="445" stroke="#2563EB" stroke-width="2"/>
+            <line x1="-20" y1="445" x2="20" y2="445" stroke="#2563EB" stroke-width="2"/>
+            <!-- Outlier (outlier=8) -->
+            <circle cx="0" cy="494" r="6" fill="#FFFFFF" stroke="#2563EB" stroke-width="2"/>
+            <!-- Label -->
+            <text x="0" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="15" font-weight="600" fill="#2563EB" text-anchor="middle">Tech</text>
+            <!-- Value Label -->
+            <text x="50" y="148" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">58</text>
+            <text x="50" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">45</text>
+            <text x="50" y="310" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#3B82F6">35</text>
+            <text x="50" y="380" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">25</text>
+            <text x="50" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">15</text>
+        </g>
+        <!-- Box Plot 2: Product (Green) -->
+        <g id="box2" transform="translate(400, 0)">
+            <!-- Upper Whisker (max=50) -->
+            <line x1="0" y1="200" x2="0" y2="284" stroke="#059669" stroke-width="2"/>
+            <line x1="-20" y1="200" x2="20" y2="200" stroke="#059669" stroke-width="2"/>
+            <!-- Box (Q1=22 to Q3=38) -->
+            <rect x="-40" y="284" width="80" height="112" rx="4" fill="url(#boxGrad2)" filter="url(#boxShadow)"/>
+            <!-- Median Line (median=28) -->
+            <line x1="-40" y1="354" x2="40" y2="354" stroke="#FFFFFF" stroke-width="3"/>
+            <!-- Lower Whisker (min=12) -->
+            <line x1="0" y1="396" x2="0" y2="466" stroke="#059669" stroke-width="2"/>
+            <line x1="-20" y1="466" x2="20" y2="466" stroke="#059669" stroke-width="2"/>
+            <!-- Label -->
+            <text x="0" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="15" font-weight="600" fill="#059669" text-anchor="middle">Product</text>
+        </g>
+        <!-- Box Plot 3: Design (Orange) -->
+        <g id="box3" transform="translate(570, 0)">
+            <!-- Upper Whisker (max=42) -->
+            <line x1="0" y1="256" x2="0" y2="326" stroke="#D97706" stroke-width="2"/>
+            <line x1="-20" y1="256" x2="20" y2="256" stroke="#D97706" stroke-width="2"/>
+            <!-- Box (Q1=18 to Q3=32) -->
+            <rect x="-40" y="326" width="80" height="98" rx="4" fill="url(#boxGrad3)" filter="url(#boxShadow)"/>
+            <!-- Median Line (median=24) -->
+            <line x1="-40" y1="382" x2="40" y2="382" stroke="#FFFFFF" stroke-width="3"/>
+            <!-- Lower Whisker (min=10) -->
+            <line x1="0" y1="424" x2="0" y2="480" stroke="#D97706" stroke-width="2"/>
+            <line x1="-20" y1="480" x2="20" y2="480" stroke="#D97706" stroke-width="2"/>
+            <!-- Label -->
+            <text x="0" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="15" font-weight="600" fill="#D97706" text-anchor="middle">Design</text>
+        </g>
+        <!-- Box Plot 4: Marketing (Purple) -->
+        <g id="box4" transform="translate(740, 0)">
+            <!-- Upper Whisker (max=45) -->
+            <line x1="0" y1="235" x2="0" y2="340" stroke="#7C3AED" stroke-width="2"/>
+            <line x1="-20" y1="235" x2="20" y2="235" stroke="#7C3AED" stroke-width="2"/>
+            <!-- Box (Q1=15 to Q3=30) -->
+            <rect x="-40" y="340" width="80" height="105" rx="4" fill="url(#boxGrad4)" filter="url(#boxShadow)"/>
+            <!-- Median Line (median=22) -->
+            <line x1="-40" y1="396" x2="40" y2="396" stroke="#FFFFFF" stroke-width="3"/>
+            <!-- Lower Whisker (min=8) -->
+            <line x1="0" y1="445" x2="0" y2="494" stroke="#7C3AED" stroke-width="2"/>
+            <line x1="-20" y1="494" x2="20" y2="494" stroke="#7C3AED" stroke-width="2"/>
+            <!-- Outlier (outlier=55) -->
+            <circle cx="0" cy="165" r="6" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+            <!-- Label -->
+            <text x="0" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="15" font-weight="600" fill="#7C3AED" text-anchor="middle">Marketing</text>
+        </g>
+        <!-- Box Plot 5: Operations (Red) -->
+        <g id="box5" transform="translate(910, 0)">
+            <!-- Upper Whisker (max=38) -->
+            <line x1="0" y1="284" x2="0" y2="368" stroke="#E11D48" stroke-width="2"/>
+            <line x1="-20" y1="284" x2="20" y2="284" stroke="#E11D48" stroke-width="2"/>
+            <!-- Box (Q1=14 to Q3=26) -->
+            <rect x="-40" y="368" width="80" height="84" rx="4" fill="url(#boxGrad5)" filter="url(#boxShadow)"/>
+            <!-- Median Line (median=20) -->
+            <line x1="-40" y1="410" x2="40" y2="410" stroke="#FFFFFF" stroke-width="3"/>
+            <!-- Lower Whisker (min=8) -->
+            <line x1="0" y1="452" x2="0" y2="494" stroke="#E11D48" stroke-width="2"/>
+            <line x1="-20" y1="494" x2="20" y2="494" stroke="#E11D48" stroke-width="2"/>
+            <!-- Label -->
+            <text x="0" y="590" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="15" font-weight="600" fill="#E11D48" text-anchor="middle">Operations</text>
+        </g>
+    </g>
+    <!-- Legend Description -->
+    <g id="boxLegend" transform="translate(1040, 130)">
+        <rect x="0" y="0" width="200" height="240" rx="8" fill="#F8F9FA" stroke="#E0E0E0" stroke-width="1"/>
+        <text x="100" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">Legend</text>
+        <line x1="15" y1="42" x2="185" y2="42" stroke="#E0E0E0" stroke-width="1"/>
+        <!-- Diagram -->
+        <g transform="translate(30, 60)">
+            <!-- Upper Whisker -->
+            <line x1="30" y1="0" x2="30" y2="25" stroke="#475569" stroke-width="2"/>
+            <line x1="20" y1="0" x2="40" y2="0" stroke="#475569" stroke-width="2"/>
+            <text x="70" y="5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">Max</text>
+            <!-- Box -->
+            <rect x="10" y="25" width="40" height="60" rx="3" fill="#CBD5E1"/>
+            <text x="70" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">Q3 (75%)</text>
+            <!-- Median -->
+            <line x1="10" y1="55" x2="50" y2="55" stroke="#0F172A" stroke-width="2"/>
+            <text x="70" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#0F172A">Median</text>
+            <text x="70" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">Q1 (25%)</text>
+            <!-- Lower Whisker -->
+            <line x1="30" y1="85" x2="30" y2="110" stroke="#475569" stroke-width="2"/>
+            <line x1="20" y1="110" x2="40" y2="110" stroke="#475569" stroke-width="2"/>
+            <text x="70" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#64748B">Min</text>
+            <!-- Outlier -->
+            <circle cx="30" cy="135" r="5" fill="#FFFFFF" stroke="#475569" stroke-width="2"/>
+            <text x="70" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                  font-size="12" fill="#F43F5E">Outlier</text>
+        </g>
+        <text x="15" y="220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="11" fill="#94A3B8">IQR = Q3 - Q1</text>
+        <text x="15" y="232" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="11" fill="#94A3B8">异常值 > Q3+1.5*IQR</text>
+    </g>
+    <!-- Stats Summary -->
+    <g id="statsSummary" transform="translate(1040, 390)">
+        <rect x="0" y="0" width="200" height="160" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1"/>
+        <text x="15" y="25" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="13" font-weight="600" fill="#059669">📊 Stats Summary</text>
+        <text x="15" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#475569">Highest Median: Tech 350K</text>
+        <text x="15" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#475569">Lowest Median: Ops 200K</text>
+        <text x="15" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#475569">Widest Range: Tech</text>
+        <text x="15" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#475569">Narrowest Range: Ops</text>
+        <text x="15" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="12" fill="#F43F5E">Outliers Found: 2</text>
+    </g>
+    <!-- Data Source -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="14" fill="#94A3B8">Data Source: HR Department Salary Statistics</text>
+</svg>

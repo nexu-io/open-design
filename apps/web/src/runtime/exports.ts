@@ -319,3 +319,145 @@ function injectDeckPrintStylesheet(doc: string): string {
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
   return tag + doc;
 }
+
+// PPTX export via daemon API. Uses HTML → PDF (Playwright) → PPTX (LibreOffice)
+// pipeline on the server side. 100% visual fidelity, zero AI involvement.
+//
+// The daemon streams SSE progress events:
+//   { type: 'status', status: 'converting' }
+//   { type: 'progress', slide: N, total: M }
+//   { type: 'done', path: '/...', slideCount: N, sizeBytes: B }
+//   { type: 'error', code: '...', message: '...' }
+
+export interface PptxProgress {
+  slide: number;
+  total: number;
+}
+
+export async function exportAsPptx(opts: {
+  projectId: string;
+  fileId: string;
+  aspectRatio?: '16:9' | '4:3';
+  onProgress?: (progress: PptxProgress) => void;
+}): Promise<{ fileName: string; slideCount: number }> {
+  const { projectId, fileId, aspectRatio = '16:9', onProgress } = opts;
+
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/export/pptx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileId, aspectRatio }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+    throw new Error(err.message || 'PPTX export failed');
+  }
+
+  const result = parsePptxSseStream(response, onProgress);
+
+  // After generation, fetch the file and trigger a browser download
+  result.then((res) => {
+    return fetch(`/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(res.fileName)}`)
+      .then((resp) => resp.blob())
+      .then((blob) => triggerDownload(blob, res.fileName));
+  }).catch(() => {
+    // Download failure is non-critical — file still exists in project dir
+  });
+
+  return result;
+}
+
+async function parsePptxSseStream(
+  response: Response,
+  onProgress?: (progress: PptxProgress) => void,
+): Promise<{ fileName: string; slideCount: number }> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Response body is not readable');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    while (true) {
+      const nl = buffer.indexOf('\n\n');
+      if (nl === -1) break;
+
+      const frame = buffer.slice(0, nl);
+      buffer = buffer.slice(nl + 2);
+
+      const result = parseSseFrame(frame);
+      if (!result) continue;
+
+      if (result.event === 'progress' && result.data) {
+        onProgress?.({ slide: result.data.slide, total: result.data.total });
+      }
+
+      if (result.event === 'done' && result.data) {
+        return {
+          fileName: result.data.fileName || 'deck.pptx',
+          slideCount: result.data.slideCount || 0,
+        };
+      }
+
+      if (result.event === 'error' && result.data) {
+        throw new Error(result.data.message || 'PPTX export failed');
+      }
+    }
+  }
+
+  // Process remaining buffer
+  const tail = buffer.trim();
+  if (tail) {
+    const result = parseSseFrame(tail);
+    if (result?.event === 'done' && result.data) {
+      return {
+        fileName: result.data.fileName || 'deck.pptx',
+        slideCount: result.data.slideCount || 0,
+      };
+    }
+    if (result?.event === 'error' && result.data) {
+      throw new Error(result.data.message || 'PPTX export failed');
+    }
+  }
+
+  throw new Error('PPTX export completed without a done event');
+}
+
+function parseSseFrame(frame: string): { event: string; data: any } | null {
+  const lines = frame.split('\n');
+  let event = 'message';
+  let dataStr = '';
+
+  for (const line of lines) {
+    if (line.startsWith('event:')) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      dataStr = line.slice(5).trim();
+    }
+  }
+
+  if (!dataStr) return null;
+
+  try {
+    return { event, data: JSON.parse(dataStr) };
+  } catch {
+    return null;
+  }
+}
+
+// Check if LibreOffice is available on the daemon side.
+export async function checkLibreOfficeAvailability(projectId: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/check-libreoffice`);
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data.available === true;
+  } catch {
+    return false;
+  }
+}

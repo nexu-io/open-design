@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Feature Grid Chart Template
+    Usage: Displaying product features, advantages, service items
+    Scenarios: Product feature highlights, team capabilities, pricing tiers
+    Supports: 2×3 Grid (Recommended 4-9 items)
+    -->
+    <defs>
+        <!-- Standard Drop Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="640" y="65" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="32" font-weight="700" fill="#0F172A">Core Product Features</text>
+    <text x="640" y="95" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" font-weight="600" fill="#64748B" letter-spacing="2">SIX CAPABILITIES FOR A COMPLETE SOLUTION</text>
+    <!-- ============ Card 1: Smart Analytics (50,130) - Blue ============ -->
+    <g filter="url(#cardShadow)">
+        <rect x="50" y="130" width="370" height="260" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <text x="390" y="190" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="52" font-weight="800" fill="#3B82F6" fill-opacity="0.08">01</text>
+    <rect x="80" y="160" width="56" height="56" rx="14" fill="#EFF6FF"/>
+    <g stroke="#3B82F6" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(108 188)">
+        <line x1="-10" y1="10" x2="10" y2="10"/>
+        <line x1="-7" y1="10" x2="-7" y2="3"/>
+        <line x1="-1" y1="10" x2="-1" y2="-4"/>
+        <line x1="5" y1="10" x2="5" y2="0"/>
+    </g>
+    <text x="80" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="19" font-weight="700" fill="#0F172A">Smart Data Analytics</text>
+    <text x="80" y="272" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" font-weight="600" fill="#3B82F6" letter-spacing="1.5">AI-DRIVEN ENGINE</text>
+    <text x="80" y="310" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">AI-driven multi-dimensional analytics</text>
+    <text x="80" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">engine that automatically discovers trends</text>
+    <text x="80" y="354" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">and anomalies for actionable insights.</text>
+    <!-- ============ Card 2: Real-time Collaboration (455,130) - Emerald ============ -->
+    <g filter="url(#cardShadow)">
+        <rect x="455" y="130" width="370" height="260" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <text x="795" y="190" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="52" font-weight="800" fill="#10B981" fill-opacity="0.08">02</text>
+    <rect x="485" y="160" width="56" height="56" rx="14" fill="#ECFDF5"/>
+    <g stroke="#10B981" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="508" cy="182" r="3.6"/>
+        <path d="M 501 198 C 501 192.5 504 189.5 508 189.5 C 512 189.5 515 192.5 515 198"/>
+        <circle cx="519" cy="186" r="3.6"/>
+        <path d="M 512 200 C 512 194.5 515 191.5 519 191.5 C 523 191.5 526 194.5 526 200"/>
+    </g>
+    <text x="485" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="19" font-weight="700" fill="#0F172A">Real-time Collaboration</text>
+    <text x="485" y="272" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" font-weight="600" fill="#10B981" letter-spacing="1.5">TEAM SYNCHRONIZATION</text>
+    <text x="485" y="310" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">Support for simultaneous online editing,</text>
+    <text x="485" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">real-time synchronization, built-in</text>
+    <text x="485" y="354" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">comments, and complete version history.</text>
+    <!-- ============ Card 3: Security & Compliance (860,130) - Amber ============ -->
+    <g filter="url(#cardShadow)">
+        <rect x="860" y="130" width="370" height="260" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <text x="1200" y="190" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="52" font-weight="800" fill="#F59E0B" fill-opacity="0.08">03</text>
+    <rect x="890" y="160" width="56" height="56" rx="14" fill="#FFFBEB"/>
+    <g stroke="#F59E0B" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 918 176 L 928 179 V 190 C 928 195 924 198.5 918 201 C 912 198.5 908 195 908 190 V 179 Z"/>
+        <path d="M 914 188 L 917 191 L 922.5 185"/>
+    </g>
+    <text x="890" y="252" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="19" font-weight="700" fill="#0F172A">Security &amp; Compliance</text>
+    <text x="890" y="272" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" font-weight="600" fill="#F59E0B" letter-spacing="1.5">ENTERPRISE GRADE</text>
+    <text x="890" y="310" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">Enterprise-grade data encryption and</text>
+    <text x="890" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">access control. Fully compliant with</text>
+    <text x="890" y="354" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">SOC2 and GDPR with complete audit trails.</text>
+    <!-- ============ Card 4: Workflow Automation (50,420) - Indigo ============ -->
+    <g filter="url(#cardShadow)">
+        <rect x="50" y="420" width="370" height="260" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <text x="390" y="480" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="52" font-weight="800" fill="#6366F1" fill-opacity="0.08">04</text>
+    <rect x="80" y="450" width="56" height="56" rx="14" fill="#EEF2FF"/>
+    <g stroke="#6366F1" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="108" cy="478" r="6.5"/>
+        <circle cx="108" cy="478" r="2"/>
+        <line x1="108" y1="467" x2="108" y2="470.5"/>
+        <line x1="108" y1="485.5" x2="108" y2="489"/>
+        <line x1="97" y1="478" x2="100.5" y2="478"/>
+        <line x1="115.5" y1="478" x2="119" y2="478"/>
+        <line x1="100.2" y1="470.2" x2="102.7" y2="472.7"/>
+        <line x1="113.3" y1="483.3" x2="115.8" y2="485.8"/>
+        <line x1="100.2" y1="485.8" x2="102.7" y2="483.3"/>
+        <line x1="113.3" y1="472.7" x2="115.8" y2="470.2"/>
+    </g>
+    <text x="80" y="542" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="19" font-weight="700" fill="#0F172A">Workflow Automation</text>
+    <text x="80" y="562" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" font-weight="600" fill="#6366F1" letter-spacing="1.5">PROCESS ORCHESTRATION</text>
+    <text x="80" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">Visual process orchestration with</text>
+    <text x="80" y="622" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">no-code trigger configurations to</text>
+    <text x="80" y="644" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">eliminate repetitive manual operations.</text>
+    <!-- ============ Card 5: Open API Integration (455,420) - Rose ============ -->
+    <g filter="url(#cardShadow)">
+        <rect x="455" y="420" width="370" height="260" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <text x="795" y="480" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="52" font-weight="800" fill="#F43F5E" fill-opacity="0.08">05</text>
+    <rect x="485" y="450" width="56" height="56" rx="14" fill="#FFF1F2"/>
+    <g stroke="#F43F5E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="505,470 498,478 505,486"/>
+        <polyline points="521,470 528,478 521,486"/>
+        <line x1="518" y1="468" x2="508" y2="488"/>
+    </g>
+    <text x="485" y="542" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="19" font-weight="700" fill="#0F172A">Open API Integration</text>
+    <text x="485" y="562" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" font-weight="600" fill="#F43F5E" letter-spacing="1.5">SEAMLESS CONNECTIONS</text>
+    <text x="485" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">Access to 200+ standard APIs that</text>
+    <text x="485" y="622" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">support seamless integration with</text>
+    <text x="485" y="644" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">mainstream SaaS, ERP, and CRM systems.</text>
+    <!-- ============ Card 6: Smart Reporting Center (860,420) - Sky ============ -->
+    <g filter="url(#cardShadow)">
+        <rect x="860" y="420" width="370" height="260" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <text x="1200" y="480" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="52" font-weight="800" fill="#0EA5E9" fill-opacity="0.08">06</text>
+    <rect x="890" y="450" width="56" height="56" rx="14" fill="#E0F2FE"/>
+    <g stroke="#0EA5E9" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 908 469 H 923 L 928 474 V 489 C 928 490.1 927.1 491 926 491 H 908 C 906.9 491 906 490.1 906 489 V 471 C 906 469.9 906.9 469 908 469 Z"/>
+        <path d="M 923 469 V 474 H 928"/>
+        <line x1="910" y1="486" x2="910" y2="482"/>
+        <line x1="914" y1="486" x2="914" y2="479"/>
+        <line x1="918" y1="486" x2="918" y2="476"/>
+        <line x1="922" y1="486" x2="922" y2="481"/>
+    </g>
+    <text x="890" y="542" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="19" font-weight="700" fill="#0F172A">Smart Reporting Center</text>
+    <text x="890" y="562" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" font-weight="600" fill="#0EA5E9" letter-spacing="1.5">ADVANCED DASHBOARDS</text>
+    <text x="890" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">One-click generation of custom data</text>
+    <text x="890" y="622" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">dashboards and multi-dimensional reports</text>
+    <text x="890" y="644" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#475569">to support executive decision-making.</text>
+</svg>

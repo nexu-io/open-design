@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 (Premium Tech Style) -->
+
+    <defs>
+        <!-- 头部微渐变 -->
+        <linearGradient id="gradHeader" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#F9FAFB;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#F3F4F6;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景: 纯白 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- 顶部彩条 (品牌识别) -->
+    <rect x="0" y="0" width="1280" height="6" fill="#003366" />
+
+    <!-- 头部区域 (背景) -->
+    <rect x="0" y="6" width="1280" height="84" fill="url(#gradHeader)" />
+
+    <!-- 章节标记 (左上角徽章) -->
+    <g transform="translate(60, 26)">
+        <!-- 徽章底色 -->
+        <rect x="0" y="0" width="50" height="50" rx="4" fill="#003366" />
+        <!-- 章节数字 -->
+        <text x="25" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#FFFFFF">
+            {{CHAPTER_NUM}}
+        </text>
+    </g>
+
+    <!-- 页面标题 -->
+    <text x="130" y="62" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#1F2937">
+        {{PAGE_TITLE}}
+    </text>
+
+    <!-- Logo (右上角) -->
+    <image href="../images/{{LOGO_HEADER}}" x="1100" y="26" width="120" height="50" preserveAspectRatio="xMidYMid meet"/>
+    
+    <!-- 头部底部分隔线 -->
+    <line x1="0" y1="90" x2="1280" y2="90" stroke="#E5E7EB" stroke-width="1" />
+
+    <!-- 内容区域 (示宽虚线框 - Executor 会替换) -->
+    <rect x="60" y="110" width="1160" height="560" fill="none" stroke="#E5E7EB" stroke-width="2" stroke-dasharray="8,8" rx="8"/>
+    
+    <text x="640" y="380" text-anchor="middle" fill="#9CA3AF" font-size="18" font-family="Microsoft YaHei, sans-serif">
+        {{CONTENT_AREA}}
+    </text>
+
+    <!-- 右下角水印 Logo (极淡) - 增强品牌感 -->
+    <image href="../images/{{LOGO_LARGE}}" x="1000" y="600" width="200" height="80" preserveAspectRatio="xMidYMid meet"/>
+    <rect x="1000" y="600" width="200" height="80" fill="#FFFFFF" fill-opacity="0.97"/>
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="714" width="1280" height="6" fill="#003366" />
+    
+    <!-- 页码 -->
+    <text x="1220" y="700" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="#9CA3AF">
+        {{PAGE_NUM}}
+    </text>
+
+</svg>

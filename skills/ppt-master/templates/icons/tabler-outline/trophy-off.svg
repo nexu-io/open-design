@@ -1,0 +1,25 @@
+<!--
+category: Sport
+tags: [success, win, prize, winner, trophy, off, disabled, inactive]
+version: "1.94"
+unicode: "f438"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M8 21h8" />
+  <path d="M12 17v4" />
+  <path d="M8 4h9" />
+  <path d="M17 4v8c0 .31 -.028 .612 -.082 .905m-1.384 2.632a5 5 0 0 1 -8.534 -3.537v-5" />
+  <path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+  <path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+  <path d="M3 3l18 18" />
+</svg>

@@ -41,6 +41,7 @@ import { playSound, showCompletionNotification } from '../utils/notifications';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { exportAsPptx, type PptxProgress } from '../runtime/exports';
 import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 import {
   createConversation,
@@ -248,6 +249,9 @@ export function ProjectView({
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
+  const [pptxExporting, setPptxExporting] = useState(false);
+  const [pptxProgress, setPptxProgress] = useState<{ slide: number; total: number } | null>(null);
+  const [pptxExportSuccess, setPptxExportSuccess] = useState<string | null>(null);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
@@ -421,6 +425,9 @@ export function ProjectView({
   // runStatus is visible at the moment we edge-detect; the early-return
   // guarantees only the edge actually does anything.
   const prevStreamingRef = useRef(false);
+  // Guard against rapid-fire auto-continue: if a continuation is already
+  // in flight, don't fire another one.
+  const autoContinuingRef = useRef(false);
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
@@ -461,7 +468,35 @@ export function ProjectView({
         });
       }
     }
-  }, [streaming, messages, config.notifications, t]);
+
+    // Deck auto-continue: when a run succeeds and the session still has
+    // unfinished slides, automatically trigger the next continuation.
+    // Guard: only fire if we're not already auto-continuing.
+    if (status === 'succeeded' && project?.metadata?.kind === 'deck' && !autoContinuingRef.current) {
+      void (async () => {
+        autoContinuingRef.current = true;
+        try {
+          const resp = await fetch(`/api/projects/${encodeURIComponent(project.id)}/deck/session`);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (!data.active || data.status === 'done') return;
+          if (data.completedSlides >= data.totalSlides) return;
+
+          // There are remaining slides — auto-continue with a minimal prompt.
+          console.log(`[od] Auto-continuing deck: ${data.completedSlides}/${data.totalSlides} slides done`);
+          const nextSlide = data.completedSlides + 1;
+          const prompt = `继续生成第 ${nextSlide} 页（${data.outline?.slides[data.completedSlides]?.title || ''}）。只需完成这一页，完成后 STOP。`;
+          void handleSend(prompt, [], []);
+        } catch {
+          // Auto-continue is best-effort; if the check fails, user can still click Continue manually.
+        } finally {
+          // Release the guard after a short delay to prevent rapid-fire
+          // if the new run fails immediately (e.g. inactivity timeout).
+          setTimeout(() => { autoContinuingRef.current = false; }, 2000);
+        }
+      })();
+    }
+  }, [streaming, messages, config.notifications, t, project]);
 
   // Hydrate the open-tabs state once per project. After this initial
   // load, every mutation flows through saveTabsState() which keeps DB +
@@ -1397,67 +1432,88 @@ export function ProjectView({
   );
 
   const handleContinueRemainingTasks = useCallback(
-    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+    (assistantMessage: ChatMessage, todos: TodoItem[]) => {
       if (streaming || todos.length === 0) return;
-      const remainingList = todos
-        .map((todo, i) => {
+
+      // Deck projects: Four-phase workflow (A: outline → B1: skeleton → B2: first slide → C: remaining slides)
+      // Only send the NEXT step, not all remaining tasks.
+      const isDeck = project?.metadata?.kind === 'deck';
+
+      let prompt: string;
+      if (isDeck) {
+        const inProgressTodo = todos.find((t) => t.status === 'in_progress');
+        const completedTodos = todos.filter((t) => t.status === 'completed');
+        const hasAnySlideTodo = todos.some(
+          (t) =>
+            t.content.includes('页') ||
+            t.content.includes('slide') ||
+            t.content.includes('封面') ||
+            t.content.includes('目录'),
+        );
+
+        if (!inProgressTodo && completedTodos.length > 0 && !hasAnySlideTodo) {
+          // Phase A done → trigger Phase B1 (create skeleton)
+          prompt = '大纲已确认。请直接复制 skeleton 为 index.html，绑定主题 token，所有 slide 保持默认内容。完成后 STOP。';
+        } else if (!inProgressTodo && completedTodos.length > 0 && hasAnySlideTodo) {
+          // All todos completed → deck is done
+          prompt = '所有页面已完成。请做最终检查并总结。';
+        } else {
+          // Phase B2 or C: fill the next slide (in_progress or first pending)
+          const nextTodo = inProgressTodo || todos.find((t) => t.status === 'pending') || todos[0];
+          if (!nextTodo) return;
           const label =
-            todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content;
-          return `${i + 1}. [${todo.status}] ${label}`;
-        })
-        .join('\n');
-      const prompt =
-        'Continue the remaining unfinished tasks from the previous run. ' +
-        'Do not redo completed work. Focus only on these unfinished todos:\n\n' +
-        `${remainingList}\n\n` +
-        'Before making changes, inspect the current project files as needed. ' +
-        'Update TodoWrite as you complete each remaining task.';
+            nextTodo.status === 'in_progress' && nextTodo.activeForm
+              ? nextTodo.activeForm
+              : nextTodo.content;
+          prompt = `继续完成：${label}\n只需完成这一页，完成后 STOP。`;
+        }
+      } else {
+        // Non-deck: original behavior — list all remaining tasks
+        const remainingList = todos
+          .map((todo, i) => {
+            const label =
+              todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content;
+            return `${i + 1}. [${todo.status}] ${label}`;
+          })
+          .join('\n');
+        prompt =
+          'Continue the remaining unfinished tasks from the previous run. ' +
+          'Do not redo completed work. Focus only on these unfinished todos:\n\n' +
+          `${remainingList}\n\n` +
+          'Before making changes, inspect the current project files as needed. ' +
+          'Update TodoWrite as you complete each remaining task.';
+      }
+
       void handleSend(prompt, [], []);
     },
-    [streaming, handleSend],
+    [streaming, handleSend, project],
   );
 
   const handleExportAsPptx = useCallback(
-    (fileName: string) => {
-      if (streaming) return;
-      const baseTitle = fileName.replace(/\.html?$/i, '') || fileName;
-      const prompt =
-        `Export @${fileName} as an editable PPTX file titled "${baseTitle}".\n\n` +
-        `**Generate.** Use python-pptx (preferred — full XML control). Apply the ` +
-        `footer-rail + cursor-flow discipline from \`skills/pptx-html-fidelity-audit/SKILL.md\` ` +
-        `Step 4 from the start: define \`CONTENT_MAX_Y = 6.70"\` and \`FOOTER_TOP = 6.85"\` ` +
-        `as constants, route every content block through a \`Cursor\` that refuses to cross ` +
-        `the rail, and use budget centering (not \`MARGIN_TOP\`) for hero/cover slides. ` +
-        `Preserve \`<em>\` / \`<i>\` as \`italic=True\` on Latin runs only — never on CJK. ` +
-        `Set the \`<a:latin>\` and \`<a:ea>\` typeface slots explicitly so Chinese runs ` +
-        `don't fall back to Microsoft JhengHei.\n\n` +
-        `**Verify (mandatory gate).** After writing, run ` +
-        `\`python skills/pptx-html-fidelity-audit/scripts/verify_layout.py "${baseTitle}.pptx"\` ` +
-        `(quote the path — filenames may contain spaces). Zero rail violations is the gate ` +
-        `for "shippable". If violations remain, walk Steps 2-4 of the SKILL.md ` +
-        `(extract dump → audit table → re-export) — do not declare done by eyeballing the ` +
-        `deck. If 🟡 typography issues surface (italic missing, unexpected \`Calibri\` / ` +
-        `\`Microsoft JhengHei\` in the XML), consult ` +
-        `\`skills/pptx-html-fidelity-audit/references/font-discipline.md\` for the ` +
-        `five-layer font audit.\n\n` +
-        `**Customizing rails.** The default \`CONTENT_MAX_Y = 6.70"\` / ` +
-        `\`FOOTER_TOP = 6.85"\` constants suit a 16:9 canvas with a slim footer. If the ` +
-        `design system needs different rails (wider footer, 4:3 canvas), pass ` +
-        `\`--content-max-y\` / \`--canvas-h\` to \`verify_layout.py\` and update the matching ` +
-        `constants in the export script — see \`references/layout-discipline.md\` §1.\n\n` +
-        `If \`python-pptx\` or the verifier is unavailable in this environment, say so ` +
-        `explicitly — don't claim fidelity is correct without evidence.\n\n` +
-        `Save into the current project folder (this conversation's working directory) as ` +
-        `\`${baseTitle}.pptx\`. Report the on-disk path and a 1-line fidelity summary ` +
-        `(e.g. "0 rail violations across 14 slides") when done.`;
-      const attachment: ChatAttachment = {
-        path: fileName,
-        name: fileName,
-        kind: 'file',
-      };
-      void handleSend(prompt, [attachment], []);
+    async (fileName: string) => {
+      if (streaming || pptxExporting) return;
+      setPptxExporting(true);
+      setPptxProgress(null);
+      setPptxExportSuccess(null);
+
+      try {
+        const result = await exportAsPptx({
+          projectId: project.id,
+          fileId: fileName,
+          aspectRatio: '16:9',
+          onProgress: (progress: PptxProgress) => {
+            setPptxProgress({ slide: progress.slide, total: progress.total });
+          },
+        });
+        setPptxExportSuccess(`导出成功：${result.slideCount} 页 PPTX`);
+      } catch (err) {
+        setPptxExportSuccess(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setPptxExporting(false);
+        setTimeout(() => setPptxExportSuccess(null), 5000);
+      }
     },
-    [streaming, handleSend],
+    [streaming, pptxExporting, project.id],
   );
 
   const handleStop = useCallback(() => {
@@ -1891,6 +1947,9 @@ export function ProjectView({
           }}
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
+          pptxExporting={pptxExporting}
+          pptxProgress={pptxProgress}
+          pptxExportSuccess={pptxExportSuccess}
           streaming={streaming}
           openRequest={openRequest}
           liveArtifactEvents={liveArtifactEvents}

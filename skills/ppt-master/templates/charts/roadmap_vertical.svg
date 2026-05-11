@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Vertical Roadmap Template
+    Purpose: Vertical timeline, milestone tracking, strategic roadmap
+    Use cases: Annual planning, product roadmaps, strategic milestones
+    Supports: 6 unified nodes with integrated side-dashboard
+    -->
+    <defs>
+        <!-- Modern Tailwind Shadow -->
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="3" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- Active Timeline Gradient -->
+        <linearGradient id="lineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#10B981" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#3B82F6" stop-opacity="1"/>
+        </linearGradient>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">2025 Strategic Roadmap</text>
+    <text x="60" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">ANNUAL ROADMAP · SIX KEY MILESTONES</text>
+    <!-- ==================== Vertical Timeline Axis ==================== -->
+    <!-- Background Track -->
+    <line x1="180" y1="115" x2="180" y2="690" stroke="#E2E8F0" stroke-width="4" stroke-linecap="round"/>
+    <!-- Active Progress Track -->
+    <line x1="180" y1="115" x2="180" y2="360" stroke="url(#lineGrad)" stroke-width="4" stroke-linecap="round"/>
+    <!-- ==================== Timeline Nodes ==================== -->
+    <!-- Node 1 (Completed) -->
+    <text x="150" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="end">2025 Q1</text>
+    <circle cx="180" cy="150" r="16" fill="#10B981" stroke="#FFFFFF" stroke-width="4"/>
+    <path d="M 174,150 L 178,154 L 186,145" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <rect x="210" y="115" width="480" height="70" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <line x1="214" y1="130" x2="214" y2="170" stroke="#10B981" stroke-width="4" stroke-linecap="round"/>
+    <text x="235" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Organizational Restructuring</text>
+    <text x="235" y="162" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#475569">Complete divisional reform and establish three independent business units.</text>
+    <rect x="585" y="125" width="90" height="24" rx="12" fill="#D1FAE5"/>
+    <text x="630" y="141" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#064E3B" text-anchor="middle" letter-spacing="0.5">COMPLETED</text>
+    <!-- Node 2 (Completed) -->
+    <text x="150" y="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="end">End of Q1</text>
+    <circle cx="180" cy="255" r="16" fill="#10B981" stroke="#FFFFFF" stroke-width="4"/>
+    <path d="M 174,255 L 178,259 L 186,250" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <rect x="210" y="220" width="480" height="70" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <line x1="214" y1="235" x2="214" y2="275" stroke="#10B981" stroke-width="4" stroke-linecap="round"/>
+    <text x="235" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Series A Funding Closed</text>
+    <text x="235" y="267" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#475569">Secured $50M in Series A funding, reaching $300M valuation.</text>
+    <rect x="585" y="230" width="90" height="24" rx="12" fill="#D1FAE5"/>
+    <text x="630" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#064E3B" text-anchor="middle" letter-spacing="0.5">COMPLETED</text>
+    <!-- Node 3 (In Progress) -->
+    <text x="150" y="365" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#3B82F6" text-anchor="end">2025 Q2</text>
+    <circle cx="180" cy="360" r="16" fill="#EFF6FF" stroke="#3B82F6" stroke-width="3.5"/>
+    <circle cx="180" cy="360" r="6" fill="#3B82F6"/>
+    <rect x="210" y="325" width="480" height="70" rx="10" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="2" filter="url(#cardShadow)"/>
+    <line x1="214" y1="340" x2="214" y2="380" stroke="#3B82F6" stroke-width="4" stroke-linecap="round"/>
+    <text x="235" y="350" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Product V2.0 Launch</text>
+    <text x="235" y="372" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#475569">Integrate AI engine, launch smart recommendations and automated workflows.</text>
+    <rect x="585" y="335" width="90" height="24" rx="12" fill="#DBEAFE"/>
+    <text x="630" y="351" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#1E3A8A" text-anchor="middle" letter-spacing="0.5">IN PROGRESS</text>
+    <!-- Node 4 (Planned) -->
+    <text x="150" y="470" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" text-anchor="end">2025 Q3</text>
+    <circle cx="180" cy="465" r="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="3.5"/>
+    <circle cx="180" cy="465" r="5" fill="#94A3B8"/>
+    <rect x="210" y="430" width="480" height="70" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <line x1="214" y1="445" x2="214" y2="485" stroke="#94A3B8" stroke-width="4" stroke-linecap="round"/>
+    <text x="235" y="455" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#334155">Global Market Expansion</text>
+    <text x="235" y="477" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Pilot operations in SEA region to validate localization strategies.</text>
+    <rect x="585" y="440" width="90" height="24" rx="12" fill="#F1F5F9"/>
+    <text x="630" y="456" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#475569" text-anchor="middle" letter-spacing="0.5">PLANNED</text>
+    <!-- Node 5 (Planned) -->
+    <text x="150" y="575" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" text-anchor="end">2025 Q4</text>
+    <circle cx="180" cy="570" r="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="3.5"/>
+    <circle cx="180" cy="570" r="5" fill="#94A3B8"/>
+    <rect x="210" y="535" width="480" height="70" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <line x1="214" y1="550" x2="214" y2="590" stroke="#94A3B8" stroke-width="4" stroke-linecap="round"/>
+    <text x="235" y="560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#334155">Series B Initiation</text>
+    <text x="235" y="582" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Target $1B valuation, build capital reserves for scaled expansion.</text>
+    <rect x="585" y="545" width="90" height="24" rx="12" fill="#F1F5F9"/>
+    <text x="630" y="561" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#475569" text-anchor="middle" letter-spacing="0.5">PLANNED</text>
+    <!-- Node 6 (Planned) -->
+    <text x="150" y="680" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" text-anchor="end">End of 2025</text>
+    <circle cx="180" cy="675" r="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="3.5"/>
+    <circle cx="180" cy="675" r="5" fill="#94A3B8"/>
+    <rect x="210" y="640" width="480" height="70" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <line x1="214" y1="655" x2="214" y2="695" stroke="#94A3B8" stroke-width="4" stroke-linecap="round"/>
+    <text x="235" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#334155">Annual Targets Achieved</text>
+    <text x="235" y="687" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#64748B">Reach 5M+ Active Users and $150M Annual Recurring Revenue.</text>
+    <rect x="585" y="650" width="90" height="24" rx="12" fill="#F1F5F9"/>
+    <text x="630" y="666" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#475569" text-anchor="middle" letter-spacing="0.5">PLANNED</text>
+    <!-- ==================== Right Dashboard Panel ==================== -->
+    <rect x="730" y="115" width="490" height="590" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <text x="975" y="155" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Annual Core Objectives</text>
+    <line x1="730" y1="172" x2="1220" y2="172" stroke="#F1F5F9" stroke-width="2"/>
+    <!-- Target 1: Revenue -->
+    <rect x="760" y="190" width="430" height="75" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+    <line x1="764" y1="205" x2="764" y2="250" stroke="#3B82F6" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="810" cy="227.5" r="20" fill="#EFF6FF"/>
+    <text x="810" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#2563EB" text-anchor="middle">$</text>
+    <text x="850" y="222" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#0F172A">$150M</text>
+    <text x="850" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Annual Recurring Revenue Target</text>
+    <!-- Target 2: Users -->
+    <rect x="760" y="280" width="430" height="75" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+    <line x1="764" y1="295" x2="764" y2="340" stroke="#10B981" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="810" cy="317.5" r="20" fill="#D1FAE5"/>
+    <text x="810" y="325" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#059669" text-anchor="middle">U</text>
+    <text x="850" y="312" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#0F172A">5.0M</text>
+    <text x="850" y="336" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Active Registered Users</text>
+    <!-- Target 3: Team -->
+    <rect x="760" y="370" width="430" height="75" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+    <line x1="764" y1="385" x2="764" y2="430" stroke="#F59E0B" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="810" cy="407.5" r="20" fill="#FEF3C7"/>
+    <text x="810" y="415" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#D97706" text-anchor="middle">+</text>
+    <text x="850" y="402" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#0F172A">300+</text>
+    <text x="850" y="426" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">End-of-Year Headcount Target</text>
+    <!-- Divider -->
+    <line x1="760" y1="465" x2="1190" y2="465" stroke="#E2E8F0" stroke-width="1.5"/>
+    <text x="760" y="495" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Key Strategic Initiatives</text>
+    <!-- Strategy 1 -->
+    <rect x="760" y="510" width="430" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <circle cx="785" cy="530" r="12" fill="#E0E7FF"/>
+    <text x="785" y="534" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#4F46E5" text-anchor="middle">1</text>
+    <text x="810" y="535" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Product-Led Growth (PLG) Expansion</text>
+    <!-- Strategy 2 -->
+    <rect x="760" y="558" width="430" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <circle cx="785" cy="578" r="12" fill="#D1FAE5"/>
+    <text x="785" y="582" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#059669" text-anchor="middle">2</text>
+    <text x="810" y="583" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Enterprise Account Acquisition</text>
+    <!-- Strategy 3 -->
+    <rect x="760" y="606" width="430" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <circle cx="785" cy="626" r="12" fill="#FEF3C7"/>
+    <text x="785" y="630" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#D97706" text-anchor="middle">3</text>
+    <text x="810" y="631" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Global Market PMF Validation</text>
+    <!-- Strategy 4 -->
+    <rect x="760" y="654" width="430" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <circle cx="785" cy="674" r="12" fill="#FFE4E6"/>
+    <text x="785" y="678" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle">4</text>
+    <text x="810" y="679" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">AI Technical Moat Construction</text>
+</svg>

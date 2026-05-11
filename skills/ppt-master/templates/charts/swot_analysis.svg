@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    SWOT Analysis Chart Template
+    Purpose: Strategic analysis, competitive assessment
+    Use cases: Business plans, strategic planning, competitor analysis, project evaluation
+    Feature: Modern quadrant layout, Tailwind semantic colors, glassmorphic center badge
+    -->
+    <defs>
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="640" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A" text-anchor="middle">SWOT Strategic Analysis</text>
+    <text x="640" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#64748B" text-anchor="middle" letter-spacing="1">ABC TECH COMPANY · 2025 MARKET COMPETITION ASSESSMENT</text>
+    <!-- ==================== Axis Labels ==================== -->
+    <!-- Top Horizontal Axis -->
+    <rect x="230" y="95" width="240" height="28" rx="14" fill="#ECFDF5"/>
+    <text x="350" y="114" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#059669" text-anchor="middle" letter-spacing="0.5">HELPFUL (TO ACHIEVE OBJECTIVE)</text>
+    <rect x="810" y="95" width="240" height="28" rx="14" fill="#FFF1F2"/>
+    <text x="930" y="114" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#E11D48" text-anchor="middle" letter-spacing="0.5">HARMFUL (TO ACHIEVE OBJECTIVE)</text>
+    <!-- Left Vertical Axis -->
+    <rect x="20" y="200" width="28" height="120" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <text x="34" y="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#475569" text-anchor="middle" letter-spacing="1" transform="rotate(-90, 34, 260)">INTERNAL</text>
+    <rect x="20" y="460" width="28" height="120" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <text x="34" y="520" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#475569" text-anchor="middle" letter-spacing="1" transform="rotate(-90, 34, 520)">EXTERNAL</text>
+    <!-- ==================== S - Strengths (Top Left) ==================== -->
+    <g id="strengths" transform="translate(80, 140)">
+        <rect x="0" y="0" width="540" height="240" rx="16" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <!-- Perfect Top-Rounded Header -->
+        <path d="M 16 0 h 508 a 16 16 0 0 1 16 16 v 44 h -540 v -44 a 16 16 0 0 1 16 -16 Z" fill="#10B981"/>
+        <text x="35" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">S</text>
+        <text x="60" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="start">Strengths</text>
+        <circle cx="30" cy="90" r="5" fill="#10B981"/>
+        <text x="45" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#064E3B">Strong R&amp;D team, 200+ tech patents</text>
+        <circle cx="30" cy="120" r="5" fill="#10B981"/>
+        <text x="45" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#064E3B">High brand recognition, 85% customer loyalty</text>
+        <circle cx="30" cy="150" r="5" fill="#10B981"/>
+        <text x="45" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#064E3B">Complete supply chain, 15% cost advantage</text>
+        <circle cx="30" cy="180" r="5" fill="#10B981"/>
+        <text x="45" y="185" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#064E3B">Strong cash flow, stable financials</text>
+        <circle cx="30" cy="210" r="5" fill="#10B981"/>
+        <text x="45" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#064E3B">Efficient management team, strong execution</text>
+    </g>
+    <!-- ==================== W - Weaknesses (Top Right) ==================== -->
+    <g id="weaknesses" transform="translate(660, 140)">
+        <rect x="0" y="0" width="540" height="240" rx="16" fill="#FFF1F2" stroke="#FECDD3" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <path d="M 16 0 h 508 a 16 16 0 0 1 16 16 v 44 h -540 v -44 a 16 16 0 0 1 16 -16 Z" fill="#F43F5E"/>
+        <text x="35" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">W</text>
+        <text x="60" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="start">Weaknesses</text>
+        <circle cx="30" cy="90" r="5" fill="#F43F5E"/>
+        <text x="45" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#881337">Insufficient marketing investment</text>
+        <circle cx="30" cy="120" r="5" fill="#F43F5E"/>
+        <text x="45" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#881337">Single product line, core product dependency</text>
+        <circle cx="30" cy="150" r="5" fill="#F43F5E"/>
+        <text x="45" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#881337">Lack of overseas market experience</text>
+        <circle cx="30" cy="180" r="5" fill="#F43F5E"/>
+        <text x="45" y="185" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#881337">High talent turnover rate (12%)</text>
+        <circle cx="30" cy="210" r="5" fill="#F43F5E"/>
+        <text x="45" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#881337">After-sales response needs improvement</text>
+    </g>
+    <!-- ==================== O - Opportunities (Bottom Left) ==================== -->
+    <g id="opportunities" transform="translate(80, 400)">
+        <rect x="0" y="0" width="540" height="240" rx="16" fill="#F0F9FF" stroke="#BAE6FD" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <path d="M 16 0 h 508 a 16 16 0 0 1 16 16 v 44 h -540 v -44 a 16 16 0 0 1 16 -16 Z" fill="#0EA5E9"/>
+        <text x="35" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">O</text>
+        <text x="60" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="start">Opportunities</text>
+        <circle cx="30" cy="90" r="5" fill="#0EA5E9"/>
+        <text x="45" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#0C4A6E">AI industry growing at 25% CAGR</text>
+        <circle cx="30" cy="120" r="5" fill="#0EA5E9"/>
+        <text x="45" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#0C4A6E">Increased policy support and subsidies</text>
+        <circle cx="30" cy="150" r="5" fill="#0EA5E9"/>
+        <text x="45" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#0C4A6E">Strong demand in emerging markets (SEA)</text>
+        <circle cx="30" cy="180" r="5" fill="#0EA5E9"/>
+        <text x="45" y="185" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#0C4A6E">Competitors repositioning, market share available</text>
+        <circle cx="30" cy="210" r="5" fill="#0EA5E9"/>
+        <text x="45" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#0C4A6E">Digital transformation driving enterprise demand</text>
+    </g>
+    <!-- ==================== T - Threats (Bottom Right) ==================== -->
+    <g id="threats" transform="translate(660, 400)">
+        <rect x="0" y="0" width="540" height="240" rx="16" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <path d="M 16 0 h 508 a 16 16 0 0 1 16 16 v 44 h -540 v -44 a 16 16 0 0 1 16 -16 Z" fill="#F59E0B"/>
+        <text x="35" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" text-anchor="middle">T</text>
+        <text x="60" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="start">Threats</text>
+        <circle cx="30" cy="90" r="5" fill="#F59E0B"/>
+        <text x="45" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#78350F">Intensified competition, giants entering market</text>
+        <circle cx="30" cy="120" r="5" fill="#F59E0B"/>
+        <text x="45" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#78350F">Rapid technology iterations, R&amp;D pressure</text>
+        <circle cx="30" cy="150" r="5" fill="#F59E0B"/>
+        <text x="45" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#78350F">Rising raw material costs, margin squeeze</text>
+        <circle cx="30" cy="180" r="5" fill="#F59E0B"/>
+        <text x="45" y="185" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#78350F">Stricter regulations, compliance costs rising</text>
+        <circle cx="30" cy="210" r="5" fill="#F59E0B"/>
+        <text x="45" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#78350F">Economic uncertainty, client budgets tightening</text>
+    </g>
+    <!-- ==================== Center Glassmorphic Badge ==================== -->
+    <g id="centerBadge">
+        <circle cx="640" cy="390" r="55" fill="#FFFFFF" filter="url(#cardShadow)"/>
+        <circle cx="640" cy="390" r="48" fill="#0F172A"/>
+        <text x="640" y="386" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="800" fill="#FFFFFF" text-anchor="middle">SWOT</text>
+        <text x="640" y="406" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#94A3B8" text-anchor="middle" letter-spacing="1">STRATEGY</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="640" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="middle">Data Source: Strategic Planning Department - 2025 Annual Analysis Report</text>
+</svg>

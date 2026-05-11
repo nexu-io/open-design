@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <defs>
+        <linearGradient id="endGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#1E3A5F" />
+            <stop offset="50%" style="stop-color:#2E5C8E" />
+            <stop offset="100%" style="stop-color:#3D8B7A" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景渐变 -->
+    <rect width="1280" height="720" fill="url(#endGradient)" />
+
+    <!-- 装饰网络图 - 中心点 -->
+    <circle cx="640" cy="360" r="8" fill="#FFFFFF" fill-opacity="0.2" />
+
+    <!-- 外围节点 -->
+    <circle cx="350" cy="200" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="450" cy="150" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="550" cy="180" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="730" cy="160" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="830" cy="200" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="920" cy="250" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+
+    <circle cx="280" cy="350" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="320" cy="480" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="450" cy="540" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="580" cy="580" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="700" cy="560" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="830" cy="520" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="950" cy="450" r="4" fill="#FFFFFF" fill-opacity="0.2" />
+    <circle cx="1000" cy="350" r="5" fill="#FFFFFF" fill-opacity="0.2" />
+
+    <!-- 连接线 - 从中心辐射 -->
+    <line x1="640" y1="360" x2="350" y2="200" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="450" y2="150" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="550" y2="180" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="730" y2="160" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="830" y2="200" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="920" y2="250" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+
+    <line x1="640" y1="360" x2="280" y2="350" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="320" y2="480" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="450" y2="540" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="580" y2="580" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="700" y2="560" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="830" y2="520" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="950" y2="450" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+    <line x1="640" y1="360" x2="1000" y2="350" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.2" />
+
+    <!-- 连接线 - 外围连接 -->
+    <line x1="350" y1="200" x2="450" y2="150" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.15" />
+    <line x1="450" y1="150" x2="550" y2="180" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.15" />
+    <line x1="730" y1="160" x2="830" y2="200" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.15" />
+    <line x1="320" y1="480" x2="450" y2="540" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.15" />
+    <line x1="580" y1="580" x2="700" y2="560" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.15" />
+    <line x1="830" y1="520" x2="950" y2="450" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.15" />
+
+    <!-- 主标题 -->
+    <text x="640" y="260" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="56" font-weight="bold"
+        fill="#FFFFFF" text-anchor="middle">
+        {{THANK_YOU}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="640" y="320" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="28" fill="#E5E7EB"
+        text-anchor="middle">
+        {{ENDING_SUBTITLE}}
+    </text>
+
+    <!-- 英文标题 -->
+    <text x="640" y="360" font-family="system-ui, sans-serif" font-size="18" fill="#94A3B8" text-anchor="middle">
+        {{THANK_YOU_EN}}
+    </text>
+
+    <!-- 装饰线 -->
+    <rect x="490" y="400" width="300" height="4" rx="2" fill="#E07843" />
+
+    <!-- 感谢语 -->
+    <text x="640" y="470" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="32" fill="#FFFFFF"
+        text-anchor="middle">
+        {{CLOSING_MESSAGE}}
+    </text>
+
+    <!-- 信息卡片 -->
+    <rect x="440" y="520" width="400" height="100" rx="12" fill="#FFFFFF" fill-opacity="0.1" />
+
+    <text x="640" y="560" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" fill="#E5E7EB"
+        text-anchor="middle">
+        {{CONTACT_INFO}}
+    </text>
+    <text x="640" y="590" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" fill="#94A3B8"
+        text-anchor="middle">
+        {{CONTACT_LINE_2}}
+    </text>
+
+    <!-- 底部版权 -->
+    <text x="640" y="680" font-family="system-ui, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">
+        {{COPYRIGHT}}
+    </text>
+</svg>

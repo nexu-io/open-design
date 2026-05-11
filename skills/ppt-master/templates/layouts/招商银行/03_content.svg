@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="30" fill="#C8152D"/>
+  <defs>
+    <linearGradient id="accentFade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#C8152D;stop-opacity:0.5"/>
+      <stop offset="100%" style="stop-color:#C8152D;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="30" width="180" height="4" fill="url(#accentFade)"/>
+  <image href="logo_dark.png" x="940" y="42" width="280" height="48" preserveAspectRatio="xMidYMid meet"/>
+
+
+  <text x="72" y="84" fill="#1F1F1F" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="26" font-weight="700">
+    {{PAGE_TITLE}}
+  </text>
+  <line x1="72" y1="98" x2="286" y2="98" stroke="#C8152D" stroke-width="3"/>
+
+  <rect x="72" y="112" width="110" height="28" rx="14" fill="#C8152D"/>
+  <text x="127" y="131" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="13" font-weight="700">
+    {{SECTION_NAME}}
+  </text>
+
+  <rect x="72" y="158" width="4" height="26" fill="#C8152D"/>
+  <text x="90" y="177" fill="#666666" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="16">
+    {{KEY_MESSAGE}}
+  </text>
+  <line x1="72" y1="204" x2="1210" y2="204" stroke="#E9E9E9" stroke-width="2"/>
+  <rect x="72" y="212" width="132" height="4" fill="#C8152D" fill-opacity="0.1"/>
+
+  <path d="M72 236 L86 236 M72 236 L72 250" stroke="#C8152D" stroke-width="2" stroke-opacity="0.6"/>
+  <path d="M1210 236 L1196 236 M1210 236 L1210 250" stroke="#C8152D" stroke-width="2" stroke-opacity="0.6"/>
+  <path d="M72 640 L86 640 M72 640 L72 626" stroke="#C8152D" stroke-width="2" stroke-opacity="0.35"/>
+  <path d="M1210 640 L1196 640 M1210 640 L1210 626" stroke="#C8152D" stroke-width="2" stroke-opacity="0.35"/>
+
+  <!--
+      AI 灵活布局区
+      可用空间: x=72, y=236, w=1138, h=404
+
+      推荐布局模式：
+      - 左右分栏 (540+540, gap=24 或 380+700)
+      - 上下两段
+      - 2×2 矩阵 (270×190 每格, gap=20)
+      - 3 列卡片 (356×360, gap=24)
+      - 数据卡片组合 (160×120 每个)
+      - 横向流程 (全宽, 高度 100-140px, 3-6 节点)
+
+      常用设计元素：
+      数据卡片: <rect fill="#FFFFFF" stroke="#E9E9E9" stroke-width="1.5" rx="6"/>
+                <rect width="4" fill="#C8152D"/> (左侧品牌装饰条)
+      关键数据: <text fill="#C8152D" font-size="44" font-weight="bold"/> (品牌红-正向)
+                <text fill="#2175D9" font-size="44" font-weight="bold"/> (金融蓝-对比)
+      分隔线:   <line stroke="#E9E9E9" stroke-width="1"/>
+  -->
+  <text x="641" y="450" text-anchor="middle" fill="#D8D8D8" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="3">
+    {{CONTENT_AREA}}
+  </text>
+  <text x="641" y="486" text-anchor="middle" fill="#E6E6E6" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14">
+    Content Area: 1138 × 404 px
+  </text>
+
+  <line x1="72" y1="674" x2="1210" y2="674" stroke="#E5E5E5" stroke-width="1.5"/>
+  <line x1="72" y1="662" x2="184" y2="662" stroke="#C8152D" stroke-width="2" stroke-opacity="0.2"/>
+  <text x="72" y="698" fill="#8A8A8A" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="12">
+    数据来源：{{SOURCE}}
+  </text>
+  <text x="1210" y="698" text-anchor="end" fill="#777777" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14">
+    {{PAGE_NUM}}
+  </text>
+</svg>

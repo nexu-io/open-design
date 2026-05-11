@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 - Anthropic 风格 -->
+    
+    <defs>
+        <!-- 卡片渐变 -->
+        <linearGradient id="cardGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFFFFF"/>
+            <stop offset="100%" style="stop-color:#F8FAFC"/>
+        </linearGradient>
+    </defs>
+    
+    <!-- 白色背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    
+    <!-- 顶部橙色装饰条 -->
+    <rect x="0" y="0" width="1280" height="6" fill="#D97757"/>
+    
+    <!-- 页面标签 -->
+    <text x="60" y="55" font-family="Arial, sans-serif" font-size="14" font-weight="500" fill="#D97757" letter-spacing="2">
+        {{PAGE_LABEL}}
+    </text>
+    
+    <!-- 页面标题（核心观点） -->
+    <text x="60" y="100" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1A1A2E">
+        {{PAGE_TITLE}}
+    </text>
+    <text x="60" y="135" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1A1A2E">
+        {{PAGE_TITLE_LINE2}}
+    </text>
+    
+    <!-- 三列卡片布局 -->
+    <!-- 卡片1 - 绿色（推荐/成功） -->
+    <g>
+        <rect x="60" y="180" width="360" height="420" fill="url(#cardGradient)" stroke="#E2E8F0" stroke-width="1" rx="12"/>
+        <rect x="60" y="180" width="360" height="6" fill="#10B981" rx="3"/>
+        
+        <!-- 图标背景 -->
+        <circle cx="130" cy="250" r="35" fill="#10B981" fill-opacity="0.1"/>
+        <!-- 图标占位 -->
+        <text x="130" y="258" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#10B981">💡</text>
+        
+        <!-- 卡片标题 -->
+        <text x="90" y="320" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#1A1A2E">{{CARD_1_TITLE}}</text>
+        <text x="90" y="348" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#64748B">{{CARD_1_SUBTITLE}}</text>
+        
+        <!-- 卡片内容 -->
+        <text x="90" y="400" font-family="Arial, sans-serif" font-size="16" fill="#1A1A2E">{{CARD_1_LINE1}}</text>
+        <text x="90" y="428" font-family="Arial, sans-serif" font-size="16" fill="#1A1A2E">{{CARD_1_LINE2}}</text>
+        <text x="90" y="470" font-family="Arial, sans-serif" font-size="15" fill="#64748B">{{CARD_1_NOTE1}}</text>
+        <text x="90" y="494" font-family="Arial, sans-serif" font-size="15" fill="#64748B">{{CARD_1_NOTE2}}</text>
+        
+        <!-- 标签 -->
+        <rect x="90" y="545" width="80" height="28" fill="#10B981" fill-opacity="0.1" rx="14"/>
+        <text x="130" y="564" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#10B981">{{CARD_1_TAG}}</text>
+    </g>
+    
+    <!-- 卡片2 - 蓝色（流程/架构） -->
+    <g>
+        <rect x="460" y="180" width="360" height="420" fill="url(#cardGradient)" stroke="#E2E8F0" stroke-width="1" rx="12"/>
+        <rect x="460" y="180" width="360" height="6" fill="#4A90D9" rx="3"/>
+        
+        <!-- 图标背景 -->
+        <circle cx="530" cy="250" r="35" fill="#4A90D9" fill-opacity="0.1"/>
+        <!-- 图标占位 -->
+        <text x="530" y="258" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#4A90D9">⚡</text>
+        
+        <!-- 卡片标题 -->
+        <text x="490" y="320" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#1A1A2E">{{CARD_2_TITLE}}</text>
+        <text x="490" y="348" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#64748B">{{CARD_2_SUBTITLE}}</text>
+        
+        <!-- 卡片内容 -->
+        <text x="490" y="400" font-family="Arial, sans-serif" font-size="16" fill="#1A1A2E">{{CARD_2_LINE1}}</text>
+        <text x="490" y="428" font-family="Arial, sans-serif" font-size="16" fill="#1A1A2E">{{CARD_2_LINE2}}</text>
+        <text x="490" y="470" font-family="Arial, sans-serif" font-size="15" fill="#64748B">{{CARD_2_NOTE1}}</text>
+        <text x="490" y="494" font-family="Arial, sans-serif" font-size="15" fill="#64748B">{{CARD_2_NOTE2}}</text>
+        
+        <!-- 标签 -->
+        <rect x="490" y="545" width="80" height="28" fill="#4A90D9" fill-opacity="0.1" rx="14"/>
+        <text x="530" y="564" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#4A90D9">{{CARD_2_TAG}}</text>
+    </g>
+    
+    <!-- 卡片3 - 橙色（关键洞察） -->
+    <g>
+        <rect x="860" y="180" width="360" height="420" fill="url(#cardGradient)" stroke="#E2E8F0" stroke-width="1" rx="12"/>
+        <rect x="860" y="180" width="360" height="6" fill="#D97757" rx="3"/>
+        
+        <!-- 图标背景 -->
+        <circle cx="930" cy="250" r="35" fill="#D97757" fill-opacity="0.1"/>
+        <!-- 图标占位 -->
+        <text x="930" y="258" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#D97757">⚙️</text>
+        
+        <!-- 卡片标题 -->
+        <text x="890" y="320" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#1A1A2E">{{CARD_3_TITLE}}</text>
+        <text x="890" y="348" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#64748B">{{CARD_3_SUBTITLE}}</text>
+        
+        <!-- 卡片内容 -->
+        <text x="890" y="400" font-family="Arial, sans-serif" font-size="16" fill="#1A1A2E">{{CARD_3_LINE1}}</text>
+        <text x="890" y="428" font-family="Arial, sans-serif" font-size="16" fill="#1A1A2E">{{CARD_3_LINE2}}</text>
+        <text x="890" y="470" font-family="Arial, sans-serif" font-size="15" fill="#64748B">{{CARD_3_NOTE1}}</text>
+        <text x="890" y="494" font-family="Arial, sans-serif" font-size="15" fill="#64748B">{{CARD_3_NOTE2}}</text>
+        
+        <!-- 标签 -->
+        <rect x="890" y="545" width="80" height="28" fill="#D97757" fill-opacity="0.1" rx="14"/>
+        <text x="930" y="564" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#D97757">{{CARD_3_TAG}}</text>
+    </g>
+    
+    <!-- Executor 自由布局锚点 -->
+    <text x="640" y="625" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#CBD5E1">
+        {{CONTENT_AREA}}
+    </text>
+
+    <!-- 页码 -->
+    <text x="640" y="680" font-family="Arial, sans-serif" font-size="14" fill="#64748B" text-anchor="middle">
+        {{PAGE_NUM}} / {{TOTAL_PAGES}}
+    </text>
+
+</svg>

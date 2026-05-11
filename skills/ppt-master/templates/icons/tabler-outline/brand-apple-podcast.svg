@@ -1,0 +1,21 @@
+<!--
+tags: [audio, software, music, ios, tvos, brand, apple, podcast, logo, company]
+category: Brand
+version: "1.69"
+unicode: "f1e6"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M18.364 18.364a9 9 0 1 0 -12.728 0" />
+  <path d="M11.766 22h.468a2 2 0 0 0 1.985 -1.752l.5 -4a2 2 0 0 0 -1.985 -2.248h-1.468a2 2 0 0 0 -1.985 2.248l.5 4a2 2 0 0 0 1.985 1.752" />
+  <path d="M10 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+</svg>

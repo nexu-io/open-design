@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 章节页 - Google 风格 -->
+
+    <defs>
+        <!-- 深色背景渐变 -->
+        <linearGradient id="bgDarkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#1A237E;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0D47A1;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- 章节编号渐变 -->
+        <linearGradient id="numGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#4285F4;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#1A73E8;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 深色渐变背景 -->
+    <rect width="1280" height="720" fill="url(#bgDarkGradient)" />
+
+    <!-- 装饰圆形 - 增加视觉层次 -->
+    <circle cx="1100" cy="150" r="200" fill="#FFFFFF" fill-opacity="0.03" />
+    <circle cx="1150" cy="600" r="250" fill="#FFFFFF" fill-opacity="0.02" />
+    <circle cx="100" cy="650" r="150" fill="#FFFFFF" fill-opacity="0.02" />
+
+    <!-- 左侧四色竖条装饰 -->
+    <rect x="60" y="200" width="8" height="80" fill="#4285F4" />
+    <rect x="60" y="290" width="8" height="80" fill="#EA4335" />
+    <rect x="60" y="380" width="8" height="80" fill="#FBBC04" />
+    <rect x="60" y="470" width="8" height="80" fill="#34A853" />
+
+    <!-- 大号章节编号 -->
+    <text x="120" y="380" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="180" font-weight="700" fill="url(#numGradient)" fill-opacity="0.9">
+        {{CHAPTER_NUM}}
+    </text>
+
+    <!-- 章节标题 -->
+    <text x="120" y="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="48" font-weight="700" fill="#FFFFFF">
+        {{CHAPTER_TITLE}}
+    </text>
+
+    <!-- 英文副标题 -->
+    <text x="120" y="560" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="400" fill="#FFFFFF" fill-opacity="0.7">
+        {{CHAPTER_TITLE_EN}}
+    </text>
+
+    <!-- 底部四色圆点装饰 -->
+    <g transform="translate(640, 680)">
+        <circle cx="-60" cy="0" r="6" fill="#4285F4" />
+        <circle cx="-30" cy="0" r="6" fill="#EA4335" />
+        <circle cx="0" cy="0" r="6" fill="#FBBC04" />
+        <circle cx="30" cy="0" r="6" fill="#34A853" />
+        <circle cx="60" cy="0" r="6" fill="#4285F4" />
+    </g>
+
+    <!-- 右下角装饰线 -->
+    <line x1="1000" y1="650" x2="1100" y2="650" stroke="#4285F4" stroke-width="3" stroke-linecap="round" stroke-opacity="0.6" />
+    <line x1="1110" y1="650" x2="1160" y2="650" stroke="#EA4335" stroke-width="3" stroke-linecap="round" stroke-opacity="0.6" />
+    <line x1="1170" y1="650" x2="1220" y2="650" stroke="#34A853" stroke-width="3" stroke-linecap="round" stroke-opacity="0.6" />
+
+</svg>

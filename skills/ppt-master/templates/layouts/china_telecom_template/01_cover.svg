@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+  <rect x="0" y="0" width="1280" height="8" fill="#C00000" />
+  <rect x="72" y="118" width="6" height="266" rx="3" fill="#C00000" />
+  <rect x="72" y="600" width="1136" height="1" fill="#D1D5DB" />
+
+  <image x="72" y="34" width="214" height="58" xlink:href="logo.png" />
+  <image x="0" y="548" width="1280" height="172" xlink:href="footer_ribbon.png" preserveAspectRatio="xMidYMid slice" />
+
+  <rect x="820" y="136" width="388" height="318" rx="28" fill="#F8FAFC" stroke="#E5E7EB" stroke-width="2" />
+  <rect x="858" y="188" width="110" height="4" rx="2" fill="#C00000" />
+  <image x="862" y="246" width="292" height="102" xlink:href="slogan_red.png" preserveAspectRatio="xMidYMid meet" />
+  <image x="848" y="360" width="324" height="92" xlink:href="skyline_bg.png" preserveAspectRatio="xMidYMid meet" />
+
+  <text x="108" y="202" fill="#111827" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="42" font-weight="700">{{TITLE}}</text>
+  <text x="108" y="248" fill="#6B7280" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="21">{{SUBTITLE}}</text>
+  <rect x="108" y="282" width="144" height="6" rx="3" fill="#C00000" />
+  <text x="108" y="352" fill="#2B2F33" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="18">{{AUTHOR}}</text>
+  <text x="108" y="386" fill="#6B7280" font-family="Arial, sans-serif" font-size="15">China Telecom Digital Transformation Template</text>
+  <text x="108" y="434" fill="#6B7280" font-family="Arial, sans-serif" font-size="15">{{DATE}}</text>
+
+  <text x="72" y="650" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14">CHINA TELECOM</text>
+</svg>

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <defs>
+    <!-- 底部渐变 -->
+    <linearGradient id="bottomBar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#003D6B"/>
+      <stop offset="100%" stop-color="#006BB7"/>
+    </linearGradient>
+    <!-- 金色渐变 -->
+    <linearGradient id="goldAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#B8860B"/>
+      <stop offset="50%" stop-color="#D4A84B"/>
+      <stop offset="100%" stop-color="#B8860B"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  
+  <!-- 顶部细线装饰 -->
+  <rect x="0" y="0" width="1280" height="6" fill="#006BB7"/>
+  <rect x="0" y="6" width="1280" height="2" fill="#D4A84B"/>
+  
+  <!-- 中央 Logo（大尺寸） -->
+  <image x="390" y="160" width="500" height="150" xlink:href="重庆大学logo.png" preserveAspectRatio="xMidYMid meet"/>
+  
+  <!-- 金色装饰分隔线 -->
+  <rect x="490" y="340" width="300" height="2" fill="url(#goldAccent)"/>
+  <circle cx="490" cy="341" r="4" fill="#D4A84B"/>
+  <circle cx="790" cy="341" r="4" fill="#D4A84B"/>
+  
+  <!-- 感谢语 -->
+  <text x="640" y="420" text-anchor="middle" fill="#1A2E44" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="48" font-weight="bold">{{THANK_YOU}}</text>
+  
+  <!-- 副标语 -->
+  <text x="640" y="475" text-anchor="middle" fill="#006BB7" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18">{{ENDING_SUBTITLE}}</text>
+  
+  <!-- 底部色块 -->
+  <rect x="0" y="560" width="1280" height="160" fill="url(#bottomBar)"/>
+  
+  <!-- 底部色块顶部金色装饰线 -->
+  <rect x="0" y="558" width="1280" height="3" fill="#D4A84B"/>
+  
+  <!-- 底部白色装饰纹理 -->
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+  <line x1="0" y1="650" x2="1280" y2="650" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03"/>
+  
+  <!-- 联系信息（在底部色块上） -->
+  <text x="640" y="615" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="bold">{{CONTACT_INFO}}</text>
+  <text x="640" y="650" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.85" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{EMAIL}}</text>
+  
+  <!-- 版权信息 -->
+  <text x="640" y="695" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5" font-family="Microsoft YaHei, Arial, sans-serif" font-size="11">{{COPYRIGHT}}</text>
+  
+  <!-- 页码 -->
+  <text x="1220" y="695" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.5" font-family="Arial, sans-serif" font-size="11">{{PAGE_NUM}}</text>
+  
+  <!-- 左侧 CQU 水印 -->
+  <text x="80" y="660" fill="#FFFFFF" fill-opacity="0.08" font-family="Arial, sans-serif" font-size="80" font-weight="bold">CQU</text>
+  
+  <!-- 右下角装饰 -->
+  <polygon points="1280,560 1280,720 1120,720" fill="#FFFFFF" fill-opacity="0.03"/>
+</svg>

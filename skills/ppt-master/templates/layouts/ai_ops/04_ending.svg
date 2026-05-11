@@ -1,0 +1,59 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+  <!-- Top Red Strip -->
+  <rect x="0" y="0" width="1280" height="8" fill="#C00000" />
+
+  <!-- Left Decorative Block (mirror of cover) -->
+  <rect x="0" y="0" width="60" height="360" fill="#C00000" />
+  <rect x="0" y="360" width="60" height="360" fill="#2E75B6" />
+
+  <!-- Central Warm Panel -->
+  <rect x="280" y="200" width="720" height="320" fill="#FDF3EB" stroke="#F8CBAD" stroke-width="2" />
+
+  <!-- Thank You Text -->
+  <text x="640" y="310" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="64" font-weight="bold" fill="#C00000" text-anchor="middle">{{THANK_YOU}}</text>
+
+  <!-- English Tagline -->
+  <text x="640" y="370" font-family="Arial, sans-serif" font-size="22" fill="#2E75B6" text-anchor="middle" letter-spacing="6">{{ENDING_SUBTITLE}}</text>
+
+  <!-- Separator -->
+  <line x1="480" y1="400" x2="800" y2="400" stroke="#E7E6E6" stroke-width="1" />
+
+  <!-- Contact Info -->
+  <text x="640" y="450" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="18" fill="#666666" text-anchor="middle">{{CONTACT_INFO}}</text>
+
+  <!-- Copyright -->
+  <text x="640" y="490" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="14" fill="#999999" text-anchor="middle">{{COPYRIGHT}}</text>
+
+  <!-- Bottom Accent (mirror of cover) -->
+  <rect x="0" y="680" width="1280" height="10" fill="#FDF3EB" />
+  <rect x="0" y="690" width="1280" height="30" fill="#2E75B6" />
+
+  <!-- Decorative Numbered Badges (echoing cover) -->
+  <rect x="300" y="580" width="30" height="30" fill="#C00000" />
+  <text x="315" y="602" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+
+  <rect x="500" y="580" width="30" height="30" fill="#C00000" />
+  <text x="515" y="602" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
+
+  <rect x="700" y="580" width="30" height="30" fill="#C00000" />
+  <text x="715" y="602" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
+
+  <rect x="900" y="580" width="30" height="30" fill="#C00000" />
+  <text x="915" y="602" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">4</text>
+
+  <!-- Blue Label Tags (echoing cover) -->
+  <rect x="340" y="580" width="100" height="30" fill="#5B9BD5" />
+  <text x="390" y="601" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle">能力封装</text>
+
+  <rect x="540" y="580" width="100" height="30" fill="#5B9BD5" />
+  <text x="590" y="601" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle">跨域拉通</text>
+
+  <rect x="740" y="580" width="100" height="30" fill="#5B9BD5" />
+  <text x="790" y="601" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle">知识沉淀</text>
+
+  <rect x="940" y="580" width="100" height="30" fill="#5B9BD5" />
+  <text x="990" y="601" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle">开放共享</text>
+</svg>

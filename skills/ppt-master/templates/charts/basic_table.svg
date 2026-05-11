@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Basic Grid Table Template
+    Purpose: The most universally recognizable standard data table (Full Grid)
+    Use cases: Traditional data reporting, detailed lists, Excel-like presentations
+    Design Principles: Full horizontal and vertical borders, strict text alignment rules
+    -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Quarterly Resource Allocation</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">BASIC TABLE FORMAT · TRADITIONAL FULL GRID WITH ALIGNMENT RULES</text>
+    <!-- ==================== Table Structure ==================== -->
+    <!-- Table bounding box -->
+    <rect x="80" y="150" width="1120" height="340" fill="none" stroke="#CBD5E1" stroke-width="2"/>
+    <g id="tableArea" transform="translate(80, 150)">
+        <!-- ==================== Table Header ==================== -->
+        <rect x="0" y="0" width="1120" height="50" fill="#F8FAFC"/>
+        <line x1="0" y1="50" x2="1120" y2="50" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- Column 1: ID / Code -->
+        <text x="20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1">PROJECT ID</text>
+        <!-- Column 2: Name / Description -->
+        <text x="180" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1">PROJECT DESCRIPTION</text>
+        <!-- Column 3: Category -->
+        <text x="640" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="middle">DEPARTMENT</text>
+        <!-- Column 4: Small Number -->
+        <text x="860" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="middle">HEADCOUNT</text>
+        <!-- Column 5: Large Number -->
+        <text x="1100" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="end">BUDGET (USD)</text>
+        <!-- Vertical Grid Lines -->
+        <line x1="160" y1="0" x2="160" y2="340" stroke="#E2E8F0" stroke-width="1.5"/>
+        <line x1="560" y1="0" x2="560" y2="340" stroke="#E2E8F0" stroke-width="1.5"/>
+        <line x1="720" y1="0" x2="720" y2="340" stroke="#E2E8F0" stroke-width="1.5"/>
+        <line x1="1000" y1="0" x2="1000" y2="340" stroke="#E2E8F0" stroke-width="1.5"/>
+        <!-- ==================== Data Rows ==================== -->
+        <!-- Row 1 -->
+        <line x1="0" y1="98" x2="1120" y2="98" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="80" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#334155">PRJ-2025-01A</text>
+        <text x="180" y="80" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A">Cloud Infrastructure Migration</text>
+        <text x="640" y="80" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569" text-anchor="middle">Engineering</text>
+        <text x="860" y="80" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155" text-anchor="middle">12</text>
+        <text x="1100" y="80" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A" text-anchor="end">450,000</text>
+        <!-- Row 2 -->
+        <line x1="0" y1="146" x2="1120" y2="146" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="128" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#334155">PRJ-2025-02B</text>
+        <text x="180" y="128" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A">Global Marketing Campaign Q2</text>
+        <text x="640" y="128" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569" text-anchor="middle">Marketing</text>
+        <text x="860" y="128" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155" text-anchor="middle">8</text>
+        <text x="1100" y="128" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A" text-anchor="end">820,500</text>
+        <!-- Row 3 -->
+        <line x1="0" y1="194" x2="1120" y2="194" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="176" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#334155">PRJ-2025-03C</text>
+        <text x="180" y="176" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A">Sales Enablement Training</text>
+        <text x="640" y="176" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569" text-anchor="middle">Sales</text>
+        <text x="860" y="176" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155" text-anchor="middle">4</text>
+        <text x="1100" y="176" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A" text-anchor="end">95,000</text>
+        <!-- Row 4 -->
+        <line x1="0" y1="242" x2="1120" y2="242" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="224" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#334155">PRJ-2025-04A</text>
+        <text x="180" y="224" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A">Mobile App Redesign V3.0</text>
+        <text x="640" y="224" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569" text-anchor="middle">Product</text>
+        <text x="860" y="224" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155" text-anchor="middle">15</text>
+        <text x="1100" y="224" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A" text-anchor="end">315,200</text>
+        <!-- Row 5 -->
+        <line x1="0" y1="290" x2="1120" y2="290" stroke="#CBD5E1" stroke-width="2"/>
+        <text x="20" y="272" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#334155">PRJ-2025-05B</text>
+        <text x="180" y="272" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A">Cybersecurity Audit &amp; Fixes</text>
+        <text x="640" y="272" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="500" fill="#475569" text-anchor="middle">IT Security</text>
+        <text x="860" y="272" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155" text-anchor="middle">5</text>
+        <text x="1100" y="272" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#0F172A" text-anchor="end">120,000</text>
+        <!-- ==================== Total Row ==================== -->
+        <rect x="0" y="290" width="1120" height="50" fill="#EFF6FF"/>
+        <text x="20" y="322" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#1D4ED8" letter-spacing="1">TOTAL ALLOCATION</text>
+        <text x="860" y="322" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#1D4ED8" text-anchor="middle">44</text>
+        <text x="1100" y="322" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#1D4ED8" text-anchor="end">1,800,700</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1200" y="530" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: PMO Budget Allocation Draft V1.0</text>
+</svg>

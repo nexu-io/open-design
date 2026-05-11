@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#8F0F1B"/>
+  <image href="cover_bg.png" x="0" y="0" width="1280" height="720" preserveAspectRatio="xMidYMid slice"/>
+  <rect width="1280" height="720" fill="#8F0F1B" fill-opacity="0.18"/>
+
+
+  <rect x="196" y="182" width="888" height="238" rx="10" fill="#5E0913" fill-opacity="0.18" stroke="#FFFFFF" stroke-width="1.2" stroke-opacity="0.16"/>
+  <rect x="236" y="448" width="808" height="1.5" fill="#FFFFFF" fill-opacity="0.22"/>
+
+  <line x1="210" y1="408" x2="380" y2="408" stroke="#E26A74" stroke-width="2" stroke-opacity="0.72"/>
+  <line x1="900" y1="408" x2="1070" y2="408" stroke="#E26A74" stroke-width="2" stroke-opacity="0.72"/>
+
+  <text x="640" y="254" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="54" font-weight="700">
+    {{TITLE}}
+  </text>
+  <text x="640" y="334" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="2">
+    {{SUBTITLE}}
+  </text>
+  <text x="640" y="468" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="18">
+    {{AUTHOR}}
+  </text>
+  <text x="640" y="506" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="18">
+    {{DATE}}
+  </text>
+  <text x="640" y="560" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.74" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14" letter-spacing="4">
+    {{TAGLINE}}
+  </text>
+  <text x="640" y="646" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.84" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14" letter-spacing="3">
+    {{BRAND_LINE}}
+  </text>
+</svg>

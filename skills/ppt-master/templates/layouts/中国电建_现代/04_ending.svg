@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 结束页 - 中国电建现代风 (POWERCHINA Modern) -->
+    
+    <defs>
+        <!-- 主背景渐变 -->
+        <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+             <stop offset="0%" style="stop-color:#001F45;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#003270;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- 光辉金渐变 (Glory Gold) -->
+        <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#FFA500;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="url(#mainGrad)"/>
+    
+    <!-- 精细网格背景 -->
+    <defs>
+         <pattern id="grid" x="0" y="0" width="100" height="50" patternUnits="userSpaceOnUse">
+             <path d="M 0 0 L 100 0 L 100 50" fill="none" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="1"/>
+        </pattern>
+    </defs>
+    <rect width="1280" height="720" fill="url(#grid)"/>
+
+    <!-- 底部基石 (Foundation) -->
+    <path d="M0,600 L1280,550 L1280,720 L0,720 Z" fill="#000F24"/>
+    
+    <!-- 装饰金线 (Cooperation Line) -->
+    <rect x="0" y="550" width="1280" height="4" fill="url(#goldGrad)"/>
+
+    <!-- 中央内容容器 -->
+    <g transform="translate(640, 280)">
+        
+        <!-- 大 Logo -->
+        <text x="0" y="-60" text-anchor="middle" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="#FFFFFF" fill-opacity="0.03">
+            THANKS
+        </text>
+        
+        <!-- 感谢语 -->
+        <text x="0" y="0" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="64" font-weight="bold" fill="#FFFFFF" letter-spacing="4">
+            {{THANK_YOU}}
+        </text>
+
+        <!-- 装饰短线 -->
+        <rect x="-80" y="40" width="160" height="6" fill="#C41E3A"/>
+        
+        <!-- 结语 (Closing Message) -->
+        <text x="0" y="100" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="32" fill="#B0C4DE" letter-spacing="2">
+            {{CLOSING_MESSAGE}}
+        </text>
+
+        <!-- 联系方式卡片 (Contact Card) -->
+        <rect x="-300" y="140" width="600" height="120" fill="#FFFFFF" fill-opacity="0.05" rx="8"/>
+        
+        <text x="0" y="180" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">
+            {{AUTHOR}}
+        </text>
+        <text x="0" y="220" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#CED4DA">
+            {{CONTACT_INFO}}
+        </text>
+
+    </g>
+
+    <!-- 对角线切角装饰 (Engineering Cut) -->
+    <path d="M0,0 L200,0 L0,200 Z" fill="#0066CC" fill-opacity="0.2"/>
+    <path d="M1280,720 L1080,720 L1280,520 Z" fill="#C41E3A" fill-opacity="0.2"/>
+
+    <!-- 底部双语版权 -->
+     <text x="640" y="690" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6C757D">
+        © 2026 POWERCHINA. All Rights Reserved.
+    </text>
+
+</svg>

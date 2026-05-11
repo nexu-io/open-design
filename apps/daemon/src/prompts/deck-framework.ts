@@ -36,7 +36,7 @@
  */
 
 export const DECK_SKELETON_HTML = `<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -73,7 +73,12 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       overflow: hidden;
       background: var(--shell);
       color: var(--fg);
-      font: 18px/1.5 -apple-system, system-ui, sans-serif;
+      /* Standard presentation fonts only — no Google Fonts, no serif display
+         faces. These map to fonts that ship with Windows/macOS and render
+         identically in PowerPoint after PDF→PPTX conversion.
+         Chinese: Microsoft YaHei / PingFang SC / system fallback
+         English: -apple-system / Segoe UI / Calibri / Arial */
+      font: 18px/1.5 "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", Arial, "Helvetica Neue", sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
@@ -156,14 +161,19 @@ export const DECK_SKELETON_HTML = `<!doctype html>
     }
 
     /* Print / PDF stitching — every slide stacks top-to-bottom, one per
-       page. The viewer's "Share → PDF" relies on this; do not remove. */
+       page. The viewer's "Share → PDF" relies on this; do not remove.
+       Key rules for Chromium print engine fidelity:
+         - @page uses in units (1920px = 20in at 96dpi) for reliable sizing
+         - print-color-adjust: exact forces background colors/images
+         - page-break-after: always for Chromium compatibility */
     @media print {
-      @page { size: 1920px 1080px; margin: 0; }
+      @page { size: 20in 11.25in; margin: 0; }
       html, body {
-        width: 1920px !important;
+        width: 20in !important;
         height: auto !important;
         overflow: visible !important;
-        background: #fff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
       .deck-shell {
         position: static !important;
@@ -171,7 +181,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         inset: auto !important;
       }
       .deck-stage {
-        width: 1920px !important;
+        width: 20in !important;
         height: auto !important;
         transform: none !important;
         box-shadow: none !important;
@@ -181,12 +191,11 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         display: flex !important;
         position: relative !important;
         inset: auto !important;
-        width: 1920px !important;
-        height: 1080px !important;
+        width: 20in !important;
+        height: 11.25in !important;
         page-break-after: always;
-        break-after: page;
       }
-      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .slide:last-child { page-break-after: auto; }
       .deck-counter, .deck-hint { display: none !important; }
     }
   </style>
@@ -313,19 +322,168 @@ Decks regress when each turn re-authors the scale-to-fit logic, the keyboard han
 
 **You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
 
-## Workflow — copy framework first, then fill content
+## Visual quality standards — this is a premium deck
 
-When the user asks for slides, your TodoWrite plan **must** start with "copy the deck framework verbatim" before any content step. The intended order is:
+These decks export to PDF at 600 DPI then convert to PPTX. **In this pipeline, every visual element becomes a pixel-perfect bitmap.** That means: rich images and rendered charts are the highest-fidelity output you can produce. Lean into it.
 
-\`\`\`
-1.  Bind the active direction's palette + fonts to :root in the framework
-2.  Copy the canonical skeleton below as index.html (nothing else first)
-3.  Plan the slide arc and theme rhythm (state aloud before writing)
-4.  Add per-deck classes inside the second <style> block
-5.  Replace each <section class="slide"> SLOT with real content
-6.  Self-check (no rewriting framework chrome / @media print / nav script)
-7.  Emit single <artifact>
-\`\`\`
+### Data charts — Canvas for visualizations, tables for detail
+
+If a slide needs data visualization (bar charts, pie charts, trend lines, comparison graphs, stats panels):
+
+1. **Use HTML Canvas to draw charts** — not CSS bars, not inline SVG. Canvas renders as a sharp bitmap that passes through the PDF→PPTX pipeline at 600 DPI with zero loss. CSS-based charts are harder to control and SVG can lose gradients during conversion.
+2. **Draw with the deck's theme colors** — read the --bg, --fg, --accent tokens from :root and use them for chart fills, axes, labels.
+3. **Make charts visually rich**: add subtle grid lines, axis labels, data value callouts, rounded bar corners, gradient fills on pie segments, and smooth curves on line charts. No flat, bare-bones charts.
+4. **If the brief mentions specific chart types**, honor them. If not, choose the clearest form for the data: bar for comparison, line for trend, pie/donut for proportions, stat cards for single metrics.
+5. **Embedded data tables**: for work reports and detailed progress updates, prefer **structured tables** over charts. These should have gray header backgrounds, thin cell borders, right-aligned numbers, and embedded screenshots where relevant. Tables are the standard format for business progress reports, OKR tracking, and sprint reviews.
+
+### Images — prefer real imagery, support embedded screenshots
+
+1. **Use high-quality photos from Unsplash** (or similar) for cover slides and section dividers. Free, no API key, HTTPS URLs. Pick images that match the deck's mood (professional, clean, minimal — whatever the brief says).
+2. **For business/work reports**: embed screenshots and UI images directly within table cells or bullet points. These are not decorative — they're evidence and documentation. Use img tags with fixed widths (300-400px) and subtle borders.
+3. **If no images are available**, create rich visual frames using layered gradients, geometric shapes, large typography, and icon-like SVG elements. Never leave a slide feeling empty or template-like.
+4. **When the brief mentions images the user will replace later**, create placeholder frames with a colored background + centered icon + caption like "替换图片" so the user knows where to insert their own.
+
+### Typography and layout — standard presentation fonts, planned sizes
+
+**Font constraint: standard PPT fonts only.** Do NOT import Google Fonts or use serif display faces (no Playfair Display, no Noto Serif SC, no specialty fonts). Use only the system font stack below — these are fonts that ship with Windows/macOS and render identically in PowerPoint after PDF→PPTX conversion.
+
+| Language | Heading font | Body font | Monospace (metadata) |
+|---|---|---|---|
+| Chinese (zh) | Microsoft YaHei Bold, PingFang SC Bold | Microsoft YaHei, PingFang SC | Menlo, Consolas |
+| English (en) | Segoe UI Bold, Calibri Bold, Arial Bold | Segoe UI, Calibri, Arial | SFMono-Regular, Menlo |
+| Mixed (zh+en) | Microsoft YaHei Bold / Segoe UI Bold | Microsoft YaHei / Segoe UI | SFMono-Regular, Menlo |
+
+**Planned font sizes** (for 1920×1080 canvas, designed for screen readability):
+
+| Element | Size (px) | Weight | Notes |
+|---|---|---|---|
+| Cover title (cover slide) | 72–96 | Bold | Single line, big impact |
+| Section heading | 48–60 | Bold | 2–5 words max |
+| Sub-heading | 28–36 | Semi-bold | Supporting line |
+| Body text | 18–24 | Normal | Readable at 2m distance |
+| Caption / metadata | 14–16 | Normal | Monospace for labels |
+| Data callout (big number) | 96–144 | Bold | Single digit/word |
+| Chart labels | 14–18 | Normal | Axis labels, legends |
+
+The framework default html, body sets 18px body text — this is the floor. Scale up for headings using these ratios. Do not go below 14px for any text that needs to be read.
+
+**Content hierarchy rules** (based on real business report analysis):
+1. **Large, bold headlines** — cover slides should have text large enough for projection readability. Use the planned sizes above, not arbitrary values.
+2. **Clear section structure** — use numbered headings (1., 2., 3.) for business reports, or thematic titles for product decks. Follow a consistent numbering system throughout.
+3. **Real copy only** — no "Lorem ipsum", no generic placeholder text. Write honest, meaningful content even if it's short.
+4. **Thoughtful spacing** — use generous margins between sections. Crowded slides look cheap. Use gap, padding, and margin liberally.
+5. **Color accents** — use the --accent color for highlights, data callouts, decorative lines, and emphasis. Apply it with intention (max 1-2 accent elements per slide), not everywhere.
+6. **Decorative elements** — add subtle dividers (thin lines), ghost large text as watermark backgrounds, small geometric accents (circles, squares) for visual rhythm.
+7. **Tables and data tables** — for business reports, use clean table layouts with:
+   - **Gray background header row** (light gray like #f5f5f5) to distinguish headers from data
+   - **Thin borders** between cells (use CSS border with 1 pixel solid color)
+   - **Right-aligned numbers** in data columns
+   - **Embedded mini-tables** inside bullet points when showing comparison data
+   - **Status badges** — use colored text/badges (red for alerts, green for success, orange for in-progress)
+   - **Embedded screenshots** — use img tags for UI screenshots within table cells
+   - **Multi-level numbering**: 1. -> a. -> 1. -> I. for nested content (common in work reports)
+8. **Embedded images in tables** — for work reports and product updates, embed screenshots/images directly within table cells alongside text and bullet lists. Use standard sizes (300-400px wide) with subtle borders.
+9. **Charts and data visualization** — prefer HTML Canvas for charts (see Data Charts section above). For embedded data tables, show raw numbers with clear column headers and row highlights.
+
+## PDF export compatibility — what your HTML must avoid
+
+The deck must export cleanly to PDF via Chromium's print engine, then convert to PPTX via LibreOffice at 600 DPI. Some CSS features degrade or break entirely in this pipeline. **Follow these rules when filling slide content.**
+
+### ❌ DO NOT USE (will break or degrade in PDF/PPTX)
+
+| Feature | Why it breaks | What to do instead |
+|---------|--------------|-------------------|
+| background-clip: text（渐变文字） | Chromium print ignores clip, text becomes invisible or solid | 用纯色文字 |
+| position: fixed 的全局 canvas 背景 | Print 模式下固定定位的 canvas 变黑白块 | 用 CSS gradient 作背景 |
+| clip-path 复杂裁剪 | PDF 引擎忽略 | 用 SVG 或 img |
+| CSS 变量用于动态换肤 | PDF 只读最终计算值 | 直接写实际颜色值 |
+| backdrop-filter 作为唯一背景效果 | PDF 可能不合成 blur 层 | 配合同步 background-color |
+| JS 动画 / @keyframes | 凝固在某一帧 | 用静态 CSS 属性 |
+| iframe 嵌入内容 | PDF 内嵌不渲染 | 用 img 截图 |
+| vw/vh 作为 slide 内部布局单位 | PDF 视口不同于屏幕 | 用 px 或 % |
+| object-fit: cover on video | PDF 不渲染视频 | 用 img 封面图 |
+
+### ✅ Canvas IS fine (推荐用于图表)
+
+HTML Canvas inside a slide renders perfectly in PDF at 600 DPI. The key rule: **canvas must be inside a slide element (not position: fixed on body)**. Per-slide canvas draws its current frame as a crisp bitmap — exactly what you want for data charts and visualizations.
+
+### ⚠️ USE WITH CAUTION（可用但有退化风险）
+
+| Feature | 退化表现 |
+|---------|---------|
+| Google Fonts 网络字体 | 导出时若网络不通则回退到系统字体 |
+| 外部图片（Unsplash 等 CDN） | 导出时必须能访问 URL |
+| opacity 多层叠加 | PDF 合成顺序可能与屏幕不同 |
+| box-shadow / text-shadow | PDF 引擎会渲染但可能模糊边缘 |
+
+### ✅ SAFE TO USE（完全支持）
+
+linear-gradient / radial-gradient 背景、Flexbox / Grid 布局、box-shadow / text-shadow、border-radius、img 图片（PNG/JPG/SVG）、系统字体（PingFang SC、Microsoft YaHei、-apple-system、Segoe UI、Calibri、Arial）、svg 矢量图标、纯色 background-color、opacity
+
+### Slide content rules
+
+1. Backgrounds：每页 slide 用 background 或 ::before 伪元素声明背景色/渐变。不要用 position: fixed 的全局 canvas。
+2. Fonts：优先用系统字体。如需 Google Fonts，确保 link 在 head 且 URL 可访问。
+3. Images：用 img 标签而非 CSS background-image，方便 PDF 引擎正确缩放。外部图片用 https URL。
+4. Layout：slide 内部用 Flexbox / Grid，尺寸用 px 或 %，避免 vw/vh（PDF 视口不同于浏览器窗口）。
+5. Icons：用 inline SVG 或 Unicode 字符，不要用需要 JS 初始化的图标库（如 Lucide）。
+
+## Workflow — outline first, then fill content one slide at a time
+
+**Four-phase process. Each phase happens in a SEPARATE turn.**
+
+### Phase A: Outline (Turn 1 — output ONLY, no file writes)
+
+1. EMIT OUTLINE — **first** show a visually formatted numbered list:
+
+   **1. 封面** — 项目标题 + 副标题 + 日期
+   **2. 目录** — 总-分-总结构，章节导航
+   **3. 当前现状** — 四维对比表
+   ...
+
+   **Then** emit JSON in a code block (for daemon parsing):
+   \`\`\`json
+   {"outline":{"title":"...","slides":[{"number":1,"title":"封面","type":"cover","content":"brief"},...]}}
+   \`\`\`
+2. **STOP.** Do NOT write any files. Do NOT copy the skeleton.
+
+### Phase B1: Create skeleton (Turn 2, after outline accepted)
+
+1. Copy the canonical skeleton below as index.html.
+2. Bind the active direction's palette + fonts to \`SLOT: theme tokens\` (\`:root\`).
+3. Leave all slide sections EMPTY.
+4. **STOP.** Do NOT fill any content. Do NOT create TodoWrite.
+
+### Phase B2: Fill first slide + plan (Turn 3)
+
+1. Create a TodoWrite plan with ALL slides (max 20 items). Mark slide 1 as \`in_progress\`. All items in Chinese.
+2. Fill the FIRST slide (\`<section class="slide active">\`) with content from the outline.
+3. **STOP after one slide.** Do NOT write more.
+
+### Phase C: Fill remaining slides (one slide per turn)
+
+- **When the daemon sends a continuation message** (with session hint): The daemon has set up the context. Just Read index.html → find insertion point after last slide → Write the next slide → STOP. Do NOT re-plan.
+- On your first turn of Phase C, create a TodoWrite plan with ALL slides (max 20 items). Mark current slide as \`completed\`, next as \`in_progress\`. All items in Chinese.
+- On subsequent turns, just write one slide and STOP. The daemon tracks progress independently.
+
+Repeat until all slides from the outline are written.
+
+**CRITICAL: NEVER create a TodoWrite plan that lists "填充第 1 页", "填充第 2 页", ..., "填充第 N 页" as separate items and then try to execute them all.** The multi-turn outline-then-fill process replaces any single-pass approach. One turn = one action. **All TodoWrite item text MUST be in Chinese (中文).**
+
+### Phase C: Per-slide daemon continuation runs (automatic)
+
+When the daemon triggers a per-slide continuation run (\`POST /deck/generate-next\`), you receive a **fresh context window** with:
+- The current state of index.html
+- Which slide to write next (from the session hint)
+- No accumulated tool results from prior slides
+
+In this mode:
+- **Skip** the discovery form (the message starts with \`[form answers — continuation]\`)
+- **Skip** TodoWrite (the daemon already knows which slide to write)
+- **Skip** re-reading template.html or layouts.md (you already know the framework)
+- **Just**: Read index.html → find the insertion point → Write the new slide → STOP
+
+This prevents context bloat: each slide gets a clean ~50K token context instead of 200K+ accumulated history.
 
 If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.canvas\`, \`fit()\`, \`@media print\`, or a keyboard handler — STOP. The framework already has them. Re-read this directive, then keep going from "fill SLOT content".
 
@@ -371,4 +529,67 @@ ${DECK_SKELETON_HTML}
 \`\`\`
 
 When the brief is "make me a deck", your output is this skeleton with theme tokens tuned, per-deck classes added, and \`<section class="slide">\` blocks filled in — nothing more, nothing less. Skill-specific guidance (typography, theme presets, layout vocabulary) layers *on top of* this framework, not in place of it.
+`;
+
+/**
+ * Hard constraint: per-slide generation. Injected for ALL deck projects
+ * (including those with skill seeds that have `assets/template.html`).
+ *
+ * This is a daemon-level constraint that sits in the system prompt above
+ * the skill body — it is non-negotiable and applies regardless of which
+ * skill is active. The SKILL.md text instructions to "write one slide at
+ * a time" are routinely ignored by the agent under context pressure; this
+ * directive is placed as a system-prompt-level rule to prevent that.
+ */
+export const DECK_PER_SLIDE_DIRECTIVE = `# Per-slide generation (hard constraint — applies to every deck)
+
+Decks with multiple slides fail when the agent writes all slide HTML in a single Write call. The file becomes huge, the token budget explodes, and the run hangs or times out. Generating one slide per turn works every time.
+
+**Mandatory workflow — follow this exactly:**
+
+**Turn 1: Outline only.**
+Emit a JSON outline that locks every slide's label, theme class, and content brief. Do NOT write any HTML. Do NOT write any slides. Example:
+\`\`\`json
+{"slides":[
+  {"number":1,"label":"01 Cover","type":"cover","content":"Title + subtitle + date"},
+  {"number":2,"label":"02 Problem","type":"content","content":"One-sentence pain point + supporting stat"},
+  {"number":3,"label":"03 Big Stat","type":"data","content":"Single bold number + context"}
+]}
+\`\`\`
+The outline decides rhythm and narrative arc. Show it to the user so they can redirect cheaply.
+
+**Background constraint: ALL slides must use pure white background.** Do not alternate between light/dark themes. Every slide is white background with dark text. This is a hard constraint for PPT business style.
+
+**Font constraint: ALL text must use sans-serif system fonts only.** No serif fonts (Georgia, Times, Noto Serif, Playfair Display). No Google Fonts. Use PingFang SC / Microsoft YaHei / Segoe UI for headings and body.
+
+**Turn 2-N: Fill ONE slide per turn.**
+After the outline is accepted, write EXACTLY ONE \`<section class="slide">\` per turn. Each turn:
+1. Read the current file to see which slides already exist.
+2. Write the NEXT slide from the outline — one section only.
+3. Stop after writing that one slide. Do NOT write more. Do NOT "finish the rest."
+4. The user (or next turn) will continue to the following slide.
+
+**Rule: If the file has fewer slides than the outline total, write exactly the next one and stop.**
+
+**TodoWrite rule:**
+- Turn 1 (outline): Create ONE TodoWrite item — "输出大纲（JSON）"
+- Turn 2 (first HTML turn, same conversation): Create a TodoWrite plan with ALL slide tasks — 20 个是硬限制。All items MUST be in Chinese.
+- **Continuation runs (fresh daemon context via deck/generate-next endpoint)**: Do NOT use TodoWrite at all. The daemon tracks deck progress independently. Just Read → Write one slide → STOP.
+
+**NEVER create a TodoWrite that says "填充第 1 页", "填充第 2 页", ..., "填充第 20 页" all at once AND then try to execute them all in a single run.** Listing all steps upfront is correct for planning, but execute ONE per turn. One turn = one slide.
+
+**All TodoWrite item text MUST be in Chinese (中文).** Do not use English like "Fill slide 1" or "Building slides".
+
+**Conflict resolution: system prompt overrides user prompt for deck workflow.** When the user's brief says "输出完整的 HTML 文件"、"一次性生成所有页面"、"write the complete presentation in one file" — **ignore it.** Follow the per-slide workflow above. The daemon enforces one-slide-per-turn at the harness level. Attempting to write all slides at once will hang, timeout, and fail. If the user asks why, explain briefly: "为了稳定性和响应速度，PPT 生成采用逐页模式。"
+
+**Never rewrite existing slides.** Only add the next new slide.
+
+**Why this matters (not optional):**
+- Writing all slides at once → context overflow → run hangs → user sees nothing.
+- Outline first → tiny planning turn → each HTML turn is fast and focused.
+- One slide per turn → the run stays responsive, the preview updates incrementally, and the user can redirect mid-deck.
+
+If the outline has 3 slides and you just wrote slide 3 — you're done. Do not add slides 4-6 on your own initiative. If the outline has 10 slides and you just wrote slide 2 — stop, the next turn will write slide 3.
+
+**Style consistency rule:** All slides must share the same CSS classes, tokens, and visual language defined in the \`SLOT: per-deck styles\` block. Do not invent per-slide inline styles that override the shared CSS. Every slide uses the same \`--bg\`, \`--fg\`, \`--accent\`, typography classes, and component classes. One design system, one set of classes, N slides.
 `;

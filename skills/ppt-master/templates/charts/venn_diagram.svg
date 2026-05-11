@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Venn Diagram Chart Template
+    Purpose: Intersection analysis, synergy, overlaps
+    Use cases: Competency analysis, cross-functional relationships
+    Feature: Mathematically precise 3-circle overlap, Tailwind aesthetics, card-based legend
+    -->
+    <defs>
+        <radialGradient id="bgGlow" cx="35%" cy="50%" r="45%">
+            <stop offset="0%" stop-color="#EEF2FF" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+        </radialGradient>
+        <filter id="cardShadow" x="-15%" y="-20%" width="130%" height="150%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.08"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FAFBFC"/>
+    <rect width="1280" height="720" fill="url(#bgGlow)"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Core Competency Intersection</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">SYNERGISTIC RELATIONSHIP BETWEEN THREE PILLARS</text>
+    <!-- ==================== Venn Diagram ==================== -->
+    <g id="venn_diagram">
+        <!-- Circles -->
+        <!-- Technology: Indigo -->
+        <circle cx="360" cy="320" r="180" fill="#6366F1" fill-opacity="0.12" stroke="#6366F1" stroke-width="2"/>
+        <!-- Market: Rose -->
+        <circle cx="540" cy="320" r="180" fill="#F43F5E" fill-opacity="0.12" stroke="#F43F5E" stroke-width="2"/>
+        <!-- Operations: Emerald -->
+        <circle cx="450" cy="460" r="180" fill="#10B981" fill-opacity="0.12" stroke="#10B981" stroke-width="2"/>
+        <!-- Main Labels -->
+        <text x="260" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="26" font-weight="800" fill="#4338CA" text-anchor="middle">Technology</text>
+        <text x="260" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#6366F1" text-anchor="middle">Capabilities</text>
+        <text x="640" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="26" font-weight="800" fill="#BE123C" text-anchor="middle">Market</text>
+        <text x="640" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#F43F5E" text-anchor="middle">Intelligence</text>
+        <text x="450" y="585" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="26" font-weight="800" fill="#047857" text-anchor="middle">Operations</text>
+        <text x="450" y="610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#10B981" text-anchor="middle">Efficiency</text>
+        <!-- Intersection Labels -->
+        <!-- Tech + Market (Product Innovation) -->
+        <g filter="url(#badgeShadow)">
+            <rect x="375" y="255" width="150" height="32" rx="16" fill="#FFFFFF" stroke="#8B5CF6" stroke-width="2"/>
+            <text x="450" y="276" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#7C3AED" text-anchor="middle">Product Innovation</text>
+        </g>
+        <!-- Tech + Ops (Tech Ops) -->
+        <g filter="url(#badgeShadow)">
+            <rect x="285" y="415" width="130" height="32" rx="16" fill="#FFFFFF" stroke="#0EA5E9" stroke-width="2"/>
+            <text x="350" y="436" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0284C7" text-anchor="middle">Tech Ops</text>
+        </g>
+        <!-- Market + Ops (Customer Success) -->
+        <g filter="url(#badgeShadow)">
+            <rect x="485" y="415" width="150" height="32" rx="16" fill="#FFFFFF" stroke="#F59E0B" stroke-width="2"/>
+            <text x="560" y="436" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#D97706" text-anchor="middle">Customer Success</text>
+        </g>
+        <!-- Center (Core Advantage) -->
+        <g filter="url(#badgeShadow)">
+            <rect x="365" y="340" width="170" height="40" rx="20" fill="#0F172A"/>
+            <text x="450" y="365" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF" text-anchor="middle">CORE ADVANTAGE</text>
+        </g>
+    </g>
+    <!-- ==================== Right Side Panels ==================== -->
+    <g id="side_panels">
+        <!-- Panel 1: Technology -->
+        <g filter="url(#cardShadow)">
+            <rect x="740" y="130" width="480" height="100" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+            <circle cx="780" cy="180" r="24" fill="#EEF2FF"/>
+            <circle cx="780" cy="180" r="10" fill="#6366F1"/>
+            <text x="820" y="170" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Technology Capabilities</text>
+            <text x="820" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Proprietary Engine · AI Algorithms · Cloud Native</text>
+        </g>
+        <!-- Panel 2: Market -->
+        <g filter="url(#cardShadow)">
+            <rect x="740" y="250" width="480" height="100" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+            <circle cx="780" cy="300" r="24" fill="#FFF1F2"/>
+            <circle cx="780" cy="300" r="10" fill="#F43F5E"/>
+            <text x="820" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Market Intelligence</text>
+            <text x="820" y="315" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Omnichannel · Brand Leadership · Growth Flywheel</text>
+        </g>
+        <!-- Panel 3: Operations -->
+        <g filter="url(#cardShadow)">
+            <rect x="740" y="370" width="480" height="100" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+            <circle cx="780" cy="420" r="24" fill="#ECFDF5"/>
+            <circle cx="780" cy="420" r="10" fill="#10B981"/>
+            <text x="820" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A">Operational Efficiency</text>
+            <text x="820" y="435" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Supply Chain · Smart Warehousing · Cost Control</text>
+        </g>
+        <!-- Panel 4: Core Advantage Summary -->
+        <g filter="url(#cardShadow)">
+            <rect x="740" y="490" width="480" height="100" rx="12" fill="#0F172A"/>
+            <rect x="740" y="490" width="480" height="4" rx="2" fill="#8B5CF6"/>
+            <text x="980" y="535" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">CORE ADVANTAGE = TECH × MARKET × OPS</text>
+            <text x="980" y="565" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="middle">Deep integration creates an irreplicable competitive moat</text>
+        </g>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="60" y="690" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Note: Circle area denotes scope; intersections denote synergistic value and cross-functional advantages.</text>
+</svg>

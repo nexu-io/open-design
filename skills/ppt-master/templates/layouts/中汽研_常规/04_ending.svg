@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 结束页 - 中汽研风格 -->
+
+    <!-- 深蓝色背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#004098" />
+
+    <!-- 装饰元素 - 几何图案（低透明度圆形） -->
+    <circle cx="100" cy="100" r="200" fill="#FFFFFF" fill-opacity="0.03" />
+    <circle cx="1200" cy="600" r="300" fill="#FFFFFF" fill-opacity="0.03" />
+    <circle cx="640" cy="360" r="400" fill="#FFFFFF" fill-opacity="0.02" />
+
+    <!-- 顶部装饰线 -->
+    <rect x="0" y="0" width="1280" height="4" fill="#FFFFFF" fill-opacity="0.3" />
+
+    <!-- 网格装饰 - 营造专业氛围 -->
+    <line x1="0" y1="180" x2="1280" y2="180" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="0" y1="360" x2="1280" y2="360" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="0" y1="540" x2="1280" y2="540" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="320" y1="0" x2="320" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="640" y1="0" x2="640" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+    <line x1="960" y1="0" x2="960" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05" />
+
+    <!-- 大型Logo - 居中 -->
+    <image href="../images/{{LOGO_LARGE}}" x="344" y="160" width="592" height="238"
+        preserveAspectRatio="xMidYMid meet" />
+
+    <!-- 感谢语（中文） -->
+    <text x="640" y="480" text-anchor="middle" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="56"
+        font-weight="bold" fill="#FFFFFF">
+        {{THANK_YOU}}
+    </text>
+
+    <!-- 感谢语（英文） -->
+    <text x="640" y="530" text-anchor="middle" font-family="Arial, Georgia, serif" font-size="24" fill="#FFFFFF"
+        fill-opacity="0.7">
+        {{THANK_YOU_EN}}
+    </text>
+
+    <!-- 分隔线 -->
+    <line x1="540" y1="560" x2="740" y2="560" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.3" />
+
+    <!-- 单位信息（中文） -->
+    <text x="640" y="610" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="18" fill="#FFFFFF"
+        fill-opacity="0.85">
+        {{CONTACT_INFO}}
+    </text>
+
+    <!-- 单位信息（英文） -->
+    <text x="640" y="640" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#FFFFFF"
+        fill-opacity="0.6">
+        {{AUTHOR}}
+    </text>
+
+    <!-- 底部信息区 -->
+    <rect x="0" y="680" width="1280" height="40" fill="#FFFFFF" fill-opacity="0.1" />
+    <text x="640" y="707" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF"
+        fill-opacity="0.6">
+        {{ENDING_SUBTITLE}}
+    </text>
+
+</svg>

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+  <defs>
+    <!-- 左侧主渐变 -->
+    <linearGradient id="leftGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#003D6B"/>
+      <stop offset="100%" stop-color="#006BB7"/>
+    </linearGradient>
+    <!-- 金色渐变 -->
+    <linearGradient id="goldLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#B8860B"/>
+      <stop offset="50%" stop-color="#D4A84B"/>
+      <stop offset="100%" stop-color="#B8860B"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  
+  <!-- 左侧色块（占据左边约 35%） -->
+  <rect x="0" y="0" width="450" height="720" fill="url(#leftGradient)"/>
+  
+  <!-- 左侧色块上的装饰纹理 -->
+  <line x1="50" y1="0" x2="50" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+  <line x1="100" y1="0" x2="100" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03"/>
+  <line x1="350" y1="0" x2="350" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.05"/>
+  <line x1="400" y1="0" x2="400" y2="720" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.03"/>
+  
+  <!-- 左侧金色装饰竖线 -->
+  <rect x="448" y="100" width="4" height="520" fill="url(#goldLine)"/>
+  
+  <!-- Logo（左侧色块中央，白色版本） -->
+  <image x="75" y="260" width="300" height="90" xlink:href="重庆大学logo2.png" preserveAspectRatio="xMidYMid meet"/>
+  
+  <!-- 左侧底部年份水印 -->
+  <text x="225" y="650" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.15" font-family="Arial, sans-serif" font-size="72" font-weight="bold">CQU</text>
+  
+  <!-- 右侧内容区 -->
+  <!-- 主标题 -->
+  <text x="860" y="280" text-anchor="middle" fill="#1A2E44" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="44" font-weight="bold">{{TITLE}}</text>
+  
+  <!-- 副标题 -->
+  <text x="860" y="340" text-anchor="middle" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="20">{{SUBTITLE}}</text>
+  
+  <!-- 金色装饰分隔线 -->
+  <rect x="710" y="380" width="300" height="2" fill="url(#goldLine)"/>
+  <circle cx="710" cy="381" r="4" fill="#D4A84B"/>
+  <circle cx="1010" cy="381" r="4" fill="#D4A84B"/>
+  
+  <!-- 答辩人信息 -->
+  <text x="860" y="450" text-anchor="middle" fill="#333D4A" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18">
+    <tspan fill="#006BB7" font-weight="bold">答辩人</tspan>
+    <tspan dx="16">{{AUTHOR}}</tspan>
+  </text>
+  
+  <text x="860" y="490" text-anchor="middle" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16">
+    <tspan>指导老师：{{ADVISOR}}</tspan>
+  </text>
+  
+  <text x="860" y="530" text-anchor="middle" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16">{{INSTITUTION}}</text>
+  
+  <!-- 日期（底部居中于右侧区域） -->
+  <rect x="780" y="620" width="160" height="36" fill="#F5F7FA" rx="18"/>
+  <text x="860" y="644" text-anchor="middle" fill="#6B7B8C" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">{{DATE}}</text>
+  
+  <!-- 右下角装饰几何 -->
+  <polygon points="1280,600 1280,720 1160,720" fill="#006BB7" fill-opacity="0.06"/>
+  <polygon points="1280,660 1280,720 1200,720" fill="#D4A84B" fill-opacity="0.1"/>
+  
+  <!-- 右上角装饰 -->
+  <line x1="1100" y1="60" x2="1240" y2="60" stroke="#006BB7" stroke-width="1" stroke-opacity="0.2"/>
+  <line x1="1150" y1="90" x2="1240" y2="90" stroke="#D4A84B" stroke-width="1" stroke-opacity="0.3"/>
+  <circle cx="1240" cy="60" r="3" fill="#006BB7" fill-opacity="0.3"/>
+  <circle cx="1240" cy="90" r="3" fill="#D4A84B" fill-opacity="0.4"/>
+</svg>

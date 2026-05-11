@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Feature Matrix / Competitive Checklist Table
+    Purpose: Capability comparison, competitor benchmarking
+    Use cases: "Us vs Them", feature availability checklists, compliance matrices
+    Design Principles: Left-aligned features, centered checkmarks/crosses, alternating rows
+    -->
+    <defs>
+        <filter id="highlightShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feFlood flood-color="#4F46E5" flood-opacity="0.15"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Competitive Feature Matrix</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">CAPABILITY CHECKLIST · OUR PLATFORM VS KEY COMPETITORS</text>
+    <!-- ==================== Table Structure ==================== -->
+    <g id="tableArea" transform="translate(80, 150)">
+        <!-- Table Header (Top Line) -->
+        <line x1="0" y1="40" x2="1120" y2="40" stroke="#CBD5E1" stroke-width="2"/>
+        <text x="20" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1">CORE CAPABILITIES</text>
+        <!-- Column 1: Our Product (Highlighted) -->
+        <rect x="440" y="0" width="180" height="40" rx="6" fill="#EEF2FF"/>
+        <text x="530" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#4338CA" letter-spacing="1" text-anchor="middle">OUR PLATFORM</text>
+        <!-- Column 2: Competitor A -->
+        <text x="770" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="middle">COMPETITOR A</text>
+        <!-- Column 3: Competitor B -->
+        <text x="1010" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="middle">COMPETITOR B</text>
+        <!-- Vertical highlight background for "Our Platform" spanning all rows -->
+        <rect x="440" y="45" width="180" height="420" fill="#EEF2FF" fill-opacity="0.4" rx="6"/>
+        <!-- ==================== Data Rows ==================== -->
+        <!-- Category 1 -->
+        <rect x="0" y="55" width="1120" height="35" fill="#F8FAFC"/>
+        <text x="20" y="78" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">1. Security &amp; Compliance</text>
+        <!-- Row 1.1 -->
+        <line x1="0" y1="140" x2="1120" y2="140" stroke="#F1F5F9" stroke-width="1.5"/>
+        <text x="40" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">End-to-End Encryption (E2EE)</text>
+        <text x="530" y="122" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="770" y="122" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="1010" y="122" font-family="sans-serif" font-size="18" font-weight="800" fill="#F43F5E" text-anchor="middle">✘</text>
+        <!-- Row 1.2 -->
+        <line x1="0" y1="190" x2="1120" y2="190" stroke="#F1F5F9" stroke-width="1.5"/>
+        <text x="40" y="170" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">SOC2 Type II Certified</text>
+        <text x="530" y="172" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="770" y="172" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="1010" y="170" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#F59E0B" text-anchor="middle">Planned Q4</text>
+        <!-- Category 2 -->
+        <rect x="0" y="205" width="1120" height="35" fill="#F8FAFC"/>
+        <text x="20" y="228" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">2. Artificial Intelligence</text>
+        <!-- Row 2.1 -->
+        <line x1="0" y1="290" x2="1120" y2="290" stroke="#F1F5F9" stroke-width="1.5"/>
+        <text x="40" y="270" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">Automated Workflow Generation</text>
+        <text x="530" y="272" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="770" y="272" font-family="sans-serif" font-size="18" font-weight="800" fill="#F43F5E" text-anchor="middle">✘</text>
+        <text x="1010" y="272" font-family="sans-serif" font-size="18" font-weight="800" fill="#F43F5E" text-anchor="middle">✘</text>
+        <!-- Row 2.2 -->
+        <line x1="0" y1="340" x2="1120" y2="340" stroke="#F1F5F9" stroke-width="1.5"/>
+        <text x="40" y="320" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">Predictive Analytics Dashboard</text>
+        <text x="530" y="322" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="770" y="320" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#F59E0B" text-anchor="middle">Add-on Only</text>
+        <text x="1010" y="322" font-family="sans-serif" font-size="18" font-weight="800" fill="#F43F5E" text-anchor="middle">✘</text>
+        <!-- Category 3 -->
+        <rect x="0" y="355" width="1120" height="35" fill="#F8FAFC"/>
+        <text x="20" y="378" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">3. Ecosystem Integration</text>
+        <!-- Row 3.1 -->
+        <line x1="0" y1="440" x2="1120" y2="440" stroke="#F1F5F9" stroke-width="1.5"/>
+        <text x="40" y="420" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#334155">Native Salesforce Sync</text>
+        <text x="530" y="422" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="770" y="422" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <text x="1010" y="422" font-family="sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="middle">✔</text>
+        <!-- Bottom Highlight Box -->
+        <g filter="url(#highlightShadow)">
+            <rect x="0" y="470" width="1120" height="60" fill="#4F46E5" rx="8"/>
+        </g>
+        <text x="40" y="506" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Total Advanced Features Met</text>
+        <text x="530" y="508" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#FFFFFF" text-anchor="middle">100%</text>
+        <text x="770" y="508" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#A5B4FC" text-anchor="middle">40%</text>
+        <text x="1010" y="508" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#A5B4FC" text-anchor="middle">20%</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1200" y="690" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: Competitive Intelligence Report · Updated Q4 2025</text>
+</svg>

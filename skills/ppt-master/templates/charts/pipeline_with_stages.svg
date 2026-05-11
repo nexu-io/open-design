@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!--
+  Data/Process Pipeline Chart Template
+  Purpose: Multi-stage sequential pipeline with structured descriptions and outputs
+  Use cases: ETL pipelines, CI/CD flows, approval workflows
+  Supports: 5 stages (optimized for data processing flow)
+  -->
+  <defs>
+    <!-- Soft shadow for cards -->
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+      <feOffset dx="0" dy="2" result="offsetblur"/>
+      <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+      <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+  <!-- ==================== Title Area ==================== -->
+  <rect x="30" y="30" width="8" height="32" rx="4" fill="#334155"/>
+  <text x="52" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" font-weight="800" fill="#0F172A">End-to-End Data Pipeline Architecture</text>
+  <!-- Subtitle Area -->
+  <rect x="30" y="78" width="1220" height="46" rx="8" fill="#F8FAFC"/>
+  <text x="640" y="98" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#1E293B" letter-spacing="0.5">
+    FIVE-STAGE PIPELINE: FROM RAW DATA TO BUSINESS VALUE · EACH STAGE OUTPUT DRIVES THE NEXT
+  </text>
+  <text x="640" y="116" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">
+    Stage Layout: Step ID + Phase Name + Role + Key Steps + Deliverable
+  </text>
+  <!-- ==================== Left Row Label (Stages) ==================== -->
+  <rect x="30" y="150" width="30" height="30" rx="6" fill="#334155"/>
+  <text x="45" y="171" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF">→</text>
+  <text x="45" y="350" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" letter-spacing="4" transform="rotate(-90, 45, 350)">PIPELINE STAGES</text>
+  <!-- ==================== Main Pipeline Frame ==================== -->
+  <rect x="100" y="150" width="1150" height="36" fill="#F8FAFC" rx="8"/>
+  <path d="M 100 176 L 1250 176 L 1250 186 L 100 186 Z" fill="#F8FAFC"/> 
+  <rect x="100" y="150" width="1150" height="430" rx="8" fill="none" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="675" y="173" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1">SEQUENTIAL FLOW: RAW → CLEAN → WIDE → ENRICHED → PRODUCTS</text>
+  <!-- ==================== Stage 1: Ingest (Violet) ==================== -->
+  <rect x="120" y="200" width="190" height="360" rx="8" fill="#FFFFFF" stroke="#C4B5FD" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <path d="M 120 208 A 8 8 0 0 1 128 200 L 302 200 A 8 8 0 0 1 310 208 L 310 250 L 120 250 Z" fill="#8B5CF6"/>
+  <rect x="132" y="210" width="30" height="30" rx="6" fill="#FFFFFF"/>
+  <text x="147" y="231" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#8B5CF6">01</text>
+  <text x="174" y="231" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Ingest</text>
+  <rect x="120" y="250" width="190" height="36" fill="#F5F3FF"/>
+  <text x="215" y="273" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#6D28D9">Multi-source &amp; Real-time</text>
+  <circle cx="140" cy="310" r="3" fill="#8B5CF6"/>
+  <text x="150" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Data Collection</text>
+  <text x="150" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">CDC &amp; File Sync</text>
+  <circle cx="140" cy="360" r="3" fill="#8B5CF6"/>
+  <text x="150" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Unified Protocol</text>
+  <text x="150" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Queue &amp; Buffer</text>
+  <circle cx="140" cy="410" r="3" fill="#8B5CF6"/>
+  <text x="150" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Elastic Scaling</text>
+  <text x="150" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Sharding &amp; Parallel</text>
+  <line x1="120" y1="465" x2="310" y2="465" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <rect x="135" y="480" width="160" height="60" rx="6" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
+  <text x="215" y="500" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#64748B" letter-spacing="1">STAGE OUTPUT</text>
+  <text x="215" y="525" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#6D28D9">Raw Events</text>
+  <!-- ==================== Stage 2: Validate (Blue) ==================== -->
+  <rect x="350" y="200" width="190" height="360" rx="8" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <path d="M 350 208 A 8 8 0 0 1 358 200 L 532 200 A 8 8 0 0 1 540 208 L 540 250 L 350 250 Z" fill="#3B82F6"/>
+  <rect x="362" y="210" width="30" height="30" rx="6" fill="#FFFFFF"/>
+  <text x="377" y="231" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#3B82F6">02</text>
+  <text x="404" y="231" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Validate</text>
+  <rect x="350" y="250" width="190" height="36" fill="#EFF6FF"/>
+  <text x="445" y="273" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#1D4ED8">Isolation &amp; Quality Check</text>
+  <circle cx="370" cy="310" r="3" fill="#3B82F6"/>
+  <text x="380" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Format &amp; Bounds</text>
+  <text x="380" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Type &amp; Value Range</text>
+  <circle cx="370" cy="360" r="3" fill="#3B82F6"/>
+  <text x="380" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Business Rules</text>
+  <text x="380" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Uniqueness &amp; Refs</text>
+  <circle cx="370" cy="410" r="3" fill="#3B82F6"/>
+  <text x="380" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Anomaly Isolation</text>
+  <text x="380" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Dead-letter Queue</text>
+  <line x1="350" y1="465" x2="540" y2="465" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <rect x="365" y="480" width="160" height="60" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+  <text x="445" y="500" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#64748B" letter-spacing="1">STAGE OUTPUT</text>
+  <text x="445" y="525" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#1D4ED8">Clean Events</text>
+  <!-- ==================== Stage 3: Transform (Emerald) ==================== -->
+  <rect x="580" y="200" width="190" height="360" rx="8" fill="#FFFFFF" stroke="#6EE7B7" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <path d="M 580 208 A 8 8 0 0 1 588 200 L 762 200 A 8 8 0 0 1 770 208 L 770 250 L 580 250 Z" fill="#10B981"/>
+  <rect x="592" y="210" width="30" height="30" rx="6" fill="#FFFFFF"/>
+  <text x="607" y="231" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#10B981">03</text>
+  <text x="634" y="231" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Transform</text>
+  <rect x="580" y="250" width="190" height="36" fill="#ECFDF5"/>
+  <text x="675" y="273" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#047857">Structure &amp; Alignment</text>
+  <circle cx="600" cy="310" r="3" fill="#10B981"/>
+  <text x="610" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Denormalization</text>
+  <text x="610" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Metrics &amp; Grouping</text>
+  <circle cx="600" cy="360" r="3" fill="#10B981"/>
+  <text x="610" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Derived Metrics</text>
+  <text x="610" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Unified Definitions</text>
+  <circle cx="600" cy="410" r="3" fill="#10B981"/>
+  <text x="610" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Wide Table Build</text>
+  <text x="610" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Reusable Models</text>
+  <line x1="580" y1="465" x2="770" y2="465" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <rect x="595" y="480" width="160" height="60" rx="6" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+  <text x="675" y="500" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#64748B" letter-spacing="1">STAGE OUTPUT</text>
+  <text x="675" y="525" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#047857">Wide Tables</text>
+  <!-- ==================== Stage 4: Enrich (Amber) ==================== -->
+  <rect x="810" y="200" width="190" height="360" rx="8" fill="#FFFFFF" stroke="#FCD34D" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <path d="M 810 208 A 8 8 0 0 1 818 200 L 992 200 A 8 8 0 0 1 1000 208 L 1000 250 L 810 250 Z" fill="#F59E0B"/>
+  <rect x="822" y="210" width="30" height="30" rx="6" fill="#FFFFFF"/>
+  <text x="837" y="231" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#F59E0B">04</text>
+  <text x="864" y="231" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Enrich</text>
+  <rect x="810" y="250" width="190" height="36" fill="#FFFBEB"/>
+  <text x="905" y="273" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#B45309">AI Labels &amp; Semantics</text>
+  <circle cx="830" cy="310" r="3" fill="#F59E0B"/>
+  <text x="840" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">AI Inference</text>
+  <text x="840" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Profile &amp; Predict</text>
+  <circle cx="830" cy="360" r="3" fill="#F59E0B"/>
+  <text x="840" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Knowledge Graph</text>
+  <text x="840" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Entities &amp; Relations</text>
+  <circle cx="830" cy="410" r="3" fill="#F59E0B"/>
+  <text x="840" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Semantic Tags</text>
+  <text x="840" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Business Ready</text>
+  <line x1="810" y1="465" x2="1000" y2="465" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <rect x="825" y="480" width="160" height="60" rx="6" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+  <text x="905" y="500" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#64748B" letter-spacing="1">STAGE OUTPUT</text>
+  <text x="905" y="525" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#B45309">Enriched Set</text>
+  <!-- ==================== Stage 5: Serve (Rose) ==================== -->
+  <rect x="1040" y="200" width="190" height="360" rx="8" fill="#FFFFFF" stroke="#FDA4AF" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <path d="M 1040 208 A 8 8 0 0 1 1048 200 L 1222 200 A 8 8 0 0 1 1230 208 L 1230 250 L 1040 250 Z" fill="#F43F5E"/>
+  <rect x="1052" y="210" width="30" height="30" rx="6" fill="#FFFFFF"/>
+  <text x="1067" y="231" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#F43F5E">05</text>
+  <text x="1094" y="231" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Serve</text>
+  <rect x="1040" y="250" width="190" height="36" fill="#FFF1F2"/>
+  <text x="1135" y="273" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#BE123C">Services &amp; Access API</text>
+  <circle cx="1060" cy="310" r="3" fill="#F43F5E"/>
+  <text x="1070" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">BI Dashboards</text>
+  <text x="1070" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Visual Decisions</text>
+  <circle cx="1060" cy="360" r="3" fill="#F43F5E"/>
+  <text x="1070" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Data API</text>
+  <text x="1070" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">On-demand Fetch</text>
+  <circle cx="1060" cy="410" r="3" fill="#F43F5E"/>
+  <text x="1070" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Pub/Sub Events</text>
+  <text x="1070" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B">Webhook Triggers</text>
+  <line x1="1040" y1="465" x2="1230" y2="465" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <rect x="1055" y="480" width="160" height="60" rx="6" fill="#FFF1F2" stroke="#FECDD3" stroke-width="1"/>
+  <text x="1135" y="500" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#64748B" letter-spacing="1">STAGE OUTPUT</text>
+  <text x="1135" y="525" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#BE123C">Products</text>
+  <!-- ==================== Stage Arrows ==================== -->
+  <g fill="#CBD5E1">
+    <path d="M 315 376 L 328 376 L 328 368 L 345 380 L 328 392 L 328 384 L 315 384 Z"/>
+    <path d="M 545 376 L 558 376 L 558 368 L 575 380 L 558 392 L 558 384 L 545 384 Z"/>
+    <path d="M 775 376 L 788 376 L 788 368 L 805 380 L 788 392 L 788 384 L 775 384 Z"/>
+    <path d="M 1005 376 L 1018 376 L 1018 368 L 1035 380 L 1018 392 L 1018 384 L 1005 384 Z"/>
+  </g>
+  <!-- ==================== Bottom Flow Diagram ==================== -->
+  <rect x="30" y="610" width="30" height="30" rx="6" fill="#334155"/>
+  <text x="45" y="631" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF">→</text>
+  <text x="45" y="675" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" transform="rotate(-90, 45, 675)">END TO END</text>
+  <rect x="100" y="610" width="1150" height="90" rx="8" fill="none" stroke="#E2E8F0" stroke-width="2"/>
+  <text x="675" y="632" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#64748B" letter-spacing="0.5">Origin: Raw Data ————— 5-Stage Processing ————— Destination: Business Products</text>
+  <!-- Dashed connect line -->
+  <line x1="120" y1="665" x2="1230" y2="665" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="4 4"/>
+  <!-- Flow Blocks -->
+  <rect x="120" y="645" width="200" height="40" rx="6" fill="#F5F3FF" stroke="#C4B5FD" stroke-width="1.5"/>
+  <text x="220" y="670" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#6D28D9">Origin: Raw Data</text>
+  <rect x="340" y="645" width="160" height="40" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+  <text x="420" y="670" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Raw Events</text>
+  <rect x="520" y="645" width="160" height="40" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+  <text x="600" y="670" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Clean Events</text>
+  <rect x="700" y="645" width="160" height="40" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+  <text x="780" y="670" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Wide Tables</text>
+  <rect x="880" y="645" width="160" height="40" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+  <text x="960" y="670" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Enriched Set</text>
+  <rect x="1060" y="645" width="170" height="40" rx="6" fill="#FFF1F2" stroke="#FDA4AF" stroke-width="1.5"/>
+  <text x="1145" y="670" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="800" fill="#BE123C">Destination: Products</text>
+</svg>

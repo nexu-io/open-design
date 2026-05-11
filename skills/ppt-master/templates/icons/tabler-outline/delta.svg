@@ -1,0 +1,19 @@
+<!--
+tags: [letter, alphabet, greek, math, delta, character, typography, text, writing]
+category: Letters
+version: "1.104"
+unicode: "f53c"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 20h16l-8 -16l-8 16" />
+</svg>

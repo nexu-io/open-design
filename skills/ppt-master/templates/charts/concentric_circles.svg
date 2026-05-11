@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Concentric Circles / Bullseye Chart Template
+    Usage: Hierarchical focus, influence/priority layers, core-periphery display
+    Scenarios: Target focus analysis, stakeholder circles, core-expansion-ecosystem
+    Supports: 4 concentric layers (3-5 layers recommended)
+    -->
+    <defs>
+                <filter id="ringGlow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#8B5CF6" flood-opacity="0.3" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="30" font-weight="700" fill="#0F172A">Product Strategy Priority Layers</text>
+    <text x="60" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#64748B">Concentric Model · Four layers of focus from core to periphery</text>
+    <g id="concentric-circles">
+    <!-- Concentric circles (Left-aligned, center 450,395) -->
+    <g id="circle-4">
+    <!-- Layer 4 (Outermost, Ecosystem) -->
+    <circle cx="450" cy="395" r="290" fill="#3B82F6" fill-opacity="0.06" stroke="#3B82F6" stroke-width="1.5" stroke-opacity="0.2"/>
+    <text x="450" y="128" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#3B82F6" fill-opacity="0.6">Ecosystem Expansion</text>
+        </g>
+    <g id="circle-3">
+    <!-- Layer 3 (Expansion) -->
+    <circle cx="450" cy="395" r="210" fill="#10B981" fill-opacity="0.08" stroke="#10B981" stroke-width="1.5" stroke-opacity="0.25"/>
+    <text x="450" y="208" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#10B981" fill-opacity="0.7">Growth Engine</text>
+        </g>
+    <g id="circle-2">
+    <!-- Layer 2 (Core Periphery) -->
+    <circle cx="450" cy="395" r="135" fill="#F59E0B" fill-opacity="0.1" stroke="#F59E0B" stroke-width="2" stroke-opacity="0.3"/>
+    <text x="450" y="282" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#D97706" fill-opacity="0.8">Core Support</text>
+        </g>
+    <g id="circle-1">
+    <!-- Layer 1 (Core, Innermost) -->
+    <circle cx="450" cy="395" r="65" fill="#8B5CF6" filter="url(#ringGlow)"/>
+    <text x="450" y="390" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" font-weight="800" fill="#FFFFFF">Core</text>
+    <text x="450" y="410" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="20" font-weight="800" fill="#FFFFFF">Product</text>
+        </g>
+    </g>
+    <g id="cards">
+    <!-- Right Description Panel -->
+    <g id="card-1">
+    <!-- Layer 1 -->
+    <g filter="url(#cardShadow)">
+        <rect x="800" y="115" width="420" height="100" rx="10" fill="#FFFFFF"/>
+        <rect x="800" y="115" width="6" height="100" rx="3" fill="#8B5CF6"/>
+        <circle cx="830" cy="145" r="14" fill="#8B5CF6"/>
+        <text x="830" y="150" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="18" font-weight="700" fill="#FFFFFF">1</text>
+        <text x="856" y="149" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="16" font-weight="700" fill="#0F172A">Core Product · Highest Priority</text>
+        <text x="830" y="175" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" fill="#475569">Core UX features driving retention and conversion</text>
+        <text x="830" y="196" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="13" fill="#94A3B8">60% Resource Allocation · Bi-weekly Iteration</text>
+    </g>
+        </g>
+    <g id="card-2">
+    <!-- Layer 2 -->
+    <g filter="url(#cardShadow)">
+        <rect x="800" y="235" width="420" height="100" rx="10" fill="#FFFFFF"/>
+        <rect x="800" y="235" width="6" height="100" rx="3" fill="#D97706"/>
+        <circle cx="830" cy="265" r="14" fill="#D97706"/>
+        <text x="830" y="270" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="18" font-weight="700" fill="#FFFFFF">2</text>
+        <text x="856" y="269" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="16" font-weight="700" fill="#0F172A">Core Support · High Priority</text>
+        <text x="830" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" fill="#475569">Security, performance, and foundational capabilities</text>
+        <text x="830" y="316" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="13" fill="#94A3B8">25% Resource Allocation · Monthly Iteration</text>
+    </g>
+        </g>
+    <g id="card-3">
+    <!-- Layer 3 -->
+    <g filter="url(#cardShadow)">
+        <rect x="800" y="355" width="420" height="100" rx="10" fill="#FFFFFF"/>
+        <rect x="800" y="355" width="6" height="100" rx="3" fill="#10B981"/>
+        <circle cx="830" cy="385" r="14" fill="#10B981"/>
+        <text x="830" y="390" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="18" font-weight="700" fill="#FFFFFF">3</text>
+        <text x="856" y="389" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="16" font-weight="700" fill="#0F172A">Growth Engine · Medium Priority</text>
+        <text x="830" y="415" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" fill="#475569">Acquisition, operational tools, and monetization</text>
+        <text x="830" y="436" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="13" fill="#94A3B8">10% Resource Allocation · Quarterly Planning</text>
+    </g>
+        </g>
+    <g id="card-4">
+    <!-- Layer 4 -->
+    <g filter="url(#cardShadow)">
+        <rect x="800" y="475" width="420" height="100" rx="10" fill="#FFFFFF"/>
+        <rect x="800" y="475" width="6" height="100" rx="3" fill="#3B82F6"/>
+        <circle cx="830" cy="505" r="14" fill="#3B82F6"/>
+        <text x="830" y="510" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="18" font-weight="700" fill="#FFFFFF">4</text>
+        <text x="856" y="509" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="16" font-weight="700" fill="#0F172A">Ecosystem · Exploratory Priority</text>
+        <text x="830" y="535" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" fill="#475569">Open platform and ISV partnerships</text>
+        <text x="830" y="556" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="13" fill="#94A3B8">5% Resource Allocation · Semi-annual Review</text>
+    </g>
+        </g>
+    </g>
+    <!-- Footer Note -->
+    <text x="640" y="690" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" fill="#CBD5E1">The closer to the center, the higher the priority and resource concentration</text>
+</svg>

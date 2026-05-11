@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Hub & Spoke Chart Template
+    Usage: Central theme and peripheral elements
+    Scenarios: Core capabilities, platform ecosystem, product suites
+    Supports: 1 Hub + 6 Spokes
+    -->
+    <defs>
+        <!-- Hub Gradients -->
+        <linearGradient id="hubGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3B82F6"/> <!-- Blue 500 -->
+            <stop offset="50%" stop-color="#6366F1"/> <!-- Indigo 500 -->
+            <stop offset="100%" stop-color="#8B5CF6"/> <!-- Violet 500 -->
+        </linearGradient>
+        <!-- Background radial glow -->
+        <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#EEF2FF" stop-opacity="0.8"/>
+            <stop offset="60%" stop-color="#F8FAFC" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="#F8FAFC" stop-opacity="0"/>
+        </radialGradient>
+        <!-- Standard Drop Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <!-- Hub Glow -->
+        <filter id="hubGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
+            <feOffset dx="0" dy="0" result="offsetblur"/>
+            <feFlood flood-color="#6366F1" flood-opacity="0.4" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Background Decor -->
+    <circle cx="640" cy="380" r="450" fill="url(#bgGlow)"/>
+    <circle cx="640" cy="380" r="160" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+    <circle cx="640" cy="380" r="260" fill="none" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <circle cx="640" cy="380" r="360" fill="none" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="2 4"/>
+    <!-- Title -->
+    <text x="640" y="55" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="34" font-weight="800" fill="#0F172A">Enterprise Platform Architecture</text>
+    <text x="640" y="85" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" font-weight="600" fill="#64748B" letter-spacing="2">HUB &amp; SPOKE · CORE CAPABILITIES</text>
+    <!-- Data Pipelines (Connections) -->
+    <g stroke-linecap="round">
+        <!-- 1. Top (Blue) -->
+        <line x1="640" y1="380" x2="640" y2="120" stroke="#E2E8F0" stroke-width="2"/>
+        <line x1="640" y1="380" x2="640" y2="120" stroke="#3B82F6" stroke-width="2" stroke-dasharray="6 8" opacity="0.8"/>
+        <!-- 2. Top Right (Sky) -->
+        <line x1="640" y1="380" x2="870" y2="230" stroke="#E2E8F0" stroke-width="2"/>
+        <line x1="640" y1="380" x2="870" y2="230" stroke="#0EA5E9" stroke-width="2" stroke-dasharray="6 8" opacity="0.8"/>
+        <!-- 3. Bottom Right (Indigo) -->
+        <line x1="640" y1="380" x2="870" y2="530" stroke="#E2E8F0" stroke-width="2"/>
+        <line x1="640" y1="380" x2="870" y2="530" stroke="#6366F1" stroke-width="2" stroke-dasharray="6 8" opacity="0.8"/>
+        <!-- 4. Bottom (Blue) -->
+        <line x1="640" y1="380" x2="640" y2="640" stroke="#E2E8F0" stroke-width="2"/>
+        <line x1="640" y1="380" x2="640" y2="640" stroke="#3B82F6" stroke-width="2" stroke-dasharray="6 8" opacity="0.8"/>
+        <!-- 5. Bottom Left (Sky) -->
+        <line x1="640" y1="380" x2="410" y2="530" stroke="#E2E8F0" stroke-width="2"/>
+        <line x1="640" y1="380" x2="410" y2="530" stroke="#0EA5E9" stroke-width="2" stroke-dasharray="6 8" opacity="0.8"/>
+        <!-- 6. Top Left (Indigo) -->
+        <line x1="640" y1="380" x2="410" y2="230" stroke="#E2E8F0" stroke-width="2"/>
+        <line x1="640" y1="380" x2="410" y2="230" stroke="#6366F1" stroke-width="2" stroke-dasharray="6 8" opacity="0.8"/>
+    </g>
+    <!-- Center Hub -->
+    <!-- Outer Glow -->
+    <circle cx="640" cy="380" r="85" fill="url(#hubGrad)" filter="url(#hubGlow)" opacity="0.8"/>
+    <circle cx="640" cy="380" r="80" fill="url(#hubGrad)"/>
+    <circle cx="640" cy="380" r="68" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.4"/>
+    <circle cx="640" cy="380" r="62" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-dasharray="2 4" opacity="0.3"/>
+    <text x="640" y="375" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="24" font-weight="800" fill="#FFFFFF" letter-spacing="1">CORE</text>
+    <text x="640" y="405" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="13" font-weight="600" fill="#E0E7FF" letter-spacing="3">SYSTEM</text>
+    <circle cx="616" cy="428" r="2" fill="#FFFFFF" opacity="0.8"/>
+    <circle cx="640" cy="428" r="2.5" fill="#FFFFFF" opacity="0.9"/>
+    <circle cx="664" cy="428" r="2" fill="#FFFFFF" opacity="0.8"/>
+    <!-- ===== Spoke 1: Data Architecture (Top) - Blue ===== -->
+    <!-- Center: 640, 120 -->
+    <g filter="url(#cardShadow)">
+        <rect x="520" y="80" width="240" height="80" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <rect x="520" y="104" width="4" height="32" rx="2" fill="#3B82F6"/>
+    <rect x="540" y="100" width="40" height="40" rx="10" fill="#EFF6FF"/>
+    <g stroke="#3B82F6" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="560" cy="112" rx="8" ry="3"/>
+        <path d="M 552 112 V 124 C 552 125.66 555.58 127 560 127 C 564.42 127 568 125.66 568 124 V 112"/>
+        <path d="M 552 118 C 552 119.66 555.58 121 560 121 C 564.42 121 568 119.66 568 118"/>
+    </g>
+    <text x="596" y="118" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#0F172A">Data Architecture</text>
+    <text x="596" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="500" fill="#64748B">Data Lake &amp; Analytics</text>
+    <!-- ===== Spoke 2: AI Engine (Top Right) - Sky ===== -->
+    <!-- Center: 870, 230 -->
+    <g filter="url(#cardShadow)">
+        <rect x="750" y="190" width="240" height="80" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <rect x="750" y="214" width="4" height="32" rx="2" fill="#0EA5E9"/>
+    <rect x="770" y="210" width="40" height="40" rx="10" fill="#E0F2FE"/>
+    <g stroke="#0EA5E9" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 790 218 L 792 226 L 800 228 L 792 230 L 790 238 L 788 230 L 780 228 L 788 226 Z"/>
+        <path d="M 799 217 L 800 220 L 803 221 L 800 222 L 799 225 L 798 222 L 795 221 L 798 220 Z"/>
+    </g>
+    <text x="826" y="228" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#0F172A">AI Engine</text>
+    <text x="826" y="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="500" fill="#64748B">Model Training &amp; Inference</text>
+    <!-- ===== Spoke 3: Business Logic (Bottom Right) - Indigo ===== -->
+    <!-- Center: 870, 530 -->
+    <g filter="url(#cardShadow)">
+        <rect x="750" y="490" width="240" height="80" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <rect x="750" y="514" width="4" height="32" rx="2" fill="#6366F1"/>
+    <rect x="770" y="510" width="40" height="40" rx="10" fill="#EEF2FF"/>
+    <g stroke="#6366F1" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="784" cy="520" r="3"/>
+        <circle cx="796" cy="520" r="3"/>
+        <circle cx="790" cy="532" r="3"/>
+        <line x1="786" y1="523" x2="788.5" y2="529"/>
+        <line x1="794" y1="523" x2="791.5" y2="529"/>
+        <line x1="787" y1="520" x2="793" y2="520"/>
+    </g>
+    <text x="826" y="528" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#0F172A">Business Logic</text>
+    <text x="826" y="550" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="500" fill="#64748B">Workflow &amp; Rule Engines</text>
+    <!-- ===== Spoke 4: Integration Services (Bottom) - Blue ===== -->
+    <!-- Center: 640, 640 -->
+    <g filter="url(#cardShadow)">
+        <rect x="520" y="600" width="240" height="80" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <rect x="520" y="624" width="4" height="32" rx="2" fill="#3B82F6"/>
+    <rect x="540" y="620" width="40" height="40" rx="10" fill="#EFF6FF"/>
+    <g stroke="#3B82F6" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="552" cy="632" r="2.5"/>
+        <circle cx="568" cy="632" r="2.5"/>
+        <circle cx="560" cy="646" r="2.5"/>
+        <line x1="554.5" y1="632" x2="565.5" y2="632"/>
+        <line x1="553.5" y1="634" x2="558.5" y2="644"/>
+        <line x1="566.5" y1="634" x2="561.5" y2="644"/>
+    </g>
+    <text x="596" y="638" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#0F172A">Integration Services</text>
+    <text x="596" y="660" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="500" fill="#64748B">API Gateway &amp; Event Bus</text>
+    <!-- ===== Spoke 5: Security & Compliance (Bottom Left) - Sky ===== -->
+    <!-- Center: 410, 530 -->
+    <g filter="url(#cardShadow)">
+        <rect x="290" y="490" width="240" height="80" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <rect x="290" y="514" width="4" height="32" rx="2" fill="#0EA5E9"/>
+    <rect x="310" y="510" width="40" height="40" rx="10" fill="#E0F2FE"/>
+    <g stroke="#0EA5E9" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 320 519 L 330 516 L 340 519 V 525 C 340 533 334 538 330 540 C 326 538 320 533 320 525 Z"/>
+        <path d="M 326 528 L 329 531 L 334 524"/>
+    </g>
+    <text x="366" y="528" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#0F172A">Security &amp; Compliance</text>
+    <text x="366" y="550" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="500" fill="#64748B">IAM &amp; Zero-Trust Architecture</text>
+    <!-- ===== Spoke 6: User Experience (Top Left) - Indigo ===== -->
+    <!-- Center: 410, 230 -->
+    <g filter="url(#cardShadow)">
+        <rect x="290" y="190" width="240" height="80" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+    <rect x="290" y="214" width="4" height="32" rx="2" fill="#6366F1"/>
+    <rect x="310" y="210" width="40" height="40" rx="10" fill="#EEF2FF"/>
+    <g stroke="#6366F1" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="320" y="218" width="20" height="16" rx="2"/>
+        <line x1="320" y1="223" x2="340" y2="223"/>
+        <line x1="326" y1="223" x2="326" y2="234"/>
+    </g>
+    <text x="366" y="228" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#0F172A">User Experience</text>
+    <text x="366" y="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" font-weight="500" fill="#64748B">Low-Code &amp; Design System</text>
+    <!-- Footer Summary -->
+    <text x="640" y="695" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#94A3B8">The central hub seamlessly integrates six core capability domains to form a unified digital foundation.</text>
+</svg>

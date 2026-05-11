@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - 中国电建现代风 (POWERCHINA Modern) -->
+    
+    <defs>
+        <!-- 主背景渐变: 深海蓝 -> 科技蓝 -->
+        <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#001F45;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#003270;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- 装饰渐变: 亮蓝 -> 透明 -->
+        <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#0066CC;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:0" />
+        </linearGradient>
+
+        <!-- 地球经纬网格 (Global Grid) -->
+        <pattern id="grid" x="0" y="0" width="100" height="50" patternUnits="userSpaceOnUse">
+            <path d="M 100 0 L 0 0 0 50" fill="none" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="1"/>
+        </pattern>
+    </defs>
+
+    <!-- 背景层 -->
+    <rect width="1280" height="720" fill="url(#mainGrad)"/>
+    <rect width="1280" height="720" fill="url(#grid)"/>
+
+    <!-- 底部基石 (Foundation Block) -->
+    <!-- 象征大坝地基或坚实基础 -->
+    <path d="M0,580 L1280,500 L1280,720 L0,720 Z" fill="#001533" fill-opacity="0.6"/>
+    <rect x="0" y="680" width="1280" height="40" fill="#000F24"/>
+
+    <!-- 装饰线条 (Construction Lines) -->
+    <!-- 对角线切角，体现切割感 -->
+    <path d="M0,0 L400,0 L300,720 L0,720 Z" fill="#FFFFFF" fill-opacity="0.02"/>
+    <line x1="300" y1="0" x2="300" y2="720" stroke="#FFFFFF" stroke-opacity="0.05" stroke-dasharray="10,5"/>
+
+    <!-- 顶部 Logo 区域 (右上角) -->
+    <rect x="1000" y="0" width="280" height="80" fill="#FFFFFF" fill-opacity="0.1"/>
+    <text x="1140" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFFFFF" letter-spacing="2">
+        POWERCHINA
+    </text>
+
+    <!-- 装饰红条 (点睛) -->
+    <rect x="1000" y="0" width="8" height="80" fill="#C41E3A"/>
+
+    <!-- 主标题区域 (居中偏左) -->
+    <g transform="translate(100, 260)">
+        
+        <!-- 巨大装饰年份或序号 -->
+        <text x="-20" y="-60" font-family="Arial, sans-serif" font-size="180" font-weight="bold" fill="#FFFFFF" fill-opacity="0.03">
+            2026
+        </text>
+
+        <!-- 主标题 -->
+        <text x="0" y="0" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="64" font-weight="bold" fill="#FFFFFF" letter-spacing="2">
+            {{TITLE}}
+        </text>
+        
+        <!-- 下划线装饰 -->
+        <rect x="0" y="25" width="120" height="8" fill="#0066CC"/>
+        <rect x="120" y="25" width="800" height="2" fill="#FFFFFF" fill-opacity="0.3"/>
+
+        <!-- 副标题 -->
+        <text x="0" y="80" font-family="Microsoft YaHei, Arial, sans-serif" font-size="32" fill="#B0C4DE" font-weight="normal">
+            {{SUBTITLE}}
+        </text>
+
+        <!-- 汇报信息组 -->
+        <g transform="translate(0, 160)">
+            <!-- 左侧竖线 -->
+            <rect x="0" y="0" width="4" height="80" fill="#C41E3A"/>
+            
+            <text x="20" y="30" font-family="Microsoft YaHei, sans-serif" font-size="24" fill="#FFFFFF">
+                {{AUTHOR}}
+            </text>
+            <text x="20" y="70" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#FFFFFF" fill-opacity="0.7">
+                汇报人：{{PRESENTER}} | {{DATE}}
+            </text>
+        </g>
+
+    </g>
+
+    <!-- 底部公司全称 -->
+    <text x="640" y="708" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" fill-opacity="0.4" letter-spacing="1">
+        中国电力建设集团有限公司 · POWERCHINA CONSTRUCTION CORPORATION
+    </text>
+
+</svg>

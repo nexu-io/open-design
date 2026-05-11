@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- ==================== 页眉区域 ==================== -->
+    <!-- 医学蓝页眉背景 -->
+    <rect x="0" y="0" width="1280" height="70" fill="#0066B3" />
+    <!-- 左侧橙色竖条装饰 -->
+    <rect x="0" y="0" width="6" height="70" fill="#FF6B35" />
+
+    <!-- 章节编号 + 页面标题 -->
+    <text x="40" y="46" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif" font-size="26"
+        font-weight="bold">
+        {{SECTION_NUM}} {{PAGE_TITLE}}
+    </text>
+
+    <!-- 右上角 Logo -->
+    <rect x="1100" y="20" width="140" height="30" fill="none" />
+    <text x="1220" y="46" text-anchor="end" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="16" font-weight="bold">
+        {{LOGO}}
+    </text>
+
+    <!-- ==================== 核心观点条 ==================== -->
+    <rect x="0" y="70" width="1280" height="50" fill="#E6F3FA" />
+    <rect x="0" y="70" width="6" height="50" fill="#00A86B" />
+    <text x="40" y="102" fill="#333333" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18">
+        {{KEY_MESSAGE}}
+    </text>
+
+    <!-- ==================== 内容区域 ==================== -->
+    <!-- 
+    AI 灵活布局区
+    可用空间: x=40, y=135, width=1200, height=515
+    适用布局：病例展示、数据卡片、图文混排、时间线、流程图等
+  -->
+    <rect x="40" y="135" width="1200" height="515" fill="#FFFFFF" rx="4" />
+    <rect x="40" y="135" width="1200" height="515" fill="none" stroke="#D0D7E0" stroke-width="1" rx="4"
+        stroke-dasharray="8,4" />
+
+    <!-- 内容区域占位符 -->
+    <text x="640" y="385" text-anchor="middle" fill="#CBD5E1" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="16">
+        {{CONTENT_AREA}}
+    </text>
+
+    <!-- 布局说明 -->
+    <text x="640" y="415" text-anchor="middle" fill="#CBD5E1" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="14">
+        可用布局：病例展示、检验结果、影像资料、治疗方案、数据图表等
+    </text>
+
+    <!-- 示例数据卡片区域（虚线框） -->
+    <rect x="80" y="180" width="180" height="100" fill="none" stroke="#D0D7E0" stroke-width="1" stroke-dasharray="4,4"
+        rx="8" />
+    <text x="170" y="235" text-anchor="middle" fill="#D0D7E0" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="12">数据卡片</text>
+
+    <rect x="280" y="180" width="180" height="100" fill="none" stroke="#D0D7E0" stroke-width="1" stroke-dasharray="4,4"
+        rx="8" />
+    <text x="370" y="235" text-anchor="middle" fill="#D0D7E0" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="12">数据卡片</text>
+
+    <!-- ==================== 页脚区域 ==================== -->
+    <line x1="40" y1="665" x2="1240" y2="665" stroke="#E6F3FA" stroke-width="1" />
+    <text x="40" y="695" fill="#999999" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12">
+        数据来源：{{SOURCE}}
+    </text>
+    <text x="640" y="695" text-anchor="middle" fill="#999999" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="12">
+        {{SECTION_NAME}}
+    </text>
+    <text x="1220" y="695" text-anchor="end" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="14">
+        {{PAGE_NUM}}
+    </text>
+</svg>

@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Customer Journey Map Template
+    Purpose: UX and Marketing visualization of the user lifecycle
+    Use cases: Product design, customer experience (CX) analysis, marketing funnel mapping
+    Design Principles: Matrix layout mapping phases against actions, emotions, and pain points
+    -->
+    <defs>
+        <!-- Emotional Curve gradient -->
+        <linearGradient id="curveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#3B82F6"/>
+            <stop offset="50%" stop-color="#10B981"/>
+            <stop offset="80%" stop-color="#F59E0B"/>
+            <stop offset="100%" stop-color="#F43F5E"/>
+        </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Customer Journey Map</text>
+    <text x="60" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">USER EXPERIENCE &amp; PAIN POINT ANALYSIS: ENTERPRISE ONBOARDING</text>
+    <!-- ==================== Journey Grid ==================== -->
+    <g transform="translate(60, 140)">
+        <!-- Header Row (Stages) -->
+        <rect x="180" y="0" width="240" height="40" rx="6" fill="#EFF6FF"/>
+        <text x="300" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#1E40AF" letter-spacing="1" text-anchor="middle">1. DISCOVERY</text>
+        <rect x="430" y="0" width="240" height="40" rx="6" fill="#EFF6FF"/>
+        <text x="550" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#1E40AF" letter-spacing="1" text-anchor="middle">2. EVALUATION</text>
+        <rect x="680" y="0" width="240" height="40" rx="6" fill="#EFF6FF"/>
+        <text x="800" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#1E40AF" letter-spacing="1" text-anchor="middle">3. PURCHASE</text>
+        <rect x="930" y="0" width="240" height="40" rx="6" fill="#EFF6FF"/>
+        <text x="1050" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#1E40AF" letter-spacing="1" text-anchor="middle">4. ONBOARDING</text>
+        <!-- Vertical grid lines -->
+        <line x1="170" y1="50" x2="170" y2="520" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <line x1="425" y1="50" x2="425" y2="520" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <line x1="675" y1="50" x2="675" y2="520" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <line x1="925" y1="50" x2="925" y2="520" stroke="#E2E8F0" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <!-- ==================== Row 1: User Actions ==================== -->
+        <line x1="0" y1="60" x2="1170" y2="60" stroke="#CBD5E1" stroke-width="2"/>
+        <text x="0" y="90" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">User Actions</text>
+        <text x="0" y="110" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#64748B">What the user does</text>
+        <rect x="180" y="80" width="240" height="60" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="195" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">Searches Google for solutions,</text>
+        <text x="195" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">lands on marketing site.</text>
+        <rect x="430" y="80" width="240" height="60" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="445" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">Reads case studies, compares</text>
+        <text x="445" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">features vs competitors.</text>
+        <rect x="680" y="80" width="240" height="60" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="695" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">Requests a demo, negotiates</text>
+        <text x="695" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">pricing with sales team.</text>
+        <rect x="930" y="80" width="240" height="60" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="945" y="105" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">Signs contract, creates account,</text>
+        <text x="945" y="125" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#334155">starts initial configuration.</text>
+        <!-- ==================== Row 2: Touchpoints ==================== -->
+        <line x1="0" y1="160" x2="1170" y2="160" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="0" y="190" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Touchpoints</text>
+        <text x="0" y="210" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#64748B">Channels of interaction</text>
+        <text x="300" y="200" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#3B82F6" text-anchor="middle">SEO / Ads / Website</text>
+        <text x="550" y="200" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#3B82F6" text-anchor="middle">Whitepapers / Webinars</text>
+        <text x="800" y="200" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#3B82F6" text-anchor="middle">Zoom / Email / Docusign</text>
+        <text x="1050" y="200" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#3B82F6" text-anchor="middle">Web App / CS Manager</text>
+        <!-- ==================== Row 3: Emotional Curve ==================== -->
+        <line x1="0" y1="240" x2="1170" y2="240" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="0" y="270" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Emotional Experience</text>
+        <text x="0" y="290" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#64748B">Satisfaction level over time</text>
+        <!-- Horizontal baseline for curve -->
+        <line x1="180" y1="310" x2="1170" y2="310" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- The Journey Curve -->
+        <!-- Starts OK -> Goes High during eval -> Drops during negotiation -> Drops hard during onboarding -> Recovers slightly -->
+        <path d="M 180 310 C 240 280, 300 260, 425 260 S 550 250, 675 320 S 800 360, 925 360 S 1050 280, 1170 290" fill="none" stroke="url(#curveGrad)" stroke-width="4" stroke-linecap="round"/>
+        <!-- Emotion Nodes (Circles) -->
+        <circle cx="300" cy="275" r="8" fill="#FFFFFF" stroke="#3B82F6" stroke-width="3"/>
+        <text x="300" y="255" font-family="sans-serif" font-size="20" text-anchor="middle">🙂</text>
+        <circle cx="550" cy="256" r="8" fill="#FFFFFF" stroke="#10B981" stroke-width="3"/>
+        <text x="550" y="236" font-family="sans-serif" font-size="20" text-anchor="middle">🤩</text>
+        <circle cx="800" cy="340" r="8" fill="#FFFFFF" stroke="#F59E0B" stroke-width="3"/>
+        <text x="800" y="375" font-family="sans-serif" font-size="20" text-anchor="middle">😐</text>
+        <circle cx="1050" cy="325" r="8" fill="#FFFFFF" stroke="#F43F5E" stroke-width="3"/>
+        <text x="1050" y="360" font-family="sans-serif" font-size="20" text-anchor="middle">😫</text>
+        <!-- ==================== Row 4: Pain Points & Opportunities ==================== -->
+        <line x1="0" y1="400" x2="1170" y2="400" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="0" y="430" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Pain Points &amp; Friction</text>
+        <text x="0" y="450" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#64748B">Barriers to success</text>
+        <!-- Highlighted Pain Point Cards (Red) -->
+        <rect x="180" y="420" width="240" height="80" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="195" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#475569">Information overload on</text>
+        <text x="195" y="465" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#475569">the homepage.</text>
+        <rect x="430" y="420" width="240" height="80" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="445" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#475569">Pricing is not transparent;</text>
+        <text x="445" y="465" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#475569">requires a sales call.</text>
+        <rect x="680" y="420" width="240" height="80" rx="6" fill="#FFF1F2" stroke="#FDA4AF" stroke-width="1"/>
+        <text x="695" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#E11D48">Contract negotiation takes</text>
+        <text x="695" y="465" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#E11D48">too long (Avg 14 days).</text>
+        <text x="695" y="485" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#E11D48">Legal redlines cause delays.</text>
+        <rect x="930" y="420" width="240" height="80" rx="6" fill="#FFF1F2" stroke="#FDA4AF" stroke-width="1"/>
+        <text x="945" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#E11D48">Steep learning curve.</text>
+        <text x="945" y="465" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#E11D48">Lack of interactive tutorials.</text>
+        <line x1="0" y1="520" x2="1170" y2="520" stroke="#0F172A" stroke-width="2"/>
+    </g>
+</svg>

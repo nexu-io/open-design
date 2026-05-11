@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <!-- 背景 -->
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  
+  <!-- ==================== 顶部装饰区域 ==================== -->
+  <!-- 深蓝色主横条 -->
+  <rect x="0" y="0" width="1280" height="100" fill="#003366"/>
+  <!-- 左侧红色竖条装饰 -->
+  <rect x="0" y="0" width="6" height="100" fill="#CC0000"/>
+  
+  <!-- 右上角 Logo 区域占位 -->
+  <rect x="1080" y="25" width="160" height="50" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.3" rx="4"/>
+  <text x="1160" y="58" text-anchor="middle" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18" font-weight="bold">
+    {{LOGO}}
+  </text>
+  
+  <!-- ==================== 主内容区域 ==================== -->
+  <!-- 主标题 -->
+  <text x="640" y="340" text-anchor="middle" fill="#003366" font-family="Microsoft YaHei, Arial, sans-serif" font-size="56" font-weight="bold">
+    {{TITLE}}
+  </text>
+  
+  <!-- 副标题 -->
+  <text x="640" y="410" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif" font-size="28">
+    {{SUBTITLE}}
+  </text>
+  
+  <!-- 装饰分割线 -->
+  <line x1="420" y1="450" x2="860" y2="450" stroke="#0066CC" stroke-width="2"/>
+  <circle cx="640" cy="450" r="5" fill="#0066CC"/>
+  
+  <!-- ==================== 答辩人信息区域 ==================== -->
+  <text x="640" y="520" text-anchor="middle" fill="#333333" font-family="Microsoft YaHei, Arial, sans-serif" font-size="24">
+    答辩人：{{AUTHOR}}
+  </text>
+  <text x="640" y="560" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif" font-size="20">
+    指导老师：{{ADVISOR}}
+  </text>
+  <text x="640" y="600" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18">
+    {{INSTITUTION}}
+  </text>
+  
+  <!-- ==================== 底部信息 ==================== -->
+  <rect x="0" y="665" width="1280" height="55" fill="#F5F7FA"/>
+  <text x="640" y="698" text-anchor="middle" fill="#999999" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14">
+    {{DATE}}
+  </text>
+</svg>

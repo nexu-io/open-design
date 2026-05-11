@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Harvey Balls Matrix Template
+    Purpose: Qualitative assessment, scoring, and vendor comparison
+    Use cases: Vendor evaluations, project status, skill matrices
+    Design Principles: Left-aligned features, centered Harvey balls, clean minimalist consulting grid
+    Note: Harvey ball shapes are inlined (no <use>/<defs>) so the SVG-to-PPTX converter renders them.
+    -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Vendor Capability Assessment</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">QUALITATIVE SCORING · HARVEY BALLS MATRIX</text>
+    <!-- ==================== Table Structure ==================== -->
+    <g id="tableArea" transform="translate(80, 150)">
+        <line x1="0" y1="40" x2="1120" y2="40" stroke="#0F172A" stroke-width="2"/>
+        <!-- Column Headers -->
+        <text x="20" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#64748B" letter-spacing="1">EVALUATION CRITERIA</text>
+        <!-- Highlighted Column -->
+        <rect x="440" y="0" width="160" height="40" rx="6" fill="#F8FAFC"/>
+        <text x="520" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#0F172A" letter-spacing="1" text-anchor="middle">VENDOR A (OURS)</text>
+        <text x="740" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="middle">VENDOR B</text>
+        <text x="960" y="25" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="middle">VENDOR C</text>
+        <!-- Vertical highlight background -->
+        <rect x="440" y="45" width="160" height="360" fill="#F8FAFC" rx="6"/>
+        <!-- ==================== Data Rows ==================== -->
+        <!-- Category 1 -->
+        <rect x="0" y="55" width="1120" height="35" fill="#F1F5F9"/>
+        <text x="20" y="78" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">Technical Architecture</text>
+        <!-- Row 1.1 -->
+        <line x1="0" y1="130" x2="1120" y2="130" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="40" y="115" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Cloud-Native Scalability</text>
+        <!-- 100% -->
+        <circle cx="520" cy="110" r="10" fill="#0F172A"/>
+        <!-- 50% -->
+        <circle cx="740" cy="110" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 740 110 L 740 100 A 10 10 0 0 1 740 120 Z" fill="#0F172A"/>
+        <!-- 25% -->
+        <circle cx="960" cy="110" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 960 110 L 960 100 A 10 10 0 0 1 970 110 Z" fill="#0F172A"/>
+        <!-- Row 1.2 -->
+        <line x1="0" y1="170" x2="1120" y2="170" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="40" y="155" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">API Extensibility</text>
+        <!-- 100% -->
+        <circle cx="520" cy="150" r="10" fill="#0F172A"/>
+        <!-- 75% -->
+        <circle cx="740" cy="150" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 740 150 L 730 150 A 10 10 0 1 1 740 160 Z" fill="#0F172A"/>
+        <!-- 50% -->
+        <circle cx="960" cy="150" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 960 150 L 960 140 A 10 10 0 0 1 960 160 Z" fill="#0F172A"/>
+        <!-- Category 2 -->
+        <rect x="0" y="185" width="1120" height="35" fill="#F1F5F9"/>
+        <text x="20" y="208" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">Market &amp; Support</text>
+        <!-- Row 2.1 -->
+        <line x1="0" y1="260" x2="1120" y2="260" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="40" y="245" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Global Support Coverage</text>
+        <!-- 75% -->
+        <circle cx="520" cy="240" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 520 240 L 510 240 A 10 10 0 1 1 520 250 Z" fill="#0F172A"/>
+        <!-- 100% -->
+        <circle cx="740" cy="240" r="10" fill="#0F172A"/>
+        <!-- 25% -->
+        <circle cx="960" cy="240" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 960 240 L 960 230 A 10 10 0 0 1 970 240 Z" fill="#0F172A"/>
+        <!-- Row 2.2 -->
+        <line x1="0" y1="300" x2="1120" y2="300" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="40" y="285" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Implementation Speed</text>
+        <!-- 100% -->
+        <circle cx="520" cy="280" r="10" fill="#0F172A"/>
+        <!-- 25% -->
+        <circle cx="740" cy="280" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 740 280 L 740 270 A 10 10 0 0 1 750 280 Z" fill="#0F172A"/>
+        <!-- 75% -->
+        <circle cx="960" cy="280" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 960 280 L 950 280 A 10 10 0 1 1 960 290 Z" fill="#0F172A"/>
+        <!-- Category 3 -->
+        <rect x="0" y="315" width="1120" height="35" fill="#F1F5F9"/>
+        <text x="20" y="338" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#0F172A">Pricing &amp; Value</text>
+        <!-- Row 3.1 -->
+        <line x1="0" y1="390" x2="1120" y2="390" stroke="#0F172A" stroke-width="2"/>
+        <text x="40" y="375" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#334155">Total Cost of Ownership (ROI)</text>
+        <!-- 100% -->
+        <circle cx="520" cy="370" r="10" fill="#0F172A"/>
+        <!-- 50% -->
+        <circle cx="740" cy="370" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 740 370 L 740 360 A 10 10 0 0 1 740 380 Z" fill="#0F172A"/>
+        <!-- 0% -->
+        <circle cx="960" cy="370" r="10" fill="none" stroke="#CBD5E1" stroke-width="2"/>
+        <!-- ==================== Legend ==================== -->
+        <rect x="0" y="410" width="1120" height="50" fill="#FFFFFF"/>
+        <text x="20" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748B" letter-spacing="1">LEGEND:</text>
+        <!-- 0% -->
+        <circle cx="120" cy="435" r="10" fill="none" stroke="#CBD5E1" stroke-width="2"/>
+        <text x="140" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Poor</text>
+        <!-- 25% -->
+        <circle cx="200" cy="435" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 200 435 L 200 425 A 10 10 0 0 1 210 435 Z" fill="#0F172A"/>
+        <text x="220" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Fair</text>
+        <!-- 50% -->
+        <circle cx="280" cy="435" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 280 435 L 280 425 A 10 10 0 0 1 280 445 Z" fill="#0F172A"/>
+        <text x="300" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Good</text>
+        <!-- 75% -->
+        <circle cx="360" cy="435" r="10" fill="none" stroke="#0F172A" stroke-width="2"/>
+        <path d="M 360 435 L 350 435 A 10 10 0 1 1 360 445 Z" fill="#0F172A"/>
+        <text x="380" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569">Very Good</text>
+        <!-- 100% -->
+        <circle cx="470" cy="435" r="10" fill="#0F172A"/>
+        <text x="490" y="440" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#0F172A">Excellent</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1200" y="690" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: Internal Vendor Assessment Q3</text>
+</svg>

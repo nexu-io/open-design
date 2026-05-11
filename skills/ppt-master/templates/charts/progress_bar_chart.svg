@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Progress Bar Chart Template
+    Purpose: Goal tracking, metric comparisons
+    Use cases: OKR tracking, Project status, KPI dashboards
+    Supports: 6 unified progress bars with global target axis
+    -->
+    <defs>
+        <!-- Tailwind Gradients for Progress Bars -->
+        <linearGradient id="gradEmerald" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#34D399" />
+            <stop offset="100%" stop-color="#059669" />
+        </linearGradient>
+        <linearGradient id="gradBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#60A5FA" />
+            <stop offset="100%" stop-color="#2563EB" />
+        </linearGradient>
+        <linearGradient id="gradAmber" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#FBBF24" />
+            <stop offset="100%" stop-color="#D97706" />
+        </linearGradient>
+        <linearGradient id="gradRose" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#FB7185" />
+            <stop offset="100%" stop-color="#E11D48" />
+        </linearGradient>
+        <!-- Standard Card Shadow -->
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="3" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- Subtle Bar Shadow -->
+        <filter id="barShadow" x="-5%" y="-20%" width="110%" height="150%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- ==================== Header Area ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Q4 2025 OKR Progress Tracking</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">DEADLINE: DEC 31, 2025 · 20 DAYS REMAINING</text>
+    <!-- Overall Completion Card -->
+    <g id="overallProgress" transform="translate(860, 40)">
+        <rect x="0" y="0" width="360" height="70" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <text x="20" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#64748B" letter-spacing="0.5">OVERALL COMPLETION</text>
+        <text x="20" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="800" fill="#0F172A">73.5%</text>
+        <text x="100" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#94A3B8">/ Target 100%</text>
+        <rect x="220" y="28" width="120" height="14" rx="7" fill="#F1F5F9"/>
+        <rect x="220" y="28" width="88.2" height="14" rx="7" fill="url(#gradBlue)" filter="url(#barShadow)"/>
+    </g>
+    <!-- ==================== Progress Bars ==================== -->
+    <g id="progressBars">
+        <!-- 1. Revenue Target (92%) -->
+        <g transform="translate(60, 150)">
+            <text x="0" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Revenue Target</text>
+            <text x="0" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Target: $50M | Actual: $46M</text>
+            <rect x="280" y="10" width="700" height="20" rx="10" fill="#F1F5F9" />
+            <rect x="280" y="10" width="644" height="20" rx="10" fill="url(#gradEmerald)" filter="url(#barShadow)"/>
+            <text x="1010" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#059669">92%</text>
+            <rect x="1080" y="8" width="90" height="24" rx="12" fill="#D1FAE5" />
+            <text x="1125" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#064E3B" text-anchor="middle">AHEAD</text>
+        </g>
+        <!-- 2. New Customer Acquisition (85%) -->
+        <g transform="translate(60, 235)">
+            <text x="0" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">New Customer Acquisition</text>
+            <text x="0" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Target: 200 Accounts | Actual: 170 Accounts</text>
+            <rect x="280" y="10" width="700" height="20" rx="10" fill="#F1F5F9" />
+            <rect x="280" y="10" width="595" height="20" rx="10" fill="url(#gradEmerald)" filter="url(#barShadow)"/>
+            <text x="1010" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#059669">85%</text>
+            <rect x="1080" y="8" width="90" height="24" rx="12" fill="#D1FAE5" />
+            <text x="1125" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#064E3B" text-anchor="middle">ON TRACK</text>
+        </g>
+        <!-- 3. Product Launch (75%) -->
+        <g transform="translate(60, 320)">
+            <text x="0" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Product Launch</text>
+            <text x="0" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Target: 4 Features | Actual: 3 Features</text>
+            <rect x="280" y="10" width="700" height="20" rx="10" fill="#F1F5F9" />
+            <rect x="280" y="10" width="525" height="20" rx="10" fill="url(#gradBlue)" filter="url(#barShadow)"/>
+            <text x="1010" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#2563EB">75%</text>
+            <rect x="1080" y="8" width="90" height="24" rx="12" fill="#DBEAFE" />
+            <text x="1125" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#1E3A8A" text-anchor="middle">IN PROGRESS</text>
+        </g>
+        <!-- 4. Team Expansion (68%) -->
+        <g transform="translate(60, 405)">
+            <text x="0" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Team Expansion</text>
+            <text x="0" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Target: 25 Hires | Actual: 17 Hires</text>
+            <rect x="280" y="10" width="700" height="20" rx="10" fill="#F1F5F9" />
+            <rect x="280" y="10" width="476" height="20" rx="10" fill="url(#gradAmber)" filter="url(#barShadow)"/>
+            <text x="1010" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#D97706">68%</text>
+            <rect x="1080" y="8" width="90" height="24" rx="12" fill="#FEF3C7" />
+            <text x="1125" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#92400E" text-anchor="middle">DELAYED</text>
+        </g>
+        <!-- 5. Cost Optimization (55%) -->
+        <g transform="translate(60, 490)">
+            <text x="0" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Cost Optimization</text>
+            <text x="0" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Target: -20% | Actual: -11%</text>
+            <rect x="280" y="10" width="700" height="20" rx="10" fill="#F1F5F9" />
+            <rect x="280" y="10" width="385" height="20" rx="10" fill="url(#gradRose)" filter="url(#barShadow)"/>
+            <text x="1010" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#E11D48">55%</text>
+            <rect x="1080" y="8" width="90" height="24" rx="12" fill="#FFE4E6" />
+            <text x="1125" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#9F1239" text-anchor="middle">AT RISK</text>
+        </g>
+        <!-- 6. Brand Awareness (66%) -->
+        <g transform="translate(60, 575)">
+            <text x="0" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Brand Awareness</text>
+            <text x="0" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B">Target: +30% | Actual: +20%</text>
+            <rect x="280" y="10" width="700" height="20" rx="10" fill="#F1F5F9" />
+            <rect x="280" y="10" width="462" height="20" rx="10" fill="url(#gradAmber)" filter="url(#barShadow)"/>
+            <text x="1010" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#D97706">66%</text>
+            <rect x="1080" y="8" width="90" height="24" rx="12" fill="#FEF3C7" />
+            <text x="1125" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#92400E" text-anchor="middle">DELAYED</text>
+        </g>
+    </g>
+    <!-- ==================== Global Target Axis ==================== -->
+    <line x1="980" y1="140" x2="980" y2="615" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" />
+    <rect x="945" y="125" width="70" height="24" rx="12" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5" />
+    <text x="980" y="141" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#64748B" text-anchor="middle">100% GOAL</text>
+    <!-- ==================== Legend ==================== -->
+    <g id="legend" transform="translate(60, 660)">
+        <rect x="0" y="0" width="16" height="16" rx="4" fill="url(#gradEmerald)"/>
+        <text x="24" y="13" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">On Track / Ahead (≥80%)</text>
+        <rect x="180" y="0" width="16" height="16" rx="4" fill="url(#gradBlue)"/>
+        <text x="204" y="13" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">In Progress (70-80%)</text>
+        <rect x="350" y="0" width="16" height="16" rx="4" fill="url(#gradAmber)"/>
+        <text x="374" y="13" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Delayed (60-70%)</text>
+        <rect x="510" y="0" width="16" height="16" rx="4" fill="url(#gradRose)"/>
+        <text x="534" y="13" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">At Risk (&lt;60%)</text>
+    </g>
+    <!-- Data Source -->
+    <text x="1220" y="675" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="end">Data Source: OKR Management System</text>
+</svg>

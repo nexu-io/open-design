@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Bullet Chart Template
+    Purpose: Target vs Actual comparison, more space-efficient than gauges
+    Use cases: KPI achievement, sales targets, budget execution, performance evaluation
+    Supports: 5 metrics displayed in parallel
+    -->
+    <defs>
+        <!-- Base Background Range (Professional Grayscale) -->
+        <linearGradient id="bgFair" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#F1F5F9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#E2E8F0;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="bgGood" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#E2E8F0;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#CBD5E1;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="bgExcellent" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#CBD5E1;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#94A3B8;stop-opacity:1" />
+        </linearGradient>
+        <!-- Actual Data Bar Gradient -->
+        <linearGradient id="actualBarBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#2563EB;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="actualBarGreen" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#34D399;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="actualBarOrange" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#F59E0B;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#FBBF24;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="actualBarRed" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#EF4444;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#F87171;stop-opacity:1" />
+        </linearGradient>
+        <!-- Standard Shadow Filter -->
+        <filter id="bulletShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2" result="offsetBlur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.12" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <text x="640" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A" text-anchor="middle">2025 Annual KPI Achievement Status</text>
+    <text x="640" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+          font-size="18" fill="#64748B" text-anchor="middle">Target vs Actual - As of Q4</text>
+    <!-- Legend -->
+    <g id="legend" transform="translate(900, 100)">
+        <g id="legend-fair">
+            <rect x="0" y="0" width="20" height="12" fill="url(#bgFair)" rx="2"/>
+            <text x="28" y="10" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="12" fill="#475569">Fair (0-60%)</text>
+        </g>
+        <g id="legend-good">
+            <rect x="120" y="0" width="20" height="12" fill="url(#bgGood)" rx="2"/>
+            <text x="148" y="10" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="12" fill="#475569">Good (60-80%)</text>
+        </g>
+        <g id="legend-excellent">
+            <rect x="250" y="0" width="20" height="12" fill="url(#bgExcellent)" rx="2"/>
+            <text x="278" y="10" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+                  font-size="12" fill="#475569">Excellent (80-100%+)</text>
+        </g>
+    </g>
+    <!-- Bullet 1: Sales Revenue 92% -->
+    <g id="bullet1" transform="translate(80, 140)">
+        <text x="0" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A">Sales Revenue</text>
+        <text x="0" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B">Target: $100M</text>
+        <rect x="180" y="20" width="900" height="50" fill="url(#bgFair)" rx="4"/>
+        <rect x="180" y="20" width="720" height="50" fill="url(#bgGood)" rx="4"/>
+        <rect x="180" y="20" width="540" height="50" fill="url(#bgExcellent)" rx="4"/>
+        <rect x="180" y="32" width="828" height="26" fill="url(#actualBarGreen)" rx="3" filter="url(#bulletShadow)"/>
+        <line x1="1080" y1="15" x2="1080" y2="75" stroke="#1E293B" stroke-width="4"/>
+        <text x="998" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="end">$92M</text>
+        <text x="1120" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="bold" fill="#10B981">92%</text>
+    </g>
+    <!-- Bullet 2: New Customers 97% -->
+    <g id="bullet2" transform="translate(80, 240)">
+        <text x="0" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A">New Customers</text>
+        <text x="0" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B">Target: 500</text>
+        <rect x="180" y="20" width="900" height="50" fill="url(#bgFair)" rx="4"/>
+        <rect x="180" y="20" width="720" height="50" fill="url(#bgGood)" rx="4"/>
+        <rect x="180" y="20" width="540" height="50" fill="url(#bgExcellent)" rx="4"/>
+        <rect x="180" y="32" width="873" height="26" fill="url(#actualBarGreen)" rx="3" filter="url(#bulletShadow)"/>
+        <line x1="1080" y1="15" x2="1080" y2="75" stroke="#1E293B" stroke-width="4"/>
+        <text x="1043" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="end">485</text>
+        <text x="1120" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="bold" fill="#10B981">97%</text>
+    </g>
+    <!-- Bullet 3: Customer Satisfaction 98% -->
+    <g id="bullet3" transform="translate(80, 340)">
+        <text x="0" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A">Customer Satisfaction</text>
+        <text x="0" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B">Target: 90%</text>
+        <rect x="180" y="20" width="900" height="50" fill="url(#bgFair)" rx="4"/>
+        <rect x="180" y="20" width="720" height="50" fill="url(#bgGood)" rx="4"/>
+        <rect x="180" y="20" width="540" height="50" fill="url(#bgExcellent)" rx="4"/>
+        <rect x="180" y="32" width="880" height="26" fill="url(#actualBarGreen)" rx="3" filter="url(#bulletShadow)"/>
+        <line x1="990" y1="15" x2="990" y2="75" stroke="#1E293B" stroke-width="4"/>
+        <text x="1050" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="end">88%</text>
+        <text x="1120" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="bold" fill="#10B981">98%</text>
+    </g>
+    <!-- Bullet 4: Market Share 72% -->
+    <g id="bullet4" transform="translate(80, 440)">
+        <text x="0" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A">Market Share</text>
+        <text x="0" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B">Target: 25%</text>
+        <rect x="180" y="20" width="900" height="50" fill="url(#bgFair)" rx="4"/>
+        <rect x="180" y="20" width="720" height="50" fill="url(#bgGood)" rx="4"/>
+        <rect x="180" y="20" width="540" height="50" fill="url(#bgExcellent)" rx="4"/>
+        <rect x="180" y="32" width="648" height="26" fill="url(#actualBarOrange)" rx="3" filter="url(#bulletShadow)"/>
+        <line x1="1080" y1="15" x2="1080" y2="75" stroke="#1E293B" stroke-width="4"/>
+        <text x="818" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="end">18%</text>
+        <text x="1120" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="bold" fill="#F59E0B">72%</text>
+    </g>
+    <!-- Bullet 5: Cost Control 119% (Over budget) -->
+    <g id="bullet5" transform="translate(80, 540)">
+        <text x="0" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A">Cost Control</text>
+        <text x="0" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B">Budget: $80M</text>
+        <rect x="180" y="20" width="900" height="50" fill="url(#bgExcellent)" rx="4"/>
+        <rect x="720" y="20" width="360" height="50" fill="url(#bgGood)" rx="4"/>
+        <rect x="900" y="20" width="180" height="50" fill="url(#bgFair)" rx="4"/>
+        <rect x="180" y="32" width="855" height="26" fill="url(#actualBarRed)" rx="3" filter="url(#bulletShadow)"/>
+        <line x1="720" y1="15" x2="720" y2="75" stroke="#1E293B" stroke-width="4"/>
+        <text x="1025" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="end">$95M</text>
+        <text x="1120" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="bold" fill="#EF4444">119%</text>
+    </g>
+    <!-- Insight box -->
+    <g id="insight">
+        <rect x="80" y="620" width="1120" height="70" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" filter="url(#bulletShadow)"/>
+        <text x="110" y="650" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="16" font-weight="600" fill="#1E293B">💡 Summary:</text>
+        <text x="220" y="650" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="15" fill="#475569">3 KPIs exceeded targets. Market share growth needs strengthening. Cost control requires attention.</text>
+        <text x="110" y="675" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" 
+              font-size="14" font-weight="500" fill="#64748B">Recommendation: Prioritize cutting non-core project expenses while increasing marketing budget.</text>
+    </g>
+</svg>

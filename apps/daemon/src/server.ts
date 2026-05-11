@@ -13,7 +13,17 @@ import {
   composeSystemPrompt,
   renderCodexImagegenOverride,
   shouldRenderCodexImagegenOverride,
+  injectDeckSessionHint,
 } from './prompts/system.js';
+import {
+  validateAndTrimHtml as _validateAndTrimHtml,
+  loadSession as _loadSession,
+  advanceSession as _advanceSession,
+  hasSession as _hasSession,
+  createSession as _createSession,
+  closeSession as _closeSession,
+  countSlidesInFile as _countSlidesInFile,
+} from './deck-session.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { createCommandInvocation } from '@open-design/platform';
 import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
@@ -60,6 +70,7 @@ import { importClaudeDesignZip } from './claude-design-import.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
+import { convertHtmlToPptx, isLibreOfficeAvailable } from './html-to-pptx.js';
 import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
@@ -1530,6 +1541,20 @@ export function createSseResponse(
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
   if (!Number.isFinite(raw)) return 2 * 60 * 1000;
+  return Math.max(0, Math.floor(raw));
+}
+
+/** Deck projects get a 90s inactivity window — generous for thinking models while still catching hangs. */
+function resolveDeckRunInactivityTimeoutMs() {
+  const raw = Number(process.env.OD_DECK_RUN_INACTIVITY_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return 90_000; // 90s for deck — generous enough for thinking models (Qwen/Claude) while still catching hangs
+  return Math.max(0, Math.floor(raw));
+}
+
+/** Maximum wall-clock duration for a single deck run. Prevents context-bloat hangs. */
+function resolveDeckRunTotalTimeoutMs() {
+  const raw = Number(process.env.OD_DECK_RUN_TOTAL_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return 5 * 60 * 1000; // 5min cap
   return Math.max(0, Math.floor(raw));
 }
 
@@ -3488,6 +3513,308 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  // ---- PPTX export: HTML → PDF → PPTX (automated, no AI) -----------------
+  // Converts a deck HTML file to PPTX via Playwright (HTML → PDF) + LibreOffice (PDF → PPTX).
+  // Gives 100% visual fidelity — every slide is rendered by Chromium and preserved as PDF pages.
+
+  const createSseResponseForExport = (res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    const send = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    return { send, end: () => res.end() };
+  };
+
+  app.post('/api/projects/:id/export/pptx', async (req, res) => {
+    const { fileId, aspectRatio = '16:9' } = req.body || {};
+    if (typeof fileId !== 'string' || !fileId.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'fileId is required');
+    }
+
+    // Check LibreOffice availability upfront
+    const loAvailable = await isLibreOfficeAvailable();
+    if (!loAvailable) {
+      return sendApiError(res, 501, 'LIBREOFFICE_UNAVAILABLE',
+        'LibreOffice is not installed. Install it with: brew install libreoffice (macOS) or sudo apt install libreoffice (Linux).');
+    }
+
+    const sse = createSseResponseForExport(res);
+
+    try {
+      const projectId = req.params.id;
+      const project = getProject(db, projectId);
+      if (!project) {
+        sse.send('error', { code: 'PROJECT_NOT_FOUND', message: 'Project not found' });
+        sse.end();
+        return;
+      }
+
+      // Resolve the HTML file path within the project
+      const projectPath = projectDir(PROJECTS_DIR, projectId);
+      const htmlFilePath = path.resolve(projectPath, fileId);
+
+      // Security: ensure the resolved path is within the project directory
+      if (!htmlFilePath.startsWith(path.resolve(projectPath) + path.sep) && htmlFilePath !== path.resolve(projectPath)) {
+        sse.send('error', { code: 'BAD_REQUEST', message: 'fileId must be within the project directory' });
+        sse.end();
+        return;
+      }
+
+      // Verify the HTML file exists
+      if (!fs.existsSync(htmlFilePath)) {
+        sse.send('error', { code: 'FILE_NOT_FOUND', message: `File not found: ${fileId}` });
+        sse.end();
+        return;
+      }
+
+      sse.send('status', { status: 'converting', slide: 0 });
+
+      // Determine output path
+      const baseName = fileId.replace(/\.[^.]+$/, '');
+      const outputPptxPath = path.join(projectPath, `${baseName}.pptx`);
+
+      const result = await convertHtmlToPptx({
+        htmlPath: htmlFilePath,
+        outputPath: outputPptxPath,
+        aspectRatio,
+        onProgress: (slide, total) => {
+          sse.send('progress', { slide, total, status: 'converting' });
+        },
+      });
+
+      sse.send('done', {
+        path: result.path,
+        slideCount: result.slideCount,
+        sizeBytes: result.sizeBytes,
+        fileName: path.basename(result.path),
+      });
+      sse.end();
+    } catch (err: any) {
+      sse.send('error', {
+        code: 'PPTX_CONVERSION_FAILED',
+        message: err?.message || String(err),
+      });
+      sse.end();
+    }
+  });
+
+  // GET /api/projects/:id/check-libreoffice — check if LibreOffice is available
+  app.get('/api/projects/:id/check-libreoffice', async (req, res) => {
+    const available = await isLibreOfficeAvailable();
+    res.json({ available });
+  });
+
+  // --- Deck session management API ---
+  // These endpoints let the frontend manage multi-slide deck generation
+  // through a harness-level state machine rather than relying solely on
+  // prompt-level soft constraints.
+
+  // GET /api/projects/:id/deck/session — check if an active session exists
+  app.get('/api/projects/:id/deck/session', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      const cwd = project?.metadata?.baseDir
+        ? path.normalize(project.metadata.baseDir)
+        : path.join(PROJECTS_DIR, req.params.id);
+
+      if (!_hasSession(cwd)) {
+        return res.json({ active: false });
+      }
+
+      const session = _loadSession(cwd);
+      if (!session) {
+        return res.json({ active: false });
+      }
+
+      res.json({
+        active: true,
+        status: session.status,
+        outline: session.outline,
+        completedSlides: session.completedSlides,
+        totalSlides: session.outline?.slides?.length ?? 0,
+        lastViolation: session.lastViolation,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // POST /api/projects/:id/deck/session — create a new deck session with outline
+  app.post('/api/projects/:id/deck/session', async (req, res) => {
+    try {
+      const { outline } = req.body || {};
+      if (!outline || !Array.isArray(outline.slides)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'outline.slides is required');
+      }
+
+      const project = getProject(db, req.params.id);
+      const cwd = project?.metadata?.baseDir
+        ? path.normalize(project.metadata.baseDir)
+        : path.join(PROJECTS_DIR, req.params.id);
+
+      // Ensure project directory exists
+      try {
+        fs.mkdirSync(cwd, { recursive: true });
+      } catch { /* may already exist */ }
+
+      const session = _createSession(cwd, outline);
+      res.json({
+        active: true,
+        status: session.status,
+        outline: session.outline,
+        completedSlides: session.completedSlides,
+        totalSlides: session.outline?.slides?.length ?? 0,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // POST /api/projects/:id/deck/session/advance — manually advance to next slide
+  app.post('/api/projects/:id/deck/session/advance', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      const cwd = project?.metadata?.baseDir
+        ? path.normalize(project.metadata.baseDir)
+        : path.join(PROJECTS_DIR, req.params.id);
+
+      if (!_hasSession(cwd)) {
+        return res.json({ active: false });
+      }
+
+      const session = _advanceSession(cwd);
+      if (!session) {
+        return res.json({ active: false });
+      }
+
+      res.json({
+        active: true,
+        status: session.status,
+        completedSlides: session.completedSlides,
+        totalSlides: session.outline?.slides?.length ?? 0,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // DELETE /api/projects/:id/deck/session — close/cancel the session
+  app.delete('/api/projects/:id/deck/session', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      const cwd = project?.metadata?.baseDir
+        ? path.normalize(project.metadata.baseDir)
+        : path.join(PROJECTS_DIR, req.params.id);
+
+      if (_hasSession(cwd)) {
+        _closeSession(cwd);
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // POST /api/projects/:id/deck/generate-next — spawn a FRESH agent run for
+  // the next slide only. This avoids context bloat from the accumulated
+  // conversation history of prior slides. Each call creates a new run with
+  // a clean context window.
+  app.post('/api/projects/:id/deck/generate-next', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      const cwd = project?.metadata?.baseDir
+        ? path.normalize(project.metadata.baseDir)
+        : path.join(PROJECTS_DIR, req.params.id);
+
+      if (!_hasSession(cwd)) {
+        return res.status(400).json({
+          error: 'No active deck session. Create one first via POST /api/projects/:id/deck/session',
+        });
+      }
+
+      const session = _loadSession(cwd);
+      if (!session || session.status === 'done') {
+        return res.json({ active: false, message: 'All slides complete' });
+      }
+
+      const nextSlide = session.completedSlides + 1;
+      const slideInfo = session.outline?.slides[session.completedSlides];
+      if (!slideInfo) {
+        return res.status(400).json({ error: 'No outline entry for next slide' });
+      }
+
+      // Read current HTML to give the agent the existing state
+      const htmlPath = path.join(cwd, 'index.html');
+      let currentHtml = '';
+      if (fs.existsSync(htmlPath)) {
+        currentHtml = fs.readFileSync(htmlPath, 'utf-8');
+      }
+
+      // Read skeleton for reference
+      const skeletonHtml = DECK_SKELETON_HTML;
+
+      // Craft a compact message that tells the agent exactly what to do
+      const slideType = slideInfo.type || 'content';
+      const message = [
+        `[form answers — continuation] 这是多页 PPT 生成的第 ${nextSlide}/${session.outline.slides.length} 页。跳过 discovery 表单，直接写 slide。`,
+        '',
+        '## 当前文件状态',
+        currentHtml ? `index.html 已有 ${currentHtml.split('\n').length} 行。请在 </div>（stage 结束）之前、现有 slides 之后，插入新的 <section class="slide">。</section>` : `index.html 还不存在。请先拷贝下面的骨架作为 index.html，然后只填充第 ${nextSlide} 页：\n\n\`\`\`html\n${skeletonHtml}\n\`\`\``,
+        '',
+        '## 你要写的 slide',
+        `- 页号: ${nextSlide}`,
+        `- 标题: ${slideInfo.title}`,
+        `- 类型: ${slideType}`,
+        `- 内容概要: ${slideInfo.content}`,
+        '',
+        '## 绝对规则',
+        '1. 纯白背景，禁止深色/黑白交替',
+        '2. 系统字体（PingFang SC / Microsoft YaHei / Segoe UI），禁止 Google Fonts',
+        '3. 只用一个 accent 色（从 :root 的 --accent 读取）',
+        '4. 只写这一页，不要修改已有 slides',
+        '5. 写完后 STOP — 不要继续编辑或自检',
+        '6. 绝对不要做 TodoWrite 计划，不要问问题，直接写代码',
+        '7. 不要尝试一次性写完所有 slide，逐页生成是强制规则',
+        '',
+        '请现在开始。先 Read 当前 index.html 确认位置，然后 Write 插入新 slide。',
+      ].join('\n');
+
+      // Create a fresh run with this compact message — NO conversation history
+      const run = design.runs.create({
+        projectId: req.params.id,
+        conversationId: null,  // No conversation — clean context
+        agentId: (req.body && req.body.agentId) || project?.metadata?.agentId || null,
+      });
+
+      /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
+      const body = { runId: run.id };
+      res.status(202).json(body);
+
+      // Build a minimal chat request
+      const chatReq = {
+        agentId: (req.body && req.body.agentId) || 'claude',
+        message,
+        projectId: req.params.id,
+        conversationId: null,
+        assistantMessageId: null,
+        clientRequestId: `deck-slide-${nextSlide}-${randomUUID()}`,
+        skillId: project?.metadata?.skillId || null,
+        designSystemId: project?.metadata?.designSystemId || null,
+        imagePaths: [],
+        attachments: [],
+        commentAttachments: [],
+        model: (req.body && req.body.model) || null,
+        reasoning: (req.body && req.body.reasoning) || null,
+      };
+      design.runs.start(run, () => startChatRun(chatReq, run));
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // Preflight for the raw file route. Current artifact fetches are simple GETs
   // (no preflight needed), but an explicit handler future-proofs the route if
   // artifacts ever add custom request headers.
@@ -4163,7 +4490,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
     // the same panel-eligibility decision down to the spawn-path
     // orchestrator gate so prompt and orchestrator stay in lockstep.
-    return { prompt, activeSkillDir, critiqueShouldRun };
+    return { prompt, activeSkillDir, critiqueShouldRun, skillMode, metadata };
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -4317,7 +4644,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
-    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
+    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun, skillMode, metadata } =
       await composeDaemonSystemPrompt({
         agentId,
         projectId,
@@ -4413,6 +4740,56 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
+
+    // Deck projects: wrap user message in XML tags so the system prompt's
+    // input-boundary rule can treat conflicting instructions (like "一次性生成所有页面")
+    // as context data rather than executable directives.
+    // For deck continuation messages ("Continue remaining tasks"), override to
+    // only request the NEXT slide — prevents the agent from attempting to
+    // generate all remaining slides at once.
+    const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
+    const safeMessage = (() => {
+      let raw = message || '(No extra typed instruction.)';
+
+      // Detect deck continuation: message asks to continue remaining tasks.
+      // Extract the first remaining task and rewrite the message to only
+      // request that one slide.
+      if (isDeckProject && /continue.*(remaining|unfinished|unfinished remaining|remaining unfinished).*(task|todo)|继续.*下一页|继续生成|未完成/i.test(raw)) {
+        // Parse the todo list from the message
+        const todoMatch = raw.match(/\d+\.\s*\[(\w+)\]\s*(.+)/g);
+        if (todoMatch && todoMatch.length > 0) {
+          // Find the first in_progress or pending todo
+          for (const todo of todoMatch) {
+            const todoDetail = todo.match(/\d+\.\s*\[(\w+)\]\s*(.+)/);
+            if (todoDetail) {
+              const [, status, label] = todoDetail;
+              if (status === 'in_progress' || status === 'pending') {
+                raw = [
+                  `[form answers — continuation] 继续生成 PPT。只写下一页，不要写其他页面。`,
+                  '',
+                  `## 你要写的 slide`,
+                  label.trim(),
+                  '',
+                  `## 规则`,
+                  '1. 先 Read 当前 index.html 确认插入位置',
+                  '2. 只插入一个新的 <section class="slide">，不要修改已有 slides',
+                  '3. 写完后 STOP — 不要继续编辑或自检',
+                  '4. 不要做 TodoWrite 计划，直接写代码',
+                  '5. 不要尝试一次性写完所有 slide',
+                ].join('\n');
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (isDeckProject) {
+        return `<user_brief>\n${raw}\n</user_brief>`;
+      }
+      return raw;
+    })();
+
     const composed = [
       instructionPrompt
         ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
@@ -4421,11 +4798,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           : linkedDirsHint
             ? `# Instructions${linkedDirsHint}\n\n---\n`
             : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      `# User request\n\n${safeMessage}${attachmentHint}${commentHint}`,
       safeImages.length
         ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
         : '',
     ].join('');
+
+    // Deck session hint: when a deck project has an active multi-slide
+    // session, append the per-turn state hint so the agent knows exactly
+    // which slide to write next. This is harness-level enforcement on top
+    // of the soft prompt constraints.
+    const composedWithSession = injectDeckSessionHint(composed, cwd, isDeckProject);
+    const effectiveComposed = composedWithSession;
+
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -4455,7 +4840,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // independently of whether the adapter binary happens to be on PATH
     // in the CI environment, and the user gets the actionable
     // adapter-named error even if /api/agents hadn't refreshed yet.
-    const promptBudgetError = checkPromptArgvBudget(def, composed);
+    const promptBudgetError = checkPromptArgvBudget(def, effectiveComposed);
     if (promptBudgetError) {
       design.runs.emit(
         run,
@@ -4480,7 +4865,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const resolvedBin = resolveAgentBin(agentId, configuredAgentEnv);
 
     const args = def.buildArgs(
-      composed,
+      effectiveComposed,
       safeImages,
       extraAllowedDirs,
       agentOptions,
@@ -4543,13 +4928,25 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
 
     const send = (event, data) => design.runs.emit(run, event, data);
-    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    // Deck projects get a tighter inactivity window (90s vs 2m default)
+    // so context-bloat hangs are caught fast. Generous enough for thinking models.
+    const inactivityTimeoutMs = isDeckProject
+      ? resolveDeckRunInactivityTimeoutMs()
+      : resolveChatRunInactivityTimeoutMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
+    // Deck projects also get a total wall-clock cap (5min default) to prevent
+    // runs that keep dribbling output slowly but never finish (context overflow).
+    const deckTotalTimeoutMs = isDeckProject ? resolveDeckRunTotalTimeoutMs() : 0;
+    let deckTotalTimer = null;
     const clearInactivityWatchdog = () => {
       if (inactivityTimer) {
         clearTimeout(inactivityTimer);
         inactivityTimer = null;
+      }
+      if (deckTotalTimer) {
+        clearTimeout(deckTotalTimer);
+        deckTotalTimer = null;
       }
     };
     const scheduleForcedChildShutdown = () => {
@@ -4615,6 +5012,14 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           }
         : {}),
     };
+
+    // Deck projects get 64K output tokens (double the 32K default) so
+    // multi-slide generation doesn't hit the output cap mid-write. This
+    // is separate from context window — even with 200K context, the model
+    // can only emit 32K tokens per response by default.
+    const deckOutputBudgetEnv = isDeckProject
+      ? { CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64000' }
+      : {};
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -4634,7 +5039,32 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       reasoning: safeReasoning,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
-    noteAgentActivity();
+    // Inactivity timer: for deck projects, start from the first SSE event
+    // (not spawn time) so startup overhead doesn't eat into the window.
+    // For generic projects, keep the old behavior (start immediately).
+    if (!isDeckProject) {
+      noteAgentActivity();
+    }
+
+    // Deck total timeout: kill the run if it exceeds the wall-clock cap.
+    // This catches the "context bloat" case where the agent keeps producing
+    // output slowly but never finishes because the conversation grew too large.
+    if (deckTotalTimeoutMs > 0) {
+      deckTotalTimer = setTimeout(() => {
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        const message =
+          `Deck generation exceeded ${Math.round(deckTotalTimeoutMs / 1000 / 60)}min. ` +
+          'The agent likely ran out of context budget. Try: (1) reduce the number of slides, ' +
+          '(2) ask it to continue from where it left off, or (3) retry with a different model.';
+        clearInactivityWatchdog();
+        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
+        design.runs.finish(run, 'failed', 1, null);
+        if (acpSession?.abort) acpSession.abort();
+        if (child && !child.killed) child.kill('SIGTERM');
+        scheduleForcedChildShutdown();
+      }, deckTotalTimeoutMs);
+      deckTotalTimer.unref?.();
+    }
 
     let child;
     let acpSession = null;
@@ -4656,6 +5086,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           configuredAgentEnv,
         ),
         ...odMediaEnv,
+        ...deckOutputBudgetEnv,
       };
       const invocation = createCommandInvocation({
         command: resolvedBin,
@@ -4858,22 +5289,45 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       send('agent', ev);
     };
 
+    // ---- Deck outline auto-detection ----------------------------------
+    // When a deck project's agent emits an outline JSON block in its text
+    // output, we intercept it. Once the run completes, if a session doesn't
+    // exist yet, we extract the outline and create it. This ensures
+    // subsequent runs enforce per-slide generation even when the frontend
+    // never calls the session API.
+    let deckOutlineJson = '';
+    const captureDeckOutline = (text) => {
+      if (!isDeckProject || !cwd) return;
+      deckOutlineJson += text;
+    };
+
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
         noteAgentActivity();
         send('agent', ev);
+        if (isDeckProject && ev?.type === 'text_delta' && ev?.delta) {
+          captureDeckOutline(ev.delta);
+        }
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
       trackingSubstantiveOutput = true;
-      const qoder = createQoderStreamHandler(sendAgentEvent);
+      const qoder = createQoderStreamHandler((ev) => {
+        sendAgentEvent(ev);
+        if (isDeckProject && ev?.type === 'text_delta' && ev?.delta) {
+          captureDeckOutline(ev.delta);
+        }
+      });
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => {
         noteAgentActivity();
         send('agent', ev);
+        if (isDeckProject && ev?.type === 'text_delta' && ev?.delta) {
+          captureDeckOutline(ev.delta);
+        }
       });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
@@ -4896,7 +5350,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
-        prompt: composed,
+        prompt: effectiveComposed,
         cwd: effectiveCwd,
         model: safeModel,
         send: (channel, payload) => {
@@ -4922,7 +5376,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     } else if (def.streamFormat === 'acp-json-rpc') {
       acpSession = attachAcpSession({
         child,
-        prompt: composed,
+        prompt: effectiveComposed,
         cwd: effectiveCwd,
         model: safeModel,
         mcpServers,
@@ -4940,7 +5394,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       trackingSubstantiveOutput = true;
       const handler = createJsonEventStreamHandler(
         def.eventParser || def.id,
-        sendAgentEvent,
+        (ev) => {
+          sendAgentEvent(ev);
+          if (isDeckProject && ev?.type === 'text_delta' && ev?.delta) {
+            captureDeckOutline(ev.delta);
+          }
+        },
       );
       child.stdout.on('data', (chunk) => handler.feed(chunk));
       child.on('close', () => handler.flush());
@@ -4966,6 +5425,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       design.runs.finish(run, 'failed', 1, null);
     });
     child.on('close', (code, signal) => {
+      const closeStart = Date.now();
+      console.log(`[od][deck-debug] child.close fired: code=${code} signal=${signal}`);
       clearInactivityWatchdog();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -5002,10 +5463,97 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : code === 0
           ? 'succeeded'
           : 'failed';
+      console.log(`[od][deck-debug] status=${status}, isDeckProject=${isDeckProject}, effectiveCwd=${!!effectiveCwd}`);
+
+      // Deck session enforcement: validate agent output after each run.
+      // Runs even when the agent was killed (timeout/SIGTERM) — the HTML
+      // file may have partial content that needs trimming and the session
+      // needs advancing so the next continuation doesn't retry the same
+      // broken state.
+      if (effectiveCwd && isDeckProject) {
+        try {
+          const htmlPath = path.join(effectiveCwd, 'index.html');
+
+          // No sleep needed: close event fires after process exits and all
+          // file writes from the agent's tools are already flushed.
+
+          // Auto-create session from detected outline JSON if no session exists
+          if (!_hasSession(effectiveCwd) && deckOutlineJson.length > 0) {
+            try {
+              const outlineRe = /(\{[^{}]*"outline"\s*:\s*\{[^{}]*"slides"\s*:\s*\[[\s\S]*?\][^{}]*\}[^{}]*\})/m;
+              const outlineMatch = deckOutlineJson.match(outlineRe);
+              if (outlineMatch) {
+                const parsed = JSON.parse(outlineMatch[1]);
+                const outline = parsed.outline;
+                if (outline && outline.slides && Array.isArray(outline.slides) && outline.slides.length > 0) {
+                  _createSession(effectiveCwd, outline);
+                  console.log(`[od][deck-session] Auto-created session from outline: ${outline.slides.length} slides`);
+                  send('deck-session', {
+                    event: 'outline_detected',
+                    totalSlides: outline.slides.length,
+                    title: outline.title || '',
+                  });
+                }
+              }
+            } catch {
+              // Incomplete JSON or no outline found — will try again on next run
+            }
+          }
+
+          // Validate/trim HTML against session (if one exists now)
+          if (_hasSession(effectiveCwd) && fs.existsSync(htmlPath)) {
+            const html = fs.readFileSync(htmlPath, 'utf-8');
+            console.log(`[od][deck-debug] HTML size: ${html.length} bytes`);
+            const session = _loadSession(effectiveCwd);
+            if (session) {
+              const validateStart = Date.now();
+              const { html: validatedHtml, violation, updatedSession } = _validateAndTrimHtml(html, session);
+              console.log(`[od][deck-debug] validateAndTrimHtml took ${Date.now() - validateStart}ms`);
+              if (violation) {
+                console.warn(`[od][deck-session] ${violation}`);
+                send('deck-session', { violation, slidesWritten: updatedSession.completedSlides });
+              }
+              // Always write back the validated HTML. Even if the agent
+              // wrote all 26 slides at once, trimming reduces to the
+              // expected count and we save the trimmed version so the
+              // next continuation sees the correct file state.
+              if (validatedHtml !== html) {
+                fs.writeFileSync(htmlPath, validatedHtml, 'utf-8');
+                console.warn(`[od][deck-session] Trimmed excess slides from ${htmlPath}`);
+              }
+              // Advance session based on actual slide count in the saved
+              // HTML. If the agent wrote N slides and we trimmed to 1,
+              // advance by 1. If trimming failed and N slides remain,
+              // advance to N so the session stays in sync with the file.
+              const actualSlideCount = _countSlidesInFile(htmlPath);
+              console.log(`[od][deck-debug] slides: actual=${actualSlideCount} session.completed=${session.completedSlides}`);
+              if (actualSlideCount > session.completedSlides) {
+                // Sync session to actual file state
+                const syncSession = _loadSession(effectiveCwd);
+                if (syncSession) {
+                  while (syncSession.completedSlides < actualSlideCount) {
+                    _advanceSession(effectiveCwd);
+                  }
+                }
+              } else {
+                // No new slides written — advance normally for next turn
+                _advanceSession(effectiveCwd);
+              }
+            }
+          } else {
+            console.log(`[od][deck-debug] skip validation: hasSession=${_hasSession(effectiveCwd)} exists=${fs.existsSync(htmlPath || '')}`);
+          }
+        } catch (err) {
+          // Non-fatal: log but don't fail the run
+          console.warn(`[od][deck-session] Validation error: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      console.log(`[od][deck-debug] calling design.runs.finish, total close handler took ${Date.now() - closeStart}ms`);
       design.runs.finish(run, status, code, signal);
     });
     if (writePromptToChildStdin && child.stdin) {
-      child.stdin.end(composed, 'utf8');
+      child.stdin.end(effectiveComposed, 'utf8');
     }
   };
 
@@ -5199,6 +5747,37 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const run = design.runs.create();
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
+  });
+
+  // ---- Debug endpoints (never enabled in production builds) ---------------
+  // Dumps the composed system prompt for a given configuration so we can
+  // verify prompt composition without spawning an agent.
+  app.post('/api/debug/prompt', async (req, res) => {
+    try {
+      const { agentId, projectId, skillId, designSystemId, streamFormat } =
+        req.body || {};
+      const result = await composeDaemonSystemPrompt({
+        agentId: agentId || 'claude',
+        projectId,
+        skillId,
+        designSystemId,
+        streamFormat,
+      });
+      res.json({
+        ok: true,
+        prompt: result.prompt,
+        skillMode: result.skillMode,
+        skillName: result.skillName,
+        metadata: result.metadata,
+      });
+    } catch (err) {
+      sendApiError(
+        res,
+        500,
+        'PROMPT_COMPOSE_ERROR',
+        err?.message ?? 'prompt compose failed',
+      );
+    }
   });
 
   // ---- Connection tests (single-shot JSON; no SSE) ------------------------

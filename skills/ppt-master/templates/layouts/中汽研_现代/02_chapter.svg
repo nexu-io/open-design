@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="720" viewBox="0 0 1280 720">
+    <!-- 模板: 章节过渡页 (Future Tech Motion) -->
+
+    <defs>
+        <radialGradient id="gradChap" cx="0%" cy="50%" r="100%" fx="0%" fy="50%">
+            <stop offset="0%" style="stop-color:#002B52;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#001529;stop-opacity:1" />
+        </radialGradient>
+        
+        <!-- 倾斜条纹填充 -->
+        <pattern id="patternStripe" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="2" height="20" fill="#FFFFFF" fill-opacity="0.05"/>
+        </pattern>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="url(#gradChap)"/>
+    
+    <!-- 右侧装饰 - 科技条纹 -->
+    <rect x="800" y="0" width="480" height="720" fill="url(#patternStripe)" />
+    
+    <!-- 巨大的背景数字 (Stroke Only) -->
+    <text x="1200" y="600" text-anchor="end" font-family="Arial, sans-serif" font-size="500" font-weight="bold" 
+          fill="none" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="4">
+        {{CHAPTER_NUM}}
+    </text>
+
+    <!-- 中央内容容器 - 带倾斜感 -->
+    <g transform="translate(100, 360)">
+        
+        <!-- 装饰短条 -->
+        <rect x="0" y="-120" width="80" height="8" fill="#1890FF" />
+        
+        <!-- 章节标签 -->
+        <text x="0" y="-80" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#00E5FF" letter-spacing="4">
+            CHAPTER {{CHAPTER_NUM}}
+        </text>
+
+        <!-- 标题 -->
+        <text x="0" y="0" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="60" font-weight="bold" fill="#FFFFFF">
+            {{CHAPTER_TITLE}}
+        </text>
+        
+        <!-- 英文副标题 -->
+        <text x="0" y="60" font-family="Roboto, Arial, sans-serif" font-size="28" fill="#A0AEC0">
+            {{CHAPTER_SUBTITLE}}
+        </text>
+
+        <!-- 装饰线 -->
+        <line x1="0" y1="100" x2="600" y2="100" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="2" />
+        <circle cx="600" cy="100" r="4" fill="#00E5FF" />
+    </g>
+
+</svg>

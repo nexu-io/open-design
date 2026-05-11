@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Organizational Chart Template
+    Usage: Hierarchical structures, reporting lines
+    Scenarios: Corporate structure, team organization
+    Supports: 3 Levels (CEO -> 5 VPs -> 10 Departments)
+    -->
+    <defs>
+        <!-- Standard Card Shadow -->
+        <filter id="orgShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <!-- CEO Gradient -->
+        <linearGradient id="ceoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3B82F6"/> <!-- Blue-500 -->
+            <stop offset="100%" stop-color="#1D4ED8"/> <!-- Blue-700 -->
+        </linearGradient>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title Area -->
+    <text x="640" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="800" fill="#0F172A" text-anchor="middle">Corporate Organizational Chart</text>
+    <!-- ==================== Connecting Lines ==================== -->
+    <g stroke="#CBD5E1" stroke-width="2">
+        <!-- Level 1 (CEO) to Level 2 (VPs) -->
+        <line x1="640" y1="175" x2="640" y2="210"/>
+        <line x1="150" y1="210" x2="1130" y2="210"/>
+        <line x1="150" y1="210" x2="150" y2="245"/>
+        <line x1="395" y1="210" x2="395" y2="245"/>
+        <line x1="640" y1="210" x2="640" y2="245"/>
+        <line x1="885" y1="210" x2="885" y2="245"/>
+        <line x1="1130" y1="210" x2="1130" y2="245"/>
+        <!-- Level 2 (Engineering) to Level 3 -->
+        <line x1="150" y1="355" x2="150" y2="390"/>
+        <line x1="90" y1="390" x2="210" y2="390"/>
+        <line x1="90" y1="390" x2="90" y2="425"/>
+        <line x1="210" y1="390" x2="210" y2="425"/>
+        <!-- Level 2 (Product) to Level 3 -->
+        <line x1="395" y1="355" x2="395" y2="390"/>
+        <line x1="335" y1="390" x2="455" y2="390"/>
+        <line x1="335" y1="390" x2="335" y2="425"/>
+        <line x1="455" y1="390" x2="455" y2="425"/>
+        <!-- Level 2 (Sales) to Level 3 -->
+        <line x1="640" y1="355" x2="640" y2="390"/>
+        <line x1="580" y1="390" x2="700" y2="390"/>
+        <line x1="580" y1="390" x2="580" y2="425"/>
+        <line x1="700" y1="390" x2="700" y2="425"/>
+        <!-- Level 2 (Finance) to Level 3 -->
+        <line x1="885" y1="355" x2="885" y2="390"/>
+        <line x1="825" y1="390" x2="945" y2="390"/>
+        <line x1="825" y1="390" x2="825" y2="425"/>
+        <line x1="945" y1="390" x2="945" y2="425"/>
+        <!-- Level 2 (HR) to Level 3 -->
+        <line x1="1130" y1="355" x2="1130" y2="390"/>
+        <line x1="1070" y1="390" x2="1190" y2="390"/>
+        <line x1="1070" y1="390" x2="1070" y2="425"/>
+        <line x1="1190" y1="390" x2="1190" y2="425"/>
+    </g>
+    <!-- ==================== Level 1: CEO ==================== -->
+    <g filter="url(#orgShadow)">
+        <rect x="540" y="85" width="200" height="90" rx="12" fill="url(#ceoGrad)"/>
+        <text x="640" y="125" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" text-anchor="middle">John Doe</text>
+        <text x="640" y="150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#DBEAFE" letter-spacing="0.5" text-anchor="middle">Chief Executive Officer</text>
+    </g>
+    <!-- ==================== Level 2: VPs ==================== -->
+    <!-- VP 1: Engineering (Slate Theme) -->
+    <g filter="url(#orgShadow)">
+        <rect x="60" y="245" width="180" height="110" rx="10" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1.5"/>
+        <text x="150" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#0F172A" text-anchor="middle">Jane Smith</text>
+        <text x="150" y="305" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569" text-anchor="middle">VP of Engineering</text>
+        <rect x="95" y="320" width="110" height="22" rx="11" fill="#E2E8F0"/>
+        <text x="150" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#334155" text-anchor="middle">Engineering</text>
+    </g>
+    <!-- VP 2: Product (Emerald Theme) -->
+    <g filter="url(#orgShadow)">
+        <rect x="305" y="245" width="180" height="110" rx="10" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="1.5"/>
+        <text x="395" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#064E3B" text-anchor="middle">Mike Johnson</text>
+        <text x="395" y="305" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#059669" text-anchor="middle">VP of Product</text>
+        <rect x="340" y="320" width="110" height="22" rx="11" fill="#D1FAE5"/>
+        <text x="395" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#047857" text-anchor="middle">Product</text>
+    </g>
+    <!-- VP 3: Sales (Amber Theme) -->
+    <g filter="url(#orgShadow)">
+        <rect x="550" y="245" width="180" height="110" rx="10" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1.5"/>
+        <text x="640" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#78350F" text-anchor="middle">Emily Davis</text>
+        <text x="640" y="305" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#D97706" text-anchor="middle">VP of Sales</text>
+        <rect x="585" y="320" width="110" height="22" rx="11" fill="#FEF3C7"/>
+        <text x="640" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#B45309" text-anchor="middle">Sales</text>
+    </g>
+    <!-- VP 4: Finance (Violet Theme) -->
+    <g filter="url(#orgShadow)">
+        <rect x="795" y="245" width="180" height="110" rx="10" fill="#F5F3FF" stroke="#C4B5FD" stroke-width="1.5"/>
+        <text x="885" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#4C1D95" text-anchor="middle">Robert Wilson</text>
+        <text x="885" y="305" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#7C3AED" text-anchor="middle">VP of Finance</text>
+        <rect x="830" y="320" width="110" height="22" rx="11" fill="#EDE9FE"/>
+        <text x="885" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#6D28D9" text-anchor="middle">Finance</text>
+    </g>
+    <!-- VP 5: HR (Rose Theme) -->
+    <g filter="url(#orgShadow)">
+        <rect x="1040" y="245" width="180" height="110" rx="10" fill="#FFF1F2" stroke="#FDA4AF" stroke-width="1.5"/>
+        <text x="1130" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#881337" text-anchor="middle">Sarah Brown</text>
+        <text x="1130" y="305" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#E11D48" text-anchor="middle">VP of HR</text>
+        <rect x="1065" y="320" width="130" height="22" rx="11" fill="#FFE4E6"/>
+        <text x="1130" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#BE123C" text-anchor="middle">Human Resources</text>
+    </g>
+    <!-- ==================== Level 3: Departments ==================== -->
+    <!-- Group 1: Engineering -->
+    <g filter="url(#orgShadow)">
+        <rect x="35" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+        <text x="90" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#0F172A" text-anchor="middle">Frontend</text>
+        <text x="90" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">12 Staff</text>
+    </g>
+    <g filter="url(#orgShadow)">
+        <rect x="155" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.5"/>
+        <text x="210" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#0F172A" text-anchor="middle">Backend</text>
+        <text x="210" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#64748B" text-anchor="middle">15 Staff</text>
+    </g>
+    <!-- Group 2: Product -->
+    <g filter="url(#orgShadow)">
+        <rect x="280" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#34D399" stroke-width="1.5"/>
+        <text x="335" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#064E3B" text-anchor="middle">UX/UI Design</text>
+        <text x="335" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#10B981" text-anchor="middle">8 Staff</text>
+    </g>
+    <g filter="url(#orgShadow)">
+        <rect x="400" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#34D399" stroke-width="1.5"/>
+        <text x="455" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#064E3B" text-anchor="middle">User Research</text>
+        <text x="455" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#10B981" text-anchor="middle">5 Staff</text>
+    </g>
+    <!-- Group 3: Sales -->
+    <g filter="url(#orgShadow)">
+        <rect x="525" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#FBBF24" stroke-width="1.5"/>
+        <text x="580" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#78350F" text-anchor="middle">Enterprise</text>
+        <text x="580" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#F59E0B" text-anchor="middle">20 Staff</text>
+    </g>
+    <g filter="url(#orgShadow)">
+        <rect x="645" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#FBBF24" stroke-width="1.5"/>
+        <text x="700" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#78350F" text-anchor="middle">SMB Accounts</text>
+        <text x="700" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#F59E0B" text-anchor="middle">18 Staff</text>
+    </g>
+    <!-- Group 4: Finance -->
+    <g filter="url(#orgShadow)">
+        <rect x="770" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+        <text x="825" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#4C1D95" text-anchor="middle">Accounting</text>
+        <text x="825" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#8B5CF6" text-anchor="middle">6 Staff</text>
+    </g>
+    <g filter="url(#orgShadow)">
+        <rect x="890" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.5"/>
+        <text x="945" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#4C1D95" text-anchor="middle">FP&amp;A</text>
+        <text x="945" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#8B5CF6" text-anchor="middle">4 Staff</text>
+    </g>
+    <!-- Group 5: HR -->
+    <g filter="url(#orgShadow)">
+        <rect x="1015" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#FB7185" stroke-width="1.5"/>
+        <text x="1070" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#881337" text-anchor="middle">Recruiting</text>
+        <text x="1070" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#F43F5E" text-anchor="middle">5 Staff</text>
+    </g>
+    <g filter="url(#orgShadow)">
+        <rect x="1135" y="425" width="110" height="80" rx="8" fill="#FFFFFF" stroke="#FB7185" stroke-width="1.5"/>
+        <text x="1190" y="460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#881337" text-anchor="middle">Comp &amp; Ben</text>
+        <text x="1190" y="482" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#F43F5E" text-anchor="middle">3 Staff</text>
+    </g>
+    <!-- ==================== Footer Info ==================== -->
+    <text x="640" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" text-anchor="middle">
+        Total Headcount: 96 | Management: 6 | Departments: 10
+    </text>
+    <text x="60" y="690" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="500" fill="#94A3B8">
+        Updated: Dec 2025
+    </text>
+</svg>

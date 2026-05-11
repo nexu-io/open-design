@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- Background -->
+  <rect x="0" y="0" width="1280" height="720" fill="#ffffff" />
+  
+  <!-- Header -->
+  <rect x="30" y="20" width="10" height="40" fill="#C00000" />
+  <text x="50" y="55" font-family="Microsoft YaHei, sans-serif" font-size="36" font-weight="bold" fill="#C00000">1 公司运维AI建设总体视图</text>
+  
+  <!-- Subtitle -->
+  <rect x="30" y="80" width="1220" height="60" fill="#F2F2F2" />
+  <text x="640" y="105" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#000000" text-anchor="middle">
+    <tspan x="640" dy="0">聚焦用户故障压降，提升优化一键诊断能力，实现降本提质；深入系统架构具备一键故障定位；借助大数据核心网实现网络效能提升；通过能</tspan>
+    <tspan x="640" dy="25">力封装、跨域拉通、知识沉淀、智能编排、开放共享等五大举措，深化AI大模型应用，重塑故障诊断处置流程，做深做实1-5-10</tspan>
+  </text>
+  
+  <!-- Large Triangle Background (simplified to a polygon) -->
+  <polygon points="640,160 30,340 1250,340" fill="#F8CBAD" fill-opacity="0.3" stroke="none" />
+  
+  <!-- Target Bar -->
+  <rect x="300" y="160" width="680" height="40" fill="#C00000" rx="5" ry="5"/>
+  <text x="640" y="188" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">以故障双压降，快速定位故障问题为目标</text>
+
+  <!-- Metrics -->
+  <text x="50" y="240" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#C00000">成效</text>
+  
+  <rect x="120" y="215" width="140" height="35" fill="#FFFFFF" stroke="#F2F2F2" stroke-width="2" />
+  <text x="190" y="239" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">故障工单压降<tspan fill="#C00000">30%</tspan></text>
+  
+  <rect x="270" y="215" width="140" height="35" fill="#FFFFFF" stroke="#F2F2F2" stroke-width="2" />
+  <text x="340" y="239" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">IT订单自愈<tspan fill="#C00000">69w</tspan></text>
+  
+  <rect x="420" y="215" width="140" height="35" fill="#FFFFFF" stroke="#F2F2F2" stroke-width="2" />
+  <text x="490" y="239" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">自动化测试覆盖<tspan fill="#C00000">80%</tspan></text>
+  
+  <rect x="570" y="215" width="140" height="35" fill="#FFFFFF" stroke="#F2F2F2" stroke-width="2" />
+  <text x="640" y="239" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">系统监控覆盖<tspan fill="#C00000">100%</tspan></text>
+  
+  <rect x="720" y="215" width="140" height="35" fill="#FFFFFF" stroke="#F2F2F2" stroke-width="2" />
+  <text x="790" y="239" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">监控指标<tspan fill="#C00000">4000+</tspan></text>
+  
+  <rect x="870" y="215" width="140" height="35" fill="#FFFFFF" stroke="#F2F2F2" stroke-width="2" />
+  <text x="940" y="239" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">CMDB纳管<tspan fill="#C00000">7000+</tspan></text>
+  
+  <polygon points="1060,220 1080,225 1095,210 1105,230 1125,235 1110,245 1115,265 1095,255 1075,265 1085,245" fill="#C00000" />
+  <rect x="1130" y="210" width="120" height="50" fill="#FDF3EB" stroke="#C00000" stroke-width="2" />
+  <text x="1190" y="230" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#000000" text-anchor="middle">
+    <tspan x="1190" dy="0">节省运维成本</tspan>
+    <tspan x="1190" dy="20" fill="#C00000">150万</tspan>
+  </text>
+  
+  <!-- Scenarios -->
+  <text x="50" y="320" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">应用</text>
+  <text x="50" y="345" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">场景</text>
+  
+  <rect x="120" y="310" width="220" height="40" fill="#2E75B6" />
+  <text x="230" y="336" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">故障申告、故障定界定段</text>
+  
+  <rect x="360" y="310" width="220" height="40" fill="#2E75B6" />
+  <text x="470" y="336" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">RPA数字员工</text>
+  
+  <rect x="600" y="310" width="220" height="40" fill="#2E75B6" />
+  <text x="710" y="336" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">IT自动化运维</text>
+  
+  <rect x="840" y="310" width="220" height="40" fill="#2E75B6" />
+  <text x="950" y="336" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">系统故障快速定位诊断</text>
+  
+  <!-- Orchestration & Release Panel -->
+  <rect x="30" y="390" width="30" height="30" fill="#C00000" />
+  <text x="45" y="412" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">4</text>
+  <text x="50" y="460" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">智能体</text>
+  <text x="50" y="485" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">编排</text>
+  
+  <rect x="120" y="390" width="940" height="150" fill="none" stroke="#C00000" stroke-width="2" stroke-dasharray="5 5" />
+  <rect x="120" y="390" width="940" height="30" fill="#FDF3EB" />
+  <text x="590" y="412" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#000000" text-anchor="middle">持续迭代用户一键诊断智能体能力；引入RPA，针对固化场景实现RPA数字员工；建设系统故障诊断处置Agent</text>
+  
+  <rect x="140" y="440" width="280" height="90" fill="none" stroke="#2E75B6" stroke-width="1" stroke-dasharray="3 3"/>
+  <rect x="160" y="450" width="240" height="30" fill="#5B9BD5" />
+  <text x="280" y="471" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">网络：AI一键排障助手</text>
+  <rect x="160" y="490" width="240" height="30" fill="#5B9BD5" />
+  <text x="280" y="511" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">IT：AI一键查询助手</text>
+  
+  <rect x="440" y="440" width="280" height="90" fill="none" stroke="#C00000" stroke-width="1" stroke-dasharray="3 3"/>
+  <rect x="460" y="445" width="240" height="25" fill="#5B9BD5" />
+  <text x="580" y="462" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">NB工单自动化处理</text>
+  <rect x="460" y="475" width="240" height="25" fill="#5B9BD5" />
+  <text x="580" y="492" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">IT订单自愈</text>
+  <rect x="460" y="505" width="240" height="25" fill="#5B9BD5" />
+  <text x="580" y="522" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">IT自动化测试</text>
+  
+  <rect x="740" y="440" width="280" height="90" fill="none" stroke="#C00000" stroke-width="1" stroke-dasharray="3 3"/>
+  <rect x="760" y="445" width="240" height="25" fill="#5B9BD5" />
+  <text x="880" y="462" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">自动化巡检</text>
+  <rect x="760" y="475" width="240" height="25" fill="#5B9BD5" />
+  <text x="880" y="492" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">AI隐患排查助手</text>
+  <rect x="760" y="505" width="240" height="25" fill="#5B9BD5" />
+  <text x="880" y="522" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle">AI系统诊断助手</text>
+  
+  <rect x="1080" y="390" width="160" height="300" fill="#FDF3EB" stroke="#F8CBAD" stroke-width="2" />
+  <text x="1130" y="420" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">开放</text>
+  <rect x="1180" y="400" width="30" height="25" fill="#C00000" />
+  <text x="1195" y="419" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">5</text>
+  
+  <rect x="1100" y="440" width="120" height="40" fill="#E7E6E6" />
+  <text x="1160" y="465" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">统一监控运维平台</text>
+  <rect x="1100" y="490" width="120" height="40" fill="#E7E6E6" />
+  <text x="1160" y="515" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">一站服务中台</text>
+  <rect x="1100" y="540" width="120" height="40" fill="#E7E6E6" />
+  <text x="1160" y="565" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">物联网IT</text>
+  <rect x="1100" y="590" width="120" height="40" fill="#E7E6E6" />
+  <text x="1160" y="615" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">集同昆仑平台</text>
+  <rect x="1100" y="640" width="120" height="40" fill="#E7E6E6" />
+  <text x="1160" y="665" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">B客户推广</text>
+  
+  <!-- Base Capabilities -->
+  <text x="50" y="620" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">基础</text>
+  <text x="50" y="645" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#000000">能力</text>
+  
+  <rect x="100" y="580" width="310" height="110" fill="none" stroke="#E7E6E6" stroke-width="2" />
+  <rect x="80" y="560" width="30" height="30" fill="#C00000" />
+  <text x="95" y="582" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+  <text x="255" y="595" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">梳理3大能力底座，做好场景清单化</text>
+  <line x1="120" y1="605" x2="390" y2="605" stroke="#000000" stroke-width="1" stroke-dasharray="2 2" />
+  <rect x="120" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="160" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">核心网</text>
+  <rect x="210" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="250" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">物联网IT</text>
+  <rect x="300" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="340" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">物联网平台</text>
+  
+  <rect x="430" y="580" width="300" height="110" fill="none" stroke="#E7E6E6" stroke-width="2" />
+  <rect x="410" y="560" width="30" height="30" fill="#C00000" />
+  <text x="425" y="582" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
+  <text x="580" y="595" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">利用数字员工实现日常固化场景自动化</text>
+  <line x1="450" y1="605" x2="710" y2="605" stroke="#000000" stroke-width="1" stroke-dasharray="2 2" />
+  <rect x="450" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="490" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">场景设计</text>
+  <rect x="540" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="580" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">机器人</text>
+  <rect x="630" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="670" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">知识库</text>
+  
+  <rect x="750" y="580" width="300" height="110" fill="none" stroke="#E7E6E6" stroke-width="2" />
+  <rect x="730" y="560" width="30" height="30" fill="#C00000" />
+  <text x="745" y="582" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
+  <text x="900" y="595" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">实现系统IPS三层监控全覆盖</text>
+  <line x1="770" y1="605" x2="1030" y2="605" stroke="#000000" stroke-width="1" stroke-dasharray="2 2" />
+  <rect x="770" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="810" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">CMDB</text>
+  <rect x="860" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="900" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">日志</text>
+  <rect x="950" y="630" width="80" height="40" fill="#F2F2F2" stroke="#D9D9D9" stroke-width="1" />
+  <text x="990" y="655" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#000000" text-anchor="middle">调用链</text>
+</svg>

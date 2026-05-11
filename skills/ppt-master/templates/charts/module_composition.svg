@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Module Composition Chart Template
+    Usage: Breakdown of a large module into sub-modules
+    Scenarios: Pipeline stages, architecture internals, three-stage processes
+    Supports: 1 Parent Container + 3 Sub-modules
+    -->
+    <defs>
+        <marker id="mcArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L10,5 L0,10 Z" fill="#94A3B8"/>
+        </marker>
+        <!-- Standard Card Drop Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title Area -->
+    <rect x="40" y="32" width="8" height="36" rx="4" fill="#3B82F6"/>
+    <text x="64" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Recommendation Engine Pipeline</text>
+    <text x="64" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B" letter-spacing="0.5">
+        PARENT CONTAINER DECLARES "WHAT", SUB-MODULES DECLARE "HOW" — RECALL → RANK → RERANK
+    </text>
+    <!-- ==================== Left Label Badge ==================== -->
+    <rect x="40" y="150" width="40" height="430" rx="8" fill="#3B82F6"/>
+    <text x="60" y="370" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" fill="#FFFFFF">⚙</text>
+    <!-- ==================== Parent Container ==================== -->
+    <rect x="100" y="150" width="1140" height="430" rx="12" fill="#F8FAFC" fill-opacity="0.6" stroke="#93C5FD" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="670" y="175" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#2563EB" letter-spacing="1">PARENT CONTAINER · RECOMMENDATION PIPELINE · INPUT: CONTEXT → OUTPUT: EXPOSURE</text>
+    <!-- ==================== Card 1: Recall ==================== -->
+    <g filter="url(#cardShadow)">
+        <rect x="130" y="200" width="340" height="352" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- Header & Badge -->
+        <rect x="130" y="220" width="6" height="40" rx="3" fill="#3B82F6"/>
+        <rect x="150" y="220" width="40" height="40" rx="8" fill="#EFF6FF"/>
+        <text x="170" y="246" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#3B82F6">01</text>
+        <text x="200" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#0F172A">Recall Stage</text>
+        <!-- Role Subtitle -->
+        <rect x="146" y="276" width="308" height="30" rx="6" fill="#EFF6FF"/>
+        <text x="300" y="296" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#2563EB">Filter candidates from massive corpus</text>
+        <!-- Bullet 1 -->
+        <circle cx="156" cy="336" r="4" fill="#3B82F6"/>
+        <text x="168" y="341" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Multi-channel Triggering</text>
+        <text x="168" y="361" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Collaborative filtering, trending, interests</text>
+        <!-- Bullet 2 -->
+        <circle cx="156" cy="386" r="4" fill="#3B82F6"/>
+        <text x="168" y="391" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Dual-channel Indexing</text>
+        <text x="168" y="411" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Vector retrieval + Inverted index fusion</text>
+        <!-- Bullet 3 -->
+        <circle cx="156" cy="436" r="4" fill="#3B82F6"/>
+        <text x="168" y="441" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Candidate Pool</text>
+        <text x="168" y="461" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Outputs hundreds to thousands per user</text>
+        <!-- Metrics Box -->
+        <rect x="146" y="486" width="308" height="54" rx="6" fill="#F8FAFC" stroke="#F1F5F9" stroke-width="1"/>
+        <line x1="300" y1="496" x2="300" y2="530" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="223" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#64748B">Avg Latency</text>
+        <text x="223" y="530" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#3B82F6">&lt; 50 ms</text>
+        <text x="377" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#64748B">Pool Size</text>
+        <text x="377" y="530" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#3B82F6">~2,000</text>
+    </g>
+    <!-- Arrow 1-2 -->
+    <line x1="475" y1="376" x2="495" y2="376" stroke="#CBD5E1" stroke-width="3" marker-end="url(#mcArrow)"/>
+    <!-- ==================== Card 2: Ranking ==================== -->
+    <g filter="url(#cardShadow)">
+        <rect x="500" y="200" width="340" height="352" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- Header & Badge -->
+        <rect x="500" y="220" width="6" height="40" rx="3" fill="#6366F1"/>
+        <rect x="520" y="220" width="40" height="40" rx="8" fill="#EEF2FF"/>
+        <text x="540" y="246" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#6366F1">02</text>
+        <text x="570" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#0F172A">Ranking Stage</text>
+        <!-- Role Subtitle -->
+        <rect x="516" y="276" width="308" height="30" rx="6" fill="#EEF2FF"/>
+        <text x="670" y="296" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#4F46E5">Precise scoring and optimal output</text>
+        <!-- Bullet 1 -->
+        <circle cx="526" cy="336" r="4" fill="#6366F1"/>
+        <text x="538" y="341" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Deep Model Prediction</text>
+        <text x="538" y="361" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Multi-tower DNN for CTR/CVR est.</text>
+        <!-- Bullet 2 -->
+        <circle cx="526" cy="386" r="4" fill="#6366F1"/>
+        <text x="538" y="391" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Multi-objective Fusion</text>
+        <text x="538" y="411" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Weighted formula or Pareto frontier</text>
+        <!-- Bullet 3 -->
+        <circle cx="526" cy="436" r="4" fill="#6366F1"/>
+        <text x="538" y="441" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Top-K Refinement</text>
+        <text x="538" y="461" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Select Top-K candidates for next stage</text>
+        <!-- Metrics Box -->
+        <rect x="516" y="486" width="308" height="54" rx="6" fill="#F8FAFC" stroke="#F1F5F9" stroke-width="1"/>
+        <line x1="670" y1="496" x2="670" y2="530" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="593" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#64748B">Avg Latency</text>
+        <text x="593" y="530" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#6366F1">&lt; 100 ms</text>
+        <text x="747" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#64748B">Top-K Size</text>
+        <text x="747" y="530" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#6366F1">~200</text>
+    </g>
+    <!-- Arrow 2-3 -->
+    <line x1="845" y1="376" x2="865" y2="376" stroke="#CBD5E1" stroke-width="3" marker-end="url(#mcArrow)"/>
+    <!-- ==================== Card 3: Rerank ==================== -->
+    <g filter="url(#cardShadow)">
+        <rect x="870" y="200" width="340" height="352" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- Header & Badge -->
+        <rect x="870" y="220" width="6" height="40" rx="3" fill="#8B5CF6"/>
+        <rect x="890" y="220" width="40" height="40" rx="8" fill="#F5F3FF"/>
+        <text x="910" y="246" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#8B5CF6">03</text>
+        <text x="940" y="246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="800" fill="#0F172A">Rerank Stage</text>
+        <!-- Role Subtitle -->
+        <rect x="886" y="276" width="308" height="30" rx="6" fill="#F5F3FF"/>
+        <text x="1040" y="296" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#7C3AED">Strategic intervention &amp; diversity tuning</text>
+        <!-- Bullet 1 -->
+        <circle cx="896" cy="336" r="4" fill="#8B5CF6"/>
+        <text x="908" y="341" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Diversity Scattering</text>
+        <text x="908" y="361" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Prevent homogeneity, disperse categories</text>
+        <!-- Bullet 2 -->
+        <circle cx="896" cy="386" r="4" fill="#8B5CF6"/>
+        <text x="908" y="391" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Business Rules</text>
+        <text x="908" y="411" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Boost / Filter / Targeted pinning</text>
+        <!-- Bullet 3 -->
+        <circle cx="896" cy="436" r="4" fill="#8B5CF6"/>
+        <text x="908" y="441" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1E293B">Final Exposure</text>
+        <text x="908" y="461" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="500" fill="#64748B">Generate final user-visible sequence</text>
+        <!-- Metrics Box -->
+        <rect x="886" y="486" width="308" height="54" rx="6" fill="#F8FAFC" stroke="#F1F5F9" stroke-width="1"/>
+        <line x1="1040" y1="496" x2="1040" y2="530" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="963" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#64748B">Avg Latency</text>
+        <text x="963" y="530" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#8B5CF6">&lt; 30 ms</text>
+        <text x="1117" y="508" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#64748B">Final Exp.</text>
+        <text x="1117" y="530" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#8B5CF6">~20</text>
+    </g>
+    <!-- ==================== Bottom Section: Data Flow ==================== -->
+    <rect x="40" y="610" width="40" height="80" rx="8" fill="#64748B"/>
+    <text x="60" y="658" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" fill="#FFFFFF">⇄</text>
+    <rect x="100" y="610" width="1140" height="80" rx="12" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="670" y="632" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#475569" letter-spacing="1">END-TO-END DATA FLOW · UPSTREAM LOGS → ENGINE PROCESSING → DOWNSTREAM FEEDBACK</text>
+    <!-- Flow Baseline -->
+    <line x1="120" y1="668" x2="1220" y2="668" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 2"/>
+    <!-- Input 1 -->
+    <rect x="130" y="650" width="196" height="36" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="228" y="673" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">User Action Logs</text>
+    <!-- Input 2 (Highlighted) -->
+    <rect x="346" y="650" width="196" height="36" rx="6" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+    <text x="444" y="673" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#2563EB">Persona &amp; Features</text>
+    <!-- Input 3 -->
+    <rect x="562" y="650" width="196" height="36" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="660" y="673" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Feed Exposure Stream</text>
+    <!-- Input 4 -->
+    <rect x="778" y="650" width="196" height="36" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="876" y="673" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#475569">Click / Dwell Feedback</text>
+    <!-- Input 5 (Highlighted Output) -->
+    <rect x="994" y="650" width="196" height="36" rx="6" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="1"/>
+    <text x="1092" y="673" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#059669">A/B Testing Metrics</text>
+</svg>

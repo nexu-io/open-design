@@ -54,13 +54,13 @@ Copy `assets/template.html` to the project root as `index.html`. Replace the six
 
 ### Step 2 — Decide slide count + theme rhythm BEFORE writing any slide
 
-Default: 6 slides unless the brief says otherwise.
+Default: 6 slides unless the brief says otherwise. Page count should follow content needs.
 
 | Audience / format | Slides |
 |---|---|
 | Product overview / lightning talk (5–10 min) | 6 |
 | Pitch deck (15 min) | 8–10 |
-| Investor update / longer talk (20–30 min) | 12–18 |
+| Investor update / longer talk (20–30 min) | 10–15 |
 
 Then write out the rhythm before any HTML — for example, 8 slides:
 
@@ -82,9 +82,26 @@ A healthy sequence has:
 
 Show this rhythm sketch to the user *before* writing slide HTML — they can redirect cheaply.
 
-### Step 3 — Paste and fill
+**TodoWrite enforcement:** The rhythm sketch is planning only. **Each turn gets exactly ONE TodoWrite item.** Do NOT create a list like "Fill slide 1, Fill slide 2, ..., Fill slide 8" — that causes the agent to try executing all of them at once → context overflow → crash.
 
-For each planned slide, copy the matching `<section>` from `layouts.md` into the body. Replace bracketed text with real, specific copy. **No filler / no lorem.** If a slide feels empty, the layout is wrong — pick a different one.
+Correct pattern:
+- Turn 1: `TodoWrite: - Emit outline (JSON)` → outline only, no HTML
+- Turn 2: `TodoWrite: - Fill slide 1 (Cover)` → write slide 1 only → stop
+- Turn 3: `TodoWrite: - Fill slide 2 (Problem)` → write slide 2 only → stop
+- ... repeat for each slide
+
+**Never create more than one TodoWrite item in a single turn.**
+
+### Step 3 — Paste and fill ONE slide at a time
+
+**CRITICAL: One slide per turn, NOT all at once.** For each slide:
+
+1. Copy the matching `<section>` from `layouts.md` into the body
+2. Replace bracketed text with real, specific copy. **No filler / no lorem.**
+3. Tag with `data-screen-label="NN Title"`
+4. Move to the next slide
+
+**Never write "Write all slides" or "Fill all slide content" as one TodoWrite item.** Each slide is its own TodoWrite step. This prevents context overflow — the #1 reason multi-slide decks time out or hang.
 
 Tag each slide with `data-screen-label="01 Cover"`, `"02 Problem"`, etc., in the order you wrote them. (The seed's first three slides already do this — extend the pattern.)
 
@@ -109,11 +126,22 @@ Read the resulting class list. If you see `light × 4 in a row`, swap one to `da
 
 One sentence before the artifact. Stop after `</artifact>`.
 
+## Visual quality standards
+
+This is a premium deck export. Every visual element must look polished and intentional:
+
+- **Data charts** (bar, line, pie, comparison): use HTML Canvas inside the slide. Canvas renders as a sharp bitmap at 600 DPI in the PDF→PPTX pipeline. Use the deck's theme colors for fills, axes, and labels. Add grid lines, value labels, and smooth curves — no flat bare-bones charts.
+- **Images**: prefer high-quality Unsplash photos for hero slides. Use `https://` URLs. No broken or low-resolution placeholders.
+- **Typography**: large bold headlines, generous spacing, real copy only (no lorem ipsum).
+- **Color**: use the accent color for highlights and callouts (max 1–2 per slide). Add subtle dividers and decorative elements for visual rhythm.
+- **Layout**: never leave a slide feeling empty or template-like. Use generous gaps, thoughtful alignment, and meaningful whitespace.
+
 ## Hard rules
 
 - **Theme class on every slide** (`light` | `dark` | `hero light` | `hero dark`). Bare `class="slide"` = regression.
 - **No 3+ same theme in a row.**
-- **Display = serif via `var(--font-display)`.** `.h-hero` / `.h-xl` / `.h-md` already enforce.
+- **Standard PPT fonts only** — headings use bold sans-serif (PingFang SC Bold / Microsoft YaHei Bold / Segoe UI Bold / Arial Bold); body uses regular sans-serif (PingFang SC / Microsoft YaHei / Segoe UI / Arial). Do NOT import Google Fonts or use serif display faces.
+- **Display = bold sans-serif via `var(--font-display)`.** `.h-hero` / `.h-xl` / `.h-md` already enforce.
 - **One accent per slide, used at most twice.**
 - **Don't rewrite the nav script.** It's proven.
 - **No `scrollIntoView()`.** Breaks iframe.

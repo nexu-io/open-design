@@ -1,0 +1,51 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+  <!-- Top Red Strip -->
+  <rect x="0" y="0" width="1280" height="8" fill="#C00000" />
+
+  <!-- Left Panel -->
+  <rect x="0" y="8" width="320" height="682" fill="#C00000" />
+  <text x="160" y="300" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="56" font-weight="bold" fill="#FFFFFF" text-anchor="middle">目 录</text>
+  <text x="160" y="360" font-family="Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" fill-opacity="0.7">CONTENTS</text>
+
+  <!-- TOC Items -->
+  <!-- Item 1 -->
+  <rect x="380" y="140" width="40" height="40" fill="#C00000" />
+  <text x="400" y="168" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+  <rect x="430" y="140" width="260" height="40" fill="#2E75B6" />
+  <text x="560" y="167" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="18" fill="#FFFFFF" text-anchor="middle">{{TOC_ITEM_1_TITLE}}</text>
+
+  <!-- Item 2 -->
+  <rect x="380" y="220" width="40" height="40" fill="#C00000" />
+  <text x="400" y="248" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
+  <rect x="430" y="220" width="260" height="40" fill="#2E75B6" />
+  <text x="560" y="247" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="18" fill="#FFFFFF" text-anchor="middle">{{TOC_ITEM_2_TITLE}}</text>
+
+  <!-- Item 3 -->
+  <rect x="380" y="300" width="40" height="40" fill="#C00000" />
+  <text x="400" y="328" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
+  <rect x="430" y="300" width="260" height="40" fill="#2E75B6" />
+  <text x="560" y="327" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="18" fill="#FFFFFF" text-anchor="middle">{{TOC_ITEM_3_TITLE}}</text>
+
+  <!-- Item 4 -->
+  <rect x="380" y="380" width="40" height="40" fill="#C00000" />
+  <text x="400" y="408" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">4</text>
+  <rect x="430" y="380" width="260" height="40" fill="#2E75B6" />
+  <text x="560" y="407" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="18" fill="#FFFFFF" text-anchor="middle">{{TOC_ITEM_4_TITLE}}</text>
+
+  <!-- Item 5 -->
+  <rect x="380" y="460" width="40" height="40" fill="#C00000" />
+  <text x="400" y="488" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">5</text>
+  <rect x="430" y="460" width="260" height="40" fill="#2E75B6" />
+  <text x="560" y="487" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="18" fill="#FFFFFF" text-anchor="middle">{{TOC_ITEM_5_TITLE}}</text>
+
+  <!-- Right side decorative panel -->
+  <rect x="780" y="140" width="420" height="400" fill="#FDF3EB" stroke="#F8CBAD" stroke-width="2" />
+  <text x="990" y="340" font-family="'Microsoft YaHei', Arial, sans-serif" font-size="16" fill="#999999" text-anchor="middle">{{TOC_SUMMARY}}</text>
+
+  <!-- Bottom Accent -->
+  <rect x="0" y="680" width="1280" height="10" fill="#FDF3EB" />
+  <rect x="0" y="690" width="1280" height="30" fill="#2E75B6" />
+</svg>

@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Porter's Value Chain Template
+    Purpose: Business operations and competitive advantage analysis
+    Use cases: Strategic planning, operational efficiency review, margin analysis
+    Design Principles: Classic interlocking blocks with right-facing margin chevron
+    -->
+    <defs>
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.05"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Value Chain Analysis</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">INTERNAL OPERATIONS EVALUATION FOR COMPETITIVE ADVANTAGE</text>
+    <!-- ==================== Value Chain Diagram ==================== -->
+    <g transform="translate(80, 160)">
+        <!-- Y-Axis Label (Support vs Primary) -->
+        <text x="-40" y="150" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#64748B" transform="rotate(-90 -40,150)" letter-spacing="2">SUPPORT ACTIVITIES</text>
+        <text x="-40" y="380" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="800" fill="#64748B" transform="rotate(-90 -40,380)" letter-spacing="2">PRIMARY ACTIVITIES</text>
+        <line x1="10" y1="260" x2="1080" y2="260" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="6 6"/>
+        <!-- ==================== Support Activities (Top 4 Rows) ==================== -->
+        <!-- Row 1: Firm Infrastructure -->
+        <g transform="translate(40, 0)" filter="url(#shadow)">
+            <path d="M 0 0 L 1020 0 L 1040 25 L 1020 50 L 0 50 Z" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+            <text x="20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#1E3A8A">Firm Infrastructure</text>
+            <text x="220" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#3B82F6">General Management, Planning, Finance, Legal, Quality Management</text>
+        </g>
+        <!-- Row 2: Human Resource Management -->
+        <g transform="translate(40, 60)" filter="url(#shadow)">
+            <path d="M 0 0 L 1020 0 L 1040 25 L 1020 50 L 0 50 Z" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+            <text x="20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#1E3A8A">Human Resources</text>
+            <text x="220" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#3B82F6">Recruitment, Training, Development, Compensation &amp; Benefits</text>
+        </g>
+        <!-- Row 3: Technology Development -->
+        <g transform="translate(40, 120)" filter="url(#shadow)">
+            <path d="M 0 0 L 1020 0 L 1040 25 L 1020 50 L 0 50 Z" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+            <text x="20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#1E3A8A">Tech Development</text>
+            <text x="220" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#3B82F6">R&amp;D, Product Design, Process Automation, IT Systems</text>
+        </g>
+        <!-- Row 4: Procurement -->
+        <g transform="translate(40, 180)" filter="url(#shadow)">
+            <path d="M 0 0 L 1020 0 L 1040 25 L 1020 50 L 0 50 Z" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+            <text x="20" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#1E3A8A">Procurement</text>
+            <text x="220" y="30" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#3B82F6">Supplier Sourcing, Raw Material Purchasing, Vendor Management</text>
+        </g>
+        <!-- ==================== Primary Activities (Bottom 5 Columns) ==================== -->
+        <g transform="translate(40, 280)">
+            <!-- 1. Inbound Logistics -->
+            <g transform="translate(0, 0)" filter="url(#shadow)">
+                <path d="M 0 0 L 180 0 L 200 90 L 180 180 L 0 180 L 20 90 Z" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+                <text x="100" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Inbound</text>
+                <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Logistics</text>
+                <text x="100" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Inventory</text>
+                <text x="100" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Warehousing</text>
+                <text x="100" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Material Ctrl</text>
+            </g>
+            <!-- 2. Operations -->
+            <g transform="translate(195, 0)" filter="url(#shadow)">
+                <path d="M 0 0 L 180 0 L 200 90 L 180 180 L 0 180 L 20 90 Z" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+                <text x="100" y="55" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Operations</text>
+                <text x="100" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Machining</text>
+                <text x="100" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Assembly</text>
+                <text x="100" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Packaging</text>
+            </g>
+            <!-- 3. Outbound Logistics -->
+            <g transform="translate(390, 0)" filter="url(#shadow)">
+                <path d="M 0 0 L 180 0 L 200 90 L 180 180 L 0 180 L 20 90 Z" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+                <text x="100" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Outbound</text>
+                <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Logistics</text>
+                <text x="100" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Order Mgmt</text>
+                <text x="100" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Distribution</text>
+                <text x="100" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Shipping</text>
+            </g>
+            <!-- 4. Marketing & Sales -->
+            <g transform="translate(585, 0)" filter="url(#shadow)">
+                <path d="M 0 0 L 180 0 L 200 90 L 180 180 L 0 180 L 20 90 Z" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+                <text x="100" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Marketing</text>
+                <text x="100" y="65" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">&amp; Sales</text>
+                <text x="100" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Advertising</text>
+                <text x="100" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Promotions</text>
+                <text x="100" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Sales Force</text>
+            </g>
+            <!-- 5. Service -->
+            <g transform="translate(780, 0)" filter="url(#shadow)">
+                <path d="M 0 0 L 240 0 L 260 90 L 240 180 L 0 180 L 20 90 Z" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+                <text x="130" y="55" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#3730A3" text-anchor="middle">Service</text>
+                <text x="130" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Installation, Repairs</text>
+                <text x="130" y="120" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Training, Updates</text>
+                <text x="130" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="500" fill="#4F46E5" text-anchor="middle">Customer Support</text>
+            </g>
+        </g>
+    </g>
+</svg>

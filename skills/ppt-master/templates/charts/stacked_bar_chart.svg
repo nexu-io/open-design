@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Stacked Bar Chart Template
+    Purpose: Category composition over time, proportional analysis
+    Use cases: Revenue breakdown, Cost decomposition, Market share
+    Feature: Modern pill-stacked aesthetic, embedded data labels, AI Insight dashboard
+    -->
+    <defs>
+        <!-- Stack Shadow -->
+        <filter id="stackShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- Panel Shadow -->
+        <filter id="panelShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="3" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Quarterly Revenue Breakdown</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">2024-2025 FINANCIAL YEAR · UNIT: $M</text>
+    <!-- ==================== Chart Area ==================== -->
+    <g id="chartArea">
+        <!-- Zebra Shading for Quarters -->
+        <rect x="332" y="150" width="192" height="400" fill="#F1F5F9" opacity="0.5"/>
+        <rect x="716" y="150" width="192" height="400" fill="#F1F5F9" opacity="0.5"/>
+        <!-- Horizontal Grid Lines -->
+        <line x1="140" y1="550" x2="1080" y2="550" stroke="#E2E8F0" stroke-width="1.5"/>
+        <line x1="140" y1="470" x2="1080" y2="470" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="140" y1="390" x2="1080" y2="390" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="140" y1="310" x2="1080" y2="310" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="140" y1="230" x2="1080" y2="230" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="140" y1="150" x2="1080" y2="150" stroke="#F1F5F9" stroke-width="1.5"/>
+        <!-- Y-Axis Labels -->
+        <text x="120" y="555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">0</text>
+        <text x="120" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">100</text>
+        <text x="120" y="395" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">200</text>
+        <text x="120" y="315" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">300</text>
+        <text x="120" y="235" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">400</text>
+        <text x="120" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">500</text>
+        <!-- Main Axes Lines -->
+        <line x1="140" y1="150" x2="140" y2="550" stroke="#94A3B8" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="140" y1="550" x2="1080" y2="550" stroke="#94A3B8" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- chart-plot-area: 140,150,1080,550 -->
+        <!-- ==================== Stacked Bars ==================== -->
+        <!-- Q1'24 (Total: 300) -->
+        <g filter="url(#stackShadow)">
+            <rect x="196" y="438" width="80" height="112" rx="4" fill="#6366F1" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="196" y="366" width="80" height="72" rx="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="196" y="326" width="80" height="40" rx="4" fill="#10B981" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="196" y="310" width="80" height="16" rx="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
+        <text x="236" y="494" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">140</text>
+        <text x="236" y="402" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">90</text>
+        <text x="236" y="346" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">50</text>
+        <text x="236" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">20</text>
+        <text x="236" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="middle">300</text>
+        <text x="236" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#475569" text-anchor="middle">Q1'24</text>
+        <!-- Q2'24 (Total: 350) -->
+        <g filter="url(#stackShadow)">
+            <rect x="388" y="422" width="80" height="128" rx="4" fill="#6366F1" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="388" y="342" width="80" height="80" rx="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="388" y="294" width="80" height="48" rx="4" fill="#10B981" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="388" y="270" width="80" height="24" rx="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
+        <text x="428" y="486" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">160</text>
+        <text x="428" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">100</text>
+        <text x="428" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">60</text>
+        <text x="428" y="282" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle">30</text>
+        <text x="428" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="middle">350</text>
+        <text x="428" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#475569" text-anchor="middle">Q2'24</text>
+        <!-- Q3'24 (Total: 400) -->
+        <g filter="url(#stackShadow)">
+            <rect x="580" y="406" width="80" height="144" rx="4" fill="#6366F1" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="580" y="318" width="80" height="88" rx="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="580" y="258" width="80" height="60" rx="4" fill="#10B981" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="580" y="230" width="80" height="28" rx="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
+        <text x="620" y="478" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">180</text>
+        <text x="620" y="362" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">110</text>
+        <text x="620" y="288" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">75</text>
+        <text x="620" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle">35</text>
+        <text x="620" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="middle">400</text>
+        <text x="620" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#475569" text-anchor="middle">Q3'24</text>
+        <!-- Q4'24 (Total: 450) -->
+        <g filter="url(#stackShadow)">
+            <rect x="772" y="390" width="80" height="160" rx="4" fill="#6366F1" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="772" y="294" width="80" height="96" rx="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="772" y="222" width="80" height="72" rx="4" fill="#10B981" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="772" y="190" width="80" height="32" rx="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
+        <text x="812" y="470" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">200</text>
+        <text x="812" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">120</text>
+        <text x="812" y="258" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">90</text>
+        <text x="812" y="206" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">40</text>
+        <text x="812" y="175" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="middle">450</text>
+        <text x="812" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#475569" text-anchor="middle">Q4'24</text>
+        <!-- Q1'25 (Total: 500) -->
+        <g filter="url(#stackShadow)">
+            <rect x="964" y="374" width="80" height="176" rx="4" fill="#6366F1" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="964" y="270" width="80" height="104" rx="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="964" y="186" width="80" height="84" rx="4" fill="#10B981" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="964" y="150" width="80" height="36" rx="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
+        <text x="1004" y="462" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">220</text>
+        <text x="1004" y="322" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">130</text>
+        <text x="1004" y="228" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">105</text>
+        <text x="1004" y="168" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">45</text>
+        <text x="1004" y="135" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="middle">500</text>
+        <text x="1004" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#475569" text-anchor="middle">Q1'25</text>
+    </g>
+    <!-- ==================== Right Insight Dashboard ==================== -->
+    <g id="dashboardPanel">
+        <!-- Dashboard Background -->
+        <rect x="1090" y="150" width="170" height="400" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#panelShadow)"/>
+        <!-- Legend Header -->
+        <text x="1175" y="185" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#0F172A" text-anchor="middle">Revenue Categories</text>
+        <line x1="1090" y1="200" x2="1260" y2="200" stroke="#F1F5F9" stroke-width="1.5"/>
+        <!-- Series 4 (Other) -->
+        <circle cx="1110" cy="225" r="5" fill="#F59E0B"/>
+        <text x="1125" y="230" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Other Revenue</text>
+        <rect x="1125" y="240" width="45" height="20" rx="4" fill="#FEF3C7"/>
+        <text x="1147.5" y="254" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#D97706" text-anchor="middle">+125%</text>
+        <!-- Series 3 (Subscriptions) -->
+        <circle cx="1110" cy="285" r="5" fill="#10B981"/>
+        <text x="1125" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Subscriptions</text>
+        <rect x="1125" y="300" width="45" height="20" rx="4" fill="#D1FAE5"/>
+        <text x="1147.5" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#059669" text-anchor="middle">+110%</text>
+        <!-- Series 2 (Services) -->
+        <circle cx="1110" cy="345" r="5" fill="#0EA5E9"/>
+        <text x="1125" y="350" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Services</text>
+        <rect x="1125" y="360" width="45" height="20" rx="4" fill="#E0F2FE"/>
+        <text x="1147.5" y="374" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#0284C7" text-anchor="middle">+44%</text>
+        <!-- Series 1 (Product Sales) -->
+        <circle cx="1110" cy="405" r="5" fill="#6366F1"/>
+        <text x="1125" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700" fill="#1E293B">Product Sales</text>
+        <rect x="1125" y="420" width="45" height="20" rx="4" fill="#E0E7FF"/>
+        <text x="1147.5" y="434" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#4338CA" text-anchor="middle">+57%</text>
+        <!-- AI Insight Box -->
+        <rect x="1100" y="455" width="150" height="85" rx="8" fill="#F0FDF4" stroke="#86EFAC" stroke-width="1"/>
+        <text x="1112" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#166534">💡 Key Driver</text>
+        <text x="1112" y="495" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#15803D">Subs &amp; Other grew</text>
+        <text x="1112" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#15803D">&gt;100% YoY, boosting</text>
+        <text x="1112" y="525" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#15803D">the margin structure.</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="60" y="690" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Data Source: Financial Reports</text>
+</svg>

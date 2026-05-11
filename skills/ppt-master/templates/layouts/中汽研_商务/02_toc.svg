@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 目录页 (Premium Tech Style) -->
+
+    <defs>
+        <!-- 头部渐变 -->
+        <linearGradient id="gradHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#003366;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0050B3;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景: 浅灰 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#F0F2F5" />
+    
+    <!-- 顶部装饰条 -->
+    <rect x="0" y="0" width="1280" height="6" fill="#003366" />
+
+    <!-- 页面标题区 -->
+    <text x="100" y="80" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="#E0E0E0">02</text>
+    <text x="200" y="80" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="36" font-weight="bold" fill="#003366">目录 CONTENTS</text>
+    <line x1="100" y1="100" x2="1180" y2="100" stroke="#D1D5DB" stroke-width="1" />
+
+    <!-- Logo (右上) -->
+    <image href="../images/{{LOGO_HEADER}}" x="1100" y="30" width="120" height="50" preserveAspectRatio="xMidYMid meet"/>
+
+    <!-- 目录列表区域 (卡片式) -->
+    <g transform="translate(100, 140)">
+        
+        <!-- Chapter 1 -->
+        <g transform="translate(0, 0)">
+            <!-- 阴影模拟 -->
+            <rect x="4" y="4" width="520" height="100" fill="#000000" fill-opacity="0.05" rx="4"/>
+            <!-- 卡片主体 -->
+            <rect x="0" y="0" width="520" height="100" fill="#FFFFFF" rx="4"/>
+            <!-- 左侧色条 -->
+            <rect x="0" y="0" width="8" height="100" fill="#003366" rx="2"/>
+            <!-- 序号 -->
+            <text x="40" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#E5E7EB">01</text>
+            <!-- 标题 -->
+            <text x="120" y="45" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#1F2937">
+                {{TOC_ITEM_1_TITLE}}
+            </text>
+            <text x="120" y="75" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6B7280">
+                {{TOC_ITEM_1_DESC}}
+            </text>
+        </g>
+
+        <!-- Chapter 2 -->
+        <g transform="translate(560, 0)">
+             <rect x="4" y="4" width="520" height="100" fill="#000000" fill-opacity="0.05" rx="4"/>
+            <rect x="0" y="0" width="520" height="100" fill="#FFFFFF" rx="4"/>
+            <rect x="0" y="0" width="8" height="100" fill="#004098" rx="2"/>
+            <text x="40" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#E5E7EB">02</text>
+            <text x="120" y="45" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#1F2937">
+                {{TOC_ITEM_2_TITLE}}
+            </text>
+            <text x="120" y="75" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6B7280">
+                {{TOC_ITEM_2_DESC}}
+            </text>
+        </g>
+
+        <!-- Chapter 3 -->
+        <g transform="translate(0, 140)">
+             <rect x="4" y="4" width="520" height="100" fill="#000000" fill-opacity="0.05" rx="4"/>
+            <rect x="0" y="0" width="520" height="100" fill="#FFFFFF" rx="4"/>
+            <rect x="0" y="0" width="8" height="100" fill="#0050B3" rx="2"/>
+            <text x="40" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#E5E7EB">03</text>
+            <text x="120" y="45" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#1F2937">
+                {{TOC_ITEM_3_TITLE}}
+            </text>
+             <text x="120" y="75" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6B7280">
+                {{TOC_ITEM_3_DESC}}
+            </text>
+        </g>
+
+        <!-- Chapter 4 -->
+        <g transform="translate(560, 140)">
+             <rect x="4" y="4" width="520" height="100" fill="#000000" fill-opacity="0.05" rx="4"/>
+            <rect x="0" y="0" width="520" height="100" fill="#FFFFFF" rx="4"/>
+            <rect x="0" y="0" width="8" height="100" fill="#0066CC" rx="2"/>
+            <text x="40" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#E5E7EB">04</text>
+            <text x="120" y="45" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#1F2937">
+                {{TOC_ITEM_4_TITLE}}
+            </text>
+             <text x="120" y="75" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6B7280">
+                {{TOC_ITEM_4_DESC}}
+            </text>
+        </g>
+
+         <!-- Chapter 5 (Bottom Centered) -->
+        <g transform="translate(280, 280)">
+             <rect x="4" y="4" width="520" height="100" fill="#000000" fill-opacity="0.05" rx="4"/>
+            <rect x="0" y="0" width="520" height="100" fill="#FFFFFF" rx="4"/>
+            <rect x="0" y="0" width="8" height="100" fill="#007ACC" rx="2"/>
+            <text x="40" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#E5E7EB">05</text>
+            <text x="120" y="45" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="24" font-weight="bold" fill="#1F2937">
+                {{TOC_ITEM_5_TITLE}}
+            </text>
+             <text x="120" y="75" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#6B7280">
+                {{TOC_ITEM_5_DESC}}
+            </text>
+        </g>
+
+    </g>
+
+    <!-- 底部装饰 -->
+    <rect x="0" y="710" width="1280" height="10" fill="#003366" />
+
+</svg>

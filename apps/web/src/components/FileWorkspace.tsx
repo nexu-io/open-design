@@ -32,6 +32,9 @@ interface Props {
   onRefreshFiles: () => Promise<void> | void;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
+  pptxExporting?: boolean;
+  pptxProgress?: { slide: number; total: number } | null;
+  pptxExportSuccess?: string | null;
   streaming?: boolean;
   openRequest?: { name: string; nonce: number } | null;
   liveArtifactEvents?: LiveArtifactEventItem[];
@@ -64,6 +67,9 @@ export function FileWorkspace({
   onRefreshFiles,
   isDeck,
   onExportAsPptx,
+  pptxExporting,
+  pptxProgress,
+  pptxExportSuccess,
   streaming,
   openRequest,
   liveArtifactEvents = [],
@@ -550,6 +556,9 @@ export function FileWorkspace({
             file={activeFile}
             isDeck={isDeck}
             onExportAsPptx={onExportAsPptx}
+            pptxExporting={pptxExporting}
+            pptxProgress={pptxProgress}
+            pptxExportSuccess={pptxExportSuccess}
             streaming={streaming}
             previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
             onSavePreviewComment={onSavePreviewComment}

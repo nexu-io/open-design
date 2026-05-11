@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- ==================== 顶部装饰区域 ==================== -->
+    <rect x="0" y="0" width="1280" height="100" fill="#0066B3" />
+    <rect x="0" y="0" width="6" height="100" fill="#FF6B35" />
+
+    <!-- 顶部装饰：心电图波形 -->
+    <path d="M40 50 L100 50 L120 20 L140 80 L160 40 L180 60 L200 50 L280 50" stroke="#FFFFFF" stroke-width="2"
+        stroke-opacity="0.3" fill="none" />
+
+    <!-- 右上角 Logo -->
+    <text x="1200" y="58" text-anchor="end" fill="#FFFFFF" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="16" font-weight="bold">
+        {{LOGO}}
+    </text>
+
+    <!-- ==================== 主内容区域 ==================== -->
+    <!-- 感谢语 -->
+    <text x="640" y="280" text-anchor="middle" fill="#004080" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="52" font-weight="bold">
+        {{THANK_YOU}}
+    </text>
+
+    <!-- 副标语 -->
+    <text x="640" y="340" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="22">
+        {{ENDING_SUBTITLE}}
+    </text>
+
+    <!-- 装饰分割线 -->
+    <line x1="460" y1="380" x2="820" y2="380" stroke="#0066B3" stroke-width="2" />
+    <circle cx="640" cy="380" r="6" fill="#00A86B" />
+    <circle cx="460" cy="380" r="4" fill="#0066B3" />
+    <circle cx="820" cy="380" r="4" fill="#0066B3" />
+
+    <!-- ==================== 联系信息区域 ==================== -->
+    <rect x="340" y="420" width="600" height="150" fill="#F5F7FA" rx="8" />
+    <!-- 左侧装饰条 -->
+    <rect x="340" y="420" width="6" height="150" fill="#0066B3" rx="3" />
+
+    <!-- 联系信息 -->
+    <text x="640" y="470" text-anchor="middle" fill="#004080" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="20" font-weight="bold">
+        {{INSTITUTION}}
+    </text>
+    <text x="640" y="510" text-anchor="middle" fill="#333333" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="16">
+        {{DEPARTMENT}}
+    </text>
+    <text x="640" y="545" text-anchor="middle" fill="#666666" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="14">
+        {{CONTACT_INFO}}
+    </text>
+
+    <!-- ==================== 装饰元素 ==================== -->
+    <!-- 左侧医疗十字装饰 -->
+    <rect x="120" y="380" width="60" height="15" fill="#00A86B" fill-opacity="0.15" rx="3" />
+    <rect x="142" y="358" width="15" height="60" fill="#00A86B" fill-opacity="0.15" rx="3" />
+
+    <!-- 右侧医疗十字装饰 -->
+    <rect x="1100" y="380" width="60" height="15" fill="#00A86B" fill-opacity="0.15" rx="3" />
+    <rect x="1122" y="358" width="15" height="60" fill="#00A86B" fill-opacity="0.15" rx="3" />
+
+    <!-- ==================== 底部信息 ==================== -->
+    <rect x="0" y="665" width="1280" height="55" fill="#F5F7FA" />
+    <rect x="0" y="665" width="1280" height="3" fill="#0066B3" />
+
+    <text x="640" y="700" text-anchor="middle" fill="#999999" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="14">
+        {{COPYRIGHT}}
+    </text>
+    <text x="1220" y="700" text-anchor="end" fill="#999999" font-family="Microsoft YaHei, Arial, sans-serif"
+        font-size="14">
+        {{PAGE_NUM}}
+    </text>
+</svg>

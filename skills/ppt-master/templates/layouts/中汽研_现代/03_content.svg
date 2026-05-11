@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 (Clean Tech Interface) -->
+
+    <defs>
+        <!-- 标题栏渐变 -->
+         <linearGradient id="gradHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#001529;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#003366;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景: 极浅灰护眼色 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#F7F9FC" />
+
+    <!-- 顶栏 (悬浮感) -->
+    <g transform="translate(0, 0)">
+        <!-- 底色条 -->
+        <rect x="0" y="0" width="1280" height="80" fill="url(#gradHeader)" />
+        <rect x="0" y="80" width="1280" height="4" fill="#1890FF" />
+        
+        <!-- Logo -->
+        <image href="../images/{{LOGO_HEADER}}" x="1100" y="15" width="120" height="50" preserveAspectRatio="xMidYMid meet"/>
+        
+        <!-- 页面标题 -->
+        <text x="80" y="52" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#FFFFFF">
+            {{PAGE_TITLE}}
+        </text>
+        
+        <!-- 章节序号小标 -->
+         <rect x="0" y="0" width="60" height="80" fill="#000000" fill-opacity="0.2" />
+         <text x="30" y="52" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold" fill="#00E5FF">
+            {{CHAPTER_NUM}}
+         </text>
+    </g>
+
+    <!-- 内容区域 (Executor Area) -->
+    <!-- 留白: Left 80, Right 80 -->
+    <rect x="80" y="120" width="1120" height="540" fill="none" stroke="#E5E7EB" stroke-width="2" stroke-dasharray="8,8" rx="8"/>
+    
+    <text x="640" y="380" text-anchor="middle" fill="#9CA3AF" font-size="18" font-family="Microsoft YaHei, sans-serif">
+        {{CONTENT_AREA}}
+    </text>
+
+    <!-- 右下角装饰水印 (Tech HUD) -->
+    <g transform="translate(1180, 650)">
+        <circle cx="0" cy="0" r="40" fill="none" stroke="#000000" stroke-opacity="0.1" stroke-width="2" />
+        <path d="M-40,0 L40,0 M0,-40 L0,40" stroke="#000000" stroke-opacity="0.1" stroke-width="1" />
+    </g>
+
+    <!-- 页码 -->
+    <text x="1200" y="700" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="#6B7280">
+        {{PAGE_NUM}}
+    </text>
+
+</svg>

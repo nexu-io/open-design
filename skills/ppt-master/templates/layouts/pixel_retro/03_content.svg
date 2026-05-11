@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- 模板: 内容页 - 像素复古风格 -->
+  <!-- 内容区域保持开放，供 Executor 自由发挥 -->
+  
+  <defs>
+    <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 深空黑背景 -->
+  <rect width="1280" height="720" fill="#0D1117" />
+  
+  <!-- 顶部装饰线 -->
+  <rect x="0" y="0" width="1280" height="4" fill="#39FF14" fill-opacity="0.6" />
+  
+  <!-- 页面标题 -->
+  <text x="60" y="70" font-family="Consolas, Monaco, monospace" font-size="36" font-weight="bold" fill="#39FF14" filter="url(#glowGreen)">
+    {{PAGE_TITLE}}
+  </text>
+  <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei, sans-serif" font-size="18" fill="#8B949E">
+    {{PAGE_TITLE_EN}}
+  </text>
+  
+  <!-- 分隔线 -->
+  <rect x="60" y="120" width="200" height="2" fill="#30363D" />
+  
+  <!-- ============================================ -->
+  <!-- 内容区域: y=140 到 y=670, x=60 到 x=1220     -->
+  <!-- 宽度: 1160px, 高度: 530px                    -->
+  <!-- 此区域由 Executor 自由设计内容               -->
+  <!-- ============================================ -->
+  <rect x="60" y="140" width="1160" height="500" fill="none" stroke="#30363D" stroke-width="2" stroke-dasharray="8,8" />
+  <text x="640" y="405" text-anchor="middle" font-family="Consolas, monospace" font-size="20" fill="#8B949E">
+    {{CONTENT_AREA}}
+  </text>
+  
+  <!-- 底部装饰线 -->
+  <rect x="0" y="716" width="1280" height="4" fill="#39FF14" fill-opacity="0.6" />
+  
+  <!-- 页码 -->
+  <text x="60" y="690" font-family="Consolas, monospace" font-size="14" fill="#8B949E">{{PAGE_NUM}}/{{TOTAL_PAGES}}</text>
+  <text x="1220" y="690" text-anchor="end" font-family="Consolas, monospace" font-size="14" fill="#8B949E">{{PAGE_SUBTITLE}}</text>
+
+</svg>

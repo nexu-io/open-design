@@ -542,6 +542,7 @@ export const esES: Dict = {
   'fileViewer.empty': 'Selecciona un archivo para verlo.',
   'fileViewer.loading': 'Cargando…',
   'fileViewer.exportPptx': 'Exportar como PPTX',
+  'fileViewer.exportPptxConverting': 'Conversion en cours…',
   'fileViewer.openInNewTab': 'Abrir en pestaña nueva',
   'fileViewer.copyPath': 'Copiar ruta',
   'fileViewer.copied': '¡Copiado!',

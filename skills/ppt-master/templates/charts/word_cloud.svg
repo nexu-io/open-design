@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Word Cloud Chart Template
+    Purpose: Keyword weight visualization, trending topics
+    Use cases: User feedback analysis, industry trends, tech stack overview
+    Feature: Mathematically mapped geometric distribution, non-overlapping Tailwind typography
+    -->
+    <defs>
+        <!-- Premium Radial Background -->
+        <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stop-color="#FFFFFF"/>
+            <stop offset="100%" stop-color="#F1F5F9"/>
+        </radialGradient>
+        <!-- Text Glow for Core Keywords -->
+        <filter id="textGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <!-- Pill Shadow -->
+        <filter id="pillShadow" x="-10%" y="-20%" width="120%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.08"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="url(#bgGrad)"/>
+    <!-- ==================== Header ==================== -->
+    <text x="640" y="60" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Industry Trending Keywords</text>
+    <text x="640" y="88" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">WORD CLOUD · FONT SIZE INDICATES KEYWORD WEIGHT &amp; FREQUENCY</text>
+    <!-- ==================== Word Cloud Geometry ==================== -->
+    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" text-anchor="middle">
+        <!-- Tier 1: Extreme (Center Core) -->
+        <g font-weight="900" font-size="64" letter-spacing="-1" filter="url(#textGlow)">
+            <text x="640" y="340" fill="#4F46E5">Artificial Intelligence</text>
+            <text x="640" y="420" fill="#7C3AED">Large Language Models</text>
+        </g>
+        <!-- Tier 2: High (Inner Ring) -->
+        <g font-weight="800" font-size="44" letter-spacing="-0.5" filter="url(#textGlow)">
+            <text x="320" y="280" fill="#F43F5E">Digital Transformation</text>
+            <text x="960" y="280" fill="#0EA5E9">Cloud Computing</text>
+            <text x="320" y="480" fill="#10B981">Smart Manufacturing</text>
+            <text x="960" y="480" fill="#F59E0B">Data Security</text>
+        </g>
+        <!-- Tier 3: Medium (Middle Ring) -->
+        <g font-weight="700" font-size="32">
+            <text x="640" y="240" fill="#14B8A6">Autonomous Driving</text>
+            <text x="640" y="500" fill="#D946EF">Edge Computing</text>
+            <text x="180" y="380" fill="#8B5CF6">Metaverse</text>
+            <text x="1100" y="380" fill="#6366F1">Blockchain</text>
+            <text x="440" y="200" fill="#3B82F6">Quantum Computing</text>
+            <text x="840" y="200" fill="#FB7185">Machine Learning</text>
+            <text x="440" y="560" fill="#34D399">Digital Twins</text>
+            <text x="840" y="560" fill="#FBBF24">IoT / AIoT</text>
+        </g>
+        <!-- Tier 4: Low (Outer Ring) -->
+        <g font-weight="600" font-size="24" fill="#64748B">
+            <text x="240" y="180">Web 3.0</text>
+            <text x="1040" y="180">Low-Code</text>
+            <text x="240" y="580">Zero Trust</text>
+            <text x="1040" y="580">Knowledge Graphs</text>
+            <text x="140" y="280">Multimodal AI</text>
+            <text x="1140" y="280">Federated Learning</text>
+            <text x="140" y="480">AIGC</text>
+            <text x="1140" y="480">Privacy Computing</text>
+            <text x="640" y="160">RPA</text>
+            <text x="640" y="580">GPT-4</text>
+        </g>
+        <!-- Tier 5: Minimum (Dust/Particles) -->
+        <g font-weight="500" font-size="16" fill="#94A3B8">
+            <text x="140" y="120">DevOps</text>
+            <text x="1140" y="120">MLOps</text>
+            <text x="140" y="640">Cybersecurity</text>
+            <text x="1140" y="640">Spatial Computing</text>
+            <text x="500" y="260">Data Mesh</text>
+            <text x="780" y="260">API First</text>
+            <text x="500" y="500">Serverless</text>
+            <text x="780" y="500">Microservices</text>
+            <text x="80" y="380">SaaS</text>
+            <text x="1200" y="380">PaaS</text>
+        </g>
+    </g>
+    <!-- ==================== UI Legend ==================== -->
+    <g filter="url(#pillShadow)">
+        <rect x="340" y="640" width="600" height="40" rx="20" fill="#FFFFFF"/>
+    </g>
+    <text x="640" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#475569" text-anchor="middle">
+        Size indicates frequency: 
+        <tspan fill="#4F46E5" font-weight="800"> Extreme</tspan> · 
+        <tspan fill="#F43F5E" font-weight="700"> High</tspan> · 
+        <tspan fill="#14B8A6" font-weight="600"> Medium</tspan> · 
+        <tspan fill="#64748B" font-weight="500"> Low</tspan>
+    </text>
+    <!-- ==================== Footer ==================== -->
+    <text x="1220" y="700" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: Industry Reports &amp; Social Media Analysis · 2025</text>
+</svg>

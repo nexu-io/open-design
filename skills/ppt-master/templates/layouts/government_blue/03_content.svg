@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 - 政府蓝风格 (优化版) -->
+
+    <defs>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#00B4D8;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0050B3;stop-opacity:1" />
+        </linearGradient>
+        <!-- 序号块渐变 -->
+        <linearGradient id="numGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#0077B6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0050B3;stop-opacity:1" />
+        </linearGradient>
+        <!-- 背景渐变 -->
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#F8FCFF;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#FFFFFF;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="url(#bgGrad)" />
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)" />
+
+    <!-- 页眉导航栏 -->
+    <!-- 章节序号块 -->
+    <rect x="60" y="30" width="50" height="50" rx="6" fill="url(#numGrad)" />
+    <text x="85" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFFFFF">{{CHAPTER_NUM}}</text>
+
+    <!-- 页面标题 -->
+    <text x="130" y="65" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#1A1A1A">{{PAGE_TITLE}}</text>
+
+    <!-- 右上角单位标识 -->
+    <text x="1220" y="50" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="12" fill="#718096">{{ORG_SHORT}}</text>
+    <rect x="1100" y="58" width="120" height="2" fill="url(#topGrad)" fill-opacity="0.4"/>
+
+    <!-- 分隔线 -->
+    <line x1="60" y1="95" x2="1220" y2="95" stroke="#E4E7EB" stroke-width="1" stroke-dasharray="6,4"/>
+
+    <!-- 内容区域 - 灵活布局，由 Executor 根据实际内容自由设计 -->
+    <!-- 可使用的布局模式：
+       - 单栏文字列表
+       - 左右双栏对比
+       - 卡片式分块（如 2×2 四宫格）
+       - 图文混排（左图右文、上图下文、通栏图）
+       - 表格
+       - 时间轴
+       - 流程图
+  -->
+    <rect x="60" y="110" width="1160" height="550" fill="none" stroke="#E4E7EB" stroke-width="2" stroke-dasharray="8,8" />
+    <text x="640" y="365" text-anchor="middle" fill="#CBD5E1" font-size="18" font-family="Microsoft YaHei, sans-serif">
+        {{CONTENT_AREA}}
+    </text>
+    <text x="640" y="400" text-anchor="middle" fill="#CBD5E1" font-size="14" font-family="Microsoft YaHei, sans-serif">
+        (由 Executor 根据实际内容自由布局)
+    </text>
+
+    <!-- 常用设计元素参考 -->
+    <!-- 色块容器: <rect fill="#F0F9FF" rx="8"/> -->
+    <!-- 强调色块: <rect fill="#0050B3"/> -->
+    <!-- 辅助色块: <rect fill="#00B4D8"/> -->
+    <!-- 圆点列表: <circle r="5" fill="#0050B3"/> -->
+    <!-- 分隔线: <line stroke="#E4E7EB" stroke-width="1"/> -->
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#0050B3" />
+
+    <!-- 页码 -->
+    <text x="640" y="695" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#718096">{{PAGE_NUM}}</text>
+
+    <!-- 底部单位名称 -->
+    <text x="1220" y="695" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="12" fill="#718096" fill-opacity="0.6">{{ORG_SHORT}}</text>
+
+</svg>

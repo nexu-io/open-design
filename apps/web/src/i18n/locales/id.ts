@@ -752,6 +752,7 @@ export const id: Dict = {
   'fileViewer.empty': 'Pilih file untuk dilihat.',
   'fileViewer.loading': 'Memuat file...',
   'fileViewer.exportPptx': 'Ekspor PPTX',
+  'fileViewer.exportPptxConverting': 'Converting…',
   'fileViewer.openInNewTab': 'Buka di tab baru',
   'fileViewer.copyPath': 'Salin path',
   'fileViewer.copied': 'Tersalin',

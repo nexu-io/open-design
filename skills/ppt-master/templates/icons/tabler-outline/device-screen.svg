@@ -1,0 +1,22 @@
+<!--
+category: Devices
+tags: [screen, display, monitor, broken, defect, hardware, device, repair, quality, diagnostic]
+unicode: "1022b"
+version: "3.41"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M5 5a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-14"  />
+  <path d="M15 7l-6 10" />
+  <path d="M15 14l-1.75 3" />
+  <path d="M10.75 7l-1.75 3" />
+</svg>

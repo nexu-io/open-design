@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Team Roster / Executive Board Template
+    Purpose: Introduce key team members, executives, or project leaders
+    Use cases: Company overview, pitch decks, "Meet the Team" slides
+    Design Principles: Clean card grid, circular photo placeholders, clear typographic hierarchy
+    -->
+    <defs>
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.05"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <clipPath id="circleClip">
+            <circle cx="80" cy="80" r="80"/>
+        </clipPath>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="640" y="80" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="800" fill="#0F172A" text-anchor="middle">Meet Our Executive Team</text>
+    <text x="640" y="110" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#64748B" letter-spacing="1" text-anchor="middle">LEADERSHIP DRIVING INNOVATION AND GROWTH</text>
+    <!-- ==================== Team Cards ==================== -->
+    <g transform="translate(60, 180)">
+        <!-- Card 1 -->
+        <g transform="translate(0, 0)">
+            <rect width="270" height="420" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+            <!-- Photo Placeholder -->
+            <g transform="translate(55, 40)">
+                <circle cx="80" cy="80" r="80" fill="#E2E8F0"/>
+                <circle cx="80" cy="65" r="30" fill="#94A3B8"/>
+                <path d="M 20 140 Q 80 80 140 140" fill="none" stroke="#94A3B8" stroke-width="40" stroke-linecap="round"/>
+            </g>
+            <!-- Text Info -->
+            <text x="135" y="240" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="800" fill="#0F172A" text-anchor="middle">Eleanor Vance</text>
+            <text x="135" y="270" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#3B82F6" letter-spacing="0.5" text-anchor="middle">CHIEF EXECUTIVE OFFICER</text>
+            <line x1="95" y1="290" x2="175" y2="290" stroke="#CBD5E1" stroke-width="2"/>
+            <!-- Bio / Description -->
+            <text x="135" y="320" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569" text-anchor="middle" line-height="1.5">
+                <tspan x="135" dy="0">15+ years experience in</tspan>
+                <tspan x="135" dy="20">SaaS scale-ups. Former</tspan>
+                <tspan x="135" dy="20">VP of Strategy at TechCorp.</tspan>
+                <tspan x="135" dy="20">Stanford MBA.</tspan>
+            </text>
+        </g>
+        <!-- Card 2 -->
+        <g transform="translate(300, 0)">
+            <rect width="270" height="420" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+            <g transform="translate(55, 40)">
+                <circle cx="80" cy="80" r="80" fill="#E2E8F0"/>
+                <circle cx="80" cy="65" r="30" fill="#94A3B8"/>
+                <path d="M 20 140 Q 80 80 140 140" fill="none" stroke="#94A3B8" stroke-width="40" stroke-linecap="round"/>
+            </g>
+            <text x="135" y="240" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="800" fill="#0F172A" text-anchor="middle">Marcus Chen</text>
+            <text x="135" y="270" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#3B82F6" letter-spacing="0.5" text-anchor="middle">CHIEF TECHNOLOGY OFFICER</text>
+            <line x1="95" y1="290" x2="175" y2="290" stroke="#CBD5E1" stroke-width="2"/>
+            <text x="135" y="320" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569" text-anchor="middle" line-height="1.5">
+                <tspan x="135" dy="0">Pioneer in distributed</tspan>
+                <tspan x="135" dy="20">systems. Led engineering</tspan>
+                <tspan x="135" dy="20">at GlobalScale Inc.</tspan>
+                <tspan x="135" dy="20">Holds 12 software patents.</tspan>
+            </text>
+        </g>
+        <!-- Card 3 -->
+        <g transform="translate(600, 0)">
+            <rect width="270" height="420" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+            <g transform="translate(55, 40)">
+                <circle cx="80" cy="80" r="80" fill="#E2E8F0"/>
+                <circle cx="80" cy="65" r="30" fill="#94A3B8"/>
+                <path d="M 20 140 Q 80 80 140 140" fill="none" stroke="#94A3B8" stroke-width="40" stroke-linecap="round"/>
+            </g>
+            <text x="135" y="240" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="800" fill="#0F172A" text-anchor="middle">Sarah Jenkins</text>
+            <text x="135" y="270" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#3B82F6" letter-spacing="0.5" text-anchor="middle">CHIEF REVENUE OFFICER</text>
+            <line x1="95" y1="290" x2="175" y2="290" stroke="#CBD5E1" stroke-width="2"/>
+            <text x="135" y="320" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569" text-anchor="middle" line-height="1.5">
+                <tspan x="135" dy="0">Drove 300% YoY growth</tspan>
+                <tspan x="135" dy="20">in previous B2B role.</tspan>
+                <tspan x="135" dy="20">Expert in enterprise</tspan>
+                <tspan x="135" dy="20">sales &amp; partnerships.</tspan>
+            </text>
+        </g>
+        <!-- Card 4 -->
+        <g transform="translate(900, 0)">
+            <rect width="270" height="420" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+            <g transform="translate(55, 40)">
+                <circle cx="80" cy="80" r="80" fill="#E2E8F0"/>
+                <circle cx="80" cy="65" r="30" fill="#94A3B8"/>
+                <path d="M 20 140 Q 80 80 140 140" fill="none" stroke="#94A3B8" stroke-width="40" stroke-linecap="round"/>
+            </g>
+            <text x="135" y="240" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="800" fill="#0F172A" text-anchor="middle">David Torres</text>
+            <text x="135" y="270" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#3B82F6" letter-spacing="0.5" text-anchor="middle">CHIEF PRODUCT OFFICER</text>
+            <line x1="95" y1="290" x2="175" y2="290" stroke="#CBD5E1" stroke-width="2"/>
+            <text x="135" y="320" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" fill="#475569" text-anchor="middle" line-height="1.5">
+                <tspan x="135" dy="0">Design-thinking advocate.</tspan>
+                <tspan x="135" dy="20">Shipped award-winning</tspan>
+                <tspan x="135" dy="20">consumer products.</tspan>
+                <tspan x="135" dy="20">ex-Google Design Lead.</tspan>
+            </text>
+        </g>
+    </g>
+</svg>

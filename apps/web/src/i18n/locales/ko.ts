@@ -648,6 +648,7 @@ export const ko: Dict = {
   'fileViewer.empty': '보려는 파일을 선택하세요.',
   'fileViewer.loading': '불러오는 중…',
   'fileViewer.exportPptx': 'PPTX로 내보내기',
+  'fileViewer.exportPptxConverting': '转换中…',
   'fileViewer.openInNewTab': '새 탭에서 열기',
   'fileViewer.copyPath': '경로 복사',
   'fileViewer.copied': '복사 완료!',

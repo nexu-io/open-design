@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Heatmap Chart Template
+    Usage: Matrix data visualization, correlation analysis
+    Scenarios: Activity heatmaps, time-series analysis, user behavior
+    Supports: 7×7 or 7x8 matrix grid
+    -->
+    <defs>
+        <!-- Heatmap Gradient Scale (Blue to Red) -->
+        <linearGradient id="heatGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#DBEAFE"/>
+            <stop offset="25%" style="stop-color:#93C5FD"/>
+            <stop offset="50%" style="stop-color:#FCD34D"/>
+            <stop offset="75%" style="stop-color:#F97316"/>
+            <stop offset="100%" style="stop-color:#DC2626"/>
+        </linearGradient>
+        <!-- Standard Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="60" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="700" fill="#0F172A">User Activity Heatmap Analysis</text>
+    <text x="60" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="18" fill="#64748B">Active Users by Day and Time · Values in Thousands (K)</text>
+    <!-- Heatmap Area -->
+    <g id="heatmapArea" transform="translate(180, 130)">
+        <!-- Column Titles (Days) -->
+        <text x="40" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#475569" text-anchor="middle">Mon</text>
+        <text x="120" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#475569" text-anchor="middle">Tue</text>
+        <text x="200" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#475569" text-anchor="middle">Wed</text>
+        <text x="280" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#475569" text-anchor="middle">Thu</text>
+        <text x="360" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#475569" text-anchor="middle">Fri</text>
+        <text x="440" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#EF4444" text-anchor="middle">Sat</text>
+        <text x="520" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#EF4444" text-anchor="middle">Sun</text>
+        <!-- Row Titles (Time) -->
+        <text x="-15" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">06:00 - 09:00</text>
+        <text x="-15" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">09:00 - 12:00</text>
+        <text x="-15" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">12:00 - 14:00</text>
+        <text x="-15" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">14:00 - 17:00</text>
+        <text x="-15" y="275" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">17:00 - 19:00</text>
+        <text x="-15" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">19:00 - 21:00</text>
+        <text x="-15" y="395" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">21:00 - 23:00</text>
+        <text x="-15" y="455" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" fill="#64748B" text-anchor="end">23:00 - 06:00</text>
+        <!-- Heatmap Cells -->
+        <!-- Row 1 -->
+        <rect x="0" y="5" width="78" height="58" rx="4" fill="#93C5FD"/><text x="40" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">35</text>
+        <rect x="80" y="5" width="78" height="58" rx="4" fill="#60A5FA"/><text x="120" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">42</text>
+        <rect x="160" y="5" width="78" height="58" rx="4" fill="#60A5FA"/><text x="200" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">40</text>
+        <rect x="240" y="5" width="78" height="58" rx="4" fill="#93C5FD"/><text x="280" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">38</text>
+        <rect x="320" y="5" width="78" height="58" rx="4" fill="#BFDBFE"/><text x="360" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">28</text>
+        <rect x="400" y="5" width="78" height="58" rx="4" fill="#DBEAFE"/><text x="440" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">15</text>
+        <rect x="480" y="5" width="78" height="58" rx="4" fill="#EFF6FF"/><text x="520" y="40" font-size="13" fill="#1E3A8A" text-anchor="middle">10</text>
+        <!-- Row 2 -->
+        <rect x="0" y="65" width="78" height="58" rx="4" fill="#FEF08A"/><text x="40" y="100" font-size="13" fill="#9A3412" text-anchor="middle">58</text>
+        <rect x="80" y="65" width="78" height="58" rx="4" fill="#FCD34D"/><text x="120" y="100" font-size="13" fill="#9A3412" text-anchor="middle">65</text>
+        <rect x="160" y="65" width="78" height="58" rx="4" fill="#FACC15"/><text x="200" y="100" font-size="13" fill="#FFFFFF" text-anchor="middle">72</text>
+        <rect x="240" y="65" width="78" height="58" rx="4" fill="#FCD34D"/><text x="280" y="100" font-size="13" fill="#9A3412" text-anchor="middle">68</text>
+        <rect x="320" y="65" width="78" height="58" rx="4" fill="#FEF08A"/><text x="360" y="100" font-size="13" fill="#9A3412" text-anchor="middle">55</text>
+        <rect x="400" y="65" width="78" height="58" rx="4" fill="#60A5FA"/><text x="440" y="100" font-size="13" fill="#1E3A8A" text-anchor="middle">45</text>
+        <rect x="480" y="65" width="78" height="58" rx="4" fill="#93C5FD"/><text x="520" y="100" font-size="13" fill="#1E3A8A" text-anchor="middle">38</text>
+        <!-- Row 3 -->
+        <rect x="0" y="125" width="78" height="58" rx="4" fill="#FDBA74"/><text x="40" y="160" font-size="13" fill="#7C2D12" text-anchor="middle">75</text>
+        <rect x="80" y="125" width="78" height="58" rx="4" fill="#FB923C"/><text x="120" y="160" font-size="13" fill="#FFFFFF" text-anchor="middle">82</text>
+        <rect x="160" y="125" width="78" height="58" rx="4" fill="#F97316"/><text x="200" y="160" font-size="13" fill="#FFFFFF" text-anchor="middle">88</text>
+        <rect x="240" y="125" width="78" height="58" rx="4" fill="#FB923C"/><text x="280" y="160" font-size="13" fill="#FFFFFF" text-anchor="middle">80</text>
+        <rect x="320" y="125" width="78" height="58" rx="4" fill="#FDBA74"/><text x="360" y="160" font-size="13" fill="#7C2D12" text-anchor="middle">70</text>
+        <rect x="400" y="125" width="78" height="58" rx="4" fill="#FEF08A"/><text x="440" y="160" font-size="13" fill="#9A3412" text-anchor="middle">60</text>
+        <rect x="480" y="125" width="78" height="58" rx="4" fill="#FCD34D"/><text x="520" y="160" font-size="13" fill="#9A3412" text-anchor="middle">65</text>
+        <!-- Row 4 -->
+        <rect x="0" y="185" width="78" height="58" rx="4" fill="#FEF08A"/><text x="40" y="220" font-size="13" fill="#9A3412" text-anchor="middle">55</text>
+        <rect x="80" y="185" width="78" height="58" rx="4" fill="#FCD34D"/><text x="120" y="220" font-size="13" fill="#9A3412" text-anchor="middle">62</text>
+        <rect x="160" y="185" width="78" height="58" rx="4" fill="#FCD34D"/><text x="200" y="220" font-size="13" fill="#9A3412" text-anchor="middle">68</text>
+        <rect x="240" y="185" width="78" height="58" rx="4" fill="#FEF08A"/><text x="280" y="220" font-size="13" fill="#9A3412" text-anchor="middle">60</text>
+        <rect x="320" y="185" width="78" height="58" rx="4" fill="#60A5FA"/><text x="360" y="220" font-size="13" fill="#1E3A8A" text-anchor="middle">48</text>
+        <rect x="400" y="185" width="78" height="58" rx="4" fill="#FDBA74"/><text x="440" y="220" font-size="13" fill="#7C2D12" text-anchor="middle">72</text>
+        <rect x="480" y="185" width="78" height="58" rx="4" fill="#FB923C"/><text x="520" y="220" font-size="13" fill="#FFFFFF" text-anchor="middle">78</text>
+        <!-- Row 5 -->
+        <rect x="0" y="245" width="78" height="58" rx="4" fill="#93C5FD"/><text x="40" y="280" font-size="13" fill="#1E3A8A" text-anchor="middle">32</text>
+        <rect x="80" y="245" width="78" height="58" rx="4" fill="#93C5FD"/><text x="120" y="280" font-size="13" fill="#1E3A8A" text-anchor="middle">35</text>
+        <rect x="160" y="245" width="78" height="58" rx="4" fill="#93C5FD"/><text x="200" y="280" font-size="13" fill="#1E3A8A" text-anchor="middle">38</text>
+        <rect x="240" y="245" width="78" height="58" rx="4" fill="#93C5FD"/><text x="280" y="280" font-size="13" fill="#1E3A8A" text-anchor="middle">35</text>
+        <rect x="320" y="245" width="78" height="58" rx="4" fill="#BFDBFE"/><text x="360" y="280" font-size="13" fill="#1E3A8A" text-anchor="middle">28</text>
+        <rect x="400" y="245" width="78" height="58" rx="4" fill="#FCD34D"/><text x="440" y="280" font-size="13" fill="#9A3412" text-anchor="middle">65</text>
+        <rect x="480" y="245" width="78" height="58" rx="4" fill="#FDBA74"/><text x="520" y="280" font-size="13" fill="#7C2D12" text-anchor="middle">70</text>
+        <!-- Row 6 (Peak) -->
+        <rect x="0" y="305" width="78" height="58" rx="4" fill="#FB923C"/><text x="40" y="340" font-size="13" fill="#FFFFFF" text-anchor="middle">78</text>
+        <rect x="80" y="305" width="78" height="58" rx="4" fill="#F97316"/><text x="120" y="340" font-size="13" fill="#FFFFFF" text-anchor="middle">85</text>
+        <rect x="160" y="305" width="78" height="58" rx="4" fill="#F97316"/><text x="200" y="340" font-size="13" fill="#FFFFFF" text-anchor="middle">88</text>
+        <rect x="240" y="305" width="78" height="58" rx="4" fill="#F97316"/><text x="280" y="340" font-size="13" fill="#FFFFFF" text-anchor="middle">86</text>
+        <rect x="320" y="305" width="78" height="58" rx="4" fill="#FB923C"/><text x="360" y="340" font-size="13" fill="#FFFFFF" text-anchor="middle">80</text>
+        <rect x="400" y="305" width="78" height="58" rx="4" fill="#EF4444"/><text x="440" y="340" font-size="13" fill="#FFFFFF" text-anchor="middle">95</text>
+        <rect x="480" y="305" width="78" height="58" rx="4" fill="#DC2626"/><text x="520" y="340" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">98</text>
+        <!-- Row 7 -->
+        <rect x="0" y="365" width="78" height="58" rx="4" fill="#FCD34D"/><text x="40" y="400" font-size="13" fill="#9A3412" text-anchor="middle">62</text>
+        <rect x="80" y="365" width="78" height="58" rx="4" fill="#FDBA74"/><text x="120" y="400" font-size="13" fill="#7C2D12" text-anchor="middle">70</text>
+        <rect x="160" y="365" width="78" height="58" rx="4" fill="#FDBA74"/><text x="200" y="400" font-size="13" fill="#7C2D12" text-anchor="middle">72</text>
+        <rect x="240" y="365" width="78" height="58" rx="4" fill="#FDBA74"/><text x="280" y="400" font-size="13" fill="#7C2D12" text-anchor="middle">68</text>
+        <rect x="320" y="365" width="78" height="58" rx="4" fill="#FCD34D"/><text x="360" y="400" font-size="13" fill="#9A3412" text-anchor="middle">65</text>
+        <rect x="400" y="365" width="78" height="58" rx="4" fill="#F97316"/><text x="440" y="400" font-size="13" fill="#FFFFFF" text-anchor="middle">85</text>
+        <rect x="480" y="365" width="78" height="58" rx="4" fill="#FB923C"/><text x="520" y="400" font-size="13" fill="#FFFFFF" text-anchor="middle">82</text>
+        <!-- Row 8 -->
+        <rect x="0" y="425" width="78" height="58" rx="4" fill="#DBEAFE"/><text x="40" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">18</text>
+        <rect x="80" y="425" width="78" height="58" rx="4" fill="#DBEAFE"/><text x="120" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">15</text>
+        <rect x="160" y="425" width="78" height="58" rx="4" fill="#DBEAFE"/><text x="200" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">12</text>
+        <rect x="240" y="425" width="78" height="58" rx="4" fill="#DBEAFE"/><text x="280" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">15</text>
+        <rect x="320" y="425" width="78" height="58" rx="4" fill="#BFDBFE"/><text x="360" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">22</text>
+        <rect x="400" y="425" width="78" height="58" rx="4" fill="#93C5FD"/><text x="440" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">35</text>
+        <rect x="480" y="425" width="78" height="58" rx="4" fill="#BFDBFE"/><text x="520" y="460" font-size="13" fill="#1E3A8A" text-anchor="middle">28</text>
+    </g>
+    <!-- Color Legend -->
+    <g id="colorLegend" transform="translate(780, 150)">
+        <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A">Activity Intensity</text>
+        <rect x="0" y="15" width="240" height="20" rx="4" fill="url(#heatGradient)"/>
+        <text x="0" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#64748B">Low (0)</text>
+        <text x="120" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#64748B" text-anchor="middle">Med (50)</text>
+        <text x="240" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#64748B" text-anchor="end">High (100)</text>
+    </g>
+    <!-- Stats Panel -->
+    <g id="statsPanel" transform="translate(780, 240)">
+        <rect x="0" y="0" width="240" height="180" rx="8" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)"/>
+        <text x="120" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">Key Statistics</text>
+        <line x1="15" y1="42" x2="225" y2="42" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="68" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#475569">🔥 Peak Time</text>
+        <text x="20" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#DC2626">Sun 19:00-21:00 (98K)</text>
+        <text x="20" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#475569">❄️ Low Time</text>
+        <text x="20" y="135" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#2563EB">Sun 06:00-09:00 (10K)</text>
+        <text x="20" y="162" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#475569">📊 Daily Avg</text>
+        <text x="140" y="162" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="700" fill="#0F172A">54.2K</text>
+    </g>
+    <!-- Insight Card -->
+    <g id="insightCard" transform="translate(780, 440)">
+        <rect x="0" y="0" width="240" height="120" rx="8" fill="#F0FDF4" stroke="#22C55E" stroke-width="1" filter="url(#cardShadow)"/>
+        <text x="20" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#166534">💡 Key Insights</text>
+        <text x="20" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#475569">• Peak activity on weekend nights</text>
+        <text x="20" y="75" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#475569">• Mid-day spikes on weekdays</text>
+        <text x="20" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="12" fill="#475569">• Lowest traffic in early hours</text>
+        <text x="20" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="11" font-weight="600" fill="#64748B">Action: Scale servers on weekends</text>
+    </g>
+    <!-- Data Source -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" fill="#94A3B8">Source: User Behavior Analytics Platform</text>
+</svg>

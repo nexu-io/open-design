@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Funnel Chart Template
+    Usage: Conversion flow analysis
+    Scenarios: Sales funnel, user conversion, process efficiency
+    Supports: 4 stages (3-5 recommended)
+    -->
+    <defs>
+        <!-- Funnel Gradients -->
+        <linearGradient id="funnelGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="funnelGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#0EA5E9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0284C7;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="funnelGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#14B8A6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0D9488;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="funnelGrad4" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#F97316;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#EA580C;stop-opacity:1" />
+        </linearGradient>
+        <!-- Standard Shadow -->
+        <filter id="funnelShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <!-- Arrow -->
+        <marker id="arrowLoss" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#EF4444" />
+        </marker>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="60" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="700" fill="#0F172A">Conversion Funnel Analysis</text>
+    <text x="60" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="18" fill="#64748B">Quarterly Performance · Total Volume: 10,000</text>
+    <!-- Funnel Chart -->
+    <g id="funnelChart">
+        <!-- Stage 1: Awareness (y: 160-240) -->
+        <path d="M 340,160 L 940,160 L 895,240 L 385,240 Z" 
+              fill="url(#funnelGrad1)" filter="url(#funnelShadow)"/>
+        <text x="640" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle">Stage 01: Awareness: 10,000</text>
+        <text x="640" y="228" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#FFFFFF" text-anchor="middle" opacity="0.9">100%</text>
+        <!-- Stage 2: Interest (y: 270-350) -->
+        <path d="M 385,270 L 895,270 L 850,350 L 430,350 Z" 
+              fill="url(#funnelGrad2)" filter="url(#funnelShadow)"/>
+        <text x="640" y="315" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle">Stage 02: Interest: 4,500</text>
+        <text x="640" y="338" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#FFFFFF" text-anchor="middle" opacity="0.9">45%</text>
+        <!-- Stage 3: Consideration (y: 380-460) -->
+        <path d="M 430,380 L 850,380 L 805,460 L 475,460 Z" 
+              fill="url(#funnelGrad3)" filter="url(#funnelShadow)"/>
+        <text x="640" y="425" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle">Stage 03: Consideration: 1,800</text>
+        <text x="640" y="448" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#FFFFFF" text-anchor="middle" opacity="0.9">18%</text>
+        <!-- Stage 4: Conversion (y: 490-570) -->
+        <path d="M 475,490 L 805,490 L 760,570 L 520,570 Z" 
+              fill="url(#funnelGrad4)" filter="url(#funnelShadow)"/>
+        <text x="640" y="535" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle">Stage 04: Conversion: 650</text>
+        <text x="640" y="558" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" fill="#FFFFFF" text-anchor="middle" opacity="0.9">6.5%</text>
+    </g>
+    <!-- Right Annotations (Drop-off) -->
+    <g id="lossAnnotations">
+        <!-- Loss 1: 10,000 -> 4,500 -->
+        <line x1="950" y1="250" x2="1020" y2="250" stroke="#EF4444" stroke-width="2" marker-end="url(#arrowLoss)"/>
+        <text x="1030" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#EF4444">Drop-off: 5,500</text>
+        <text x="1030" y="265" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#64748B">Conversion: 45%</text>
+        <!-- Loss 2: 4,500 -> 1,800 -->
+        <line x1="905" y1="360" x2="975" y2="360" stroke="#EF4444" stroke-width="2" marker-end="url(#arrowLoss)"/>
+        <text x="985" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#EF4444">Drop-off: 2,700</text>
+        <text x="985" y="375" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#64748B">Conversion: 40%</text>
+        <!-- Loss 3: 1,800 -> 650 -->
+        <line x1="860" y1="470" x2="930" y2="470" stroke="#EF4444" stroke-width="2" marker-end="url(#arrowLoss)"/>
+        <text x="940" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#EF4444">Drop-off: 1,150</text>
+        <text x="940" y="485" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#64748B">Conversion: 36%</text>
+    </g>
+    <!-- Left Key Metrics -->
+    <g id="keyMetrics">
+        <rect x="60" y="180" width="220" height="380" rx="8" fill="#FFFFFF" filter="url(#funnelShadow)"/>
+        <text x="170" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="700" fill="#0F172A" text-anchor="middle">Key Metrics</text>
+        <!-- Metric 1 -->
+        <rect x="80" y="245" width="4" height="50" rx="2" fill="#F97316"/>
+        <text x="95" y="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#475569">Total Conversion</text>
+        <text x="95" y="285" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="32" font-weight="700" fill="#F97316">6.5%</text>
+        <!-- Metric 2 -->
+        <rect x="80" y="320" width="4" height="50" rx="2" fill="#3B82F6"/>
+        <text x="95" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#475569">Avg. Deal Size</text>
+        <text x="95" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="28" font-weight="700" fill="#3B82F6">$125K</text>
+        <!-- Metric 3 -->
+        <rect x="80" y="395" width="4" height="50" rx="2" fill="#10B981"/>
+        <text x="95" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#475569">Total Revenue</text>
+        <text x="95" y="435" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="28" font-weight="700" fill="#10B981">$81.3M</text>
+        <!-- Metric 4 -->
+        <rect x="80" y="470" width="4" height="50" rx="2" fill="#8B5CF6"/>
+        <text x="95" y="485" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#475569">Sales Cycle</text>
+        <text x="95" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="28" font-weight="700" fill="#8B5CF6">42 Days</text>
+    </g>
+    <!-- Bottom Insight -->
+    <g id="insight">
+        <rect x="320" y="610" width="880" height="60" rx="6" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2"/>
+        <text x="340" y="635" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="700" fill="#0F172A">💡 Key Insight: </text>
+        <text x="460" y="635" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#475569">Significant drop-off between Interest and Consideration stages (40% conversion).</text>
+        <text x="340" y="655" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#475569">Recommend optimizing follow-up cadence and improving proposal quality to boost retention.</text>
+    </g>
+    <!-- Footer -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" fill="#94A3B8">Source: Internal CRM Performance Data</text>
+</svg>

@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Stacked Area Chart Template
+    Purpose: Multi-series cumulative trends and composition changes
+    Use cases: Revenue breakdown, traffic sources, market share
+    Feature: Mathematically precise stacking, gradient ribbons, 5-card dashboard
+    -->
+    <defs>
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <!-- Series 1 (Subscription - Indigo) -->
+        <linearGradient id="stackGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#6366F1" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#6366F1" stop-opacity="0.4"/>
+        </linearGradient>
+        <!-- Series 2 (Advertising - Sky) -->
+        <linearGradient id="stackGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.4"/>
+        </linearGradient>
+        <!-- Series 3 (Value-Added - Emerald) -->
+        <linearGradient id="stackGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#10B981" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#10B981" stop-opacity="0.4"/>
+        </linearGradient>
+        <!-- Series 4 (Other - Amber) -->
+        <linearGradient id="stackGrad4" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.4"/>
+        </linearGradient>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="60" y="60" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Revenue Composition Trend</text>
+    <text x="60" y="90" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">2025 MONTHLY DATA · UNIT: $M</text>
+    <!-- ==================== Legend ==================== -->
+    <g id="legend" transform="translate(680, 60)">
+        <rect x="0" y="0" width="12" height="12" rx="3" fill="#6366F1"/>
+        <text x="20" y="11" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Subscription</text>
+        <rect x="130" y="0" width="12" height="12" rx="3" fill="#0EA5E9"/>
+        <text x="150" y="11" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Advertising</text>
+        <rect x="250" y="0" width="12" height="12" rx="3" fill="#10B981"/>
+        <text x="270" y="11" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Value-Added</text>
+        <rect x="380" y="0" width="12" height="12" rx="3" fill="#F59E0B"/>
+        <text x="400" y="11" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#64748B">Other</text>
+    </g>
+    <!-- ==================== Chart Area ==================== -->
+    <g id="chartArea">
+        <!-- Vertical Grid Lines (Months) -->
+        <line x1="145" y1="160" x2="145" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="235" y1="160" x2="235" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="325" y1="160" x2="325" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="415" y1="160" x2="415" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="505" y1="160" x2="505" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="595" y1="160" x2="595" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="685" y1="160" x2="685" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="775" y1="160" x2="775" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="865" y1="160" x2="865" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="955" y1="160" x2="955" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="1045" y1="160" x2="1045" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="1135" y1="160" x2="1135" y2="550" stroke="#F1F5F9" stroke-width="1.5"/>
+        <!-- Horizontal Grid Lines -->
+        <line x1="100" y1="550" x2="1180" y2="550" stroke="#E2E8F0" stroke-width="1.5"/>
+        <line x1="100" y1="460" x2="1180" y2="460" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="100" y1="370" x2="1180" y2="370" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="100" y1="280" x2="1180" y2="280" stroke="#F1F5F9" stroke-width="1.5"/>
+        <line x1="100" y1="190" x2="1180" y2="190" stroke="#F1F5F9" stroke-width="1.5"/>
+        <!-- Y-Axis Labels -->
+        <text x="85" y="555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">0</text>
+        <text x="85" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">50</text>
+        <text x="85" y="375" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">100</text>
+        <text x="85" y="285" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">150</text>
+        <text x="85" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="end">200</text>
+        <!-- Main Axes Lines -->
+        <line x1="100" y1="150" x2="100" y2="550" stroke="#94A3B8" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="100" y1="550" x2="1180" y2="550" stroke="#94A3B8" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- X-Axis Labels -->
+        <text x="145" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Jan</text>
+        <text x="235" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Feb</text>
+        <text x="325" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Mar</text>
+        <text x="415" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Apr</text>
+        <text x="505" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">May</text>
+        <text x="595" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Jun</text>
+        <text x="685" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Jul</text>
+        <text x="775" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Aug</text>
+        <text x="865" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Sep</text>
+        <text x="955" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Oct</text>
+        <text x="1045" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Nov</text>
+        <text x="1135" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#64748B" text-anchor="middle">Dec</text>
+        <!-- chart-plot-area: 100,150,1180,550 -->
+        <!-- ==================== Stacked Areas ==================== -->
+        <!-- Series 4: Other (Amber - Top) -->
+        <path d="M 145,550 L 145,382.6 L 235,370 L 325,352 L 415,339.4 L 505,321.4 L 595,303.4 L 685,274.6 L 775,258.4 L 865,271 L 955,283.6 L 1045,253 L 1135,217 L 1135,249.4 L 1045,280 L 955,308.8 L 865,296.2 L 775,285.4 L 685,301.6 L 595,325 L 505,343 L 415,357.4 L 325,370 L 235,384.4 L 145,397 Z" fill="url(#stackGrad4)"/>
+        <!-- Series 3: Value-Added (Emerald) -->
+        <path d="M 145,550 L 145,397 L 235,384.4 L 325,370 L 415,357.4 L 505,343 L 595,325 L 685,301.6 L 775,285.4 L 865,296.2 L 955,308.8 L 1045,280 L 1135,249.4 L 1135,312.4 L 1045,334 L 955,355.6 L 865,346.6 L 775,339.4 L 685,352 L 595,370 L 505,382.6 L 415,393.4 L 325,402.4 L 235,413.2 L 145,424 Z" fill="url(#stackGrad3)"/>
+        <!-- Series 2: Advertising (Sky) -->
+        <path d="M 145,550 L 145,424 L 235,413.2 L 325,402.4 L 415,393.4 L 505,382.6 L 595,370 L 685,352 L 775,339.4 L 865,346.6 L 955,355.6 L 1045,334 L 1135,312.4 L 1135,402.4 L 1045,415 L 955,427.6 L 865,424 L 775,420.4 L 685,427.6 L 595,438.4 L 505,445.6 L 415,451 L 325,456.4 L 235,463.6 L 145,469 Z" fill="url(#stackGrad2)"/>
+        <!-- Series 1: Subscription (Indigo - Bottom) -->
+        <path d="M 145,550 L 145,469 L 235,463.6 L 325,456.4 L 415,451 L 505,445.6 L 595,438.4 L 685,427.6 L 775,420.4 L 865,424 L 955,427.6 L 1045,415 L 1135,402.4 L 1135,550 Z" fill="url(#stackGrad1)"/>
+        <!-- Top Border Strokes for Definition -->
+        <path d="M 145,382.6 L 235,370 L 325,352 L 415,339.4 L 505,321.4 L 595,303.4 L 685,274.6 L 775,258.4 L 865,271 L 955,283.6 L 1045,253 L 1135,217" fill="none" stroke="#F59E0B" stroke-width="2"/>
+        <path d="M 145,397 L 235,384.4 L 325,370 L 415,357.4 L 505,343 L 595,325 L 685,301.6 L 775,285.4 L 865,296.2 L 955,308.8 L 1045,280 L 1135,249.4" fill="none" stroke="#10B981" stroke-width="2"/>
+        <path d="M 145,424 L 235,413.2 L 325,402.4 L 415,393.4 L 505,382.6 L 595,370 L 685,352 L 775,339.4 L 865,346.6 L 955,355.6 L 1045,334 L 1135,312.4" fill="none" stroke="#0EA5E9" stroke-width="2"/>
+        <path d="M 145,469 L 235,463.6 L 325,456.4 L 415,451 L 505,445.6 L 595,438.4 L 685,427.6 L 775,420.4 L 865,424 L 955,427.6 L 1045,415 L 1135,402.4" fill="none" stroke="#6366F1" stroke-width="2"/>
+    </g>
+    <!-- ==================== Annotation (August Peak) ==================== -->
+    <g id="annotation">
+        <rect x="725" y="180" width="100" height="55" rx="8" fill="#1E293B" filter="url(#cardShadow)"/>
+        <text x="775" y="202" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#94A3B8" text-anchor="middle">Peak Month</text>
+        <text x="775" y="222" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">162M</text>
+        <path d="M 770,235 L 780,235 L 775,242 Z" fill="#1E293B"/>
+        <line x1="775" y1="242" x2="775" y2="256" stroke="#1E293B" stroke-width="2" stroke-dasharray="2,2"/>
+    </g>
+    <!-- ==================== Statistics Dashboard Cards ==================== -->
+    <g id="statsCards">
+        <!-- Card 1: Subscription -->
+        <rect x="60" y="610" width="216" height="80" rx="10" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <circle cx="85" cy="635" r="5" fill="#6366F1"/>
+        <text x="100" y="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#3730A3">Subscription</text>
+        <text x="85" y="670" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#312E81">755M</text>
+        <rect x="190" y="652" width="75" height="22" rx="11" fill="#E0E7FF"/>
+        <text x="227.5" y="667" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#4338CA" text-anchor="middle">48.5%</text>
+        <!-- Card 2: Advertising -->
+        <rect x="296" y="610" width="216" height="80" rx="10" fill="#F0F9FF" stroke="#BAE6FD" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <circle cx="321" cy="635" r="5" fill="#0EA5E9"/>
+        <text x="336" y="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#0369A1">Advertising</text>
+        <text x="321" y="670" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#0C4A6E">453M</text>
+        <rect x="426" y="652" width="75" height="22" rx="11" fill="#E0F2FE"/>
+        <text x="463.5" y="667" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#0284C7" text-anchor="middle">29.1%</text>
+        <!-- Card 3: Value-Added -->
+        <rect x="532" y="610" width="216" height="80" rx="10" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <circle cx="557" cy="635" r="5" fill="#10B981"/>
+        <text x="572" y="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#047857">Value-Added</text>
+        <text x="557" y="670" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#064E3B">293M</text>
+        <rect x="662" y="652" width="75" height="22" rx="11" fill="#D1FAE5"/>
+        <text x="699.5" y="667" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#059669" text-anchor="middle">18.8%</text>
+        <!-- Card 4: Other -->
+        <rect x="768" y="610" width="216" height="80" rx="10" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <circle cx="793" cy="635" r="5" fill="#F59E0B"/>
+        <text x="808" y="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#B45309">Other</text>
+        <text x="793" y="670" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#78350F">56M</text>
+        <rect x="898" y="652" width="75" height="22" rx="11" fill="#FEF3C7"/>
+        <text x="935.5" y="667" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#D97706" text-anchor="middle">3.6%</text>
+        <!-- Card 5: Total Revenue -->
+        <rect x="1004" y="610" width="216" height="80" rx="10" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+        <circle cx="1029" cy="635" r="5" fill="#64748B"/>
+        <text x="1044" y="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#334155">Total Revenue</text>
+        <text x="1029" y="670" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="800" fill="#0F172A">1,557M</text>
+        <rect x="1134" y="652" width="75" height="22" rx="11" fill="#D1FAE5"/>
+        <text x="1171.5" y="667" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="800" fill="#059669" text-anchor="middle">+11.2%</text>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1220" y="705" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8" text-anchor="end">Data Source: Finance Department</text>
+</svg>

@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Financial Statement Table Template
+    Purpose: Strict tabular data presentation for P&L, balance sheets
+    Use cases: Quarterly earnings, budget reviews, cost analysis
+    Design Principles: Left-align labels with indent hierarchy, strict right-aligned numbers, strong bottom totals
+    -->
+    <defs>
+        <filter id="bottomGlow" x="-5%" y="-20%" width="110%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="-2"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08"/>
+            <feComposite in2="SourceAlpha" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- ==================== Header ==================== -->
+    <text x="80" y="70" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Income Statement Summary</text>
+    <text x="80" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">Q1 - Q3 2025 · IN MILLIONS USD (UNAUDITED)</text>
+    <!-- ==================== Table Structure ==================== -->
+    <g id="tableArea" transform="translate(80, 140)">
+        <!-- Table Header (Double Top Line) -->
+        <line x1="0" y1="20" x2="1120" y2="20" stroke="#0F172A" stroke-width="3"/>
+        <text x="20" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1">FINANCIAL LINE ITEM</text>
+        <text x="460" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="end">Q1 2025</text>
+        <text x="640" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="end">Q2 2025</text>
+        <text x="820" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="end">Q3 2025</text>
+        <text x="1000" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#0F172A" letter-spacing="1" text-anchor="end">YTD TOTAL</text>
+        <text x="1100" y="45" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#475569" letter-spacing="1" text-anchor="end">YOY%</text>
+        <line x1="0" y1="60" x2="1120" y2="60" stroke="#0F172A" stroke-width="1.5"/>
+        <!-- ==================== Data Rows ==================== -->
+        <!-- Section: Revenue -->
+        <text x="20" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Total Revenue</text>
+        <text x="460" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#0F172A" text-anchor="end">245.8</text>
+        <text x="640" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#0F172A" text-anchor="end">268.4</text>
+        <text x="820" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="600" fill="#0F172A" text-anchor="end">294.2</text>
+        <text x="1000" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="end">808.4</text>
+        <text x="1100" y="100" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#10B981" text-anchor="end">+24%</text>
+        <!-- Sub-items (Indented) -->
+        <text x="40" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569">Software Subscriptions</text>
+        <text x="460" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">180.5</text>
+        <text x="640" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">200.2</text>
+        <text x="820" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">225.0</text>
+        <text x="1000" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#334155" text-anchor="end">605.7</text>
+        <text x="1100" y="140" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#10B981" text-anchor="end">+32%</text>
+        <text x="40" y="175" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569">Professional Services</text>
+        <text x="460" y="175" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">65.3</text>
+        <text x="640" y="175" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">68.2</text>
+        <text x="820" y="175" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">69.2</text>
+        <text x="1000" y="175" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#334155" text-anchor="end">202.7</text>
+        <text x="1100" y="175" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600" fill="#F59E0B" text-anchor="end">+4%</text>
+        <!-- Section: COGS & Margin -->
+        <line x1="0" y1="205" x2="1120" y2="205" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="20" y="235" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A">Cost of Revenue</text>
+        <text x="460" y="235" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="500" fill="#0F172A" text-anchor="end">(75.4)</text>
+        <text x="640" y="235" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="500" fill="#0F172A" text-anchor="end">(80.1)</text>
+        <text x="820" y="235" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="500" fill="#0F172A" text-anchor="end">(85.5)</text>
+        <text x="1000" y="235" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A" text-anchor="end">(241.0)</text>
+        <text x="1100" y="235" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" fill="#F43F5E" text-anchor="end">+12%</text>
+        <!-- Gross Profit (Subtotal Highlight) -->
+        <rect x="0" y="255" width="1120" height="45" fill="#F1F5F9" rx="4"/>
+        <text x="20" y="284" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Gross Profit</text>
+        <text x="460" y="284" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A" text-anchor="end">170.4</text>
+        <text x="640" y="284" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A" text-anchor="end">188.3</text>
+        <text x="820" y="284" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A" text-anchor="end">208.7</text>
+        <text x="1000" y="284" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A" text-anchor="end">567.4</text>
+        <text x="1100" y="284" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#10B981" text-anchor="end">+28%</text>
+        <!-- Section: Operating Expenses -->
+        <text x="20" y="340" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="800" fill="#0F172A">Operating Expenses</text>
+        <text x="40" y="375" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569">Research &amp; Development</text>
+        <text x="460" y="375" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(45.2)</text>
+        <text x="640" y="375" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(48.5)</text>
+        <text x="820" y="375" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(52.0)</text>
+        <text x="1000" y="375" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#334155" text-anchor="end">(145.7)</text>
+        <text x="40" y="410" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569">Sales &amp; Marketing</text>
+        <text x="460" y="410" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(60.8)</text>
+        <text x="640" y="410" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(65.2)</text>
+        <text x="820" y="410" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(70.5)</text>
+        <text x="1000" y="410" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#334155" text-anchor="end">(196.5)</text>
+        <text x="40" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569">General &amp; Administrative</text>
+        <text x="460" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(22.4)</text>
+        <text x="640" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(23.1)</text>
+        <text x="820" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="500" fill="#475569" text-anchor="end">(24.0)</text>
+        <text x="1000" y="445" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="700" fill="#334155" text-anchor="end">(69.5)</text>
+        <!-- ==================== Emphasized Net Income Row ==================== -->
+        <!-- Double lines for final total -->
+        <line x1="0" y1="475" x2="1120" y2="475" stroke="#0F172A" stroke-width="2"/>
+        <line x1="0" y1="480" x2="1120" y2="480" stroke="#0F172A" stroke-width="1"/>
+        <g filter="url(#bottomGlow)">
+            <rect x="0" y="485" width="1120" height="60" fill="#FFFFFF"/>
+        </g>
+        <text x="20" y="522" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#0F172A">Net Operating Income</text>
+        <text x="460" y="522" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="700" fill="#0F172A" text-anchor="end">42.0</text>
+        <text x="640" y="522" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="700" fill="#0F172A" text-anchor="end">51.5</text>
+        <text x="820" y="522" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="700" fill="#0F172A" text-anchor="end">62.2</text>
+        <text x="1000" y="524" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" fill="#2563EB" text-anchor="end">155.7</text>
+        <text x="1100" y="522" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800" fill="#10B981" text-anchor="end">+48%</text>
+        <line x1="0" y1="550" x2="1120" y2="550" stroke="#CBD5E1" stroke-width="1"/>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="1200" y="690" text-anchor="end" font-family="Roboto, -apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Data Source: Q3 2025 Financial Earnings Report</text>
+</svg>

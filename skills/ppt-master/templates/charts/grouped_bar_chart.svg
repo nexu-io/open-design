@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Grouped Bar Chart Template
+    Usage: Multi-series data comparison
+    Scenarios: Product/period/category comparison, YoY/QoQ analysis
+    Supports: 4 groups × 3 series (adjustable to 3-6 groups, 2-4 series)
+    -->
+    <defs>
+        <!-- Series 1 Gradient (Blue) -->
+        <linearGradient id="groupGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+        </linearGradient>
+        <!-- Series 2 Gradient (Emerald) -->
+        <linearGradient id="groupGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+        </linearGradient>
+        <!-- Series 3 Gradient (Amber) -->
+        <linearGradient id="groupGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#F59E0B;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#D97706;stop-opacity:1" />
+        </linearGradient>
+        <!-- Standard Shadow -->
+        <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.1" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#F8FAFC"/>
+    <!-- Title -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="32" font-weight="700" fill="#0F172A">Quarterly Revenue by Division</text>
+    <text x="60" y="105" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="18" fill="#64748B">Fiscal Year 2025 · Unit: $M</text>
+    <!-- Legend -->
+    <g id="legend" transform="translate(900, 70)">
+        <rect x="0" y="0" width="20" height="20" rx="3" fill="url(#groupGrad1)"/>
+        <text x="30" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#475569">Division A</text>
+        <rect x="120" y="0" width="20" height="20" rx="3" fill="url(#groupGrad2)"/>
+        <text x="150" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#475569">Division B</text>
+        <rect x="240" y="0" width="20" height="20" rx="3" fill="url(#groupGrad3)"/>
+        <text x="270" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="15" fill="#475569">Division C</text>
+    </g>
+    <!-- Chart Area -->
+    <g id="chartArea">
+        <!-- Y-Axis Grid Lines -->
+        <line x1="140" y1="570" x2="1180" y2="570" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="480" x2="1180" y2="480" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="390" x2="1180" y2="390" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="300" x2="1180" y2="300" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="140" y1="210" x2="1180" y2="210" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- Y-Axis Tick Labels -->
+        <text x="125" y="575" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">0</text>
+        <text x="125" y="485" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">50</text>
+        <text x="125" y="395" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">100</text>
+        <text x="125" y="305" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">150</text>
+        <text x="125" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#64748B" text-anchor="end">200</text>
+        <!-- Axes -->
+        <line x1="140" y1="165" x2="140" y2="570" stroke="#94A3B8" stroke-width="2"/>
+        <line x1="140" y1="570" x2="1180" y2="570" stroke="#94A3B8" stroke-width="2"/>
+        <!-- chart-plot-area: 140,165,1180,570 -->
+        <!-- Q1 Group -->
+        <!-- Q1 Div A: 120M (Height 216px) -->
+        <rect x="170" y="354" width="60" height="216" rx="4" fill="url(#groupGrad1)" filter="url(#cardShadow)"/>
+        <text x="200" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">120</text>
+        <!-- Q1 Div B: 85M (Height 153px) -->
+        <rect x="240" y="417" width="60" height="153" rx="4" fill="url(#groupGrad2)" filter="url(#cardShadow)"/>
+        <text x="270" y="405" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">85</text>
+        <!-- Q1 Div C: 65M (Height 117px) -->
+        <rect x="310" y="453" width="60" height="117" rx="4" fill="url(#groupGrad3)" filter="url(#cardShadow)"/>
+        <text x="340" y="441" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">65</text>
+        <!-- Q1 Label -->
+        <text x="255" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569" text-anchor="middle">Q1</text>
+        <!-- Q2 Group -->
+        <!-- Q2 Div A: 145M (Height 261px) -->
+        <rect x="430" y="309" width="60" height="261" rx="4" fill="url(#groupGrad1)" filter="url(#cardShadow)"/>
+        <text x="460" y="297" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">145</text>
+        <!-- Q2 Div B: 98M (Height 176px) -->
+        <rect x="500" y="394" width="60" height="176" rx="4" fill="url(#groupGrad2)" filter="url(#cardShadow)"/>
+        <text x="530" y="382" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">98</text>
+        <!-- Q2 Div C: 78M (Height 140px) -->
+        <rect x="570" y="430" width="60" height="140" rx="4" fill="url(#groupGrad3)" filter="url(#cardShadow)"/>
+        <text x="600" y="418" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">78</text>
+        <!-- Q2 Label -->
+        <text x="515" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569" text-anchor="middle">Q2</text>
+        <!-- Q3 Group -->
+        <!-- Q3 Div A: 168M (Height 302px) -->
+        <rect x="690" y="268" width="60" height="302" rx="4" fill="url(#groupGrad1)" filter="url(#cardShadow)"/>
+        <text x="720" y="256" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">168</text>
+        <!-- Q3 Div B: 112M (Height 202px) -->
+        <rect x="760" y="368" width="60" height="202" rx="4" fill="url(#groupGrad2)" filter="url(#cardShadow)"/>
+        <text x="790" y="356" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">112</text>
+        <!-- Q3 Div C: 92M (Height 166px) -->
+        <rect x="830" y="404" width="60" height="166" rx="4" fill="url(#groupGrad3)" filter="url(#cardShadow)"/>
+        <text x="860" y="392" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">92</text>
+        <!-- Q3 Label -->
+        <text x="775" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569" text-anchor="middle">Q3</text>
+        <!-- Q4 Group -->
+        <!-- Q4 Div A: 185M (Height 333px) -->
+        <rect x="950" y="237" width="60" height="333" rx="4" fill="url(#groupGrad1)" filter="url(#cardShadow)"/>
+        <text x="980" y="225" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">185</text>
+        <!-- Q4 Div B: 125M (Height 225px) -->
+        <rect x="1020" y="345" width="60" height="225" rx="4" fill="url(#groupGrad2)" filter="url(#cardShadow)"/>
+        <text x="1050" y="333" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">125</text>
+        <!-- Q4 Div C: 108M (Height 194px) -->
+        <rect x="1090" y="376" width="60" height="194" rx="4" fill="url(#groupGrad3)" filter="url(#cardShadow)"/>
+        <text x="1120" y="364" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#0F172A" text-anchor="middle">108</text>
+        <!-- Q4 Label -->
+        <text x="1035" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569" text-anchor="middle">Q4</text>
+    </g>
+    <!-- Trend Summary Card -->
+    <g id="summaryCard">
+        <rect x="60" y="630" width="400" height="60" rx="8" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="80" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" font-weight="600" fill="#475569">FY Total:</text>
+        <text x="150" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="700" fill="#3B82F6">618M</text>
+        <text x="200" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#94A3B8">|</text>
+        <text x="220" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="700" fill="#10B981">420M</text>
+        <text x="270" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="14" fill="#94A3B8">|</text>
+        <text x="290" y="665" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="16" font-weight="700" fill="#F59E0B">343M</text>
+        <text x="80" y="645" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="13" font-weight="600" fill="#64748B">YoY Growth: +15.2%</text>
+    </g>
+    <!-- Data Source -->
+    <text x="1220" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" fill="#94A3B8" text-anchor="end">Source: Internal Financials</text>
+</svg>

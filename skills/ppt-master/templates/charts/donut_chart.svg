@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Donut Chart Template
+    Usage: Proportion and composition analysis
+    Scenarios: Market share, budget allocation, structural analysis
+    Supports: 5 segments (3-6 recommended)
+    Convention: slices start at 12 o'clock and proceed clockwise
+    -->
+    <defs>
+        <!-- Sector Shadow -->
+                <filter id="sectorShadow">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.12" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="60" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="34" font-weight="bold" fill="#0F172A">Product Line Revenue Share</text>
+    <text x="60" y="115" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="18" fill="#64748B">Q3 2025 · Total Revenue $520M</text>
+    <!-- chart-plot-area: donut | center: 400,410 | outer-radius: 180 | inner-radius: 100 -->
+    <!-- Donut Chart Center -->
+    <g id="donutChart" transform="translate(400, 410)">
+        <!-- 
+        Center: (400, 410)
+        Outer Radius: 180px
+        Inner Radius: 100px
+        Start Angle: -90° (12 o'clock)
+        Direction: Clockwise
+        Data:
+        1. Enterprise Services: 35% (Blue #3B82F6) - Angle: 126°
+        2. Consumer Electronics: 28% (Green #10B981) - Angle: 100.8°
+        3. Cloud Computing: 20% (Orange #F59E0B) - Angle: 72°
+        4. IoT: 12% (Purple #8B5CF6) - Angle: 43.2°
+        5. Others: 5% (Gray #CBD5E1) - Angle: 18°
+        -->
+        <g id="donut-sectors">
+        <g id="sector-1">
+        <!-- Sector 1: Enterprise Services 35% (From -90° to 36°) -->
+        <path d="M 0,-180 A 180,180 0 0,1 156.36,88.18 L 86.87,49.04 A 100,100 0 0,0 0,-100 Z" 
+              fill="#3B82F6" filter="url(#sectorShadow)"/>
+                </g>
+        <g id="sector-2">
+        <!-- Sector 2: Consumer Electronics 28% (From 36° to 136.8°) -->
+        <path d="M 156.36,88.18 A 180,180 0 0,1 -123.43,130.14 L -68.57,72.30 A 100,100 0 0,0 86.87,49.04 Z" 
+              fill="#10B981" filter="url(#sectorShadow)"/>
+                </g>
+        <g id="sector-3">
+        <!-- Sector 3: Cloud Computing 20% (From 136.8° to 208.8°) -->
+        <path d="M -123.43,130.14 A 180,180 0 0,1 -175.36,-51.76 L -97.42,-28.76 A 100,100 0 0,0 -68.57,72.30 Z" 
+              fill="#F59E0B" filter="url(#sectorShadow)"/>
+                </g>
+        <g id="sector-4">
+        <!-- Sector 4: IoT 12% (From 208.8° to 252°) -->
+        <path d="M -175.36,-51.76 A 180,180 0 0,1 -54.46,-171.54 L -30.26,-95.30 A 100,100 0 0,0 -97.42,-28.76 Z" 
+              fill="#8B5CF6" filter="url(#sectorShadow)"/>
+                </g>
+        <g id="sector-5">
+        <!-- Sector 5: Others 5% (From 252° to 270°/360°-90°) -->
+        <path d="M -54.46,-171.54 A 180,180 0 0,1 0,-180 L 0,-100 A 100,100 0 0,0 -30.26,-95.30 Z" 
+              fill="#CBD5E1" filter="url(#sectorShadow)"/>
+                </g>
+        </g>
+        <!-- Center White Circle -->
+        <circle cx="0" cy="0" r="100" fill="#FFFFFF"/>
+        <!-- Center Text -->
+        <text x="0" y="-15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="48" font-weight="bold" fill="#0F172A" text-anchor="middle">$520M</text>
+        <text x="0" y="20" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#64748B" text-anchor="middle">Total Revenue</text>
+    </g>
+    <g id="labels">
+    <!-- Percentage Labels -->
+    <!-- Label 1: Enterprise Services 35% -->
+    <g id="label-1">
+        <line x1="530" y1="295" x2="620" y2="250" stroke="#3B82F6" stroke-width="1.5"/>
+        <circle cx="530" cy="295" r="3" fill="#3B82F6"/>
+        <text x="630" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#3B82F6">35%</text>
+    </g>
+    <!-- Label 2: Consumer Electronics 28% -->
+    <g id="label-2">
+        <line x1="510" y1="500" x2="620" y2="540" stroke="#10B981" stroke-width="1.5"/>
+        <circle cx="510" cy="500" r="3" fill="#10B981"/>
+        <text x="630" y="545" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#10B981">28%</text>
+    </g>
+    <!-- Label 3: Cloud Computing 20% -->
+    <g id="label-3">
+        <line x1="250" y1="480" x2="150" y2="520" stroke="#F59E0B" stroke-width="1.5"/>
+        <circle cx="250" cy="480" r="3" fill="#F59E0B"/>
+        <text x="140" y="525" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#F59E0B" text-anchor="end">20%</text>
+    </g>
+    <!-- Label 4: IoT 12% -->
+    <g id="label-4">
+        <line x1="310" y1="265" x2="200" y2="220" stroke="#8B5CF6" stroke-width="1.5"/>
+        <circle cx="310" cy="265" r="3" fill="#8B5CF6"/>
+        <text x="190" y="225" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#8B5CF6" text-anchor="end">12%</text>
+    </g>
+    <!-- Label 5: Others 5% -->
+    <g id="label-5">
+        <line x1="375" y1="240" x2="340" y2="180" stroke="#CBD5E1" stroke-width="1.5"/>
+        <circle cx="375" cy="240" r="3" fill="#CBD5E1"/>
+        <text x="330" y="185" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#94A3B8" text-anchor="end">5%</text>
+    </g>
+    </g>
+    <!-- Right Detail List -->
+    <g id="detailList">
+        <!-- List Background Card -->
+        <rect x="730" y="195" width="475" height="410" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- List Title -->
+        <text x="750" y="225" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="22" font-weight="600" fill="#0F172A">Detailed Data</text>
+        <line x1="750" y1="238" x2="1185" y2="238" stroke="#E2E8F0" stroke-width="1"/>
+        <g id="list-items">
+        <g id="item-1">
+        <!-- Item 1: Enterprise Services -->
+        <rect x="750" y="250" width="8" height="40" rx="4" fill="#3B82F6"/>
+        <text x="775" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569">Enterprise Services</text>
+        <text x="1100" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#0F172A" text-anchor="end">$182M</text>
+        <text x="1180" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#3B82F6" text-anchor="end">35%</text>
+        <line x1="750" y1="300" x2="1185" y2="300" stroke="#F1F5F9" stroke-width="1"/>
+                </g>
+        <g id="item-2">
+        <!-- Item 2: Consumer Electronics -->
+        <rect x="750" y="310" width="8" height="40" rx="4" fill="#10B981"/>
+        <text x="775" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569">Consumer Electronics</text>
+        <text x="1100" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#0F172A" text-anchor="end">$146M</text>
+        <text x="1180" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#10B981" text-anchor="end">28%</text>
+        <line x1="750" y1="360" x2="1185" y2="360" stroke="#F1F5F9" stroke-width="1"/>
+                </g>
+        <g id="item-3">
+        <!-- Item 3: Cloud Computing -->
+        <rect x="750" y="370" width="8" height="40" rx="4" fill="#F59E0B"/>
+        <text x="775" y="390" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569">Cloud Computing</text>
+        <text x="1100" y="390" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#0F172A" text-anchor="end">$104M</text>
+        <text x="1180" y="390" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#F59E0B" text-anchor="end">20%</text>
+        <line x1="750" y1="420" x2="1185" y2="420" stroke="#F1F5F9" stroke-width="1"/>
+                </g>
+        <g id="item-4">
+        <!-- Item 4: IoT -->
+        <rect x="750" y="430" width="8" height="40" rx="4" fill="#8B5CF6"/>
+        <text x="775" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569">IoT</text>
+        <text x="1100" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#0F172A" text-anchor="end">$62M</text>
+        <text x="1180" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#8B5CF6" text-anchor="end">12%</text>
+        <line x1="750" y1="480" x2="1185" y2="480" stroke="#F1F5F9" stroke-width="1"/>
+                </g>
+        <g id="item-5">
+        <!-- Item 5: Others -->
+        <rect x="750" y="490" width="8" height="40" rx="4" fill="#CBD5E1"/>
+        <text x="775" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#475569">Others</text>
+        <text x="1100" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="600" fill="#0F172A" text-anchor="end">$26M</text>
+        <text x="1180" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" fill="#94A3B8" text-anchor="end">5%</text>
+                </g>
+        </g>
+        <!-- Separator Line -->
+        <line x1="750" y1="550" x2="1185" y2="550" stroke="#E2E8F0" stroke-width="1.5"/>
+        <!-- Total -->
+        <text x="775" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A">Total</text>
+        <text x="1100" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="20" font-weight="bold" fill="#0F172A" text-anchor="end">$520M</text>
+        <text x="1180" y="580" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+              font-size="18" font-weight="600" fill="#0F172A" text-anchor="end">100%</text>
+    </g>
+    <!-- Data Source -->
+    <text x="60" y="695" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+          font-size="14" fill="#94A3B8">Data Source: Finance Department Quarterly Report</text>
+</svg>

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ToolCard } from './ToolCard';
 import { renderMarkdown } from '../runtime/markdown';
 import { projectFileUrl } from '../providers/registry';
@@ -79,11 +79,11 @@ export function AssistantMessage({
         {blocks.length === 0 && streaming ? (
           <WaitingPill startedAt={message.startedAt} latestStatus={latestStatusLabel(events)} />
         ) : null}
-        {blocks.map((b, i) => {
+        {blocks.map((b) => {
           if (b.kind === 'text')
             return (
               <ProseBlock
-                key={i}
+                key={`b-${b.fei}`}
                 text={b.text}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
@@ -99,11 +99,11 @@ export function AssistantMessage({
                 }}
               />
             );
-          if (b.kind === 'thinking') return <ThinkingBlock key={i} text={b.text} />;
+          if (b.kind === 'thinking') return <ThinkingBlock key={`b-${b.fei}`} text={b.text} />;
           if (b.kind === 'tool-group') {
             return (
               <ToolGroupCard
-                key={i}
+                key={`b-${b.fei}`}
                 items={b.items}
                 runStreaming={streaming}
                 projectFileNames={projectFileNames}
@@ -111,7 +111,7 @@ export function AssistantMessage({
               />
             );
           }
-          if (b.kind === 'status') return <StatusPill key={i} label={b.label} detail={b.detail} />;
+          if (b.kind === 'status') return <StatusPill key={`b-${b.fei}`} label={b.label} detail={b.detail} />;
           return null;
         })}
         {!streaming && produced.length > 0 && projectId ? (
@@ -393,31 +393,31 @@ function ProseBlock({
   const segments = useMemo(() => splitOnQuestionForms(cleaned), [cleaned]);
   // Each text segment is further split on `<system-reminder>` blocks so
   // those render as their own collapsible chip instead of raw markup.
-  const renderable = segments.flatMap((seg, idx): Array<
-    | { key: string; kind: 'text'; text: string }
-    | { key: string; kind: 'reminder'; text: string }
-    | { key: string; kind: 'form'; form: QuestionForm }
+  const renderable = segments.flatMap((seg): Array<
+    | { kind: 'text'; text: string }
+    | { kind: 'reminder'; text: string }
+    | { kind: 'form'; form: QuestionForm }
   > => {
     if (seg.kind === 'form') {
-      return [{ key: `f-${idx}`, kind: 'form', form: seg.form }];
+      return [{ kind: 'form', form: seg.form }];
     }
     if (seg.text.trim().length === 0) return [];
     const sub = splitSystemReminders(seg.text);
-    return sub.map((s, j) => ({ key: `t-${idx}-${j}`, kind: s.kind, text: s.text }));
+    return sub.map((s) => ({ kind: s.kind, text: s.text } as const));
   });
   if (renderable.length === 0) return null;
   return (
     <div className="prose-block">
       {renderable.map((seg) => {
         if (seg.kind === 'reminder') {
-          return <SystemReminderBlock key={seg.key} text={seg.text} />;
+          return <SystemReminderBlock key={`r-${seg.text.slice(0, 80)}`} text={seg.text} />;
         }
         if (seg.kind === 'text') {
-          return <Fragment key={seg.key}>{renderMarkdown(seg.text)}</Fragment>;
+          return <div key={`t-${seg.text.slice(0, 80)}`} className="prose-markdown">{renderMarkdown(seg.text)}</div>;
         }
         return (
           <FormBlock
-            key={seg.key}
+            key={`f-${seg.form.id}`}
             form={seg.form}
             isLastAssistant={isLastAssistant}
             streaming={streaming}
@@ -489,7 +489,7 @@ function SystemReminderBlock({ text }: { text: string }) {
           <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
         </span>
       </button>
-      {open ? <pre className="system-reminder-body">{trimmed}</pre> : null}
+      <pre className="system-reminder-body" style={{ display: open ? undefined : 'none' }}>{trimmed}</pre>
     </div>
   );
 }
@@ -510,7 +510,7 @@ function ThinkingBlock({ text }: { text: string }) {
           <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
         </span>
       </button>
-      {open ? <pre className="thinking-body">{text}</pre> : null}
+      <pre className="thinking-body" style={{ display: open ? undefined : 'none' }}>{text}</pre>
     </div>
   );
 }
@@ -573,11 +573,10 @@ function ToolGroupCard({
           <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
         </span>
       </button>
-      {open ? (
-        <div className="action-card-body">
-          {items.map((it, i) => (
+      <div className="action-card-body" style={{ display: open ? undefined : 'none' }}>
+          {items.map((it) => (
             <ToolCard
-              key={i}
+              key={it.use.id}
               use={it.use}
               result={it.result}
               runStreaming={runStreaming}
@@ -586,7 +585,6 @@ function ToolGroupCard({
             />
           ))}
         </div>
-      ) : null}
     </div>
   );
 }
@@ -678,16 +676,23 @@ function lastStateLabel(
 }
 
 type Block =
-  | { kind: 'text'; text: string }
-  | { kind: 'thinking'; text: string }
-  | { kind: 'tool-group'; items: ToolItem[] }
-  | { kind: 'status'; label: string; detail?: string | undefined };
+  | { kind: 'text'; text: string; fei: number }
+  | { kind: 'thinking'; text: string; fei: number }
+  | { kind: 'tool-group'; items: ToolItem[]; fei: number }
+  | { kind: 'status'; label: string; detail?: string | undefined; fei: number };
 
 /**
  * Walk the event stream and build the rendering layout list. We additionally
  * collapse runs of consecutive tool_uses sharing the same tool family into a
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
+ *
+ * Each block records the index of the first event that created it (fei = first
+ * event index). During streaming, events are only appended — existing events
+ * keep their positions. This means the fei is a stable identifier: even when
+ * new blocks are inserted and shift array positions, the fei never changes
+ * for an existing block. We use fei as the React key to prevent unmount/
+ * remount cycles mid-stream that cause removeChild errors on user interaction.
  */
 function buildBlocks(events: AgentEvent[]): Block[] {
   const out: Block[] = [];
@@ -695,17 +700,18 @@ function buildBlocks(events: AgentEvent[]): Block[] {
   for (const ev of events) {
     if (ev.kind === 'tool_result') resultByToolId.set(ev.toolUseId, ev);
   }
-  for (const ev of events) {
+  for (let idx = 0; idx < events.length; idx++) {
+    const ev = events[idx]!;
     if (ev.kind === 'text') {
       const last = out[out.length - 1];
       if (last && last.kind === 'text') last.text += ev.text;
-      else out.push({ kind: 'text', text: ev.text });
+      else out.push({ kind: 'text', text: ev.text, fei: idx });
       continue;
     }
     if (ev.kind === 'thinking') {
       const last = out[out.length - 1];
       if (last && last.kind === 'thinking') last.text += ev.text;
-      else out.push({ kind: 'thinking', text: ev.text });
+      else out.push({ kind: 'thinking', text: ev.text, fei: idx });
       continue;
     }
     if (ev.kind === 'tool_use') {
@@ -720,7 +726,7 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       ) {
         last.items.push(item);
       } else {
-        out.push({ kind: 'tool-group', items: [item] });
+        out.push({ kind: 'tool-group', items: [item], fei: idx });
       }
       continue;
     }
@@ -729,7 +735,7 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       if (ev.label === 'streaming' || ev.label === 'starting' || ev.label === 'requesting' || ev.label === 'thinking') continue;
       const last = out[out.length - 1];
       if (last && last.kind === 'status' && last.label === ev.label) continue;
-      out.push({ kind: 'status', label: ev.label, detail: ev.detail });
+      out.push({ kind: 'status', label: ev.label, detail: ev.detail, fei: idx });
       continue;
     }
   }

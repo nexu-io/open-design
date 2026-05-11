@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - Google 风格 -->
+
+    <defs>
+        <!-- 背景渐变 -->
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#E8F0FE;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#FFFFFF;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#E8F5E9;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- 标题渐变 -->
+        <linearGradient id="titleGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#1A73E8;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#0D47A1;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1280" height="720" fill="url(#bgGradient)" />
+
+    <!-- 装饰圆形 - 增加视觉层次 -->
+    <circle cx="150" cy="150" r="120" fill="#4285F4" fill-opacity="0.08" />
+    <circle cx="1130" cy="570" r="150" fill="#34A853" fill-opacity="0.08" />
+    <rect x="900" y="80" width="180" height="180" rx="20" fill="#FBBC04" fill-opacity="0.06" transform="rotate(15 990 170)" />
+
+    <!-- 左侧四色竖条 -->
+    <rect x="0" y="0" width="10" height="180" fill="#4285F4" />
+    <rect x="0" y="180" width="10" height="180" fill="#EA4335" />
+    <rect x="0" y="360" width="10" height="180" fill="#FBBC04" />
+    <rect x="0" y="540" width="10" height="180" fill="#34A853" />
+
+    <!-- 中央内容卡片 -->
+    <rect x="280" y="180" width="720" height="360" rx="24" fill="#FFFFFF" stroke="#E8EAED" stroke-width="1" />
+
+    <!-- 主标题 -->
+    <text x="640" y="280" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="700" fill="url(#titleGradient)" text-anchor="middle">
+        {{TITLE}}
+    </text>
+
+    <!-- 副标题 -->
+    <text x="640" y="335" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="22" font-weight="500" fill="#5F6368" text-anchor="middle">
+        {{SUBTITLE}}
+    </text>
+
+    <!-- 四色分隔线 -->
+    <line x1="380" y1="380" x2="530" y2="380" stroke="#4285F4" stroke-width="3" stroke-linecap="round" />
+    <line x1="550" y1="380" x2="620" y2="380" stroke="#EA4335" stroke-width="3" stroke-linecap="round" />
+    <line x1="640" y1="380" x2="710" y2="380" stroke="#FBBC04" stroke-width="3" stroke-linecap="round" />
+    <line x1="730" y1="380" x2="900" y2="380" stroke="#34A853" stroke-width="3" stroke-linecap="round" />
+
+    <!-- 演讲者姓名 -->
+    <text x="640" y="440" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="32" font-weight="700" fill="#1A237E" text-anchor="middle">
+        {{SPEAKER_NAME}}
+    </text>
+
+    <!-- 演讲者职位 -->
+    <text x="640" y="478" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="400" fill="#5F6368" text-anchor="middle">
+        {{SPEAKER_TITLE}}
+    </text>
+
+    <!-- 日期 -->
+    <g transform="translate(640, 510)">
+        <circle cx="0" cy="0" r="3" fill="#4285F4" />
+        <text x="0" y="25" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="500" fill="#5F6368" text-anchor="middle">
+            {{DATE}}
+        </text>
+    </g>
+
+    <!-- 底部四色圆点装饰 -->
+    <circle cx="520" cy="630" r="12" fill="#4285F4" fill-opacity="0.9" />
+    <circle cx="570" cy="630" r="10" fill="#EA4335" fill-opacity="0.9" />
+    <circle cx="610" cy="630" r="14" fill="#FBBC04" fill-opacity="0.9" />
+    <circle cx="660" cy="630" r="10" fill="#34A853" fill-opacity="0.9" />
+    <circle cx="700" cy="630" r="12" fill="#4285F4" fill-opacity="0.9" />
+    <circle cx="750" cy="630" r="10" fill="#EA4335" fill-opacity="0.9" />
+
+</svg>

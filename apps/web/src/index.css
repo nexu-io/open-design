@@ -7262,6 +7262,7 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
 .viewer-toolbar {
   display: flex;
@@ -13782,4 +13783,32 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   font-size: 11px;
   white-space: pre-wrap;
+}
+
+/* PPTX export success toast — floats at bottom-center of the preview */
+.pptx-export-success {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(34, 139, 34, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  z-index: 1001;
+  animation: pptx-success-fade-in 0.2s ease-out;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes pptx-success-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }

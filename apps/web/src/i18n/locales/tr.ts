@@ -639,6 +639,7 @@ export const tr: Dict = {
   'fileViewer.empty': 'Görüntülemek için bir dosya seçin.',
   'fileViewer.loading': 'Yükleniyor…',
   'fileViewer.exportPptx': 'PPTX olarak dışa aktar',
+  'fileViewer.exportPptxConverting': 'Converting…',
   'fileViewer.openInNewTab': 'Yeni sekmede aç',
   'fileViewer.copyPath': 'Yolu kopyala',
   'fileViewer.copied': 'Kopyalandı!',

@@ -650,6 +650,7 @@ export const zhCN: Dict = {
   'fileViewer.empty': '请选择一个文件查看。',
   'fileViewer.loading': '加载中…',
   'fileViewer.exportPptx': '导出为 PPTX',
+  'fileViewer.exportPptxConverting': '转换中…',
   'fileViewer.openInNewTab': '在新标签页中打开',
   'fileViewer.copyPath': '复制路径',
   'fileViewer.copied': '已复制！',

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Multi-Column Comparison / Pricing Table Template
+    Usage: Service tier comparison, pricing plans, membership levels
+    Scenarios: SaaS pricing page, product version comparison, service tiers
+    Supports: 3 columns (2-4 recommended)
+    -->
+
+    <defs>
+                <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.06" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="highlightShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
+            <feOffset dx="0" dy="8" result="offsetblur"/>
+            <feFlood flood-color="#7C3AED" flood-opacity="0.15" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+
+    <rect width="1280" height="720" fill="#F1F5F9"/>
+
+    <!-- Title -->
+    <text x="640" y="52" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="34" font-weight="700" fill="#0F172A"><tspan>Choose the Right Plan</tspan></text>
+    <text x="640" y="78" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#64748B"><tspan>Pricing Plans · Flexible plans to meet different scale needs</tspan></text>
+
+    <!-- Basic Plan (Left) -->
+    <g id="plan-basic">
+    <g filter="url(#cardShadow)">
+        <rect x="80" y="110" width="340" height="560" rx="16" fill="#FFFFFF"/>
+        <!-- Header -->
+        <rect x="80" y="110" width="340" height="120" rx="16" fill="#3B82F6" fill-opacity="0.06"/>
+        <rect x="80" y="214" width="340" height="16" fill="#FFFFFF"/>
+        <text x="250" y="152" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="24" font-weight="700" fill="#3B82F6"><tspan>Basic</tspan></text>
+        <text x="250" y="175" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="15" fill="#94A3B8"><tspan>For individuals &amp; small teams</tspan></text>
+        <text x="250" y="210" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+              <tspan font-size="42" font-weight="800" fill="#0F172A">$15</tspan>
+              <tspan font-size="14" fill="#94A3B8"> /mo</tspan>
+        </text>
+        <!-- Feature List -->
+        <line x1="110" y1="240" x2="390" y2="240" stroke="#F0F0F0" stroke-width="1"/>
+        <text x="118" y="275" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#3B82F6" font-weight="700">✓</tspan><tspan x="142" fill="#334155">5 Project Spaces</tspan></text>
+        <text x="118" y="310" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#3B82F6" font-weight="700">✓</tspan><tspan x="142" fill="#334155">10GB Storage</tspan></text>
+        <text x="118" y="345" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#3B82F6" font-weight="700">✓</tspan><tspan x="142" fill="#334155">Basic Reporting</tspan></text>
+        <text x="118" y="380" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#3B82F6" font-weight="700">✓</tspan><tspan x="142" fill="#334155">Email Support</tspan></text>
+        <text x="118" y="415" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#CBD5E1" font-weight="700">—</tspan><tspan x="142" fill="#CBD5E1">API Integration</tspan></text>
+        <text x="118" y="450" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#CBD5E1" font-weight="700">—</tspan><tspan x="142" fill="#CBD5E1">Custom Workflows</tspan></text>
+        <text x="118" y="485" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#CBD5E1" font-weight="700">—</tspan><tspan x="142" fill="#CBD5E1">Dedicated Account Manager</tspan></text>
+        <text x="118" y="520" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#CBD5E1" font-weight="700">—</tspan><tspan x="142" fill="#CBD5E1">SLA Guarantee</tspan></text>
+        <!-- Button -->
+        <rect x="150" y="560" width="200" height="44" rx="22" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2"/>
+        <text x="250" y="587" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" font-weight="700" fill="#3B82F6"><tspan>Get Started</tspan></text>
+    </g>
+
+        </g>
+
+    <!-- Pro Plan (Middle, Recommended Highlight) -->
+    <g id="plan-pro">
+    <g filter="url(#highlightShadow)">
+        <rect x="470" y="95" width="340" height="590" rx="16" fill="#FFFFFF"/>
+        <!-- Header -->
+        <rect x="470" y="95" width="340" height="130" rx="16" fill="#8B5CF6"/>
+        <!-- Recommended Tag -->
+        <rect x="600" y="82" width="80" height="26" rx="13" fill="#F59E0B"/>
+        <text x="640" y="99" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="12" font-weight="700" fill="#FFFFFF"><tspan>Most Popular</tspan></text>
+        <rect x="470" y="209" width="340" height="16" fill="#FFFFFF"/>
+        <text x="640" y="142" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="24" font-weight="700" fill="#FFFFFF"><tspan>Pro</tspan></text>
+        <text x="640" y="165" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="15" fill="#FFFFFF" fill-opacity="0.85"><tspan>For growing businesses</tspan></text>
+        <text x="640" y="205" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+              <tspan font-size="42" font-weight="800" fill="#0F172A">$49</tspan>
+              <tspan font-size="14" fill="#94A3B8"> /mo</tspan>
+        </text>
+        <line x1="500" y1="235" x2="780" y2="235" stroke="#F0F0F0" stroke-width="1"/>
+        <text x="508" y="270" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#8B5CF6" font-weight="700">✓</tspan><tspan x="532" fill="#334155">Unlimited Projects</tspan></text>
+        <text x="508" y="305" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#8B5CF6" font-weight="700">✓</tspan><tspan x="532" fill="#334155">100GB Storage</tspan></text>
+        <text x="508" y="340" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#8B5CF6" font-weight="700">✓</tspan><tspan x="532" fill="#334155">Advanced Reports + Dashboard</tspan></text>
+        <text x="508" y="375" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#8B5CF6" font-weight="700">✓</tspan><tspan x="532" fill="#334155">Priority Ticket Support</tspan></text>
+        <text x="508" y="410" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#8B5CF6" font-weight="700">✓</tspan><tspan x="532" fill="#334155">API Integration</tspan></text>
+        <text x="508" y="445" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#8B5CF6" font-weight="700">✓</tspan><tspan x="532" fill="#334155">Custom Workflows</tspan></text>
+        <text x="508" y="480" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#CBD5E1" font-weight="700">—</tspan><tspan x="532" fill="#CBD5E1">Dedicated Account Manager</tspan></text>
+        <text x="508" y="515" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#CBD5E1" font-weight="700">—</tspan><tspan x="532" fill="#CBD5E1">SLA Guarantee</tspan></text>
+        <rect x="540" y="555" width="200" height="44" rx="22" fill="#8B5CF6"/>
+        <text x="640" y="582" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" font-weight="700" fill="#FFFFFF"><tspan>Upgrade Now</tspan></text>
+    </g>
+
+        </g>
+
+    <!-- Enterprise Plan (Right) -->
+    <g id="plan-enterprise">
+    <g filter="url(#cardShadow)">
+        <rect x="860" y="110" width="340" height="560" rx="16" fill="#FFFFFF"/>
+        <rect x="860" y="110" width="340" height="120" rx="16" fill="#0F172A" fill-opacity="0.04"/>
+        <rect x="860" y="214" width="340" height="16" fill="#FFFFFF"/>
+        <text x="1030" y="152" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="24" font-weight="700" fill="#0F172A"><tspan>Enterprise</tspan></text>
+        <text x="1030" y="175" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="15" fill="#94A3B8"><tspan>For large organizations</tspan></text>
+        <text x="1030" y="210" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="36" font-weight="800" fill="#0F172A"><tspan>Contact Sales</tspan></text>
+        <line x1="890" y1="240" x2="1170" y2="240" stroke="#F0F0F0" stroke-width="1"/>
+        <text x="898" y="275" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">Unlimited Projects</tspan></text>
+        <text x="898" y="310" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">Unlimited Storage</tspan></text>
+        <text x="898" y="345" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">All Reports + BI Analytics</tspan></text>
+        <text x="898" y="380" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">24/7 Phone Support</tspan></text>
+        <text x="898" y="415" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">API Integration + Webhook</tspan></text>
+        <text x="898" y="450" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">Custom Workflows</tspan></text>
+        <text x="898" y="485" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">Dedicated Account Manager</tspan></text>
+        <text x="898" y="520" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15"><tspan fill="#0F172A" font-weight="700">✓</tspan><tspan x="922" fill="#334155">99.9% SLA Guarantee</tspan></text>
+        <rect x="930" y="560" width="200" height="44" rx="22" fill="#FFFFFF" stroke="#0F172A" stroke-width="2"/>
+        <text x="1030" y="587" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="14" font-weight="700" fill="#0F172A"><tspan>Contact Us</tspan></text>
+    </g>
+
+        </g>
+
+    <!-- Footer -->
+    <text x="640" y="710" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="12" fill="#CBD5E1"><tspan>All plans include a 14-day free trial · Upgrade or downgrade anytime</tspan></text>
+</svg>

@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!--
+    Multi-dimensional Feature Comparison Table Template
+    Usage: Multi-plan/product horizontal comparison, feature matrix
+    Scenarios: Product selection, competitor comparison, service tier comparison
+    Supports: 3 columns x 6 rows (2-4 columns, 4-8 rows recommended)
+    -->
+    <defs>
+                <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.12" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </defs>
+    <rect width="1280" height="720" fill="#FFFFFF"/>
+    <!-- Title -->
+    <text x="640" y="55" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="30" font-weight="700" fill="#0F172A">Solution Comparison Assessment</text>
+    <text x="640" y="82" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="14" fill="#64748B">Comparison Matrix · Horizontal comparison of core metrics across three solutions</text>
+    <g id="row-header">
+    <!-- Header Row -->
+    <rect x="60" y="105" width="240" height="55" rx="8" fill="#F1F5F9"/>
+    <text x="180" y="139" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#475569">Evaluation Dimensions</text>
+    <!-- Plan A Column Header -->
+    <rect x="320" y="105" width="280" height="55" rx="8" fill="#64748B" filter="url(#cardShadow)"/>
+    <text x="460" y="132" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#FFFFFF">Plan A</text>
+    <text x="460" y="150" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" fill="#FFFFFF" fill-opacity="0.8">Self-built On-premise</text>
+    <!-- Plan B Column Header (Recommended) -->
+    <rect x="620" y="100" width="280" height="62" rx="8" fill="#10B981" filter="url(#cardShadow)"/>
+    <rect x="750" y="92" width="56" height="20" rx="10" fill="#F59E0B"/>
+    <text x="778" y="105" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="10" font-weight="700" fill="#FFFFFF">Recommended</text>
+    <text x="760" y="131" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#FFFFFF">Plan B</text>
+    <text x="760" y="150" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" fill="#FFFFFF" fill-opacity="0.8">Hybrid Cloud Arch</text>
+    <!-- Plan C Column Header -->
+    <rect x="920" y="105" width="280" height="55" rx="8" fill="#3B82F6" filter="url(#cardShadow)"/>
+    <text x="1060" y="132" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="18" font-weight="700" fill="#FFFFFF">Plan C</text>
+    <text x="1060" y="150" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" fill="#FFFFFF" fill-opacity="0.8">Pure SaaS Subscription</text>
+        </g>
+    <!-- Data Rows -->
+    <g id="row-1">
+    <!-- Row 1: Deployment Cost -->
+    <rect x="60" y="175" width="240" height="75" rx="6" fill="#F1F5F9"/>
+    <text x="180" y="218" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#334155">Deployment Cost</text>
+    <rect x="320" y="175" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="460" y="210" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="22" font-weight="700" fill="#0F172A">$500K</text>
+    <text x="460" y="232" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" fill="#F43F5E">High</text>
+    <rect x="620" y="175" width="280" height="75" rx="6" fill="#10B981" fill-opacity="0.05" stroke="#10B981" stroke-width="1.5"/>
+    <text x="760" y="210" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="22" font-weight="700" fill="#0F172A">$180K</text>
+    <text x="760" y="232" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" fill="#10B981">Optimal</text>
+    <rect x="920" y="175" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="1060" y="210" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="22" font-weight="700" fill="#0F172A">$80K/yr</text>
+    <text x="1060" y="232" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="11" fill="#F59E0B">Medium</text>
+        </g>
+    <g id="row-2">
+    <!-- Row 2: Data Security -->
+    <rect x="60" y="260" width="240" height="75" rx="6" fill="#F1F5F9"/>
+    <text x="180" y="303" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#334155">Data Security</text>
+    <rect x="320" y="260" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="460" y="303" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#10B981">★★★★★</text>
+    <rect x="620" y="260" width="280" height="75" rx="6" fill="#10B981" fill-opacity="0.05" stroke="#10B981" stroke-width="1.5"/>
+    <text x="760" y="303" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#10B981">★★★★☆</text>
+    <rect x="920" y="260" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="1060" y="303" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#F43F5E">★★★☆☆</text>
+        </g>
+    <g id="row-3">
+    <!-- Row 3: Scalability -->
+    <rect x="60" y="345" width="240" height="75" rx="6" fill="#F1F5F9"/>
+    <text x="180" y="388" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#334155">Scalability</text>
+    <rect x="320" y="345" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="460" y="388" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#F43F5E">★★☆☆☆</text>
+    <rect x="620" y="345" width="280" height="75" rx="6" fill="#10B981" fill-opacity="0.05" stroke="#10B981" stroke-width="1.5"/>
+    <text x="760" y="388" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#10B981">★★★★★</text>
+    <rect x="920" y="345" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="1060" y="388" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#10B981">★★★★★</text>
+        </g>
+    <g id="row-4">
+    <!-- Row 4: Time to Market -->
+    <rect x="60" y="430" width="240" height="75" rx="6" fill="#F1F5F9"/>
+    <text x="180" y="473" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#334155">Time to Market</text>
+    <rect x="320" y="430" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="460" y="473" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="700" fill="#0F172A">6-12 Months</text>
+    <rect x="620" y="430" width="280" height="75" rx="6" fill="#10B981" fill-opacity="0.05" stroke="#10B981" stroke-width="1.5"/>
+    <text x="760" y="473" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="700" fill="#0F172A">3-5 Months</text>
+    <rect x="920" y="430" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="1060" y="473" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="700" fill="#0F172A">1-2 Months</text>
+        </g>
+    <g id="row-5">
+    <!-- Row 5: Customization -->
+    <rect x="60" y="515" width="240" height="75" rx="6" fill="#F1F5F9"/>
+    <text x="180" y="558" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="600" fill="#334155">Customization Level</text>
+    <rect x="320" y="515" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="460" y="558" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#10B981">★★★★★</text>
+    <rect x="620" y="515" width="280" height="75" rx="6" fill="#10B981" fill-opacity="0.05" stroke="#10B981" stroke-width="1.5"/>
+    <text x="760" y="558" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#10B981">★★★★☆</text>
+    <rect x="920" y="515" width="280" height="75" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="1060" y="558" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="16" font-weight="600" fill="#F43F5E">★★☆☆☆</text>
+        </g>
+    <g id="row-total">
+    <!-- Footer Total Score -->
+    <rect x="60" y="610" width="240" height="70" rx="8" fill="#F1F5F9"/>
+    <text x="180" y="650" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="700" fill="#334155">Overall Score</text>
+    <rect x="320" y="610" width="280" height="70" rx="8" fill="#64748B" fill-opacity="0.08"/>
+    <text x="460" y="652" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="28" font-weight="800" fill="#64748B">72</text>
+    <rect x="620" y="610" width="280" height="70" rx="8" fill="#10B981" fill-opacity="0.1"/>
+    <text x="760" y="652" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="28" font-weight="800" fill="#10B981">91</text>
+    <rect x="920" y="610" width="280" height="70" rx="8" fill="#3B82F6" fill-opacity="0.08"/>
+    <text x="1060" y="652" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="28" font-weight="800" fill="#3B82F6">68</text>
+    </g>
+</svg>

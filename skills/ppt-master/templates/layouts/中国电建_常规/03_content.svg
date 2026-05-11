@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 内容页 - 中国电建经典风格 -->
+
+    <defs>
+        <!-- 顶部装饰渐变 -->
+        <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:1" />
+        </linearGradient>
+        <!-- 序号块渐变 -->
+        <linearGradient id="numGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#0066CC;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00418D;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- 白色背景 -->
+    <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+
+    <!-- 顶部渐变装饰线 -->
+    <rect x="0" y="0" width="1280" height="6" fill="url(#topGrad)" />
+
+    <!-- 页眉导航栏 -->
+    <!-- 章节序号块 -->
+    <rect x="60" y="30" width="50" height="50" rx="4" fill="url(#numGrad)" />
+    <text x="85" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFFFFF">{{CHAPTER_NUM}}</text>
+
+    <!-- 页面标题 -->
+    <text x="130" y="65" font-family="Microsoft YaHei, SimHei, sans-serif" font-size="28" font-weight="bold" fill="#1A1A1A">{{PAGE_TITLE}}</text>
+
+    <!-- 右上角企业标识 -->
+    <text x="1220" y="50" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#00418D" fill-opacity="0.6">POWERCHINA</text>
+    <rect x="1100" y="58" width="120" height="2" fill="url(#topGrad)" fill-opacity="0.4"/>
+
+    <!-- 分隔线 -->
+    <line x1="60" y1="95" x2="1220" y2="95" stroke="#E4E7EB" stroke-width="1"/>
+
+    <!-- 内容区域占位 -->
+    <rect x="60" y="110" width="1160" height="550" fill="none" stroke="#E4E7EB" stroke-width="2" stroke-dasharray="8,8" />
+    <text x="640" y="365" text-anchor="middle" fill="#CBD5E1" font-size="18" font-family="Microsoft YaHei, sans-serif">
+        {{CONTENT_AREA}}
+    </text>
+    <text x="640" y="400" text-anchor="middle" fill="#CBD5E1" font-size="14" font-family="Microsoft YaHei, sans-serif">
+        (由 Executor 根据实际内容自由布局)
+    </text>
+
+    <!-- 底部装饰线 -->
+    <rect x="0" y="716" width="1280" height="4" fill="#00418D" />
+
+    <!-- 页码 -->
+    <text x="640" y="695" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#718096">{{PAGE_NUM}}</text>
+
+    <!-- 底部企业名称 -->
+    <text x="1220" y="695" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#718096" fill-opacity="0.6">POWERCHINA</text>
+
+</svg>

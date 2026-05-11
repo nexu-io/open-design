@@ -660,6 +660,7 @@ export const ptBR: Dict = {
   'fileViewer.empty': 'Selecione um arquivo para visualizar.',
   'fileViewer.loading': 'Carregando…',
   'fileViewer.exportPptx': 'Exportar como PPTX',
+  'fileViewer.exportPptxConverting': 'Conversion en cours…',
   'fileViewer.openInNewTab': 'Abrir em nova aba',
   'fileViewer.copyPath': 'Copiar caminho',
   'fileViewer.copied': 'Copiado!',

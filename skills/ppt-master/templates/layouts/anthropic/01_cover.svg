@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+    <!-- 模板: 封面页 - Anthropic 风格 -->
+    
+    <defs>
+        <!-- 背景渐变 -->
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#1A1A2E"/>
+            <stop offset="50%" style="stop-color:#16213E"/>
+            <stop offset="100%" style="stop-color:#0F0F1A"/>
+        </linearGradient>
+        <!-- 橙色渐变 -->
+        <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#D97757"/>
+            <stop offset="100%" style="stop-color:#E8956F"/>
+        </linearGradient>
+        <!-- 光晕效果 -->
+        <radialGradient id="glowOrange" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#D97757;stop-opacity:0.3"/>
+            <stop offset="100%" style="stop-color:#D97757;stop-opacity:0"/>
+        </radialGradient>
+        <radialGradient id="glowBlue" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:0.2"/>
+            <stop offset="100%" style="stop-color:#4A90D9;stop-opacity:0"/>
+        </radialGradient>
+    </defs>
+    
+    <!-- 渐变背景 -->
+    <rect width="1280" height="720" fill="url(#bgGradient)"/>
+    
+    <!-- 网格装饰线 -->
+    <g stroke="#FFFFFF" stroke-opacity="0.03" stroke-width="1">
+        <line x1="0" y1="180" x2="1280" y2="180"/>
+        <line x1="0" y1="360" x2="1280" y2="360"/>
+        <line x1="0" y1="540" x2="1280" y2="540"/>
+        <line x1="320" y1="0" x2="320" y2="720"/>
+        <line x1="640" y1="0" x2="640" y2="720"/>
+        <line x1="960" y1="0" x2="960" y2="720"/>
+    </g>
+    
+    <!-- 光晕效果 -->
+    <ellipse cx="1100" cy="150" rx="300" ry="200" fill="url(#glowOrange)"/>
+    <ellipse cx="200" cy="550" rx="250" ry="180" fill="url(#glowBlue)"/>
+    
+    <!-- 神经网络连接线 -->
+    <g stroke="#4A90D9" stroke-opacity="0.4" stroke-width="1" fill="none">
+        <path d="M100,200 Q250,150 350,220"/>
+        <path d="M350,220 Q450,280 500,200"/>
+        <path d="M900,480 Q1000,420 1100,480"/>
+        <path d="M1100,480 Q1150,550 1200,500"/>
+    </g>
+    
+    <!-- 蓝色节点 -->
+    <g fill="#4A90D9" fill-opacity="0.6">
+        <circle cx="100" cy="200" r="4"/>
+        <circle cx="350" cy="220" r="6"/>
+        <circle cx="500" cy="200" r="4"/>
+        <circle cx="900" cy="480" r="5"/>
+        <circle cx="1100" cy="480" r="7"/>
+        <circle cx="1200" cy="500" r="4"/>
+    </g>
+    
+    <!-- 橙色节点 -->
+    <g fill="#D97757" fill-opacity="0.7">
+        <circle cx="1050" cy="180" r="8"/>
+        <circle cx="1150" cy="120" r="5"/>
+        <circle cx="180" cy="520" r="6"/>
+    </g>
+    
+    <!-- 左上角装饰短线 -->
+    <rect x="60" y="60" width="80" height="4" fill="url(#accentGradient)" rx="2"/>
+    
+    <!-- 品牌标识 -->
+    <text x="60" y="100" font-family="Arial, sans-serif" font-size="14" font-weight="500" fill="#D97757" letter-spacing="2">
+        {{BRAND_LABEL}}
+    </text>
+    
+    <!-- 主标题 -->
+    <text x="640" y="300" font-family="Arial, sans-serif" font-size="56" font-weight="bold" fill="#FFFFFF" text-anchor="middle">
+        {{TITLE}}
+    </text>
+    
+    <!-- 副标题 -->
+    <text x="640" y="365" font-family="Arial, sans-serif" font-size="26" fill="#FFFFFF" fill-opacity="0.85" text-anchor="middle">
+        {{SUBTITLE}}
+    </text>
+    
+    <!-- 装饰分隔线 -->
+    <rect x="540" y="400" width="200" height="3" fill="url(#accentGradient)" rx="1.5"/>
+    
+    <!-- 引用语 -->
+    <text x="640" y="465" font-family="Arial, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.7" text-anchor="middle">
+        "{{COVER_QUOTE}}"
+    </text>
+    
+    <!-- 底部信息 -->
+    <rect x="60" y="650" width="1160" height="1" fill="#FFFFFF" fill-opacity="0.1"/>
+    <text x="60" y="680" font-family="Arial, sans-serif" font-size="14" fill="#64748B">
+        {{DATE}}
+    </text>
+    <text x="1220" y="680" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="#64748B">
+        {{SOURCE}}
+    </text>
+
+</svg>

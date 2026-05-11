@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="30" fill="#C8152D"/>
+  <defs>
+    <linearGradient id="accentFade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#C8152D;stop-opacity:0.5"/>
+      <stop offset="100%" style="stop-color:#C8152D;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="30" width="180" height="4" fill="url(#accentFade)"/>
+  <image href="logo_dark.png" x="940" y="42" width="280" height="48" preserveAspectRatio="xMidYMid meet"/>
+
+
+  <text x="72" y="88" fill="#1F1F1F" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="26" font-weight="700">
+    目录 / CONTENTS
+  </text>
+  <line x1="72" y1="110" x2="1210" y2="110" stroke="#E3E3E3" stroke-width="2"/>
+  <line x1="72" y1="126" x2="250" y2="126" stroke="#C8152D" stroke-width="3"/>
+
+  <!--
+      AI 灵活布局区
+      可用空间: x=72, y=140, w=1138, h=540
+
+      推荐布局模式（按章节数量自由选择）：
+      - 2-3 章: 单列纵排，每项间距 120px
+      - 4 章:   2×2 矩阵 或 单列紧凑排列
+      - 5-6 章: 2×3 矩阵 或 3 列布局
+      - 7+ 章:  紧凑列表，减小编号字号
+
+      设计元素参考：
+      编号:     <text fill="#C8152D" font-size="44" font-weight="700"/> (品牌红)
+                <text fill="#2175D9" font-size="44" font-weight="700"/> (金融蓝-交替)
+      标题:     <text fill="#1F1F1F" font-size="24" font-weight="700"/>
+      描述:     <text fill="#666666" font-size="15"/>
+      分隔线:   <line stroke="#ECECEC" stroke-width="1.5"/>
+      列分隔:   <line stroke="#EFEFEF" stroke-width="2"/> (纵向)
+  -->
+  <text x="641" y="400" text-anchor="middle" fill="#D8D8D8" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="3">
+    {{CONTENT_AREA}}
+  </text>
+  <text x="641" y="436" text-anchor="middle" fill="#E6E6E6" font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif" font-size="14">
+    Content Area: 1138 × 540 px
+  </text>
+
+</svg>
+

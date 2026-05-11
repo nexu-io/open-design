@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+    <!-- 
+    Pyramid Capability Chart Template
+    Purpose: Hierarchical structure, capability maturity, strategic layers
+    Use cases: Maslow's hierarchy, Enterprise strategy layers, Maturity models
+    Supports: 5 precise geometric layers
+    -->
+    <defs>
+        <!-- Modern Tailwind Shadow -->
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dx="0" dy="4" result="offsetblur"/>
+            <feFlood flood-color="#0F172A" flood-opacity="0.08" result="shadowColor"/>
+            <feComposite in="shadowColor" in2="offsetblur" operator="in" result="shadow"/>
+            <feMerge>
+                <feMergeNode in="shadow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#F8FAFC" />
+            <stop offset="100%" stop-color="#F1F5F9" />
+        </linearGradient>
+    </defs>
+    <!-- Background -->
+    <rect width="1280" height="720" fill="url(#bgGrad)"/>
+    <!-- ==================== Header Area ==================== -->
+    <text x="60" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="800" fill="#0F172A">Strategic Capability Pyramid</text>
+    <text x="60" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#64748B" letter-spacing="1">FIVE-TIER EVOLUTION MODEL · FROM FOUNDATION TO VISION</text>
+    <!-- Translate group to perfectly center vertically -->
+    <g transform="translate(0, 35)">
+        <!-- ==================== Connecting Lines ==================== -->
+        <g>
+            <line x1="393" y1="195" x2="680" y2="195" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.8"/>
+            <line x1="438" y1="270" x2="680" y2="270" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.8"/>
+            <line x1="492" y1="360" x2="680" y2="360" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.8"/>
+            <line x1="546" y1="450" x2="680" y2="450" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.8"/>
+            <line x1="600" y1="540" x2="680" y2="540" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.8"/>
+        </g>
+        <!-- ==================== Pyramid Object ==================== -->
+        <g filter="url(#cardShadow)">
+            <!-- L1 (Base) -->
+            <polygon points="144,500 576,500 624,580 96,580" fill="#06B6D4" />
+            <!-- L2 -->
+            <polygon points="198,410 522,410 570,490 150,490" fill="#0EA5E9" />
+            <!-- L3 -->
+            <polygon points="252,320 468,320 516,400 204,400" fill="#3B82F6" />
+            <!-- L4 -->
+            <polygon points="306,230 414,230 462,310 258,310" fill="#6366F1" />
+            <!-- L5 (Top) -->
+            <polygon points="360,140 408,220 312,220" fill="#7C3AED" />
+        </g>
+        <!-- Connection Anchor Dots -->
+        <g>
+            <circle cx="393" cy="195" r="4" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2.5"/>
+            <circle cx="438" cy="270" r="4" fill="#FFFFFF" stroke="#6366F1" stroke-width="2.5"/>
+            <circle cx="492" cy="360" r="4" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2.5"/>
+            <circle cx="546" cy="450" r="4" fill="#FFFFFF" stroke="#0EA5E9" stroke-width="2.5"/>
+            <circle cx="600" cy="540" r="4" fill="#FFFFFF" stroke="#06B6D4" stroke-width="2.5"/>
+        </g>
+        <!-- Pyramid Text Labels -->
+        <g>
+            <text x="360" y="200" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#FFFFFF" letter-spacing="1">VISION</text>
+            <text x="360" y="276" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF" letter-spacing="1">INNOVATION</text>
+            <text x="360" y="366" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" letter-spacing="1.5">BRAND POWER</text>
+            <text x="360" y="456" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#FFFFFF" letter-spacing="1.5">R&amp;D SYSTEM</text>
+            <text x="360" y="546" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" letter-spacing="2">OPERATIONS</text>
+        </g>
+        <!-- ==================== Explanatory Cards ==================== -->
+        <!-- L5 Card -->
+        <g transform="translate(680, 155)">
+            <rect x="0" y="0" width="540" height="80" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <line x1="6" y1="20" x2="6" y2="60" stroke="#7C3AED" stroke-width="6" stroke-linecap="round"/>
+            <text x="25" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Vision &amp; Purpose</text>
+            <text x="25" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500" fill="#475569">Establishes industry leadership and guides overall strategic layout.</text>
+            <rect x="480" y="20" width="40" height="40" rx="20" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <text x="500" y="46" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#94A3B8" text-anchor="middle">L5</text>
+        </g>
+        <!-- L4 Card -->
+        <g transform="translate(680, 230)">
+            <rect x="0" y="0" width="540" height="80" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <line x1="6" y1="20" x2="6" y2="60" stroke="#6366F1" stroke-width="6" stroke-linecap="round"/>
+            <text x="25" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Innovation Drive</text>
+            <text x="25" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500" fill="#475569">Builds continuous innovation mechanisms and explores frontiers.</text>
+            <rect x="480" y="20" width="40" height="40" rx="20" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <text x="500" y="46" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#94A3B8" text-anchor="middle">L4</text>
+        </g>
+        <!-- L3 Card -->
+        <g transform="translate(680, 320)">
+            <rect x="0" y="0" width="540" height="80" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <line x1="6" y1="20" x2="6" y2="60" stroke="#3B82F6" stroke-width="6" stroke-linecap="round"/>
+            <text x="25" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Brand Influence</text>
+            <text x="25" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500" fill="#475569">Creates industry-leading awareness and deep customer loyalty.</text>
+            <rect x="480" y="20" width="40" height="40" rx="20" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <text x="500" y="46" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#94A3B8" text-anchor="middle">L3</text>
+        </g>
+        <!-- L2 Card -->
+        <g transform="translate(680, 410)">
+            <rect x="0" y="0" width="540" height="80" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <line x1="6" y1="20" x2="6" y2="60" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round"/>
+            <text x="25" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">R&amp;D Capabilities</text>
+            <text x="25" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500" fill="#475569">Supported by 500+ core patents and deep technical expertise.</text>
+            <rect x="480" y="20" width="40" height="40" rx="20" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <text x="500" y="46" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#94A3B8" text-anchor="middle">L2</text>
+        </g>
+        <!-- L1 Card -->
+        <g transform="translate(680, 500)">
+            <rect x="0" y="0" width="540" height="80" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+            <line x1="6" y1="20" x2="6" y2="60" stroke="#06B6D4" stroke-width="6" stroke-linecap="round"/>
+            <text x="25" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="800" fill="#0F172A">Operational Foundation</text>
+            <text x="25" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500" fill="#475569">Refined operations, global supply chain, and intelligent logistics.</text>
+            <rect x="480" y="20" width="40" height="40" rx="20" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <text x="500" y="46" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="#94A3B8" text-anchor="middle">L1</text>
+        </g>
+    </g>
+    <!-- ==================== Footer ==================== -->
+    <text x="60" y="680" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#94A3B8">Higher tiers represent greater strategic value, while lower tiers provide essential structural support.</text>
+</svg>
