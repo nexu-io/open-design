@@ -740,6 +740,70 @@ function renderReturningAiShowcase(input: {
     .swatch.muted { background: #aaa9a9; color: #141414; }
     .swatch.border { background: #575757; }
     .swatch.accent { background: #e5971d; color: #1b1c1d; font-weight: 700; }
+    .tweak-lab {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .tweak-stage {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 16px;
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+    }
+    .tweak-preview-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tweak-preview-tab {
+      min-height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+    }
+    .tweak-preview-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    .tweak-panel {
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      border-radius: 8px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .tweak-row { display: grid; gap: 6px; }
+    .tweak-row label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .tweak-options { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tweak-option {
+      min-height: 28px;
+      padding: 0 9px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-3);
+      background: var(--surface-3);
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .tweak-option.active { border-color: var(--accent); color: var(--accent); }
+    .tweak-code {
+      margin: 0;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 10px;
+      color: var(--text-3);
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: var(--font);
+    }
     .section { margin-top: 18px; }
     .section-head {
       display: flex;
@@ -1057,30 +1121,71 @@ function renderReturningAiShowcase(input: {
     .modal-body { padding: 24px 32px; display: grid; gap: 12px; }
     .stepper { color: var(--muted); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 
+    .surface-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
     .surface-demo {
       display: grid;
-      grid-template-columns: 80px 240px minmax(0, 1fr);
+      grid-template-columns: 80px minmax(0, 1fr);
       min-height: 380px;
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
       background: var(--bg);
     }
-    .icon-rail { background: #141414; border-right: 1px solid var(--border); padding: 14px 0; display: grid; gap: 8px; align-content: start; justify-items: center; }
+    .surface-demo.admin { grid-template-columns: 240px minmax(0, 1fr); }
+    .icon-rail { background: var(--surface-2); border-right: 1px solid var(--border); padding: 16px 0; display: grid; gap: 12px; align-content: start; justify-items: center; }
     .rail-icon {
       width: 40px;
       height: 48px;
       border-radius: 4px;
       color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border-left: 2px solid transparent;
+      font-size: 9px;
+      font-weight: 700;
+    }
+    .rail-icon.active { color: var(--accent-2); }
+    .rail-icon-mark { width: 20px; height: 20px; border: 2px solid currentColor; border-radius: 6px; }
+    .app-shell { min-width: 0; display: flex; flex-direction: column; }
+    .app-topbar {
+      height: 56px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 0 12px;
+    }
+    .reward-pill {
+      min-height: 32px;
+      padding: 0 12px;
+      border-radius: 4px;
+      background: var(--surface-3);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: var(--fg);
+    }
+    .coin {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
       display: grid;
       place-items: center;
-      border-left: 2px solid transparent;
+      background: var(--accent-2);
+      color: var(--accent-fg);
+      font-size: 12px;
     }
-    .rail-icon.active { background: var(--surface-2); border-left-color: var(--accent); color: var(--fg); }
-    .rail { background: var(--surface); border-right: 1px solid var(--border); padding: 14px 0; }
-    .rail-title { padding: 0 16px 12px; font-weight: 700; color: #e3e3e3; }
-    .rail-item { padding: 9px 16px; color: var(--muted); border-left: 2px solid transparent; }
-    .rail-item.active { color: var(--fg); background: var(--surface-2); border-left-color: var(--accent); }
+    .settings-rail { background: var(--surface-2); border-right: 1px solid var(--border); padding: 8px; }
+    .settings-search { height: 35px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-3); color: var(--muted); display: flex; align-items: center; padding: 0 12px; margin-bottom: 12px; }
+    .rail-title { padding: 10px 8px; font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 12px; }
+    .rail-item { padding: 8px 12px; color: var(--fg); border-radius: 6px; font-size: 12px; }
+    .rail-item.active { color: var(--accent-fg); background: var(--accent); font-weight: 600; }
     .workspace { padding: 16px; display: grid; gap: 12px; align-content: start; }
     .mini-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .mini-card { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 12px; }
@@ -1099,10 +1204,11 @@ function renderReturningAiShowcase(input: {
     .criteria-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text-3); font-size: 13px; }
 
     @media (max-width: 980px) {
-      .hero, .grid.two, .grid.three, .grid.four, .modal-row, .contract { grid-template-columns: 1fr; }
+      .hero, .grid.two, .grid.three, .grid.four, .modal-row, .contract, .tweak-lab, .surface-grid { grid-template-columns: 1fr; }
       .modal.w300, .modal.w400, .modal.w600 { width: 100%; }
       .surface-demo { grid-template-columns: 1fr; }
-      .rail { border-right: 0; border-bottom: 1px solid var(--border); }
+      .surface-demo.admin { grid-template-columns: 1fr; }
+      .settings-rail { border-right: 0; border-bottom: 1px solid var(--border); }
       .icon-rail { display: none; }
       .topbar { grid-template-columns: 1fr; height: auto; }
       .brand { height: 48px; border-right: 0; border-bottom: 1px solid var(--border); }
@@ -1123,6 +1229,8 @@ function renderReturningAiShowcase(input: {
         <span class="nav-tab">Controls</span>
         <span class="nav-tab">Tables</span>
         <span class="nav-tab">Modals</span>
+        <span class="nav-tab">Tweaks</span>
+        <span class="nav-tab">Shells</span>
         <span class="nav-tab">Store</span>
       </div>
       <div class="nav-actions">
@@ -1135,17 +1243,21 @@ function renderReturningAiShowcase(input: {
       <div class="hero-main">
         <p class="eyebrow">ReturningAI design system - Figma MCP grounded</p>
         <h1>Black Beauty component fidelity lab for ${title}</h1>
-        <p class="lead">${tagline}. This preview shows the actual component families OpenDesign should use: buttons, fields, dropdowns, tabs, badges, navigation, DataTableV2 rows, store/social cards, and modals.</p>
+        <p class="lead">${tagline}. This preview shows the actual component families OpenDesign should use: buttons, fields, dropdowns, tabs, badges, navigation, tweakable variants, DataTableV2 rows, store/social cards, and modals.</p>
         <div class="source-row">
           <span class="source-pill">Figma file VH6luJCFcoxFoOesswo7qU</span>
           <span class="source-pill">23 pages crawled</span>
           <span class="source-pill">Black Beauty only</span>
           <span class="source-pill">Roboto 400-700 loaded</span>
+          <span class="source-pill">Tweaks for variation sets</span>
+          <span class="source-pill">80px rail / 56px top bar</span>
           <span class="source-pill">design-systems/${escapeHtml(input.id)}/DESIGN.md</span>
         </div>
         <div class="contract" aria-label="Component contract">
           <div class="contract-item"><strong>09</strong><span>Buttons, icon buttons, social actions.</span></div>
           <div class="contract-item"><strong>10/11</strong><span>Fields, dropdowns, filters, date panels.</span></div>
+          <div class="contract-item"><strong>19/20</strong><span>Userfront navigation shell fidelity.</span></div>
+          <div class="contract-item"><strong>21</strong><span>Admin settings navigation anatomy.</span></div>
           <div class="contract-item"><strong>22/27</strong><span>Data tables and modal anatomy.</span></div>
         </div>
       </div>
@@ -1163,6 +1275,54 @@ function renderReturningAiShowcase(input: {
         </div>
       </aside>
     </header>
+
+    <section class="section">
+      <div class="section-head">
+        <div><h2>Tweakable Variation Pattern</h2><p class="hint">Variation sets default to one adjustable artifact: no alternate themes, no mono font switch, no freeform color picker.</p></div>
+      </div>
+      <div class="tweak-lab">
+        <div class="tweak-stage">
+          <div class="row" style="justify-content: space-between;">
+            <div>
+              <p class="eyebrow">Variation set</p>
+              <h3>Social quests preview</h3>
+              <p class="hint">Same data model, different hierarchy and state emphasis.</p>
+            </div>
+            <div class="tweak-preview-tabs">
+              <span class="tweak-preview-tab">Foundation</span>
+              <span class="tweak-preview-tab active">Sharper</span>
+              <span class="tweak-preview-tab">Bolder</span>
+              <span class="tweak-preview-tab">Polish</span>
+            </div>
+          </div>
+          <div class="grid three">
+            <div class="mini-card"><span class="meta">State</span><strong>Selected row</strong><p class="hint">Use for table, card, and quest verification focus.</p></div>
+            <div class="mini-card"><span class="meta">Density</span><strong>Standard</strong><p class="hint">4px scale, 16-24px content padding.</p></div>
+            <div class="mini-card"><span class="meta">Chrome</span><strong>Content-only</strong><p class="hint">Full shell only when review requires it.</p></div>
+          </div>
+        </div>
+        <aside class="tweak-panel" aria-label="Tweaks panel">
+          <p class="eyebrow">Tweaks</p>
+          <div class="tweak-row">
+            <label>Direction</label>
+            <div class="tweak-options"><span class="tweak-option">Foundation</span><span class="tweak-option active">Sharper</span><span class="tweak-option">Bolder</span><span class="tweak-option">Polish</span></div>
+          </div>
+          <div class="tweak-row">
+            <label>Density</label>
+            <div class="tweak-options"><span class="tweak-option">Compact</span><span class="tweak-option active">Standard</span></div>
+          </div>
+          <div class="tweak-row">
+            <label>Surface chrome</label>
+            <div class="tweak-options"><span class="tweak-option active">Content-only</span><span class="tweak-option">Full shell</span></div>
+          </div>
+          <pre class="tweak-code">const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "direction": "sharper",
+  "density": "standard",
+  "surfaceChrome": "content-only"
+}/*EDITMODE-END*/;</pre>
+        </aside>
+      </div>
+    </section>
 
     <section class="section">
       <div class="section-head">
@@ -1317,41 +1477,55 @@ function renderReturningAiShowcase(input: {
 
     <section class="section">
       <div class="section-head">
-        <div><h2>Navigation and Surface Composition</h2><p class="hint">Figma nav pages define shell anatomy; artifacts should use the shell as context, not decoration.</p></div>
+        <div><h2>Navigation and Surface Composition</h2><p class="hint">Figma nav pages and production shell components define chrome. Artifacts use the shell as context, not decoration.</p></div>
       </div>
-      <div class="surface-demo">
-        <aside class="icon-rail" aria-label="Main navigation">
-          <span class="rail-icon active">H</span>
-          <span class="rail-icon">A</span>
-          <span class="rail-icon">S</span>
-          <span class="rail-icon">L</span>
-          <span class="rail-icon">M</span>
-        </aside>
-        <aside class="rail">
-          <div class="rail-title">Settings</div>
-          <div class="rail-item">Appearance</div>
-          <div class="rail-item active">Custom leaderboards</div>
-          <div class="rail-item">Badges</div>
-          <div class="rail-item">Widget embed</div>
-          <div class="rail-item">API keys</div>
-        </aside>
-        <div class="workspace">
-          <div class="row" style="justify-content: space-between;">
-            <div><h2>Custom leaderboards</h2><p class="hint">DataTableV2 first, compact forms second.</p></div>
-            <button class="btn primary">Save changes</button>
-          </div>
-          <div class="mini-cards">
-            <div class="mini-card"><span class="meta">Active boards</span><strong>12</strong></div>
-            <div class="mini-card"><span class="meta">Pending edits</span><strong>3</strong></div>
-            <div class="mini-card"><span class="meta">Trader views</span><strong>4,280</strong></div>
-          </div>
-          <div class="panel">
-            <div class="panel-title">Widget preview <span class="meta">width 100% / height 600px</span></div>
-            <div class="panel-pad">
-              <div class="row" style="justify-content: space-between;">
-                <span class="status success">Token valid</span>
-                <button class="btn ghost dense">Copy SDK snippet</button>
+      <div class="surface-grid">
+        <div class="surface-demo userfront">
+          <aside class="icon-rail" aria-label="Main navigation">
+            <span class="rail-icon"><span class="rail-icon-mark"></span>Home</span>
+            <span class="rail-icon"><span class="rail-icon-mark"></span>Activity</span>
+            <span class="rail-icon active"><span class="rail-icon-mark"></span>Socials</span>
+            <span class="rail-icon"><span class="rail-icon-mark"></span>Store</span>
+            <span class="rail-icon"><span class="rail-icon-mark"></span>Quests</span>
+          </aside>
+          <div class="app-shell">
+            <div class="app-topbar">
+              <span class="reward-pill"><span class="coin">C</span>17,329.5 Coins</span>
+              <span class="reward-pill">Bronze - Level 1</span>
+              <span class="reward-pill">Leaderboard</span>
+            </div>
+            <div class="workspace">
+              <div><h2>Userfront shell</h2><p class="hint">80px SideBarSection and 56px TopBarSection. Content starts inside this frame.</p></div>
+              <div class="mini-cards">
+                <div class="mini-card"><span class="meta">Rail</span><strong>80px</strong></div>
+                <div class="mini-card"><span class="meta">Top bar</span><strong>56px</strong></div>
+                <div class="mini-card"><span class="meta">Nav item</span><strong>40px</strong></div>
               </div>
+            </div>
+          </div>
+        </div>
+        <div class="surface-demo admin">
+          <aside class="settings-rail">
+            <div class="settings-search">Search</div>
+            <div class="rail-title">Community</div>
+            <div class="rail-item">Appearance</div>
+            <div class="rail-item">Roles &amp; permissions</div>
+            <div class="rail-title">Loyalty</div>
+            <div class="rail-item active">Custom leaderboards</div>
+            <div class="rail-item">Badges</div>
+            <div class="rail-item">Widget embed</div>
+            <div class="rail-title">Logs</div>
+            <div class="rail-item">API keys</div>
+          </aside>
+          <div class="workspace">
+            <div class="row" style="justify-content: space-between;">
+              <div><h2>Admin settings shell</h2><p class="hint">240px CommunitySettingNavigation plus CommunitySettingsHeader.</p></div>
+              <button class="btn primary">Save changes</button>
+            </div>
+            <div class="mini-cards">
+              <div class="mini-card"><span class="meta">Rail</span><strong>240px</strong></div>
+              <div class="mini-card"><span class="meta">Link type</span><strong>12px</strong></div>
+              <div class="mini-card"><span class="meta">Active</span><strong>Accent fill</strong></div>
             </div>
           </div>
         </div>
