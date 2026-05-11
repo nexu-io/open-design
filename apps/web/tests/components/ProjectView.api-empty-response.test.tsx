@@ -171,6 +171,7 @@ function renderProjectView() {
       config={config}
       agents={[] as AgentInfo[]}
       skills={[] as SkillSummary[]}
+      designTemplates={[] as SkillSummary[]}
       designSystems={[] as DesignSystemSummary[]}
       daemonLive
       onModeChange={vi.fn()}
