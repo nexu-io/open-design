@@ -2,6 +2,7 @@
 // provider protocol and uses fake CLI bins for deterministic agent outcomes.
 
 import type http from 'node:http';
+import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -360,7 +361,53 @@ describe('POST /api/provider/models', () => {
     ).toBe(false);
   });
 
+  // Regression for the DNS-bypass SSRF gap flagged on PR #1176: the route
+  // must resolve the hostname and reject when *any* resolved address is in
+  // a blocked range, not just when the literal hostname is a private IP.
+  it('rejects hostnames that resolve to a private IP without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async (hostname: string) => {
+        if (hostname === 'rebind.example.test') {
+          return [{ address: '10.0.0.5', family: 4 }];
+        }
+        const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+        err.code = 'ENOTFOUND';
+        throw err;
+      }) as unknown as typeof dnsPromises.lookup);
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'https://rebind.example.test/v1',
+          apiKey: 'sk-good',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ ok: false, kind: 'forbidden' });
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => !String(input).startsWith(baseUrl),
+        ),
+      ).toBe(false);
+    } finally {
+      dnsSpy.mockRestore();
+    }
+  });
+
   it('reports timeout when model listing is aborted by the probe timer', async () => {
+    // The DNS-aware validator runs before the probe timer is installed; stub
+    // the resolver so the test doesn't race against real DNS while fake
+    // timers are active.
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async () => [
+        { address: '203.0.113.10', family: 4 },
+      ]) as unknown as typeof dnsPromises.lookup);
     vi.useFakeTimers();
     vi.stubGlobal(
       'fetch',
@@ -373,17 +420,21 @@ describe('POST /api/provider/models', () => {
       ),
     );
 
-    const pending = listProviderModels({
-      protocol: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'sk-timeout',
-    });
+    try {
+      const pending = listProviderModels({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-timeout',
+      });
 
-    await vi.advanceTimersByTimeAsync(12_000);
-    await expect(pending).resolves.toMatchObject({
-      ok: false,
-      kind: 'timeout',
-    });
+      await vi.advanceTimersByTimeAsync(12_000);
+      await expect(pending).resolves.toMatchObject({
+        ok: false,
+        kind: 'timeout',
+      });
+    } finally {
+      dnsSpy.mockRestore();
+    }
   });
 });
 
@@ -771,6 +822,47 @@ describe('POST /api/test/connection provider mode', () => {
         ([input]) => !String(input).startsWith(baseUrl),
       ),
     ).toBe(false);
+  });
+
+  // Regression for the DNS-bypass SSRF gap flagged on PR #1176: provider
+  // mode must run the same resolved-IP check as the proxy/finalize paths
+  // so a public hostname pointing at a private address can't be fetched.
+  it('reports forbidden for hostnames that resolve to a private IP without calling fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async (hostname: string) => {
+        if (hostname === 'rebind.example.test') {
+          return [{ address: '10.0.0.5', family: 4 }];
+        }
+        const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+        err.code = 'ENOTFOUND';
+        throw err;
+      }) as unknown as typeof dnsPromises.lookup);
+    try {
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          baseUrl: 'https://rebind.example.test/v1',
+          apiKey: 'sk-good',
+          model: 'gpt-4o',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.ok).toBe(false);
+      expect(body.kind).toBe('forbidden');
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => !String(input).startsWith(baseUrl),
+        ),
+      ).toBe(false);
+    } finally {
+      dnsSpy.mockRestore();
+    }
   });
 
   it('allows IPv6 loopback base URLs for local OpenAI-compatible providers', async () => {

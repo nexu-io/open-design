@@ -488,6 +488,41 @@ describe('API proxy routes', () => {
     });
   });
 
+  // Regression for PR #1176: the Ollama proxy fetch must also set
+  // `redirect: 'error'`. Without it, a validated public host could
+  // 3xx the daemon to a private/internal URL and slip past the
+  // resolved-IP SSRF check that runs *before* the fetch.
+  it('forwards redirect:error on the Ollama proxy upstream fetch', async () => {
+    const ndjsonResponse = new Response(
+      new TextEncoder().encode('{"done":true}\n'),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/x-ndjson' },
+      },
+    );
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(ndjsonResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/ollama/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://ollama.example.com',
+        apiKey: 'ollama-key',
+        model: 'llama3',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe('https://ollama.example.com/api/chat');
+    expect(upstreamInit?.redirect).toBe('error');
+  });
+
   // Plan §3.A4 / spec §11.8 (e2e-7): the API-fallback proxy paths must
   // never carry plugin context. The web sidecar's fallback mode bypasses
   // the daemon snapshot bus, so any pluginId / appliedPluginSnapshotId in
