@@ -53,7 +53,7 @@ import {
   findProvider,
   modelsForSurface,
 } from './media-models.js';
-import { resolveProviderConfig } from './media-config.js';
+import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import {
   ensureProject,
   kindFor,
@@ -341,9 +341,20 @@ export async function generateMedia(args: {
   // and decide how to splice the data URL into their request.
   const imageRef = await resolveProjectImage(image, dir);
 
+  // Resolve any user-configured model alias BEFORE we hand the id to a
+  // dispatcher (issue #1277). Catalog lookup + surface validation above
+  // ran against the original id so we still enforce the registered
+  // catalog; this swap only changes what the provider receives on the
+  // wire, which is exactly the redirect the issue asks for. Pass-
+  // through when no alias matches.
+  const wireModel = await resolveModelAlias(projectRoot, model);
   const ctx = {
     surface,
-    model,
+    // `model` here is the wire-name a provider's request body will
+    // carry. The registered catalog id stays accessible via
+    // `ctx.modelDef.id` below, and the function-level `model`
+    // parameter (used by `autoOutputName` etc.) is unchanged.
+    model: wireModel,
     modelDef: def,
     provider: findProvider(def.provider),
     prompt: prompt || '',
