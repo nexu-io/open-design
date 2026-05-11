@@ -725,7 +725,7 @@ export async function syncConfigToDaemon(
     onboardingCompleted: config.onboardingCompleted,
     agentId: config.agentId,
     agentModels: config.agentModels,
-    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
+    agentCliEnv: config.agentCliEnv,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
     disabledSkills: config.disabledSkills,

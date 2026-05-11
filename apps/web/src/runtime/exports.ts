@@ -82,8 +82,8 @@ export function buildDesignManifestContent(opts: {
   kind?: 'html' | 'react';
 }): string {
   const title = opts.title || 'Open Design artifact';
-  const entryFile = opts.entryFile || 'index.html';
-  const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles } = designFileMap(entryFile, opts.files);
+  const requestedEntryFile = opts.entryFile || 'index.html';
+  const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
     schema: 'open-design.design-manifest.v1',
@@ -173,8 +173,8 @@ export function buildDesignHandoffContent(opts: {
   kind?: 'html' | 'react';
 }): string {
   const title = opts.title || 'Open Design artifact';
-  const entryFile = opts.entryFile || 'index.html';
-  const { files, htmlFiles, cssFiles, jsFiles, assetFiles } = designFileMap(entryFile, opts.files);
+  const requestedEntryFile = opts.entryFile || 'index.html';
+  const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const accentLikelyBrandLed =
     files.some((name) => /(design|brand|tokens?|theme|style|tailwind|variables)\.(css|scss|sass|less|json|ts|tsx|js|jsx|md)$/i.test(name)) ||
     cssFiles.length > 0;

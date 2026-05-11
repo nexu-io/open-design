@@ -104,7 +104,7 @@ describe('syncConfigToDaemon', () => {
     });
   });
 
-  it('does not sync proxy API key env values to daemon app config', async () => {
+  it('syncs proxy API key env values to daemon app config while localStorage strips them', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -119,8 +119,8 @@ describe('syncConfigToDaemon', () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toMatchObject({
       agentCliEnv: {
-        claude: { ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
-        codex: { OPENAI_BASE_URL: 'https://proxy.example/openai' },
+        claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
+        codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
       },
     });
   });

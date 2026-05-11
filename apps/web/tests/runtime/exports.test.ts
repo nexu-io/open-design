@@ -145,6 +145,25 @@ describe('buildDesignHandoffContent', () => {
     expect(manifest.sourceFiles.html).toEqual(['browser-chrome.html', 'frames/iphone-15-pro.html', 'index.html']);
     expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
   });
+
+  it('normalizes a frame-wrapper active file to the implementable screen entry in manifest and handoff', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Framed App',
+      entryFile: 'frames/iphone-15-pro.html',
+      files: ['index.html', 'landing.html', 'frames/iphone-15-pro.html', 'src/app.css'],
+    }));
+    const handoff = buildDesignHandoffContent({
+      title: 'Framed App',
+      entryFile: 'frames/iphone-15-pro.html',
+      files: ['index.html', 'landing.html', 'frames/iphone-15-pro.html', 'src/app.css'],
+    });
+
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html', 'landing.html']);
+    expect(handoff).toContain('Primary entry: `index.html`');
+    expect(handoff).toContain('Open `index.html` and `DESIGN-MANIFEST.json`');
+    expect(handoff).not.toContain('Primary entry: `frames/iphone-15-pro.html`');
+  });
 });
 
 describe('exportProjectAsPdf', () => {
