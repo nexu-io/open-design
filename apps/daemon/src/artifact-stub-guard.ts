@@ -134,16 +134,33 @@ async function readSidecarIdentifier(scanDir: string, entryName: string): Promis
 }
 
 // Strips the frontend's `-N` collision suffix and the `.html` / `.htm`
-// extension to recover the per-lineage basename. Used as a fallback
-// identifier for legacy HTML artifacts that don't have a sidecar yet
-// (anything written before the manifest era, or HTML pasted/uploaded
-// outside the artifact-tag flow). `inferLegacyManifest` already treats
-// these as html-kind artifacts elsewhere; we mirror that so the guard
-// doesn't silently let a stub overwrite them.
+// extension to recover the per-lineage basename. Used as one of the
+// fallback identifiers for legacy HTML artifacts that don't have a
+// sidecar yet (anything written before the manifest era, or HTML
+// pasted/uploaded outside the artifact-tag flow). `inferLegacyManifest`
+// already treats these as html-kind artifacts elsewhere; we mirror
+// that so the guard doesn't silently let a stub overwrite them.
 const SYNTHETIC_IDENTIFIER_SUFFIX = /(?:-\d+)?\.html?$/;
+const HTML_EXTENSION = /\.html?$/;
 
 function syntheticIdentifierFromFilename(name: string): string {
   return name.replace(SYNTHETIC_IDENTIFIER_SUFFIX, '');
+}
+
+// `phase-2.html` is genuinely ambiguous: it could be the identifier
+// `phase` with a `-2` collision suffix, or the standalone identifier
+// `phase-2`. Without a sidecar to disambiguate, both interpretations
+// are valid candidates — the guard accepts the file as a prior if
+// either matches the input identifier. Visible false positives
+// (rejecting a legitimate write the user can override via env) are
+// preferable to silent false negatives (stub bypasses the guard).
+function legacyCandidateIdentifiers(filename: string): string[] {
+  const fullBasename = filename.replace(HTML_EXTENSION, '');
+  const stripped = syntheticIdentifierFromFilename(filename);
+  const candidates: string[] = [];
+  if (fullBasename.length > 0) candidates.push(fullBasename);
+  if (stripped.length > 0 && stripped !== fullBasename) candidates.push(stripped);
+  return candidates;
 }
 
 // Finds prior HTML siblings on disk that share an identifier with a
@@ -181,19 +198,22 @@ export async function findPriorArtifactSiblings(
     // it as a prior. Without this check, distinct identifiers that share
     // a sibling-name namespace (most reachably the empty-slug fallback,
     // where 测试 and 首页 both land in artifact*.html) would falsely
-    // warn/reject across each other. For legacy HTML artifacts written
-    // before the sidecar era (or HTML uploaded outside the artifact-tag
-    // flow), we fall back to a filename-derived synthetic identifier —
-    // `inferLegacyManifest` treats those files as html-kind artifacts
-    // elsewhere, so the guard should too. The canonical-anchor rule in
-    // `artifactIdentifiersMatch` keeps the bridge safe: synthetic IDs
-    // come from already-slugified filenames, so they bridge raw inputs
-    // only via legitimate slug-equivalence, not via truncation collision
-    // or empty-slug conflation.
+    // warn/reject across each other.
+    //
+    // For legacy HTML artifacts without a sidecar (pre-manifest era,
+    // Write-tool, paste-text, manual import), we fall back to filename-
+    // derived candidates. Because a name like `phase-2.html` is
+    // genuinely ambiguous between "phase + collision suffix -2" and "the
+    // standalone identifier phase-2", we try both interpretations and
+    // accept the file as a prior if either matches. The canonical-form
+    // anchor in artifactIdentifiersMatch still rules out truncation
+    // collisions and empty-slug conflations.
     const sidecarIdentifier = await readSidecarIdentifier(scanDir, entry.name);
-    const candidateIdentifier = sidecarIdentifier ?? syntheticIdentifierFromFilename(entry.name);
-    if (candidateIdentifier.length === 0) continue;
-    if (!artifactIdentifiersMatch(identifier, candidateIdentifier)) continue;
+    const candidateIdentifiers = sidecarIdentifier !== null
+      ? [sidecarIdentifier]
+      : legacyCandidateIdentifiers(entry.name);
+    if (candidateIdentifiers.length === 0) continue;
+    if (!candidateIdentifiers.some((c) => artifactIdentifiersMatch(identifier, c))) continue;
     try {
       const st = await stat(path.join(scanDir, entry.name));
       results.push({ name: entry.name, size: st.size });

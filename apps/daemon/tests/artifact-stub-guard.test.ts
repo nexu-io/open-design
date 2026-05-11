@@ -246,6 +246,29 @@ describe('findPriorArtifactSiblings', () => {
     const priors = await findPriorArtifactSiblings(dir, 'legacy-dashboard');
     expect(priors).toEqual([]);
   });
+
+  it('legacy fallback honors identifiers that legitimately end in -<digits> (mrcfps R7)', async () => {
+    const dir = await makeDir();
+    // `phase-2.html` is ambiguous without a sidecar: could be "phase"
+    // with -2 collision suffix, or the standalone identifier "phase-2".
+    // The guard tries both; here the input names "phase-2" so the full
+    // basename interpretation must match.
+    await writeFile(path.join(dir, 'phase-2.html'), 'a'.repeat(40_000));
+
+    const priors = await findPriorArtifactSiblings(dir, 'phase-2');
+    expect(priors.map((p) => p.name)).toEqual(['phase-2.html']);
+  });
+
+  it('legacy fallback also honors the suffix-stripped interpretation', async () => {
+    const dir = await makeDir();
+    // Same on-disk file, different input: this time the agent is
+    // emitting under the `phase` identifier (treating the -2 as a
+    // collision suffix). The suffix-stripped interpretation must match.
+    await writeFile(path.join(dir, 'phase-2.html'), 'a'.repeat(40_000));
+
+    const priors = await findPriorArtifactSiblings(dir, 'phase');
+    expect(priors.map((p) => p.name)).toEqual(['phase-2.html']);
+  });
 });
 
 describe('artifactIdentifiersMatch', () => {

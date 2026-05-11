@@ -396,4 +396,32 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
     expect(body.error.code).toBe('ARTIFACT_REGRESSION');
     expect(body.error.details?.priorName).toBe('dashboard.html');
   });
+
+  it('catches stub rewrites of legacy priors whose identifier ends in -<digits> (mrcfps R7)', async () => {
+    const projectId = await createProject('legacy-numeric');
+
+    // Seed a sidecar-less `phase-2.html` prior (the standalone
+    // identifier "phase-2", not "phase + collision suffix"). Without
+    // the dual-candidate fallback, syntheticIdentifierFromFilename
+    // would strip the -2 and the legacy fallback would search for
+    // "phase" instead, missing the prior and bypassing the guard.
+    const legacyResp = await postFile(projectId, {
+      name: 'phase-2.html',
+      content: htmlBody(20_000),
+      // no artifactManifest -> no sidecar on disk
+    });
+    expect(legacyResp.status).toBe(200);
+
+    const stubResp = await postFile(projectId, {
+      name: 'phase-2-2.html',
+      content: '<html><body>see phase-2.html</body></html>',
+      artifactManifest: manifestFor('phase-2'),
+    });
+    expect(stubResp.status).toBe(422);
+    const body = (await stubResp.json()) as {
+      error: { code: string; details?: { priorName?: string } };
+    };
+    expect(body.error.code).toBe('ARTIFACT_REGRESSION');
+    expect(body.error.details?.priorName).toBe('phase-2.html');
+  });
 });
