@@ -5,6 +5,16 @@ on:
     types: [closed]
   issues:
     types: [opened]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  discussion:
+    types: [created]
+  discussion_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +30,11 @@ jobs:
     if: |
       (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
       (github.event_name == 'issues' && github.event.action == 'opened') ||
+      (github.event_name == 'pull_request_review' && github.event.action == 'submitted') ||
+      (github.event_name == 'issue_comment' && github.event.action == 'created') ||
+      (github.event_name == 'pull_request_review_comment' && github.event.action == 'created') ||
+      (github.event_name == 'discussion' && github.event.action == 'created') ||
+      (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -50,9 +65,4 @@ jobs:
           BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
           BOT_APP_INSTALLATION_ID: ${{ secrets.BOT_APP_INSTALLATION_ID }}
           BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
-            GITHUB_EVENT_NAME=pull_request pnpm exec tsx scripts/action-handler.ts
-          else
-            pnpm exec tsx scripts/action-handler.ts
-          fi
+        run: pnpm exec tsx scripts/action-handler.ts
