@@ -57,7 +57,7 @@ OD stands on four open-source shoulders:
 | **BYOK fallback** | Protocol-specific API proxy at `/api/proxy/{anthropic,openai,azure,google}/stream` — paste `baseUrl` + `apiKey` + `model`, choose Anthropic / OpenAI / Azure OpenAI / Google Gemini, and the daemon normalizes SSE back to the same chat stream. Internal-IP/SSRF blocked at the daemon edge. |
 | **Design systems built-in** | **129** — 2 hand-authored starters + 70 product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) from [`awesome-design-md`][acd2], plus 57 design skills from [`awesome-design-skills`][ads] added directly under `design-systems/` |
 | **Skills built-in** | **31** — 27 in `prototype` mode (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 in `deck` mode (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Grouped in the picker by `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
-| **Media generation** | Image · video · audio surfaces ship alongside the design loop. **gpt-image-2** (Azure / OpenAI) for posters, avatars, infographics, illustrated maps · **Seedance 2.0** (ByteDance) for cinematic 15s text-to-video and image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) for HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). **93** ready-to-replicate prompts gallery — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — under [`prompt-templates/`](prompt-templates/), with preview thumbnails and source attribution. Same chat surface as code; outputs a real `.mp4` / `.png` chip into the project workspace. |
+| **Media generation** | Image · video · audio surfaces ship alongside the design loop. **gpt-image-2** (Azure / OpenAI) for posters, avatars, infographics, illustrated maps · **FLUX.2 [max]** ([Black Forest Labs](https://bfl.ai)) for high-fidelity image generation + editing, hex-color palettes, geographic coordinates-to-scene, isometric infographics · **Seedance 2.0** (ByteDance) for cinematic 15s text-to-video and image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) for HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). **99** ready-to-replicate prompts gallery — 45 gpt-image-2 + 4 FLUX.2 [max] + 39 Seedance + 11 HyperFrames — under [`prompt-templates/`](prompt-templates/), with preview thumbnails and source attribution. Same chat surface as code; outputs a real `.mp4` / `.png` chip into the project workspace. |
 | **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — each ships a deterministic OKLch palette + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across skills under [`assets/frames/`](assets/frames/) |
 | **Agent runtime** | Local daemon spawns the CLI in your project folder — agent gets real `Read`, `Write`, `Bash`, `WebFetch` against a real on-disk environment, with Windows `ENAMETOOLONG` fallbacks (stdin / prompt-file) on every adapter |
@@ -784,17 +784,18 @@ Full spec → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/
 
 OD doesn't stop at code. The same chat surface that produces `<artifact>` HTML also drives **image**, **video**, and **audio** generation, with model adapters wired into the daemon's media pipeline ([`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts), [`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)). Every render lands as a real file in the project workspace — `.png` for image, `.mp4` for video — and shows up as a download chip when the turn ends.
 
-Three model families carry the load today:
+Four model families carry the load today:
 
 | Surface | Model | Provider | What it's for |
 |---|---|---|---|
 | **Image** | `gpt-image-2` | Azure / OpenAI | Posters, profile avatars, illustrated maps, infographics, magazine-style social cards, photo restoration, exploded-view product art |
+| **Image** | `flux-2-max` | [Black Forest Labs](https://bfl.ai) | High-fidelity text-to-image + native i2i editing — hex-color brand palettes, real-world coordinates-to-scene, isometric 3D infographics, camera-angle relighting |
 | **Video** | `seedance-2.0` | ByteDance Volcengine | 15s cinematic t2v + i2v with audio — narrative shorts, character close-ups, product films, MV-style choreography |
 | **Video** | `hyperframes-html` | [HeyGen / OSS](https://github.com/heygen-com/hyperframes) | HTML→MP4 motion graphics — product reveals, kinetic typography, data charts, social overlays, logo outros, TikTok-style verticals with karaoke captions |
 
-A growing **prompt gallery** at [`prompt-templates/`](prompt-templates/) ships **93 ready-to-replicate prompts** — 43 image (`prompt-templates/image/*.json`), 39 Seedance (`prompt-templates/video/*.json` excluding `hyperframes-*`), 11 HyperFrames (`prompt-templates/video/hyperframes-*.json`). Each carries a preview thumbnail, the prompt body verbatim, the target model, the aspect ratio, and a `source` block for license + attribution. The daemon serves them at `GET /api/prompt-templates`, the web app surfaces them as a card grid in the **Image templates** and **Video templates** tabs of the entry view; one click drops a prompt into the composer with the right model preselected.
+A growing **prompt gallery** at [`prompt-templates/`](prompt-templates/) ships **99 ready-to-replicate prompts** — 45 gpt-image-2 + 4 FLUX.2 [max] image (`prompt-templates/image/*.json`), 39 Seedance (`prompt-templates/video/*.json` excluding `hyperframes-*`), 11 HyperFrames (`prompt-templates/video/hyperframes-*.json`). Each carries a preview thumbnail, the prompt body verbatim, the target model, the aspect ratio, and a `source` block for license + attribution. The daemon serves them at `GET /api/prompt-templates`, the web app surfaces them as a card grid in the **Image templates** and **Video templates** tabs of the entry view; one click drops a prompt into the composer with the right model preselected.
 
-### gpt-image-2 — image gallery (sample of 43)
+### gpt-image-2 — image gallery (sample of 45)
 
 <table>
 <tr>
@@ -807,6 +808,21 @@ A growing **prompt gallery** at [`prompt-templates/`](prompt-templates/) ships *
 </table>
 
 Full set → [`prompt-templates/image/`](prompt-templates/image/). Sources: most pull from [`YouMind-OpenLab/awesome-gpt-image-prompts`](https://github.com/YouMind-OpenLab/awesome-gpt-image-prompts) (CC-BY-4.0) with author attribution preserved per template.
+
+### FLUX.2 [max] — image gallery (4 ready-to-replicate templates)
+
+[Black Forest Labs](https://bfl.ai) FLUX.2 [max] is wired as a first-class image provider via the BFL async API (`POST /v1/flux-2-max` → poll → download). Native image-to-image editing (pass a URL into `input_image`), explicit `width`/`height` driven by the template's aspect ratio, BYOK via `BFL_API_KEY` in the Settings dialog. Four templates curated from the [BFL Playground](https://playground.bfl.ai) ship out of the box:
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/image/isometric-city-infographic-flux2-max.json"><img src="https://cdn.sanity.io/images/2gpum2i6/production/e5f192a12fac73b9160ffdfd89ccd05af4347de1-1696x1696.png" alt="Isometric City Infographic" /></a><br/><sub><b>Real-Time City Infographics</b> · 1:1 · 45° isometric 3D miniature city with weather, date, temperature</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/image/coordinates-to-scene-flux2-max.json"><img src="https://cdn.sanity.io/images/2gpum2i6/production/e34603ec4c870b06671cf2cc97bc4883a75a665e-1152x1440.png" alt="Coordinates to Scene" /></a><br/><sub><b>Coordinates to Scene</b> · 3:4 · GPS coords + decade → historically styled scene</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/image/move-camera-angle-flux2-max.json"><img src="https://cdn.sanity.io/images/2gpum2i6/production/94e8ad9c7315204ef31b3ed10482c8bc005968ba-800x1052.png" alt="Move Camera Angle" /></a><br/><sub><b>Move Camera</b> · 1:1 · i2i — re-stage the camera on a reference shot</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/image/hex-palette-vibes-flux2-max.json"><img src="https://cdn.sanity.io/images/2gpum2i6/production/80433f714670662d1b592294670f4067cd86caa3-2048x2048.png" alt="Hex Color Palette" /></a><br/><sub><b>Hex Color Palette</b> · 1:1 · Editorial vibes driven by a list of brand hex codes</sub></td>
+</tr>
+</table>
+
+Full set → [`prompt-templates/image/*-flux2-max.json`](prompt-templates/image/). Sources: BFL Playground (Apache-2.0) with preview thumbnails served from BFL's CDN.
 
 ### Seedance 2.0 — video gallery (sample of 39)
 
