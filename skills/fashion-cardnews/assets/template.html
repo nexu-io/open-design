@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{title}}</title>
+  <style>
+    :root {
+      --ink: #171615;
+      --muted: #77706a;
+      --paper: #f6f1ea;
+      --line: rgba(23, 22, 21, 0.16);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e7dfd4; color: var(--ink); }
+    .stage { min-height: 100vh; padding: 40px clamp(20px, 4vw, 64px) 56px; }
+    .carousel { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 320px); gap: 18px; overflow-x: auto; padding-bottom: 22px; }
+    .card { position: relative; aspect-ratio: 4 / 5; overflow: hidden; border-radius: 24px; background: #fffaf2; border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(23,22,21,.14); }
+    .photo { position: absolute; overflow: hidden; background: linear-gradient(135deg, #f8f1e8, #b9aa9b 48%, #9fa99b); }
+    .photo::before { content: "safe image slot"; position: absolute; left: 14px; top: 14px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: rgba(23,22,21,.42); }
+    .num { position: absolute; z-index: 3; top: 18px; left: 18px; font-size: 13px; letter-spacing: .12em; color: rgba(23,22,21,.72); }
+    .headline { position: absolute; z-index: 4; margin: 0; font-size: 38px; line-height: .98; letter-spacing: -.055em; font-weight: 850; }
+    .caption { position: absolute; z-index: 4; margin: 0; font-size: 15px; line-height: 1.35; letter-spacing: -.03em; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="stage" data-od-id="fashion-cardnews-stage">
+    <p style="margin:0 0 8px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)">Fashion Cardnews · 1080×1350</p>
+    <h1 style="margin:0 0 28px;font-size:clamp(36px,6vw,72px);line-height:.94;letter-spacing:-.06em">{{title}}</h1>
+    <section class="carousel" aria-label="Fashion cardnews carousel">
+      <article class="card" data-od-id="card-01" data-role="cover">
+        <div class="num">01 / {{count}}</div>
+        <div class="photo" data-od-id="cover-image" style="inset:20px 20px 178px;border-radius:20px"></div>
+        <h2 class="headline" data-od-id="cover-headline" style="left:22px;right:22px;bottom:64px">{{cover_headline}}</h2>
+        <p class="caption" style="left:22px;right:84px;bottom:32px">{{cover_caption}}</p>
+      </article>
+      <!-- Add index, look, detail, checklist, and outro cards. Keep each card 4:5. -->
+    </section>
+  </main>
+</body>
+</html>

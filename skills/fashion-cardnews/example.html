@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fashion Cardnews Example</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #171615;
+      --muted: #77706a;
+      --paper: #f6f1ea;
+      --line: rgba(23, 22, 21, 0.16);
+      --cream: #fffaf2;
+      --taupe: #b9aa9b;
+      --sage: #9fa99b;
+      --charcoal: #232220;
+      --accent: #5f6f5b;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #e7dfd4;
+      color: var(--ink);
+    }
+
+    .stage {
+      min-height: 100vh;
+      padding: 40px clamp(20px, 4vw, 64px) 56px;
+    }
+
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      margin: 0 auto 28px;
+      max-width: 1480px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 72px);
+      line-height: 0.94;
+      letter-spacing: -0.06em;
+      max-width: 720px;
+    }
+
+    .note {
+      max-width: 390px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .carousel {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(240px, 1fr));
+      gap: 18px;
+      overflow-x: auto;
+      padding: 6px 4px 22px;
+      scroll-snap-type: x mandatory;
+      max-width: 100%;
+    }
+
+    .card {
+      position: relative;
+      width: min(72vw, 320px);
+      aspect-ratio: 4 / 5;
+      flex: none;
+      overflow: hidden;
+      border-radius: 24px;
+      background: var(--cream);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 50px rgba(23, 22, 21, 0.14);
+      scroll-snap-align: start;
+    }
+
+    .card::after {
+      content: attr(data-role);
+      position: absolute;
+      right: 18px;
+      bottom: 16px;
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(23, 22, 21, 0.36);
+    }
+
+    .num {
+      position: absolute;
+      z-index: 3;
+      top: 18px;
+      left: 18px;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: rgba(23, 22, 21, 0.72);
+    }
+
+    .photo {
+      position: absolute;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 40% 26%, rgba(255,255,255,0.88), transparent 0 18%, transparent 31%),
+        linear-gradient(140deg, #d8c8ba, #f7f1e9 48%, #a7ad9c);
+    }
+
+    .photo::before {
+      content: "safe image slot";
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(23, 22, 21, 0.42);
+    }
+
+    .photo::after {
+      content: "";
+      position: absolute;
+      inset: 24% 30% 0;
+      border-radius: 999px 999px 24px 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.48), rgba(44,43,38,0.12));
+      transform: skewX(-4deg);
+    }
+
+    .headline {
+      position: absolute;
+      z-index: 4;
+      margin: 0;
+      font-size: 35px;
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 850;
+    }
+
+    .caption {
+      position: absolute;
+      z-index: 4;
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.35;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+
+    .micro {
+      position: absolute;
+      z-index: 4;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(23, 22, 21, 0.48);
+    }
+
+    .cover { background: #f7f1e8; }
+    .cover .photo { inset: 20px 20px 178px; border-radius: 20px; }
+    .cover .headline { left: 22px; right: 22px; bottom: 64px; font-size: 39px; }
+    .cover .caption { left: 22px; right: 84px; bottom: 32px; color: var(--muted); }
+
+    .index { background: var(--charcoal); color: #f7f1e8; }
+    .index .num, .index .micro, .index::after { color: rgba(247,241,232,0.52); }
+    .index .headline { left: 24px; top: 76px; right: 24px; color: #f7f1e8; }
+    .index-list { position: absolute; left: 24px; right: 24px; bottom: 54px; display: grid; gap: 12px; }
+    .index-item { display: flex; justify-content: space-between; border-top: 1px solid rgba(247,241,232,0.2); padding-top: 12px; font-size: 15px; }
+    .index-item span:last-child { color: rgba(247,241,232,0.55); }
+
+    .look-a .photo { inset: 56px 18px 116px; border-radius: 160px 160px 22px 22px; background: linear-gradient(145deg, #e8ddd1, #a8ad9d); }
+    .look-a .headline { left: 22px; right: 50px; bottom: 56px; }
+    .look-a .caption { left: 22px; right: 38px; bottom: 28px; color: var(--muted); }
+
+    .detail { background: #efe7dd; }
+    .detail .headline { left: 22px; top: 64px; right: 22px; }
+    .detail-grid { position: absolute; left: 22px; right: 22px; bottom: 58px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-slot { height: 122px; border-radius: 18px; background: linear-gradient(135deg, #fff9ef, #b6ab9d); position: relative; overflow: hidden; }
+    .detail-slot::after { content: attr(data-label); position: absolute; left: 12px; bottom: 10px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(23,22,21,.48); }
+
+    .look-b { background: #f8f6ef; }
+    .look-b .photo.large { inset: 24px 24px 160px 102px; border-radius: 22px; background: linear-gradient(135deg, #d4d9cf, #fbf6ec); }
+    .look-b .photo.small { inset: 206px 168px 44px 22px; border-radius: 18px; background: linear-gradient(145deg, #b7aa9a, #fff9ef); }
+    .look-b .headline { left: 22px; right: 24px; bottom: 82px; }
+    .look-b .caption { left: 148px; right: 22px; bottom: 38px; color: var(--muted); }
+
+    .checklist { background: #f5efe4; }
+    .checklist .headline { left: 22px; top: 58px; right: 22px; }
+    .rules { position: absolute; left: 22px; right: 22px; bottom: 52px; display: grid; gap: 10px; }
+    .rule { border-top: 1px solid var(--line); padding-top: 12px; font-size: 16px; line-height: 1.35; letter-spacing: -0.035em; }
+    .rule em { color: var(--accent); font-style: normal; font-weight: 800; }
+
+    .outro { background: #191817; color: #f8f1e8; }
+    .outro .num, .outro .micro, .outro::after { color: rgba(248,241,232,.5); }
+    .outro .photo { inset: 22px 22px 118px; border-radius: 20px; opacity: .58; filter: grayscale(.2); }
+    .outro .headline { left: 22px; right: 22px; bottom: 68px; color: #f8f1e8; }
+    .outro .caption { left: 22px; right: 22px; bottom: 32px; color: rgba(248,241,232,.68); }
+
+    footer {
+      max-width: 1480px;
+      margin: 24px auto 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 900px) {
+      .stage-header { display: block; }
+      .note { margin-top: 16px; }
+      .carousel { grid-template-columns: repeat(7, minmax(260px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" data-od-id="fashion-cardnews-stage">
+    <header class="stage-header">
+      <div>
+        <p class="eyebrow">Fashion Cardnews · 1080×1350 System</p>
+        <h1>낮엔 덥고<br />실내는 추운 날</h1>
+      </div>
+      <p class="note">Public-safe example using placeholder image slots only. Replace slots with approved campaign imagery in a private workspace before publishing.</p>
+    </header>
+
+    <section class="carousel" aria-label="Fashion cardnews example carousel">
+      <article class="card cover" data-role="cover" data-od-id="card-cover">
+        <div class="num">01 / 07</div>
+        <div class="photo" data-od-id="cover-image"></div>
+        <h2 class="headline" data-od-id="cover-headline">얇은 한 장<br />3가지 공식</h2>
+        <p class="caption">출근길부터 사무실 냉방까지</p>
+      </article>
+
+      <article class="card index" data-role="index" data-od-id="card-index">
+        <div class="num">02 / 07</div>
+        <p class="micro" style="left:24px;top:48px">30-sec checklist</p>
+        <h2 class="headline" data-od-id="index-headline">고를 때는<br />이 순서로</h2>
+        <div class="index-list">
+          <div class="index-item"><strong>01 소재</strong><span>가볍게 접히는지</span></div>
+          <div class="index-item"><strong>02 핏</strong><span>어깨선이 무겁지 않은지</span></div>
+          <div class="index-item"><strong>03 색</strong><span>안에 입은 톤과 이어지는지</span></div>
+        </div>
+      </article>
+
+      <article class="card look-a" data-role="look" data-od-id="card-look-01">
+        <div class="num">ITEM 01</div>
+        <div class="photo" data-od-id="look-01-image"></div>
+        <h2 class="headline" data-od-id="look-01-headline">셔츠처럼<br />걸치는 니트</h2>
+        <p class="caption">단추를 열어두면 답답함이 덜함</p>
+      </article>
+
+      <article class="card detail" data-role="detail" data-od-id="card-detail">
+        <div class="num">04 / 07</div>
+        <h2 class="headline" data-od-id="detail-headline">가까이 봐야<br />보이는 것들</h2>
+        <div class="detail-grid">
+          <div class="detail-slot" data-label="rib texture" data-od-id="detail-texture"></div>
+          <div class="detail-slot" data-label="neckline" data-od-id="detail-neckline"></div>
+          <div class="detail-slot" data-label="hem line" data-od-id="detail-hem"></div>
+          <div class="detail-slot" data-label="soft fold" data-od-id="detail-fold"></div>
+        </div>
+      </article>
+
+      <article class="card look-b" data-role="look" data-od-id="card-look-02">
+        <div class="num">ITEM 02</div>
+        <div class="photo large" data-od-id="look-02-image-main"></div>
+        <div class="photo small" data-od-id="look-02-image-crop"></div>
+        <h2 class="headline" data-od-id="look-02-headline">밝은 상의엔<br />흐린 카키</h2>
+        <p class="caption">색을 낮추면 전체가 차분해짐</p>
+      </article>
+
+      <article class="card checklist" data-role="checklist" data-od-id="card-checklist">
+        <div class="num">06 / 07</div>
+        <h2 class="headline" data-od-id="checklist-headline">저장 전에<br />세 가지만</h2>
+        <div class="rules">
+          <div class="rule"><em>하나.</em> 손에 들었을 때 가벼운지</div>
+          <div class="rule"><em>둘.</em> 의자에 앉아도 구김이 자연스러운지</div>
+          <div class="rule"><em>셋.</em> 벗었을 때도 룩이 남는지</div>
+        </div>
+      </article>
+
+      <article class="card outro" data-role="outro" data-od-id="card-outro">
+        <div class="num">07 / 07</div>
+        <div class="photo" data-od-id="outro-collage"></div>
+        <h2 class="headline" data-od-id="outro-headline">다음 냉방룩도<br />이 기준으로</h2>
+        <p class="caption">저장해두고 아침에 다시 보기</p>
+      </article>
+    </section>
+
+    <footer>
+      Asset boundary: this example uses CSS placeholders only. Keep live post images,
+      captions, upload logs, and performance data in a private content workspace.
+    </footer>
+  </main>
+</body>
+</html>
