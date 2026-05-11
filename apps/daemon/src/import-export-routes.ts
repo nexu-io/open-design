@@ -420,6 +420,15 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         relPath,
         fileReader,
       );
+      // PR #1312 round-2 (lefarcen P2): top-level browser navigation to
+      // this URL sends no Origin header, so the /api middleware lets it
+      // through. Without a CSP, any JS in the exported document would
+      // run at daemon origin with access to /api/, cookies, localStorage,
+      // etc. `sandbox allow-scripts` treats the response like a sandboxed
+      // iframe with an opaque origin — scripts execute (that's the point
+      // of inlining JS for screenshot tooling), but cannot read cookies,
+      // hit /api/, or escalate to daemon-origin privileges.
+      res.setHeader('Content-Security-Policy', 'sandbox allow-scripts');
       res.type('text/html').send(rendered);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
