@@ -161,6 +161,33 @@ describe('inlineRelativeAssets', () => {
     expect(out).not.toContain(`data-od-inline-asset="${href}"`);
   });
 
+  it('preserves <link> attrs (media, title, disabled, nonce) on the generated <style> tag', async () => {
+    // PR #1312 round-2 (lefarcen P2 @ inline-assets.ts:44): a stylesheet
+    // <link> with `media="print"` was becoming a plain <style> with no
+    // media query, so print-only styles applied unconditionally. Same
+    // problem for `title` (alternate stylesheet sets), `disabled`
+    // (initial disabled state), `nonce` (CSP nonce). All four are valid
+    // attributes on both <link rel=stylesheet> and <style> per HTML
+    // spec, so the inliner should copy them across.
+    const html =
+      '<link rel="stylesheet" href="print.css" media="print" title="Print">' +
+      '<link rel="stylesheet" href="alt.css" disabled>' +
+      '<link rel="stylesheet" href="csp.css" nonce="abc123">';
+    const out = await inlineRelativeAssets(
+      html,
+      'index.html',
+      readerFrom({
+        'print.css': '.p{}',
+        'alt.css': '.a{}',
+        'csp.css': '.c{}',
+      }),
+    );
+    expect(out).toMatch(/<style\b[^>]*\bmedia="print"[^>]*>[\s\S]*?\.p\{\}/);
+    expect(out).toMatch(/<style\b[^>]*\btitle="Print"[^>]*>[\s\S]*?\.p\{\}/);
+    expect(out).toMatch(/<style\b[^>]*\bdisabled\b[^>]*>[\s\S]*?\.a\{\}/);
+    expect(out).toMatch(/<style\b[^>]*\bnonce="abc123"[^>]*>[\s\S]*?\.c\{\}/);
+  });
+
   it('resolves deep-nested owner (a/b/c/index.html + ../../shared/util.js)', async () => {
     const out = await inlineRelativeAssets(
       '<script src="../../shared/util.js"></script>',
