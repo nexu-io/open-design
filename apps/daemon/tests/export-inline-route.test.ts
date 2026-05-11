@@ -170,6 +170,41 @@ describe('inlineRelativeAssets', () => {
     expect(out).toContain('DEEP');
     expect(out).not.toContain('src="../../shared/util.js"');
   });
+
+  it('does not re-replace a tag literal that appears inside an already-inlined asset body', async () => {
+    // Regression for nexu-io/open-design#1312 review feedback (Siri-Ray
+    // looper + codex bot): the previous reduce/split-join approach
+    // re-scanned the progressively mutated HTML, so a tag literal that
+    // happened to appear inside an inlined asset body got the inner
+    // literal also replaced — corrupting the body.
+    //
+    // The reproducer uses two <link rel=stylesheet> tags where a.css's
+    // body contains the literal text of b.css's <link> tag (e.g. inside
+    // a CSS comment or content: declaration). The </style escape on
+    // CSS bodies doesn't touch <link>, so split/join over the mutated
+    // HTML finds the literal inside a.css's inline body and replaces
+    // it on the second pass — injecting b.css's inline body where the
+    // literal comment text used to be.
+    const html =
+      '<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="b.css">';
+    const aCssBody = '/* see also <link rel="stylesheet" href="b.css"> */';
+    const bCssBody = 'body{color:red}';
+    const out = await inlineRelativeAssets(
+      html,
+      'index.html',
+      readerFrom({ 'a.css': aCssBody, 'b.css': bCssBody }),
+    );
+    // The literal <link> string inside a.css's comment must survive
+    // verbatim — position-based replacement only touches the original
+    // outer-tag spans, not text introduced by earlier replacements.
+    expect(out).toContain('/* see also <link rel="stylesheet" href="b.css"> */');
+    // b.css's body is inlined exactly once, at the real outer tag's
+    // position — not injected inside a.css's inline body.
+    expect(out.match(/body\{color:red\}/g)?.length).toBe(1);
+    // Neither original outer <link href="…"> survives as a URL ref.
+    expect(out).not.toMatch(/<link\b[^>]*\bhref="a\.css"/);
+    expect(out).not.toMatch(/<link\b[^>]*\bhref="b\.css"(?![^<]*\*\/)/);
+  });
 });
 
 // ---------------------------------------------------------------------------
