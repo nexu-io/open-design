@@ -44,4 +44,50 @@ describe('<InterruptButton> (Phase 8)', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onInterrupt).not.toHaveBeenCalled();
   });
+
+  it('ignores Escape when focus is inside a textarea (lefarcen P2 on PR #1315)', () => {
+    // Previously the Esc handler fired regardless of focus, so
+    // pressing Escape while typing in the prompt textarea or any
+    // other text-entry field would cancel the in-flight critique by
+    // accident.
+    const onInterrupt = vi.fn();
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+    textarea.focus();
+    render(<InterruptButton onInterrupt={onInterrupt} />);
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(onInterrupt).not.toHaveBeenCalled();
+    document.body.removeChild(textarea);
+  });
+
+  it('ignores Escape when focus is inside an input', () => {
+    const onInterrupt = vi.fn();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    render(<InterruptButton onInterrupt={onInterrupt} />);
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onInterrupt).not.toHaveBeenCalled();
+    document.body.removeChild(input);
+  });
+
+  it('ignores Escape when focus is inside a contenteditable surface', () => {
+    const onInterrupt = vi.fn();
+    const editor = document.createElement('div');
+    editor.setAttribute('contenteditable', 'true');
+    document.body.appendChild(editor);
+    editor.focus();
+    render(<InterruptButton onInterrupt={onInterrupt} />);
+    fireEvent.keyDown(editor, { key: 'Escape' });
+    expect(onInterrupt).not.toHaveBeenCalled();
+    document.body.removeChild(editor);
+  });
+
+  it('still fires Escape when focus is on a non-text element', () => {
+    const onInterrupt = vi.fn();
+    render(<InterruptButton onInterrupt={onInterrupt} />);
+    // Body-level focus (no text input) still triggers the keybind.
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onInterrupt).toHaveBeenCalledTimes(1);
+  });
 });

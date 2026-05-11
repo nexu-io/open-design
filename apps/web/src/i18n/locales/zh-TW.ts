@@ -1052,7 +1052,7 @@ export const zhTW: Dict = {
   'sketch.textPrompt': '請輸入文字：',
   'sketch.textModalTitle': '新增文字',
 
-  'critiqueTheater.title': '設計評審團',
+  'critiqueTheater.userFacingName': '設計評審團',
   'critiqueTheater.roleDesigner': '設計師',
   'critiqueTheater.roleCritic': '評審',
   'critiqueTheater.roleBrand': '品牌',

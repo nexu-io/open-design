@@ -987,7 +987,7 @@ export const ko: Dict = {
   'sketch.textPrompt': '텍스트:',
   'sketch.textModalTitle': '텍스트 추가',
 
-  'critiqueTheater.title': '디자인 배심',
+  'critiqueTheater.userFacingName': '디자인 배심',
   'critiqueTheater.roleDesigner': '디자이너',
   'critiqueTheater.roleCritic': '평론가',
   'critiqueTheater.roleBrand': '브랜드',

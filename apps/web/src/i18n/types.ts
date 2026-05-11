@@ -1470,7 +1470,7 @@ export interface Dict {
   'sketch.textPrompt': string;
   'sketch.textModalTitle': string;
   // Critique Theater (Phase 8 components; Phase 9 fills non-English locales)
-  'critiqueTheater.title': string;
+  'critiqueTheater.userFacingName': string;
   'critiqueTheater.roleDesigner': string;
   'critiqueTheater.roleCritic': string;
   'critiqueTheater.roleBrand': string;

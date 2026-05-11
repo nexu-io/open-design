@@ -875,7 +875,7 @@ export const de: Dict = {
   'sketch.textPrompt': 'Text:',
   'sketch.textModalTitle': 'Text hinzufügen',
 
-  'critiqueTheater.title': 'Design-Jury',
+  'critiqueTheater.userFacingName': 'Design-Jury',
   'critiqueTheater.roleDesigner': 'Designer',
   'critiqueTheater.roleCritic': 'Kritiker',
   'critiqueTheater.roleBrand': 'Marke',

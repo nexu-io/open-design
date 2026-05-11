@@ -41,11 +41,11 @@ export function TheaterStage({ state, onInterrupt, interruptPending = false }: P
     <section
       className="theater-stage"
       role="region"
-      aria-label={t('critiqueTheater.title')}
+      aria-label={t('critiqueTheater.userFacingName')}
       data-phase="running"
     >
       <header className="theater-stage-head">
-        <h3 className="theater-stage-title">{t('critiqueTheater.title')}</h3>
+        <h3 className="theater-stage-title">{t('critiqueTheater.userFacingName')}</h3>
         <InterruptButton pending={interruptPending} onInterrupt={onInterrupt} />
       </header>
       <ScoreTicker rounds={rounds} threshold={config.threshold} scale={config.scale} />

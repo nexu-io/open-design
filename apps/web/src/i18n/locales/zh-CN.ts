@@ -1059,7 +1059,7 @@ export const zhCN: Dict = {
   'sketch.textPrompt': '请输入文本：',
   'sketch.textModalTitle': '添加文本',
 
-  'critiqueTheater.title': '设计评审团',
+  'critiqueTheater.userFacingName': '设计评审团',
   'critiqueTheater.roleDesigner': '设计师',
   'critiqueTheater.roleCritic': '评审',
   'critiqueTheater.roleBrand': '品牌',

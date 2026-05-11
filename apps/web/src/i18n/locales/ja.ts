@@ -874,7 +874,7 @@ export const ja: Dict = {
   'sketch.textPrompt': 'テキスト:',
   'sketch.textModalTitle': 'テキストを追加',
 
-  'critiqueTheater.title': 'デザイン陪審',
+  'critiqueTheater.userFacingName': 'デザイン陪審',
   'critiqueTheater.roleDesigner': 'デザイナー',
   'critiqueTheater.roleCritic': '批評家',
   'critiqueTheater.roleBrand': 'ブランド',

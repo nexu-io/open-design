@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CritiqueTheaterMount } from '../../../src/components/Theater/CritiqueTheaterMount';
 import type { CritiqueAction } from '../../../src/components/Theater/state/reducer';
@@ -110,5 +110,122 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
       <CritiqueTheaterMount projectId="p-1" enabled={false} connectionFactory={factory} />,
     );
     expect(handles[0]!.closed).toBe(true);
+  });
+
+  it('POSTs to the daemon interrupt endpoint on Interrupt click (PR #1315 review)', () => {
+    // Lefarcen + codex P1: the previous revision did the optimistic
+    // local dispatch only, so the daemon-side run kept running while
+    // the UI ignored the real terminal event. Fire the kill request
+    // alongside the optimistic dispatch.
+    const { factory, handles } = makeFactory();
+    const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchInterrupt = vi.fn(async (url: string, init: RequestInit) => {
+      fetchCalls.push({ url, init });
+      return new Response(null, { status: 204 });
+    });
+    render(
+      <CritiqueTheaterMount
+        projectId="proj-42"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={fetchInterrupt}
+      />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-abc',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+
+    expect(fetchInterrupt).toHaveBeenCalledTimes(1);
+    expect(fetchCalls[0]!.url).toBe(
+      '/api/projects/proj-42/critique/run-abc/interrupt',
+    );
+    expect(fetchCalls[0]!.init.method).toBe('POST');
+  });
+
+  it('swallows a rejected interrupt fetch and still moves the UI to interrupted', () => {
+    // If the daemon endpoint has not landed yet (Phase 15), the
+    // user's click should still flip the UI; the warning surfaces
+    // on the dev console rather than tearing the React tree.
+    const { factory, handles } = makeFactory();
+    const fetchInterrupt = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    render(
+      <CritiqueTheaterMount
+        projectId="proj-1"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={fetchInterrupt}
+      />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-abc',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    // Optimistic dispatch already fired so the collapsed surface
+    // mounts in place of the live stage.
+    expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+  });
+
+  it('resets interruptPending when a fresh run starts after an interrupt (codex P2 on PR #1315)', () => {
+    // Previously `interruptPending` stayed true forever once clicked,
+    // so a second run on the same mount would render the kill
+    // button stuck in the "Interrupting…" state.
+    const { factory, handles } = makeFactory();
+    render(
+      <CritiqueTheaterMount
+        projectId="proj-1"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={vi.fn(async () => new Response(null, { status: 204 }))}
+      />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-1',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+
+    // Daemon emits a fresh run_started for the next rerun. The
+    // collapsed badge should give way to a live stage with a fresh
+    // Interrupt button that is NOT pending.
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-2',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+    const btn = screen.getByRole('button', { name: 'Interrupt' }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
   });
 });
