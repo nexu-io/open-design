@@ -601,6 +601,41 @@ describe('media-config model alias resolution (issue #1277)', () => {
     });
   });
 
+  it('readMaskedConfig surfaces the alias map for the Settings UI', async () => {
+    // Lefarcen P3 (#1309 review): the prior PR description claimed
+    // `readAliasMap` was the daemon-public API for the Settings UI,
+    // but the HTTP route returned only `readMaskedConfig` (which
+    // had no aliases field). The fix wires aliases into the GET
+    // response so a future Settings UI PR can consume them without
+    // touching the daemon.
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'dall-e-3': 'azure-dalle3' },
+    });
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'gpt-4o-mini-tts': 'custom-tts',
+    });
+
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(masked.aliases.stored).toEqual({ 'dall-e-3': 'azure-dalle3' });
+    expect(masked.aliases.env).toEqual({ 'gpt-4o-mini-tts': 'custom-tts' });
+    expect(masked.aliases.effective).toEqual({
+      'dall-e-3': 'azure-dalle3',
+      'gpt-4o-mini-tts': 'custom-tts',
+    });
+  });
+
+  it('readMaskedConfig returns empty alias maps when no aliases are configured', async () => {
+    // Settings UI needs a stable shape so it can render "no aliases
+    // configured" without crashing on `aliases.effective` being
+    // undefined.
+    const masked = await readMaskedConfig(projectRoot);
+    expect(masked.aliases.effective).toEqual({});
+    expect(masked.aliases.env).toEqual({});
+    expect(masked.aliases.stored).toEqual({});
+  });
+
   it('writeConfig preserves aliases when a Settings-style provider PUT lands', async () => {
     // The Settings UI in its current shape writes providers only.
     // Without alias preservation, every provider edit would wipe the

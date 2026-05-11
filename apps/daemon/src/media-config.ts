@@ -353,9 +353,20 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
  * frontend can show "••••" + a "configured" indicator without leaking
  * the secret back into the DOM.
  */
-export async function readMaskedConfig(projectRoot: string): Promise<{ providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }> }> {
+export interface MaskedConfigResponse {
+  providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }>;
+  /**
+   * Effective alias map plus source attribution. The Settings UI can
+   * show "from env" vs "from media-config.json" badges next to each
+   * entry without needing a second endpoint. Empty maps mean no
+   * aliases are configured (issue #1277).
+   */
+  aliases: { effective: ModelAliasMap; env: ModelAliasMap; stored: ModelAliasMap };
+}
+
+export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfigResponse> {
   const stored = await readStored(projectRoot);
-  const providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }> = {};
+  const providers: MaskedConfigResponse['providers'] = {};
   for (const id of PROVIDER_IDS) {
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
@@ -377,7 +388,8 @@ export async function readMaskedConfig(projectRoot: string): Promise<{ providers
         : {}),
     };
   }
-  return { providers };
+  const aliases = await readAliasMap(projectRoot);
+  return { providers, aliases };
 }
 
 /**
