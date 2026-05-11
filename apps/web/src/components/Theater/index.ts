@@ -8,6 +8,7 @@
  * the canonical mount surface narrow so adding/removing internals
  * does not churn callers.
  */
+export { CritiqueTheaterMount } from './CritiqueTheaterMount';
 export { TheaterStage } from './TheaterStage';
 export { TheaterCollapsed } from './TheaterCollapsed';
 export { TheaterDegraded } from './TheaterDegraded';
