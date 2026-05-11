@@ -1324,6 +1324,56 @@ code {
 }
 .mention-meta { color: var(--text-muted); font-size: 10px; flex-shrink: 0; }
 
+/* Section header inside the @-popover when both skills and files appear. */
+.mention-section-head {
+  padding: 6px 10px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.mention-skill-item { flex-direction: column; align-items: flex-start; gap: 2px; }
+.mention-skill-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.mention-skill-row code { flex: none; font-size: 11px; }
+.mention-skill-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mention-skill-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Staged skill chips above the textarea. Reuse the staged-chip baseline
+   so they line up with attachment chips. */
+.staged-skills-row { gap: 6px; flex-wrap: wrap; }
+.staged-chip.staged-skill {
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-subtle));
+  border-color: color-mix(in oklab, var(--accent) 28%, var(--border));
+}
+.staged-chip.staged-skill .staged-icon { color: var(--accent); }
+.staged-chip.staged-skill-user {
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-subtle));
+}
+
 /* ===========================================================
    Modal / Settings
    =========================================================== */
@@ -7935,6 +7985,12 @@ button.connector-action.is-loading {
 .df-preview-thumb video {
   width: 100%; height: 100%; border: none; background: white; object-fit: cover; display: block;
 }
+.df-preview-thumb .sketch-preview,
+.df-preview-thumb .sketch-preview svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .df-preview-thumb audio {
   width: calc(100% - 24px);
   position: absolute;
@@ -9437,6 +9493,33 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: white;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+.sketch-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.sketch-preview svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview.loading {
+  background:
+    radial-gradient(circle at 8px 8px, #d7d4ce 1px, transparent 1px),
+    #f7f5f1;
+  background-size: 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview-empty-mark path {
+  stroke: #bfbcb6;
+  stroke-width: 6;
+  stroke-linecap: round;
+  fill: none;
 }
 
 /* Sketch editor */
@@ -14472,6 +14555,78 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text);
 }
 
+.library-card-badge-user {
+  background: color-mix(in oklab, var(--accent) 16%, var(--bg-subtle));
+  color: var(--text);
+}
+
+.library-card-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+.library-card-delete:hover {
+  background: color-mix(in oklab, #ef4444 18%, transparent);
+  color: #ef4444;
+}
+
+.library-import-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-import-form {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  display: grid;
+  gap: 10px;
+}
+.library-import-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.library-import-row label,
+.library-import-block {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.library-import-row input,
+.library-import-block input,
+.library-import-block textarea {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-family: inherit;
+  resize: vertical;
+}
+.library-import-block textarea {
+  min-height: 60px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.library-import-error {
+  color: #ef4444;
+  font-size: 12px;
+}
+.library-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .library-ds-card {
   position: relative;
   display: flex;
@@ -15940,6 +16095,322 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .mcp-oauth-fallback .md-link:hover {
   text-decoration-thickness: 2px;
+}
+
+/* Settings → Skills (functional) row stack.
+   Mirrors the External MCP servers panel: a vertical list of
+   collapsible rows. Each row's header is always visible; SKILL.md
+   preview, file tree and inline edit form expand only on demand. The
+   single-column layout avoids the cramped left/right split the
+   previous version produced inside the narrow settings content
+   column. */
+.settings-skills .skills-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+.settings-skills .skills-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.settings-skills .skills-row {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+.settings-skills .skills-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  transition: background-color 140ms ease;
+  pointer-events: none;
+}
+.settings-skills .skills-row:hover {
+  border-color: var(--border-strong, var(--border));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.settings-skills .skills-row-expanded {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong, var(--border));
+}
+.settings-skills .skills-row-expanded::before {
+  background: var(--accent);
+}
+.settings-skills .skills-row-editing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.settings-skills .skills-row-disabled { opacity: 0.55; }
+
+.settings-skills .skills-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  min-width: 0;
+}
+.settings-skills .skills-row-summary-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.settings-skills .skills-row-summary-btn:hover .skills-row-summary-name {
+  color: var(--accent);
+}
+.settings-skills .skills-row-summary-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.settings-skills .skills-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.settings-skills .skills-row-expanded .skills-row-icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.settings-skills .skills-row-summary {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-skills .skills-row-summary-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-skills .skills-row-summary-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  transition: color 120ms ease;
+}
+.settings-skills .skills-row-summary-mode,
+.settings-skills .skills-row-summary-source,
+.settings-skills .skills-row-summary-category {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  font-weight: 500;
+}
+.settings-skills .skills-row-summary-source {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.settings-skills .skills-row-summary-category {
+  /* Soft tinted pill so the category is visually distinct from the
+   * mode pill but still subordinate to the skill name. Falls back to a
+   * neutral border when --accent-2 is not defined by the active theme. */
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.settings-skills .skills-row-summary-desc {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.settings-skills .skills-row-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--text-faint);
+  transition: transform 160ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+.settings-skills .skills-row-summary-btn:hover .skills-row-chevron {
+  color: var(--text-muted);
+}
+.settings-skills .skills-row-expanded .skills-row-chevron {
+  transform: rotate(180deg);
+  color: var(--text-muted);
+}
+
+.settings-skills .skills-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.settings-skills .skills-row-actions .icon-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+}
+.settings-skills .skills-row-actions .icon-btn:hover {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+.settings-skills .skills-row-enable {
+  margin-left: 4px;
+}
+.settings-skills .skills-delete-confirm {
+  display: inline-flex;
+  gap: 6px;
+}
+.settings-skills .skills-delete-confirm .btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.settings-skills .skills-row-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 14px 14px;
+  border-top: 1px dashed var(--border);
+  margin: 0 4px;
+}
+.settings-skills .skills-row-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-skills .skills-row-section h5 {
+  margin: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.settings-skills .skills-row-section .library-preview-body {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.settings-skills .skills-file-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-y: auto;
+  max-height: 240px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.settings-skills .skills-file-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+.settings-skills .skills-file-entry-directory {
+  color: var(--text);
+  font-weight: 500;
+}
+.settings-skills .skills-file-size {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.settings-skills > .skills-draft {
+  margin: 0;
+}
+.settings-skills .skills-row > .skills-draft {
+  border: none;
+  border-top: 1px dashed var(--border);
+  border-radius: 0 0 10px 10px;
+  margin: 0;
+  background: transparent;
+}
+.settings-skills .skills-draft .skills-draft-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.settings-skills .skills-draft .skills-draft-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-skills .skills-draft .skills-draft-sub {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--mono);
 }
 
 .mcp-json-helper {

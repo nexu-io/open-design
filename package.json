@@ -13,16 +13,19 @@
     "postinstall": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
+    "tools-pr": "pnpm exec tools-pr",
     "guard": "tsx ./scripts/guard.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
     "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
     "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
+    "seed:curated-design-skills": "node --experimental-strip-types scripts/seed-curated-design-skills.ts",
     "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
+    "@open-design/tools-pr": "workspace:*",
     "@types/node": "^20.17.10",
     "tsx": "4.21.0",
     "typescript": "^5.6.3"

@@ -23,6 +23,7 @@ import {
   deletePreviewComment,
   fetchPreviewComments,
   fetchDesignSystem,
+  fetchDesignTemplate,
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchSkill,
@@ -110,7 +111,17 @@ interface Props {
   routeFileName: string | null;
   config: AppConfig;
   agents: AgentInfo[];
+  // Mentionable functional skills — already filtered by config.disabledSkills
+  // upstream, so this drives only the chat composer's @-picker scope. For
+  // resolving an existing project's `skillId` (which can also point at a
+  // design template after the skills/design-templates split) use
+  // `designTemplates` as a fallback in composedSystemPrompt() and in the
+  // skill-name / skill-mode lookups below.
   skills: SkillSummary[];
+  // All known design templates (unfiltered). Required so projects created
+  // from the Templates surface keep composing the template body in API
+  // mode even when the user later disables the template in Settings.
+  designTemplates: SkillSummary[];
   designSystems: DesignSystemSummary[];
   daemonLive: boolean;
   onModeChange: (mode: AppConfig['mode']) => void;
@@ -285,6 +296,7 @@ export function ProjectView({
   config,
   agents,
   skills,
+  designTemplates,
   designSystems,
   daemonLive,
   onModeChange,
@@ -307,7 +319,10 @@ export function ProjectView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
+  const [messagesConversationId, setMessagesConversationId] = useState<string | null>(null);
+  const [failedMessagesConversationId, setFailedMessagesConversationId] = useState<string | null>(null);
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
+  const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
@@ -392,6 +407,28 @@ export function ProjectView({
   // Track which conversation the current messages belong to, so we can
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
+  const creatingConversationRef = useRef(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  const currentConversationHasActiveRun = useMemo(
+    () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
+    [messages],
+  );
+  const currentConversationLoading = Boolean(
+    activeConversationId
+      && messagesConversationId !== activeConversationId
+      && failedMessagesConversationId !== activeConversationId,
+  );
+  const currentConversationStreaming = streaming;
+  const currentConversationBusy = currentConversationLoading
+    || currentConversationStreaming
+    || currentConversationHasActiveRun;
+  const currentConversationSendDisabled = currentConversationLoading
+    || currentConversationHasActiveRun
+    || failedMessagesConversationId === activeConversationId;
+  const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
+  const newConversationDisabled = creatingConversation;
+  const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
+  const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
   // Load conversations on project switch. If none exist (older projects
   // pre-conversations, or a freshly created one whose default seed got
@@ -400,6 +437,9 @@ export function ProjectView({
     let cancelled = false;
     setConversations([]);
     setActiveConversationId(null);
+    setMessagesConversationId(null);
+    setFailedMessagesConversationId(null);
+    setMessageLoadRetryNonce(0);
     setConversationLoadError(null);
     setMessages([]);
     setPreviewComments([]);
@@ -452,29 +492,61 @@ export function ProjectView({
       setMessages([]);
       setPreviewComments([]);
       setAttachedComments([]);
+      setMessagesConversationId(null);
+      setFailedMessagesConversationId(null);
       messagesConversationIdRef.current = null;
+      setStreaming(false);
       return;
     }
     let cancelled = false;
+    setMessages([]);
+    setPreviewComments([]);
+    setAttachedComments([]);
+    setArtifact(null);
+    setMessagesConversationId(null);
+    setFailedMessagesConversationId(null);
+    setStreaming(false);
+    savedArtifactRef.current = null;
+    pendingWritesRef.current.clear();
+    if (messagesConversationIdRef.current !== activeConversationId) {
+      messagesConversationIdRef.current = null;
+    }
     (async () => {
-      const [list, comments] = await Promise.all([
-        listMessages(project.id, activeConversationId),
-        fetchPreviewComments(project.id, activeConversationId),
-      ]);
-      if (cancelled) return;
-      setMessages(list);
-      setPreviewComments(comments);
-      setAttachedComments([]);
-      setArtifact(null);
-      setError(null);
-      savedArtifactRef.current = null;
-      pendingWritesRef.current.clear();
-      messagesConversationIdRef.current = activeConversationId;
+      try {
+        const [list, comments] = await Promise.all([
+          listMessages(project.id, activeConversationId),
+          fetchPreviewComments(project.id, activeConversationId),
+        ]);
+        if (cancelled) return;
+        setMessages(list);
+        setPreviewComments(comments);
+        setAttachedComments([]);
+        setArtifact(null);
+        setError(null);
+        savedArtifactRef.current = null;
+        pendingWritesRef.current.clear();
+        messagesConversationIdRef.current = activeConversationId;
+        setMessagesConversationId(activeConversationId);
+        setFailedMessagesConversationId(null);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Could not load messages for this conversation.';
+        setMessages([]);
+        setPreviewComments([]);
+        setAttachedComments([]);
+        setArtifact(null);
+        setError(message);
+        savedArtifactRef.current = null;
+        pendingWritesRef.current.clear();
+        messagesConversationIdRef.current = null;
+        setMessagesConversationId(null);
+        setFailedMessagesConversationId(activeConversationId);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [project.id, activeConversationId]);
+  }, [project.id, activeConversationId, messageLoadRetryNonce]);
 
   useEffect(() => {
     return () => {
@@ -517,27 +589,13 @@ export function ProjectView({
     reattachTextBuffersRef.current.clear();
   }, []);
 
-  // Detect the streaming `true → false` edge so we can fire the optional
-  // completion sound / desktop notification exactly once per turn. Initial
-  // mount keeps `prevStreamingRef.current = false`, so loading historical
-  // conversations (where `streaming` is also false) never triggers a stray
-  // ding. `messages` is on the dep array so the latest assistant message's
-  // runStatus is visible at the moment we edge-detect; the early-return
-  // guarantees only the edge actually does anything.
-  const prevStreamingRef = useRef(false);
-  useEffect(() => {
-    const wasStreaming = prevStreamingRef.current;
-    prevStreamingRef.current = streaming;
-    if (!(wasStreaming && !streaming)) return;
-
+  const notifyCompletedRun = useCallback((last: ChatMessage) => {
     // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
     // settled — conversation updatedAt almost certainly moved, so
     // recompute DESIGN.md staleness even when the turn produced no
     // file mutations or live artifacts.
     setDesignMdRefreshKey((n) => n + 1);
 
-    const last = [...messages].reverse().find((m) => m.role === 'assistant');
-    if (!last) return;
     const status = last.runStatus;
     if (status !== 'succeeded' && status !== 'failed') return;
 
@@ -571,7 +629,30 @@ export function ProjectView({
         });
       }
     }
-  }, [streaming, messages, config.notifications, t]);
+  }, [config.notifications, t]);
+
+  // Fire completion feedback from assistant run-status transitions rather than
+  // from the local SSE listener state. A run can finish while its conversation
+  // is detached; when the user returns, the terminal status should still produce
+  // the one completion notification for runs this view previously saw active.
+  useEffect(() => {
+    const completedMessages: ChatMessage[] = [];
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      const keys = message.runId ? [message.runId, message.id] : [message.id];
+      if (isActiveRunStatus(message.runStatus)) {
+        for (const key of keys) activeCompletionNotificationRunsRef.current.add(key);
+        continue;
+      }
+      if (message.runStatus !== 'succeeded' && message.runStatus !== 'failed') continue;
+      if (!keys.some((key) => activeCompletionNotificationRunsRef.current.has(key))) continue;
+      if (keys.some((key) => completedNotificationRunsRef.current.has(key))) continue;
+      for (const key of keys) completedNotificationRunsRef.current.add(key);
+      completedMessages.push(message);
+    }
+
+    for (const message of completedMessages) notifyCompletedRun(message);
+  }, [messages, notifyCompletedRun]);
 
   // Hydrate the open-tabs state once per project. After this initial
   // load, every mutation flows through saveTabsState() which keeps DB +
@@ -705,14 +786,21 @@ export function ProjectView({
     let designSystemTitle: string | undefined;
 
     if (project.skillId) {
-      const summary = skills.find((s) => s.id === project.skillId);
+      // project.skillId can resolve to either root after the
+      // skills/design-templates split; check both lists so a template-backed
+      // project keeps composing its template body when running in API mode.
+      const summary =
+        skills.find((s) => s.id === project.skillId) ??
+        designTemplates.find((s) => s.id === project.skillId);
       skillName = summary?.name;
       skillMode = summary?.mode;
       const cached = skillCache.current.get(project.skillId);
       if (cached !== undefined) {
         skillBody = cached;
       } else {
-        const detail = await fetchSkill(project.skillId);
+        const detail =
+          (await fetchSkill(project.skillId)) ??
+          (await fetchDesignTemplate(project.skillId));
         if (detail) {
           skillBody = detail.body;
           skillCache.current.set(project.skillId, detail.body);
@@ -781,6 +869,7 @@ export function ProjectView({
     project.designSystemId,
     project.metadata,
     skills,
+    designTemplates,
     designSystems,
     config.mode,
   ]);
@@ -1126,10 +1215,11 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
-      meta?: { research?: ResearchOptions },
+      meta?: { research?: ResearchOptions; skillIds?: string[] },
     ) => {
       if (!activeConversationId) return;
-      if (streaming) return;
+      if (messagesConversationIdRef.current !== activeConversationId) return;
+      if (currentConversationBusy) return;
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
       setError(null);
       const startedAt = Date.now();
@@ -1173,6 +1263,7 @@ export function ProjectView({
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
       };
+      activeCompletionNotificationRunsRef.current.add(assistantId);
       const nextHistory = [...messages, userMsg];
       setMessages([...nextHistory, assistantMsg]);
       setStreaming(true);
@@ -1346,6 +1437,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 endedAt: Date.now(),
+                runStatus: 'failed',
                 events: [
                   ...(prev.events ?? []),
                   { kind: 'status', label: 'empty_response', detail: config.model },
@@ -1447,6 +1539,7 @@ export function ProjectView({
           assistantMessageId: assistantId,
           clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
+          skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
@@ -1560,7 +1653,7 @@ export function ProjectView({
     [
       attachedComments,
       activeConversationId,
-      streaming,
+      currentConversationBusy,
       messages,
       config,
       agentsById,
@@ -1581,10 +1674,10 @@ export function ProjectView({
 
   const handleSendBoardCommentAttachments = useCallback(
     async (commentAttachments: ChatCommentAttachment[]) => {
-      if (streaming || commentAttachments.length === 0) return;
+      if (currentConversationActionDisabled || commentAttachments.length === 0) return;
       await handleSend('', [], commentAttachments);
     },
-    [handleSend, streaming],
+    [handleSend, currentConversationActionDisabled],
   );
 
   const persistArtifact = useCallback(
@@ -1648,10 +1741,34 @@ export function ProjectView({
       });
       if (file) {
         setFilesRefresh((n) => n + 1);
+        // Surface the daemon's stub-guard warning when it fires in `warn`
+        // mode (the default). Without this the warning would land in the
+        // file metadata silently and the user would never see that the
+        // model shipped a placeholder.
+        if (file.stubGuardWarning) {
+          setError(
+            `Saved "${file.name}", but the model may have shipped a placeholder: ` +
+              `${file.stubGuardWarning.message}`,
+          );
+        }
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
         requestOpenFile(file.name);
+      } else {
+        // writeProjectTextFile collapses non-OK responses (including
+        // 422 ARTIFACT_REGRESSION from reject-mode stub-guard) to null.
+        // Surfacing the structured error requires changing that helper's
+        // return contract for all callers — out of scope here. Until then,
+        // a generic banner makes the failure observable instead of silent.
+        // Allow the user to retry by clearing the saved-artifact ref so a
+        // retry attempt re-enters this code path.
+        savedArtifactRef.current = '';
+        setError(
+          `Couldn't save artifact "${fileName}". The daemon refused the write — ` +
+            'this is most likely OD_ARTIFACT_STUB_GUARD=reject catching a placeholder body. ' +
+            'Check the daemon logs for the structured ARTIFACT_REGRESSION details.',
+        );
       }
     },
     [project.id, projectFiles, requestOpenFile],
@@ -1659,7 +1776,7 @@ export function ProjectView({
 
   const handleContinueRemainingTasks = useCallback(
     (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (streaming || todos.length === 0) return;
+      if (currentConversationActionDisabled || todos.length === 0) return;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -1675,12 +1792,12 @@ export function ProjectView({
         'Update TodoWrite as you complete each remaining task.';
       void handleSend(prompt, [], []);
     },
-    [streaming, handleSend],
+    [currentConversationActionDisabled, handleSend],
   );
 
   const handleExportAsPptx = useCallback(
     (fileName: string) => {
-      if (streaming) return;
+      if (currentConversationActionDisabled) return;
       const baseTitle = fileName.replace(/\.html?$/i, '') || fileName;
       const prompt =
         `Export @${fileName} as an editable PPTX file titled "${baseTitle}".\n\n` +
@@ -1718,7 +1835,7 @@ export function ProjectView({
       };
       void handleSend(prompt, [attachment], []);
     },
-    [streaming, handleSend],
+    [currentConversationActionDisabled, handleSend],
   );
 
   const handleStop = useCallback(() => {
@@ -1760,6 +1877,7 @@ export function ProjectView({
   }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
+    if (creatingConversationRef.current) return;
     // Only block if we're sure the current conversation is empty:
     // messages must be loaded AND match the active conversation.
     if (
@@ -1768,6 +1886,8 @@ export function ProjectView({
     ) {
       return;
     }
+    creatingConversationRef.current = true;
+    setCreatingConversation(true);
     setConversationLoadError(null);
     try {
       const fresh = await createConversation(project.id);
@@ -1775,6 +1895,8 @@ export function ProjectView({
       // Eagerly clear messages and update ref so rapid clicks don't create
       // duplicate empty conversations before the effect resolves.
       setMessages([]);
+      setStreaming(false);
+      setMessagesConversationId(null);
       messagesConversationIdRef.current = fresh.id;
       setConversations((curr) => [fresh, ...curr]);
       setActiveConversationId(fresh.id);
@@ -1783,17 +1905,38 @@ export function ProjectView({
       const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
       setConversationLoadError(message);
       setError(message);
+    } finally {
+      creatingConversationRef.current = false;
+      setCreatingConversation(false);
     }
   }, [project.id, activeConversationId, messages.length]);
 
   const handleSelectConversation = useCallback((id: string) => {
+    if (id === activeConversationId && failedMessagesConversationId !== id) return;
+    setMessages([]);
+    setPreviewComments([]);
+    setAttachedComments([]);
+    setArtifact(null);
+    setStreaming(false);
+    setMessagesConversationId(null);
+    setFailedMessagesConversationId(null);
+    setConversationLoadError(null);
+    messagesConversationIdRef.current = null;
     setActiveConversationId(id);
-  }, []);
+    setMessageLoadRetryNonce((nonce) => nonce + 1);
+  }, [activeConversationId, failedMessagesConversationId]);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
       const ok = await deleteConversationApi(project.id, id);
       if (!ok) return;
+      // The deleted conversation may have owned an unanswered
+      // `<question-form>`, which the daemon counts toward the project's
+      // `needsInput` flag in `/api/projects`. Home cards render that
+      // flag from the cached projects payload, so without refreshing
+      // it here the `Needs input` badge survives the deletion until
+      // the next manual reload.
+      onProjectsRefresh();
       setConversations((curr) => {
         const next = curr.filter((c) => c.id !== id);
         if (next.length === 0) {
@@ -1811,7 +1954,7 @@ export function ProjectView({
         return next;
       });
     },
-    [project.id, activeConversationId],
+    [project.id, activeConversationId, onProjectsRefresh],
   );
 
   const handleRenameConversation = useCallback(
@@ -1837,10 +1980,13 @@ export function ProjectView({
   );
 
   const projectMeta = useMemo(() => {
-    const skill = skills.find((s) => s.id === project.skillId)?.name;
+    const summary =
+      skills.find((s) => s.id === project.skillId) ??
+      designTemplates.find((s) => s.id === project.skillId);
+    const skill = summary?.name;
     const ds = designSystems.find((d) => d.id === project.designSystemId)?.title;
     return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
-  }, [skills, designSystems, project.skillId, project.designSystemId, t]);
+  }, [skills, designTemplates, designSystems, project.skillId, project.designSystemId, t]);
 
   const targetPlatforms = useMemo(() => projectTargetPlatforms(project), [project]);
   const targetPlatformsLabel = targetPlatforms.join(', ');
@@ -1850,8 +1996,10 @@ export function ProjectView({
   const featureChipsLabel = featureChips.map((chip) => chip.label).join(', ');
 
   const isDeck = useMemo(
-    () => skills.find((s) => s.id === project.skillId)?.mode === 'deck',
-    [skills, project.skillId],
+    () =>
+      (skills.find((s) => s.id === project.skillId) ??
+        designTemplates.find((s) => s.id === project.skillId))?.mode === 'deck',
+    [skills, designTemplates, project.skillId],
   );
   const chatResizeLabel = t('project.resizeChatPanel');
   const workspacePanelTrack =
@@ -2263,11 +2411,13 @@ export function ProjectView({
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}`}
               messages={messages}
-              streaming={streaming}
+              streaming={currentConversationStreaming}
+              sendDisabled={currentConversationSendDisabled}
               error={conversationLoadError ?? error}
               projectId={project.id}
               projectFiles={projectFiles}
               projectFileNames={projectFileNames}
+              skills={skills}
               onEnsureProject={handleEnsureProject}
               previewComments={previewComments}
               attachedComments={attachedComments}
@@ -2279,11 +2429,12 @@ export function ProjectView({
               onRequestOpenFile={requestOpenFile}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
-                if (streaming) return;
+                if (currentConversationActionDisabled) return;
                 void handleSend(text, [], []);
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onNewConversation={handleNewConversation}
+              newConversationDisabled={newConversationDisabled}
               conversations={conversations}
               activeConversationId={activeConversationId}
               onSelectConversation={handleSelectConversation}
@@ -2333,7 +2484,7 @@ export function ProjectView({
           }}
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
-          streaming={streaming}
+          streaming={currentConversationActionDisabled}
           openRequest={openRequest}
           liveArtifactEvents={liveArtifactEvents}
           tabsState={openTabsState}

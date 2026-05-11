@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
@@ -9,7 +9,7 @@ import type { ProjectFile, ProjectFileKind } from '../../src/types';
 function extForKind(kind: ProjectFileKind): string {
   if (kind === 'html') return 'html';
   if (kind === 'image') return 'png';
-  if (kind === 'sketch') return 'svg';
+  if (kind === 'sketch') return 'sketch.json';
   if (kind === 'text') return 'txt';
   if (kind === 'code') return 'ts';
   if (kind === 'pdf') return 'pdf';
@@ -400,6 +400,43 @@ describe('DesignFilesPanel large-list regression', () => {
     fireEvent.click(row.querySelector('.df-row-menu')!);
     expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
     expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('renders sketch files with the static sketch preview instead of a broken image', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      version: 1,
+      items: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 16,
+          w: 120,
+          h: 72,
+          color: '#1c1b1a',
+          size: 2,
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const sketchFile = file({
+      name: 'board.sketch.json',
+      path: 'board.sketch.json',
+      kind: 'sketch',
+      mime: 'application/json; charset=utf-8',
+    });
+    const { container } = renderPanel([sketchFile]);
+
+    fireEvent.click(container.querySelector('.df-file-row .df-row-name-btn')!);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeTruthy();
+    });
+    expect(container.querySelector('.df-preview-thumb img')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/test-project/raw/board.sketch.json', { cache: 'no-store' });
   });
 
   it('passes every selected file to batch delete', () => {

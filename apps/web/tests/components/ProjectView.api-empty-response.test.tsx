@@ -9,6 +9,7 @@ import { streamMessage } from '../../src/providers/anthropic';
 import type { StreamHandlers } from '../../src/providers/anthropic';
 import { patchPreviewCommentStatus, writeProjectTextFile } from '../../src/providers/registry';
 import { listMessages, saveMessage } from '../../src/state/projects';
+import { playSound } from '../../src/utils/notifications';
 import type {
   AgentEvent,
   AgentInfo,
@@ -44,6 +45,16 @@ vi.mock('../../src/providers/daemon', () => ({
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
+
+vi.mock('../../src/utils/notifications', async () => {
+  const actual = await vi.importActual<typeof import('../../src/utils/notifications')>(
+    '../../src/utils/notifications',
+  );
+  return {
+    ...actual,
+    playSound: vi.fn(),
+  };
+});
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -142,6 +153,7 @@ const mockedListMessages = vi.mocked(listMessages);
 const mockedSaveMessage = vi.mocked(saveMessage);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
 const mockedPatchPreviewCommentStatus = vi.mocked(patchPreviewCommentStatus);
+const mockedPlaySound = vi.mocked(playSound);
 
 const config: AppConfig = {
   mode: 'api',
@@ -152,6 +164,12 @@ const config: AppConfig = {
   agentId: null,
   skillId: null,
   designSystemId: null,
+  notifications: {
+    soundEnabled: true,
+    successSoundId: 'success-sound',
+    failureSoundId: 'failure-sound',
+    desktopEnabled: false,
+  },
 };
 
 const project: Project = {
@@ -171,6 +189,7 @@ function renderProjectView() {
       config={config}
       agents={[] as AgentInfo[]}
       skills={[] as SkillSummary[]}
+      designTemplates={[] as SkillSummary[]}
       designSystems={[] as DesignSystemSummary[]}
       daemonLive
       onModeChange={vi.fn()}
@@ -195,6 +214,7 @@ describe('ProjectView API empty response handling', () => {
     mockedSaveMessage.mockClear();
     mockedWriteProjectTextFile.mockClear();
     mockedPatchPreviewCommentStatus.mockClear();
+    mockedPlaySound.mockClear();
   });
 
   afterEach(() => {
@@ -228,7 +248,7 @@ describe('ProjectView API empty response handling', () => {
           const message = call[2] as ChatMessage;
           return (
             message.role === 'assistant' &&
-            message.runStatus === undefined &&
+            message.runStatus === 'failed' &&
             message.events?.some(
               (event: AgentEvent) => event.kind === 'status' && event.label === 'empty_response',
             )
@@ -236,6 +256,7 @@ describe('ProjectView API empty response handling', () => {
         }),
       ).toBe(true);
     });
+    expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound');
   });
 
   it('marks attached saved comments as failed when an API completion has no output', async () => {
@@ -277,7 +298,7 @@ describe('ProjectView API empty response handling', () => {
     });
     await waitFor(() => {
       expect(hasSavedAssistantMessage((message) => (
-        message.runStatus === undefined &&
+        message.runStatus === 'failed' &&
         message.events?.some((event) => event.kind === 'status' && event.label === 'empty_response') === true
       ))).toBe(true);
     });
@@ -303,6 +324,27 @@ describe('ProjectView API empty response handling', () => {
       expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
     });
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+  });
+
+  it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('hello');
+      handlers.onDone('hello');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
   });
 
   it('keeps API artifact completions on the succeeded path even when done text is empty', async () => {

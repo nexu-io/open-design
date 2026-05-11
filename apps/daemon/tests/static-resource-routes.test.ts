@@ -40,6 +40,7 @@ describe('static resource mutation routes', () => {
             ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
+            DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             OD_BIN: path.join(tempRoot, 'od'),
             PROJECT_ROOT: tempRoot,
             PROJECTS_DIR: path.join(tempRoot, 'projects'),
@@ -48,6 +49,7 @@ describe('static resource mutation routes', () => {
             RUNTIME_DATA_DIR_CANONICAL: path.join(tempRoot, 'data'),
             SKILLS_DIR: path.join(tempRoot, 'skills'),
             USER_DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'user-design-systems'),
+            USER_DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'user-design-templates'),
             USER_SKILLS_DIR: path.join(tempRoot, 'user-skills'),
           },
           resources: {
@@ -59,6 +61,8 @@ describe('static resource mutation routes', () => {
               catalogReadCount += 1;
               return [];
             },
+            listAllDesignTemplates: async () => [],
+            listAllSkillLikeEntries: async () => [],
             mimeFor: () => 'application/octet-stream',
           },
         });

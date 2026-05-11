@@ -230,6 +230,77 @@ test('BYOK save stays disabled until required fields are valid', async ({ page }
   });
 });
 
+test('BYOK fetch models hydrates model options and reuses cached results', async ({ page }) => {
+  const providerModelRequests: Array<Record<string, unknown>> = [];
+  await page.route('**/api/provider/models', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    providerModelRequests.push(payload);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 15,
+        models: [
+          { id: 'aa-nightly-model', label: 'AA Nightly Model' },
+          { id: 'mm-nightly-model', label: 'MM Nightly Model' },
+          { id: 'zz-nightly-model', label: 'ZZ Nightly Model' },
+        ],
+      }),
+    });
+  });
+
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: 'sk-openai-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  const fetchModelsButton = dialog.getByRole('button', { name: 'Fetch models' });
+  const modelSelect = dialog.getByLabel('Model');
+
+  await expect(fetchModelsButton).toBeEnabled();
+  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
+
+  await fetchModelsButton.click();
+  await expect(dialog.getByText('Fetched 3 models.')).toBeVisible();
+  await expect.poll(() => providerModelRequests.length).toBe(1);
+  expect(providerModelRequests[0]).toMatchObject({
+    protocol: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-openai-test',
+  });
+
+  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toBeVisible();
+  await expect(modelSelect.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toBeVisible();
+  await expect(modelSelect.getByRole('option', { name: 'ZZ Nightly Model (zz-nightly-model)' })).toBeVisible();
+
+  const fetchedValues = await modelSelect.locator('option').evaluateAll((options) =>
+    options.slice(0, 3).map((option) => (option as HTMLOptionElement).value),
+  );
+  expect(fetchedValues).toEqual([
+    'aa-nightly-model',
+    'mm-nightly-model',
+    'zz-nightly-model',
+  ]);
+
+  await fetchModelsButton.click();
+  await expect.poll(() => providerModelRequests.length).toBe(1);
+});
+
 test('saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
   await openExecutionSettingsWithAgents(
     page,

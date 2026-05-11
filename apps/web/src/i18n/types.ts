@@ -219,8 +219,24 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
-  'settings.library': string;
-  'settings.libraryHint': string;
+  'settings.skills': string;
+  'settings.skillsHint': string;
+  'settings.skillsNew': string;
+  'settings.skillsEmpty': string;
+  'settings.skillsEdit': string;
+  'settings.skillsDelete': string;
+  'settings.skillsDeleteConfirm': string;
+  'settings.skillsName': string;
+  'settings.skillsTriggers': string;
+  'settings.skillsDescription': string;
+  'settings.skillsBody': string;
+  'settings.skillsCreate': string;
+  'settings.skillsSave': string;
+  'settings.skillsSaving': string;
+  'settings.skillsFiles': string;
+  'settings.skillsNoFiles': string;
+  'settings.designSystems': string;
+  'settings.designSystemsHint': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
@@ -485,7 +501,7 @@ export interface Dict {
 
   // Entry view / tabs
   'entry.tabDesigns': string;
-  'entry.tabExamples': string;
+  'entry.tabTemplates': string;
   'entry.tabDesignSystems': string;
   'entry.tabConnectors': string;
   'entry.tabImageTemplates': string;

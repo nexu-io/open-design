@@ -3,7 +3,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile, ProjectMetadata } from '../types';
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -199,6 +199,7 @@ interface Props {
   error: string | null;
   projectId: string | null;
   projectFiles: ProjectFile[];
+  sendDisabled?: boolean;
   // Names that exist in the project folder. Tool cards and chips use this
   // set to decide whether a path can be opened as a tab.
   projectFileNames?: Set<string>;
@@ -208,8 +209,16 @@ interface Props {
   onAttachComment?: (comment: PreviewComment) => void;
   onDetachComment?: (commentId: string) => void;
   onDeleteComment?: (commentId: string) => void;
-  onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[], meta?: ChatSendMeta) => void;
+  onSend: (
+    prompt: string,
+    attachments: ChatAttachment[],
+    commentAttachments: ChatCommentAttachment[],
+    meta?: ChatSendMeta,
+  ) => void;
   onStop: () => void;
+  // Skills available for @-mention assembly. ProjectView filters out the
+  // user's disabled set before passing them in here.
+  skills?: SkillSummary[];
   // Click-to-open chain: passes a basename up to ProjectView, which sets
   // FileWorkspace's openRequest. Tool cards, attachment chips, and
   // produced-file chips all call this.
@@ -221,6 +230,7 @@ interface Props {
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
+  newConversationDisabled?: boolean;
   // Conversation list that used to live in the topbar. The chat tab now
   // owns the list so users can browse + switch conversations without
   // leaving the pane.
@@ -252,6 +262,7 @@ type Tab = 'chat' | 'comments';
 export function ChatPane({
   messages,
   streaming,
+  sendDisabled = false,
   error,
   projectId,
   projectFiles,
@@ -269,6 +280,7 @@ export function ChatPane({
   onSubmitForm,
   onContinueRemainingTasks,
   onNewConversation,
+  newConversationDisabled = false,
   conversations,
   activeConversationId,
   onSelectConversation,
@@ -282,6 +294,7 @@ export function ChatPane({
   onOpenPetSettings,
   projectMetadata,
   onProjectMetadataChange,
+  skills = [],
   researchAvailable,
   onCollapse,
 }: Props) {
@@ -560,7 +573,9 @@ export function ChatPane({
                       type="button"
                       className="chat-history-new"
                       data-testid="conversation-history-new"
+                      disabled={newConversationDisabled}
                       onClick={() => {
+                        if (newConversationDisabled) return;
                         onNewConversation();
                         setShowConvList(false);
                       }}
@@ -602,7 +617,7 @@ export function ChatPane({
             title={t('chat.newConversationsTitle')}
             aria-label={t('chat.newConversation')}
             onClick={onNewConversation}
-            disabled={!onNewConversation}
+            disabled={!onNewConversation || newConversationDisabled}
           >
             <Icon name="plus" size={16} />
           </button>
@@ -721,7 +736,9 @@ export function ChatPane({
             ref={composerRef}
             projectId={projectId}
             projectFiles={projectFiles}
-            streaming={streaming || hasActiveRunMessage}
+            skills={skills}
+            streaming={streaming}
+            sendDisabled={sendDisabled}
             initialDraft={initialDraft}
             onEnsureProject={onEnsureProject}
             commentAttachments={commentsToAttachments(attachedComments)}

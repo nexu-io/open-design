@@ -2,7 +2,15 @@ import type { Express } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { detectAgents } from './agents.js';
-import { findSkillById, splitDerivedSkillId } from './skills.js';
+import {
+  SkillImportError,
+  deleteUserSkill,
+  findSkillById,
+  importUserSkill,
+  listSkillFiles,
+  splitDerivedSkillId,
+  updateUserSkill,
+} from './skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { readDesignSystem } from './design-systems.js';
@@ -20,12 +28,20 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     RUNTIME_DATA_DIR,
     DESIGN_SYSTEMS_DIR,
     USER_DESIGN_SYSTEMS_DIR,
+    DESIGN_TEMPLATES_DIR,
+    USER_DESIGN_TEMPLATES_DIR,
     SKILLS_DIR,
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
   } = ctx.paths;
-  const { listAllSkills, listAllDesignSystems, mimeFor } = ctx.resources;
+  const {
+    listAllSkills,
+    listAllDesignTemplates,
+    listAllSkillLikeEntries,
+    listAllDesignSystems,
+    mimeFor,
+  } = ctx.resources;
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
   const requireLocalOrigin = (req: any, res: any) => {
     if (isLocalSameOrigin(req, resolvedPortRef.current)) return true;
@@ -68,6 +84,128 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       res.json(serializable);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Design templates — the rendering catalogue. Same shape as /api/skills
+  // (so the web client can reuse SkillSummary types) but rooted at
+  // DESIGN_TEMPLATE_ROOTS so the listing stays focused on template-style
+  // entries without bleeding functional skills into the EntryView gallery.
+  app.get('/api/design-templates', async (_req, res) => {
+    try {
+      const templates = await listAllDesignTemplates();
+      res.json({
+        designTemplates: templates.map(({ body, dir: _dir, ...rest }) => ({
+          ...rest,
+          hasBody: typeof body === 'string' && body.length > 0,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/design-templates/:id', async (req, res) => {
+    try {
+      const templates = await listAllDesignTemplates();
+      const template = findSkillById(templates, req.params.id);
+      if (!template) return res.status(404).json({ error: 'design template not found' });
+      const { dir: _dir, ...serializable } = template;
+      res.json(serializable);
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // POST /api/skills/import — write a new SKILL.md under USER_SKILLS_DIR
+  // from a UI-supplied body. The next /api/skills request surfaces it
+  // automatically because listSkills walks USER_SKILLS_DIR first.
+  app.post('/api/skills/import', async (req, res) => {
+    try {
+      const result = await importUserSkill(USER_SKILLS_DIR, req.body || {});
+      const skills = await listAllSkills();
+      const skill = findSkillById(skills, result.id);
+      if (!skill) {
+        return sendApiError(
+          res,
+          500,
+          'INTERNAL_ERROR',
+          'imported skill was not found in catalog',
+        );
+      }
+      const { dir: _dir, body: _body, ...serializable } = skill;
+      res.status(201).json({
+        skill: {
+          ...serializable,
+          hasBody: typeof skill.body === 'string' && skill.body.length > 0,
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof SkillImportError) {
+        const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'BAD_REQUEST' ? 400 : 500;
+        return sendApiError(res, status, err.code, err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  // PUT /api/skills/:id — update an existing user-managed skill's
+  // SKILL.md (and, when the user edits a built-in for the first time,
+  // clone its side files into USER_SKILLS_DIR/<slug>/ so subsequent
+  // /api/skills/:id/{files,example,assets/*} requests keep resolving
+  // the bundled assets/references/scripts/examples). See PR #955 review.
+  app.put('/api/skills/:id', async (req, res) => {
+    try {
+      const skills = await listAllSkills();
+      const skill = findSkillById(skills, req.params.id);
+      if (!skill) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
+      }
+      const result = await updateUserSkill(USER_SKILLS_DIR, {
+        ...(req.body || {}),
+        id: skill.id,
+        sourceDir: skill.dir,
+      });
+      const next = await listAllSkills();
+      const updated = findSkillById(next, result.id);
+      if (!updated) {
+        return sendApiError(
+          res,
+          500,
+          'INTERNAL_ERROR',
+          'updated skill was not found in catalog',
+        );
+      }
+      const { dir: _dir, body: _body, ...serializable } = updated;
+      res.json({
+        skill: {
+          ...serializable,
+          hasBody: typeof updated.body === 'string' && updated.body.length > 0,
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof SkillImportError) {
+        const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'BAD_REQUEST' ? 400 : 500;
+        return sendApiError(res, status, err.code, err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  // GET /api/skills/:id/files — flat listing of the files that ship with
+  // a skill. Used by the Settings → Skills detail panel to render the
+  // file tree (capped server-side to keep payload bounded).
+  app.get('/api/skills/:id/files', async (req, res) => {
+    try {
+      const skills = await listAllSkills();
+      const skill = findSkillById(skills, req.params.id);
+      if (!skill) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
+      }
+      const files = await listSkillFiles(skill.dir);
+      res.json({ files });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
     }
   });
 
@@ -259,7 +397,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   //      a real preview on its parent card instead of returning 404.
   app.get('/api/skills/:id/example', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      // Span both functional skills and design templates: rendered example
+      // HTML rewrites assets to /api/skills/<id>/... and we want those URLs
+      // to keep resolving regardless of which root owns the backing folder
+      // after the skills/design-templates split.
+      const skills = await listAllSkillLikeEntries();
 
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
@@ -381,7 +523,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // contributors can preview `example.html` straight from disk.
   app.get('/api/skills/:id/assets/*', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      // Same rationale as /example above — assets need to resolve whether
+      // the owning skill folder lives under skills/ or design-templates/.
+      const skills = await listAllSkillLikeEntries();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');

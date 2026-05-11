@@ -1939,19 +1939,18 @@ describe('SettingsDialog pets interactions', () => {
   });
 });
 
-describe('SettingsDialog skills and design systems interactions', () => {
+describe('SettingsDialog skills section', () => {
   afterEach(() => {
     cleanup();
   });
 
-  it('renders the skills library by default and filters by mode and search', async () => {
+  it('lists functional skills and filters them by mode + search', async () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
+      { initialSection: 'skills' },
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Skills3/i })).toBeTruthy();
       expect(screen.getByText('blog-post')).toBeTruthy();
       expect(screen.getByText('sales-deck')).toBeTruthy();
     });
@@ -1967,17 +1966,17 @@ describe('SettingsDialog skills and design systems interactions', () => {
     expect(screen.queryByText('dashboard')).toBeNull();
   });
 
-  it('opens a skill preview and persists disabled skills from toggle switches', async () => {
+  it('opens a skill detail panel and persists disabled skills from toggle switches', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
+      { initialSection: 'skills' },
     );
 
     await waitFor(() => {
       expect(screen.getByText('blog-post')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByTitle('Preview')[0] as HTMLElement);
+    fireEvent.click(screen.getByText('blog-post'));
     await waitFor(() => {
       expect(fetchSkillMock).toHaveBeenCalledWith('blog-post');
       expect(screen.getByText('skill body for blog-post')).toBeTruthy();
@@ -1995,17 +1994,34 @@ describe('SettingsDialog skills and design systems interactions', () => {
     );
   });
 
-  it('switches to design systems, previews details, and persists disabled design systems', async () => {
-    const { onPersist } = renderSettingsDialog(
+  it('shows an empty state when search matches nothing', async () => {
+    renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
+      { initialSection: 'skills' },
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /Design Systems2/i })).toBeTruthy();
+      expect(screen.getByText('blog-post')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: /Design Systems2/i }));
+    fireEvent.change(screen.getByPlaceholderText('Search...'), {
+      target: { value: 'zzz-no-match' },
+    });
+    expect(screen.getByText('No items match your search.')).toBeTruthy();
+  });
+});
+
+describe('SettingsDialog design systems section', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('lists design systems and persists disabled selections from toggle switches', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'designSystems' },
+    );
+
     await waitFor(() => {
       expect(screen.getByText('Neutral Modern')).toBeTruthy();
       expect(screen.getByText('Signal Green')).toBeTruthy();
@@ -2030,22 +2046,6 @@ describe('SettingsDialog skills and design systems interactions', () => {
       }),
       {},
     );
-  });
-
-  it('shows an empty state when library search returns no results', async () => {
-    renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'library' },
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('blog-post')).toBeTruthy();
-    });
-
-    fireEvent.change(screen.getByPlaceholderText('Search...'), {
-      target: { value: 'zzz-no-match' },
-    });
-    expect(screen.getByText('No items match your search.')).toBeTruthy();
   });
 });
 

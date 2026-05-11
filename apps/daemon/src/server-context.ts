@@ -17,6 +17,10 @@ export interface PathDeps {
   ARTIFACTS_DIR: string;
   BUNDLED_PETS_DIR: string;
   DESIGN_SYSTEMS_DIR: string;
+  // Bundled rendering catalogue (see specs/current/skills-and-design-templates.md).
+  // Distinct from SKILLS_DIR so the EntryView Templates surface and the
+  // Settings → Skills surface stay decoupled.
+  DESIGN_TEMPLATES_DIR: string;
   OD_BIN: string;
   PROJECT_ROOT: string;
   PROJECTS_DIR: string;
@@ -25,12 +29,23 @@ export interface PathDeps {
   RUNTIME_DATA_DIR_CANONICAL: string;
   SKILLS_DIR: string;
   USER_DESIGN_SYSTEMS_DIR: string;
+  // Mirror of USER_SKILLS_DIR rooted at DESIGN_TEMPLATES_DIR so user
+  // imports of templates do not collide with imports of functional skills.
+  USER_DESIGN_TEMPLATES_DIR: string;
   USER_SKILLS_DIR: string;
 }
 
 export interface ResourceDeps {
   listAllDesignSystems: () => Promise<Array<DesignSystemSummary & { source?: string }>>;
   listAllSkills: () => Promise<Array<SkillInfo & { source?: string }>>;
+  // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates
+  // surface only sees rendering-catalogue entries.
+  listAllDesignTemplates: () => Promise<Array<SkillInfo & { source?: string }>>;
+  // Spans both functional skills and design templates so cross-surface
+  // resolvers (chat run system prompt, orbit template resolver,
+  // /api/skills/:id/example, /api/skills/:id/assets/*) keep working when
+  // a stored project.skillId points at either root.
+  listAllSkillLikeEntries: () => Promise<Array<SkillInfo & { source?: string }>>;
   mimeFor: (filePath: string) => string;
 }
 

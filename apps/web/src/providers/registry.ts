@@ -94,6 +94,32 @@ export async function fetchSkills(): Promise<SkillSummary[]> {
   }
 }
 
+// Design templates — the rendering catalogue (decks, prototypes, image/
+// video/audio templates). Same SkillSummary shape as functional skills,
+// fetched from a separate registry root so the EntryView Templates tab
+// and Settings → Skills surface stay decoupled. See
+// specs/current/skills-and-design-templates.md.
+export async function fetchDesignTemplates(): Promise<SkillSummary[]> {
+  try {
+    const resp = await fetch('/api/design-templates');
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { designTemplates: SkillSummary[] };
+    return json.designTemplates ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchDesignTemplate(id: string): Promise<SkillDetail | null> {
+  try {
+    const resp = await fetch(`/api/design-templates/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as SkillDetail;
+  } catch {
+    return null;
+  }
+}
+
 // Pets packaged by the Codex `hatch-pet` skill — surfaced so the web
 // pet settings can offer one-click adoption right after the agent run
 // finishes. Returns an empty list (not an error) when the registry
@@ -155,6 +181,142 @@ export function codexPetSpritesheetUrl(pet: CodexPetSummary): string {
   // that prefix is empty (default), it is already a same-origin path
   // we can hand to <img src> or fetch() as-is.
   return pet.spritesheetUrl;
+}
+
+// Body for POST /api/skills/import. Mirrors the contracts type but is
+// repeated here so the registry module is self-describing for callers.
+export interface SkillImportInput {
+  name: string;
+  description?: string;
+  body: string;
+  triggers?: string[];
+}
+
+export interface SkillImportError {
+  code?: string;
+  message: string;
+}
+
+export async function importSkill(
+  input: SkillImportInput,
+): Promise<{ skill: SkillSummary } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/skills/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: SkillImportError }
+        | null;
+      return {
+        error: {
+          code: payload?.error?.code,
+          message: payload?.error?.message ?? `Import failed (${resp.status}).`,
+        },
+      };
+    }
+    return (await resp.json()) as { skill: SkillSummary };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
+// Update an existing skill's body. For built-in skills the daemon writes
+// a "shadow" copy under the user-skills root; the next listSkills() pass
+// surfaces it in place of the bundled copy. The id passed here must
+// match the SKILL.md frontmatter `name` — the daemon refuses cross-id
+// renames so callers can drop "edit" into the same surface they use for
+// "edit my own draft".
+export interface SkillUpdateInput {
+  name?: string;
+  description?: string;
+  body: string;
+  triggers?: string[];
+}
+
+export async function updateSkill(
+  id: string,
+  input: SkillUpdateInput,
+): Promise<{ skill: SkillSummary } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: SkillImportError }
+        | null;
+      return {
+        error: {
+          code: payload?.error?.code,
+          message:
+            payload?.error?.message ?? `Update failed (${resp.status}).`,
+        },
+      };
+    }
+    return (await resp.json()) as { skill: SkillSummary };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Update request failed.',
+      },
+    };
+  }
+}
+
+export interface SkillFileEntry {
+  path: string;
+  kind: 'file' | 'directory';
+  size: number | null;
+}
+
+export async function fetchSkillFiles(id: string): Promise<SkillFileEntry[]> {
+  try {
+    const resp = await fetch(
+      `/api/skills/${encodeURIComponent(id)}/files`,
+    );
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { files: SkillFileEntry[] };
+    return json.files ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteSkill(
+  id: string,
+): Promise<{ ok: true } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: SkillImportError }
+        | null;
+      return {
+        error: {
+          code: payload?.error?.code,
+          message: payload?.error?.message ?? `Delete failed (${resp.status}).`,
+        },
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Delete request failed.',
+      },
+    };
+  }
 }
 
 export async function fetchSkill(id: string): Promise<SkillDetail | null> {

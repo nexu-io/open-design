@@ -57,7 +57,8 @@ import { MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
-import { LibrarySection } from './LibrarySection';
+import { SkillsSection } from './SkillsSection';
+import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
@@ -67,6 +68,7 @@ import {
   applyAppearanceToDocument,
   normalizeAccentColor,
 } from '../state/appearance';
+import { isAutosaveDraftOnlyChange } from '../App';
 import {
   FAILURE_SOUNDS,
   SUCCESS_SOUNDS,
@@ -88,8 +90,9 @@ export type SettingsSection =
   | 'appearance'
   | 'notifications'
   | 'pet'
+  | 'skills'
+  | 'designSystems'
   | 'memory'
-  | 'library'
   | 'privacy'
   | 'about';
 
@@ -1136,6 +1139,13 @@ export function SettingsDialog({
   const autosaveRetryTimerRef = useRef<number | null>(null);
   const autosavePendingFlushRef = useRef(false);
   const autosaveLatestRef = useRef<AppConfig>(cfg);
+  // Baseline used by the draft-only detector: the snapshot at the most
+  // recent successful autosave (or the initial cfg on mount). Compared
+  // against the current snapshot to decide whether the only edits
+  // since last save are intentionally-stripped fields like the
+  // Composio API key — in which case we must NOT flash "All changes
+  // saved", because the draft has not actually been persisted.
+  const autosaveLastSavedRef = useRef<AppConfig>(cfg);
   const mediaProvidersChangeVersionRef = useRef(0);
   const lastSyncedMediaProvidersVersionRef = useRef(0);
   const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
@@ -1143,6 +1153,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
+      autosaveLastSavedRef.current = cfg;
       return;
     }
     setAutosaveStatus('pending');
@@ -1166,10 +1177,27 @@ export function SettingsDialog({
       const persistOptions = {
         forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
       };
+      // Draft-only edit (e.g. the user is mid-typing the Composio API
+      // key, which only commits via the explicit "Save key" gesture):
+      // the persisted shape would be identical to what is already on
+      // disk, so a save would be a no-op that mis-reports "Saved" and
+      // makes users trust that a sensitive key was persisted when it
+      // was not. Skip the persist and settle the indicator to idle.
+      // The forced media-provider sync path still runs because that
+      // is a real outbound effect even when the persisted shape
+      // hasn't changed.
+      if (
+        !persistOptions.forceMediaProviderSync
+        && isAutosaveDraftOnlyChange(snapshot, autosaveLastSavedRef.current)
+      ) {
+        setAutosaveStatus('idle');
+        return;
+      }
       setAutosaveStatus('saving');
       void (async () => {
         try {
           await onPersist(snapshot, persistOptions);
+          autosaveLastSavedRef.current = snapshot;
           if (persistOptions.forceMediaProviderSync) {
             lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
           }
@@ -1330,8 +1358,12 @@ export function SettingsDialog({
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
+    skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
+    designSystems: {
+      title: t('settings.designSystems'),
+      subtitle: t('settings.designSystemsHint'),
+    },
     memory: { title: t('settings.memory'), subtitle: t('settings.memoryHint') },
-    library: { title: t('settings.library'), subtitle: t('settings.libraryHint') },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
@@ -1399,26 +1431,6 @@ export function SettingsDialog({
               <span className="kicker">{t('settings.welcomeKicker')}</span>
               <h2>{t('settings.welcomeTitle')}</h2>
               <p className="subtitle">{t('settings.welcomeSubtitle')}</p>
-              {/* First-run users see a mini pet teaser inside the welcome
-                  modal so adoption is part of the warm intro rather than
-                  hidden behind another nav click. The chip nudges them
-                  toward Pets without forcing them to leave the rest of
-                  the welcome flow. */}
-              <button
-                type="button"
-                className="welcome-pet-teaser"
-                onClick={() => setActiveSection('pet')}
-              >
-                <span className="welcome-pet-glyph" aria-hidden>🐾</span>
-                <span className="welcome-pet-copy">
-                  <strong>{t('pet.welcomeTeaserTitle')}</strong>
-                  <span>{t('pet.welcomeTeaserBody')}</span>
-                </span>
-                <span className="welcome-pet-cta">
-                  {t('pet.welcomeTeaserCta')}
-                  <Icon name="chevron-right" size={12} />
-                </span>
-              </button>
             </>
           ) : (
             <>
@@ -1455,17 +1467,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'library' ? ' active' : ''}`}
-              onClick={() => setActiveSection('library')}
-            >
-              <Icon name="grid" size={18} />
-              <span>
-                <strong>{t('settings.library')}</strong>
-                <small>{t('settings.libraryHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
               onClick={() => setActiveSection('media')}
             >
@@ -1473,6 +1474,28 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.mediaProviders')}</strong>
                 <small>Image / video / audio</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'skills' ? ' active' : ''}`}
+              onClick={() => setActiveSection('skills')}
+            >
+              <Icon name="grid" size={18} />
+              <span>
+                <strong>{t('settings.skills')}</strong>
+                <small>{t('settings.skillsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
+              onClick={() => setActiveSection('mcpClient')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('settings.externalMcpTitle')}</strong>
+                <small>{t('settings.externalMcpHint')}</small>
               </span>
             </button>
             <button
@@ -1521,17 +1544,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
-              onClick={() => setActiveSection('mcpClient')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('settings.externalMcpTitle')}</strong>
-                <small>{t('settings.externalMcpHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
               onClick={() => setActiveSection('language')}
             >
@@ -1572,6 +1584,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('pet.navTitle')}</strong>
                 <small>{t('pet.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'designSystems' ? ' active' : ''}`}
+              onClick={() => setActiveSection('designSystems')}
+            >
+              <Icon name="draw" size={18} />
+              <span>
+                <strong>{t('settings.designSystems')}</strong>
+                <small>{t('settings.designSystemsHint')}</small>
               </span>
             </button>
             <button
@@ -2452,11 +2475,15 @@ export function SettingsDialog({
             <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'memory' ? <MemorySection /> : null}
-
-          {activeSection === 'library' ? (
-            <LibrarySection cfg={cfg} setCfg={setCfg} />
+          {activeSection === 'skills' ? (
+            <SkillsSection cfg={cfg} setCfg={setCfg} />
           ) : null}
+
+          {activeSection === 'designSystems' ? (
+            <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'memory' ? <MemorySection /> : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />

@@ -52,6 +52,11 @@ export const linuxResources = {
 
 const BUNDLED_RESOURCE_TREES = [
   { from: "skills", to: "skills" },
+  // After the skills/design-templates split (specs/current/skills-and-design-templates.md)
+  // the rendering catalogue lives under its own root and the daemon
+  // resolves it via DESIGN_TEMPLATES_DIR. Bundle it like any other
+  // first-class resource so packaged builds carry the full template set.
+  { from: "design-templates", to: "design-templates" },
   { from: "design-systems", to: "design-systems" },
   { from: "craft", to: "craft" },
   { from: join("assets", "frames"), to: "frames" },
