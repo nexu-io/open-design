@@ -1077,48 +1077,54 @@ interface RefreshStatusDescriptor {
   description: string;
 }
 
-function describeRefreshStatus(status: LiveArtifactRefreshStatus): RefreshStatusDescriptor {
+function describeRefreshStatus(
+  status: LiveArtifactRefreshStatus,
+  t: TranslateFn,
+): RefreshStatusDescriptor {
   switch (status) {
     case 'running':
       return {
-        label: 'Refreshing',
+        label: t('liveArtifact.refresh.statusRunning'),
         tone: 'running',
-        description: 'A refresh run is currently in progress.',
+        description: t('liveArtifact.refresh.statusRunningDescription'),
       };
     case 'succeeded':
       return {
-        label: 'Up to date',
+        label: t('liveArtifact.refresh.statusSucceeded'),
         tone: 'success',
-        description: 'The last refresh finished successfully.',
+        description: t('liveArtifact.refresh.statusSucceededDescription'),
       };
     case 'failed':
       return {
-        label: 'Refresh failed',
+        label: t('liveArtifact.refresh.statusFailed'),
         tone: 'error',
-        description: 'The last refresh attempt did not complete successfully.',
+        description: t('liveArtifact.refresh.statusFailedDescription'),
       };
     case 'idle':
       return {
-        label: 'Ready to refresh',
+        label: t('liveArtifact.refresh.statusReady'),
         tone: 'neutral',
-        description: 'Refreshable sources are configured but no run is in progress.',
+        description: t('liveArtifact.refresh.statusReadyDescription'),
       };
     case 'never':
     default:
       return {
-        label: 'Not refreshable',
+        label: t('liveArtifact.refresh.statusNever'),
         tone: 'warning',
-        description: 'This live artifact has no refresh source yet.',
+        description: t('liveArtifact.refresh.statusNeverDescription'),
       };
   }
 }
 
 function describeEventPhase(
   event: LiveArtifactRefreshEvent,
+  t: TranslateFn,
 ): { label: string; tone: 'running' | 'success' | 'error' } {
-  if (event.phase === 'started') return { label: 'Started', tone: 'running' };
-  if (event.phase === 'succeeded') return { label: 'Succeeded', tone: 'success' };
-  return { label: 'Failed', tone: 'error' };
+  if (event.phase === 'started')
+    return { label: t('liveArtifact.refresh.eventStarted'), tone: 'running' };
+  if (event.phase === 'succeeded')
+    return { label: t('liveArtifact.refresh.eventSucceeded'), tone: 'success' };
+  return { label: t('liveArtifact.refresh.eventFailed'), tone: 'error' };
 }
 
 export function LiveArtifactRefreshHistoryPanel({
@@ -1136,6 +1142,7 @@ export function LiveArtifactRefreshHistoryPanel({
   sessionEvents: LiveArtifactRefreshEvent[];
   persistedEvents?: LiveArtifactRefreshLogEntry[];
 }) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -1147,7 +1154,7 @@ export function LiveArtifactRefreshHistoryPanel({
   const status: LiveArtifactRefreshStatus = isRunning
     ? 'running'
     : liveArtifact?.refreshStatus ?? fallbackRefreshStatus;
-  const descriptor = describeRefreshStatus(status);
+  const descriptor = describeRefreshStatus(status, t);
   const lastRefreshedAt = liveArtifact?.lastRefreshedAt ?? fallbackLastRefreshedAt;
   const createdAt = liveArtifact?.createdAt;
   const updatedAt = liveArtifact?.updatedAt;
@@ -1268,14 +1275,14 @@ export function LiveArtifactRefreshHistoryPanel({
         </header>
         {reversedEvents.length === 0 ? (
           <div className="live-artifact-refresh-empty">
-            No refresh activity yet in this session. Trigger
-            {' '}<em>Refresh</em>{' '}to record a timeline, or wait for automated runs.
+            {t('liveArtifact.refresh.timelineEmpty')}
           </div>
         ) : (
           <ol className="live-artifact-refresh-timeline">
             {reversedEvents.map((event) => {
-              const phase = describeEventPhase(event);
+              const phase = describeEventPhase(event, t);
               const duration = formatDurationMs(event.durationMs);
+              const refreshedCount = event.refreshedSourceCount ?? 0;
               return (
                 <li key={event.id} className={`live-artifact-refresh-event tone-${phase.tone}`}>
                   <span className="live-artifact-refresh-event-dot" aria-hidden />
@@ -1296,18 +1303,21 @@ export function LiveArtifactRefreshHistoryPanel({
                     <div className="live-artifact-refresh-event-detail">
                       {event.phase === 'succeeded' ? (
                         <span>
-                          {`${event.refreshedSourceCount ?? 0} source${
-                            (event.refreshedSourceCount ?? 0) === 1 ? '' : 's'
-                          } updated`}
+                          {t(
+                            refreshedCount === 1
+                              ? 'liveArtifact.refresh.sourcesUpdatedOne'
+                              : 'liveArtifact.refresh.sourcesUpdatedMany',
+                            { n: refreshedCount },
+                          )}
                           {duration ? ` · ${duration}` : ''}
                         </span>
                       ) : event.phase === 'failed' ? (
                         <span>
-                          {event.error ?? 'Refresh failed.'}
+                          {event.error ?? t('liveArtifact.refresh.genericFailure')}
                           {duration ? ` · ${duration}` : ''}
                         </span>
                       ) : (
-                        <span>Refresh started…</span>
+                        <span>{t('liveArtifact.refresh.eventStartedDetail')}</span>
                       )}
                     </div>
                   </div>

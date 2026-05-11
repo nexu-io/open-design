@@ -907,6 +907,25 @@ export const en: Dict = {
   'liveArtifact.refresh.statusReady': 'Ready to refresh',
   'liveArtifact.refresh.statusSucceeded': 'Up to date',
   'liveArtifact.refresh.statusFailed': 'Refresh failed',
+  'liveArtifact.refresh.statusRunning': 'Refreshing',
+  'liveArtifact.refresh.statusRunningDescription':
+    'A refresh run is currently in progress.',
+  'liveArtifact.refresh.statusSucceededDescription':
+    'The last refresh finished successfully.',
+  'liveArtifact.refresh.statusFailedDescription':
+    'The last refresh attempt did not complete successfully.',
+  'liveArtifact.refresh.statusReadyDescription':
+    'Refreshable sources are configured but no run is in progress.',
+  'liveArtifact.refresh.statusNeverDescription':
+    'This live artifact has no refresh source yet.',
+  'liveArtifact.refresh.eventStarted': 'Started',
+  'liveArtifact.refresh.eventSucceeded': 'Succeeded',
+  'liveArtifact.refresh.eventFailed': 'Failed',
+  'liveArtifact.refresh.eventStartedDetail': 'Refresh started…',
+  'liveArtifact.refresh.sourcesUpdatedOne': '{n} source updated',
+  'liveArtifact.refresh.sourcesUpdatedMany': '{n} sources updated',
+  'liveArtifact.refresh.timelineEmpty':
+    'No refresh activity yet in this session. Trigger Refresh to record a timeline, or wait for automated runs.',
   'liveArtifact.viewer.tabPreview': 'Preview',
   'liveArtifact.viewer.tabCode': 'Code',
   'liveArtifact.viewer.tabData': 'Data',
