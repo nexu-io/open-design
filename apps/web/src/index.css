@@ -247,7 +247,32 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-select { padding-right: 24px; }
+/* Native <select> on macOS uses its own intrinsic min-height that ends up
+   shorter than <input> at the same `padding: 7px 10px` rule above, so any
+   form that flex-aligns an input next to a select (e.g. the memory editor's
+   Title + Type row) renders with mismatched heights. Stripping the native
+   chrome lets the shared padding and inherited line-height compute the
+   same box dimensions as the input, then we paint our own chevron via a
+   background SVG. The chevron color is a per-theme override so it stays
+   readable against the panel in both light and dark. */
+select {
+  padding-right: 32px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+}
+select::-ms-expand { display: none; }
+[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  }
+}
 textarea { resize: vertical; font-family: inherit; }
 
 code {
@@ -501,29 +526,40 @@ code {
 }
 .app-project-title {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0;
   min-width: 0;
-  max-height: 32px;
+  max-height: 22px;
   overflow: hidden;
 }
 .app-project-title .title {
   color: var(--text-strong);
   font-size: 13.5px;
-  line-height: 16px;
+  line-height: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .app-project-title .meta {
   color: var(--text-muted);
   font-size: 11.5px;
-  line-height: 15px;
+  line-height: 18px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.app-project-title .meta::before {
+  content: '·';
+  margin: 0 8px;
+  color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .topbar {
@@ -7304,6 +7340,8 @@ button.connector-action.is-loading {
   min-height: 0;
   overflow-y: auto;
   padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
 }
 .df-group-toggle {
   margin: 0 20px 8px;
@@ -7717,10 +7755,67 @@ button.connector-action.is-loading {
   cursor: pointer;
 }
 .df-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 48px 24px;
-  text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+  min-height: 320px;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(to right, var(--border-soft) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border-soft) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
+}
+.df-empty-pill {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 36px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 0 rgba(15, 15, 15, 0.02),
+    0 8px 24px -12px rgba(15, 15, 15, 0.08);
+  max-width: min(420px, 92%);
+  text-align: center;
+}
+.df-empty-title {
+  font-size: 16px;
+  color: var(--text-strong);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+.df-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.df-empty-cta:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.df-empty-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .df-drop {
@@ -11281,6 +11376,17 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: white;
 }
+/* The global `button:hover:not(:disabled)` rule (specificity 0,2,1) is more
+   specific than `.filter-pill.active` (0,2,0), so without an explicit
+   active-hover rule the active pill loses its accent background on hover and
+   the white label drops onto a cream `--bg-subtle` background — invisible.
+   This rule (0,3,0) wins and keeps the accent treatment, swapping in
+   `--accent-hover` for a subtle hover shift. */
+.filter-pill.active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: white;
+}
 .filter-pill-count {
   font-size: 11px;
   opacity: 0.7;
@@ -14085,6 +14191,32 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   margin-bottom: 16px;
 }
 
+/* Variant: filter pills on the left, primary action on the right.
+   Used by Memory's toolbar where there is no search input above. */
+.library-toolbar.is-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.library-toolbar.is-row .library-filters {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Primary action button positioned at the right edge of `.library-toolbar`.
+   The default button line-height makes the icon and label vertically off
+   when sitting next to filter pills; tightening the line-height aligns the
+   plus icon with the text baseline. */
+.library-toolbar-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
 .library-search {
   width: 100%;
   padding: 8px 12px;
@@ -14137,12 +14269,27 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 
 .library-card {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   flex-wrap: wrap;
+}
+
+/* Icon-only action buttons inside a library-card.
+   The chevron/edit/close buttons used different sizes (.library-card-expand
+   was 4px padding, .ghost was 6px 12px), which made them look misaligned
+   horizontally and stretched the card vertically. Force a uniform 28x28
+   square so they line up like a proper action group. */
+.library-card .library-card-action {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .library-card.disabled {
@@ -14191,13 +14338,20 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .library-card-expand:hover {
-  background: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
 }
 
 .library-card-badge-user {
@@ -14347,6 +14501,167 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   font-size: 13px;
   padding: 32px 0;
+}
+
+/* Memory section: warning banner shown when the memory feature is
+   disabled. Padded so it reads as a full callout rather than inline text,
+   and tinted with the same warning hue used elsewhere in settings. */
+.memory-disabled-banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 159, 64, 0.12);
+  color: var(--text-muted, #b06a00);
+  border: 1px solid rgba(255, 159, 64, 0.32);
+  font-size: 12px;
+  margin: 8px 0 12px;
+}
+
+/* Memory section: red callout shown when the LLM extractor is silent
+   because no API key is configured. Same shape as `memory-disabled-banner`
+   but tuned to a stronger warning hue so the user reads it as
+   "something is wrong" rather than "FYI". */
+.memory-noprovider-banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(220, 53, 69, 0.10);
+  color: var(--text-danger, #b02a37);
+  border: 1px solid rgba(220, 53, 69, 0.32);
+  font-size: 12px;
+  margin: 8px 0 12px;
+}
+
+/* Memory section: monospace path showing where the memory files live on
+   disk. `break-all` so even long absolute paths fit inside the panel. */
+.memory-root-dir {
+  word-break: break-all;
+  font-size: 11px;
+}
+
+/* Memory section: extraction-history list. One row per recorded LLM
+   extraction attempt, with phase pill + provider/model meta + preview of
+   the user message that triggered it. Kept dense (no card) so a burst of
+   attempts stays scannable inside the small <details> drawer. */
+.memory-extraction-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-extraction-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-subtle, rgba(0, 0, 0, 0.02));
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memory-extraction-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-extraction-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: var(--surface-strong, rgba(0, 0, 0, 0.06));
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-pill.is-running {
+  background: rgba(64, 137, 255, 0.16);
+  color: #2864d6;
+}
+
+.memory-extraction-pill.is-success {
+  background: rgba(34, 139, 90, 0.16);
+  color: #1f7a4d;
+}
+
+.memory-extraction-pill.is-skipped {
+  background: rgba(150, 150, 150, 0.16);
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-pill.is-failed {
+  background: rgba(220, 53, 69, 0.14);
+  color: #b02a37;
+}
+
+.memory-extraction-meta {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+}
+
+/* Subtle filled pill so the heuristic/LLM badge reads as a kind tag,
+ * not a free-floating word in the meta row. Keeps the visual weight
+ * lower than the phase pill on the left (no colour signal, just a
+ * tonal background) so it stays a passive label. */
+.memory-extraction-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-subtle, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-preview {
+  font-size: 12px;
+  color: var(--text, inherit);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.memory-extraction-reason {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
+
+.memory-extraction-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Memory section: pill that briefly confirms a manual save/create/delete.
+   Pinned to the right edge of the section's flex column. */
+.memory-flash-pill {
+  align-self: flex-end;
+  margin: 4px 0 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(34, 139, 90, 0.12);
+  color: var(--text-success, #1f7a4d);
+  border: 1px solid rgba(34, 139, 90, 0.32);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* Library install UI */

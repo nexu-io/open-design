@@ -25,6 +25,12 @@ import {
 import type { KnownProvider } from '../state/config';
 import { navigate as navigateRoute } from '../router';
 import {
+  API_KEY_PLACEHOLDERS,
+  API_PROTOCOL_LABELS,
+  API_PROTOCOL_TABS,
+  SUGGESTED_MODELS_BY_PROTOCOL,
+} from '../state/apiProtocols';
+import {
   MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
@@ -56,6 +62,8 @@ import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
+import { MemoryModelInline } from './MemoryModelInline';
+import { MemorySection } from './MemorySection';
 import {
   applyAppearanceToDocument,
   normalizeAccentColor,
@@ -83,6 +91,7 @@ export type SettingsSection =
   | 'pet'
   | 'skills'
   | 'designSystems'
+  | 'memory'
   | 'privacy'
   | 'about';
 
@@ -133,114 +142,6 @@ export interface AgentRefreshOptions {
   agentCliEnv?: AppConfig['agentCliEnv'];
 }
 
-const SUGGESTED_MODELS_BY_PROTOCOL = {
-  anthropic: [
-    'claude-opus-4-5',
-    'claude-sonnet-4-5',
-    'claude-haiku-4-5',
-    'deepseek-chat',
-    'deepseek-reasoner',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'MiniMax-M2.7-highspeed',
-    'MiniMax-M2.7',
-    'MiniMax-M2.5-highspeed',
-    'MiniMax-M2.5',
-    'MiniMax-M2.1-highspeed',
-    'MiniMax-M2.1',
-    'MiniMax-M2',
-    'mimo-v2.5-pro',
-  ],
-  openai: [
-    'gpt-4o',
-    'gpt-4o-mini',
-    'o3',
-    'o4-mini',
-    'deepseek-chat',
-    'deepseek-reasoner',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'MiniMax-M2.7-highspeed',
-    'MiniMax-M2.7',
-    'MiniMax-M2.5-highspeed',
-    'MiniMax-M2.5',
-    'MiniMax-M2.1-highspeed',
-    'MiniMax-M2.1',
-    'MiniMax-M2',
-    'mimo-v2.5-pro',
-  ],
-  ollama: [
-    'cogito-2.1:671b',
-    'deepseek-v3.1:671b',
-    'deepseek-v3.2',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'devstral-2:123b',
-    'devstral-small-2:24b',
-    'gemini-3-flash-preview',
-    'gemma3:4b',
-    'gemma3:12b',
-    'gemma3:27b',
-    'gemma4:31b',
-    'glm-4.6',
-    'glm-4.7',
-    'glm-5',
-    'glm-5.1',
-    'gpt-oss:20b',
-    'gpt-oss:120b',
-    'kimi-k2:1t',
-    'kimi-k2-thinking',
-    'kimi-k2.5',
-    'kimi-k2.6',
-    'minimax-m2',
-    'minimax-m2.1',
-    'minimax-m2.5',
-    'minimax-m2.7',
-    'ministral-3:3b',
-    'ministral-3:8b',
-    'ministral-3:14b',
-    'mistral-large-3:675b',
-    'nemotron-3-nano:30b',
-    'nemotron-3-super',
-    'qwen3-coder:480b',
-    'qwen3-coder-next',
-    'qwen3-next:80b',
-    'qwen3-vl:235b',
-    'qwen3-vl:235b-instruct',
-    'qwen3.5:397b',
-    'rnj-1:8b',
-  ],
-  azure: [
-    'gpt-4o',
-    'gpt-4o-mini',
-  ],
-  google: [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
-  ],
-} as const;
-
-const API_PROTOCOL_TABS: Array<{
-  id: ApiProtocol;
-  title: string;
-}> = [
-  { id: 'anthropic', title: 'Anthropic' },
-  { id: 'openai', title: 'OpenAI' },
-  { id: 'azure', title: 'Azure OpenAI' },
-  { id: 'google', title: 'Google Gemini' },
-  { id: 'ollama', title: 'Ollama Cloud' },
-];
-
-const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
-  anthropic: 'Anthropic API',
-  openai: 'OpenAI API',
-  azure: 'Azure OpenAI',
-  google: 'Google Gemini',
-  ollama: 'Ollama Cloud API',
-};
-
 function codexPathStrings(locale: Locale) {
   if (locale === 'zh-CN') {
     return {
@@ -288,14 +189,6 @@ function sanitizeHttpsUrl(url: string | undefined): string | undefined {
     return undefined;
   }
 }
-
-const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
-  anthropic: 'sk-ant-...',
-  openai: 'sk-...',
-  azure: 'azure key',
-  google: 'AIza...',
-  ollama: 'Ollama API key',
-};
 
 type RescanNotice =
   | { kind: 'success'; count: number }
@@ -1418,6 +1311,7 @@ export function SettingsDialog({
       title: t('settings.designSystems'),
       subtitle: t('settings.designSystemsHint'),
     },
+    memory: { title: t('settings.memory'), subtitle: t('settings.memoryHint') },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
@@ -1506,6 +1400,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
                 <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
+              onClick={() => setActiveSection('memory')}
+            >
+              <Icon name="history" size={18} />
+              <span>
+                <strong>{t('settings.memory')}</strong>
+                <small>{t('settings.memoryHint')}</small>
               </span>
             </button>
             <button
@@ -2074,6 +1979,20 @@ export function SettingsDialog({
                         </select>
                       </label>
                     ) : null}
+                    <MemoryModelInline
+                      mode="daemon"
+                      apiProtocol={apiProtocol}
+                      chatApiKey={cfg.apiKey}
+                      chatBaseUrl={cfg.baseUrl}
+                      chatApiVersion={cfg.apiVersion ?? ''}
+                      chatModel={modelValue}
+                      cliAgentId={selected.id}
+                      cliModelOptions={
+                        hasModels
+                          ? selected.models!.map((m) => m.id)
+                          : []
+                      }
+                    />
                     <p className="hint">{t('settings.modelPickerHint')}</p>
                   </div>
                 );
@@ -2318,6 +2237,14 @@ export function SettingsDialog({
                   />
                 </label>
               ) : null}
+              <MemoryModelInline
+                mode="api"
+                apiProtocol={apiProtocol}
+                chatApiKey={cfg.apiKey}
+                chatBaseUrl={cfg.baseUrl}
+                chatApiVersion={cfg.apiVersion ?? ''}
+                chatModel={cfg.model}
+              />
               <label className="field">
                 <span className="field-label">{t('settings.baseUrl')}</span>
                 <input
@@ -2502,6 +2429,8 @@ export function SettingsDialog({
           {activeSection === 'designSystems' ? (
             <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
           ) : null}
+
+          {activeSection === 'memory' ? <MemorySection /> : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />

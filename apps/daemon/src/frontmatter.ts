@@ -3,10 +3,10 @@
 // and flat arrays ("- foo"). Keeps the daemon dep-free. If you need real
 // YAML (nested objects, flow-style, anchors), swap for `yaml` or `js-yaml`.
 
-type FrontmatterScalar = string | number | boolean | null;
-type FrontmatterValue = FrontmatterScalar | FrontmatterArray | FrontmatterObject;
-interface FrontmatterArray extends Array<FrontmatterValue> {}
-interface FrontmatterObject extends Record<string, FrontmatterValue> {}
+export type FrontmatterScalar = string | number | boolean | null;
+export type FrontmatterValue = FrontmatterScalar | FrontmatterArray | FrontmatterObject;
+export interface FrontmatterArray extends Array<FrontmatterValue> {}
+export interface FrontmatterObject extends Record<string, FrontmatterValue> {}
 type FrontmatterContainer = FrontmatterObject | FrontmatterArray;
 type StackEntry = {
   indent: number;

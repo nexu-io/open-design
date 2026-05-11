@@ -207,7 +207,11 @@ async function discoverDaemonUrlFromToolsDev(): Promise<string | null> {
   return await new Promise<string | null>((resolve) => {
     let child;
     try {
-      child = spawn('pnpm', ['exec', 'tools-dev', 'status', '--json'], {
+      // `--silent` suppresses pnpm's own warnings (notably "Unsupported
+      // engine" when the local node version doesn't match the repo's
+      // engines.node). Without it, those warnings land on stdout under a
+      // nested pnpm context and break the JSON parse below.
+      child = spawn('pnpm', ['--silent', 'exec', 'tools-dev', 'status', '--json'], {
         cwd: REPO_ROOT,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -222,18 +226,32 @@ async function discoverDaemonUrlFromToolsDev(): Promise<string | null> {
     child.stderr?.resume();
     child.on('error', () => resolve(null));
     child.on('exit', () => {
-      try {
-        const parsed = JSON.parse(stdout) as {
-          apps?: { daemon?: { url?: string | null } };
-          url?: string | null;
-        };
-        const url = parsed?.apps?.daemon?.url ?? parsed?.url ?? null;
-        resolve(typeof url === 'string' && url.length > 0 ? url : null);
-      } catch {
-        resolve(null);
-      }
+      const url = extractDaemonUrlFromStatusOutput(stdout);
+      resolve(url);
     });
   });
+}
+
+// Robust against any leading non-JSON noise pnpm or a wrapper might still
+// print on stdout (engine warnings, recursive run banners, deprecation
+// notices). Find the first `{` and try to parse the JSON object that
+// starts there; if that fails, walk forward to the next `{`. This keeps
+// discovery working even if a future pnpm version regresses around
+// `--silent`.
+function extractDaemonUrlFromStatusOutput(stdout: string): string | null {
+  for (let i = stdout.indexOf('{'); i !== -1; i = stdout.indexOf('{', i + 1)) {
+    try {
+      const parsed = JSON.parse(stdout.slice(i)) as {
+        apps?: { daemon?: { url?: string | null } };
+        url?: string | null;
+      };
+      const url = parsed?.apps?.daemon?.url ?? parsed?.url ?? null;
+      if (typeof url === 'string' && url.length > 0) return url;
+    } catch {
+      // try the next `{`
+    }
+  }
+  return null;
 }
 
 async function resolveDaemonUrl(args: Args): Promise<string> {

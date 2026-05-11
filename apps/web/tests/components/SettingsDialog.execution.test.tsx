@@ -660,7 +660,18 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
   it('runs the BYOK connection test only after required fields are present', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(input.toString()).toBe('/api/test/connection');
+      const url = input.toString();
+      // MemoryModelInline mounts inside the BYOK section and reads the
+      // current extraction override from /api/memory on mount. Swallow
+      // it here so the assertion below only counts the test-connection
+      // POST the user actually triggered.
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
       expect(JSON.parse(String(init?.body))).toMatchObject({
         mode: 'provider',
         protocol: 'anthropic',
@@ -694,7 +705,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Connected\. Replied in 42 ms/)).toBeTruthy();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const testConnectionCalls = fetchMock.mock.calls.filter(
+      ([input]) => input.toString() === '/api/test/connection',
+    );
+    expect(testConnectionCalls).toHaveLength(1);
   });
 });
 
@@ -864,7 +878,18 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
   it('runs the Local CLI connection test for the selected installed agent', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(input.toString()).toBe('/api/test/connection');
+      const url = input.toString();
+      // MemoryModelInline mounts inside the Local CLI section and reads
+      // the current extraction override from /api/memory on mount.
+      // Swallow it here so the assertion below only counts the
+      // test-connection POST the user actually triggered.
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
       expect(JSON.parse(String(init?.body))).toMatchObject({
         mode: 'agent',
         agentId: 'codex',
@@ -898,7 +923,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Codex CLI replied in 31 ms/)).toBeTruthy();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const testConnectionCalls = fetchMock.mock.calls.filter(
+      ([input]) => input.toString() === '/api/test/connection',
+    );
+    expect(testConnectionCalls).toHaveLength(1);
   });
 });
 

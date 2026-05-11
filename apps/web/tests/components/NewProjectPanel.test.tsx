@@ -446,4 +446,76 @@ describe('NewProjectPanel design system defaults', () => {
       }),
     );
   });
+
+  it('pins skillId to hyperframes when the video model is hyperframes-html, regardless of skill discovery order', () => {
+    // Reproduces PR #866 mrcfps's reported regression: when daemon `readdir()`
+    // returns video skills in an order that puts `video-shortform` ahead of
+    // `hyperframes`, the previous `list[0]?.id` fallback would route the
+    // HyperFrames-HTML model through `video-shortform`, dropping the
+    // hyperframes SKILL body and the html-in-canvas preflight. The fix forces
+    // the create-time skillId to `hyperframes` whenever `hyperframes-html` is
+    // the chosen model.
+    const onCreate = vi.fn();
+    const videoSkills: SkillSummary[] = [
+      {
+        id: 'video-shortform',
+        name: 'Video shortform',
+        description: 'Shortform video skill',
+        mode: 'video',
+        surface: 'video',
+        previewType: 'video',
+        designSystemRequired: false,
+        defaultFor: [],
+        triggers: [],
+        upstream: null,
+        hasBody: true,
+        examplePrompt: '',
+        aggregatesExamples: false,
+      },
+      {
+        id: 'hyperframes',
+        name: 'HyperFrames',
+        description: 'HTML-in-canvas video',
+        mode: 'video',
+        surface: 'video',
+        previewType: 'video',
+        designSystemRequired: false,
+        defaultFor: [],
+        triggers: [],
+        upstream: null,
+        hasBody: true,
+        examplePrompt: '',
+        aggregatesExamples: false,
+      },
+    ];
+
+    render(
+      <NewProjectPanel
+        skills={videoSkills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Video' }));
+    fireEvent.click(screen.getByRole('button', { name: /hyperframes-html/i }));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'HyperFrames routing' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'HyperFrames routing',
+        skillId: 'hyperframes',
+        metadata: expect.objectContaining({
+          kind: 'video',
+          videoModel: 'hyperframes-html',
+        }),
+      }),
+    );
+  });
 });
