@@ -1433,6 +1433,7 @@ export const en: Dict = {
   'settings.memoryExtractionsEmpty': 'No extractions yet. The next chat turn will populate this list.',
   'settings.memoryExtractionsRefresh': 'Refresh',
   'settings.memoryExtractionsRefreshing': 'Refreshing…',
+  'settings.memoryExtractionsRefreshing': 'Refreshing…',
   'settings.memoryExtractionPhaseRunning': 'Running…',
   'settings.memoryExtractionPhaseSuccess': 'Success',
   'settings.memoryExtractionPhaseSkipped': 'Skipped',

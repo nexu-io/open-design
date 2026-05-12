@@ -932,7 +932,7 @@ export function MemorySection() {
             disabled={isRefreshing}
             title={t('settings.memoryExtractionsRefresh')}
           >
-            <Icon name={isRefreshing ? 'loader' : 'refresh'} size={12} className={isRefreshing ? 'spin' : ''} />{' '}
+            <Icon name={isRefreshing ? 'refresh' : 'refresh'} size={12} className={isRefreshing ? 'icon-spin' : ''} />{' '}
             <span style={{ marginLeft: 4 }}>
               {isRefreshing ? t('settings.memoryExtractionsRefreshing') : t('settings.memoryExtractionsRefresh')}
             </span>
