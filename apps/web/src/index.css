@@ -3869,8 +3869,8 @@ code {
 }
 .newproj-title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 550;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4137,8 +4137,8 @@ code {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 11px;
-  margin-top: 4px;
+  padding: 8px 11px;
+  margin-top: 2px;
   font-size: 13px;
   border-radius: var(--radius-sm);
 }
@@ -4148,7 +4148,7 @@ code {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 10px;
+  padding: 6px 10px;
   font-size: 12.5px;
   border-radius: var(--radius-sm);
 }
@@ -4183,7 +4183,7 @@ code {
   opacity: 0.7;
 }
 .newproj-footer {
-  padding: 0 24px 16px;
+  padding: 12px 24px 16px;
   font-size: 11px;
   color: var(--text-muted);
   text-align: center;
@@ -4201,8 +4201,8 @@ code {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 10px 10px 12px;
+  gap: 6px;
+  padding: 8px 8px 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -4219,7 +4219,7 @@ code {
 .fidelity-thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 12 / 7;
+  aspect-ratio: 16 / 7;
   border-radius: 4px;
   overflow: hidden;
   background: var(--bg-subtle);
@@ -4515,9 +4515,9 @@ code {
 .ds-picker-trigger {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 6px 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -4541,7 +4541,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text);
   overflow: hidden;
@@ -4575,9 +4575,9 @@ code {
 .ds-avatar {
   position: relative;
   flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--bg-panel);
