@@ -109,8 +109,8 @@ created: '2026-05-09'
 - Scope: `apps/web` style toolchain. Impact: add Tailwind v4/PostCSS dependencies and config at the web package boundary because `@open-design/web` owns `dev/build/typecheck/test` scripts and currently declares no Tailwind/PostCSS dependencies. Source: `apps/web/package.json:23-50`; `https://tailwindcss.com/docs/guides/nextjs`
 - Scope: `apps/web/src/index.css`. Impact: keep CSS variables, dark/system theme overrides, reset, body styles, loading shell, keyframes, and truly global content styles; add Tailwind import/theme/base layers in the same entry so the existing `layout.tsx` import remains the only global CSS entry, move retained conflicting element/reset rules into `@layer base` or constrain them before the affected TSX migration, and remove component-level global classes that have moved to TSX. Source: `apps/web/app/layout.tsx:1-4`; `apps/web/src/index.css:6-181,1121-1143,6219-6299`
 - Scope: existing `apps/web/src/**/*.tsx`. Impact: migrate replaceable global CSS classes to token-first Tailwind `className` values by page/component area while keeping DOM structure and component responsibilities stable. Source: `apps/web/src/index.css:183-219`; `apps/web/src/**/*.tsx`
-- Scope: token mapping. Impact: expose existing color, radius, shadow, and font CSS variables as Tailwind theme variables while preserving runtime custom accent behavior that writes to the same `--accent*` variables; use native Tailwind utilities for spacing and font size. Source: `apps/web/src/index.css:6-63`; `apps/web/src/state/appearance.ts:17-52`; `apps/web/app/layout.tsx:21-29`; `specs/change/20260509-token-first-tailwind/token.md`; `https://tailwindcss.com/docs/theme`
-- Scope: constraints. Impact: extend the repository guard to explicitly check default Tailwind palette classes and uncontrolled hardcoded colors, with allowlists for brand/user-content scenarios. Source: `scripts/guard.ts:138-151,205-221`; `apps/web/src/components/AgentIcon.tsx:46-99`; `apps/web/src/components/SketchEditor.tsx:72,144-149`; `apps/web/src/components/FileViewer.tsx:1448-1474`
+- Scope: token mapping. Impact: expose existing color, radius, shadow, and font CSS variables as Tailwind theme variables while preserving runtime custom accent behavior that writes to the same `--accent*` variables; use native Tailwind utilities for spacing and standard typography sizes, with exact `text-ui-*` aliases for existing non-standard UI sizes where visual parity requires them. Source: `apps/web/src/index.css:6-63`; `apps/web/src/state/appearance.ts:17-52`; `apps/web/app/layout.tsx:21-29`; `specs/change/20260509-token-first-tailwind/token.md`; `https://tailwindcss.com/docs/theme`
+- Scope: constraints. Impact: extend the repository guard to reject default Tailwind palette classes, add hardcoded color detection with staged enforcement, and maintain allowlists for brand/user-content scenarios. Source: `scripts/guard.ts:138-151,205-221`; `apps/web/src/components/AgentIcon.tsx:46-99`; `apps/web/src/components/SketchEditor.tsx:72,144-149`; `apps/web/src/components/FileViewer.tsx:1448-1474`
 - Scope: testing and validation. Impact: web-owned tests live in `apps/web/tests/`; validate through `pnpm guard`, `pnpm typecheck`, `pnpm --filter @open-design/web test`, and `pnpm --filter @open-design/web build`. Source: `apps/AGENTS.md:19-24,39-51`; `AGENTS.md#Validation strategy`
 - Scope: agent visual consistency validation. Impact: each development slice uses a baseline worktree and development worktree, each running its own web/daemon pair; the agent compares the same scenarios across both services through the agent-browser CLI and Chrome DevTools MCP, using screenshots as the primary comparison record and component source inspection as auxiliary evidence, to validate consistent frontend display before and after the refactor. Source: `AGENTS.md:40-45,82-89,91-104`; `apps/web/src/index.css:65-157`; `apps/web/src/state/appearance.ts:28-52`
 
@@ -140,7 +140,7 @@ created: '2026-05-09'
 
 - Toolchain: run `pnpm install`, then `pnpm --filter @open-design/web build`, proving the Next/Tailwind/PostCSS integration compiles. Source: `apps/web/package.json:23-29`; `AGENTS.md#Validation strategy`
 - Type safety: after config and TS guard changes, run `pnpm typecheck` and `pnpm --filter @open-design/web typecheck`. Source: `AGENTS.md#Validation strategy`; `apps/AGENTS.md:39-51`
-- Constraint mechanism: add/extend guard coverage for disallowed default palette classes, and stage hardcoded UI color enforcement so Phase 1 only fails files or patterns already cleaned in that PR; later migration phases tighten the scope until Phase 6 runs the strict whole-app check. Source: `scripts/guard.ts:138-151,205-221,401-422`
+- Constraint mechanism: add/extend guard coverage for disallowed default palette classes, and add hardcoded UI color detection plus allowlist scaffolding in Phase 1. Existing hardcoded UI colors stay classified as migration inventory or explicit exceptions until the component migration phases tighten enforcement by area; Phase 6 runs the strict app UI check. Source: `scripts/guard.ts:138-151,205-221,401-422`
 - Web tests: when adding style-policy helper logic, add focused Vitest coverage under `apps/web/tests/`. Source: `apps/AGENTS.md:19-24`; `apps/web/package.json:23-29`
 - Agent visual consistency validation: run `pnpm tools-dev run web --namespace baseline --daemon-port <port> --web-port <port>` in the baseline worktree and `pnpm tools-dev run web --namespace candidate --daemon-port <port> --web-port <port>` in the development worktree; the agent uses agent-browser CLI and Chrome DevTools MCP to compare screenshots for major pages/component areas, fixed viewport, light/dark/system themes, and custom accent across the two services, with component source inspection used to explain differences and confirm class migration traceability. Source: `AGENTS.md:40-45,82-89,91-104`; `apps/web/src/index.css:65-157`; `apps/web/src/state/appearance.ts:28-52`
 - Manual visual review: use the agent comparison record to check Dashboard/app shell, project detail, settings dialog, file viewer/inspect overlay, sketch editor, live artifact card, and modal/popover/control states; approved deviations must be included in implementation notes.
@@ -169,14 +169,15 @@ created: '2026-05-09'
 Guard needs to cover three rule categories and record file scope, match pattern, and reason for every exception.
 
 1. Default Tailwind palette class check: reject default palette utilities such as `text-red-500`, `bg-white`, `border-zinc-200`, `from-orange-500`, and `ring-blue-400` in app UI files. Allowed color utilities come from project tokens exposed through `@theme` in `token.md`.
-2. Hardcoded UI color check: reject unregistered `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, and real named colors in app UI chrome and component styles within the cleaned scope for each phase; Phase 6 tightens this to the remaining app UI surface after migrated colors are gone. CSS-wide/special keywords such as `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` express transparency, inheritance, or reset semantics, so guard should explicitly exempt them or handle them by property semantics. When real unregistered colors are found, prefer migrating them to Tailwind token classes or CSS variables; any arbitrary color that appears repeatedly should be promoted to a named token.
+2. Hardcoded UI color check: Phase 1 adds detection, keyword exemptions, allowlist structure, and fixture/temp-sample validation while existing hardcoded UI colors remain classified as migration inventory or explicit exceptions. Component migration phases then reject unregistered `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, and real named colors in the areas being migrated. Phase 6 tightens this to the remaining app UI surface after migrated colors are gone. CSS-wide/special keywords such as `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` express transparency, inheritance, or reset semantics, so guard should explicitly exempt them or handle them by property semantics. When real unregistered colors are found, prefer migrating them to Tailwind token classes or CSS variables; any arbitrary color that appears repeatedly should be promoted to a named token.
 3. Explicit allowlist check: allow brand assets, SVG illustrations, user accent input, canvas/sketch user colors, user-authored file/inspect color conversion, external document/iframe/popup runtime HTML, and test fixtures. The allowlist should be as narrow as possible, with reasons annotated by file, function, or pattern, so path-level exemptions do not cover normal UI chrome.
 
 ### Open Questions
 
 | Question | Resolution point |
 | --- | --- |
-| Exact style guard allowlist entries and path/pattern scopes | Phase 1 before strict guard lands |
+| Initial style guard allowlist structure and fixture/temp-sample scopes | Phase 1 before guard scaffolding lands |
+| Final strict hardcoded-color allowlist and app UI path/pattern scopes | Phase 6 before strict enforcement lands |
 | Exact dual-worktree port assignments, scenario matrix, and agent comparison note format | Phase 1 before Phase 2 merges |
 | Final retained global CSS inventory | Phase 6 |
 | Dynamic class handling policy for each migrated component | During each phase before replacing dynamic class composition |
@@ -191,50 +192,50 @@ Each phase maps to one PR. Every PR must be reviewable on its own, keep business
 
 Goal: add Tailwind v4 infrastructure, expose Open Design tokens as Tailwind utilities, and land the first style guard scaffolding.
 
-- [ ] Step 1: Install Tailwind foundations
-  - [ ] Substep 1.1 Implement: Add Tailwind v4/PostCSS dependencies to `apps/web/package.json`.
-  - [ ] Substep 1.2 Implement: Add a web-local PostCSS config for `@tailwindcss/postcss`.
-  - [ ] Substep 1.3 Implement: Add `apps/web/postcss.config.mjs` to the exact residual JavaScript allowlist in `scripts/guard.ts`, with a comment explaining that the PostCSS/Tailwind config entry needs the `.mjs` compatibility format, keeping `pnpm guard` coverage for planned config files.
-  - [ ] Substep 1.4 Implement: Import Tailwind theme and utilities layers in `apps/web/src/index.css` with `@layer theme, base, utilities;`, `@import "tailwindcss/theme.css" layer(theme);`, and `@import "tailwindcss/utilities.css" layer(utilities);`, while preserving the existing global entry behavior and excluding Preflight from the foundation slice. Add the narrow local border-style reset in the base layer with `@layer base { *, ::before, ::after, ::backdrop, ::file-selector-button { border: 0 solid; } }` so Tailwind `border` width utilities in the later utilities layer combine with project `border-*` color utilities without requiring `border-solid` on every migrated element. Record the cascade policy that retained element/reset rules which may conflict with migrated utilities must also live in `@layer base`, be constrained to non-migrated scopes, or be removed before the affected elements migrate.
-  - [ ] Substep 1.5 Verify: Run `pnpm install`.
-  - [ ] Substep 1.6 Verify: Run `pnpm guard` and confirm the PostCSS config allowlist works.
-  - [ ] Substep 1.7 Verify: Run `pnpm --filter @open-design/web build`.
-- [ ] Step 2: Expose Open Design tokens as Tailwind utilities
-  - [ ] Substep 2.1 Implement: Add CSS-first `@theme` aliases for colors, core semantic status, selection/inspect overlays, radius, shadow, font tokens, and exact existing UI text-size aliases; use native Tailwind utilities for spacing and standard typography scale. Confirm token border examples such as `border border-border` render against the local border-style reset when Preflight is omitted.
-  - [ ] Substep 2.2 Implement: Clear default Tailwind colors and declare the project-approved color namespace.
-  - [ ] Substep 2.3 Implement: Document the token class vocabulary near the theme block.
-  - [ ] Substep 2.4 Verify: Confirm light, dark, system, and custom accent modes all resolve through the same CSS variables.
-  - [ ] Substep 2.5 Verify: Run `pnpm --filter @open-design/web build`.
-- [ ] Step 3: Add base style guardrails
-  - [ ] Substep 3.1 Implement: Add a default Tailwind palette class check for app UI code in `scripts/guard.ts`.
-  - [ ] Substep 3.2 Implement: Add hardcoded UI color check scaffolding covering `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, and named colors, with enforcement initially scoped to files, classes, or patterns already cleaned in Phase 1 so known later-phase migrations keep `pnpm guard` passing.
-  - [ ] Substep 3.2a Implement: Exempt CSS-wide/special keywords such as `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` in the named-color check so ghost buttons, SVG current-color, and inherit/reset states pass by semantics.
-  - [ ] Substep 3.3 Implement: Add an explicit allowlist mechanism covering brand assets, SVG illustrations, user accent input, canvas/sketch user colors, user-authored file/inspect colors, external runtime documents, and tests/fixtures.
-  - [ ] Substep 3.4 Implement: If helpers need extraction, add focused tests under `apps/web/tests/`; test fixtures must cover `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` passing, and real unregistered named colors failing.
-  - [ ] Substep 3.5 Verify: Run `pnpm guard` and confirm the scoped hardcoded-color enforcement does not fail known migration inventory items such as legacy `SettingsDialog` fallbacks or component colors still scheduled for later phases.
-  - [ ] Substep 3.6 Verify: Temporarily write a default Tailwind native color class in a TSX file, such as `text-red-500`, confirm `pnpm guard` detects it and fails, then remove the temporary code.
-  - [ ] Substep 3.7 Verify: Temporarily write an unallowlisted hardcoded color inside the Phase 1 enforced scope, such as `style={{ color: '#ff0000' }}`, confirm `pnpm guard` detects it and fails, then remove the temporary code.
-  - [ ] Substep 3.8 Verify: Run `pnpm --filter @open-design/web test`.
-- [ ] Step 4: Build migration inventory and agent visual comparison prep
-  - [ ] Substep 4.1 Implement: Generate an inventory of global CSS classes referenced in `apps/web/src/**/*.tsx` and map them to definitions in `apps/web/src/index.css`.
-  - [ ] Substep 4.2 Implement: Classify classes as component-level migratable styles, global base styles, loading shell, keyframes/animation, content-level/third-party boundary styles, and retained exceptions; identify unlayered element selectors that set properties planned for Tailwind utilities, such as global `button` base rules, and assign each one a remove, constrain, or move-to-`@layer base` resolution before its affected TSX migration slice.
-  - [ ] Substep 4.3 Implement: Record the corresponding token-first Tailwind utility combination or migration note for each component-level class.
-  - [ ] Substep 4.4 Implement: Define style guard allowlist entries, path/pattern scopes, and the repeated arbitrary color promotion threshold.
-  - [ ] Substep 4.5 Verify: Confirm the migration inventory covers all global classes referenced by TSX; the migration inventory is an implementation reference, while actual migration scope and classification follow the current code at implementation time, with on-the-spot judgment for classes added or changed after rebase.
-  - [ ] Substep 4.6 Verify: Run `pnpm guard`, `pnpm typecheck`, `pnpm --filter @open-design/web test`, and `pnpm --filter @open-design/web build`.
-- [ ] Step 5: Establish the dual-worktree agent visual comparison workflow
-  - [ ] Substep 5.1 Implement: Define the agent comparison scenario list, viewport, theme/accent matrix, fixture data, dual-worktree namespace values and port assignments, screenshot artifact requirements, component source inspection guidance, and phase notes format.
-  - [ ] Substep 5.2 Implement: Prepare startup instructions for the baseline and development worktrees: run `pnpm tools-dev run web --namespace baseline --daemon-port <baseline-daemon-port> --web-port <baseline-web-port>` in the baseline worktree and `pnpm tools-dev run web --namespace candidate --daemon-port <candidate-daemon-port> --web-port <candidate-web-port>` in the development worktree so each web/daemon pair has independent runtime files and IPC sockets.
-  - [ ] Substep 5.3 Verify: Have an agent equipped with agent-browser CLI and Chrome DevTools MCP compare screenshots for Dashboard/app shell, project detail, settings dialog, file viewer/inspect overlay, sketch editor, live artifact card, and modal/popover/control states between the baseline and development services.
-  - [ ] Substep 5.4 Verify: Agent comparison must cover light, dark, system, and custom accent. When layout offset, token color drift, radius/shadow differences, or theme-state differences appear, fix the styles or record an approved deviation.
-  - [ ] Substep 5.5 Implement: In `phase1-notes.md`, record foundation changes, migration inventory, dual-worktree service URLs, agent comparison coverage scenarios, discovered issues, and approved deviations.
+- [x] Step 1: Install Tailwind foundations
+  - [x] Substep 1.1 Implement: Add Tailwind v4/PostCSS dependencies to `apps/web/package.json`.
+  - [x] Substep 1.2 Implement: Add a web-local PostCSS config for `@tailwindcss/postcss`.
+  - [x] Substep 1.3 Implement: Add `apps/web/postcss.config.mjs` to the exact residual JavaScript allowlist in `scripts/guard.ts`, with a comment explaining that the PostCSS/Tailwind config entry needs the `.mjs` compatibility format, keeping `pnpm guard` coverage for planned config files.
+  - [x] Substep 1.4 Implement: Import Tailwind theme and utilities layers in `apps/web/src/index.css` with `@layer theme, base, utilities;`, `@import "tailwindcss/theme.css" layer(theme);`, and `@import "tailwindcss/utilities.css" layer(utilities);`, while preserving the existing global entry behavior and excluding Preflight from the foundation slice. Add the narrow local border-style reset in the base layer with `@layer base { *, ::before, ::after, ::backdrop, ::file-selector-button { border: 0 solid; } }` so Tailwind `border` width utilities in the later utilities layer combine with project `border-*` color utilities without requiring `border-solid` on every migrated element. Record the cascade policy that retained element/reset rules which may conflict with migrated utilities must also live in `@layer base`, be constrained to non-migrated scopes, or be removed before the affected elements migrate.
+  - [x] Substep 1.5 Verify: Run `pnpm install`.
+  - [x] Substep 1.6 Verify: Run `pnpm guard` and confirm the PostCSS config allowlist works.
+  - [x] Substep 1.7 Verify: Run `pnpm --filter @open-design/web build`.
+- [x] Step 2: Expose Open Design tokens as Tailwind utilities
+  - [x] Substep 2.1 Implement: Add CSS-first `@theme` aliases for colors, core semantic status, selection/inspect overlays, radius, shadow, font tokens, and exact existing UI text-size aliases; use native Tailwind utilities for spacing and standard typography scale. Confirm token border examples such as `border border-border` render against the local border-style reset when Preflight is omitted.
+  - [x] Substep 2.2 Implement: Clear default Tailwind colors and declare the project-approved color namespace.
+  - [x] Substep 2.3 Implement: Document the token class vocabulary near the theme block.
+  - [x] Substep 2.4 Verify: Confirm light, dark, system, and custom accent modes all resolve through the same CSS variables.
+  - [x] Substep 2.5 Verify: Run `pnpm --filter @open-design/web build`.
+- [x] Step 3: Add base style guardrails
+  - [x] Substep 3.1 Implement: Add a default Tailwind palette class check for app UI code in `scripts/guard.ts`.
+  - [x] Substep 3.2 Implement: Add hardcoded UI color check scaffolding covering `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, and named colors. In Phase 1, keep existing hardcoded UI colors classified as migration inventory or explicit exceptions, and validate the checker through focused fixtures or temporary scoped samples so `pnpm guard` stays green until component migration phases tighten enforcement.
+  - [x] Substep 3.2a Implement: Exempt CSS-wide/special keywords such as `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` in the named-color check so ghost buttons, SVG current-color, and inherit/reset states pass by semantics.
+  - [x] Substep 3.3 Implement: Add an explicit allowlist mechanism covering brand assets, SVG illustrations, user accent input, canvas/sketch user colors, user-authored file/inspect colors, external runtime documents, and tests/fixtures.
+  - [x] Substep 3.4 Implement: If helpers need extraction, add focused tests under `apps/web/tests/`; test fixtures must cover `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` passing, and real unregistered named colors failing.
+  - [x] Substep 3.5 Verify: Run `pnpm guard` and confirm the hardcoded-color scaffolding does not fail known migration inventory items such as legacy `SettingsDialog` fallbacks or component colors still scheduled for later phases.
+  - [x] Substep 3.6 Verify: Temporarily write a default Tailwind native color class in a TSX file, such as `text-red-500`, confirm `pnpm guard` detects it and fails, then remove the temporary code.
+  - [x] Substep 3.7 Verify: Temporarily write an unallowlisted hardcoded color in a guard fixture or temporary scoped sample, such as `style={{ color: '#ff0000' }}`, confirm `pnpm guard` detects it and fails, then remove the temporary code.
+  - [x] Substep 3.8 Verify: Run `pnpm --filter @open-design/web test`.
+- [x] Step 4: Build migration inventory and agent visual comparison prep
+  - [x] Substep 4.1 Implement: Generate an inventory of global CSS classes referenced in `apps/web/src/**/*.tsx` and map them to definitions in `apps/web/src/index.css`.
+  - [x] Substep 4.2 Implement: Classify classes as component-level migratable styles, global base styles, loading shell, keyframes/animation, content-level/third-party boundary styles, and retained exceptions; identify unlayered element selectors that set properties planned for Tailwind utilities, such as global `button` base rules, and assign each one a remove, constrain, or move-to-`@layer base` resolution before its affected TSX migration slice.
+  - [x] Substep 4.3 Implement: Record the corresponding token-first Tailwind utility combination or migration note for each component-level class.
+  - [x] Substep 4.4 Implement: Define style guard allowlist entries, path/pattern scopes, and the repeated arbitrary color promotion threshold.
+  - [x] Substep 4.5 Verify: Confirm the migration inventory covers all global classes referenced by TSX; the migration inventory is an implementation reference, while actual migration scope and classification follow the current code at implementation time, with on-the-spot judgment for classes added or changed after rebase.
+  - [x] Substep 4.6 Verify: Run `pnpm guard`, `pnpm typecheck`, `pnpm --filter @open-design/web test`, and `pnpm --filter @open-design/web build`.
+- [x] Step 5: Establish the dual-worktree agent visual comparison workflow
+  - [x] Substep 5.1 Implement: Define the agent comparison scenario list, viewport, theme/accent matrix, fixture data, dual-worktree namespace values and port assignments, screenshot artifact requirements, component source inspection guidance, and phase notes format.
+  - [x] Substep 5.2 Implement: Prepare startup instructions for the baseline and development worktrees: run `pnpm tools-dev run web --namespace baseline --daemon-port <baseline-daemon-port> --web-port <baseline-web-port>` in the baseline worktree and `pnpm tools-dev run web --namespace candidate --daemon-port <candidate-daemon-port> --web-port <candidate-web-port>` in the development worktree so each web/daemon pair has independent runtime files and IPC sockets.
+  - [x] Substep 5.3 Verify: In Phase 1, have an agent equipped with agent-browser CLI and Chrome DevTools MCP smoke-compare the workflow definition against a Dashboard/app shell baseline-vs-development run so the dual-worktree process, screenshot artifact shape, and comparison notes format are proven end to end.
+  - [ ] Substep 5.4 Verify: The full migration gate for follow-up slices remains the complete scenario and theme matrix: Dashboard/app shell, project detail, settings dialog, file viewer/inspect overlay, sketch editor, live artifact card, and modal/popover/control states under light, dark, system, and custom accent. When layout offset, token color drift, radius/shadow differences, or theme-state differences appear, fix the styles or record an approved deviation.
+  - [x] Substep 5.5 Implement: In `phase1-notes.md`, record foundation changes, migration inventory, dual-worktree service URLs, agent comparison coverage scenarios, discovered issues, and approved deviations.
 
 ### Phase 2: Shell and common controls PR
 
 Goal: migrate app shell, buttons, inputs, cards, popovers, and modals using token-backed colors/radius/shadows.
 
 - [ ] Step 6: Migrate shell and common controls
-  - [ ] Substep 6.1 Implement: Replace component-level global classes for app shell, buttons, inputs, cards, popovers, and modals with token-first Tailwind classes according to the migration inventory.
+  - [ ] Substep 6.1 Implement: Replace component-level global classes for app shell, buttons, inputs, cards, popovers, and modals with token-first Tailwind classes according to the migration inventory and `token.md` migration rules, including font aliases, exact text-size aliases, and retained element/reset selector resolution before applying utilities to affected elements.
   - [ ] Substep 6.2 Implement: For common UI that depends on `--radius*` and `--shadow*`, use variable-backed Tailwind utilities such as `rounded-card`, `rounded-panel`, `rounded-token-pill`, `shadow-token-sm`, and `shadow-token-md`.
   - [ ] Substep 6.3 Implement: When retaining necessary dynamic class composition, use a complete static class map; cases that need runtime-generated classes must have explicit safelist and guard/test coverage.
   - [ ] Substep 6.4 Implement: Remove component-level class definitions migrated in this phase from `index.css`, while retaining styles still used by global boundaries.
@@ -249,7 +250,7 @@ Goal: migrate app shell, buttons, inputs, cards, popovers, and modals using toke
 Goal: migrate settings dialogs, project creation, project detail panels, and status surfaces.
 
 - [ ] Step 8: Migrate settings and project panel areas
-  - [ ] Substep 8.1 Implement: Replace component-level global classes for settings dialog, project creation, project detail panels, and status surfaces with token-first Tailwind classes.
+  - [ ] Substep 8.1 Implement: Replace component-level global classes for settings dialog, project creation, project detail panels, and status surfaces with token-first Tailwind classes according to `token.md` migration rules, including font aliases, exact text-size aliases, and retained element/reset selector resolution before applying utilities to affected elements.
   - [ ] Substep 8.2 Implement: Migrate legacy token fallbacks in `SettingsDialog` and governable hardcoded colors in project panels to current tokens or Tailwind utilities.
   - [ ] Substep 8.3 Implement: Use semantic token utilities such as `success`, `info`, `discovery`, `danger`, and `warning` for status surfaces.
   - [ ] Substep 8.4 Implement: Remove component-level class definitions migrated in this phase from `index.css`, while retaining explicitly documented retained styles.
@@ -264,7 +265,7 @@ Goal: migrate settings dialogs, project creation, project detail panels, and sta
 Goal: migrate file viewer chrome, inspect/comment overlays, and edit-mode integration to token-first utilities while keeping user-authored file color conversion helpers allowlisted.
 
 - [ ] Step 10: Migrate file viewer and inspect/edit-mode overlays
-  - [ ] Substep 10.1 Implement: Replace component-level global classes for file viewer app chrome with token-first Tailwind classes.
+  - [ ] Substep 10.1 Implement: Replace component-level global classes for file viewer app chrome with token-first Tailwind classes according to `token.md` migration rules, including font aliases, exact text-size aliases, and retained element/reset selector resolution before applying utilities to affected elements.
   - [ ] Substep 10.2 Implement: Migrate inspect/comment overlays to `selection`/`inspect` tokens, such as `bg-selection-overlay`, `border-selection-outline`, `ring-selection-outline`, and `bg-inspect-overlay`.
   - [ ] Substep 10.3 Implement: Keep file color conversion helpers and user-authored content colors in a narrow allowlist, annotated with a runtime/user-content reason.
   - [ ] Substep 10.4 Implement: Remove component-level class definitions migrated in this phase from `index.css`, while retaining file/user-content boundary styles.
@@ -279,7 +280,7 @@ Goal: migrate file viewer chrome, inspect/comment overlays, and edit-mode integr
 Goal: migrate app chrome around sketch canvases and runtime surfaces while retaining user content, iframe, popup, generated runtime HTML, and fixtures under explicit exceptions.
 
 - [ ] Step 12: Migrate sketch and runtime content boundaries
-  - [ ] Substep 12.1 Implement: Replace component-level global classes for sketch editor app chrome, runtime surfaces, live artifact card, and related controls with token-first Tailwind classes.
+  - [ ] Substep 12.1 Implement: Replace component-level global classes for sketch editor app chrome, runtime surfaces, live artifact card, and related controls with token-first Tailwind classes according to `token.md` migration rules, including font aliases, exact text-size aliases, and retained element/reset selector resolution before applying utilities to affected elements.
   - [ ] Substep 12.2 Implement: Keep sketch/canvas user drawing colors, external document, iframe, popup, generated runtime HTML, and fixtures in the explicit allowlist, annotated with boundary reasons.
   - [ ] Substep 12.3 Implement: Use app token utilities for canvas-adjacent UI; canvas data and user content keep data semantics.
   - [ ] Substep 12.4 Implement: Remove component-level class definitions migrated in this phase from `index.css`, while retaining content-wide, iframe/runtime, and fixture boundary styles.
