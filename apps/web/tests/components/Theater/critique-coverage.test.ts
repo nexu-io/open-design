@@ -46,14 +46,37 @@
  *      keyed CSS, i18n consumer).
  *   3. Add at least one test that exercises the new symbol.
  *   4. Add the symbol string to the appropriate group below
- *      (`SSE_EVENTS`, `PANELIST_ROLE_STRINGS`, `PHASE_STRINGS`,
- *      `I18N_KEYS`). The walker auto-enforces presence in both
- *      corpora on the next CI run.
+ *      (`SSE_EVENTS` is auto-built from
+ *      `CRITIQUE_SSE_EVENT_NAMES` so it stays in sync without
+ *      manual upkeep; `PANELIST_ROLE_STRINGS` is auto-built from
+ *      `PANELIST_ROLES` for the same reason; `PHASE_STRINGS`
+ *      and `I18N_KEYS` are hand-maintained lists that need a
+ *      matching entry).
  *
- *   Failure mode if a contributor forgets step 4: CI red, gate
- *   message names the missing symbol AND which corpus is missing
- *   it. The reviewer of the next PR sees this and asks for the
- *   walker update in the same diff.
+ *   What the walker DOES catch (lefarcen P3 follow-up on PR
+ *   #1318):
+ *
+ *   - Renaming an EXISTING symbol in production / tests without
+ *     updating the walker's array → CI red. The walker still
+ *     looks for the old name and fails to find it. The reviewer
+ *     of the rename PR sees the failing assertion (with both
+ *     the missing symbol AND which corpus is missing it) and
+ *     asks for the walker update in the same diff.
+ *
+ *   What the walker does NOT catch on its own:
+ *
+ *   - Adding a NEW hand-maintained symbol (phase string or i18n
+ *     key) without adding it to the walker array → CI stays
+ *     green. The walker does not know to look for a symbol
+ *     it was not told about. Mitigation: contracts-derived
+ *     groups (`SSE_EVENTS`, `PANELIST_ROLE_STRINGS`) auto-grow
+ *     so the contracts package is the only place that needs
+ *     editing; the hand-maintained groups (`PHASE_STRINGS`,
+ *     `I18N_KEYS`) are short enough that step 4 is a one-line
+ *     edit in the same diff as the contracts / i18n change.
+ *     A future pre-commit hook (lefarcen Q5) would close this
+ *     gap entirely; tracked as a TODO at the bottom of this
+ *     docblock.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -130,13 +153,27 @@ const SRC_CORPUS = readCorpus(SRC_FILES);
 const TEST_CORPUS = readCorpus(TEST_FILES);
 
 /**
- * Match a symbol against a corpus. For prefixed SSE event names
- * (`critique.<event>`) we also accept the unprefixed PanelEvent type
- * form (`type: '<event>'`) on the test side, because reducer tests
- * dispatch the PanelEvent shape (no `critique.` prefix) while
- * production code uses the prefixed form on the SSE wire.
+ * Strict source-side match. Production code MUST reference the symbol
+ * by its exact wire form: a `critique.<event>` SSE name must appear
+ * as `critique.<event>`, not as the unprefixed PanelEvent type alias.
+ * This is what guarantees the wire name still ships; allowing the
+ * unprefixed fallback here would let production code drop the SSE
+ * channel name silently while the PanelEvent type alias keeps the
+ * walker green (lefarcen P2 follow-up on PR #1318).
  */
-function corpusReferences(corpus: string, sym: string): boolean {
+function srcReferences(corpus: string, sym: string): boolean {
+  return corpus.includes(sym);
+}
+
+/**
+ * Lenient test-side match. Reducer tests dispatch the PanelEvent
+ * shape directly (no `critique.` prefix on the SSE channel), so
+ * for an SSE event symbol the test corpus is allowed to satisfy
+ * the assertion via either the prefixed form (`critique.<event>`)
+ * OR the unprefixed PanelEvent type form (`type: '<event>'`). Both
+ * forms prove an assertion exercises the event end-to-end.
+ */
+function testReferences(corpus: string, sym: string): boolean {
   if (corpus.includes(sym)) return true;
   if (sym.startsWith('critique.')) {
     const unprefixed = sym.slice('critique.'.length);
@@ -184,14 +221,14 @@ describe('critique-coverage walker (Phase 13.2)', () => {
   describe('SSE event names', () => {
     it.each(SSE_EVENTS)('production references %s', (sym) => {
       expect(
-        corpusReferences(SRC_CORPUS, sym),
+        srcReferences(SRC_CORPUS, sym),
         `expected SRC corpus to mention SSE event "${sym}" at least once`,
       ).toBe(true);
     });
 
     it.each(SSE_EVENTS)('tests reference %s', (sym) => {
       expect(
-        corpusReferences(TEST_CORPUS, sym),
+        testReferences(TEST_CORPUS, sym),
         `expected TEST corpus to mention SSE event "${sym}" (prefixed or as PanelEvent type) at least once`,
       ).toBe(true);
     });
@@ -200,14 +237,14 @@ describe('critique-coverage walker (Phase 13.2)', () => {
   describe('Panelist roles', () => {
     it.each(PANELIST_ROLE_STRINGS)('production references %s', (sym) => {
       expect(
-        corpusReferences(SRC_CORPUS, sym),
+        srcReferences(SRC_CORPUS, sym),
         `expected SRC corpus to mention panelist role string ${sym} at least once`,
       ).toBe(true);
     });
 
     it.each(PANELIST_ROLE_STRINGS)('tests reference %s', (sym) => {
       expect(
-        corpusReferences(TEST_CORPUS, sym),
+        testReferences(TEST_CORPUS, sym),
         `expected TEST corpus to mention panelist role string ${sym} at least once`,
       ).toBe(true);
     });
@@ -216,14 +253,14 @@ describe('critique-coverage walker (Phase 13.2)', () => {
   describe('Reducer lifecycle phases', () => {
     it.each(PHASE_STRINGS)('production references %s', (sym) => {
       expect(
-        corpusReferences(SRC_CORPUS, sym),
+        srcReferences(SRC_CORPUS, sym),
         `expected SRC corpus to mention reducer phase string ${sym} at least once`,
       ).toBe(true);
     });
 
     it.each(PHASE_STRINGS)('tests reference %s', (sym) => {
       expect(
-        corpusReferences(TEST_CORPUS, sym),
+        testReferences(TEST_CORPUS, sym),
         `expected TEST corpus to mention reducer phase string ${sym} at least once`,
       ).toBe(true);
     });
@@ -232,14 +269,14 @@ describe('critique-coverage walker (Phase 13.2)', () => {
   describe('i18n keys', () => {
     it.each(I18N_KEYS)('production references %s', (sym) => {
       expect(
-        corpusReferences(SRC_CORPUS, sym),
+        srcReferences(SRC_CORPUS, sym),
         `expected SRC corpus to mention i18n key "${sym}" at least once`,
       ).toBe(true);
     });
 
     it.each(I18N_KEYS)('tests reference %s', (sym) => {
       expect(
-        corpusReferences(TEST_CORPUS, sym),
+        testReferences(TEST_CORPUS, sym),
         `expected TEST corpus to mention i18n key "${sym}" at least once`,
       ).toBe(true);
     });
