@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
+  buildDesignHandoffContent,
+  buildDesignManifestContent,
   buildSandboxedPreviewDocument,
   exportAsMd,
   exportAsPdf,
@@ -70,6 +72,118 @@ describe('archiveFilenameFrom', () => {
       'content-disposition': "attachment; filename*=UTF-8''%E9%9D",
     });
     expect(archiveFilenameFrom(resp, 'fallback', 'ui-design')).toBe('ui-design.zip');
+  });
+});
+
+describe('buildDesignHandoffContent', () => {
+  it('documents coding handoff and responsive verification expectations', () => {
+    const content = buildDesignHandoffContent({
+      title: 'Checkout Design',
+      entryFile: 'index.html',
+      files: ['index.html', 'src/app.css', 'src/app.js'],
+    });
+
+    expect(content).toContain('Checkout Design implementation handoff');
+    expect(content).toContain('Mobile compact: 360×800');
+    expect(content).toContain('Tablet portrait: 820×1180');
+    expect(content).toContain('Wide desktop: 1920×1080');
+    expect(content).toContain('`src/app.css`');
+    expect(content).toContain('visual system');
+    expect(content).toContain('Design fidelity contract');
+    expect(content).toContain('CJX-ready UX contract');
+    expect(content).toContain('DESIGN-MANIFEST.json');
+    expect(content).toContain('in-app modules/components');
+    expect(content).toContain('OS widgets are home-screen/lock-screen/quick-access surfaces');
+    expect(content).toContain('Color and brand contract');
+    expect(content).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
+    expect(content).toContain('Build product screens and domain-specific in-app modules');
+  });
+
+  it('builds a machine-readable design manifest for coding tools', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Checkout Design',
+      entryFile: 'index.html',
+      files: ['index.html', 'src/app.css', 'src/app.js'],
+    }));
+
+    expect(manifest.schema).toBe('open-design.design-manifest.v1');
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.sourceFiles.css).toEqual(['src/app.css']);
+    expect(manifest.sourceFiles.scriptsAndComponents).toEqual(['src/app.js']);
+    expect(manifest.appModules.join(' ')).toContain('domain-specific in-app modules');
+    expect(manifest.osWidgets.join(' ')).toContain('home-screen');
+    expect(manifest.responsiveViewports).toContainEqual({
+      name: 'tablet-portrait',
+      width: 820,
+      height: 1180,
+      category: 'tablet',
+      mustAvoidHorizontalScroll: true,
+    });
+    expect(manifest.implementationChecklist.join(' ')).toContain('landing pages, in-app modules, and OS widgets');
+  });
+
+  it('does not classify plain home.html as a landing page in the manifest', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Product App',
+      entryFile: 'home.html',
+      files: ['home.html', 'dashboard.html', 'marketing.html'],
+    }));
+
+    const screens = new Map(manifest.screens.map((screen: { file: string; role: string }) => [screen.file, screen.role]));
+    expect(screens.get('home.html')).not.toBe('landing-page');
+    expect(screens.get('marketing.html')).toBe('landing-page');
+    expect(screens.get('dashboard.html')).toBe('product-screen');
+  });
+
+  it('keeps frame wrapper HTML out of client export manifest screens', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Framed App',
+      entryFile: 'index.html',
+      files: ['index.html', 'frames/iphone-15-pro.html', 'browser-chrome.html', 'src/app.css'],
+    }));
+
+    expect(manifest.sourceFiles.html).toEqual(['browser-chrome.html', 'frames/iphone-15-pro.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
+  });
+
+  it('normalizes a frame-wrapper active file to the implementable screen entry in manifest and handoff', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Framed App',
+      entryFile: 'frames/iphone-15-pro.html',
+      files: ['index.html', 'landing.html', 'frames/iphone-15-pro.html', 'src/app.css'],
+    }));
+    const handoff = buildDesignHandoffContent({
+      title: 'Framed App',
+      entryFile: 'frames/iphone-15-pro.html',
+      files: ['index.html', 'landing.html', 'frames/iphone-15-pro.html', 'src/app.css'],
+    });
+
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html', 'landing.html']);
+    expect(handoff).toContain('Primary entry: `index.html`');
+    expect(handoff).toContain('Open `index.html` and `DESIGN-MANIFEST.json`');
+    expect(handoff).not.toContain('Primary entry: `frames/iphone-15-pro.html`');
+  });
+
+  it('keeps phone.html and iphone-upgrade.html as real screens when outside frames/ directory', () => {
+    // phone.html as a carrier storefront screen, iphone-upgrade.html as a
+    // product surface — neither should be silently dropped from screens just
+    // because the filename resembles a device name.
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Carrier Storefront',
+      entryFile: 'phone.html',
+      files: ['phone.html', 'iphone-upgrade.html', 'frames/browser-shell.html', 'src/app.css'],
+    }));
+
+    const screenFiles = manifest.screens.map((screen: { file: string }) => screen.file);
+    expect(screenFiles).toContain('phone.html');
+    expect(screenFiles).toContain('iphone-upgrade.html');
+    // frame wrapper inside frames/ is still excluded
+    expect(screenFiles).not.toContain('frames/browser-shell.html');
+    // both real screens appear in sourceFiles.html
+    expect(manifest.sourceFiles.html).toContain('phone.html');
+    expect(manifest.sourceFiles.html).toContain('iphone-upgrade.html');
+    expect(manifest.sourceFiles.html).toContain('frames/browser-shell.html');
   });
 });
 

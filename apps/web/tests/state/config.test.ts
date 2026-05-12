@@ -104,6 +104,27 @@ describe('syncConfigToDaemon', () => {
     });
   });
 
+  it('syncs proxy API key env values to daemon app config while localStorage strips them', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
+        codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      agentCliEnv: {
+        claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
+        codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
+      },
+    });
+  });
+
   it('syncs daemon-owned privacy decision fields', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -781,5 +802,33 @@ describe('saveConfig', () => {
     expect(saved.installationId).toBeUndefined();
     expect(saved.privacyDecisionAt).toBeUndefined();
     expect(saved.telemetry).toBeUndefined();
+  });
+
+  it('keeps proxy API key env values out of localStorage while preserving non-secret env', () => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        claude: {
+          ANTHROPIC_API_KEY: 'sk-anthropic',
+          ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
+          CLAUDE_CONFIG_DIR: '~/.claude-2',
+        },
+        codex: {
+          OPENAI_API_KEY: 'sk-openai',
+          OPENAI_BASE_URL: 'https://proxy.example/openai',
+          CODEX_HOME: '~/.codex-alt',
+        },
+      },
+    });
+
+    const saved = JSON.parse(store.get('open-design:config') ?? '{}');
+    expect(saved.agentCliEnv.claude).toEqual({
+      ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
+      CLAUDE_CONFIG_DIR: '~/.claude-2',
+    });
+    expect(saved.agentCliEnv.codex).toEqual({
+      OPENAI_BASE_URL: 'https://proxy.example/openai',
+      CODEX_HOME: '~/.codex-alt',
+    });
   });
 });

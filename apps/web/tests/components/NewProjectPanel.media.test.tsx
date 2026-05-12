@@ -26,6 +26,7 @@ describe('NewProjectPanel media provider badges', () => {
         designSystems={[]}
         defaultDesignSystemId={null}
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={vi.fn()}
         mediaProviders={{
@@ -39,9 +40,13 @@ describe('NewProjectPanel media provider badges', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    // Model picker is now a combobox — open the popover so the
+    // provider group + status badge become visible in the DOM.
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
 
-    const openaiGroup = screen.getByText('OpenAI').closest('.newproj-model-group');
+    const openaiGroup = screen.getByText('OpenAI').closest('.ds-picker-group');
     expect(openaiGroup?.textContent).toContain('Configured');
     expect(openaiGroup?.textContent).not.toContain('Integrated');
   });

@@ -165,8 +165,12 @@ export interface Dict {
   'settings.cliEnvTitle': string;
   'settings.cliEnvHint': string;
   'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvClaudeBaseUrl': string;
+  'settings.cliEnvClaudeApiKey': string;
   'settings.cliEnvCodexHome': string;
   'settings.cliEnvCodexBin': string;
+  'settings.cliEnvCodexBaseUrl': string;
+  'settings.cliEnvCodexApiKey': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
@@ -615,6 +619,7 @@ export interface Dict {
   'newproj.tabLiveArtifact': string;
   'newproj.tabDeck': string;
   'newproj.tabTemplate': string;
+  'newproj.tabMedia': string;
   'newproj.tabOther': string;
   'newproj.titlePrototype': string;
   'newproj.titleLiveArtifact': string;
@@ -623,6 +628,7 @@ export interface Dict {
   'newproj.titleImage': string;
   'newproj.titleVideo': string;
   'newproj.titleAudio': string;
+  'newproj.titleMedia': string;
   'newproj.titleOther': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;
@@ -632,6 +638,12 @@ export interface Dict {
   'newproj.toggleSpeakerNotesHint': string;
   'newproj.toggleAnimations': string;
   'newproj.toggleAnimationsHint': string;
+  'newproj.surfaceOptionsLabel': string;
+  'newproj.includeLandingPage': string;
+  'newproj.includeLandingPageHint': string;
+  'newproj.includeOsWidgets': string;
+  'newproj.includeOsWidgetsHint': string;
+  'newproj.includeOsWidgetsDisabledHint': string;
   'newproj.templateLabel': string;
   'newproj.noTemplatesTitle': string;
   'newproj.noTemplatesBody': string;
@@ -667,9 +679,12 @@ export interface Dict {
   'newproj.surfaceVideo': string;
   'newproj.surfaceAudio': string;
   'newproj.modelLabel': string;
+  'newproj.modelSearch': string;
+  'newproj.modelEmpty': string;
+  'newproj.modelRecommended': string;
+  'newproj.modelMissingTitle': string;
+  'newproj.modelMissingSub': string;
   'newproj.aspectLabel': string;
-  'newproj.imageStyleLabel': string;
-  'newproj.imageStylePlaceholder': string;
   'newproj.videoLengthLabel': string;
   'newproj.videoLengthSeconds': string;
   'newproj.audioKindLabel': string;
@@ -751,6 +766,22 @@ export interface Dict {
   'designs.viewKanban': string;
   'designs.kanbanEmptyColumn': string;
   'designs.deleteAria': string;
+  'designs.menuMore': string;
+  'designs.menuRename': string;
+  'designs.menuDelete': string;
+  'designs.renamePrompt': string;
+  'designs.selectMode': string;
+  'designs.cancelSelect': string;
+  'designs.deleteSelected': string;
+  'designs.selectedCount': string;
+  'designs.deleteSelectedConfirm': string;
+  'designs.tagPrototype': string;
+  'designs.tagLiveArtifact': string;
+  'designs.tagSlide': string;
+  'designs.tagMedia': string;
+  'designs.renameTitle': string;
+  'designs.renameSave': string;
+  'designs.renameCancel': string;
 
   // Examples tab
   'examples.typeLabel': string;
@@ -1118,6 +1149,13 @@ export interface Dict {
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
+  'fileViewer.viewportAria': string;
+  'fileViewer.viewportDesktop': string;
+  'fileViewer.viewportDesktopTitle': string;
+  'fileViewer.viewportTablet': string;
+  'fileViewer.viewportTabletTitle': string;
+  'fileViewer.viewportMobile': string;
+  'fileViewer.viewportMobileTitle': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;
@@ -1327,6 +1365,21 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.feedbackPrompt': string;
+  'assistant.feedbackPositive': string;
+  'assistant.feedbackNegative': string;
+  'assistant.feedbackReasonTitle': string;
+  'assistant.feedbackReasonPositiveMatched': string;
+  'assistant.feedbackReasonPositiveVisual': string;
+  'assistant.feedbackReasonPositiveUseful': string;
+  'assistant.feedbackReasonPositiveEasy': string;
+  'assistant.feedbackReasonNegativeMissed': string;
+  'assistant.feedbackReasonNegativeVisual': string;
+  'assistant.feedbackReasonNegativeIncomplete': string;
+  'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonOther': string;
+  'assistant.feedbackReasonPlaceholder': string;
+  'assistant.feedbackReasonSubmit': string;
   'assistant.emptyResponseLabel': string;
   'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;
@@ -1546,16 +1599,4 @@ export interface Dict {
   'critiqueTheater.replaySpeedInstant': string;
   'critiqueTheater.replaySpeedLive': string;
   'critiqueTheater.replaySpeedFast': string;
-
-  // Message-level feedback widget (issue #1288)
-  'feedback.prompt': string;
-  'feedback.thumbsUp': string;
-  'feedback.thumbsDown': string;
-  'feedback.submittedPositive': string;
-  'feedback.submittedNegative': string;
-  'feedback.commentLabel': string;
-  'feedback.commentPlaceholder': string;
-  'feedback.commentSubmit': string;
-  'feedback.commentSaved': string;
-  'feedback.change': string;
 }
