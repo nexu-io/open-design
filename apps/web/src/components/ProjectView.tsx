@@ -1756,18 +1756,17 @@ export function ProjectView({
         // this for tool-emitted files; this handles the artifact-tag path.
         requestOpenFile(file.name);
       } else {
-        // writeProjectTextFile collapses non-OK responses (including
-        // 422 ARTIFACT_REGRESSION from reject-mode stub-guard) to null.
-        // Surfacing the structured error requires changing that helper's
-        // return contract for all callers — out of scope here. Until then,
-        // a generic banner makes the failure observable instead of silent.
-        // Allow the user to retry by clearing the saved-artifact ref so a
-        // retry attempt re-enters this code path.
+        // writeProjectTextFile collapses all failure paths (non-OK HTTP
+        // responses, network errors, and stub-guard 422s) to null — the
+        // helper's return contract would need to be widened to distinguish
+        // them, which is out of scope here.  Show a generic banner so the
+        // failure is observable rather than silent; the daemon logs carry
+        // the structured details for any specific error type.
+        // Clear the saved-artifact ref so the user can retry.
         savedArtifactRef.current = '';
         setError(
-          `Couldn't save artifact "${fileName}". The daemon refused the write — ` +
-            'this is most likely OD_ARTIFACT_STUB_GUARD=reject catching a placeholder body. ' +
-            'Check the daemon logs for the structured ARTIFACT_REGRESSION details.',
+          `Couldn't save artifact "${fileName}". The write failed — ` +
+            'check the daemon logs for details.',
         );
       }
     },
