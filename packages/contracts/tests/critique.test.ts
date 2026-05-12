@@ -146,3 +146,154 @@ describe('isPanelEvent (strict guard, Siri-Ray round-3 P1 on PR #1314)', () => {
     expect(isPanelEvent({ ...SHIP_OK, artifactRef: null })).toBe(false);
   });
 });
+
+describe('isPanelEvent (numeric domain enforcement, lefarcen P2 on PR #1314 round 4)', () => {
+  // The earlier strict guard only enforced `Number.isFinite` on numeric
+  // fields. That let `scale: 0` (which ScoreTicker divides by, producing
+  // Infinity in inline CSS), negative thresholds, fractional rounds,
+  // and negative `mustFix` slip through to the reducer. This block pins
+  // the actual numeric domains the contract intends: positive integers
+  // where appropriate, non-negative where the field has a "no data yet"
+  // sentinel of 0, and threshold <= scale within `run_started`.
+
+  const RUN_STARTED_OK = {
+    type: 'run_started' as const,
+    runId: 'r',
+    protocolVersion: 1,
+    cast: ['critic'] as const,
+    maxRounds: 3,
+    threshold: 8,
+    scale: 10,
+  };
+
+  const SHIP_OK = {
+    type: 'ship' as const,
+    runId: 'r',
+    round: 3,
+    composite: 8.6,
+    status: 'shipped' as const,
+    artifactRef: { projectId: 'p', artifactId: 'a' },
+    summary: '',
+  };
+
+  // -- run_started numeric domains --
+  it('rejects run_started with scale: 0 (would cause division by zero downstream)', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, scale: 0 })).toBe(false);
+  });
+  it('rejects run_started with negative scale', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, scale: -10 })).toBe(false);
+  });
+  it('rejects run_started with fractional scale', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, scale: 10.5 })).toBe(false);
+  });
+  it('rejects run_started with maxRounds: 0', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, maxRounds: 0 })).toBe(false);
+  });
+  it('rejects run_started with fractional maxRounds', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, maxRounds: 1.5 })).toBe(false);
+  });
+  it('rejects run_started with protocolVersion: 0', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, protocolVersion: 0 })).toBe(false);
+  });
+  it('rejects run_started with fractional protocolVersion', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, protocolVersion: 1.5 })).toBe(false);
+  });
+  it('rejects run_started with negative threshold', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, threshold: -1 })).toBe(false);
+  });
+  it('rejects run_started with threshold > scale', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, threshold: 11, scale: 10 })).toBe(false);
+  });
+  it('accepts run_started with threshold == scale (boundary)', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, threshold: 10, scale: 10 })).toBe(true);
+  });
+  it('accepts run_started with fractional threshold within [0, scale]', () => {
+    expect(isPanelEvent({ ...RUN_STARTED_OK, threshold: 8.5, scale: 10 })).toBe(true);
+  });
+
+  // -- panelist_* round/score domains --
+  it('rejects panelist_open with round: 0 (rounds are 1-indexed)', () => {
+    expect(isPanelEvent({ type: 'panelist_open', runId: 'r', round: 0, role: 'critic' })).toBe(false);
+  });
+  it('rejects panelist_open with fractional round', () => {
+    expect(isPanelEvent({ type: 'panelist_open', runId: 'r', round: 1.5, role: 'critic' })).toBe(false);
+  });
+  it('rejects panelist_dim with negative dimScore', () => {
+    expect(isPanelEvent({
+      type: 'panelist_dim', runId: 'r', round: 1, role: 'critic',
+      dimName: 'c', dimScore: -1, dimNote: '',
+    })).toBe(false);
+  });
+  it('rejects panelist_close with negative score', () => {
+    expect(isPanelEvent({
+      type: 'panelist_close', runId: 'r', round: 1, role: 'critic', score: -1,
+    })).toBe(false);
+  });
+
+  // -- round_end --
+  it('rejects round_end with negative mustFix', () => {
+    expect(isPanelEvent({
+      type: 'round_end', runId: 'r', round: 1, composite: 6,
+      mustFix: -1, decision: 'continue', reason: '',
+    })).toBe(false);
+  });
+  it('rejects round_end with fractional mustFix', () => {
+    expect(isPanelEvent({
+      type: 'round_end', runId: 'r', round: 1, composite: 6,
+      mustFix: 1.5, decision: 'continue', reason: '',
+    })).toBe(false);
+  });
+  it('rejects round_end with negative composite', () => {
+    expect(isPanelEvent({
+      type: 'round_end', runId: 'r', round: 1, composite: -1,
+      mustFix: 0, decision: 'continue', reason: '',
+    })).toBe(false);
+  });
+
+  // -- ship --
+  it('rejects ship with negative composite', () => {
+    expect(isPanelEvent({ ...SHIP_OK, composite: -1 })).toBe(false);
+  });
+  it('rejects ship with round: 0', () => {
+    expect(isPanelEvent({ ...SHIP_OK, round: 0 })).toBe(false);
+  });
+
+  // -- interrupted (bestRound: 0 is a valid sentinel for "no round completed") --
+  it('accepts interrupted with bestRound: 0 (no round completed before interrupt)', () => {
+    expect(isPanelEvent({
+      type: 'interrupted', runId: 'r', bestRound: 0, composite: 0,
+    })).toBe(true);
+  });
+  it('rejects interrupted with negative bestRound', () => {
+    expect(isPanelEvent({
+      type: 'interrupted', runId: 'r', bestRound: -1, composite: 0,
+    })).toBe(false);
+  });
+  it('rejects interrupted with fractional bestRound', () => {
+    expect(isPanelEvent({
+      type: 'interrupted', runId: 'r', bestRound: 1.5, composite: 7,
+    })).toBe(false);
+  });
+  it('rejects interrupted with negative composite', () => {
+    expect(isPanelEvent({
+      type: 'interrupted', runId: 'r', bestRound: 1, composite: -1,
+    })).toBe(false);
+  });
+
+  // -- parser_warning position --
+  it('rejects parser_warning with negative position', () => {
+    expect(isPanelEvent({
+      type: 'parser_warning', runId: 'r', kind: 'weak_debate', position: -1,
+    })).toBe(false);
+  });
+  it('rejects parser_warning with fractional position', () => {
+    expect(isPanelEvent({
+      type: 'parser_warning', runId: 'r', kind: 'weak_debate', position: 1.5,
+    })).toBe(false);
+  });
+  it('accepts parser_warning with position: 0 (start of stream)', () => {
+    expect(isPanelEvent({
+      type: 'parser_warning', runId: 'r', kind: 'weak_debate', position: 0,
+    })).toBe(true);
+  });
+});
