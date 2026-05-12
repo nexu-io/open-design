@@ -1318,6 +1318,7 @@ export const ptBR: Dict = {
   'settings.memoryExtractionsHint': 'Recent LLM-backed extraction attempts. Heuristic regex extraction always runs first; LLM extraction runs in the background after each turn.',
   'settings.memoryExtractionsEmpty': 'No extractions yet. The next chat turn will populate this list.',
   'settings.memoryExtractionsRefresh': 'Refresh',
+  'settings.memoryExtractionsRefreshing': 'Refreshing…',
   'settings.memoryExtractionPhaseRunning': 'Running…',
   'settings.memoryExtractionPhaseSuccess': 'Success',
   'settings.memoryExtractionPhaseSkipped': 'Skipped',

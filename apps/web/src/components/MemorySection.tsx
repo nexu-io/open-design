@@ -916,9 +916,10 @@ export function MemorySection() {
             type="button"
             className="ghost"
             onClick={() => void reloadExtractions()}
+            disabled={isRefreshing}
             title={t('settings.memoryExtractionsRefresh')}
           >
-            <Icon name="refresh" size={12} />{' '}
+            <Icon name="refresh" size={12} className={isRefreshing ? 'icon-spin' : ''} />{' '}
             <span style={{ marginLeft: 4 }}>
               {t('settings.memoryExtractionsRefresh')}
             </span>
