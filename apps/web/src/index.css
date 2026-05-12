@@ -17937,7 +17937,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   top: 0;
   background: var(--bg-panel);
   padding: 8px 10px 4px;
+  min-height: 32px;
   z-index: 1;
+  border-bottom: 1px solid var(--border);
 }
 
 .palette-tweaks-anchor { position: relative; display: inline-flex; }
