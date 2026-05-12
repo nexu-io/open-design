@@ -157,6 +157,28 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
 }
 
 /**
+ * Stub the daemon interrupt endpoint with a 204 ack.
+ *
+ * Why this exists (Codex P1 + lefarcen P1 on PR #1483): the e2e suite
+ * drives the Theater through a synthetic SSE fixture, but
+ * `runOrchestrator` never actually registers `runId: 'e2e-run-1'` with
+ * the daemon. When the user clicks Interrupt, the mount's
+ * wait-for-daemon-ack pattern hits `POST /api/projects/:id/critique/
+ * :runId/interrupt`, the real daemon answers 404 (unknown run), the
+ * mount clears `interruptPending`, and the assertion times out.
+ *
+ * Stubbing the route with a 2xx mirrors the production happy path for
+ * a known run without standing up a real critique session. Idempotent;
+ * applied in beforeEach so every test sees a deterministic ack even if
+ * only the interrupt test actually drives the click.
+ */
+async function stubInterruptEndpoint(page: Page): Promise<void> {
+  await page.route('**/api/projects/*/critique/*/interrupt', async (route: Route) => {
+    await route.fulfill({ status: 204, body: '' });
+  });
+}
+
+/**
  * Create a project through the real daemon and return to the caller a
  * URL the page can navigate to. The daemon owns the project row;
  * `stubProjectEvents` overrides only the SSE channel. Project ids are
@@ -181,6 +203,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
   test.beforeEach(async ({ page }) => {
     await bootAppWithCritiqueEnabled(page);
     await stubAgents(page);
+    await stubInterruptEndpoint(page);
   });
 
   test('mounts the live stage with five panelist lanes mid-run', async ({ page }) => {
