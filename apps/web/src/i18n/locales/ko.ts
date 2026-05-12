@@ -1074,6 +1074,11 @@ export const ko: Dict = {
   'critiqueTheater.replaySpeedInstant': '즉시',
   'critiqueTheater.replaySpeedLive': '실시간',
   'critiqueTheater.replaySpeedFast': '빠르게',
+  'critiqueTheater.settingsNav': '디자인 배심원단',
+  'critiqueTheater.settingsNavHint': '에이전트 실행 중 5인 패널 리뷰',
+  'critiqueTheater.settingsEnabledLabel': '에이전트 실행 중 디자인 배심원단 표시',
+  'critiqueTheater.settingsEnabledDescription':
+    '활성화하면 에이전트가 생성하는 동안 5인 패널 리뷰가 함께 진행되며 출하 전에 결과에 점수를 매깁니다. 언제든지 중단할 수 있습니다.',
 
   'pet.title': '펫',
   'pet.tabBuiltIn': '내장',

@@ -1148,6 +1148,11 @@ export const zhTW: Dict = {
   'critiqueTheater.replaySpeedInstant': '瞬時',
   'critiqueTheater.replaySpeedLive': '即時',
   'critiqueTheater.replaySpeedFast': '快進',
+  'critiqueTheater.settingsNav': '設計評審團',
+  'critiqueTheater.settingsNavHint': '為代理執行啟用五人設計評審',
+  'critiqueTheater.settingsEnabledLabel': '在代理執行期間顯示設計評審團',
+  'critiqueTheater.settingsEnabledDescription':
+    '啟用後，五人評審面板會在代理產生時同步進行，並在交付前為結果評分。可隨時中斷。',
 
   'pet.title': '寵物',
   'pet.tabBuiltIn': '內建',

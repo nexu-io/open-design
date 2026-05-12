@@ -1599,4 +1599,8 @@ export interface Dict {
   'critiqueTheater.replaySpeedInstant': string;
   'critiqueTheater.replaySpeedLive': string;
   'critiqueTheater.replaySpeedFast': string;
+  'critiqueTheater.settingsNav': string;
+  'critiqueTheater.settingsNavHint': string;
+  'critiqueTheater.settingsEnabledLabel': string;
+  'critiqueTheater.settingsEnabledDescription': string;
 }

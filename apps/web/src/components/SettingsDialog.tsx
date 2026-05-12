@@ -65,6 +65,10 @@ import { ConnectorsBrowser } from './ConnectorsBrowser';
 import { MemoryModelInline } from './MemoryModelInline';
 import { MemorySection } from './MemorySection';
 import {
+  setCritiqueTheaterEnabled,
+  useCritiqueTheaterEnabled,
+} from './Theater';
+import {
   applyAppearanceToDocument,
   normalizeAccentColor,
 } from '../state/appearance';
@@ -88,6 +92,7 @@ export type SettingsSection =
   | 'mcpClient'
   | 'language'
   | 'appearance'
+  | 'critiqueTheater'
   | 'notifications'
   | 'pet'
   | 'skills'
@@ -1313,6 +1318,10 @@ export function SettingsDialog({
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
+    critiqueTheater: {
+      title: t('critiqueTheater.settingsNav'),
+      subtitle: t('critiqueTheater.settingsNavHint'),
+    },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
@@ -1520,6 +1529,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.appearance')}</strong>
                 <small>{t('settings.appearanceHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
+              onClick={() => setActiveSection('critiqueTheater')}
+            >
+              <Icon name="comment" size={18} />
+              <span>
+                <strong>{t('critiqueTheater.settingsNav')}</strong>
+                <small>{t('critiqueTheater.settingsNavHint')}</small>
               </span>
             </button>
             <button
@@ -2380,6 +2400,10 @@ export function SettingsDialog({
 
           {activeSection === 'appearance' ? (
             <AppearanceSection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'critiqueTheater' ? (
+            <CritiqueTheaterSection />
           ) : null}
 
           {activeSection === 'notifications' ? (
@@ -4593,6 +4617,46 @@ function AppearanceSection({
           />
         </div>
       </div>
+    </section>
+  );
+}
+
+/**
+ * Settings surface for the M1 Critique Theater rollout toggle. Reads
+ * and writes through `useCritiqueTheaterEnabled` / `setCritiqueTheaterEnabled`
+ * (Phase 15), so the toggle round-trips localStorage and dispatches the
+ * cross-tab `open-design:critique-theater-toggle` CustomEvent the mount
+ * subscribes to. This is the global control; per-project overrides are
+ * a separate surface that writes through `setCritiqueTheaterEnabled(next,
+ * { projectId })` from the project view.
+ */
+function CritiqueTheaterSection() {
+  const { t } = useI18n();
+  const enabled = useCritiqueTheaterEnabled();
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('critiqueTheater.settingsNav')}</h3>
+          <p className="hint">{t('critiqueTheater.settingsNavHint')}</p>
+        </div>
+      </div>
+      <label className="field">
+        <span className="field-label">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => {
+              void setCritiqueTheaterEnabled(e.target.checked);
+            }}
+          />
+          {' '}
+          {t('critiqueTheater.settingsEnabledLabel')}
+        </span>
+        <small className="hint">
+          {t('critiqueTheater.settingsEnabledDescription')}
+        </small>
+      </label>
     </section>
   );
 }

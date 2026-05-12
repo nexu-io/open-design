@@ -1228,6 +1228,11 @@ export const en: Dict = {
   'critiqueTheater.replaySpeedInstant': 'Instant',
   'critiqueTheater.replaySpeedLive': 'Live',
   'critiqueTheater.replaySpeedFast': 'Fast',
+  'critiqueTheater.settingsNav': 'Design Jury',
+  'critiqueTheater.settingsNavHint': 'Five-panel design review for your runs',
+  'critiqueTheater.settingsEnabledLabel': 'Show Design Jury during agent runs',
+  'critiqueTheater.settingsEnabledDescription':
+    'When enabled, a five-panel review appears alongside agent generations and scores the output before shipping. You can interrupt at any time.',
 
   'pet.title': 'Pets',
   'pet.subtitle': 'Adopt a tiny companion that floats over your workspace.',

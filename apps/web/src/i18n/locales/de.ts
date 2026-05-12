@@ -962,6 +962,11 @@ export const de: Dict = {
   'critiqueTheater.replaySpeedInstant': 'Sofort',
   'critiqueTheater.replaySpeedLive': 'Live',
   'critiqueTheater.replaySpeedFast': 'Schnell',
+  'critiqueTheater.settingsNav': 'Design Jury',
+  'critiqueTheater.settingsNavHint': 'Fünf-Panel-Review für deine Agent-Runs',
+  'critiqueTheater.settingsEnabledLabel': 'Design Jury während Agent-Runs anzeigen',
+  'critiqueTheater.settingsEnabledDescription':
+    'Aktiviert, läuft während jeder Agent-Generierung eine Fünf-Panel-Review mit, die das Ergebnis vor der Auslieferung bewertet. Du kannst jederzeit unterbrechen.',
 
   'pet.title': 'Haustiere',
   'pet.tabBuiltIn': 'Vorgegeben',

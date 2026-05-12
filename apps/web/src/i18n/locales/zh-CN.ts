@@ -1193,6 +1193,11 @@ export const zhCN: Dict = {
   'critiqueTheater.replaySpeedInstant': '瞬时',
   'critiqueTheater.replaySpeedLive': '实时',
   'critiqueTheater.replaySpeedFast': '快进',
+  'critiqueTheater.settingsNav': '设计评审团',
+  'critiqueTheater.settingsNavHint': '为代理运行启用五人设计评审',
+  'critiqueTheater.settingsEnabledLabel': '在代理运行期间显示设计评审团',
+  'critiqueTheater.settingsEnabledDescription':
+    '启用后，五人评审面板会在代理生成时同时显示，并在交付前对结果评分。你可以随时中断。',
 
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',
