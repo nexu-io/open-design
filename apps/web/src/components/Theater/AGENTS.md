@@ -50,15 +50,22 @@ without code churn.
   /api/projects/:id/critique/:runId/interrupt`. A failed fetch is
   swallowed with a dev-mode warning so the UI still moves to the
   collapsed badge.
-- **Composite weights are read-only on the web side in v1.** The
+- **Designer weight is frozen at 0.0 until v2 cast config lands.**
+  Mirror of the same invariant in
+  [`apps/daemon/src/critique/AGENTS.md`](../../../../daemon/src/critique/AGENTS.md):
+  the v1 weight distribution (designer 0 / critic 0.4 / brand 0.2 /
+  a11y 0.2 / copy 0.2) is wire-shape, not a tuning knob. The web
+  side reflects that by treating composite weights as read-only:
   `ScoreTicker` and `TheaterCollapsed` read `composite` straight off
-  the wire; the UI does not recompute it from per-panelist scores.
-  Per-skill cast configuration lands in v2 as a Settings surface
-  that writes to the project's settings row; the daemon resolver
-  (see `apps/daemon/src/critique/AGENTS.md`) reads that row and
-  feeds the per-run weight map into the composite computation. Do
-  not add a "weights" prop to any component in this directory
-  until the contracts package carries the v2 cast type.
+  the wire and never recompute it from per-panelist scores. V2
+  lands per-skill cast configuration as a Settings surface
+  (`apps/web/src/components/Settings/`) that writes to the project's
+  settings row; the daemon resolver reads that row and feeds the
+  per-run weight map into the composite computation, so the web
+  layer continues to render whatever number the daemon produces. Do
+  not add a `weights` prop to any component in this directory and
+  do not recompute the composite client-side until the contracts
+  package carries the v2 cast type.
 
 ## When you change anything here
 
