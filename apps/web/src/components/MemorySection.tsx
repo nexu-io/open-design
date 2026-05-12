@@ -275,6 +275,7 @@ export function MemorySection() {
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [editing, setEditing] = useState<DraftEntry | null>(null);
   const [busy, setBusy] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | MemoryType>('all');
   // Brief inline confirmation after a manual save/create/delete. The
   // form vanishes on success and the existing list re-renders, but
@@ -327,7 +328,12 @@ export function MemorySection() {
   }, []);
 
   const reloadExtractions = useCallback(async () => {
-    setExtractions(await fetchExtractions());
+    setIsRefreshing(true);
+    try {
+      setExtractions(await fetchExtractions());
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -921,7 +927,7 @@ export function MemorySection() {
           >
             <Icon name="refresh" size={12} className={isRefreshing ? 'icon-spin' : ''} />{' '}
             <span style={{ marginLeft: 4 }}>
-              {t('settings.memoryExtractionsRefresh')}
+              {isRefreshing ? t('settings.memoryExtractionsRefreshing') : t('settings.memoryExtractionsRefresh')}
             </span>
           </button>
         </div>
