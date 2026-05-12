@@ -3097,7 +3097,16 @@ export async function startServer({
       memoryBody,
       metadata,
       template,
-      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
+      // run that the resolver enabled via phase / project / skill (env
+      // unset) would have critiqueShouldRun = true while critiqueCfg.enabled
+      // remains false. Without this override the composer's own gate
+      // (cfg.enabled) drops the panel addendum, the orchestrator still
+      // launches, and the parser waits for <CRITIQUE_RUN> tags the model
+      // was never told to emit (codex P2 on PR #1338). Build a derived
+      // config that pins enabled to the resolver decision so the composer
+      // and the orchestrator agree on every eligibility input.
+      critique: critiqueShouldRun ? { ...critiqueCfg, enabled: true } : undefined,
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       streamFormat,
@@ -3933,7 +3942,45 @@ export async function startServer({
         // than wrapping the frame inside the legacy 'agent' channel. Clients
         // that subscribe to the new event names see them directly with the
         // contract payload as event.data.
-        const critiqueBus = { emit: (e) => send(e.event, e.data) };
+        //
+        // Critique events go to TWO sinks (codex P1 on PR #1338):
+        //
+        //   1. `design.runs.emit(...)` via `send(...)`, which fans out on
+        //      `/api/runs/:runId/events`. Existing transport, unchanged.
+        //   2. The per-project event-sinks map, which fans out on
+        //      `/api/projects/:projectId/events`. This is the transport the
+        //      web `CritiqueTheaterMount` actually subscribes to (the mount
+        //      is project-scoped, not run-scoped, because it lives at the
+        //      project workspace level and follows the user across runs).
+        //      Without this second sink the mount sees no frames in
+        //      production and only the e2e tests' stubbed routes deliver
+        //      anything to the reducer.
+        //
+        // The project-events route emits via `sse.send(payload.type,
+        // payload)`, so we pack the SSE channel name onto `payload.type`
+        // and let the sink push the right channel name. The web's
+        // `sseToPanelEvent` overwrites `type` from the channel name on the
+        // way back into a PanelEvent, so this round-trip stays correct.
+        const critiqueProjectIdForBus =
+          typeof projectId === 'string' && projectId ? projectId : null;
+        const critiqueBus = {
+          emit: (e) => {
+            send(e.event, e.data);
+            if (critiqueProjectIdForBus) {
+              const sinks = activeProjectEventSinks.get(critiqueProjectIdForBus);
+              if (sinks && sinks.size > 0) {
+                const payload = { ...e.data, type: e.event };
+                for (const sink of Array.from(sinks)) {
+                  try {
+                    sink(payload);
+                  } catch {
+                    sinks.delete(sink);
+                  }
+                }
+              }
+            }
+          },
+        };
 
         // Register this run with the in-process registry so the interrupt
         // endpoint can cascade an AbortController to the orchestrator. The
