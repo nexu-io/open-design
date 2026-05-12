@@ -21,9 +21,9 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  applyAgentLaunchEnv,
   getAgentDef,
-  inspectAgentExecutableResolution,
-  resolveAgentBin,
+  resolveAgentLaunch,
   spawnEnvForAgent,
 } from './agents.js';
 import { createCommandInvocation } from '@open-design/platform';
@@ -49,11 +49,52 @@ import {
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
-const PROVIDER_TIMEOUT_MS = 12_000;
+// Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
+// or distant providers; invalid values fall back to the default.
+const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 // CLI boot time is dominated by adapter auth/session restore; the heavy
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
 // run, so 45 s leaves headroom without making a hung child invisible.
-const AGENT_TIMEOUT_MS = 45_000;
+// Override with OD_CONNECTION_TEST_AGENT_TIMEOUT_MS.
+const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
+// Node's `setTimeout` silently clamps any delay above this to ~1 ms
+// (with a TimeoutOverflowWarning), so an override meant to *extend*
+// the budget — e.g. `OD_CONNECTION_TEST_AGENT_TIMEOUT_MS=3000000000` —
+// would actually make every connection test fail almost immediately.
+// Reject above the cap so the safety timeout cannot be accidentally
+// disarmed by an oversized env value.
+const MAX_CONNECTION_TEST_TIMEOUT_MS = 2_147_483_647;
+
+export function resolveConnectionTestTimeoutMs(
+  key: 'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+  fallback: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env[key];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < 1 || n > MAX_CONNECTION_TEST_TIMEOUT_MS) {
+    console.warn(
+      `connection-test: ignoring ${key}=${JSON.stringify(raw)} (must be a positive integer between 1 and ${MAX_CONNECTION_TEST_TIMEOUT_MS} ms); using ${fallback}ms`,
+    );
+    return fallback;
+  }
+  return n;
+}
+
+function providerTimeoutMs(): number {
+  return resolveConnectionTestTimeoutMs(
+    'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS',
+    DEFAULT_PROVIDER_TIMEOUT_MS,
+  );
+}
+
+function agentTimeoutMs(): number {
+  return resolveConnectionTestTimeoutMs(
+    'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+    DEFAULT_AGENT_TIMEOUT_MS,
+  );
+}
 const AGENT_COMPLETION_DEBOUNCE_MS = 500;
 const AGENT_KILL_GRACE_MS = 2_000;
 // Truncates the assistant reply we surface in the success copy so a
@@ -545,7 +586,7 @@ export async function testProviderConnection(
   } else {
     input.signal?.addEventListener('abort', abortFromParent, { once: true });
   }
-  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), providerTimeoutMs());
 
   try {
     const modelError = await validateLocalOpenAiModel(
@@ -851,7 +892,10 @@ export function createAgentSink(): AgentSink {
 
 interface AgentSpawnHandle {
   child: ReturnType<typeof spawn>;
-  acpSession?: { hasFatalError?: () => boolean } | null;
+  acpSession?: {
+    hasFatalError?: () => boolean;
+    completedSuccessfully?: () => boolean;
+  } | null;
 }
 
 function attachAgentStreamHandlers(
@@ -863,7 +907,10 @@ function attachAgentStreamHandlers(
   send: (event: string, payload: unknown) => void,
   appendRawStdout?: (chunk: string) => void,
 ): AgentSpawnHandle {
-  let acpSession: { hasFatalError?: () => boolean } | null = null;
+  let acpSession: {
+    hasFatalError?: () => boolean;
+    completedSuccessfully?: () => boolean;
+  } | null = null;
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
   if (def.streamFormat === 'claude-stream-json') {
@@ -956,12 +1003,9 @@ async function testAgentConnectionInternal(
     validateAgentCliEnv(input.agentCliEnv),
     input.agentId,
   );
-  const executableResolution = inspectAgentExecutableResolution(
-    def,
-    configuredAgentEnv,
-  );
-  const resolvedBin = resolveAgentBin(input.agentId, configuredAgentEnv);
-  if (!resolvedBin) {
+  const executableResolution = resolveAgentLaunch(def, configuredAgentEnv);
+  const resolvedBin = executableResolution.selectedPath;
+  if (!resolvedBin || !executableResolution.launchPath) {
     return {
       ok: false,
       kind: 'agent_not_installed',
@@ -1081,16 +1125,16 @@ async function testAgentConnectionInternal(
     }
     const stdinMode =
       def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
-    const env = spawnEnvForAgent(
+    const env = applyAgentLaunchEnv(spawnEnvForAgent(
       input.agentId,
       {
         ...process.env,
         ...(def.env || {}),
       },
       configuredAgentEnv,
-    );
+    ), executableResolution);
     const invocation = createCommandInvocation({
-      command: resolvedBin,
+      command: executableResolution.launchPath,
       args,
       env,
     });
@@ -1129,11 +1173,11 @@ async function testAgentConnectionInternal(
         const latencyMs = Date.now() - start;
         const detail = redactSecrets(winner.error.message);
         const guidance = redactSecrets(
-          codexExecutableGuidance(
+          `${codexExecutableGuidance(
             input.agentId,
             executableResolution.configuredOverridePath,
             executableResolution.pathResolvedPath,
-          ),
+          )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ''}`,
         );
         const errnoCode = (winner.error as NodeJS.ErrnoException).code;
         const isMissing = errnoCode === 'ENOENT';
@@ -1152,7 +1196,28 @@ async function testAgentConnectionInternal(
 
       const latencyMs = Date.now() - start;
       const buffered = sink.getText().trim();
-      const exitedCleanly = winner.code === 0 && !winner.signal;
+      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
+      // Terminal) are now SIGTERM'd from attachAcpSession after a clean
+      // prompt completion, which sets `winner.signal === 'SIGTERM'`. For
+      // that exact forced-shutdown shape we trust the ACP-level success
+      // signal so connection tests don't report `agent_spawn_failed`
+      // despite a healthy assistant response (see #1265 / #1286).
+      //
+      // Scope the override narrowly: only `code === null` AND
+      // `signal === 'SIGTERM'` AND `acpCleanCompletion` count as a clean
+      // forced shutdown. Any other post-response process failure (non-zero
+      // exit code, SIGKILL, SIGSEGV, etc.) still falls through to
+      // `agent_spawn_failed`, preserving the existing connection-test
+      // failure behavior for genuine post-response problems.
+      const acpCleanCompletion =
+        typeof acpSession?.completedSuccessfully === 'function' &&
+        acpSession.completedSuccessfully();
+      const acpForcedShutdown =
+        winner.code === null &&
+        winner.signal === 'SIGTERM' &&
+        acpCleanCompletion;
+      const exitedCleanly =
+        (winner.code === 0 && !winner.signal) || acpForcedShutdown;
       if (buffered) {
         const rawSample = truncateSample(buffered);
         if (rawSample && isLikelyModelErrorText(rawSample)) {
@@ -1195,11 +1260,11 @@ async function testAgentConnectionInternal(
           .join(' · '),
       );
       const guidance = redactSecrets(
-        codexExecutableGuidance(
+        `${codexExecutableGuidance(
           input.agentId,
           executableResolution.configuredOverridePath,
           executableResolution.pathResolvedPath,
-        ),
+        )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ''}`,
       );
       const label = buffered ? 'exit_failed' : 'no_text';
       console.warn(
@@ -1227,7 +1292,7 @@ async function testAgentConnectionInternal(
       child.stdin.end(SMOKE_PROMPT, 'utf8');
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
-      timer = setTimeout(() => resolve({ kind: 'timeout' }), AGENT_TIMEOUT_MS);
+      timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
       abortHandler = () => resolve({ kind: 'aborted' });
       if (input.signal?.aborted) {
         abortHandler();
@@ -1326,11 +1391,15 @@ export async function testAgentConnection(
   const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
   const def = getAgentDef(input.agentId);
   const executableResolution = def
-    ? inspectAgentExecutableResolution(def, configuredAgentEnv)
+    ? resolveAgentLaunch(def, configuredAgentEnv)
     : {
         configuredOverridePath: null,
         pathResolvedPath: null,
         selectedPath: null,
+        launchPath: null,
+        launchKind: 'selected' as const,
+        childPathPrepend: [],
+        diagnostic: null,
       };
   if (
     input.agentId === 'codex' &&
@@ -1341,7 +1410,7 @@ export async function testAgentConnection(
       return {
         ...primaryResult,
         configuredExecutablePath: executableResolution.configuredOverridePath,
-        usedExecutablePath: executableResolution.configuredOverridePath,
+        usedExecutablePath: executableResolution.launchPath ?? executableResolution.configuredOverridePath,
         usedExecutableSource: 'configured',
         ...(executableResolution.pathResolvedPath
           ? { detectedExecutablePath: executableResolution.pathResolvedPath }
@@ -1358,7 +1427,7 @@ export async function testAgentConnection(
         ...primaryResult,
         configuredExecutablePath: configuredCodexBin,
         detectedExecutablePath: executableResolution.pathResolvedPath,
-        usedExecutablePath: executableResolution.pathResolvedPath,
+        usedExecutablePath: executableResolution.launchPath ?? executableResolution.pathResolvedPath,
         usedExecutableSource: 'fallback_invalid',
         detail: redactSecrets(
           codexInvalidConfiguredPathFallbackDetail(
@@ -1392,7 +1461,7 @@ export async function testAgentConnection(
     ...fallbackResult,
     configuredExecutablePath: executableResolution.configuredOverridePath,
     detectedExecutablePath: executableResolution.pathResolvedPath,
-    usedExecutablePath: executableResolution.pathResolvedPath,
+    usedExecutablePath: executableResolution.launchPath ?? executableResolution.pathResolvedPath,
     usedExecutableSource: 'fallback_failed',
     detail: redactSecrets(
       codexExecutableFallbackSuccessDetail(

@@ -3,6 +3,8 @@ import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 
+test.describe.configure({ timeout: 15_000 });
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(

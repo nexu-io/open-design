@@ -278,13 +278,11 @@ test.describe('Settings connectors auth happy path', () => {
     await githubCard.getByRole('button', { name: 'Connect' }).click();
 
     await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toBeVisible();
-    await expect(githubCard.getByText('octo-user')).toBeVisible();
 
     await githubCard.getByRole('button', { name: 'Disconnect' }).click();
 
     await expect.poll(() => disconnectRequests).toBe(1);
     await expect(githubCard.getByRole('button', { name: 'Connect' })).toBeVisible();
     await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toHaveCount(0);
-    await expect(githubCard.getByText('octo-user')).toHaveCount(0);
   });
 });

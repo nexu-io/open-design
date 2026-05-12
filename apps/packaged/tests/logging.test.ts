@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createFatalUncaughtExceptionHandler,
+  createFatalUnhandledRejectionHandler,
   isHarmlessSocketOptionError,
   type PackagedDesktopLogger,
 } from '../src/logging.js';
@@ -191,5 +192,82 @@ describe('createFatalUncaughtExceptionHandler (issue #906)', () => {
     // re-entered itself we'd see runaway scheduling.
     expect(setImmediateCallCount).toHaveLength(2);
     expect(logger.error).toHaveBeenCalledTimes(2);
+  });
+});
+
+// The parallel `unhandledRejection` listener mirrors the
+// uncaughtException policy: harmless EINVAL rejections log at warn
+// and return, anything else logs at error, detaches the listener, and
+// schedules a re-throw via setImmediate so Node/Electron's default
+// fail-fast path takes over. Before this factory landed, the inline
+// listener logged non-harmless rejections and returned, which silently
+// kept the main process alive after any rejected promise. Siri-Ray
+// and the codex P2 thread on PR #1298 flagged the same gap on the
+// parallel apps/desktop filter, so the two copies stay in lockstep.
+describe('createFatalUnhandledRejectionHandler (issue #647 review follow-up)', () => {
+  it('logs harmless socket option rejections at warn level and returns silently', () => {
+    const logger = stubLogger();
+    const handler = createFatalUnhandledRejectionHandler(logger);
+    const harmless = new Error('setTypeOfService EINVAL') as NodeJS.ErrnoException;
+    harmless.code = 'EINVAL';
+
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+    const setImmediateSpy = vi.spyOn(globalThis, 'setImmediate');
+
+    handler(harmless);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(removeListenerSpy).not.toHaveBeenCalled();
+    expect(setImmediateSpy).not.toHaveBeenCalled();
+  });
+
+  it('removes itself from unhandledRejection listeners before scheduling the rethrow', () => {
+    const logger = stubLogger();
+    const handler = createFatalUnhandledRejectionHandler(logger);
+
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+    const scheduled: Array<() => void> = [];
+    const setImmediateSpy = vi
+      .spyOn(globalThis, 'setImmediate')
+      .mockImplementation(((fn: () => void) => {
+        scheduled.push(fn);
+        return 0 as unknown as NodeJS.Immediate;
+      }) as typeof setImmediate);
+
+    const realBug = new Error('failed ipc registration');
+    handler(realBug);
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(removeListenerSpy).toHaveBeenCalledWith('unhandledRejection', handler);
+    const removeOrder = removeListenerSpy.mock.invocationCallOrder[0]!;
+    const setImmediateOrder = setImmediateSpy.mock.invocationCallOrder[0]!;
+    expect(removeOrder).toBeLessThan(setImmediateOrder);
+
+    expect(scheduled).toHaveLength(1);
+    expect(() => scheduled[0]!()).toThrow(realBug);
+  });
+
+  it('falls through for primitive rejection reasons (Promise.reject(42))', () => {
+    // A primitive reason is never the undici socket shape, so the
+    // handler must reach the fail-fast path. Without this guard a
+    // `Promise.reject('boom')` would silently log and disappear.
+    const logger = stubLogger();
+    const handler = createFatalUnhandledRejectionHandler(logger);
+
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+    const scheduled: Array<() => void> = [];
+    vi
+      .spyOn(globalThis, 'setImmediate')
+      .mockImplementation(((fn: () => void) => {
+        scheduled.push(fn);
+        return 0 as unknown as NodeJS.Immediate;
+      }) as typeof setImmediate);
+
+    handler(42);
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(removeListenerSpy).toHaveBeenCalledWith('unhandledRejection', handler);
+    expect(scheduled).toHaveLength(1);
   });
 });
