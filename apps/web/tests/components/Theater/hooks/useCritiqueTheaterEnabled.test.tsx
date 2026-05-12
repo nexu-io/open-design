@@ -163,12 +163,54 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     }
   });
 
+  it('falls back to readToggle when the same-tab CustomEvent carries no usable detail', () => {
+    // A malformed dispatcher (no detail at all, or detail.enabled not a
+    // boolean) must not break the listener. The hook degrades to the
+    // localStorage path so cross-tab semantics still work for a stale
+    // emitter. Siri-Ray + lefarcen P2 on PR #1320.
+    window.localStorage.setItem(
+      'open-design:config',
+      JSON.stringify({ critiqueTheaterEnabled: true }),
+    );
+    const sink: { enabled?: boolean } = {};
+    render(<Probe sink={sink} />);
+    expect(sink.enabled).toBe(true);
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('open-design:critique-theater-toggle', {
+          // No detail at all.
+        }),
+      );
+    });
+    // Storage still says true; listener falls back to readToggle and
+    // keeps reporting true.
+    expect(sink.enabled).toBe(true);
+    act(() => {
+      window.localStorage.setItem(
+        'open-design:config',
+        JSON.stringify({ critiqueTheaterEnabled: false }),
+      );
+      window.dispatchEvent(
+        new CustomEvent('open-design:critique-theater-toggle', {
+          // Detail with wrong shape: not a boolean.
+          detail: { enabled: 'maybe' },
+        }),
+      );
+    });
+    // Same path: malformed detail falls back to readToggle, which
+    // now sees the freshly-written `false`.
+    expect(sink.enabled).toBe(false);
+  });
+
   it('still emits the same-tab CustomEvent when localStorage.setItem throws (quota / disabled storage)', () => {
     // setCritiqueTheaterEnabled writes localStorage first and then dispatches
     // the same-tab event. If the write throws (quota exceeded, private mode),
     // the production code falls through to the dispatch so every mounted
     // hook in the session still updates even though the value cannot
-    // persist across reloads. Verify the dispatch still fires.
+    // persist across reloads. The listener honors the event's typed
+    // detail payload directly (it does NOT read localStorage), so the
+    // UI stays consistent even when the write was rejected. Siri-Ray
+    // + lefarcen P2 on PR #1320.
     const original = window.localStorage.setItem;
     const restore = () => {
       Object.defineProperty(window.localStorage, 'setItem', {
