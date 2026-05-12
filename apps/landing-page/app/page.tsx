@@ -9,7 +9,7 @@
  * islands only when behavior is needed.
  */
 
-import { Header } from './_components/header';
+import { Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
 import { heroImage, imageAsset } from './image-assets';
 
@@ -90,7 +90,43 @@ const WIRE_CITIES = [
   { name: 'Sydney', coord: '33.87°S' },
 ] as const;
 
-export default function Page() {
+interface PageProps {
+  /**
+   * Live counts from the Markdown catalogs. Required: every visible
+   * "X skills / Y systems" claim on the page reads from here so meta,
+   * nav, hero copy, capability cards, labs pills, selected-work
+   * fractions, and the footer Library never disagree.
+   */
+  counts: HeaderProps['counts'] & {
+    /** Optional richer breakdown used by the Labs filter pills. */
+    byMode?: Readonly<Record<string, number>>;
+    byPlatform?: Readonly<Record<string, number>>;
+  };
+}
+
+/**
+ * Format a count for inline editorial copy. Returns the live value when
+ * positive (so a fresh `git pull` immediately reflects the new totals),
+ * falls back to a neutral em-dash when the catalog couldn't be read so
+ * we never publish "0 skills" to a visitor by mistake.
+ */
+function fmt(n: number | undefined): string {
+  return typeof n === 'number' && n > 0 ? String(n) : '—';
+}
+
+/** Two-digit padded count for the Labs pills (matches the "04", "27" feel). */
+function pad2(n: number | undefined): string {
+  if (typeof n !== 'number' || n <= 0) return '—';
+  return n < 10 ? `0${n}` : String(n);
+}
+
+export default function Page({ counts }: PageProps) {
+  const skills = fmt(counts.skills);
+  const systems = fmt(counts.systems);
+  const deckCount = pad2(counts.byMode?.deck);
+  const prototypeCount = pad2(counts.byMode?.prototype);
+  const mobileCount = pad2(counts.byPlatform?.mobile);
+
   return (
     <>
       {/* side rails (rotated brand text) */}
@@ -145,7 +181,7 @@ export default function Page() {
 
         {/* ====== NAV ====== */}
         {/* Headroom-style sticky header with live GitHub star count. */}
-        <Header />
+        <Header counts={counts} />
 
         {/* ====== HERO ====== */}
         <section className='hero' id='top' data-od-id='hero'>
@@ -162,8 +198,8 @@ export default function Page() {
               <p className='lead' data-reveal>
                 The open-source alternative to Claude Design. Your existing
                 coding agent — Claude · Codex · Cursor · Gemini · OpenCode ·
-                Qwen — becomes the design engine, driven by 31 composable
-                skills and 72 brand-grade design systems.
+                Qwen — becomes the design engine, driven by {skills} composable
+                skills and {systems} brand-grade design systems.
               </p>
               <div className='hero-actions' data-reveal>
                 <a className='btn btn-primary' href={REPO} {...ext}>
@@ -177,13 +213,13 @@ export default function Page() {
               </div>
               <div className='hero-stats' data-reveal>
                 <div className='stat'>
-                  <span className='ring solid'>31</span>
+                  <span className='ring solid'>{skills}</span>
                   <span className='stat-label'>
                     <b>skills</b>shippable
                   </span>
                 </div>
                 <div className='stat'>
-                  <span className='ring'>72</span>
+                  <span className='ring'>{systems}</span>
                   <span className='stat-label'>
                     <b>systems</b>portable
                   </span>
@@ -375,7 +411,7 @@ export default function Page() {
                       not plugins
                     </h3>
                     <p>
-                      31 file-based{' '}
+                      {skills} file-based{' '}
                       <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
                         SKILL.md
                       </code>{' '}
@@ -412,7 +448,7 @@ export default function Page() {
                       as Markdown
                     </h3>
                     <p>
-                      72 portable{' '}
+                      {systems} portable{' '}
                       <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
                         DESIGN.md
                       </code>{' '}
@@ -506,7 +542,7 @@ export default function Page() {
               <span className='meta-grp'>
                 <span>Labs / Skills Catalog</span>
                 <span className='dot-mark'>•</span>
-                <span>05 of 31 ongoing</span>
+                <span>05 of {skills} ongoing</span>
               </span>
               <span>004 / 008</span>
             </div>
@@ -521,21 +557,21 @@ export default function Page() {
                 </h2>
               </div>
               <div className='pills' data-reveal='right'>
-                <button type='button' className='pill active'>
-                  All<span className='count'>31</span>
-                </button>
-                <button type='button' className='pill'>
-                  Prototype<span className='count'>27</span>
-                </button>
-                <button type='button' className='pill'>
-                  Deck<span className='count'>04</span>
-                </button>
-                <button type='button' className='pill'>
-                  Mobile<span className='count'>03</span>
-                </button>
-                <button type='button' className='pill'>
-                  Office<span className='count'>08</span>
-                </button>
+                <a className='pill active' href='/skills/'>
+                  All<span className='count'>{skills}</span>
+                </a>
+                <a className='pill' href='/skills/mode/prototype/'>
+                  Prototype<span className='count'>{prototypeCount}</span>
+                </a>
+                <a className='pill' href='/skills/mode/deck/'>
+                  Deck<span className='count'>{deckCount}</span>
+                </a>
+                <a className='pill' href='/skills/'>
+                  Mobile<span className='count'>{mobileCount}</span>
+                </a>
+                <a className='pill' href='/skills/'>
+                  Office<span className='count'>—</span>
+                </a>
               </div>
             </div>
             <div className='labs-meta'>
@@ -634,12 +670,11 @@ export default function Page() {
                 <span />
               </div>
               <span className='meta'>
-                05 / 31 SKILLS{NBSP}·{NBSP}
+                05 / {skills} SKILLS{NBSP}·{NBSP}
                 <a
-                  href={REPO_SKILLS}
+                  href='/skills/'
                   className='library-link'
                   style={{ color: 'var(--coral)' }}
-                  {...ext}
                 >
                   VIEW FULL LIBRARY →
                 </a>
@@ -682,7 +717,7 @@ export default function Page() {
                 {
                   num: '01',
                   title: 'Detect',
-                  body: 'The daemon scans your $PATH for 12 coding agents and auto-loads 31 skills + 72 systems on boot.',
+                  body: `The daemon scans your $PATH for 12 coding agents and auto-loads ${skills} skills + ${systems} systems on boot.`,
                   src: imageAsset('method-1.png', { width: 816, quality: 82 }),
                 },
                 {
@@ -751,8 +786,8 @@ export default function Page() {
                   <em>artifacts</em>
                   <span className='dot'>.</span>
                 </h2>
-                <a className='work-link' href={REPO_SKILLS} {...ext}>
-                  View all 31 skills
+                <a className='work-link' href='/skills/'>
+                  View all {skills} skills
                 </a>
               </div>
               <a
@@ -763,7 +798,7 @@ export default function Page() {
               >
                 <div className='label-row'>
                   <span className='small-label'>Featured skill</span>
-                  <span className='index'>01 / 31</span>
+                  <span className='index'>01 / {skills}</span>
                 </div>
                 <h3>guizang-ppt</h3>
                 <p>
@@ -786,7 +821,7 @@ export default function Page() {
               >
                 <div className='label-row'>
                   <span className='small-label'>Companion system</span>
-                  <span className='index'>04 / 72</span>
+                  <span className='index'>04 / {systems}</span>
                 </div>
                 <h3>kami</h3>
                 <p>
@@ -1116,24 +1151,16 @@ export default function Page() {
                 <h5>Library</h5>
                 <ul>
                   <li>
-                    <a href={REPO_SKILLS} {...ext}>
-                      31 Skills
-                    </a>
+                    <a href='/skills/'>{skills} Skills</a>
                   </li>
                   <li>
-                    <a href={REPO_DESIGN_SYSTEMS} {...ext}>
-                      72 Systems
-                    </a>
+                    <a href='/systems/'>{systems} Systems</a>
                   </li>
                   <li>
-                    <a href={REPO_DESIGN_SYSTEMS} {...ext}>
-                      5 Directions
-                    </a>
+                    <a href='/templates/'>Templates</a>
                   </li>
                   <li>
-                    <a href={`${REPO_SKILLS}/hyperframes`} {...ext}>
-                      5 Frames
-                    </a>
+                    <a href='/craft/'>Craft</a>
                   </li>
                 </ul>
               </div>

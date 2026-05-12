@@ -90,4 +90,62 @@ describe('<InterruptButton> (Phase 8)', () => {
     fireEvent.keyDown(document.body, { key: 'Escape' });
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
+
+  it('defers to an open dialog when Escape fires outside the Theater stage (PerishCode P3 on PR #1315)', () => {
+    // Common UX collision: the workspace has a modal / popover open, the
+    // user hits Esc to dismiss it, and the Theater's window-scope listener
+    // synthesizes an interrupt at the same time. The handler should defer
+    // to the modal's own Esc handler when a [role="dialog"] is on the page.
+    const onInterrupt = vi.fn();
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    document.body.appendChild(dialog);
+    try {
+      render(<InterruptButton onInterrupt={onInterrupt} />);
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      expect(onInterrupt).not.toHaveBeenCalled();
+    } finally {
+      document.body.removeChild(dialog);
+    }
+  });
+
+  it('ignores aria-hidden dialogs and still fires Escape (PerishCode P3 followup)', () => {
+    // A dialog marked aria-hidden="true" is not really open; it should
+    // not steal the interrupt keybind from a body-level Esc.
+    const onInterrupt = vi.fn();
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(dialog);
+    try {
+      render(<InterruptButton onInterrupt={onInterrupt} />);
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+    } finally {
+      document.body.removeChild(dialog);
+    }
+  });
+
+  it('still fires Escape when the event originates inside the Theater stage even if a dialog is open elsewhere', () => {
+    // A Theater-internal Esc must always work, even when an unrelated
+    // surface is open on the page. The dialog gate only defers Esc that
+    // originates OUTSIDE the Theater region.
+    const onInterrupt = vi.fn();
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    document.body.appendChild(dialog);
+    const stage = document.createElement('section');
+    stage.className = 'theater-stage';
+    const child = document.createElement('button');
+    stage.appendChild(child);
+    document.body.appendChild(stage);
+    try {
+      render(<InterruptButton onInterrupt={onInterrupt} />);
+      fireEvent.keyDown(child, { key: 'Escape' });
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+    } finally {
+      document.body.removeChild(dialog);
+      document.body.removeChild(stage);
+    }
+  });
 });

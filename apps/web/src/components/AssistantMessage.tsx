@@ -1159,7 +1159,18 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       )
         continue;
       const last = out[out.length - 1];
-      if (last && last.kind === "status" && last.label === ev.label) continue;
+      if (last && last.kind === "status" && last.label === ev.label) {
+        // Update detail to the latest value rather than skip. When an agent
+        // emits multiple status events with the same label (notably
+        // `label: 'model'` — fired once after `session/new` with the agent's
+        // initial default, then again after the explicit model-selection
+        // call completes), the badge UI must reflect the most recent detail,
+        // not the first one. Without this update the post-selection model
+        // (e.g. `claude-opus-4-7-high`) is silently replaced in the badge
+        // by the stale initial default (`swe-1-6-fast`).
+        last.detail = ev.detail;
+        continue;
+      }
       out.push({ kind: "status", label: ev.label, detail: ev.detail });
       continue;
     }
