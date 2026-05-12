@@ -43,7 +43,7 @@ const formatDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
           <div class="blog-featured-copy">
             <p class="blog-card-kicker">Latest</p>
             <h2>
-              <a href={`/blog/${featured.slug}/`}>{featured.data.title}</a>
+              <a href={`/blog/${featured.id}/`}>{featured.data.title}</a>
             </h2>
             <p>{featured.data.summary}</p>
             <div class="blog-meta">
@@ -59,7 +59,7 @@ const formatDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
             <article class="blog-card">
               <p class="blog-card-kicker">{post.data.category}</p>
               <h3>
-                <a href={`/blog/${post.slug}/`}>{post.data.title}</a>
+                <a href={`/blog/${post.id}/`}>{post.data.title}</a>
               </h3>
               <p>{post.data.summary}</p>
               <div class="blog-meta">

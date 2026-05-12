@@ -69,7 +69,7 @@ const templates = defineCollection({
 
 const blog = defineCollection({
   loader: glob({
-    base: './content/blog',
+    base: './app/content/blog',
     pattern: '*.mdx',
   }),
   schema: z.object({
