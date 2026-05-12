@@ -39,6 +39,7 @@ interface SkillFrontmatter extends JsonRecord {
     craft?: JsonRecord;
     preview?: JsonRecord;
     design_system?: JsonRecord;
+    critique?: JsonRecord;
     category?: unknown;
   };
 }

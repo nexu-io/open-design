@@ -3020,14 +3020,29 @@ export async function startServer({
     // is unchanged until an operator flips the env var or a project
     // opts in. The skill-policy input is sourced from
     // `od.critique.policy` in the active skill's SKILL.md frontmatter
-    // (parsed in `skills.ts:normalizeCritiquePolicy`); the project
-    // override input is passed as `null` for now and gets wired in the
-    // next commit on this branch, which extends the existing Phase 6
-    // settings endpoint to round-trip `critiqueTheaterEnabled`.
+    // (parsed in `skills.ts:normalizeCritiquePolicy`). The project
+    // override input is sourced from the `critiqueTheaterEnabled`
+    // field on the project's metadata blob, which is what the M1
+    // Settings toggle writes through the existing settings endpoint.
+    // Both inputs collapse to `null` when the skill / project has
+    // not expressed an opinion, which is the resolver's "fall through
+    // to env / phase default" signal.
+    // Per-project override: the M1 Settings toggle writes
+    // `critiqueTheaterEnabled` onto the project's metadata blob via
+    // the existing settings round-trip. A boolean wins outright; any
+    // other type (missing key, malformed value) collapses to `null`
+    // so the resolver falls through to the env / phase tiers exactly
+    // the way it did when the toggle had never been touched.
+    const rawProjectOverride =
+      metadata && typeof metadata === 'object'
+        ? (metadata as { critiqueTheaterEnabled?: unknown }).critiqueTheaterEnabled
+        : undefined;
+    const projectCritiqueOverride: boolean | null =
+      typeof rawProjectOverride === 'boolean' ? rawProjectOverride : null;
     const critiqueEnabledForRun = isCritiqueEnabled({
       phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
       skillPolicy: skillCritiquePolicy,
-      projectOverride: null,
+      projectOverride: projectCritiqueOverride,
       envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
     });
     const critiqueBrand = critiqueEnabledForRun
