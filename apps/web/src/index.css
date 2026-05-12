@@ -15542,6 +15542,48 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 11px;
 }
 
+.memory-details-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+}
+
+.memory-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.memory-details-summary::before {
+  content: '▸';
+  flex: 0 0 1em;
+  color: var(--text-faint, #aaa);
+  font-size: 10px;
+  transition: transform 120ms ease, color 120ms ease;
+}
+
+.library-group[open] > .memory-details-summary::before {
+  transform: rotate(90deg);
+}
+
+.memory-details-summary:hover::before,
+.memory-details-summary:focus-visible::before {
+  color: var(--text-muted, #888);
+}
+
+.memory-details-summary:focus-visible {
+  outline: 2px solid var(--accent, #00946f);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.memory-details-title {
+  min-width: 0;
+}
+
 /* Memory section: extraction-history list. One row per recorded LLM
    extraction attempt, with phase pill + provider/model meta + preview of
    the user message that triggered it. Kept dense (no card) so a burst of

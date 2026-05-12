@@ -871,17 +871,10 @@ export function MemorySection() {
       </div>
 
       <details className="library-group memory-extractions" style={{ marginTop: 16 }}>
-        <summary
-          style={{
-            cursor: 'pointer',
-            fontWeight: 600,
-            padding: '6px 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <span>{t('settings.memoryExtractions')}</span>
+        <summary className="memory-details-summary">
+          <span className="memory-details-title">
+            {t('settings.memoryExtractions')}
+          </span>
           {extractions.length > 0 ? (
             <span className="filter-pill-count">{extractions.length}</span>
           ) : null}
@@ -1037,14 +1030,10 @@ export function MemorySection() {
       </details>
 
       <details className="library-group" style={{ marginTop: 16 }}>
-        <summary
-          style={{
-            cursor: 'pointer',
-            fontWeight: 600,
-            padding: '6px 0',
-          }}
-        >
-          {t('settings.memoryIndex')}
+        <summary className="memory-details-summary">
+          <span className="memory-details-title">
+            {t('settings.memoryIndex')}
+          </span>
         </summary>
         <textarea
           value={indexDraft ?? index}
