@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -1557,6 +1559,16 @@ function baseLiveArtifactWorkspaceEntry(
 }
 
 describe('LiveArtifactViewer', () => {
+  it('keeps the presentation exit button aligned with preview chrome spacing', () => {
+    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const rule = css.match(/\.present-exit\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('top: calc(env(safe-area-inset-top, 0px) + 20px);');
+    expect(rule).toContain('right: calc(env(safe-area-inset-right, 0px) + 20px);');
+    expect(rule).toContain('display: inline-flex;');
+    expect(rule).toContain('align-items: center;');
+  });
+
   it('enters and exits in-tab presentation from the present menu', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);

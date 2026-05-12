@@ -1048,6 +1048,7 @@ export const ko: Dict = {
   'critiqueTheater.interrupt': '중단',
   'critiqueTheater.interrupting': '중단 중…',
   'critiqueTheater.interrupted': '중단됨',
+  'critiqueTheater.interruptedSummary': '{round} 라운드에서 중단 · 최고 종합 {composite}',
   'critiqueTheater.degradedHeading': '이번 실행에서는 패널 사용 불가',
   'critiqueTheater.degradedReasonMalformed': '패널 출력 형식이 올바르지 않습니다(파서가 거부함).',
   'critiqueTheater.degradedReasonOversize': '패널 출력이 안전 바이트 예산을 초과했습니다.',

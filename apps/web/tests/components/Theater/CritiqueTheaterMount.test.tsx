@@ -229,14 +229,14 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     expect(btn.disabled).toBe(false);
   });
 
-  it('multi-round interrupt ships bestRound + composite from the same round (lefarcen P3 on PR #1338)', async () => {
-    // Regression test for the round / composite drift bug the
-    // previous bestRoundOf had: a run where round 1 closes at 8.5
-    // and round 2 closes at 6.0 must dispatch interrupted with
-    // bestRound=1, composite=8.5, NOT bestRound=2 paired with 8.5
-    // (the two helpers had disagreed). bestRoundAndComposite now
-    // walks state.rounds once and returns the matching pair so the
-    // drift cannot reappear; this test locks the fix in.
+  it('synthesizes interrupted with the round paired to the composite (PerishCode P3 on PR #1315)', async () => {
+    // Previously bestRoundOf returned the LAST round that had a composite,
+    // and bestCompositeOf returned the MAX composite. With non-monotonic
+    // composites (round 1 closes at 8.5, round 2 closes at 6.0) the two
+    // helpers disagreed: the synthesized interrupted action shipped
+    // bestRound: 2 paired with composite: 8.5 -- a pair that never
+    // existed. Folded into a single bestRoundAndComposite helper so the
+    // round and the score it advertises always refer to the same round.
     const { factory, handles } = makeFactory();
     render(
       <CritiqueTheaterMount
@@ -246,27 +246,16 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
         fetchInterrupt={vi.fn(async () => new Response(null, { status: 204 }))}
       />,
     );
-    const cast = ['designer', 'critic', 'brand', 'a11y', 'copy'] as const;
     act(() => {
       handles[0]!.send({
         type: 'run_started',
         runId: 'run-multi',
         protocolVersion: 1,
-        cast: [...cast],
+        cast: ['critic'],
         maxRounds: 3,
         threshold: 8,
         scale: 10,
       });
-      // Round 1 closes with the high composite (8.5).
-      for (const role of cast) {
-        handles[0]!.send({
-          type: 'panelist_close',
-          runId: 'run-multi',
-          round: 1,
-          role,
-          score: 8.5,
-        });
-      }
       handles[0]!.send({
         type: 'round_end',
         runId: 'run-multi',
@@ -274,19 +263,8 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
         composite: 8.5,
         mustFix: 0,
         decision: 'continue',
-        reason: 'continue',
+        reason: 'borderline',
       });
-      // Round 2 closes with the LOW composite (6.0), which would
-      // be the "last numeric composite seen" under the buggy helper.
-      for (const role of cast) {
-        handles[0]!.send({
-          type: 'panelist_close',
-          runId: 'run-multi',
-          round: 2,
-          role,
-          score: 6.0,
-        });
-      }
       handles[0]!.send({
         type: 'round_end',
         runId: 'run-multi',
@@ -294,19 +272,17 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
         composite: 6.0,
         mustFix: 1,
         decision: 'continue',
-        reason: 'continue',
+        reason: 'regression',
       });
     });
     fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
-    // The collapsed badge renders the interruptedSummary key with
-    // {round} and {composite} placeholders. The right answer is
-    // round 1 (the high-composite round) paired with 8.5.
     await waitFor(() => {
       expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
     });
-    expect(screen.getByText(/round 1/i)).toBeTruthy();
-    // The badge must not display round 2 paired with the round-1
-    // composite. The buggy helper would have produced that pair.
-    expect(screen.queryByText(/round 2.*8\.5/i)).toBeNull();
+    // The collapsed surface should advertise round 1 / composite 8.5
+    // (the round with the highest composite), not round 2 / 8.5
+    // (the buggy split-helper pair that crosses two rounds).
+    expect(screen.getByText(/Interrupted at round 1/)).toBeTruthy();
+    expect(screen.queryByText(/Interrupted at round 2/)).toBeNull();
   });
 });

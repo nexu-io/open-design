@@ -95,12 +95,12 @@ export function CritiqueTheaterMount({
       }
     });
 
-    const { round: bestRound, composite: bestComposite } = bestRoundAndComposite(state);
+    const { round, composite } = bestRoundAndComposite(state);
     dispatch({
       type: 'interrupted',
       runId: state.runId,
-      bestRound,
-      composite: bestComposite,
+      bestRound: round,
+      composite,
     });
   }, [interruptPending, state, dispatch, projectId, fetchInterrupt]);
 
@@ -117,18 +117,15 @@ export function CritiqueTheaterMount({
 }
 
 /**
- * Single-pass helper that returns the round number AND composite of the
- * best-scoring round seen so far. The two values are sourced together so
- * the optimistic `interrupted` dispatch cannot pair a `bestRound` from one
- * round with a `composite` from another. The previous split helpers had a
- * subtle bug where `bestRoundOf` returned the last round with any composite
- * (regardless of value) while `bestCompositeOf` correctly returned the
- * max; a run that closed round 1 at 8.5 and round 2 at 6.0 would dispatch
- * `bestRound: 2, composite: 8.5`. PerishCode P2 on PR #1338.
- *
- * Falls back to `state.activeRound` and composite 0 when no round has
- * closed with a numeric composite yet (typical when the user interrupts
- * before the first `round_end` event arrives).
+ * Single-pass helper returning the round number paired to the highest
+ * composite seen so far. The earlier split (`bestRoundOf` walked rounds
+ * top-down and stamped the round of the LAST closed entry; `bestCompositeOf`
+ * found the MAX composite) could disagree on non-monotonic runs: round 1
+ * at 8.5 followed by round 2 at 6.0 shipped `bestRound: 2, composite: 8.5`,
+ * a pair that never existed (PerishCode P3 on PR #1315). Falls back to
+ * `(activeRound, 0)` when no round has closed with a numeric composite,
+ * which is the typical state when the user interrupts before the first
+ * `round_end` event.
  */
 function bestRoundAndComposite(
   state: Extract<CritiqueState, { phase: 'running' }>,
@@ -141,8 +138,6 @@ function bestRoundAndComposite(
       bestRound = r.n;
     }
   }
-  if (bestRound === 0) {
-    return { round: state.activeRound, composite: 0 };
-  }
+  if (bestRound === 0) return { round: state.activeRound, composite: 0 };
   return { round: bestRound, composite: bestComposite };
 }

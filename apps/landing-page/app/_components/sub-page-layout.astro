@@ -1,0 +1,167 @@
+---
+/*
+ * Shared shell for every sub-page outside of `/` (Skills, Systems,
+ * Craft, Templates and their detail pages).
+ *
+ * The homepage (`/`) intentionally does NOT use this layout — its
+ * chrome (rails, topbar, full hero, mega-word footer) stays in
+ * lockstep with `skills/open-design-landing/example.html`. This
+ * layout is the lighter sibling: same Atelier Zero tokens, same
+ * sticky nav, but no editorial side rails or hero, and a compact
+ * footer focused on the site map.
+ *
+ * Every sub-page passes `title`, `description`, `active` (nav
+ * highlight) and an optional `jsonLd`. Catalog counts are read from
+ * `getCatalogCounts()` so the nav badges stay live.
+ */
+import '../globals.css';
+import '../sub-pages.css';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Header, type HeaderProps } from './header';
+import { heroImage } from '../image-assets';
+import { getCatalogCounts } from '../_lib/catalog';
+
+export interface Props {
+  title: string;
+  description: string;
+  active?: HeaderProps['active'];
+  ogImage?: string;
+  jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
+}
+
+const { title, description, active = 'home', ogImage, jsonLd } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const og = ogImage ?? heroImage;
+const counts = await getCatalogCounts();
+const headerHtml = renderToStaticMarkup(
+  Header({ active, counts, brandHref: '/' }) as ReturnType<typeof createElement>,
+);
+const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+
+const REPO = 'https://github.com/nexu-io/open-design';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#efe7d2" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Open Design" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={og} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={og} />
+
+    {ldArray.map((data) => (
+      <script is:inline type="application/ld+json" set:html={JSON.stringify(data)} />
+    ))}
+  </head>
+  <body class="sub-page">
+    <div class="shell">
+      {/* Same React-rendered Header used by the homepage. SSR'd here
+       * so we have one nav implementation that handles active state. */}
+      <Fragment set:html={headerHtml} />
+
+      <main class="sub-main container">
+        <slot />
+      </main>
+
+      <footer class="sub-footer" data-od-id="sub-footer">
+        <div class="container sub-footer-inner">
+          <div class="sub-footer-grid">
+            <div class="sub-footer-brand">
+              <a href="/" class="brand">
+                <span class="brand-mark">Ø</span>
+                <span>Open Design</span>
+              </a>
+              <p>
+                The open-source alternative to Claude Design. Apache-2.0,
+                local-first, BYOK at every layer.
+              </p>
+            </div>
+            <div class="sub-footer-col">
+              <h5>Catalog</h5>
+              <ul>
+                <li><a href="/skills/">{counts.skills} Skills</a></li>
+                <li><a href="/systems/">{counts.systems} Systems</a></li>
+                <li><a href="/templates/">{counts.templates} Templates</a></li>
+                <li><a href="/craft/">{counts.craft} Craft principles</a></li>
+              </ul>
+            </div>
+            <div class="sub-footer-col">
+              <h5>Connect</h5>
+              <ul>
+                <li><a href={REPO} target="_blank" rel="noopener">GitHub</a></li>
+                <li><a href={`${REPO}/issues`} target="_blank" rel="noopener">Issues</a></li>
+                <li><a href={`${REPO}/releases`} target="_blank" rel="noopener">Releases</a></li>
+                <li><a href="/#contact">Contact</a></li>
+              </ul>
+            </div>
+          </div>
+          <div class="sub-footer-bottom">
+            <span>● Open Design · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26</span>
+            <span>Berlin / Open / Earth · 52.5200° N · 13.4050° E</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script is:inline>
+      (() => {
+        // Headroom-style hide-on-scroll, mirrors the homepage
+        // enhancement so nav behavior is consistent across pages.
+        const nav = document.querySelector('[data-nav-headroom]');
+        if (nav) {
+          let lastY = window.scrollY;
+          const showTopThreshold = 100;
+          const scrollDelta = 6;
+          window.addEventListener(
+            'scroll',
+            () => {
+              const y = window.scrollY;
+              const delta = y - lastY;
+              if (y <= showTopThreshold) nav.classList.remove('is-hidden');
+              else if (delta > scrollDelta) nav.classList.add('is-hidden');
+              else if (delta < -scrollDelta) nav.classList.remove('is-hidden');
+              lastY = y;
+            },
+            { passive: true },
+          );
+        }
+
+        const stars = document.querySelector('[data-github-stars]');
+        if (stars) {
+          fetch('https://api.github.com/repos/nexu-io/open-design', {
+            headers: { Accept: 'application/vnd.github+json' },
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+            .then((data) => {
+              if (typeof data?.stargazers_count === 'number') {
+                const n = data.stargazers_count;
+                stars.textContent =
+                  n < 1000
+                    ? String(n)
+                    : `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+              }
+            })
+            .catch(() => {});
+        }
+      })();
+    </script>
+  </body>
+</html>

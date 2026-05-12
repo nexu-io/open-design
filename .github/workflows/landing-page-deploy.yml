@@ -5,9 +5,20 @@ on:
     branches:
       - main
     paths:
+      # Workflow files
       - .github/workflows/landing-page-deploy.yml
       - .github/workflows/landing-page-ci.yml
+      # Landing page sources
       - apps/landing-page/**
+      # Content sources — Astro content collections glob these at build
+      # time. Adding/removing a SKILL.md, DESIGN.md, craft principle, or
+      # live-artifact template MUST trigger a redeploy or the published
+      # site falls behind silently.
+      - skills/**
+      - design-systems/**
+      - craft/**
+      - templates/**
+      # Workspace plumbing
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -25,7 +36,7 @@ jobs:
   deploy:
     name: Deploy landing page
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -45,8 +56,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          version=$(node -p "require('./apps/landing-page/package.json').devDependencies.playwright.replace(/[^0-9.]/g,'')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+
       - name: Typecheck landing page
         run: pnpm --filter @open-design/landing-page typecheck
+
+      # Generate previews before build so they end up in `out/previews/`.
+      # Soft vs. hard failure is enforced inside the script itself:
+      # individual broken `example.html` entries are logged and skipped,
+      # but a systemic failure (chromium launch error, every job failing)
+      # exits non-zero so we don't silently ship a deploy with zero
+      # thumbnails to production.
+      - name: Generate skill + template previews
+        run: pnpm --filter @open-design/landing-page previews
 
       - name: Build landing page
         run: pnpm --filter @open-design/landing-page build
