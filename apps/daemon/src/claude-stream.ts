@@ -206,11 +206,22 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
         return;
       }
     }
-
+    
     if (ev.type === 'content_block_stop') {
-      blocks.delete(blockKey(ev.index));
-      return;
+  const state = blocks.get(blockKey(ev.index));
+  
+  if (state && state.type === 'tool_use') {
+    try {
+      const parsedInput = JSON.parse(state.input || '{}');
+      onEvent({ type: 'tool_use', id: state.id, name: state.name, input: parsedInput });
+    } catch {
+      onEvent({ type: 'tool_use', id: state.id, name: state.name, input: {} });
     }
+  }
+  
+  blocks.delete(blockKey(ev.index));
+  return;
+}   
   }
 
   return { feed, flush };
