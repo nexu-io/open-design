@@ -28,6 +28,7 @@ import {
   OversizeBlockError,
   MissingArtifactError,
 } from './errors.js';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import {
   critiqueCompositeScore,
   critiqueInterruptedTotal,
@@ -39,6 +40,8 @@ import {
   critiqueRunsTotal,
 } from '../metrics/index.js';
 import { logCritique } from '../logging/critique.js';
+
+const tracer = trace.getTracer('@open-design/daemon/critique');
 
 /**
  * Tolerance used when comparing the agent-supplied composite attribute on
@@ -125,6 +128,20 @@ export async function runOrchestrator(
   // Phase 12 round-duration histogram needs the wall-clock time the first
   // panelist_open landed for each round, so we can subtract at round_end.
   const roundStartMs = new Map<number, number>();
+
+  // Phase 12 outer trace span. No-op without an exporter wired; operators
+  // who attach OTLP / Tempo / Honeycomb / Jaeger pick the span up
+  // automatically through the existing `trace.getTracer` registry. Inner
+  // per-round / per-chunk spans are a follow-up; the outer span alone
+  // gives the trace a duration + final status + adapter/skill attributes,
+  // which is what 80% of dashboards correlate runs by.
+  const span = tracer.startSpan('critique.run', {
+    attributes: {
+      'critique.run_id': runId,
+      'critique.adapter': adapter,
+      'critique.skill': skill,
+    },
+  });
 
   // Phase 12 parser-warning helper. Three orchestrator-side checks emit
   // composite_mismatch / duplicate_ship as parser warnings; routing each
@@ -756,6 +773,20 @@ export async function runOrchestrator(
     transcriptPath,
     artifactPath,
   });
+
+  // Stamp the OTel span with the resolved terminal status before ending
+  // it, so a downstream tracing UI can filter by status without joining
+  // back to the Prometheus runs_total counter.
+  span.setAttribute('critique.final_status', finalStatus);
+  if (finalComposite !== null) {
+    span.setAttribute('critique.final_composite', finalComposite);
+  }
+  if (finalStatus === 'failed' || finalStatus === 'timed_out') {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: finalStatus });
+  } else {
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
+  span.end();
 
   return {
     status: finalStatus,
