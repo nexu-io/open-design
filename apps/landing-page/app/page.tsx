@@ -1101,6 +1101,9 @@ export default function Page() {
                     <a href='#labs'>Labs</a>
                   </li>
                   <li>
+                    <a href='/blog'>Blog</a>
+                  </li>
+                  <li>
                     <a href={REPO_DAEMON} {...ext}>
                       Method
                     </a>
