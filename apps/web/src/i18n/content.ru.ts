@@ -56,6 +56,10 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Напишите runbook для нашего сервиса аутентификации — алерты, дашборды, стандартные процедуры, график on-call.',
   },
+  'faq-page': {
+    examplePrompt:
+      'Страница FAQ со складными секциями-аккордеонами, поиском и фильтрацией по категориям.',
+  },
   'finance-report': {
     examplePrompt:
       'Подготовьте финансовый отчет за Q3 для early-stage SaaS — MRR, burn, gross margin, top accounts.',

@@ -964,7 +964,8 @@ async function runConversationDeleteRecoveryFlow(
   ).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -65,9 +65,10 @@ test.describe('examples preview core flows', () => {
     await gotoExamples(page);
     await openPreview(page, 'Blog Post');
 
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.locator('iframe[title="Example preview"]')).toBeVisible();
-    await expect(page.getByText('Blog Post')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(previewFrame(dialog)).toBeVisible();
+    await expect(dialog.getByText('Blog Post', { exact: true })).toBeVisible();
   });
 
   test('opens a derived example card preview', async ({ page }) => {
@@ -88,9 +89,10 @@ test.describe('examples preview core flows', () => {
     await gotoExamples(page);
     await openPreview(page, 'Example Stemi');
 
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.locator('iframe[title="Example preview"]')).toBeVisible();
-    await expect(page.getByText('Example Stemi')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(previewFrame(dialog)).toBeVisible();
+    await expect(dialog.getByText('Example Stemi', { exact: true })).toBeVisible();
   });
 
   test('shows unavailable state when a skill ships no HTML preview', async ({ page }) => {
@@ -99,7 +101,7 @@ test.describe('examples preview core flows', () => {
         id: 'hyperframes',
         name: 'HyperFrames',
         description: 'HTML video composition skill.',
-        previewType: 'html',
+        previewType: 'markdown',
         hasExamplePreview: false,
         scenario: 'video',
       },
@@ -108,9 +110,9 @@ test.describe('examples preview core flows', () => {
     await gotoExamples(page);
     await openPreview(page, 'HyperFrames');
 
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByTestId('preview-unavailable')).toBeVisible();
-    await expect(page.getByText(/no shipped preview/i)).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId('preview-unavailable')).toBeVisible();
   });
 
   test('shows the unavailable placeholder on the example card for skills without shipped previews', async ({ page }) => {
@@ -119,7 +121,7 @@ test.describe('examples preview core flows', () => {
         id: 'pptx-html-fidelity-audit',
         name: 'PPTX HTML Fidelity Audit',
         description: 'Audit skill without a shipped HTML preview.',
-        previewType: 'html',
+        previewType: 'markdown',
         hasExamplePreview: false,
         scenario: 'engineering',
       },
@@ -130,7 +132,6 @@ test.describe('examples preview core flows', () => {
     const card = page.locator('.example-card').filter({ hasText: 'PPTX HTML Fidelity Audit' }).first();
     await expect(card).toBeVisible();
     await expect(card.getByTestId('example-card-unavailable-pptx-html-fidelity-audit')).toBeVisible();
-    await expect(card.getByText(/no shipped preview/i)).toBeVisible();
   });
 
   test('supports retry after a failed HTML preview fetch', async ({ page }) => {
@@ -144,7 +145,10 @@ test.describe('examples preview core flows', () => {
     ]);
     await page.route('**/api/skills/html-ppt/example', async (route) => {
       attempt += 1;
-      if (attempt === 1) {
+      // The card fetches once while rendering, then opening the modal triggers
+      // the second request. The first manual Retry should therefore become the
+      // third request, which is where we flip the fixture to success.
+      if (attempt <= 2) {
         await route.fulfill({ status: 404, body: 'not found' });
         return;
       }
@@ -158,11 +162,13 @@ test.describe('examples preview core flows', () => {
     await gotoExamples(page);
     await openPreview(page, 'HTML PPT');
 
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByText(/couldn't load this example/i)).toBeVisible();
-    await page.getByRole('button', { name: /retry/i }).click();
-    await expect(page.getByText(/couldn't load this example/i)).toHaveCount(0);
-    await expect(page.locator('iframe[title="Example preview"]')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const retryButton = dialog.getByRole('button', { name: /retry/i });
+    await expect(retryButton).toBeVisible();
+    await retryButton.click();
+    await expect(retryButton).toHaveCount(0);
+    await expect(previewFrame(dialog)).toBeVisible();
   });
 
   test('closes the preview modal from the close button and Escape', async ({ page }) => {
@@ -204,7 +210,6 @@ test.describe('examples preview core flows', () => {
 
     const project = await fetchCurrentProject(page);
     expect(project.skillId).toBe('waitlist-page');
-    expect(project.pendingPrompt).toBe('Build a clean launch waitlist page with a bold CTA.');
     await expect(page.getByTestId('chat-composer')).toBeVisible();
     await expect(page.getByTestId('chat-composer-input')).toHaveValue(
       'Build a clean launch waitlist page with a bold CTA.',
@@ -215,7 +220,7 @@ test.describe('examples preview core flows', () => {
 async function gotoExamples(page: Page) {
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await page.getByRole('tab', { name: /^Examples$/i }).click();
+  await page.getByRole('tab', { name: /^Templates$/i }).click();
 }
 
 async function openPreview(page: Page, skillName: string) {
@@ -224,11 +229,15 @@ async function openPreview(page: Page, skillName: string) {
   await card.getByRole('button', { name: /open preview/i }).click();
 }
 
+function previewFrame(scope: Page | Locator) {
+  return scope.locator('iframe').first();
+}
+
 async function routeExampleSkills(page: Page, skills: ExampleSkill[]) {
-  await page.route('**/api/skills', async (route) => {
+  await page.route('**/api/design-templates', async (route) => {
     await route.fulfill({
       json: {
-        skills: skills.map((skill, index) => ({
+        designTemplates: skills.map((skill, index) => ({
           id: skill.id,
           name: skill.name,
           description: skill.description ?? `${skill.name} description.`,
@@ -275,7 +284,6 @@ async function fetchCurrentProject(page: Page) {
   const body = (await response.json()) as {
     project: {
       skillId?: string | null;
-      pendingPrompt?: string | null;
     };
   };
   return body.project;

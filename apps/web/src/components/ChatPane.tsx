@@ -3,7 +3,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -228,6 +228,7 @@ interface Props {
   // routes that text through onSend (no attachments).
   onSubmitForm?: (text: string) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   newConversationDisabled?: boolean;
@@ -279,6 +280,7 @@ export function ChatPane({
   initialDraft,
   onSubmitForm,
   onContinueRemainingTasks,
+  onAssistantFeedback,
   onNewConversation,
   newConversationDisabled = false,
   conversations,
@@ -518,26 +520,6 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-header">
-        <div className="chat-header-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'chat'}
-            className={`chat-header-tab${tab === 'chat' ? ' active' : ''}`}
-            onClick={() => setTab('chat')}
-          >
-            {t('chat.tabChat')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'comments'}
-            className={`chat-header-tab${tab === 'comments' ? ' active' : ''}`}
-            onClick={() => setTab('comments')}
-          >
-            {t('chat.tabComments')}
-          </button>
-        </div>
         <div className="chat-header-actions">
           <div
             className={`chat-history-wrap${showConvList ? ' open' : ''}`}
@@ -558,9 +540,6 @@ export function ChatPane({
               onClick={() => setShowConvList((v) => !v)}
             >
               <Icon name="history" size={15} />
-              {conversations.length > 1 ? (
-                <span className="chat-history-badge">{conversations.length}</span>
-              ) : null}
             </button>
             {showConvList ? (
               <div className="chat-history-menu" role="menu" data-testid="conversation-history-menu">
@@ -713,6 +692,11 @@ export function ChatPane({
                             ? (todos) => onContinueRemainingTasks(m, todos)
                             : undefined
                         }
+                        onFeedback={
+                          onAssistantFeedback
+                            ? (rating) => onAssistantFeedback(m, rating)
+                            : undefined
+                        }
                       />
                     )}
                   </Fragment>
@@ -760,16 +744,6 @@ export function ChatPane({
             onProjectMetadataChange={onProjectMetadataChange}
           />
         </>
-      ) : null}
-      {tab === 'comments' ? (
-        <CommentsPanel
-          comments={previewComments}
-          attachedComments={attachedComments}
-          onAttach={onAttachComment}
-          onDetach={onDetachComment}
-          onDelete={onDeleteComment}
-          t={t}
-        />
       ) : null}
     </div>
   );

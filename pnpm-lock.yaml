@@ -178,6 +178,15 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)
 
+  apps/telemetry-worker:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)
+
   apps/web:
     dependencies:
       '@anthropic-ai/sdk':

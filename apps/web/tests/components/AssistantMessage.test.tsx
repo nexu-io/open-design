@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
 
 /**
- * Visibility-gate coverage for the feedback widget (issue #1288). The
- * lefarcen P2 review on PR #1308 pointed out that mounting the
- * widget on every `runSucceeded && !hasEmptyResponse` turn would
- * surface it after text-only acknowledgements and question-form
- * replies that don't produce a final artifact. The issue is scoped
- * to final-artifact turns specifically, so the gate now also
- * requires `produced.length > 0`.
+ * Visibility-gate coverage for assistant artifact feedback (issue #1288).
+ * Feedback should only appear for successful assistant turns that produce
+ * or update an artifact, not for text-only acknowledgements, failed runs,
+ * streaming turns, or empty responses.
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { ChatMessage, ProjectFile } from '../../src/types';
@@ -56,9 +53,12 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
         message={baseMessage({ producedFiles: [producedFile('index.html')] })}
         streaming={false}
         projectId="proj-1"
+        onFeedback={vi.fn()}
       />,
     );
-    expect(screen.getByText('Was this response helpful?')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Helpful' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Not helpful' })).toBeTruthy();
   });
 
   it('hides the feedback widget for a successful text-only turn with no producedFiles', () => {
@@ -71,9 +71,10 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
         message={baseMessage({ producedFiles: [] })}
         streaming={false}
         projectId="proj-1"
+        onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByText('Was this response helpful?')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 
   it('hides the feedback widget while the turn is still streaming', () => {
@@ -86,9 +87,10 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
         })}
         streaming
         projectId="proj-1"
+        onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByText('Was this response helpful?')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 
   it('hides the feedback widget when the run failed', () => {
@@ -100,9 +102,10 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
         })}
         streaming={false}
         projectId="proj-1"
+        onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByText('Was this response helpful?')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 
   it('hides the feedback widget when the run ended with an empty_response status', () => {
@@ -116,8 +119,9 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
         })}
         streaming={false}
         projectId="proj-1"
+        onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByText('Was this response helpful?')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 });

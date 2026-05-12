@@ -134,7 +134,7 @@ export function buildDockerArgs(
   }
   const innerCommand = `${pnpmCmd} install --frozen-lockfile && ` + innerArgs.join(" ");
 
-  return [
+  const dockerArgs = [
     "run",
     "--rm",
     "--user",
@@ -155,13 +155,19 @@ export function buildDockerArgs(
     "ELECTRON_CACHE=/home/builder/.cache/electron",
     "-e",
     "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
+  ];
+  if (config.telemetryRelayUrl != null) {
+    dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
+  }
+  dockerArgs.push(
     "-w",
     "/project",
     "electronuserland/builder:base",
     "bash",
     "-lc",
     innerCommand,
-  ];
+  );
+  return dockerArgs;
 }
 
 export type DesktopTemplateValues = {
@@ -385,6 +391,7 @@ async function writeAssembledApp(
         appVersion: version,
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
+        ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,
