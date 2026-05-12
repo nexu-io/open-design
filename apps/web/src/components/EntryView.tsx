@@ -258,8 +258,6 @@ export function EntryView({
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
   const [petRailHidden, setPetRailHiddenState] = useState<boolean>(() => loadPetRailHidden());
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
 
   function setPetRailHidden(next: boolean) {
     setPetRailHiddenState(next);
@@ -394,79 +392,6 @@ export function EntryView({
     return () => window.removeEventListener('focus', onFocus);
   }, [reloadConnectorStatuses]);
 
-  // Dismiss the avatar dropdown on outside-click / Escape so it behaves
-  // like the project-view AvatarMenu (which uses the same shell CSS).
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (!avatarMenuRef.current) return;
-      if (!avatarMenuRef.current.contains(e.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
-
-  const avatarMenu = (
-    <div className="avatar-menu" ref={avatarMenuRef}>
-      <button
-        type="button"
-        className="settings-icon-btn"
-        onClick={() => setAvatarMenuOpen((v) => !v)}
-        title={t('entry.openSettingsTitle')}
-        aria-label={t('entry.openSettingsAria')}
-        aria-haspopup="menu"
-        aria-expanded={avatarMenuOpen}
-      >
-        <Icon name="settings" size={17} />
-      </button>
-      {avatarMenuOpen ? (
-        <div className="avatar-popover" role="menu">
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setPetRailHidden(!petRailHidden);
-              setAvatarMenuOpen(false);
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
-            </span>
-            <span>
-              {petRailHidden
-                ? t('pet.railShow')
-                : t('pet.railHide')}
-            </span>
-          </button>
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="settings" size={14} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-
   return (
     <div className="entry-shell">
       <div
@@ -525,30 +450,42 @@ export function EntryView({
           </button>
           <div className="entry-side-foot-row">
             <LanguageMenu />
-            <button
-              type="button"
-              className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
-              onClick={onAdoptPet}
-              title={
-                config.pet?.adopted
-                  ? t('pet.changePet')
-                  : t('pet.adoptCallout')
-              }
-            >
-              <span className="pet-pill-glyph" aria-hidden>
-                {config.pet?.adopted
-                  ? config.pet.petId === 'custom'
-                    ? config.pet.custom.glyph || '🦄'
-                    : '🐾'
-                  : '🐾'}
-              </span>
-              <span className="foot-pill-pet-label">
-                {config.pet?.adopted
-                  ? t('pet.changePet')
-                  : t('pet.adoptCallout')}
-              </span>
-              {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
-            </button>
+            <div className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}>
+              <button
+                type="button"
+                className="pet-pill-main"
+                onClick={onAdoptPet}
+                title={
+                  config.pet?.adopted
+                    ? t('pet.changePet')
+                    : t('pet.adoptCallout')
+                }
+              >
+                <span className="pet-pill-glyph" aria-hidden>
+                  {config.pet?.adopted
+                    ? config.pet.petId === 'custom'
+                      ? config.pet.custom.glyph || '🦄'
+                      : '🐾'
+                    : '🐾'}
+                </span>
+                <span className="foot-pill-pet-label">
+                  {config.pet?.adopted
+                    ? t('pet.changePet')
+                    : t('pet.adoptCallout')}
+                </span>
+                {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
+              </button>
+              <span className="pet-pill-divider" aria-hidden />
+              <button
+                type="button"
+                className="pet-pill-toggle"
+                onClick={() => setPetRailHidden(!petRailHidden)}
+                aria-label={petRailHidden ? t('pet.railShow') : t('pet.railHide')}
+                title={petRailHidden ? t('pet.railShow') : t('pet.railHide')}
+              >
+                <Icon name={petRailHidden ? 'eye' : 'eye-off'} size={12} />
+              </button>
+            </div>
             <a
               className="foot-pill foot-pill-follow"
               href="https://x.com/nexudotio"
