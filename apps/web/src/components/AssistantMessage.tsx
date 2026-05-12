@@ -9,6 +9,7 @@ import {
 import { stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import { Icon } from "./Icon";
+import { MessageFeedback } from "./MessageFeedback";
 import { useT } from "../i18n";
 import { unfinishedTodosFromEvents, type TodoItem } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -164,6 +165,15 @@ export function AssistantMessage({
           hasUnfinishedTodos={unfinishedTodos.length > 0}
           hasEmptyResponse={hasEmptyResponse}
         />
+        {/* Feedback widget for issue #1288 — gated on `produced.length > 0`
+            because the issue scopes feedback to turns that produce a final
+            artifact, not text-only acknowledgements or question-form turns
+            (lefarcen review on PR #1308). The `runSucceeded`
+            guard keeps it off failed runs, and `!hasEmptyResponse` keeps it
+            off agents that succeeded silently with no content. */}
+        {runSucceeded && !hasEmptyResponse && produced.length > 0 ? (
+          <MessageFeedback messageId={message.id} />
+        ) : null}
       </div>
     </div>
   );
