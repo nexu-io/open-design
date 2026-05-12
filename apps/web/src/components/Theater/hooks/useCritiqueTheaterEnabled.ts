@@ -73,25 +73,35 @@ export function useCritiqueTheaterEnabled(): boolean {
  * config, emits the same-tab CustomEvent so every mounted
  * `useCritiqueTheaterEnabled` updates without a reload, and (when a
  * project id is supplied) round-trips the same value through the
- * existing `PATCH /api/projects/:id` settings endpoint so the
- * daemon's spawn-time resolver picks the override up the next time
- * the project starts a generation.
+ * existing `/api/projects/:id` settings endpoint so the daemon's
+ * spawn-time resolver picks the override up the next time the
+ * project starts a generation.
  *
- * Both writes are best-effort:
+ * Three writes, in order:
  *
- *   - The localStorage write is what the web's `useCritiqueTheaterEnabled`
- *     hook reads, so the in-session UI flips immediately.
- *   - The daemon PATCH writes `metadata.critiqueTheaterEnabled` on the
- *     project's row; the daemon's `isCritiqueEnabled({ projectOverride })`
- *     resolver tier reads from that field on the next spawn.
+ *   1. localStorage. What the web's `useCritiqueTheaterEnabled` hook
+ *      reads, so the in-session UI flips immediately.
+ *   2. Same-tab CustomEvent. Every mounted hook updates from the
+ *      typed payload without re-reading storage.
+ *   3. Project PATCH (when `projectId` is supplied). The setter GETs
+ *      the project, spreads its current `metadata` into the patch,
+ *      overlays `critiqueTheaterEnabled`, then PATCHes the merged
+ *      object. The read-merge-write is mandatory because
+ *      `PATCH /api/projects/:id` replaces `metadata` wholesale and a
+ *      bare patch would wipe the row's other fields (`kind`,
+ *      `templateId`, `linkedDirs`, ...). PerishCode P2 on PR #1338.
  *
- * Failures on either side do not break the other. The same-tab
- * CustomEvent is dispatched regardless so every mounted hook in the
- * session reflects the user's intent, and the daemon round-trip is
- * skipped silently when no `projectId` is passed (the bare hook still
- * works for integrators that drive a non-project surface).
+ * Failure modes:
  *
- * The `fetchProjectSettings` option is a test seam mirroring the
+ *   - localStorage rejected (quota / private mode): falls through to
+ *     the dispatch + PATCH; the in-session UI still flips.
+ *   - CustomEvent shim missing: single-mount remains correct.
+ *   - Project GET fails: PATCH is skipped entirely so the row's other
+ *     metadata fields are not at risk.
+ *   - PATCH fails: logged in dev; the in-session UI is already
+ *     consistent.
+ *
+ * `fetchProjectSettings` is a test seam mirroring the
  * `fetchInterrupt` pattern on `CritiqueTheaterMount`; production
  * callers pass nothing and the platform `fetch` is used.
  */
@@ -134,28 +144,77 @@ export function setCritiqueTheaterEnabled(
   }
   // Round-trip the override through the existing project-settings
   // endpoint so the daemon's spawn-time resolver picks it up on the
-  // next generation. The endpoint accepts arbitrary `metadata`
-  // patches (apps/daemon/src/project-routes.ts handles the merge
-  // server-side), so no new endpoint is needed. Skipped silently
-  // when no projectId is provided (the bare hook still works for
-  // integrators that drive a non-project surface). Failures are
-  // swallowed so a transient network issue does not unwind the
-  // in-session UI flip; the next save retries.
+  // next generation. Read-merge-write rather than a bare patch:
+  // `PATCH /api/projects/:id` replaces `metadata` wholesale (the
+  // route only re-stamps the three immutable folder-import fields),
+  // so sending only `{ critiqueTheaterEnabled }` would wipe `kind`,
+  // `templateId`, `linkedDirs`, and any other field the rest of the
+  // app reads. We GET the project first, overlay the toggle on the
+  // returned metadata, then PATCH the merged object. PerishCode P2
+  // on PR #1338.
+  //
+  // Failure handling:
+  //   - GET fails → skip the PATCH entirely. We cannot construct a
+  //     safe merged body without the current state, and a bare patch
+  //     would wipe other metadata. The in-session CustomEvent fired
+  //     above still keeps every mounted hook consistent; the next
+  //     save retries the round-trip.
+  //   - PATCH fails → log in dev. The in-session UI is already
+  //     correct via the CustomEvent.
+  //
+  // Skipped silently when no projectId is provided (the bare hook
+  // still works for integrators that drive a non-project surface).
   if (options.projectId) {
+    const projectId = options.projectId;
     const fetcher = options.fetchProjectSettings
       ?? ((url: string, init: RequestInit) => fetch(url, init));
-    fetcher(`/api/projects/${encodeURIComponent(options.projectId)}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ metadata: { critiqueTheaterEnabled: next } }),
-    }).catch((err) => {
-      if (
-        typeof process !== 'undefined'
-        && process.env?.NODE_ENV === 'development'
-      ) {
-        // eslint-disable-next-line no-console
-        console.warn('[critique-theater] project-settings PATCH failed', err);
+    const projectUrl = `/api/projects/${encodeURIComponent(projectId)}`;
+    (async () => {
+      let existingMetadata: Record<string, unknown> = {};
+      try {
+        const getRes = await fetcher(projectUrl, { method: 'GET' });
+        if (!getRes.ok) {
+          throw new Error(`prefetch returned status ${getRes.status}`);
+        }
+        const body = (await getRes.json()) as {
+          project?: { metadata?: unknown };
+        };
+        const meta = body?.project?.metadata;
+        if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+          existingMetadata = meta as Record<string, unknown>;
+        }
+      } catch (err) {
+        if (
+          typeof process !== 'undefined'
+          && process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[critique-theater] project-settings prefetch failed; skipping PATCH to avoid clobbering metadata',
+            err,
+          );
+        }
+        return;
       }
+      try {
+        await fetcher(projectUrl, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            metadata: { ...existingMetadata, critiqueTheaterEnabled: next },
+          }),
+        });
+      } catch (err) {
+        if (
+          typeof process !== 'undefined'
+          && process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[critique-theater] project-settings PATCH failed', err);
+        }
+      }
+    })().catch(() => {
+      /* Already surfaced inside the async block. */
     });
   }
 }
