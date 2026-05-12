@@ -123,7 +123,8 @@ test('new project tabs switch visible form sections and preserve drafts', async 
   await expect(page.locator('.newproj-title')).toContainText('New prototype');
   await expect(page.getByTestId('new-project-name')).toHaveValue('Prototype draft survives');
 
-  await page.getByRole('button', { name: 'Scroll project types right' }).click();
+  // Playwright auto-scrolls the tab into view; the explicit scroll-arrow
+  // button was removed when the newproj tabs adopted the folder-tab pattern.
   await page.getByTestId('new-project-tab-image').click();
   await expect(page.getByTestId('new-project-tab-image')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.newproj-title')).toContainText('New image');
