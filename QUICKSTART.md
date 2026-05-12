@@ -18,8 +18,11 @@ The daemon scans your **`PATH`** (plus common user toolchain directories). If yo
 `mise` / `nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 22 (or 24) before running pnpm:
 
 ```bash
-# mise (recommended; Rust-based, multi-language)
-mise use node@22
+# mise (recommended; Rust-based, multi-language).
+# -g pins the version globally; without it `mise use` would write a
+# mise.toml into the current directory, which would dirty a fresh
+# repo checkout if you run the command from the project root.
+mise use -g node@22
 
 # nvm
 nvm install 22

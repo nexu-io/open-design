@@ -14,8 +14,10 @@
 `mise` / `nvm` / `fnm` 为可选的便捷工具，并非项目必要依赖。如需使用，请在执行 pnpm 之前安装并切换到 Node 22（或 24）：
 
 ```bash
-# mise（推荐；Rust 实现、多语言版本管理）
-mise use node@22
+# mise（推荐；Rust 实现、多语言版本管理）。
+# 必须加 -g 做全局固定，否则 `mise use` 默认会在当前目录写入
+# mise.toml，从仓库根目录执行就会把刚 clone 的工作区弄脏。
+mise use -g node@22
 
 # nvm
 nvm install 22
