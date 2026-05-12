@@ -68,6 +68,11 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
+import {
+  isCritiqueEnabled,
+  parseEnvEnabled,
+  parseRolloutPhase,
+} from './critique/rollout.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
@@ -2996,14 +3001,33 @@ export async function startServer({
     // into the composer when critique is enabled. Without this the spawned
     // child receives the legacy single-pass prompt and the parser waits for
     // <CRITIQUE_RUN> tags the model was never told to emit. The composer
-    // itself ignores these fields when cfg.enabled is false, so the legacy
-    // path stays untouched.
-    const critiqueBrand = critiqueCfg.enabled
+    // itself ignores these fields when the top-line gate is false, so the
+    // legacy path stays untouched.
+    //
+    // Top-line gate (post-Phase-15 wireup): the daemon now routes every
+    // candidate run through the rollout resolver instead of reading the
+    // env-var flag directly. The resolver carries the full priority
+    // matrix: skill `od.critique.policy` veto > project override > env
+    // override > rollout phase default. On a fresh install with M0
+    // dark-launch defaults the resolver returns `false`, so prod traffic
+    // is unchanged until an operator flips the env var or a project
+    // opts in. The skill-policy and project-override inputs are passed
+    // through as `null` for the v1 cutover; the daemon-side handler that
+    // round-trips `critiqueTheaterEnabled` on the project settings row
+    // and the `od.critique.policy` frontmatter resolver land as
+    // follow-up commits in this same stack.
+    const critiqueEnabledForRun = isCritiqueEnabled({
+      phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+      skillPolicy: null,
+      projectOverride: null,
+      envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
+    });
+    const critiqueBrand = critiqueEnabledForRun
       && typeof designSystemTitle === 'string'
       && typeof designSystemBody === 'string'
       ? { name: designSystemTitle, design_md: designSystemBody }
       : undefined;
-    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+    const critiqueSkill = critiqueEnabledForRun && typeof effectiveSkillId === 'string'
       ? { id: effectiveSkillId }
       : undefined;
     // Single-source-of-truth eligibility check. The composer downstream
@@ -3026,7 +3050,7 @@ export async function startServer({
       metadata?.kind === 'video' ||
       metadata?.kind === 'audio';
     const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueCfg.enabled
+    const critiqueShouldRun = critiqueEnabledForRun
       && critiqueBrand !== undefined
       && critiqueSkill !== undefined
       && !isMediaSurface
@@ -3857,12 +3881,13 @@ export async function startServer({
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
     //
-    // Use critiqueShouldRun (computed in the prompt builder) instead of just
-    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
-    // panel addendum. Media surfaces and runs missing brand/skill context
-    // never get the panel prompt, so they must also skip the orchestrator
-    // and fall through to legacy generation; otherwise the parser waits for
-    // <CRITIQUE_RUN> tags the model was never told to emit.
+    // Use critiqueShouldRun (computed in the prompt builder) instead of
+    // just the env var or the rollout resolver so the orchestrator gate
+    // is in lockstep with the panel addendum. Media surfaces and runs
+    // missing brand/skill context never get the panel prompt, so they
+    // must also skip the orchestrator and fall through to legacy
+    // generation; otherwise the parser waits for <CRITIQUE_RUN> tags
+    // the model was never told to emit.
     if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
