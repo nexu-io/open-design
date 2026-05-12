@@ -469,7 +469,6 @@ export function EntryView({
 
   return (
     <div className="entry-shell">
-      <AppChromeHeader actions={avatarMenu} />
       <div
         className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
         style={{
@@ -479,6 +478,16 @@ export function EntryView({
         }}
       >
       <aside className="entry-side" style={{ width: sidebarWidth }}>
+        <div className="entry-brand">
+          <span className="entry-brand-mark" aria-hidden>
+            <img src="/app-icon.svg" alt="" className="brand-mark-img" draggable={false} />
+          </span>
+          <div className="entry-brand-text">
+            <div className="entry-brand-title-row">
+              <span className="entry-brand-title">{t('app.brand')}</span>
+            </div>
+          </div>
+        </div>
         <NewProjectPanel
           skills={skills}
           designSystems={designSystems}
@@ -496,7 +505,26 @@ export function EntryView({
           loading={skillsLoading || designSystemsLoading}
         />
         <div className="entry-side-foot">
+          <button
+            type="button"
+            className="foot-pill foot-pill-env"
+            onClick={() => onOpenSettings()}
+            aria-label={t('settings.envConfigure')}
+            title={t('settings.envConfigure')}
+          >
+            <Icon name="settings" size={12} />
+            <span>
+              {config.mode === 'daemon'
+                ? t('settings.localCli')
+                : apiProtocolLabel(config.apiProtocol)}
+            </span>
+            <span style={{ color: 'var(--text-faint)' }}>·</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+              {envMetaLine}
+            </span>
+          </button>
           <div className="entry-side-foot-row">
+            <LanguageMenu />
             <button
               type="button"
               className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
@@ -530,28 +558,8 @@ export function EntryView({
               aria-label="Follow @nexudotio on X"
             >
               <Icon name="external-link" size={12} />
-              <span className="foot-pill-follow-label">Follow @nexudotio</span>
             </a>
           </div>
-          <button
-            type="button"
-            className="foot-pill"
-            onClick={() => onOpenSettings()}
-            aria-label={t('settings.envConfigure')}
-            title={t('settings.envConfigure')}
-          >
-            <Icon name="settings" size={12} />
-            <span>
-              {config.mode === 'daemon'
-                ? t('settings.localCli')
-                : apiProtocolLabel(config.apiProtocol)}
-            </span>
-            <span style={{ color: 'var(--text-faint)' }}>·</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
-              {envMetaLine}
-            </span>
-          </button>
-          <LanguageMenu />
         </div>
         <button
           type="button"

@@ -3656,7 +3656,7 @@ code {
    ============================================================ */
 .entry-shell {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   height: 100vh;
   min-height: 0;
   background: var(--bg);
@@ -3672,7 +3672,7 @@ code {
 
 .entry-side {
   border-right: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: transparent;
   display: flex;
   flex-direction: column;
 }
@@ -3681,10 +3681,16 @@ code {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 24px 20px 18px;
+}
+.entry-brand-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
 }
 .entry-brand-mark {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
   color: var(--accent);
@@ -3711,11 +3717,11 @@ code {
 }
 .entry-brand-title {
   font-family: var(--serif);
-  font-weight: 600;
+  font-weight: 450;
   font-size: 22px;
   letter-spacing: -0.015em;
   line-height: 1;
-  color: var(--text-strong);
+  color: var(--text);
 }
 .entry-brand-pill {
   font-size: 10.5px;
@@ -4792,12 +4798,14 @@ code {
 .entry-side-foot .foot-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 8px;
+  min-height: 24px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  font-size: 11.5px;
+  font-size: 10.5px;
   color: var(--text-muted);
   align-self: flex-start;
   cursor: pointer;
