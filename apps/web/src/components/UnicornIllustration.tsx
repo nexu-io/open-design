@@ -1,0 +1,330 @@
+import React from "react";
+
+/**
+ * UnicornIllustration – a fully inline SVG unicorn with wings, rainbow mane,
+ * golden horn, and sparkles. No external assets required.
+ */
+export function UnicornIllustration({
+  size = 400,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 500 500"
+      width={size}
+      height={size}
+      className={className}
+      aria-label="Unicorn illustration"
+      role="img"
+    >
+      <defs>
+        {/* Sky gradient background */}
+        <radialGradient id="uc-skyGrad" cx="50%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#fce4ff" />
+          <stop offset="50%" stopColor="#e8d5ff" />
+          <stop offset="100%" stopColor="#c4b5fd" />
+        </radialGradient>
+
+        {/* Body gradient */}
+        <linearGradient id="uc-bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="60%" stopColor="#f0e6ff" />
+          <stop offset="100%" stopColor="#ddd6fe" />
+        </linearGradient>
+
+        {/* Horn gradient */}
+        <linearGradient id="uc-hornGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffd700" />
+          <stop offset="50%" stopColor="#ffb347" />
+          <stop offset="100%" stopColor="#ff8c00" />
+        </linearGradient>
+
+        {/* Mane gradients */}
+        <linearGradient id="uc-mane1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff6eb4" />
+          <stop offset="50%" stopColor="#a855f7" />
+          <stop offset="100%" stopColor="#3b82f6" />
+        </linearGradient>
+        <linearGradient id="uc-mane2" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#f472b6" />
+          <stop offset="50%" stopColor="#c084fc" />
+          <stop offset="100%" stopColor="#60a5fa" />
+        </linearGradient>
+        <linearGradient id="uc-mane3" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#fb7185" />
+          <stop offset="50%" stopColor="#e879f9" />
+          <stop offset="100%" stopColor="#818cf8" />
+        </linearGradient>
+
+        {/* Tail gradient */}
+        <linearGradient id="uc-tailGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#f472b6" />
+          <stop offset="33%" stopColor="#a855f7" />
+          <stop offset="66%" stopColor="#60a5fa" />
+          <stop offset="100%" stopColor="#34d399" />
+        </linearGradient>
+
+        {/* Wing gradient */}
+        <linearGradient id="uc-wingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity={0.95} />
+          <stop offset="100%" stopColor="#e0d4ff" stopOpacity={0.7} />
+        </linearGradient>
+
+        {/* Glow filter */}
+        <filter id="uc-glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* Drop shadow */}
+        <filter id="uc-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow
+            dx="0"
+            dy="6"
+            stdDeviation="8"
+            floodColor="#a855f7"
+            floodOpacity={0.25}
+          />
+        </filter>
+
+        {/* Sparkle filter */}
+        <filter id="uc-sparkle">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {/* Background circle */}
+      <circle cx="250" cy="250" r="240" fill="url(#uc-skyGrad)" />
+
+      {/* Decorative sparkles */}
+      <g filter="url(#uc-sparkle)" opacity={0.85}>
+        <polygon
+          points="60,80 63,90 73,90 65,96 68,106 60,100 52,106 55,96 47,90 57,90"
+          fill="#ffd700"
+          transform="scale(0.6) translate(40,60)"
+        />
+        <polygon
+          points="420,60 423,70 433,70 425,76 428,86 420,80 412,86 415,76 407,70 417,70"
+          fill="#f472b6"
+          transform="scale(0.5) translate(420,40)"
+        />
+        <polygon
+          points="440,180 442,188 450,188 444,193 446,201 440,196 434,201 436,193 430,188 438,188"
+          fill="#a855f7"
+          transform="scale(0.55) translate(360,200)"
+        />
+        <polygon
+          points="50,300 52,308 60,308 54,313 56,321 50,316 44,321 46,313 40,308 48,308"
+          fill="#60a5fa"
+          transform="scale(0.5) translate(30,260)"
+        />
+        <polygon
+          points="380,380 382,388 390,388 384,393 386,401 380,396 374,401 376,393 370,388 378,388"
+          fill="#34d399"
+          transform="scale(0.45) translate(400,380)"
+        />
+        <circle cx="90" cy="140" r="3" fill="#ffd700" opacity={0.8} />
+        <circle cx="410" cy="120" r="2.5" fill="#f472b6" opacity={0.8} />
+        <circle cx="430" cy="300" r="2" fill="#a855f7" opacity={0.7} />
+        <circle cx="70" cy="380" r="2.5" fill="#60a5fa" opacity={0.7} />
+        <circle cx="150" cy="60" r="2" fill="#fb7185" opacity={0.8} />
+        <circle cx="350" cy="50" r="3" fill="#c084fc" opacity={0.8} />
+        <circle cx="460" cy="240" r="2" fill="#ffd700" opacity={0.7} />
+        <circle cx="40" cy="220" r="2.5" fill="#34d399" opacity={0.7} />
+      </g>
+
+      {/* Ground shadow */}
+      <ellipse cx="250" cy="430" rx="180" ry="30" fill="#e9d5ff" opacity={0.5} />
+      <ellipse cx="250" cy="425" rx="140" ry="18" fill="#ddd6fe" opacity={0.4} />
+
+      {/* Rainbow arc */}
+      <path d="M 55 415 C 105 210, 395 210, 445 415" stroke="#ff6b6b" strokeWidth="4" fill="none" opacity={0.25} strokeLinecap="round" />
+      <path d="M 60 418 C 108 218, 392 218, 440 418" stroke="#ffa500" strokeWidth="4" fill="none" opacity={0.25} strokeLinecap="round" />
+      <path d="M 65 421 C 112 226, 388 226, 435 421" stroke="#ffd700" strokeWidth="4" fill="none" opacity={0.25} strokeLinecap="round" />
+      <path d="M 70 424 C 116 234, 384 234, 430 424" stroke="#7fff00" strokeWidth="4" fill="none" opacity={0.2} strokeLinecap="round" />
+      <path d="M 75 427 C 120 242, 380 242, 425 427" stroke="#00bfff" strokeWidth="4" fill="none" opacity={0.2} strokeLinecap="round" />
+      <path d="M 80 430 C 124 250, 376 250, 420 430" stroke="#9370db" strokeWidth="4" fill="none" opacity={0.2} strokeLinecap="round" />
+
+      {/* === UNICORN === */}
+      <g filter="url(#uc-shadow)">
+        {/* Tail */}
+        <path
+          d="M 155 310 C 100 320, 60 360, 80 400 C 90 420, 110 415, 115 395 C 120 375, 100 360, 120 345 C 135 335, 155 340, 155 310 Z"
+          fill="url(#uc-tailGrad)"
+          opacity={0.9}
+        />
+        <path
+          d="M 155 315 C 95 330, 65 375, 90 405 C 95 412, 105 410, 108 400 C 112 385, 95 368, 115 350 C 128 340, 150 345, 155 315 Z"
+          fill="url(#uc-mane2)"
+          opacity={0.7}
+        />
+        <path
+          d="M 158 320 C 105 340, 75 385, 100 410 C 104 416, 112 413, 113 405 C 115 392, 100 375, 118 358 C 130 347, 155 350, 158 320 Z"
+          fill="url(#uc-mane3)"
+          opacity={0.5}
+        />
+
+        {/* Body */}
+        <ellipse cx="240" cy="320" rx="105" ry="75" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1.5" />
+
+        {/* Wing left/back */}
+        <path
+          d="M 200 280 C 160 240, 110 210, 90 230 C 75 245, 100 270, 130 275 C 155 278, 175 270, 200 280 Z"
+          fill="url(#uc-wingGrad)"
+          stroke="#c4b5fd"
+          strokeWidth="1"
+          opacity={0.85}
+        />
+        <path d="M 200 280 C 165 248, 120 225, 95 235" stroke="#c4b5fd" strokeWidth="1" fill="none" opacity={0.6} />
+        <path d="M 195 285 C 158 258, 115 240, 95 248" stroke="#c4b5fd" strokeWidth="0.8" fill="none" opacity={0.5} />
+        <path d="M 190 290 C 155 268, 115 255, 100 262" stroke="#c4b5fd" strokeWidth="0.8" fill="none" opacity={0.4} />
+
+        {/* Wing right/front */}
+        <path
+          d="M 210 275 C 250 230, 310 200, 340 215 C 360 225, 345 255, 315 262 C 285 268, 250 262, 210 275 Z"
+          fill="url(#uc-wingGrad)"
+          stroke="#c4b5fd"
+          strokeWidth="1"
+          opacity={0.85}
+        />
+        <path d="M 210 275 C 255 235, 315 210, 338 220" stroke="#c4b5fd" strokeWidth="1" fill="none" opacity={0.6} />
+        <path d="M 215 282 C 258 245, 315 225, 335 232" stroke="#c4b5fd" strokeWidth="0.8" fill="none" opacity={0.5} />
+        <path d="M 218 289 C 260 255, 315 240, 330 245" stroke="#c4b5fd" strokeWidth="0.8" fill="none" opacity={0.4} />
+
+        {/* Legs */}
+        <rect x="175" y="375" width="22" height="65" rx="11" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1.5" />
+        <rect x="210" y="378" width="22" height="62" rx="11" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1.5" />
+        <rect x="255" y="372" width="22" height="68" rx="11" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1.5" />
+        <rect x="292" y="370" width="22" height="70" rx="11" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1.5" />
+
+        {/* Hooves */}
+        <rect x="175" y="432" width="22" height="14" rx="7" fill="#c4b5fd" />
+        <rect x="210" y="432" width="22" height="14" rx="7" fill="#c4b5fd" />
+        <rect x="255" y="432" width="22" height="14" rx="7" fill="#c4b5fd" />
+        <rect x="292" y="432" width="22" height="14" rx="7" fill="#c4b5fd" />
+
+        {/* Neck */}
+        <path
+          d="M 295 270 C 310 240, 320 210, 315 185 C 310 165, 290 158, 270 165 C 250 172, 245 195, 248 220 C 252 248, 270 265, 295 270 Z"
+          fill="url(#uc-bodyGrad)"
+          stroke="#e0d4ff"
+          strokeWidth="1.5"
+        />
+
+        {/* Head */}
+        <ellipse cx="300" cy="165" rx="52" ry="42" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1.5" />
+
+        {/* Snout */}
+        <ellipse cx="340" cy="178" rx="22" ry="16" fill="url(#uc-bodyGrad)" stroke="#e0d4ff" strokeWidth="1" />
+        <ellipse cx="352" cy="182" rx="4" ry="3" fill="#f0e6ff" />
+        <ellipse cx="344" cy="184" rx="3" ry="2.5" fill="#f0e6ff" />
+
+        {/* Ear */}
+        <path
+          d="M 270 130 C 265 110, 278 100, 288 115 C 292 122, 285 130, 278 133 Z"
+          fill="url(#uc-bodyGrad)"
+          stroke="#e0d4ff"
+          strokeWidth="1.5"
+        />
+        <path
+          d="M 272 128 C 269 114, 278 107, 284 118 C 287 124, 282 129, 276 131 Z"
+          fill="#f9a8d4"
+          opacity={0.6}
+        />
+
+        {/* Horn */}
+        <g filter="url(#uc-glow)">
+          <path
+            d="M 278 125 C 282 95, 290 65, 295 40 C 300 65, 305 95, 308 125 Z"
+            fill="url(#uc-hornGrad)"
+          />
+          <path d="M 280 120 C 285 100, 291 75, 295 50" stroke="#fff8dc" strokeWidth="1.5" fill="none" opacity={0.7} />
+          <path d="M 285 122 C 289 103, 294 80, 296 55" stroke="#fff8dc" strokeWidth="1" fill="none" opacity={0.5} />
+          <circle cx="295" cy="42" r="5" fill="#ffd700" opacity={0.6} />
+          <circle cx="295" cy="42" r="8" fill="#ffd700" opacity={0.25} />
+        </g>
+
+        {/* Eye */}
+        <ellipse cx="318" cy="158" rx="10" ry="9" fill="#1e1b4b" />
+        <ellipse cx="318" cy="158" rx="7" ry="6.5" fill="#312e81" />
+        <circle cx="322" cy="154" r="3" fill="white" opacity={0.9} />
+        <circle cx="315" cy="160" r="1.5" fill="white" opacity={0.5} />
+        <path d="M 310 151 C 312 146, 316 144, 320 146" stroke="#1e1b4b" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        <path d="M 314 149 C 315 144, 318 142, 321 144" stroke="#1e1b4b" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+        <path d="M 318 149 C 320 144, 323 143, 325 145" stroke="#1e1b4b" strokeWidth="1" fill="none" strokeLinecap="round" />
+
+        {/* Mane */}
+        <path
+          d="M 278 133 C 265 150, 255 170, 258 195 C 261 215, 270 225, 265 250 C 260 270, 248 280, 250 300"
+          stroke="url(#uc-mane1)"
+          strokeWidth="14"
+          fill="none"
+          strokeLinecap="round"
+          opacity={0.9}
+        />
+        <path
+          d="M 272 130 C 255 148, 242 170, 245 198 C 248 220, 258 232, 252 258 C 247 278, 238 288, 240 308"
+          stroke="url(#uc-mane2)"
+          strokeWidth="10"
+          fill="none"
+          strokeLinecap="round"
+          opacity={0.8}
+        />
+        <path
+          d="M 268 128 C 248 148, 232 172, 236 200 C 240 224, 252 238, 244 265 C 238 285, 228 295, 232 315"
+          stroke="url(#uc-mane3)"
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          opacity={0.7}
+        />
+        {/* Forelock */}
+        <path
+          d="M 285 128 C 295 115, 305 105, 300 90 C 296 78, 285 75, 280 85"
+          stroke="url(#uc-mane1)"
+          strokeWidth="10"
+          fill="none"
+          strokeLinecap="round"
+          opacity={0.85}
+        />
+        <path
+          d="M 282 127 C 290 112, 298 100, 293 86 C 289 76, 280 74, 276 83"
+          stroke="url(#uc-mane2)"
+          strokeWidth="7"
+          fill="none"
+          strokeLinecap="round"
+          opacity={0.7}
+        />
+      </g>
+
+      {/* Magic sparkles near horn */}
+      <g filter="url(#uc-sparkle)" opacity={0.9}>
+        <circle cx="260" cy="55" r="3" fill="#ffd700" />
+        <circle cx="330" cy="48" r="2.5" fill="#f472b6" />
+        <circle cx="315" cy="30" r="2" fill="#a855f7" />
+        <circle cx="275" cy="35" r="2" fill="#60a5fa" />
+        <circle cx="345" cy="65" r="2.5" fill="#34d399" />
+        <path d="M 250 70 L 252 65 L 254 70 L 259 72 L 254 74 L 252 79 L 250 74 L 245 72 Z" fill="#ffd700" />
+        <path d="M 335 38 L 337 33 L 339 38 L 344 40 L 339 42 L 337 47 L 335 42 L 330 40 Z" fill="#f472b6" />
+        <path d="M 308 22 L 310 17 L 312 22 L 317 24 L 312 26 L 310 31 L 308 26 L 303 24 Z" fill="#a855f7" />
+      </g>
+
+      {/* Border rings */}
+      <circle cx="250" cy="250" r="238" fill="none" stroke="#c4b5fd" strokeWidth="3" opacity={0.5} />
+      <circle cx="250" cy="250" r="234" fill="none" stroke="#e9d5ff" strokeWidth="1.5" opacity={0.4} />
+    </svg>
+  );
+}
+
+export default UnicornIllustration;
