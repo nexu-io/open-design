@@ -247,6 +247,15 @@ input, textarea, select {
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, textarea:focus, select:focus {
   outline: none;
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+/* Entry sidebar form fields keep a quieter focus so the orange "Create"
+   CTA stays the loudest thing in the panel. Settings, dialogs, and the
+   right-column tab content still get the global ring above. */
+.entry-side input:focus,
+.entry-side textarea:focus,
+.entry-side select:focus {
   border-color: var(--border-strong);
   box-shadow: none;
 }
