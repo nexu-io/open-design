@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -15,11 +15,31 @@ if (!existsSync(distEntry)) {
 }
 
 // Check for stale dist in dev/workspace mode
-function isStale(): boolean {
+function isStale() {
   try {
     const distStat = statSync(distEntry);
-    const srcStat = statSync(srcDir);
-    return srcStat.mtimeMs > distStat.mtimeMs;
+    const distTime = distStat.mtimeMs;
+
+    // Recursively check all source files under src/
+    function checkDir(dir) {
+      try {
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = resolve(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (checkDir(fullPath)) return true;
+          } else {
+            const fileStat = statSync(fullPath);
+            if (fileStat.mtimeMs > distTime) return true;
+          }
+        }
+      } catch {
+        // Skip inaccessible directories
+      }
+      return false;
+    }
+
+    return checkDir(srcDir);
   } catch {
     return false;
   }
