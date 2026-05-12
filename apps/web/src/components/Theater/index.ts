@@ -16,6 +16,10 @@ export { TheaterTranscript } from './TheaterTranscript';
 export { InterruptButton } from './InterruptButton';
 export { useCritiqueStream } from './hooks/useCritiqueStream';
 export { useCritiqueReplay } from './hooks/useCritiqueReplay';
+export {
+  useCritiqueTheaterEnabled,
+  setCritiqueTheaterEnabled,
+} from './hooks/useCritiqueTheaterEnabled';
 export type {
   CritiqueState,
   CritiqueAction,
