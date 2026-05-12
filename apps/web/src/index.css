@@ -3865,7 +3865,12 @@ code {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 0 0 auto;
+  /* The parent `.newproj` is `overflow: hidden`; the card needs to be the
+     scroll container so taller form variants (image/media tabs, validation
+     messages, compact-height windows) stay reachable inside the sidebar. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .newproj-title {
   margin: 0;
