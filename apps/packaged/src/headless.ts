@@ -60,6 +60,7 @@ function resolveHeadlessConfig(): PackagedConfig {
     namespaceBaseRoot,
     nodeCommand: null,
     resourceRoot,
+    telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
     webSidecarEntry: null,
     webStandaloneRoot: null,
     webOutputMode: "server",
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    telemetryRelayUrl: config.telemetryRelayUrl,
     // PR #974 round-5 (lefarcen P2): headless packaged mode runs daemon
     // + web only, no Electron, no privileged shell.openPath surface.
     // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client

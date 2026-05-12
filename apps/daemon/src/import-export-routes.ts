@@ -1,5 +1,11 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
+import {
+  InlineAssetsLimitError,
+  MAX_INLINE_OWNER_BYTES,
+  inlineRelativeAssets,
+  type InlineAssetReader,
+} from './inline-assets.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles'> {}
 
@@ -216,13 +222,15 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
 }
 
-export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'exports'> {}
+export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
 
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
+  const { readProjectFile, resolveProjectFilePath } = ctx.projectFiles;
+  const { isSafeId } = ctx.validation;
   const {
     buildProjectArchive,
     buildBatchArchive,
@@ -342,6 +350,177 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err?.message || err),
       );
+    }
+  });
+
+  // Export endpoint: serves an HTML body with every same-project
+  // top-level `<link rel=stylesheet>` / `<script src>` inlined.
+  // Counterpart to GET /api/projects/:id/raw/* — that route stays
+  // URL-load (one request per asset; FileViewer's default since
+  // PR #384). This route exists for explicit "Inline top-level
+  // CSS/JS" exports + the screenshot path where the headless browser
+  // fetches the response and renders it.
+  //
+  // Scope is intentionally narrow: only `<link rel=stylesheet>` and
+  // `<script src>` are rewritten. `<img src>`, CSS `url(...)` refs,
+  // `@import`, ES module imports, font sources, and similar remain
+  // external in the response — see the docstring on
+  // `apps/daemon/src/inline-assets.ts` for the full not-rewritten list
+  // and rationale. A fully offline "self-contained" export with image
+  // and font bundling would be a follow-up issue.
+  //
+  // Null-origin (sandboxed iframe srcdoc) callers are intentionally
+  // NOT supported — the only consumers are the daemon UI (same-origin)
+  // and server-side screenshot tooling (no Origin header). The
+  // response also carries `Content-Security-Policy: sandbox
+  // allow-scripts` so top-level browser navigation (no Origin header,
+  // would otherwise pass the daemon middleware) cannot escalate to
+  // daemon-origin privileges through script execution.
+  //
+  // See nexu-io/open-design#368 and the architecture lock at
+  // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
+  app.get('/api/projects/:id/export/*', async (req, res) => {
+    try {
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
+      const inlineRaw =
+        typeof req.query.inline === 'string' ? req.query.inline.trim().toLowerCase() : '';
+      if (!['1', 'true', 'yes', 'on'].includes(inlineRaw)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          "query parameter 'inline=1' is required",
+        );
+      }
+
+      const project = getProject(db, req.params.id);
+      const relPath = (req.params as any)[0];
+
+      // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
+      // readProjectFile so a 100 MiB owner HTML is rejected after a
+      // cheap stat() call, not after a 100 MiB readFile() into memory.
+      // The size check + mime check both run pre-buffer here, mirroring
+      // the sibling-asset stat-then-read contract round 4 already
+      // applied via AssetHandle. Size fires before mime so an oversize
+      // non-HTML file returns 413 (not 415) — that ordering is the
+      // observable Red→Green for this round.
+      //
+      // The helper's ownerBytes check (inline-assets.ts:127-133) stays
+      // as defense-in-depth: it still catches direct in-process callers
+      // that skip the route and any future drift in the size reported
+      // by stat vs the bytes actually returned by readFile.
+      let ownerMeta;
+      try {
+        ownerMeta = await resolveProjectFilePath(
+          PROJECTS_DIR,
+          req.params.id,
+          relPath,
+          project?.metadata,
+        );
+      } catch (err: any) {
+        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        return sendApiError(
+          res,
+          status,
+          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          String(err),
+        );
+      }
+
+      if (ownerMeta.size > MAX_INLINE_OWNER_BYTES) {
+        return sendApiError(
+          res,
+          413,
+          'PAYLOAD_TOO_LARGE',
+          `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
+        );
+      }
+
+      if (!ownerMeta.mime.startsWith('text/html')) {
+        return sendApiError(
+          res,
+          415,
+          'UNSUPPORTED_MEDIA_TYPE',
+          'export endpoint only supports HTML files',
+        );
+      }
+
+      let file;
+      try {
+        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      } catch (err: any) {
+        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        return sendApiError(
+          res,
+          status,
+          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          String(err),
+        );
+      }
+
+      // PR #1312 round-4 (lefarcen P2): stat first, then read. This
+      // lets the helper short-circuit on maxAssetBytes / maxTotalBytes
+      // BEFORE the buffer is materialized into memory. A 100 MiB
+      // sibling file is rejected after the cheap stat call, not after
+      // a 100 MiB readFile.
+      const fileReader: InlineAssetReader = async (sibling) => {
+        let meta;
+        try {
+          meta = await resolveProjectFilePath(
+            PROJECTS_DIR,
+            req.params.id,
+            sibling,
+            project?.metadata,
+          );
+        } catch {
+          return null;
+        }
+        return {
+          size: meta.size,
+          read: async () => {
+            try {
+              const siblingFile = await readProjectFile(
+                PROJECTS_DIR,
+                req.params.id,
+                sibling,
+                project?.metadata,
+              );
+              return siblingFile.buffer.toString('utf8');
+            } catch {
+              return null;
+            }
+          },
+        };
+      };
+
+      const rendered = await inlineRelativeAssets(
+        file.buffer.toString('utf8'),
+        relPath,
+        fileReader,
+      );
+      // PR #1312 round-2 (lefarcen P2): top-level browser navigation to
+      // this URL sends no Origin header, so the /api middleware lets it
+      // through. Without a CSP, any JS in the exported document would
+      // run at daemon origin with access to /api/, cookies, localStorage,
+      // etc. `sandbox allow-scripts` treats the response like a sandboxed
+      // iframe with an opaque origin — scripts execute (that's the point
+      // of inlining JS for screenshot tooling), but cannot read cookies,
+      // hit /api/, or escalate to daemon-origin privileges.
+      res.setHeader('Content-Security-Policy', 'sandbox allow-scripts');
+      res.type('text/html').send(rendered);
+    } catch (err: any) {
+      // PR #1312 round-3 (lefarcen P2): the inliner's cap-enforcement
+      // throws InlineAssetsLimitError when the owner HTML, candidate
+      // count, or assembled output exceeds the module-level limits.
+      // Map every such throw to a 413 PAYLOAD_TOO_LARGE envelope so
+      // callers see a structured error rather than a generic 400.
+      if (err instanceof InlineAssetsLimitError || err?.name === 'InlineAssetsLimitError') {
+        return sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', String(err));
+      }
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 

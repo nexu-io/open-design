@@ -71,6 +71,7 @@ import type {
   ChatAttachment,
   ChatCommentAttachment,
   ChatMessage,
+  ChatMessageFeedbackChange,
   Conversation,
   DesignSystemSummary,
   OpenTabsState,
@@ -78,6 +79,7 @@ import type {
   PreviewComment,
   PreviewCommentTarget,
   ProjectFile,
+  ProjectPlatform,
   ProjectTemplate,
   LiveArtifactEventItem,
   LiveArtifactSummary,
@@ -95,7 +97,6 @@ import { ChatPane } from './ChatPane';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 import { CenteredLoader } from './Loading';
-import { ProjectActionsToolbar } from './ProjectActionsToolbar';
 import { Toast } from './Toast';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -237,6 +238,56 @@ function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['eve
     refreshedSourceCount: evt.refreshedSourceCount,
     error: evt.error,
   };
+}
+
+const PLATFORM_LABELS: Record<ProjectPlatform, string> = {
+  auto: 'Auto',
+  responsive: 'Responsive web',
+  'web-desktop': 'Desktop web',
+  'mobile-ios': 'iOS app',
+  'mobile-android': 'Android app',
+  tablet: 'Tablet app',
+  'desktop-app': 'Desktop app',
+};
+
+function labelProjectPlatform(platform: ProjectPlatform | string): string {
+  return PLATFORM_LABELS[platform as ProjectPlatform] ?? platform;
+}
+
+function projectTargetPlatforms(project: Project): string[] {
+  const targets = project.metadata?.platformTargets;
+  if (Array.isArray(targets) && targets.length > 0) {
+    return [...new Set(targets)].map(labelProjectPlatform);
+  }
+  if (project.metadata?.platform) {
+    return [labelProjectPlatform(project.metadata.platform)];
+  }
+  return [];
+}
+
+type ProjectFeatureChip = {
+  label: string;
+  title: string;
+  tone: 'landing' | 'widgets';
+};
+
+function projectFeatureChips(project: Project): ProjectFeatureChip[] {
+  const chips: ProjectFeatureChip[] = [];
+  if (project.metadata?.includeLandingPage) {
+    chips.push({
+      label: 'Landing page',
+      title: 'Landing page companion surface is enabled for this project',
+      tone: 'landing',
+    });
+  }
+  if (project.metadata?.includeOsWidgets) {
+    chips.push({
+      label: 'OS widgets',
+      title: 'Home-screen, lock-screen, or quick-access OS widget surfaces are enabled',
+      tone: 'widgets',
+    });
+  }
+  return chips;
 }
 
 export function ProjectView({
@@ -865,6 +916,37 @@ export function ProjectView({
       });
     },
     [project.id, activeConversationId],
+  );
+
+  const handleAssistantFeedback = useCallback(
+    (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => {
+      const now = Date.now();
+      updateMessageById(
+        assistantMessage.id,
+        (prev) =>
+          change
+            ? {
+                ...prev,
+                feedback: {
+                  rating: change.rating,
+                  reasonCodes: change.reasonCodes,
+                  customReason: change.customReason,
+                  reasonsSubmittedAt: change.reasonsSubmittedAt,
+                  createdAt:
+                    prev.feedback?.rating === change.rating
+                      ? prev.feedback.createdAt
+                      : now,
+                  updatedAt: now,
+                },
+              }
+            : {
+                ...prev,
+                feedback: undefined,
+              },
+        true,
+      );
+    },
+    [updateMessageById],
   );
 
   const appendAssistantErrorEvent = useCallback(
@@ -1705,18 +1787,17 @@ export function ProjectView({
         // this for tool-emitted files; this handles the artifact-tag path.
         requestOpenFile(file.name);
       } else {
-        // writeProjectTextFile collapses non-OK responses (including
-        // 422 ARTIFACT_REGRESSION from reject-mode stub-guard) to null.
-        // Surfacing the structured error requires changing that helper's
-        // return contract for all callers — out of scope here. Until then,
-        // a generic banner makes the failure observable instead of silent.
-        // Allow the user to retry by clearing the saved-artifact ref so a
-        // retry attempt re-enters this code path.
+        // writeProjectTextFile collapses all failure paths (non-OK HTTP
+        // responses, network errors, and stub-guard 422s) to null — the
+        // helper's return contract would need to be widened to distinguish
+        // them, which is out of scope here.  Show a generic banner so the
+        // failure is observable rather than silent; the daemon logs carry
+        // the structured details for any specific error type.
+        // Clear the saved-artifact ref so the user can retry.
         savedArtifactRef.current = '';
         setError(
-          `Couldn't save artifact "${fileName}". The daemon refused the write — ` +
-            'this is most likely OD_ARTIFACT_STUB_GUARD=reject catching a placeholder body. ' +
-            'Check the daemon logs for the structured ARTIFACT_REGRESSION details.',
+          `Couldn't save artifact "${fileName}". The write failed — ` +
+            'check the daemon logs for details.',
         );
       }
     },
@@ -1936,6 +2017,13 @@ export function ProjectView({
     const ds = designSystems.find((d) => d.id === project.designSystemId)?.title;
     return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
   }, [skills, designTemplates, designSystems, project.skillId, project.designSystemId, t]);
+
+  const targetPlatforms = useMemo(() => projectTargetPlatforms(project), [project]);
+  const targetPlatformsLabel = targetPlatforms.join(', ');
+  const visibleTargetPlatforms = targetPlatforms.slice(0, 5);
+  const hiddenTargetPlatformCount = Math.max(0, targetPlatforms.length - visibleTargetPlatforms.length);
+  const featureChips = useMemo(() => projectFeatureChips(project), [project]);
+  const featureChipsLabel = featureChips.map((chip) => chip.label).join(', ');
 
   const isDeck = useMemo(
     () =>
@@ -2266,6 +2354,7 @@ export function ProjectView({
         )}
       >
         <div className="app-project-title">
+          <span className="app-project-title-line">
             <span
               className="title editable"
               data-testid="project-title"
@@ -2284,16 +2373,46 @@ export function ProjectView({
               {project.name}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
+          </span>
+          {targetPlatforms.length > 0 ? (
+            <span
+              className="project-target-platforms"
+              data-testid="project-target-platforms"
+              title={`Target platforms: ${targetPlatformsLabel}`}
+            >
+              <span className="project-target-platforms-label">Targets</span>
+              {visibleTargetPlatforms.map((platform) => (
+                <span className="project-target-platform-chip" key={platform}>
+                  {platform}
+                </span>
+              ))}
+              {hiddenTargetPlatformCount > 0 ? (
+                <span className="project-target-platform-chip is-count">
+                  +{hiddenTargetPlatformCount}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+          {featureChips.length > 0 ? (
+            <span
+              className="project-feature-chips"
+              data-testid="project-feature-chips"
+              title={`Enabled design outputs: ${featureChipsLabel}`}
+            >
+              <span className="project-feature-chips-label">Includes</span>
+              {featureChips.map((chip) => (
+                <span
+                  className={`project-feature-chip is-${chip.tone}`}
+                  key={chip.tone}
+                  title={chip.title}
+                >
+                  {chip.label}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </div>
       </AppChromeHeader>
-      <ProjectActionsToolbar
-        designMdState={designMdState}
-        finalizeStatus={finalize.status}
-        onFinalize={handleFinalize}
-        onCancelFinalize={handleCancelFinalize}
-        onContinueInCli={handleContinueInCli}
-        hidden={workspaceFocused}
-      />
       <div
         ref={splitRef}
         className={[
@@ -2336,6 +2455,7 @@ export function ProjectView({
                 void handleSend(text, [], []);
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
+              onAssistantFeedback={handleAssistantFeedback}
               onNewConversation={handleNewConversation}
               newConversationDisabled={newConversationDisabled}
               conversations={conversations}

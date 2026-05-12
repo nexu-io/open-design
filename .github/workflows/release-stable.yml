@@ -24,6 +24,9 @@ concurrency:
   group: open-design-release-stable-${{ inputs.channel }}
   cancel-in-progress: false
 
+env:
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+
 jobs:
   metadata:
     name: Prepare release metadata

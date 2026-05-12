@@ -121,7 +121,12 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
   });
 }
 
-test.describe('Critique Theater e2e (Phase 11)', () => {
+// Parked behind test.describe.fixme until the follow-up that lands the
+// PNG baselines + the goto('/projects/:id') fixture (the current bootstrap
+// lands on '/' where ProjectView is not mounted, so CritiqueTheaterMount
+// never renders and every assertion times out). Removed from
+// test:ui:extended in the same merge per PerishCode P1 on PR #1338.
+test.describe.fixme('Critique Theater e2e (Phase 11)', () => {
   test.beforeEach(async ({ page }) => {
     await bootAppWithCritiqueEnabled(page);
   });

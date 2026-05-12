@@ -208,6 +208,19 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     });
     expect(env.OD_DAEMON_CLI_PATH).toBe('/path/to/cli/dist/index.js');
   });
+
+  it('forwards the packaged telemetry relay URL to the daemon when configured', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      telemetryRelayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+    });
+    expect(env.OPEN_DESIGN_TELEMETRY_RELAY_URL).toBe(
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+  });
 });
 
 describe('waitForStatus child-exit fast-fail', () => {

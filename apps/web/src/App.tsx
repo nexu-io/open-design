@@ -44,6 +44,7 @@ import {
   importFolderProject,
   listProjects,
   listTemplates,
+  deleteTemplate,
   patchProject,
 } from './state/projects';
 import { useI18n } from './i18n';
@@ -465,6 +466,12 @@ export function App() {
     setTemplates(list);
   }, []);
 
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    const ok = await deleteTemplate(id);
+    if (ok) await refreshTemplates();
+    return ok;
+  }, [refreshTemplates]);
+
   const reloadMediaProvidersFromDaemon = useCallback(async () => {
     const result = await fetchMediaProvidersFromDaemon();
     if (result.status !== 'ok') {
@@ -688,6 +695,15 @@ export function App() {
       navigate({ kind: 'home' });
     }
   }, [route]);
+
+  const handleRenameProject = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setProjects((curr) =>
+      curr.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+    );
+    void patchProject(id, { name: trimmed });
+  }, []);
 
   const handleBack = useCallback(() => {
     navigate({ kind: 'home' });
@@ -914,6 +930,7 @@ export function App() {
           designSystems={enabledDS}
           projects={projects}
           templates={templates}
+          onDeleteTemplate={handleDeleteTemplate}
           promptTemplates={promptTemplates}
           defaultDesignSystemId={config.designSystemId}
           config={config}
@@ -929,6 +946,7 @@ export function App() {
           onOpenProject={handleOpenProject}
           onOpenLiveArtifact={handleOpenLiveArtifact}
           onDeleteProject={handleDeleteProject}
+          onRenameProject={handleRenameProject}
           onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
           onOpenSettings={openSettings}
           onAdoptPet={openPetSettings}
