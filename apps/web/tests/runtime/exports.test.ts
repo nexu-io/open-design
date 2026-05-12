@@ -164,6 +164,27 @@ describe('buildDesignHandoffContent', () => {
     expect(handoff).toContain('Open `index.html` and `DESIGN-MANIFEST.json`');
     expect(handoff).not.toContain('Primary entry: `frames/iphone-15-pro.html`');
   });
+
+  it('keeps phone.html and iphone-upgrade.html as real screens when outside frames/ directory', () => {
+    // phone.html as a carrier storefront screen, iphone-upgrade.html as a
+    // product surface — neither should be silently dropped from screens just
+    // because the filename resembles a device name.
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Carrier Storefront',
+      entryFile: 'phone.html',
+      files: ['phone.html', 'iphone-upgrade.html', 'frames/browser-shell.html', 'src/app.css'],
+    }));
+
+    const screenFiles = manifest.screens.map((screen: { file: string }) => screen.file);
+    expect(screenFiles).toContain('phone.html');
+    expect(screenFiles).toContain('iphone-upgrade.html');
+    // frame wrapper inside frames/ is still excluded
+    expect(screenFiles).not.toContain('frames/browser-shell.html');
+    // both real screens appear in sourceFiles.html
+    expect(manifest.sourceFiles.html).toContain('phone.html');
+    expect(manifest.sourceFiles.html).toContain('iphone-upgrade.html');
+    expect(manifest.sourceFiles.html).toContain('frames/browser-shell.html');
+  });
 });
 
 describe('exportProjectAsPdf', () => {

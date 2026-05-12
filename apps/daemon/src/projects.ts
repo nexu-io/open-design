@@ -363,7 +363,12 @@ function addDesignManifest(zip, entries, projectLabel) {
   });
 }
 
-const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame|iphone[-_\w]*|ipad[-_\w]*|phone|mobile-frame|tablet-frame)\.html?$/i;
+// A file is treated as a preview-chrome wrapper only when it lives inside
+// a frames/ or device-frames/ directory, or its filename is an unambiguous
+// wrapper template (browser-chrome.html, device-frame.html).  Filenames
+// like phone.html or iphone-upgrade.html are legitimate product-screen
+// deliverables and must not be dropped from manifest screens.
+const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame)\.html?$/i;
 
 function isFrameWrapperHtmlFile(file: string): boolean {
   return FRAME_WRAPPER_FILE_RE.test(file);

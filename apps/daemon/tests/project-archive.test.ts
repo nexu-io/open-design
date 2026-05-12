@@ -172,4 +172,27 @@ describe('buildProjectArchive', () => {
     const handoff = await zip.file('DESIGN-HANDOFF.md')?.async('string');
     expect(handoff).toBe('# custom handoff');
   });
+
+  it('keeps phone.html and iphone-upgrade.html as real screens when outside frames/ directory', async () => {
+    // phone.html as a carrier storefront, iphone-upgrade.html as a product
+    // surface — they must not be silently dropped from manifest screens.
+    const dir = path.join(projectsRoot, projectId, 'carrier-app');
+    await mkdir(path.join(dir, 'frames'), { recursive: true });
+    await writeFile(path.join(dir, 'phone.html'), '<!doctype html>phone storefront');
+    await writeFile(path.join(dir, 'iphone-upgrade.html'), '<!doctype html>upgrade screen');
+    await writeFile(path.join(dir, 'frames', 'device-shell.html'), '<!doctype html>frame');
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'carrier-app');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+
+    const screenFiles = manifest.screens.map((screen: { file: string }) => screen.file);
+    expect(screenFiles).toContain('phone.html');
+    expect(screenFiles).toContain('iphone-upgrade.html');
+    // frame wrapper inside frames/ is still excluded from screens
+    expect(screenFiles).not.toContain('frames/device-shell.html');
+    // but still present in sourceFiles.html
+    expect(manifest.sourceFiles.html).toContain('frames/device-shell.html');
+  });
 });
