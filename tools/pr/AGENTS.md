@@ -45,7 +45,7 @@ Each tag has a single mechanical rule. Adding new tags requires the rule to be e
 | `non-ascii-slug` | A design-system root touched by the PR has a slug that fails `/^[a-z0-9-]+$/` | files + lane.DESIGN_DIR |
 | `maintainer-edits-disabled` | `maintainerCanModify === false` | gh.maintainerCanModify |
 | `org-member` | PR author's GitHub login appears in `gh api orgs/<repo-owner>/members` | gh REST orgs members list |
-| `unresolved-changes-requested` | Any reviewer's latest review has `state === "CHANGES_REQUESTED"` | gh.latestReviews[].state |
+| `unresolved-changes-requested` | A reviewer's latest review has `state === "CHANGES_REQUESTED"` (primary); falls back to `reviewDecision === "CHANGES_REQUESTED"` at PR level when no per-reviewer CR survives the latest-per-author reduction (e.g. reviewer's CR followed by COMMENTED, or CR outside the `reviews(last: 30)` window) | gh.latestReviews[].state · gh.reviewDecision (fallback) |
 | `stale-approval` | Any `APPROVED` review's `commit.oid` differs from current `headRefOid` | gh.latestReviews[].commit.oid + gh.headRefOid |
 | `awaiting-author-response-24h` | Latest human-reviewer signal time is newer than the latest author signal time and is ≥ 24h ago | latestReviews + comments + commits |
 | `awaiting-reviewer-response-24h` | Latest author signal time is newer than the latest human-reviewer signal time, ≥ 24h ago, and at least one human-reviewer signal exists | latestReviews + comments + commits |

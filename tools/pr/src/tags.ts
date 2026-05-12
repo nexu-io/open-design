@@ -116,12 +116,30 @@ function tagUnresolvedChangesRequested(facts: PrFacts): Tag | null {
     .filter((r) => r.state === "CHANGES_REQUESTED" && r.author?.login)
     .map((r) => r.author?.login)
     .filter((login): login is string => typeof login === "string");
-  if (reviewers.length === 0) return null;
-  return {
-    name: "unresolved-changes-requested",
-    reason: `latestReviews carries CHANGES_REQUESTED from: ${[...new Set(reviewers)].join(", ")}`,
-    source: "gh.latestReviews[].state",
-  };
+  if (reviewers.length > 0) {
+    return {
+      name: "unresolved-changes-requested",
+      reason: `latestReviews carries CHANGES_REQUESTED from: ${[...new Set(reviewers)].join(", ")}`,
+      source: "gh.latestReviews[].state",
+    };
+  }
+  // The reducer-side path misses cases where GitHub's reviewDecision still
+  // reports CHANGES_REQUESTED but the latest-per-author reduction of fetched
+  // reviews carries none — e.g. the reviewer's CR is followed by COMMENTED
+  // (COMMENTED does not supersede CR in GitHub's decision logic), or the CR
+  // sits outside the `reviews(last: 30)` window. Either way the PR-level
+  // decision is the authoritative signal; fall back to it without asserting
+  // a specific cause. Observed scale on the live queue: 3 of 102 open PRs
+  // (#1101 / #1127 / #1163) hit this gap, so this is a recurring pattern,
+  // not a theoretical edge case.
+  if (facts.reviewDecision === "CHANGES_REQUESTED") {
+    return {
+      name: "unresolved-changes-requested",
+      reason: "reviewDecision=CHANGES_REQUESTED at PR level; no per-reviewer CHANGES_REQUESTED state in latest-per-author reduction of fetched reviews",
+      source: "gh.reviewDecision",
+    };
+  }
+  return null;
 }
 
 function tagStaleApproval(facts: PrFacts): Tag | null {
