@@ -473,7 +473,10 @@ const MAC_WINDOW_CHROME_CSS = `
   .prompt-template-lightbox-backdrop * {
     -webkit-app-region: no-drag;
   }
-  .entry-brand,
+  .entry-brand {
+    -webkit-app-region: drag;
+    padding-top: 32px !important;
+  }
   .entry-header {
     -webkit-app-region: drag;
   }
