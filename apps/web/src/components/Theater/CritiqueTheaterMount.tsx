@@ -20,11 +20,11 @@ interface Props {
   /**
    * Test seam for the kill request. Production callers pass nothing
    * and we use platform `fetch`; tests inject a stub to capture the
-   * URL / method and resolve with a synthetic Response. Returning a
-   * rejected promise simulates a daemon that has not landed the
-   * endpoint yet — the optimistic local dispatch still fires so the
-   * UI moves to `interrupted`, and the warning surfaces on the
-   * developer console rather than tearing the React tree.
+   * URL / method and resolve with a synthetic Response. The UI only
+   * terminalizes on a 2xx response: a rejection or non-2xx (404
+   * endpoint not wired, 409 run already terminal) clears the pending
+   * flag so the user can retry and the real SSE terminal event still
+   * wins. A warning surfaces in development; production stays silent.
    */
   fetchInterrupt?: (url: string, init: RequestInit) => Promise<Response>;
 }
@@ -71,21 +71,45 @@ export function CritiqueTheaterMount({
     if (interruptPending) return;
     if (state.phase !== 'running') return;
     if (!projectId) return;
+
+    // Snapshot at click time. The fetch is async; by the time it resolves
+    // a fresh run could have started and `state.runId` could refer to a
+    // different run. The dispatch must carry the runId / round / composite
+    // the user actually saw when they clicked, not whatever the SSE feed
+    // advanced to in the meantime.
+    const runId = state.runId;
+    const { round: bestRound, composite } = bestRoundAndComposite(state);
+
     setInterruptPending(true);
 
-    // Lefarcen + codex P1 on PR #1315: the previous revision did the
-    // optimistic local dispatch only, so the daemon-side run kept
-    // executing while the UI ignored the real terminal event. Fire
-    // the daemon kill request alongside the optimistic dispatch.
-    // Daemon contract: `POST /api/projects/:id/critique/:runId/interrupt`
-    // returns 204 on success, 404 if the endpoint has not been wired
-    // up yet (Phase 15). Either response is treated as a best-effort
-    // signal: the UI moves to `interrupted` because the user asked
-    // for it; any real outcome the daemon emits later is dropped
-    // because terminal phases are sticky in the reducer.
+    // Siri-Ray + lefarcen P1 on PR #1316: the prior revision dispatched
+    // `interrupted` synchronously alongside the fetch, so a daemon that
+    // returned 404 / 409 (endpoint not wired, run already terminal) still
+    // moved the UI to the sticky `interrupted` phase and ignored every
+    // real terminal event the daemon emitted later. The new flow waits
+    // for the daemon ack: only on a successful response (HTTP 2xx) do we
+    // mark the run interrupted locally. On rejection or non-2xx we clear
+    // `interruptPending` so the user can retry, and the real SSE
+    // terminal event the daemon emits later still wins.
     const fetcher = fetchInterrupt ?? ((url, init) => fetch(url, init));
-    const url = `/api/projects/${encodeURIComponent(projectId)}/critique/${encodeURIComponent(state.runId)}/interrupt`;
-    fetcher(url, { method: 'POST' }).catch((err) => {
+    const url = `/api/projects/${encodeURIComponent(projectId)}/critique/${encodeURIComponent(runId)}/interrupt`;
+    fetcher(url, { method: 'POST' }).then((res) => {
+      if (res.ok) {
+        dispatch({ type: 'interrupted', runId, bestRound, composite });
+        return;
+      }
+      setInterruptPending(false);
+      if (
+        typeof process !== 'undefined'
+        && process.env?.NODE_ENV === 'development'
+      ) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[critique-theater] interrupt rejected by daemon (HTTP ${res.status})`,
+        );
+      }
+    }).catch((err) => {
+      setInterruptPending(false);
       if (
         typeof process !== 'undefined'
         && process.env?.NODE_ENV === 'development'
@@ -93,14 +117,6 @@ export function CritiqueTheaterMount({
         // eslint-disable-next-line no-console
         console.warn('[critique-theater] interrupt request failed', err);
       }
-    });
-
-    const { round, composite } = bestRoundAndComposite(state);
-    dispatch({
-      type: 'interrupted',
-      runId: state.runId,
-      bestRound: round,
-      composite,
     });
   }, [interruptPending, state, dispatch, projectId, fetchInterrupt]);
 
