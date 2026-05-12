@@ -8,23 +8,33 @@
  * after a future refactor.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { logCritique } from '../../src/logging/critique.js';
 
 let captured: string[] = [];
-let writeSpy: ReturnType<typeof vi.spyOn>;
+let originalWrite: typeof process.stdout.write;
 
 beforeEach(() => {
   captured = [];
-  writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
-    if (typeof chunk === 'string') captured.push(chunk);
-    return true;
-  });
+  originalWrite = process.stdout.write.bind(process.stdout);
+  // Reassign rather than `vi.spyOn` because Node's overloaded
+  // `process.stdout.write` signature (string | Uint8Array, optional
+  // encoding, optional callback) does not narrow under
+  // MockInstance<unknown>. The override below captures the string
+  // form the logger uses and forwards bytes to the original sink
+  // for everything else so unrelated test output is not swallowed.
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]): boolean => {
+    if (typeof chunk === 'string') {
+      captured.push(chunk);
+      return true;
+    }
+    return (originalWrite as (chunk: unknown, ...rest: unknown[]) => boolean)(chunk, ...rest);
+  }) as typeof process.stdout.write;
 });
 
 afterEach(() => {
-  writeSpy.mockRestore();
+  process.stdout.write = originalWrite;
 });
 
 function parseLines(): Array<Record<string, unknown>> {
