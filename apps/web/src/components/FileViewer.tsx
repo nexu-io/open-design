@@ -5160,7 +5160,7 @@ function HtmlViewer({
                     data-testid="artifact-preview-frame"
                     data-od-render-mode="url-load"
                     title={file.name}
-                    sandbox="allow-scripts"
+                    sandbox="allow-scripts allow-same-origin"
                     src={previewSrcUrl}
                     onLoad={syncBridgeModes}
                   />
@@ -5396,7 +5396,7 @@ function HtmlViewer({
           {useUrlLoadPreview ? (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-same-origin"
               data-od-render-mode="url-load"
               src={previewSrcUrl}
             />
