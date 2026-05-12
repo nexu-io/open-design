@@ -150,7 +150,9 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
       },
     });
 
-    await dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i).fill(configuredPath);
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(configuredPath);
     await dialog.getByRole('button', { name: 'Test' }).click();
 
     const status = dialog.locator('.settings-test-status');
