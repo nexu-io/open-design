@@ -32,6 +32,9 @@ concurrency:
   group: open-design-release-beta
   cancel-in-progress: false
 
+env:
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+
 jobs:
   metadata:
     name: Prepare beta metadata

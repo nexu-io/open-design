@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import { ToolCard } from "./ToolCard";
 import { renderMarkdown } from "../runtime/markdown";
 import { projectFileUrl } from "../providers/registry";
@@ -9,7 +9,6 @@ import {
 import { stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import { Icon } from "./Icon";
-import { MessageFeedback } from "./MessageFeedback";
 import { useT } from "../i18n";
 import { unfinishedTodosFromEvents, type TodoItem } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -19,7 +18,14 @@ import {
   messageTime,
   relativeTimeLong,
 } from "../utils/chatTime";
-import type { AgentEvent, ChatMessage, ProjectFile } from "../types";
+import type {
+  AgentEvent,
+  ChatMessage,
+  ChatMessageFeedbackChange,
+  ChatMessageFeedbackRating,
+  ChatMessageFeedbackReasonCode,
+  ProjectFile,
+} from "../types";
 
 type TranslateFn = (
   key: keyof Dict,
@@ -44,6 +50,7 @@ interface Props {
   // to AssistantMessage; ProjectView wires it into onSend.
   onSubmitForm?: (text: string) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
+  onFeedback?: (change: ChatMessageFeedbackChange) => void;
 }
 
 /**
@@ -65,6 +72,7 @@ export function AssistantMessage({
   nextUserContent,
   onSubmitForm,
   onContinueRemainingTasks,
+  onFeedback,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -86,6 +94,23 @@ export function AssistantMessage({
     !!isLast &&
     unfinishedTodos.length > 0 &&
     !!onContinueRemainingTasks;
+  const showFeedback =
+    !!onFeedback &&
+    isFeedbackEligible({
+      streaming,
+      message,
+      hasEmptyResponse,
+      hasUnfinishedTodos: unfinishedTodos.length > 0,
+      hasArtifactWork: hasArtifactWorkSignal(message, produced.length),
+    });
+  const showCompletionRow =
+    showFeedback ||
+    streaming ||
+    !!message.startedAt ||
+    !!message.endedAt ||
+    !!usage ||
+    unfinishedTodos.length > 0 ||
+    hasEmptyResponse;
   // Track which forms the user submitted in this session so we lock them
   // immediately on click (without waiting for the parent to re-render).
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
@@ -157,25 +182,93 @@ export function AssistantMessage({
             onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
           />
         ) : null}
-        <AssistantFooter
-          streaming={streaming}
-          startedAt={message.startedAt}
-          endedAt={message.endedAt}
-          usage={usage}
-          hasUnfinishedTodos={unfinishedTodos.length > 0}
-          hasEmptyResponse={hasEmptyResponse}
-        />
-        {/* Feedback widget for issue #1288 — gated on `produced.length > 0`
-            because the issue scopes feedback to turns that produce a final
-            artifact, not text-only acknowledgements or question-form turns
-            (lefarcen review on PR #1308). The `runSucceeded`
-            guard keeps it off failed runs, and `!hasEmptyResponse` keeps it
-            off agents that succeeded silently with no content. */}
-        {runSucceeded && !hasEmptyResponse && produced.length > 0 ? (
-          <MessageFeedback messageId={message.id} />
+        {showCompletionRow ? (
+          <div className="assistant-completion-row">
+            {showFeedback ? (
+              <AssistantFeedback
+                feedback={message.feedback}
+                onFeedback={onFeedback}
+                footerProps={{
+                  streaming,
+                  startedAt: message.startedAt,
+                  endedAt: message.endedAt,
+                  usage,
+                  hasUnfinishedTodos: unfinishedTodos.length > 0,
+                  hasEmptyResponse,
+                  forceVisible: true,
+                }}
+              />
+            ) : (
+              <AssistantFooter
+                streaming={streaming}
+                startedAt={message.startedAt}
+                endedAt={message.endedAt}
+                usage={usage}
+                hasUnfinishedTodos={unfinishedTodos.length > 0}
+                hasEmptyResponse={hasEmptyResponse}
+              />
+            )}
+          </div>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function isFeedbackEligible({
+  streaming,
+  message,
+  hasEmptyResponse,
+  hasUnfinishedTodos,
+  hasArtifactWork,
+}: {
+  streaming: boolean;
+  message: ChatMessage;
+  hasEmptyResponse: boolean;
+  hasUnfinishedTodos: boolean;
+  hasArtifactWork: boolean;
+}): boolean {
+  if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
+  if (!hasArtifactWork) return false;
+  if (message.runStatus) return message.runStatus === "succeeded";
+  return !!message.endedAt;
+}
+
+function hasArtifactWorkSignal(message: ChatMessage, producedFileCount: number): boolean {
+  if (producedFileCount > 0) return true;
+  if (message.content.includes("<artifact")) return true;
+  if (hasLiveArtifactMutation(message.events ?? [])) return true;
+  return hasSuccessfulFileMutation(message.events ?? []);
+}
+
+function hasLiveArtifactMutation(events: AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== "live_artifact") return false;
+    return event.action === "created" || event.action === "updated";
+  });
+}
+
+function hasSuccessfulFileMutation(events: AgentEvent[]): boolean {
+  const errorByToolId = new Map<string, boolean>();
+  for (const event of events) {
+    if (event.kind === "tool_result") {
+      errorByToolId.set(event.toolUseId, event.isError);
+    }
+  }
+  return events.some((event) => {
+    if (event.kind !== "tool_use") return false;
+    if (!isFileMutationToolName(event.name)) return false;
+    return errorByToolId.get(event.id) !== true;
+  });
+}
+
+function isFileMutationToolName(name: string): boolean {
+  return (
+    name === "Write" ||
+    name === "write" ||
+    name === "create_file" ||
+    name === "Edit" ||
+    name === "str_replace_edit"
   );
 }
 
@@ -232,6 +325,17 @@ function appendRoleModel(label: string, model: string | null): string {
   return `${label} · ${model}`;
 }
 
+interface AssistantFooterProps {
+  streaming: boolean;
+  startedAt: number | undefined;
+  endedAt: number | undefined;
+  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
+  hasUnfinishedTodos: boolean;
+  hasEmptyResponse: boolean;
+  feedbackControls?: ReactNode;
+  forceVisible?: boolean;
+}
+
 function AssistantFooter({
   streaming,
   startedAt,
@@ -239,17 +343,20 @@ function AssistantFooter({
   usage,
   hasUnfinishedTodos,
   hasEmptyResponse,
-}: {
-  streaming: boolean;
-  startedAt: number | undefined;
-  endedAt: number | undefined;
-  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
-  hasUnfinishedTodos: boolean;
-  hasEmptyResponse: boolean;
-}) {
+  feedbackControls,
+  forceVisible = false,
+}: AssistantFooterProps) {
   const t = useT();
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt);
-  if (!streaming && !elapsed && !usage && !hasUnfinishedTodos && !hasEmptyResponse) return null;
+  if (
+    !forceVisible &&
+    !streaming &&
+    !elapsed &&
+    !usage &&
+    !hasUnfinishedTodos &&
+    !hasEmptyResponse
+  )
+    return null;
   return (
     <div
       className="assistant-footer"
@@ -274,8 +381,214 @@ function AssistantFooter({
           ? ` · $${usage.costUsd.toFixed(4)}`
           : ""}
       </span>
+      {feedbackControls}
     </div>
   );
+}
+
+function AssistantFeedback({
+  feedback,
+  onFeedback,
+  footerProps,
+}: {
+  feedback: ChatMessage["feedback"];
+  onFeedback: (change: ChatMessageFeedbackChange) => void;
+  footerProps: AssistantFooterProps;
+}) {
+  const t = useT();
+  const [burstKey, setBurstKey] = useState(0);
+  const [reasonRating, setReasonRating] =
+    useState<ChatMessageFeedbackRating | null>(null);
+  const [draftReasonCodes, setDraftReasonCodes] = useState<
+    Set<ChatMessageFeedbackReasonCode>
+  >(() => new Set());
+  const [customReason, setCustomReason] = useState("");
+  const selected = feedback?.rating;
+  useEffect(() => {
+    if (selected) return;
+    setReasonRating(null);
+  }, [selected]);
+  const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
+    const nextRating = selected === rating ? null : rating;
+    if (nextRating === "positive") setBurstKey((key) => key + 1);
+    setDraftReasonCodes(new Set());
+    setCustomReason("");
+    setReasonRating(nextRating);
+    onFeedback(nextRating ? { rating: nextRating } : null);
+  };
+  const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
+    const next = new Set(draftReasonCodes);
+    if (next.has(code)) {
+      next.delete(code);
+      if (code === "other") setCustomReason("");
+    } else {
+      next.add(code);
+    }
+    setDraftReasonCodes(next);
+  };
+  const submitReasons = () => {
+    if (!reasonRating) return;
+    const trimmedCustomReason = customReason.trim();
+    onFeedback({
+      rating: reasonRating,
+      reasonCodes: [...draftReasonCodes],
+      customReason:
+        draftReasonCodes.has("other") && trimmedCustomReason
+          ? trimmedCustomReason
+          : undefined,
+      reasonsSubmittedAt: Date.now(),
+    });
+    setReasonRating(null);
+  };
+  const reasonOptions = reasonRating
+    ? feedbackReasonOptions(reasonRating, t)
+    : [];
+  const reasonEmoji = reasonRating === "positive" ? "😊" : "😔";
+  const showOtherInput = draftReasonCodes.has("other");
+  const canSubmit =
+    draftReasonCodes.size > 0 || (showOtherInput && customReason.trim().length > 0);
+  const controls = (
+    <span
+      className="assistant-feedback"
+      role="group"
+      aria-label={t("assistant.feedbackPrompt")}
+    >
+      <button
+        type="button"
+        className="assistant-feedback-button"
+        data-selected={selected === "positive" ? "true" : "false"}
+        aria-pressed={selected === "positive"}
+        aria-label={t("assistant.feedbackPositive")}
+        title={t("assistant.feedbackPositive")}
+        onClick={() => toggleFeedback("positive")}
+      >
+        <Icon name="thumbs-up" size={13} />
+        {burstKey > 0 ? (
+          <span
+            key={burstKey}
+            className="assistant-feedback-burst"
+            aria-hidden="true"
+          >
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        className="assistant-feedback-button"
+        data-selected={selected === "negative" ? "true" : "false"}
+        aria-pressed={selected === "negative"}
+        aria-label={t("assistant.feedbackNegative")}
+        title={t("assistant.feedbackNegative")}
+        onClick={() => toggleFeedback("negative")}
+      >
+        <Icon name="thumbs-down" size={13} />
+      </button>
+    </span>
+  );
+  return (
+    <div className="assistant-feedback-wrap">
+      <AssistantFooter {...footerProps} feedbackControls={controls} />
+      {reasonRating ? (
+        <div className="assistant-feedback-reasons">
+          <div className="assistant-feedback-reason-title">
+            <span>{t("assistant.feedbackReasonTitle")}</span>
+            <span className="assistant-feedback-reason-emoji" aria-hidden="true">
+              {reasonEmoji}
+            </span>
+          </div>
+          <div className="assistant-feedback-reason-options">
+            {reasonOptions.map((option) => (
+              <label
+                key={option.code}
+                className="assistant-feedback-reason-option"
+                data-selected={draftReasonCodes.has(option.code) ? "true" : "false"}
+              >
+                <input
+                  type="checkbox"
+                  checked={draftReasonCodes.has(option.code)}
+                  onChange={() => toggleReasonCode(option.code)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {showOtherInput ? (
+            <textarea
+              className="assistant-feedback-custom"
+              value={customReason}
+              placeholder={t("assistant.feedbackReasonPlaceholder")}
+              rows={2}
+              onChange={(event) => setCustomReason(event.target.value)}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="assistant-feedback-submit"
+            disabled={!canSubmit}
+            onClick={submitReasons}
+          >
+            {t("assistant.feedbackReasonSubmit")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function feedbackReasonOptions(
+  rating: ChatMessageFeedbackRating,
+  t: TranslateFn,
+): Array<{ code: ChatMessageFeedbackReasonCode; label: string }> {
+  const codes: ChatMessageFeedbackReasonCode[] =
+    rating === "positive"
+      ? [
+          "matched_request",
+          "strong_visual",
+          "useful_structure",
+          "easy_to_continue",
+          "other",
+        ]
+      : [
+          "missed_request",
+          "weak_visual",
+          "incomplete_output",
+          "hard_to_use",
+          "other",
+        ];
+  return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
+}
+
+function feedbackReasonLabel(
+  code: ChatMessageFeedbackReasonCode,
+  t: TranslateFn,
+): string {
+  switch (code) {
+    case "matched_request":
+      return t("assistant.feedbackReasonPositiveMatched");
+    case "strong_visual":
+      return t("assistant.feedbackReasonPositiveVisual");
+    case "useful_structure":
+      return t("assistant.feedbackReasonPositiveUseful");
+    case "easy_to_continue":
+      return t("assistant.feedbackReasonPositiveEasy");
+    case "missed_request":
+      return t("assistant.feedbackReasonNegativeMissed");
+    case "weak_visual":
+      return t("assistant.feedbackReasonNegativeVisual");
+    case "incomplete_output":
+      return t("assistant.feedbackReasonNegativeIncomplete");
+    case "hard_to_use":
+      return t("assistant.feedbackReasonNegativeHard");
+    case "other":
+      return t("assistant.feedbackReasonOther");
+  }
+  return code;
 }
 
 function UnfinishedTodosPanel({

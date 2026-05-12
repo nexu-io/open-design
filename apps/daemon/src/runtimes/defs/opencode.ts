@@ -22,8 +22,10 @@ export const opencodeAgentDef = {
       { id: 'openai/gpt-5', label: 'openai/gpt-5' },
       { id: 'google/gemini-2.5-pro', label: 'google/gemini-2.5-pro' },
     ],
-    // Prompt delivered via stdin (`opencode run -`) to avoid Windows
-    // `spawn ENAMETOOLONG` while preserving OpenCode's structured stream.
+    // Prompt delivered via stdin (`opencode run` with no message argv) to
+    // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
+    // structured stream. A literal `-` is parsed as a positional message by
+    // OpenCode 1.14.x and can surface as "Session not found".
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
       const args = [
         'run',
@@ -34,7 +36,6 @@ export const opencodeAgentDef = {
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
-      args.push('-');
       return args;
     },
     promptViaStdin: true,
