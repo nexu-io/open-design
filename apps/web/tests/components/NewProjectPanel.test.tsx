@@ -25,6 +25,7 @@ const skills: SkillSummary[] = [
     upstream: null,
     hasBody: true,
     examplePrompt: 'Build a prototype.',
+    aggregatesExamples: false,
   },
 ];
 
@@ -74,6 +75,7 @@ beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   Element.prototype.scrollIntoView = vi.fn();
 });
+
 describe('NewProjectPanel design system defaults', () => {
   it('uses the configured default design system when it exists in the catalog', () => {
     expect(defaultDesignSystemSelection('clay', designSystems)).toEqual(['clay']);
@@ -88,6 +90,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={vi.fn()}
       />,
@@ -108,6 +111,7 @@ describe('NewProjectPanel design system defaults', () => {
       inspirations: [],
     });
   });
+
   it('preserves prototype fidelity across tab switches and saves it into the create payload', () => {
     const onCreate = vi.fn();
     render(
@@ -116,6 +120,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -153,6 +158,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -192,6 +198,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId={null}
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -213,7 +220,7 @@ describe('NewProjectPanel design system defaults', () => {
     );
   });
 
-  it('saves live artifact creation with prototype kind, live-artifact intent, and fidelity metadata', () => {
+  it('saves live artifact creation with prototype kind, live-artifact intent, and locked high fidelity', () => {
     const onCreate = vi.fn();
     render(
       <NewProjectPanel
@@ -221,6 +228,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
         connectors={[]}
@@ -231,7 +239,9 @@ describe('NewProjectPanel design system defaults', () => {
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Realtime artifact payload' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Wireframe' }));
+    // Live artifact hides the fidelity picker — wireframe live artifacts
+    // don't make sense, so the surface is locked to high-fidelity.
+    expect(screen.queryByRole('button', { name: 'Wireframe' })).toBeNull();
     fireEvent.click(screen.getByTestId('create-project'));
 
     expect(onCreate).toHaveBeenCalledWith(
@@ -240,7 +250,7 @@ describe('NewProjectPanel design system defaults', () => {
         metadata: expect.objectContaining({
           kind: 'prototype',
           intent: 'live-artifact',
-          fidelity: 'wireframe',
+          fidelity: 'high-fidelity',
         }),
       }),
     );
@@ -254,6 +264,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
@@ -275,6 +286,9 @@ describe('NewProjectPanel design system defaults', () => {
         }),
       }),
     );
+    const payload = onCreate.mock.calls[0]?.[0];
+    expect(payload.metadata).not.toHaveProperty('platform');
+    expect(payload.metadata).not.toHaveProperty('platformTargets');
   });
 
   it('prevents template creation when there are no saved templates and enables creation once one exists', () => {
@@ -285,6 +299,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={emptyOnCreate}
       />,
@@ -304,6 +319,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={templates}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={templateOnCreate}
       />,
@@ -337,19 +353,18 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
     );
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Image payload metadata' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Tall3:4/i }));
-    fireEvent.change(screen.getByPlaceholderText('Editorial photo, soft daylight, muted palette'), {
-      target: { value: '  cinematic still life  ' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: '3:4' }));
     fireEvent.click(screen.getByTestId('create-project'));
 
     expect(onCreate).toHaveBeenCalledWith(
@@ -360,7 +375,6 @@ describe('NewProjectPanel design system defaults', () => {
           kind: 'image',
           imageModel: 'gpt-image-2',
           imageAspect: '3:4',
-          imageStyle: 'cinematic still life',
         }),
       }),
     );
@@ -374,16 +388,18 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Video' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Video payload metadata' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Portrait9:16/i }));
+    fireEvent.click(screen.getByRole('radio', { name: '9:16' }));
     fireEvent.change(screen.getByLabelText('Length'), {
       target: { value: '10' },
     });
@@ -411,11 +427,13 @@ describe('NewProjectPanel design system defaults', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={[]}
+        onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
       />,
     );
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Audio payload metadata' },
@@ -441,5 +459,107 @@ describe('NewProjectPanel design system defaults', () => {
         }),
       }),
     );
+  });
+
+  it('pins skillId to hyperframes when the video model is hyperframes-html, regardless of skill discovery order', () => {
+    // Reproduces PR #866 mrcfps's reported regression: when daemon `readdir()`
+    // returns video skills in an order that puts `video-shortform` ahead of
+    // `hyperframes`, the previous `list[0]?.id` fallback would route the
+    // HyperFrames-HTML model through `video-shortform`, dropping the
+    // hyperframes SKILL body and the html-in-canvas preflight. The fix forces
+    // the create-time skillId to `hyperframes` whenever `hyperframes-html` is
+    // the chosen model.
+    const onCreate = vi.fn();
+    const videoSkills: SkillSummary[] = [
+      {
+        id: 'video-shortform',
+        name: 'Video shortform',
+        description: 'Shortform video skill',
+        mode: 'video',
+        surface: 'video',
+        previewType: 'video',
+        designSystemRequired: false,
+        defaultFor: [],
+        triggers: [],
+        upstream: null,
+        hasBody: true,
+        examplePrompt: '',
+        aggregatesExamples: false,
+      },
+      {
+        id: 'hyperframes',
+        name: 'HyperFrames',
+        description: 'HTML-in-canvas video',
+        mode: 'video',
+        surface: 'video',
+        previewType: 'video',
+        designSystemRequired: false,
+        defaultFor: [],
+        triggers: [],
+        upstream: null,
+        hasBody: true,
+        examplePrompt: '',
+        aggregatesExamples: false,
+      },
+    ];
+
+    render(
+      <NewProjectPanel
+        skills={videoSkills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-hyperframes-html'));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'HyperFrames routing' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'HyperFrames routing',
+        skillId: 'hyperframes',
+        metadata: expect.objectContaining({
+          kind: 'video',
+          videoModel: 'hyperframes-html',
+        }),
+      }),
+    );
+  });
+});
+
+describe('NewProjectPanel template deletion', () => {
+  beforeEach(() => {
+    globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+    Element.prototype.scrollIntoView = () => {};
+  });
+
+  it('calls onDeleteTemplate when user clicks delete button', async () => {
+    const onDelete = vi.fn().mockResolvedValue(true);
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    const deleteBtn = screen.getByLabelText(/delete template/i);
+    fireEvent.click(deleteBtn);
+    expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
   });
 });

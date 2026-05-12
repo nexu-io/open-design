@@ -12,6 +12,7 @@ import {
   fetchConnectorDetail,
   fetchConnectorDiscovery,
   fetchProjectFileText,
+  fetchSkillExample,
   isDeployProviderId,
   updateDeployConfig,
   uploadProjectFiles,
@@ -47,6 +48,64 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('fetchSkillExample', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // Regression coverage for nexu-io/open-design#897. Skills declared with
+  // a non-html `od.preview.type` ship no fetchable HTML — the daemon's
+  // /example endpoint only resolves HTML files and 404s for everything
+  // else, which left the gallery stuck on a misleading "Couldn't load
+  // this example. The example HTML failed to fetch." state. The dispatch
+  // now short-circuits at the data layer so the modal can render a calm
+  // "no shipped preview" placeholder without firing a doomed network
+  // call.
+  it('short-circuits without a fetch when previewType is not html', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('hatch-pet', 'image')).resolves.toEqual({
+      unavailable: true,
+      kind: 'image',
+    });
+    await expect(
+      fetchSkillExample('dcf-valuation', 'markdown'),
+    ).resolves.toEqual({ unavailable: true, kind: 'markdown' });
+
+    // The doomed-call is the bug we're fixing — assert no network call
+    // was made for either non-html dispatch.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to html fetch when previewType is omitted (legacy callers)', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('<html><body>ok</body></html>', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('blog-post')).resolves.toEqual({
+      html: '<html><body>ok</body></html>',
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/blog-post/example');
+  });
+
+  it('forwards the html fetch and returns a discriminated error on non-2xx', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('design-brief', 'html')).resolves.toEqual({
+      error: 'HTTP 404',
+    });
+    // Confirm the dispatch did call through to the daemon for the html
+    // path (i.e. the short-circuit above only catches non-html types).
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
   });
 });
 
@@ -287,9 +346,45 @@ describe('connectConnector', () => {
       error: 'Popup blocked. Allow popups for Open Design and try again.',
     });
     expect(open).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
       method: 'POST',
     });
+  });
+
+  it('renders an info notice in the popup when the connect response carries no redirect URL', async () => {
+    const authWindow = {
+      document: {
+        title: '',
+        body: { innerHTML: '' },
+      },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    };
+    vi.stubGlobal('window', {
+      open: vi.fn(() => authWindow),
+      location: { assign: vi.fn() },
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/connectors/auth-configs/prepare') {
+        return new Response(JSON.stringify({
+          results: { twitter: { status: 'ready', authConfigId: 'ac_twitter' } },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        connector: { id: 'twitter', name: 'Twitter', status: 'available', tools: [] },
+        auth: { kind: 'pending', expiresAt: '2026-05-08T10:00:00.000Z' },
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(connectConnector('twitter')).resolves.toMatchObject({
+      connector: { id: 'twitter' },
+      auth: { kind: 'pending' },
+    });
+
+    expect(authWindow.close).not.toHaveBeenCalled();
+    expect(authWindow.document.title).toBe('Authorization pending');
+    expect(authWindow.document.body.innerHTML).toContain('Authorization pending');
   });
 
   it('opens connector auth in the system browser when Electron returns a success boolean', async () => {
@@ -350,7 +445,7 @@ describe('connectConnector', () => {
     });
     expect(open).not.toHaveBeenCalled();
     expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
-    expect(fetchMock).toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
       method: 'POST',
     });
   });

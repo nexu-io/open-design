@@ -69,6 +69,42 @@ describe('redactSecrets', () => {
     ).toBe('Authorization: Bearer [REDACTED:bearer_token]');
   });
 
+  it('redacts provider API key header values while keeping header names', () => {
+    expect(redactSecrets('x-api-key: secret-value-123')).toBe(
+      'x-api-key: [REDACTED:api_key_header]',
+    );
+    expect(redactSecrets('api-key=azure-secret-456')).toBe(
+      'api-key=[REDACTED:api_key_header]',
+    );
+    expect(redactSecrets('x-goog-api-key: google-secret-789, next header')).toBe(
+      'x-goog-api-key: [REDACTED:api_key_header], next header',
+    );
+    expect(redactSecrets('{"x-api-key":"secret-value-123"}')).toBe(
+      '{"x-api-key":"[REDACTED:api_key_header]"}',
+    );
+    expect(redactSecrets('{"x-api-key": "secret-value-123"}')).toBe(
+      '{"x-api-key": "[REDACTED:api_key_header]"}',
+    );
+    expect(redactSecrets('{"api-key":"secret-value-123"}')).toBe(
+      '{"api-key":"[REDACTED:api_key_header]"}',
+    );
+    expect(redactSecrets('{"x-goog-api-key":"secret-value-123"}')).toBe(
+      '{"x-goog-api-key":"[REDACTED:api_key_header]"}',
+    );
+  });
+
+  it('redacts API key query values while keeping URL structure', () => {
+    expect(redactSecrets('https://proxy.example.test/v1?key=secret-value-123&model=x')).toBe(
+      'https://proxy.example.test/v1?key=[REDACTED:api_key_query]&model=x',
+    );
+    expect(redactSecrets('https://proxy.example.test/v1?model=x&api_key=secret_value_456')).toBe(
+      'https://proxy.example.test/v1?model=x&api_key=[REDACTED:api_key_query]',
+    );
+    expect(redactSecrets('https://proxy.example.test/v1?api-key=secret-value-789#tail')).toBe(
+      'https://proxy.example.test/v1?api-key=[REDACTED:api_key_query]#tail',
+    );
+  });
+
   it('redacts email addresses', () => {
     expect(redactSecrets('contact me at jane.doe+stuff@example.co.uk!')).toBe(
       'contact me at [REDACTED:email]!',

@@ -1,8 +1,9 @@
 // Langfuse trace forwarding for completed agent runs.
 //
-// This module is intentionally dependency-free (no `langfuse` SDK). It posts
-// a trace with nested observations to Langfuse's public ingestion endpoint when
-// a run reaches a terminal state. Without LANGFUSE_PUBLIC_KEY /
+// This module is intentionally dependency-free (no `langfuse` SDK). It builds
+// Langfuse ingestion batches for completed runs and sends them either to the
+// official Open Design telemetry relay or, for local smoke tests, directly to
+// Langfuse. Without OPEN_DESIGN_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
 // LANGFUSE_SECRET_KEY in the env, every entry point becomes a no-op so that
 // dev runs and forks of this open-source repo do not accidentally report.
 //
@@ -33,6 +34,7 @@ const SESSION_ID_MAX = 200; // Langfuse drops sessionIds longer than this.
 const HARD_BATCH_MAX_BYTES = 1024 * 1024;
 const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 const DEFAULT_FETCH_RETRIES = 1;
+let missingTelemetrySinkWarned = false;
 
 export interface LangfuseConfig {
   authHeader: string;
@@ -40,6 +42,17 @@ export interface LangfuseConfig {
   timeoutMs: number;
   retries: number;
 }
+
+export type TelemetrySinkConfig =
+  | {
+      kind: 'relay';
+      relayUrl: string;
+      timeoutMs: number;
+      retries: number;
+    }
+  | ({
+      kind: 'langfuse';
+    } & LangfuseConfig);
 
 export interface RunSummary {
   runId: string;
@@ -133,7 +146,7 @@ export interface ReportContext {
 }
 
 export interface ReportRunOpts {
-  config?: LangfuseConfig | null;
+  config?: TelemetrySinkConfig | LangfuseConfig | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -159,6 +172,33 @@ export function readLangfuseConfig(
     ),
     retries: parseNonNegativeInt(env.LANGFUSE_RETRIES, DEFAULT_FETCH_RETRIES),
   };
+}
+
+/**
+ * Resolve telemetry delivery in release-safe order: hosted relay first,
+ * direct Langfuse credentials second for local smoke tests, disabled last.
+ */
+export function readTelemetrySinkConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): TelemetrySinkConfig | null {
+  const relayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
+  if (relayUrl) {
+    return {
+      kind: 'relay',
+      relayUrl: relayUrl.replace(/\/+$/, ''),
+      timeoutMs: parsePositiveInt(
+        env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS ?? env.LANGFUSE_TIMEOUT_MS,
+        DEFAULT_FETCH_TIMEOUT_MS,
+      ),
+      retries: parseNonNegativeInt(
+        env.OPEN_DESIGN_TELEMETRY_RETRIES ?? env.LANGFUSE_RETRIES,
+        DEFAULT_FETCH_RETRIES,
+      ),
+    };
+  }
+
+  const config = readLangfuseConfig(env);
+  return config == null ? null : { kind: 'langfuse', ...config };
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -471,21 +511,7 @@ async function postLangfuseBatch(
       // silently disappear server-side.
       const body = await response.text().catch(() => '');
       if (!body) return;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(body);
-      } catch {
-        return;
-      }
-      const errors =
-        parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? (parsed as { errors?: unknown }).errors
-          : undefined;
-      if (Array.isArray(errors) && errors.length > 0) {
-        console.warn(
-          `[langfuse-trace] Per-event errors (${errors.length}): ${JSON.stringify(errors).slice(0, 500)}`,
-        );
-      }
+      warnPerEventErrors(body, 'Per-event errors');
       return;
     } catch (error) {
       if (attempt < attempts) {
@@ -498,10 +524,90 @@ async function postLangfuseBatch(
   }
 }
 
+async function postRelayBatch(
+  config: Extract<TelemetrySinkConfig, { kind: 'relay' }>,
+  body: string,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const attempts = config.retries + 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(config.relayUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
+        },
+        signal: AbortSignal.timeout(config.timeoutMs),
+        body,
+      });
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => '');
+        if (
+          attempt < attempts &&
+          (response.status === 429 || response.status >= 500)
+        ) {
+          await waitBeforeRetry(attempt);
+          continue;
+        }
+        console.warn(
+          `[langfuse-trace] Relay failed ${response.status}: ${responseBody.slice(0, 200)}`,
+        );
+        return;
+      }
+
+      const responseBody = await response.text().catch(() => '');
+      if (!responseBody) return;
+      warnPerEventErrors(responseBody, 'Relay per-event errors');
+      return;
+    } catch (error) {
+      if (attempt < attempts) {
+        await waitBeforeRetry(attempt);
+        continue;
+      }
+      console.warn(`[langfuse-trace] Relay fetch error: ${String(error)}`);
+      return;
+    }
+  }
+}
+
 function waitBeforeRetry(attempt: number): Promise<void> {
   return new Promise((resolve) =>
     setTimeout(resolve, Math.min(250 * attempt, 1000)),
   );
+}
+
+function normalizeTelemetrySinkConfig(
+  config: TelemetrySinkConfig | LangfuseConfig,
+): TelemetrySinkConfig {
+  if ('kind' in config) return config;
+  return { kind: 'langfuse', ...config };
+}
+
+function resolveReportConfig(
+  opts: ReportRunOpts,
+): TelemetrySinkConfig | null {
+  if (opts.config === undefined) return readTelemetrySinkConfig();
+  if (opts.config == null) return null;
+  return normalizeTelemetrySinkConfig(opts.config);
+}
+
+function warnPerEventErrors(responseBody: string, label: string): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(responseBody);
+  } catch {
+    return;
+  }
+  const errors =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as { errors?: unknown }).errors
+      : undefined;
+  if (Array.isArray(errors) && errors.length > 0) {
+    console.warn(
+      `[langfuse-trace] ${label} (${errors.length}): ${JSON.stringify(errors).slice(0, 500)}`,
+    );
+  }
 }
 
 export async function reportRunCompleted(
@@ -510,9 +616,18 @@ export async function reportRunCompleted(
 ): Promise<void> {
   if (ctx.prefs.metrics !== true) return;
 
-  const config =
-    opts.config !== undefined ? opts.config : readLangfuseConfig();
-  if (!config) return;
+  const config = resolveReportConfig(opts);
+  if (!config) {
+    if (!missingTelemetrySinkWarned) {
+      // Warn once per daemon process; packaged config is loaded at process
+      // start, so repeated run-level warnings would only add noise.
+      missingTelemetrySinkWarned = true;
+      console.warn(
+        '[langfuse-trace] Telemetry metrics are enabled but no relay or Langfuse credentials are configured',
+      );
+    }
+    return;
+  }
 
   let batch: unknown[];
   try {
@@ -535,5 +650,9 @@ export async function reportRunCompleted(
   }
 
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  if (config.kind === 'relay') {
+    await postRelayBatch(config, serialized, fetchImpl);
+    return;
+  }
   await postLangfuseBatch(config, batch, fetchImpl);
 }

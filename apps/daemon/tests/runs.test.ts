@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { createChatRunService } from '../src/runs.js';
 
 describe('chat run service shutdown', () => {
+  it('filters active runs by conversation within the same project', () => {
+    const runs = createRuns();
+    const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
+    const runB = runs.create({ projectId: 'project-1', conversationId: 'conv-b' });
+    runA.status = 'running';
+    runB.status = 'running';
+
+    expect(
+      runs.list({ projectId: 'project-1', conversationId: 'conv-b', status: 'active' }),
+    ).toEqual([runB]);
+  });
+
   it('cancels active runs and terminates their child process during daemon shutdown', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });

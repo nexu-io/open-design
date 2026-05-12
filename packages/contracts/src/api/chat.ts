@@ -19,6 +19,12 @@ export interface ChatRequest {
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
+  // Per-turn skill ids picked via the composer's @-mention popover. The
+  // daemon concatenates each skill's body into the system prompt for
+  // this run only — they are NOT persisted on the project. Use this to
+  // assemble multiple capabilities (e.g. @web-search + @summarize) for
+  // a single turn without binding the project to one of them.
+  skillIds?: string[];
   designSystemId?: string | null;
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];
@@ -35,6 +41,28 @@ export interface ChatRunCreateRequest extends ChatRequest {
 }
 
 export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+
+export type ChatMessageFeedbackRating = 'positive' | 'negative';
+
+export type ChatMessageFeedbackReasonCode =
+  | 'matched_request'
+  | 'strong_visual'
+  | 'useful_structure'
+  | 'easy_to_continue'
+  | 'missed_request'
+  | 'weak_visual'
+  | 'incomplete_output'
+  | 'hard_to_use'
+  | 'other';
+
+export interface ChatMessageFeedback {
+  rating: ChatMessageFeedbackRating;
+  reasonCodes?: ChatMessageFeedbackReasonCode[];
+  customReason?: string;
+  reasonsSubmittedAt?: number;
+  createdAt: number;
+  updatedAt?: number;
+}
 
 export interface ChatRunCreateResponse {
   runId: string;
@@ -128,6 +156,7 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  feedback?: ChatMessageFeedback;
   /**
    * Request-only marker for the final assistant-message persistence pass.
    * The daemon does not store or return this field; it only uses it to

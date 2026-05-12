@@ -11,11 +11,12 @@ import {
   resolveAppIpcPath,
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
-import { app } from "electron";
+import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import {
+  PackagedPathAccessError,
   applyPackagedElectronPathOverrides,
   ensurePackagedNamespacePaths,
 } from "./launch.js";
@@ -83,6 +84,12 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    telemetryRelayUrl: config.telemetryRelayUrl,
+    // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
+    // main alongside the daemon, so the import-folder gate must be
+    // pinned ON from request 0. See `apps/packaged/src/headless.ts` for
+    // the daemon+web-only counterpart that passes `false`.
+    requireDesktopAuth: true,
     webSidecarEntry: config.webSidecarEntry,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,
@@ -101,10 +108,24 @@ async function main(): Promise<void> {
     async discoverWebUrl() {
       return packagedEntryUrl();
     },
+    // Round-7 (lefarcen P2 @ runtime.ts:336): packaged main-process
+    // fetch targets the daemon sidecar's real http URL — never the
+    // od://app/ renderer URL, which Node/undici cannot resolve through
+    // Electron's protocol handler.
+    async discoverDaemonUrl() {
+      return sidecars.daemon.url;
+    },
   });
 }
 
 void main().catch((error: unknown) => {
+  if (error instanceof PackagedPathAccessError) {
+    try {
+      dialog.showErrorBox(error.title, error.message);
+    } catch {
+      // Fall through to console logging + process exit.
+    }
+  }
   packagedLogger?.error("packaged runtime failed", { error });
   console.error("packaged runtime failed", error);
   process.exit(1);

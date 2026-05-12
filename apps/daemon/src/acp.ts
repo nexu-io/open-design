@@ -29,6 +29,14 @@ export interface ModelOption {
   label: string;
 }
 
+interface AcpModelConfigOption {
+  configId: string;
+  currentValue: string | null;
+  values: unknown[];
+}
+
+const MODEL_CONFIG_OPTION_IDS = new Set(['model', 'models', 'modelid', 'modelids']);
+
 interface DetectAcpModelsOptions {
   bin: string;
   args: string[];
@@ -143,7 +151,81 @@ function choosePermissionOutcome(options: unknown): string | null {
   return null;
 }
 
-function normalizeModels(models: unknown, defaultModelOption: ModelOption): ModelOption[] {
+function normalizeConfigOptionToken(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim().toLowerCase().replace(/[\s_-]+/g, '')
+    : '';
+}
+
+function isModelConfigOption(option: JsonObject, configId: string): boolean {
+  const category = normalizeConfigOptionToken(option.category);
+  if (category === 'model') return true;
+  const id = normalizeConfigOptionToken(configId);
+  if (id === 'model') return true;
+  if (category) return false;
+  const name = normalizeConfigOptionToken(option.name);
+  return MODEL_CONFIG_OPTION_IDS.has(id) || name === 'model';
+}
+
+function findModelConfigOption(configOptions: unknown): AcpModelConfigOption | null {
+  const options = Array.isArray(configOptions) ? configOptions : [];
+  for (const rawOption of options) {
+    const option = asObject(rawOption);
+    if (!option) continue;
+    const configId = typeof option.id === 'string' ? option.id.trim() : '';
+    if (!configId) continue;
+    const type = typeof option.type === 'string' ? option.type.trim() : '';
+    if (type && type !== 'select') continue;
+    if (!isModelConfigOption(option, configId)) continue;
+    const currentValue =
+      typeof option.currentValue === 'string' && option.currentValue.trim()
+        ? option.currentValue.trim()
+        : null;
+    return {
+      configId,
+      currentValue,
+      values: Array.isArray(option.options) ? option.options : [],
+    };
+  }
+  return null;
+}
+
+function normalizeModelConfigOptions(
+  configOptions: unknown,
+  defaultModelOption: ModelOption,
+): { currentModelId: string | null; models: ModelOption[] } | null {
+  const modelConfig = findModelConfigOption(configOptions);
+  if (!modelConfig) return null;
+  const seen = new Set([defaultModelOption.id]);
+  const out = [defaultModelOption];
+  for (const rawValue of modelConfig.values) {
+    const value = asObject(rawValue);
+    if (!value) continue;
+    const id =
+      typeof value.value === 'string' && value.value.trim()
+        ? value.value.trim()
+        : typeof value.id === 'string'
+          ? value.id.trim()
+          : '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const name = typeof value.name === 'string' ? value.name.trim() : '';
+    const isCurrent = id === modelConfig.currentValue;
+    const labelBase = name && name !== id ? `${name} (${id})` : id;
+    out.push({ id, label: isCurrent ? `${labelBase} • current` : labelBase });
+  }
+  return { currentModelId: modelConfig.currentValue, models: out };
+}
+
+export function normalizeModels(
+  models: unknown,
+  defaultModelOption: ModelOption,
+  configOptions?: unknown,
+): ModelOption[] {
+  const configModels = normalizeModelConfigOptions(configOptions, defaultModelOption);
+  if (configModels && configModels.models.length > 1) {
+    return configModels.models;
+  }
   const modelsObj = asObject(models);
   const available = Array.isArray(modelsObj?.availableModels) ? modelsObj.availableModels : [];
   const currentModelId =
@@ -159,7 +241,20 @@ function normalizeModels(models: unknown, defaultModelOption: ModelOption): Mode
     const labelBase = name && name !== id ? `${name} (${id})` : id;
     out.push({ id, label: isCurrent ? `${labelBase} • current` : labelBase });
   }
-  return out;
+  return out.length > 1 || !configModels ? out : configModels.models;
+}
+
+function modelSelectionErrorIsRecoverable(code: unknown): boolean {
+  return code === -32603 || code === -32602 || code === -32601 || code === -32002;
+}
+
+function currentModelFromSessionResult(result: JsonObject): string | null {
+  const configCurrent = findModelConfigOption(result.configOptions)?.currentValue;
+  if (configCurrent) return configCurrent;
+  const models = asObject(result.models);
+  return typeof models?.currentModelId === 'string' && models.currentModelId.trim()
+    ? models.currentModelId.trim()
+    : null;
 }
 
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
@@ -266,7 +361,7 @@ export async function detectAcpModels({
         return;
       }
       if (expectedId === 2) {
-        const models = normalizeModels(result.models, defaultModelOption);
+        const models = normalizeModels(result.models, defaultModelOption, result.configOptions);
         finish(resolve, models);
         if (!child.killed) child.kill('SIGTERM');
       }
@@ -324,6 +419,7 @@ export function attachAcpSession({
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
   let activeModel: string | null = null;
+  let modelConfigId: string | null = null;
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let finished = false;
@@ -393,6 +489,13 @@ export function attachAcpSession({
     }
   };
 
+  const recoverFromModelSelectionError = () => {
+    setModelRequestId = null;
+    activeModel = activeModel || 'default';
+    send('agent', { type: 'status', label: 'model', model: activeModel });
+    sendPrompt();
+  };
+
   const parser = createJsonLineStream((raw, rawLine) => {
     if (aborted) return;
     resetStageTimer('response');
@@ -407,32 +510,22 @@ export function attachAcpSession({
       // (pipe-broken, cleanup race conditions, etc.) are safe to ignore.
       if (finished) return;
       // JSON-RPC error handling:
-      // -32603 "Internal error": unexpected-id errors are cleanup noise — suppress.
-      //   Expected-id errors for session/set_model fall through to the recovery
-      //   block. All others (initialize, session/new, session/prompt) are real
-      //   failures — call fail().
-      // -32602 "Invalid params": these are real validation failures. Only
-      //   suppress when they match setModelRequestId so the recovery block handles
-      //   them. Any other -32602 (unexpected-id or non-set_model expected-id) is
-      //   a genuine protocol error — call fail().
+      // -32603 unexpected-id errors are cleanup noise. Expected-id model
+      // selection failures are recoverable; all other RPC errors are real
+      // protocol failures for initialize/session/new/session/prompt.
+      if (
+        obj.id === setModelRequestId &&
+        modelSelectionErrorIsRecoverable(error?.code) &&
+        promptRequestId === null
+      ) {
+        recoverFromModelSelectionError();
+        return;
+      }
       if (error?.code === -32603 && obj.id !== expectedId) {
         return;
       }
-      if (error?.code === -32602 && obj.id !== setModelRequestId) {
-        fail(rpcErr);
-        return;
-      }
-      if (error?.code === -32603 && obj.id === expectedId) {
-        if (obj.id === setModelRequestId) {
-          // Fall through — the recovery block will handle this
-        } else {
-          fail(rpcErr);
-          return;
-        }
-      }
-      if (error?.code === -32602 && obj.id === setModelRequestId) {
-        // Fall through — the recovery block will handle this
-      }
+      fail(rpcErr);
+      return;
     }
     if (obj.method === 'session/request_permission') {
       replyPermission(obj);
@@ -468,23 +561,6 @@ export function attachAcpSession({
       }
       return;
     }
-    // Recovery: if session/set_model failed with -32603 or -32602, fall back to
-    // sending the prompt with the default (already-active) model.
-    // -32603: agent doesn't support set_model at all (internal error).
-    // -32602: agent rejects the model ID or set_model params (invalid params).
-    // This is scoped to the exact set_model request id to avoid
-    // triggering on prompt or other request failures.
-    if (
-      (error?.code === -32603 || error?.code === -32602) &&
-      obj.id === setModelRequestId &&
-      promptRequestId === null
-    ) {
-      setModelRequestId = null;
-      activeModel = activeModel || 'default';
-      send('agent', { type: 'status', label: 'model', model: activeModel });
-      sendPrompt();
-      return;
-    }
     if (obj.id !== expectedId || !result) {
       return;
     }
@@ -504,25 +580,24 @@ export function attachAcpSession({
     }
     if (expectedId === 2) {
       sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
-      const models = asObject(result.models);
-      activeModel =
-        typeof models?.currentModelId === 'string'
-          ? models.currentModelId
-          : null;
+      const modelConfig = findModelConfigOption(result.configOptions);
+      modelConfigId = modelConfig?.configId ?? null;
+      activeModel = currentModelFromSessionResult(result);
       if (sessionId && activeModel) {
         send('agent', { type: 'status', label: 'model', model: activeModel });
       }
       if (sessionId && model && model !== 'default') {
         setModelRequestId = nextId;
         expectedId = nextId;
+        const setModelMethod = modelConfigId ? 'session/set_config_option' : 'session/set_model';
+        const setModelParams = modelConfigId
+          ? { sessionId, configId: modelConfigId, value: model }
+          : { sessionId, modelId: model };
         writeRpc(
           nextId,
-          'session/set_model',
-          {
-            sessionId,
-            modelId: model,
-          },
-          'session/set_model',
+          setModelMethod,
+          setModelParams,
+          setModelMethod,
         );
         nextId += 1;
         return;
@@ -546,10 +621,23 @@ export function attachAcpSession({
       finished = true;
       clearStageTimer();
       stdin.end();
+      // Some ACP agents (e.g. Devin for Terminal) keep the child process
+      // alive after stdin closes, waiting for the next prompt. Each Open
+      // Design run spawns its own agent process per turn, so the child must
+      // terminate for `child.on('close')` to fire and the chat run to
+      // finalize — otherwise the chat stays stuck in the "working" state.
+      // Give the child a short grace period to exit on its own first; if it
+      // doesn't, SIGTERM forces it. This mirrors the pattern in
+      // detectAcpModels() which already kills the child after a clean
+      // model-discovery probe completes (see line ~270 in this file).
+      const cleanExitTimer = setTimeout(() => {
+        if (!child.killed) child.kill('SIGTERM');
+      }, 500);
+      child.once('close', () => clearTimeout(cleanExitTimer));
       return;
     }
     if (sessionId && model && model !== 'default' && obj.id === expectedId) {
-      activeModel = model;
+      activeModel = currentModelFromSessionResult(result) ?? model;
       send('agent', { type: 'status', label: 'model', model: activeModel });
       sendPrompt();
     }
@@ -572,6 +660,13 @@ export function attachAcpSession({
   return {
     hasFatalError() {
       return fatal;
+    },
+    completedSuccessfully() {
+      // Returns true when the prompt request resolved without a fatal error
+      // and was not aborted. The chat consumer treats this as a successful
+      // run even if the child process subsequently exited via SIGTERM
+      // (which is expected for agents that don't shut down on stdin.end()).
+      return finished && !fatal && !aborted;
     },
     abort() {
       if (aborted || finished) return;

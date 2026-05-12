@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
+  canFetchProviderModels,
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
   configForManualOrbitRun,
   isOrbitRunDisabled,
   isValidApiBaseUrl,
+  mergeProviderModelOptions,
   sanitizeSettingsSavePayload,
   shouldEnableSettingsSave,
   shouldShowCustomModelInput,
@@ -196,6 +198,57 @@ describe('SettingsDialog provider connection test requirements', () => {
     expect(
       canRunProviderConnectionTest({ ...baseConfig, model: '' }),
     ).toBe(false);
+  });
+});
+
+describe('SettingsDialog provider model fetch helpers', () => {
+  it('requires key, valid base URL, and a supported protocol', () => {
+    expect(
+      canFetchProviderModels(
+        { apiKey: 'sk-openai', baseUrl: 'https://api.openai.com/v1' },
+        'openai',
+      ),
+    ).toBe(true);
+    expect(
+      canFetchProviderModels(
+        { apiKey: '', baseUrl: 'https://api.openai.com/v1' },
+        'openai',
+      ),
+    ).toBe(false);
+    expect(
+      canFetchProviderModels(
+        { apiKey: 'sk-openai', baseUrl: 'http://10.0.0.5:11434/v1' },
+        'openai',
+      ),
+    ).toBe(false);
+    expect(
+      canFetchProviderModels(
+        { apiKey: 'azure-key', baseUrl: 'https://example.openai.azure.com' },
+        'azure',
+      ),
+    ).toBe(false);
+    expect(
+      canFetchProviderModels(
+        { apiKey: 'ollama-key', baseUrl: 'https://ollama.com' },
+        'ollama',
+      ),
+    ).toBe(false);
+  });
+
+  it('merges fetched provider models before static suggestions without duplicates', () => {
+    expect(
+      mergeProviderModelOptions(
+        [
+          { id: 'remote-a', label: 'Remote A' },
+          { id: 'gpt-4o', label: 'Remote GPT' },
+        ],
+        ['gpt-4o', 'o4-mini'],
+      ),
+    ).toEqual([
+      { id: 'remote-a', label: 'Remote A' },
+      { id: 'gpt-4o', label: 'Remote GPT' },
+      { id: 'o4-mini', label: 'o4-mini' },
+    ]);
   });
 });
 
@@ -530,6 +583,63 @@ describe('SettingsDialog Orbit run behavior', () => {
     });
   });
 
+  it('preserves masked daemon media keys before starting a manual Orbit run', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/media/config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/app-config') {
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/orbit/run') {
+        return new Response(JSON.stringify({ projectId: 'orbit-project', agentRunId: 'run-preserve' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    await expect(
+      persistConfigAndRunOrbit(
+        {
+          ...baseConfig,
+          mediaProviders: {
+            openai: {
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '1234',
+              baseUrl: 'https://custom.example/v1',
+            },
+          },
+        },
+        {
+          daemonProviders: {
+            openai: {
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '1234',
+              baseUrl: '',
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual({ projectId: 'orbit-project', agentRunId: 'run-preserve' });
+
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({
+      providers: {
+        openai: {
+          preserveApiKey: true,
+          baseUrl: 'https://custom.example/v1',
+        },
+      },
+      force: false,
+    });
+  });
+
   it('does not start a manual Orbit run when saving app config fails', async () => {
     const calls: string[] = [];
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -666,7 +776,8 @@ describe('shouldEnableSettingsSave', () => {
     expect(shouldEnableSettingsSave(incompleteApiCfg, 'integrations', [availableAgent], true)).toBe(true);
     expect(shouldEnableSettingsSave(incompleteApiCfg, 'notifications', [availableAgent], true)).toBe(true);
     expect(shouldEnableSettingsSave(incompleteApiCfg, 'pet', [availableAgent], true)).toBe(true);
-    expect(shouldEnableSettingsSave(incompleteApiCfg, 'library', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'skills', [availableAgent], true)).toBe(true);
+    expect(shouldEnableSettingsSave(incompleteApiCfg, 'designSystems', [availableAgent], true)).toBe(true);
     expect(shouldEnableSettingsSave(incompleteApiCfg, 'about', [availableAgent], true)).toBe(true);
   });
 
@@ -812,7 +923,8 @@ describe('sanitizeSettingsSavePayload', () => {
       'appearance',
       'notifications',
       'pet',
-      'library',
+      'skills',
+      'designSystems',
       'about',
     ];
     for (const section of sections) {

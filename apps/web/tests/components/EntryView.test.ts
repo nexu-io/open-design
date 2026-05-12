@@ -6,6 +6,7 @@ import {
   sortConnectorsForSearch,
 } from '../../src/components/EntryView';
 import {
+  clearConnectorAuthorizationErrorsForConnected,
   clearConnectorAuthorizationPending,
   getConnectorDisplayToolCount,
   mergeConnectorActionResult,
@@ -84,6 +85,34 @@ describe('connector display sorting', () => {
 
     expect(getConnectorDisplayToolCount(connector)).toBe(25);
     expect(connector.tools).toEqual([]);
+  });
+
+  it('prefers advertised tool counts over curated preview tool names', () => {
+    const connector = {
+      id: 'github',
+      name: 'GitHub',
+      provider: 'Composio',
+      category: 'Developer',
+      status: 'connected' as const,
+      toolCount: 846,
+      tools: [
+        {
+          title: 'Search repositories',
+          name: 'github.github_search_repositories',
+          safety: { sideEffect: 'read' as const, approval: 'auto' as const, reason: 'Read-only search.' },
+          refreshEligible: true,
+        },
+        {
+          title: 'Get issue',
+          name: 'github.github_get_issue',
+          safety: { sideEffect: 'read' as const, approval: 'auto' as const, reason: 'Read-only get.' },
+          refreshEligible: true,
+        },
+      ],
+      curatedToolNames: ['github.github_search_repositories', 'github.github_get_issue'],
+    };
+
+    expect(getConnectorDisplayToolCount(connector)).toBe(846);
   });
 
   it('appends paginated preview tools without duplicating rows', () => {
@@ -275,6 +304,25 @@ describe('connector authorization pending state', () => {
     }, nowMs);
 
     expect(pending).toEqual({});
+  });
+
+  it('clears stored auth errors for connectors observed as connected', () => {
+    const errors = clearConnectorAuthorizationErrorsForConnected(
+      { exist: 'Composio provider is not configured', airtable: 'Connection failed' },
+      { exist: { status: 'connected' }, airtable: { status: 'available' } },
+    );
+
+    expect(errors).toEqual({ airtable: 'Connection failed' });
+  });
+
+  it('returns the same errors object when no connector transitions to connected', () => {
+    const original = { exist: 'Composio provider is not configured' };
+    const errors = clearConnectorAuthorizationErrorsForConnected(
+      original,
+      { exist: { status: 'available' } },
+    );
+
+    expect(errors).toBe(original);
   });
 
   it('cancels pending authorization without changing other pending connectors', () => {

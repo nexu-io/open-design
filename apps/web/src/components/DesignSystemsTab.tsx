@@ -72,6 +72,18 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
     return ['All', ...ordered];
   }, [surfaceScoped]);
 
+  // Keep surfaceFilter and category in sync when systems changes dynamically.
+  // If the currently selected surface has zero items, fall back to 'all'.
+  // If the current category is no longer present in the filtered list, fall back to 'All'.
+  useEffect(() => {
+    if (surfaceFilter !== 'all' && surfaceCounts[surfaceFilter] === 0) {
+      setSurfaceFilter('all');
+      setCategory('All');
+    } else if (category !== 'All' && !categories.includes(category)) {
+      setCategory('All');
+    }
+  }, [systems, surfaceFilter, surfaceCounts, category, categories]);
+
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return surfaceScoped.filter((s) => {
@@ -131,7 +143,7 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
         aria-label={t('ds.surfaceLabel')}
       >
         <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
-        {SURFACE_PILLS.map((p) => (
+        {SURFACE_PILLS.filter((p) => p.value === 'all' || surfaceCounts[p.value] > 0).map((p) => (
           <button
             key={p.value}
             type="button"

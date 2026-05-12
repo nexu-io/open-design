@@ -43,8 +43,12 @@ type ProjectMetadata = {
   fidelity?: string | null;
   speakerNotes?: boolean | null;
   animations?: boolean | null;
+  includeLandingPage?: boolean | null;
+  includeOsWidgets?: boolean | null;
   templateId?: string | null;
   templateLabel?: string | null;
+  platform?: string | null;
+  platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
   imageModel?: string | null;
   imageAspect?: string | null;
@@ -81,6 +85,7 @@ export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
+  streamFormat?: string | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -94,6 +99,22 @@ export interface ComposeInput {
     | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
+  // Compiled (machine-readable) form of the active brand's design system,
+  // shipped as sibling files to DESIGN.md when available. Both fields are
+  // optional and only injected when the daemon is running with the
+  // `OD_DESIGN_TOKEN_CHANNEL` env flag enabled (today's experimental
+  // gate). When present they are appended AFTER the DESIGN.md block so
+  // prose still sets the high-level voice and the structured form
+  // disambiguates token names + worked component shapes.
+  //
+  // - `designSystemTokensCss`    — verbatim `tokens.css` :root contract
+  //                                that the agent pastes into the
+  //                                artifact's <style>.
+  // - `designSystemFixtureHtml`  — verbatim `components.html` reference
+  //                                fixture demonstrating button / card /
+  //                                type-scale shapes wired to the tokens.
+  designSystemTokensCss?: string | undefined;
+  designSystemFixtureHtml?: string | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
   // them with section headers; we inject them between the DESIGN.md and
@@ -101,6 +122,12 @@ export interface ComposeInput {
   // (letter-spacing, accent caps, anti-slop) cover everything below.
   craftBody?: string | undefined;
   craftSections?: string[] | undefined;
+  // Markdown built from the user's auto-memory store
+  // (<dataDir>/memory/*.md). Folded in before the active design system so
+  // tone/voice/preferences extracted from past chats win over the
+  // built-in identity charter but still defer to the brand's hard tokens
+  // and the active skill's workflow. Empty/undefined skips the block.
+  memoryBody?: string | undefined;
   // Project-level metadata captured by the new-project panel. Drives the
   // agent's understanding of artifact kind, fidelity, speaker-notes intent
   // and animation intent. Missing fields here are exactly what the
@@ -140,28 +167,74 @@ export function composeSystemPrompt({
   skillMode,
   designSystemBody,
   designSystemTitle,
+  designSystemTokensCss,
+  designSystemFixtureHtml,
   craftBody,
   craftSections,
+  memoryBody,
   metadata,
   template,
   critique,
   critiqueBrand,
   critiqueSkill,
   connectedExternalMcp,
+  streamFormat,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
   // checklist + critique before <artifact>) win precedence over softer
   // wording later in the official base prompt.
-  const parts: string[] = [
+  const parts: string[] = [];
+
+  // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
+  // `@open-design/contracts`'s composer. The daemon hits this path for
+  // any plain-stream adapter (e.g. DeepSeek), so without pinning the
+  // override above DISCOVERY_AND_PHILOSOPHY here too, those daemon
+  // agents still emit the `<todo-list>` / `[读取 X]` pseudo-tool
+  // markup described in #313. Keep the wording byte-identical to the
+  // contracts copy so both code paths produce the same observable
+  // behaviour.
+  if (streamFormat === 'plain') {
+    parts.push(API_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  parts.push(
     DISCOVERY_AND_PHILOSOPHY,
     '\n\n---\n\n# Identity and workflow charter (background)\n\n',
     BASE_SYSTEM_PROMPT,
-  ];
+  );
+
+  if (memoryBody && memoryBody.trim().length > 0) {
+    parts.push(
+      `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\n${memoryBody.trim()}`,
+    );
+  }
 
   if (designSystemBody && designSystemBody.trim().length > 0) {
     parts.push(
       `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${designSystemBody.trim()}`,
+    );
+  }
+
+  // Structured (compiled) form of the active brand. The DESIGN.md above
+  // sets voice and intent; the tokens.css block below is the SAME
+  // contract in machine-readable form — names + values the agent pastes
+  // verbatim instead of re-deriving from prose. The components.html
+  // fixture grounds the token vocabulary in worked component shapes
+  // (button / card / type roles) so the agent can copy fragments
+  // directly. Both blocks are individually gated: missing files (today,
+  // every brand except `default` and `kami`) skip silently, preserving
+  // the legacy DESIGN.md-only behaviour for the other ~138 brands.
+  if (designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
+    parts.push(
+      `\n\n## Active design system tokens${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThe block below is this brand's tokens.css contract — every \`:root\` custom property and any scoped override (e.g. \`:root[lang=...]\`) the brand defines. **Paste the unscoped \`:root { ... }\` block verbatim into the artifact's first \`<style>\`** so every \`var(--*)\` reference resolves at runtime.\n\nDo not invent new tokens. Do not redefine these values. Do not write raw hex outside this :root block. The DESIGN.md above is prose; this is the binding contract.\n\n\`\`\`css\n${designSystemTokensCss.trim()}\n\`\`\``,
+    );
+  }
+
+  if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
+    parts.push(
+      `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
     );
   }
 
@@ -249,6 +322,33 @@ export function composeSystemPrompt({
 
   return parts.join('');
 }
+
+/**
+ * Top-anchored override for plain-stream daemon agents (#313). Mirrors
+ * the contracts-package copy byte-for-byte; see that file for the full
+ * rationale. Pinning it at the absolute top of the composed prompt is
+ * what beats the discovery layer's own "these override anything later"
+ * header — the old bottom-appended `## API mode rule` lost that
+ * precedence war and let `<todo-list>` / `[读取 X]` pseudo-tool markup
+ * leak into the chat.
+ */
+const API_MODE_OVERRIDE = `# API mode — no tools available (read first — overrides every rule below)
+
+You are running through a plain Messages API. **No tools are wired through to you.** \`TodoWrite\`, \`Read\`, \`Write\`, \`Edit\`, \`Bash\`, and \`WebFetch\` are unavailable — calls to them will not execute and will not render in the UI.
+
+Every later instruction in this prompt that tells you to "call TodoWrite", "run Bash", "read via Read", or otherwise invoke a tool is describing the daemon-mode workflow. In this API run those instructions are **overridden** — do not attempt them and do not pretend you did.
+
+**Forbidden output:**
+- Pseudo-tool markup such as \`<todo-list>...</todo-list>\`, \`<tool-call>\`, or invented XML wrappers around a plan.
+- Fake-protocol prose such as \`[读取 template.html ...]\`, \`[读取 layouts.md ...]\`, \`[正在调用 TodoWrite ...]\`, or any \`[doing X]\` placeholder narrating a tool you cannot run.
+- Statements like "I'll call TodoWrite to track this" or "let me read the skill file first" — there is no TodoWrite and no Read in this run.
+
+**Allowed output:**
+- Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
+- A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
+- \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+
+If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
 // Defense-in-depth against Claude Code's synthetic OAuth tools.
 //
@@ -390,6 +490,54 @@ function renderMetadataBlock(
   );
   lines.push('');
   lines.push(`- **kind**: ${metadata.kind}`);
+  if (metadata.platform) {
+    lines.push(`- **platform**: ${metadata.platform}`);
+  } else if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
+    lines.push('- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)');
+  }
+  if (Array.isArray(metadata.platformTargets) && metadata.platformTargets.length > 0) {
+    lines.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
+  }
+  if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
+    lines.push(
+      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
+    );
+  }
+  if ((metadata.platformTargets?.length ?? 0) > 1) {
+    lines.push(
+      '- **cross-platform deliverable rule**: each selected target keeps the same product goal but MUST be delivered as its own product screen/file when more than one concrete target is selected. Use clear files such as `landing.html` (if enabled), `mobile-ios.html`, `mobile-android.html`, `tablet.html`, `desktop.html`, plus shared `css/` and `js/` when useful. `index.html` may be a launcher/overview that links to these files, but it must not be the only place where mobile/tablet/desktop designs live. Do not collapse cross-platform work into a single tabbed demo, selector UI, comparison board, platform map, or labelled documentation section inside one mock product page.',
+    );
+  }
+  if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
+    lines.push(
+      '- **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use `index.html` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.',
+    );
+    lines.push(
+      '- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.',
+    );
+    lines.push(
+      '- **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.',
+    );
+    lines.push(
+      '- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.',
+    );
+    lines.push(
+      '- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained `index.html`, put the CSS/JS in clearly labelled blocks; for complex UX, generate `css/` and `js/` files when useful.',
+    );
+    lines.push(
+      '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
+    );
+  }
+  if (metadata.includeLandingPage) {
+    lines.push(
+      '- **includeLandingPage**: true — create `landing.html` as a separate responsive marketing companion surface in addition to the selected product/app screens. Do not implement the landing page only as a section inside `index.html`, even for responsive-web-only projects. If there is a working product/app screen, create it as a separate file such as `app.html`, `dashboard.html`, or a domain-specific screen name. `index.html` should be a lightweight launcher/overview when multiple files exist. Include hero, value props, product screenshots/device mockups, proof/features, and an appropriate CTA such as waitlist, download, or contact sales.',
+    );
+  }
+  if (metadata.includeOsWidgets) {
+    lines.push(
+      '- **includeOsWidgets**: true — add platform-native OS home-screen / lock-screen / quick-access widget surfaces where relevant. These are outside-the-app widgets (for example iOS WidgetKit, Android home screen widget, Live Activity/lock screen, tablet glance panel), not in-app cards. Include realistic widget sizes and direct quick actions for the domain.',
+    );
+  }
   if (metadata.intent === 'live-artifact') {
     lines.push(
       '- **intent**: live-artifact — the user chose New live artifact. The first output should be a live artifact/dashboard/report, not a one-off static mockup. Prefer the `live-artifact` skill workflow when available, keep source data compact, and register through the daemon live-artifact tool path once that wrapper/tooling is available.',
@@ -588,6 +736,14 @@ function derivePreflight(skillBody: string): string {
   if (/references\/themes\.md/.test(skillBody)) refs.push('`references/themes.md`');
   if (/references\/components\.md/.test(skillBody)) refs.push('`references/components.md`');
   if (/references\/checklist\.md/.test(skillBody)) refs.push('`references/checklist.md`');
+  // The hyperframes skill ships an html-in-canvas reference next to the
+  // VFX catalog blocks. The chat handler at server.ts:4138 routes through
+  // this composer (not the contracts copy), so the case must live here
+  // too — otherwise live agent runs miss the preflight directive even
+  // when the skill body explicitly lists the file.
+  if (/references\/html-in-canvas\.md|html-in-canvas\.md/.test(skillBody)) {
+    refs.push('`references/html-in-canvas.md`');
+  }
   if (refs.length === 0) return '';
   return ` **Pre-flight (do this before any other tool):** Read ${refs.join(', ')} via the path written in the skill-root preamble. The seed template defines the class system you'll paste into; the layouts file is the only acceptable source of section/screen/slide skeletons; the checklist is your P0/P1/P2 gate before emitting \`<artifact>\`. Skipping this step is the #1 reason output regresses to generic AI-slop.`;
 }

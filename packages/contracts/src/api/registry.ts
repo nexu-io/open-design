@@ -12,11 +12,17 @@ export interface AgentInfo {
   version?: string | null;
   models?: AgentModelOption[];
   reasoningOptions?: AgentModelOption[];
+  /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
+  installUrl?: string;
+  /** Optional HTTPS URL for configuration / auth / usage docs. */
+  docsUrl?: string;
 }
 
 export interface AgentsResponse {
   agents: AgentInfo[];
 }
+
+export type SkillSource = 'built-in' | 'user';
 
 export interface SkillSummary {
   id: string;
@@ -34,6 +40,16 @@ export interface SkillSummary {
   surface?: 'web' | 'image' | 'video' | 'audio';
   platform?: 'desktop' | 'mobile' | null;
   scenario?: string | null;
+  // Optional human-readable category (e.g. "image-generation", "video",
+  // "design-systems"). Surfaced as a filter pill in Settings → Skills so a
+  // large pre-loaded catalogue stays scannable. Free-form lowercase slug;
+  // not part of system-prompt composition.
+  category?: string | null;
+  // Origin of the skill: 'built-in' lives under the repo's `skills/`
+  // directory and cannot be deleted from the UI; 'user' lives under
+  // `<runtimeData>/user-skills/` and is fully owned by the user (delete
+  // / re-import allowed). New `import` endpoint always tags `user`.
+  source?: SkillSource;
   previewType: string;
   designSystemRequired: boolean;
   defaultFor: string[];
@@ -55,6 +71,48 @@ export interface SkillSummary {
   aggregatesExamples: boolean;
 }
 
+// Body shape for POST /api/skills/import. The daemon turns this into a
+// SKILL.md under `<runtimeData>/user-skills/<slug>/` and surfaces the
+// freshly-listed summary in the response.
+export interface SkillImportRequest {
+  name: string;
+  description?: string;
+  body: string;
+  triggers?: string[];
+}
+
+export interface SkillImportResponse {
+  skill: SkillSummary;
+}
+
+// Body for PUT /api/skills/:id — update an existing skill's SKILL.md.
+// The route param resolves to the canonical skill id; the daemon refuses
+// updates whose body `name` differs from that id (rename = delete +
+// re-import).
+export interface SkillUpdateRequest {
+  name?: string;
+  description?: string;
+  body: string;
+  triggers?: string[];
+}
+
+export interface SkillUpdateResponse {
+  skill: SkillSummary;
+}
+
+// Returned by GET /api/skills/:id/files — the on-disk file tree under
+// the skill's directory, capped to a small number of entries to keep
+// the payload bounded. Used by the Settings → Skills detail panel.
+export interface SkillFileEntry {
+  path: string;
+  kind: 'file' | 'directory';
+  size: number | null;
+}
+
+export interface SkillFilesResponse {
+  files: SkillFileEntry[];
+}
+
 export interface SkillDetail extends SkillSummary {
   body: string;
 }
@@ -67,6 +125,21 @@ export interface SkillResponse {
   skill: SkillDetail;
 }
 
+// Design templates share the SkillSummary/Detail shape (same SKILL.md
+// frontmatter, same preview behavior) but live under a separate registry
+// root so the EntryView Templates surface and the Settings → Skills surface
+// stay decoupled. See specs/current/skills-and-design-templates.md.
+export type DesignTemplateSummary = SkillSummary;
+export type DesignTemplateDetail = SkillDetail;
+
+export interface DesignTemplatesResponse {
+  designTemplates: DesignTemplateSummary[];
+}
+
+export interface DesignTemplateResponse {
+  designTemplate: DesignTemplateDetail;
+}
+
 export interface DesignSystemSummary {
   id: string;
   title: string;
@@ -74,6 +147,7 @@ export interface DesignSystemSummary {
   summary: string;
   swatches?: string[];
   surface?: 'web' | 'image' | 'video' | 'audio';
+  source?: 'built-in' | 'installed';
 }
 
 export interface DesignSystemDetail extends DesignSystemSummary {
@@ -148,4 +222,20 @@ export interface SyncCommunityPetsResponse {
   rootDir: string;
   // Up to ~10 surfaced error messages (the daemon log keeps the rest).
   errors: string[];
+}
+
+export type InstallInput =
+  | { source: 'github'; url: string }
+  | { source: 'local'; path: string };
+
+export interface InstallSkillResponse {
+  skill: SkillSummary;
+}
+
+export interface InstallDesignSystemResponse {
+  designSystem: DesignSystemSummary;
+}
+
+export interface UninstallResponse {
+  ok: true;
 }

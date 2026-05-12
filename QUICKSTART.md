@@ -1,6 +1,6 @@
 # Quickstart
 
-<p align="center"><b>English</b> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English</b> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
 
 Run the full product locally.
 
@@ -8,8 +8,12 @@ Run the full product locally.
 
 - **Node.js:** `~24` (Node 24.x). The repo enforces this through `package.json#engines`.
 - **pnpm:** `10.33.x`. The repo pins `pnpm@10.33.2` through `packageManager`; use Corepack so the pinned version is selected automatically.
-- **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native should work for most flows, but WSL2 is the safer baseline.
+- **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for common setup gotchas.
 - **Optional local agent CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
+
+### Local agent CLI and PATH
+
+The daemon scans your **`PATH`** (plus common user toolchain directories). If you install a CLI with **`npm install -g`** or **Homebrew** and Open Design still shows it as *not installed*, the GUI may be starting with a minimal `PATH` that does not include your global npm or Homebrew `bin` directory (common on macOS when the app is not launched from a full login shell). Ensure the executable’s directory is on `PATH` for the process that runs the daemon, then use **Rescan** in **Settings → Execution & model**.
 
 `nvm` / `fnm` are optional convenience tools, not required project setup. If you use one, install/select Node 24 before running pnpm:
 
@@ -170,7 +174,7 @@ pnpm tools-dev # starts daemon + web + desktop in the background
 
 On first load, the app detects your installed code-agent CLI (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI), picks it automatically, and defaults to `web-prototype` skill + `Neutral Modern` design system. Type a prompt and hit **Send**. The agent streams into the left pane; the `<artifact>` tag is parsed out and the HTML renders live on the right. When it finishes, click **Save to disk** to persist the artifact under `./.od/artifacts/<timestamp>-<slug>/index.html`.
 
-The **Design system** dropdown ships with **129 design systems** — 2 hand-authored starters (Neutral Modern, Warm Editorial), 70 bundled product systems, and 57 design skills sourced from [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Pick one to skin every prototype in that brand's aesthetic.
+The **Design system** dropdown ships with 71 built-in systems — 2 hand-authored starters (Neutral Modern, Warm Editorial) and 69 product systems imported from [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md), grouped by category (AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive). Pick one to skin every prototype in that brand's aesthetic, and another set of 57 design skills sourced from [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills).
 
 The **Skill** dropdown groups by mode (Prototype / Deck / Template / Design system) and shows the default skill per mode with a `· default` suffix. Bundled skills:
 
@@ -339,6 +343,13 @@ open-design/
 
 - **`better-sqlite3` fails to load / ABI mismatch after a Node.js version change** — `pnpm install` re-runs `postinstall` automatically and rebuilds the native addon for the current Node.js. To rebuild manually or verify the fix: `pnpm --filter @open-design/daemon rebuild better-sqlite3` then `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`. Requires build tools: `python3`, `make`, `g++` (or `clang++`). If you have `ignore-scripts=true` in your `.npmrc`, run `node scripts/postinstall.mjs` after `pnpm install`.
 - **"no agents found on PATH"** — install one of: `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `qodercli`, `copilot`. Or switch to API mode in Settings and paste a provider key.
+- **Claude Code exits with code 1** — Open Design was able to start `claude`, but the spawned non-interactive run failed before producing a response. From the same shell or app environment that starts Open Design, check:
+  ```bash
+  claude --version
+  claude auth status --text
+  printf 'hello' | claude -p --output-format stream-json --verbose --permission-mode bypassPermissions
+  ```
+  If the smoke test reports `401`, `apiKeySource: "none"`, or another auth error without a custom endpoint, run `claude`, use `/login`, exit Claude, and retry Open Design. If you use multiple Claude profiles, set **Settings -> Execution & model -> Claude Code config directory** to the profile path such as `~/.claude-2`. If `ANTHROPIC_BASE_URL` or a proxy is set, check the endpoint URL, proxy credentials, endpoint auth environment, and model access; remove the custom endpoint only if you want to retry with standard Claude Code auth. On Windows, native PowerShell and WSL use separate Claude installs and credential stores; re-authenticate in the same environment Open Design uses, and check Windows Credential Manager if `/login` does not repair native Windows credentials.
 - **daemon 500 on /api/chat** — check the daemon terminal for the stderr tail; usually the CLI rejected its args. Different CLIs take different argv shapes; see `apps/daemon/src/agents.ts` `buildArgs` if you need to tweak.
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — run the media dispatcher checks above. Do not resume the old CLI session; reopen the project from the Open Design app so the daemon can inject fresh `OD_*` variables.
 - **Codex loads too much plugin context** — start Open Design with `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` to make daemon-spawned Codex processes run with `--disable plugins`.

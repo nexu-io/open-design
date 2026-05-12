@@ -1,0 +1,392 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ProjectView } from '../../src/components/ProjectView';
+import { streamMessage } from '../../src/providers/anthropic';
+import type { StreamHandlers } from '../../src/providers/anthropic';
+import { patchPreviewCommentStatus, writeProjectTextFile } from '../../src/providers/registry';
+import { listMessages, saveMessage } from '../../src/state/projects';
+import { playSound } from '../../src/utils/notifications';
+import type {
+  AgentEvent,
+  AgentInfo,
+  AppConfig,
+  ChatAttachment,
+  ChatCommentAttachment,
+  ChatMessage,
+  Conversation,
+  DesignSystemSummary,
+  Project,
+  SkillSummary,
+} from '../../src/types';
+
+const chatPaneMockState = vi.hoisted(() => ({
+  commentAttachments: [] as ChatCommentAttachment[],
+}));
+
+vi.mock('../../src/router', () => ({
+  navigate: vi.fn(),
+}));
+
+vi.mock('../../src/providers/anthropic', () => ({
+  streamMessage: vi.fn(),
+}));
+
+vi.mock('../../src/providers/daemon', () => ({
+  fetchChatRunStatus: vi.fn(),
+  listActiveChatRuns: vi.fn().mockResolvedValue([]),
+  reattachDaemonRun: vi.fn(),
+  streamViaDaemon: vi.fn(),
+}));
+
+vi.mock('../../src/providers/project-events', () => ({
+  useProjectFileEvents: vi.fn(),
+}));
+
+vi.mock('../../src/utils/notifications', async () => {
+  const actual = await vi.importActual<typeof import('../../src/utils/notifications')>(
+    '../../src/utils/notifications',
+  );
+  return {
+    ...actual,
+    playSound: vi.fn(),
+  };
+});
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    deletePreviewComment: vi.fn(),
+    fetchDesignSystem: vi.fn().mockResolvedValue(null),
+    fetchLiveArtifacts: vi.fn().mockResolvedValue([]),
+    fetchPreviewComments: vi.fn().mockResolvedValue([]),
+    fetchProjectFiles: vi.fn().mockResolvedValue([]),
+    fetchSkill: vi.fn().mockResolvedValue(null),
+    patchPreviewCommentStatus: vi.fn(),
+    upsertPreviewComment: vi.fn(),
+    writeProjectTextFile: vi.fn(),
+  };
+});
+
+vi.mock('../../src/state/projects', async () => {
+  const actual = await vi.importActual<typeof import('../../src/state/projects')>(
+    '../../src/state/projects',
+  );
+  const mockConversation = (projectId: string): Conversation => ({
+    id: `conv-${projectId}`,
+    projectId,
+    title: null,
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  return {
+    ...actual,
+    createConversation: vi.fn().mockImplementation(async (projectId: string) => mockConversation(projectId)),
+    deleteConversation: vi.fn(),
+    getTemplate: vi.fn().mockResolvedValue(null),
+    listConversations: vi.fn().mockImplementation(async (projectId: string) => [mockConversation(projectId)]),
+    listMessages: vi.fn().mockResolvedValue([]),
+    loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
+    patchConversation: vi.fn(),
+    patchProject: vi.fn(),
+    saveMessage: vi.fn(),
+    saveTabs: vi.fn(),
+  };
+});
+
+vi.mock('../../src/components/AppChromeHeader', () => ({
+  AppChromeHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+}));
+
+vi.mock('../../src/components/AvatarMenu', () => ({
+  AvatarMenu: () => null,
+}));
+
+vi.mock('../../src/components/FileWorkspace', () => ({
+  FileWorkspace: () => <div data-testid="file-workspace" />,
+}));
+
+vi.mock('../../src/components/Loading', () => ({
+  CenteredLoader: () => <div data-testid="loader" />,
+}));
+
+vi.mock('../../src/components/ChatPane', () => ({
+  ChatPane: ({
+    messages,
+    onSend,
+  }: {
+    messages: ChatMessage[];
+    onSend: (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[],
+    ) => void;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onSend('Create a login page', [], chatPaneMockState.commentAttachments)}>
+        send
+      </button>
+      {messages.map((message) => (
+        <article key={message.id} data-testid={`message-${message.role}`}>
+          <span>{message.content}</span>
+          <span>{message.runStatus ?? 'no-run-status'}</span>
+          {(message.events ?? []).map((event, index) => (
+            <span key={index}>
+              {event.kind === 'status' ? `${event.label}:${event.detail ?? ''}` : ''}
+              {event.kind === 'text' ? event.text : ''}
+            </span>
+          ))}
+        </article>
+      ))}
+    </div>
+  ),
+}));
+
+const mockedStreamMessage = vi.mocked(streamMessage);
+const mockedListMessages = vi.mocked(listMessages);
+const mockedSaveMessage = vi.mocked(saveMessage);
+const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
+const mockedPatchPreviewCommentStatus = vi.mocked(patchPreviewCommentStatus);
+const mockedPlaySound = vi.mocked(playSound);
+
+const config: AppConfig = {
+  mode: 'api',
+  apiProtocol: 'openai',
+  apiKey: 'sk-test',
+  baseUrl: 'https://api.deepseek.com',
+  model: 'deepseek-chat',
+  agentId: null,
+  skillId: null,
+  designSystemId: null,
+  notifications: {
+    soundEnabled: true,
+    successSoundId: 'success-sound',
+    failureSoundId: 'failure-sound',
+    desktopEnabled: false,
+  },
+};
+
+const project: Project = {
+  id: 'project-1',
+  name: 'Project',
+  skillId: null,
+  designSystemId: null,
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+function renderProjectView() {
+  return render(
+    <ProjectView
+      project={project}
+      routeFileName={null}
+      config={config}
+      agents={[] as AgentInfo[]}
+      skills={[] as SkillSummary[]}
+      designTemplates={[] as SkillSummary[]}
+      designSystems={[] as DesignSystemSummary[]}
+      daemonLive
+      onModeChange={vi.fn()}
+      onAgentChange={vi.fn()}
+      onAgentModelChange={vi.fn()}
+      onRefreshAgents={vi.fn()}
+      onOpenSettings={vi.fn()}
+      onBack={vi.fn()}
+      onClearPendingPrompt={vi.fn()}
+      onTouchProject={vi.fn()}
+      onProjectChange={vi.fn()}
+      onProjectsRefresh={vi.fn()}
+    />,
+  );
+}
+
+describe('ProjectView API empty response handling', () => {
+  beforeEach(() => {
+    chatPaneMockState.commentAttachments = [];
+    mockedStreamMessage.mockReset();
+    mockedListMessages.mockClear();
+    mockedSaveMessage.mockClear();
+    mockedWriteProjectTextFile.mockClear();
+    mockedPatchPreviewCommentStatus.mockClear();
+    mockedPlaySound.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(screen.getByText('empty_response:deepseek-chat')).toBeTruthy();
+    });
+    expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
+    expect(screen.queryByText('succeeded')).toBeNull();
+
+    await waitFor(() => {
+      expect(
+        mockedSaveMessage.mock.calls.some((call) => {
+          const message = call[2] as ChatMessage;
+          return (
+            message.role === 'assistant' &&
+            message.runStatus === 'failed' &&
+            message.events?.some(
+              (event: AgentEvent) => event.kind === 'status' && event.label === 'empty_response',
+            )
+          );
+        }),
+      ).toBe(true);
+    });
+    expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound');
+  });
+
+  it('marks attached saved comments as failed when an API completion has no output', async () => {
+    chatPaneMockState.commentAttachments = [
+      {
+        id: 'comment-1',
+        order: 1,
+        filePath: 'index.html',
+        elementId: 'hero-title',
+        selector: '#hero-title',
+        label: 'Hero title',
+        comment: 'Make this clearer',
+        currentText: 'Old title',
+        pagePosition: { x: 0, y: 0, width: 100, height: 24 },
+        htmlHint: '<h1 id="hero-title">Old title</h1>',
+        source: 'saved-comment',
+      },
+    ];
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(mockedPatchPreviewCommentStatus).toHaveBeenCalledWith(
+        project.id,
+        'conv-project-1',
+        'comment-1',
+        'failed',
+      );
+    });
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed' &&
+        message.events?.some((event) => event.kind === 'status' && event.label === 'empty_response') === true
+      ))).toBe(true);
+    });
+  });
+
+  it('keeps normal API text completions on the succeeded path', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('hello');
+      handlers.onDone('hello');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(screen.getAllByText('hello').length).toBeGreaterThan(0));
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+  });
+
+  it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('hello');
+      handlers.onDone('hello');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
+  });
+
+  it('keeps API artifact completions on the succeeded path even when done text is empty', async () => {
+    const artifact =
+      '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
+      '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>' +
+      '</artifact>';
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
+    expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+    expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
+  });
+});
+
+async function sendTestPrompt() {
+  await waitFor(() => {
+    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1');
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'send' })).toBeTruthy());
+  fireEvent.click(screen.getByRole('button', { name: 'send' }));
+}
+
+function hasSavedAssistantMessage(predicate: (message: ChatMessage) => boolean): boolean {
+  return mockedSaveMessage.mock.calls.some((call) => {
+    const message = call[2] as ChatMessage;
+    return message.role === 'assistant' && predicate(message);
+  });
+}

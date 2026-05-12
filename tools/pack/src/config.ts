@@ -20,6 +20,7 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
 export type ToolPackCliOptions = {
+  appVersion?: string;
   cacheDir?: string;
   containerized?: boolean;
   dir?: string;
@@ -55,6 +56,7 @@ export type ToolPackRoots = {
 };
 
 export type ToolPackConfig = {
+  appVersion?: string;
   containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
@@ -70,6 +72,7 @@ export type ToolPackConfig = {
   roots: ToolPackRoots;
   silent: boolean;
   signed: boolean;
+  telemetryRelayUrl?: string;
   to: ToolPackBuildOutput;
   webOutputMode: ToolPackWebOutputMode;
   workspaceRoot: string;
@@ -89,6 +92,14 @@ function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCo
   throw new Error(`unsupported mac --mac-compression value: ${value}`);
 }
 
+function resolveToolPackAppVersion(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) throw new Error("--app-version must not be empty");
+  if (/\s/.test(normalized)) throw new Error(`--app-version must not contain whitespace: ${value}`);
+  return normalized;
+}
+
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
   // Standalone web output is wired for desktop packaged platforms; Linux stays on
   // the existing server output until its AppImage resource path is optimized.
@@ -96,6 +107,22 @@ function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string 
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
+}
+
+function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`OPEN_DESIGN_TELEMETRY_RELAY_URL must be an absolute https URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`OPEN_DESIGN_TELEMETRY_RELAY_URL must use https: ${value}`);
+  }
+  return normalized.replace(/\/+$/, "");
 }
 
 function resolveElectronVersion(workspaceRoot: string): string {
@@ -138,6 +165,7 @@ export function resolveToolPackConfig(
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
 
   return {
+    appVersion: resolveToolPackAppVersion(options.appVersion),
     containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
@@ -166,6 +194,7 @@ export function resolveToolPackConfig(
     removeSidecars: options.removeSidecars === true,
     silent: options.silent !== false,
     signed: options.signed === true,
+    telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,

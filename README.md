@@ -44,7 +44,7 @@ That's not "AI tries to design something". That's an AI that has been trained, b
 
 OD stands on four open-source shoulders:
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts).
+- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts).
 - [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — the deck mode. Bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved; magazine-style layouts, WebGL hero, P0/P1/P2 checklists.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — the UX north star and our closest peer. The first open-source Claude-Design alternative. We borrow its streaming-artifact loop, its sandboxed-iframe preview pattern (vendored React 18 + Babel), its live agent panel (todos + tool calls + interruptible generation), and its five-format export list (HTML / PDF / PPTX / ZIP / Markdown). We deliberately diverge on form factor — they are a desktop Electron app bundling [`pi-ai`][piai]; we are a web app + local daemon that delegates to your existing CLI.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — the daemon-and-runtime architecture. PATH-scan agent detection, the local daemon as the only privileged process, the agent-as-teammate worldview.
@@ -58,7 +58,7 @@ OD stands on four open-source shoulders:
 | **Design systems built-in** | **129** — 2 hand-authored starters + 70 product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) from [`awesome-design-md`][acd2], plus 57 design skills from [`awesome-design-skills`][ads] added directly under `design-systems/` |
 | **Skills built-in** | **31** — 27 in `prototype` mode (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 in `deck` mode (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Grouped in the picker by `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Media generation** | Image · video · audio surfaces ship alongside the design loop. **gpt-image-2** (Azure / OpenAI) for posters, avatars, infographics, illustrated maps · **Seedance 2.0** (ByteDance) for cinematic 15s text-to-video and image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) for HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). **93** ready-to-replicate prompts gallery — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — under [`prompt-templates/`](prompt-templates/), with preview thumbnails and source attribution. Same chat surface as code; outputs a real `.mp4` / `.png` chip into the project workspace. |
-| **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — each ships a deterministic OKLch palette + font stack ([`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts)) |
+| **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — each ships a deterministic OKLch palette + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across skills under [`assets/frames/`](assets/frames/) |
 | **Agent runtime** | Local daemon spawns the CLI in your project folder — agent gets real `Read`, `Write`, `Bash`, `WebFetch` against a real on-disk environment, with Windows `ENAMETOOLONG` fallbacks (stdin / prompt-file) on every adapter |
 | **Imports** | Drop a [Claude Design][cd] export ZIP onto the welcome dialog — `POST /api/import/claude-design` parses it into a real project so your agent can keep editing where Anthropic left off |
@@ -255,7 +255,7 @@ DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critiq
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
 ```
 
-Every layer is composable. Every layer is a file you can edit. Read [`packages/contracts/src/prompts/system.ts`](packages/contracts/src/prompts/system.ts) and [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) to see the actual contract.
+Every layer is composable. Every layer is a file you can edit. Read [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) and [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) to see the actual contract.
 
 ## Architecture
 
@@ -601,6 +601,27 @@ The desktop app discovers the web URL automatically via sidecar IPC — no port 
 
 For fixed-port restarts, background startup, and full troubleshooting see [`QUICKSTART.md`](QUICKSTART.md).
 
+## Nix
+
+A flake is published at the repo root. Home Manager is the recommended path for individual developers; a NixOS module is also exposed for shared/server installs. See [`nix/README.md`](nix/README.md) for the full surface (data dir, secrets, `webFrontend` vs. bringing your own server, `OD_DAEMON_URL`).
+
+```nix
+# Home Manager
+inputs.open-design.url = "github:nexu-io/open-design";
+# then: imports = [ inputs.open-design.homeManagerModules.default ];
+```
+
+```bash
+nix run github:nexu-io/open-design       # boot the daemon (`od`) without installing
+```
+
+For developers, a Nix dev shell is available and can be used with `direnv` too:
+
+```bash
+nix develop   # dev shell with required dependencies to work on Open Design
+```
+
+
 ## Use Open Design from your coding agent
 
 Open Design ships a stdio MCP server. Wire it into Claude Code, Codex, Cursor, VS Code, Antigravity, Zed, Windsurf, or any MCP-compatible client and the agent in another repo can read files from your local Open Design projects directly. Replaces the export-then-attach loop. When the agent calls `search_files`, `get_file`, or `get_artifact` without a project argument, the MCP defaults to whatever project (and file) you have open in Open Design right now, so prompts like *"build this in my app"* or *"match these styles"* just work.
@@ -611,7 +632,7 @@ Open **Settings → MCP server** in the Open Design app for a per-client install
 
 The daemon must be running locally for MCP tool calls to succeed. If the agent was started before Open Design, restart the agent after Open Design is up so it can reach the live daemon. Tool calls made while the daemon is offline return a clear `"daemon not reachable"` error rather than a crash.
 
-**Security model.** The MCP server is read-only; it exposes file reads, file metadata, and search -- nothing that writes to disk or calls an external service. It runs as a child process of the coding agent over stdio, so any MCP client you register inherits read access to your local Open Design projects. Treat it like installing a VS Code extension: only register clients you trust. The daemon binds to `127.0.0.1` by default; LAN-wide exposure requires an explicit `OD_BIND_HOST` opt-in.
+**Security model.** The MCP server is read-only; it exposes file reads, file metadata, and search -- nothing that writes to disk or calls an external service. It runs as a child process of the coding agent over stdio, so any MCP client you register inherits read access to your local Open Design projects. Treat it like installing a VS Code extension: only register clients you trust. The daemon binds to `127.0.0.1` by default; LAN-wide exposure requires an explicit `OD_BIND_HOST` opt-in. If you also front the SPA with a non-loopback static server, set `OD_ALLOWED_ORIGINS=<origin1>,<origin2>,...` (comma-separated `scheme://host[:port]` entries) so the daemon's same-origin gate accepts API writes from those origins on both the `Origin` and `Host` checks; without it the browser will see 403s on every PUT/POST (Caddy v2 reverse_proxy preserves the original Host header upstream by default, so loopback alone is not enough). Connector-credential and live-artifact preview routes stay loopback-only regardless.
 
 ## Repository structure
 
@@ -757,7 +778,7 @@ When the user has no brand spec, the agent emits a second form with five curated
 | Brutalist | Raw, oversized type, no shadows, harsh accents | Bloomberg Businessweek · Achtung |
 | Soft warm | Generous, low contrast, peachy neutrals | Notion marketing · Apple Health |
 
-Full spec → [`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts).
+Full spec → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts).
 
 ## Media generation
 
@@ -847,7 +868,7 @@ The chat / artifact loop gets the spotlight, but a handful of less-visible capab
 
 ## Anti-AI-slop machinery
 
-The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf/huashu-design) playbook, ported into OD's prompt-stack and made enforceable per-skill via the side-file pre-flight. Read [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) for the live wording:
+The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf/huashu-design) playbook, ported into OD's prompt-stack and made enforceable per-skill via the side-file pre-flight. Read [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) for the live wording:
 
 - **Question form first.** Turn 1 is `<question-form>` only — no thinking, no tools, no narration. The user chooses defaults at radio speed.
 - **Brand-spec extraction.** When the user attaches a screenshot or URL, the agent runs a five-step protocol (locate · download · grep hex · codify `brand-spec.md` · vocalise) before writing CSS. **Never guesses brand colors from memory.**
@@ -922,7 +943,7 @@ Every external project this repo borrows from. Each link goes to the source so y
 | Project | Role here |
 |---|---|
 | [`Claude Design`][cd] | The closed-source product this repo is the open-source alternative to. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`packages/contracts/src/prompts/discovery.ts`](packages/contracts/src/prompts/discovery.ts) and [`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts). |
+| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) and [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts). |
 | [**`op7418/guizang-ppt-skill`**][guizang] | Magazine-web-PPT skill bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved. Default for deck mode. P0/P1/P2 checklist culture borrowed for every other skill. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection, and the first pass of comment-mode preview annotations. UX patterns still on our roadmap: full surgical-edit reliability and AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
@@ -983,7 +1004,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-09" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-12" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -1000,9 +1021,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-09" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-09" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-12" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-12" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-12" />
   </picture>
 </a>
 

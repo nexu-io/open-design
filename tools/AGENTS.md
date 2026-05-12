@@ -9,6 +9,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev run web` runs foreground daemon + web for the Playwright webServer flow.
 - `pnpm tools-dev inspect desktop ...` inspects the desktop runtime through sidecar IPC.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset plus beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
+- `tools/pr` provides `@open-design/tools-pr` and the `tools-pr` bin. It is the maintainer PR-duty control plane: a thin `gh` wrapper that encodes this repo's review-lane derivation, forbidden-surface flags, per-lane checklists, and validation-command suggestions. It must not perform side effects (approve / request changes / merge / close / push); those stay in explicit `gh` calls the maintainer runs.
 
 ## Packaging scope
 
@@ -31,6 +32,8 @@ pnpm --filter @open-design/tools-dev typecheck
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack typecheck
 pnpm --filter @open-design/tools-pack build
+pnpm --filter @open-design/tools-pr typecheck
+pnpm --filter @open-design/tools-pr build
 pnpm tools-dev status --json
 pnpm tools-dev logs --json
 pnpm tools-dev check
@@ -47,4 +50,8 @@ pnpm tools-pack linux install --headless
 pnpm tools-pack linux start --headless
 pnpm tools-pack linux stop --headless
 pnpm tools-pack linux build --containerized
+pnpm tools-pr list
+pnpm tools-pr list --bucket=merge-ready,approved-blocked
+pnpm tools-pr view <num>
+pnpm tools-pr view <num> --json
 ```

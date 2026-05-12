@@ -14,6 +14,9 @@ importers:
       '@open-design/tools-pack':
         specifier: workspace:*
         version: link:tools/pack
+      '@open-design/tools-pr':
+        specifier: workspace:*
+        version: link:tools/pr
       '@types/node':
         specifier: ^20.17.10
         version: 20.19.39
@@ -103,6 +106,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)
 
   apps/landing-page:
     dependencies:
@@ -131,6 +137,12 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.1
         version: 18.3.7(@types/react@18.3.28)
+      playwright:
+        specifier: ^1.59.1
+        version: 1.59.1
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
@@ -168,6 +180,15 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)
+
+  apps/telemetry-worker:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)
@@ -373,6 +394,25 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)
+
+  tools/pr:
+    dependencies:
+      cac:
+        specifier: 6.7.14
+        version: 6.7.14
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.27.7
+        version: 0.27.7
+      tsx:
+        specifier: 4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
 packages:
 

@@ -3,9 +3,19 @@ name: landing-page-ci
 on:
   pull_request:
     paths:
+      # Workflow files
       - .github/workflows/landing-page-ci.yml
-      - .github/workflows/landing-page.yml
+      - .github/workflows/landing-page-deploy.yml
+      # Landing page sources
       - apps/landing-page/**
+      # Content sources globbed by Astro content collections — without
+      # these the deploy can be silently skipped when only Markdown
+      # content is touched.
+      - skills/**
+      - design-systems/**
+      - craft/**
+      - templates/**
+      # Workspace plumbing
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -14,8 +24,12 @@ on:
       - main
     paths:
       - .github/workflows/landing-page-ci.yml
-      - .github/workflows/landing-page.yml
+      - .github/workflows/landing-page-deploy.yml
       - apps/landing-page/**
+      - skills/**
+      - design-systems/**
+      - craft/**
+      - templates/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -32,7 +46,7 @@ jobs:
   validate:
     name: Validate landing page
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -52,8 +66,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Cache the Playwright browser binaries between runs. The cache key
+      # is pinned to the playwright version we depend on (kept in
+      # apps/landing-page/package.json) so a bump invalidates correctly.
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          version=$(node -p "require('./apps/landing-page/package.json').devDependencies.playwright.replace(/[^0-9.]/g,'')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+
       - name: Typecheck landing page
         run: pnpm --filter @open-design/landing-page typecheck
+
+      # Generate the per-skill / per-template thumbnail PNGs *before*
+      # the build so they ship in `out/previews/` automatically. The
+      # script itself decides what's a soft vs. hard failure: a single
+      # broken `example.html` is logged and skipped, but a chromium
+      # launch failure or a 100%-failure run exits non-zero so the
+      # build stops instead of silently shipping zero thumbnails.
+      - name: Generate skill + template previews
+        run: pnpm --filter @open-design/landing-page previews
 
       - name: Build landing page
         run: pnpm --filter @open-design/landing-page build

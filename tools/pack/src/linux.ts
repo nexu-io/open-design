@@ -75,6 +75,10 @@ function toDockerMountPath(value: string): string {
   return value.replaceAll("\\", "/");
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export function buildDockerArgs(
   config: ToolPackConfig,
   user: DockerUserMapping,
@@ -99,8 +103,8 @@ export function buildDockerArgs(
   //   - config.to is enum-validated by resolveToolPackBuildOutput() in config.ts
   //     to one of "all" | "appimage" | "dir"
   //   - config.portable is a boolean
-  // None of these values can contain shell metacharacters, so direct
-  // interpolation into the inner command string is safe.
+  //   - config.appVersion is shell-quoted below because release versions can
+  //     carry punctuation that is not part of the namespace / target enums.
   //
   // We can't rely on `corepack pnpm` here: although Node 16.10+ ships corepack,
   // the `electronuserland/builder:base` image strips the corepack binary, so
@@ -125,9 +129,12 @@ export function buildDockerArgs(
   if (config.portable) {
     innerArgs.push("--portable");
   }
+  if (config.appVersion != null) {
+    innerArgs.push(`--app-version ${shellQuote(config.appVersion)}`);
+  }
   const innerCommand = `${pnpmCmd} install --frozen-lockfile && ` + innerArgs.join(" ");
 
-  return [
+  const dockerArgs = [
     "run",
     "--rm",
     "--user",
@@ -148,13 +155,19 @@ export function buildDockerArgs(
     "ELECTRON_CACHE=/home/builder/.cache/electron",
     "-e",
     "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
+  ];
+  if (config.telemetryRelayUrl != null) {
+    dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
+  }
+  dockerArgs.push(
     "-w",
     "/project",
     "electronuserland/builder:base",
     "bash",
     "-lc",
     innerCommand,
-  ];
+  );
+  return dockerArgs;
 }
 
 export type DesktopTemplateValues = {
@@ -271,6 +284,7 @@ async function runNpmInstall(appRoot: string): Promise<void> {
 }
 
 async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
+  if (config.appVersion != null) return config.appVersion;
   const packageJsonPath = join(config.workspaceRoot, "apps", "packaged", "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
@@ -377,6 +391,7 @@ async function writeAssembledApp(
         appVersion: version,
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
+        ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,

@@ -13,7 +13,7 @@ This file is the single source of truth for agents entering this repository. Rea
 ## Workspace directories
 
 - Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
-- Top-level content directories: `skills/` (artifact-shape skills), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`).
+- Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`).
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
@@ -22,6 +22,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane and mac beta release artifact preparation surface.
+- `tools/pr` is the maintainer PR-duty control plane: a thin `gh` wrapper that encodes this repo's review-lane derivation, forbidden-surface flags, lane checklists, and validation-command suggestions.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
 
 ## Inactive or placeholder directories
@@ -46,8 +47,8 @@ This file is the single source of truth for agents entering this repository. Rea
 
 ## Root command boundary
 
-- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, and `pnpm tools-pack`.
-- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
+- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-pr`.
+- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...` / `pnpm tools-pr ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
 
 ## Boundary constraints
@@ -79,6 +80,19 @@ This file is the single source of truth for agents entering this repository. Rea
 - Blocking review feedback should focus on correctness, security/secrets, data integrity, repository boundary violations, contract/migration breakage, missing required validation, or high-risk maintainability issues.
 - Only maintainers may close a PR instead of requesting changes, and only when the change is not salvageable on the existing branch (wrong target product, foreign test harness, DOM/API assumptions absent from this repo, or scripts that conflict with lifecycle rules).
 
+## PR-duty tooling
+
+`pnpm tools-pr` is the maintainer-only control plane for PR-duty work on this repo. It is a thin `gh` wrapper that encodes repo-specific knowledge — review-lane derivation, forbidden-surface flags, per-lane checklists, validation-command suggestions, and a fixed dictionary of factual classify tags (`bot-only-approval`, `needs-rebase`, `stale-approval`, `unresolved-changes-requested`, `awaiting-*` timing, `org-member`, etc.). The tool is read-only on the PR surface: it never approves, merges, comments, or closes; those side effects stay in explicit `gh` invocations the maintainer runs.
+
+Common subcommands:
+
+- `pnpm tools-pr list` — triage the open queue by lane and review-state bucket.
+- `pnpm tools-pr view <num>` — factual review brief for a single PR.
+- `pnpm tools-pr classify --all` — script-level tag JSON for the whole open queue (entry point for cron / digest consumers); per-PR `classify <num>` for spot checks.
+- `pnpm tools-pr assignment` — assigner-perspective ownership + idle-time / blocker view across the queue.
+
+For the full tag dictionary, operational playbook (direct merge / duplicate-title / awaiting-author / org-member / agent-review flows), comment templates, language-detection rules, and tool-design constraints (precision boundaries, factual-output rule, retry + pagination strategy), see [`tools/pr/AGENTS.md`](tools/pr/AGENTS.md).
+
 ## Validation strategy
 
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
@@ -87,6 +101,20 @@ This file is the single source of truth for agents entering this repository. Rea
 - On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
 - Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
 - Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
+
+## Bug follow-up workflow
+
+The following is a working playbook for routine bug follow-ups, distilled from recent practice. Treat it as a default action shape, not a contract — production reality always has edges these bullets can't anticipate, so use judgment when the situation doesn't fit cleanly.
+
+- **Lead with a red spec.** Default to encoding the bug as a falsifiable test that goes red before any source change, so the fix is anchored in observable behavior rather than source-code intuition. If a red spec can't be written cheaply, that's usually a signal to clarify scope rather than push forward on a guess.
+- **Try the cheapest layer first.** Reach for the lightest test layer that can still see the symptom (e2e Vitest at the daemon HTTP boundary → app-local Vitest → Playwright UI → platform-native harnesses), and drop down only when the cheaper layer can't.
+- **Hold the spec's scope.** Defects discovered outside the bug's described boundary belong in a follow-up — their own red spec, their own PR — not in this fix. List them in the PR body's "Adjacent issues" section with the rationale and move on.
+- **Let the fix read as an invariant.** Prefer a named helper whose docblock describes what must hold over a bolt-on `if` guard with apologetic history-comments. The call site should read as intent.
+- **Diff against the baseline.** When neighboring suites have pre-existing failures, stash or check out upstream before claiming "no new failures."
+- **Link the issue from the PR body.** Use `Fixes #N` / `Closes #N` / `Resolves #N` so the issue auto-closes on merge and the release-time reverse lookup (`gh issue view N --json closedByPullRequestsReferences` → `git tag --contains <merge sha>`) actually has a chain to follow. The repo's PR template prompts for this; deleting the prompt is fine when the PR genuinely closes nothing.
+- **Stage human verification for visible bugs.** When the symptom needs an eye to confirm — UI, platform-native behavior, animations, race conditions a unit test can't see — green specs alone aren't acceptance. Stand up a buggy-vs-fix comparison the reviewer can drive themselves (typical shape: two namespaced runtimes, one on `main`, one on the fix branch), and seed any required data only through production HTTP APIs; source-level test backdoors invalidate the verification because they prove a fake flow rather than the real one.
+
+For a worked example of one full loop (red e2e spec → fix → green), see `e2e/tests/dialog/stop-reconciles-message.test.ts` (issue #135).
 
 # Common commands
 
@@ -109,6 +137,14 @@ pnpm typecheck
 ```
 
 ```bash
+pnpm tools-pr list
+pnpm tools-pr list --bucket=merge-ready,approved-blocked
+pnpm tools-pr list --lane=skill,contract --json
+pnpm tools-pr view 1180
+pnpm tools-pr view 1180 --json
+```
+
+```bash
 pnpm --filter @open-design/web typecheck
 pnpm --filter @open-design/web test
 pnpm --filter @open-design/web build
@@ -117,6 +153,7 @@ pnpm --filter @open-design/daemon build
 pnpm --filter @open-design/desktop build
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack build
+pnpm --filter @open-design/tools-pr build
 ```
 
 ```bash

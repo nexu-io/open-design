@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import { ToolCard } from "./ToolCard";
 import { renderMarkdown } from "../runtime/markdown";
 import { projectFileUrl } from "../providers/registry";
@@ -6,6 +6,7 @@ import {
   splitOnQuestionForms,
   type QuestionForm,
 } from "../artifacts/question-form";
+import { stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import { Icon } from "./Icon";
 import { useT } from "../i18n";
@@ -17,7 +18,14 @@ import {
   messageTime,
   relativeTimeLong,
 } from "../utils/chatTime";
-import type { AgentEvent, ChatMessage, ProjectFile } from "../types";
+import type {
+  AgentEvent,
+  ChatMessage,
+  ChatMessageFeedbackChange,
+  ChatMessageFeedbackRating,
+  ChatMessageFeedbackReasonCode,
+  ProjectFile,
+} from "../types";
 
 type TranslateFn = (
   key: keyof Dict,
@@ -42,6 +50,7 @@ interface Props {
   // to AssistantMessage; ProjectView wires it into onSend.
   onSubmitForm?: (text: string) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
+  onFeedback?: (change: ChatMessageFeedbackChange) => void;
 }
 
 /**
@@ -63,6 +72,7 @@ export function AssistantMessage({
   nextUserContent,
   onSubmitForm,
   onContinueRemainingTasks,
+  onFeedback,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -72,12 +82,35 @@ export function AssistantMessage({
     | undefined;
   const produced = message.producedFiles ?? [];
   const roleLabel = assistantRoleLabel(message, t);
+  const hasEmptyResponse = events.some(
+    (e) => e.kind === "status" && e.label === "empty_response"
+  );
   const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  const runSucceeded =
+    !streaming &&
+    (message.runStatus === "succeeded" || (!message.runStatus && !!message.endedAt));
   const canContinueTodos =
     !streaming &&
     !!isLast &&
     unfinishedTodos.length > 0 &&
     !!onContinueRemainingTasks;
+  const showFeedback =
+    !!onFeedback &&
+    isFeedbackEligible({
+      streaming,
+      message,
+      hasEmptyResponse,
+      hasUnfinishedTodos: unfinishedTodos.length > 0,
+      hasArtifactWork: hasArtifactWorkSignal(message, produced.length),
+    });
+  const showCompletionRow =
+    showFeedback ||
+    streaming ||
+    !!message.startedAt ||
+    !!message.endedAt ||
+    !!usage ||
+    unfinishedTodos.length > 0 ||
+    hasEmptyResponse;
   // Track which forms the user submitted in this session so we lock them
   // immediately on click (without waiting for the parent to re-render).
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
@@ -125,6 +158,7 @@ export function AssistantMessage({
                 key={i}
                 items={b.items}
                 runStreaming={streaming}
+                runSucceeded={runSucceeded}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
               />
@@ -148,15 +182,93 @@ export function AssistantMessage({
             onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
           />
         ) : null}
-        <AssistantFooter
-          streaming={streaming}
-          startedAt={message.startedAt}
-          endedAt={message.endedAt}
-          usage={usage}
-          hasUnfinishedTodos={unfinishedTodos.length > 0}
-        />
+        {showCompletionRow ? (
+          <div className="assistant-completion-row">
+            {showFeedback ? (
+              <AssistantFeedback
+                feedback={message.feedback}
+                onFeedback={onFeedback}
+                footerProps={{
+                  streaming,
+                  startedAt: message.startedAt,
+                  endedAt: message.endedAt,
+                  usage,
+                  hasUnfinishedTodos: unfinishedTodos.length > 0,
+                  hasEmptyResponse,
+                  forceVisible: true,
+                }}
+              />
+            ) : (
+              <AssistantFooter
+                streaming={streaming}
+                startedAt={message.startedAt}
+                endedAt={message.endedAt}
+                usage={usage}
+                hasUnfinishedTodos={unfinishedTodos.length > 0}
+                hasEmptyResponse={hasEmptyResponse}
+              />
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function isFeedbackEligible({
+  streaming,
+  message,
+  hasEmptyResponse,
+  hasUnfinishedTodos,
+  hasArtifactWork,
+}: {
+  streaming: boolean;
+  message: ChatMessage;
+  hasEmptyResponse: boolean;
+  hasUnfinishedTodos: boolean;
+  hasArtifactWork: boolean;
+}): boolean {
+  if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
+  if (!hasArtifactWork) return false;
+  if (message.runStatus) return message.runStatus === "succeeded";
+  return !!message.endedAt;
+}
+
+function hasArtifactWorkSignal(message: ChatMessage, producedFileCount: number): boolean {
+  if (producedFileCount > 0) return true;
+  if (message.content.includes("<artifact")) return true;
+  if (hasLiveArtifactMutation(message.events ?? [])) return true;
+  return hasSuccessfulFileMutation(message.events ?? []);
+}
+
+function hasLiveArtifactMutation(events: AgentEvent[]): boolean {
+  return events.some((event) => {
+    if (event.kind !== "live_artifact") return false;
+    return event.action === "created" || event.action === "updated";
+  });
+}
+
+function hasSuccessfulFileMutation(events: AgentEvent[]): boolean {
+  const errorByToolId = new Map<string, boolean>();
+  for (const event of events) {
+    if (event.kind === "tool_result") {
+      errorByToolId.set(event.toolUseId, event.isError);
+    }
+  }
+  return events.some((event) => {
+    if (event.kind !== "tool_use") return false;
+    if (!isFileMutationToolName(event.name)) return false;
+    return errorByToolId.get(event.id) !== true;
+  });
+}
+
+function isFileMutationToolName(name: string): boolean {
+  return (
+    name === "Write" ||
+    name === "write" ||
+    name === "create_file" ||
+    name === "Edit" ||
+    name === "str_replace_edit"
   );
 }
 
@@ -213,22 +325,38 @@ function appendRoleModel(label: string, model: string | null): string {
   return `${label} · ${model}`;
 }
 
+interface AssistantFooterProps {
+  streaming: boolean;
+  startedAt: number | undefined;
+  endedAt: number | undefined;
+  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
+  hasUnfinishedTodos: boolean;
+  hasEmptyResponse: boolean;
+  feedbackControls?: ReactNode;
+  forceVisible?: boolean;
+}
+
 function AssistantFooter({
   streaming,
   startedAt,
   endedAt,
   usage,
   hasUnfinishedTodos,
-}: {
-  streaming: boolean;
-  startedAt: number | undefined;
-  endedAt: number | undefined;
-  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
-  hasUnfinishedTodos: boolean;
-}) {
+  hasEmptyResponse,
+  feedbackControls,
+  forceVisible = false,
+}: AssistantFooterProps) {
   const t = useT();
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt);
-  if (!streaming && !elapsed && !usage && !hasUnfinishedTodos) return null;
+  if (
+    !forceVisible &&
+    !streaming &&
+    !elapsed &&
+    !usage &&
+    !hasUnfinishedTodos &&
+    !hasEmptyResponse
+  )
+    return null;
   return (
     <div
       className="assistant-footer"
@@ -238,6 +366,8 @@ function AssistantFooter({
       <span className="assistant-label">
         {streaming
           ? t("assistant.workingLabel")
+          : hasEmptyResponse
+          ? t("assistant.emptyResponseLabel")
           : hasUnfinishedTodos
           ? t("assistant.unfinishedLabel")
           : t("assistant.doneLabel")}
@@ -251,8 +381,214 @@ function AssistantFooter({
           ? ` · $${usage.costUsd.toFixed(4)}`
           : ""}
       </span>
+      {feedbackControls}
     </div>
   );
+}
+
+function AssistantFeedback({
+  feedback,
+  onFeedback,
+  footerProps,
+}: {
+  feedback: ChatMessage["feedback"];
+  onFeedback: (change: ChatMessageFeedbackChange) => void;
+  footerProps: AssistantFooterProps;
+}) {
+  const t = useT();
+  const [burstKey, setBurstKey] = useState(0);
+  const [reasonRating, setReasonRating] =
+    useState<ChatMessageFeedbackRating | null>(null);
+  const [draftReasonCodes, setDraftReasonCodes] = useState<
+    Set<ChatMessageFeedbackReasonCode>
+  >(() => new Set());
+  const [customReason, setCustomReason] = useState("");
+  const selected = feedback?.rating;
+  useEffect(() => {
+    if (selected) return;
+    setReasonRating(null);
+  }, [selected]);
+  const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
+    const nextRating = selected === rating ? null : rating;
+    if (nextRating === "positive") setBurstKey((key) => key + 1);
+    setDraftReasonCodes(new Set());
+    setCustomReason("");
+    setReasonRating(nextRating);
+    onFeedback(nextRating ? { rating: nextRating } : null);
+  };
+  const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
+    const next = new Set(draftReasonCodes);
+    if (next.has(code)) {
+      next.delete(code);
+      if (code === "other") setCustomReason("");
+    } else {
+      next.add(code);
+    }
+    setDraftReasonCodes(next);
+  };
+  const submitReasons = () => {
+    if (!reasonRating) return;
+    const trimmedCustomReason = customReason.trim();
+    onFeedback({
+      rating: reasonRating,
+      reasonCodes: [...draftReasonCodes],
+      customReason:
+        draftReasonCodes.has("other") && trimmedCustomReason
+          ? trimmedCustomReason
+          : undefined,
+      reasonsSubmittedAt: Date.now(),
+    });
+    setReasonRating(null);
+  };
+  const reasonOptions = reasonRating
+    ? feedbackReasonOptions(reasonRating, t)
+    : [];
+  const reasonEmoji = reasonRating === "positive" ? "😊" : "😔";
+  const showOtherInput = draftReasonCodes.has("other");
+  const canSubmit =
+    draftReasonCodes.size > 0 || (showOtherInput && customReason.trim().length > 0);
+  const controls = (
+    <span
+      className="assistant-feedback"
+      role="group"
+      aria-label={t("assistant.feedbackPrompt")}
+    >
+      <button
+        type="button"
+        className="assistant-feedback-button"
+        data-selected={selected === "positive" ? "true" : "false"}
+        aria-pressed={selected === "positive"}
+        aria-label={t("assistant.feedbackPositive")}
+        title={t("assistant.feedbackPositive")}
+        onClick={() => toggleFeedback("positive")}
+      >
+        <Icon name="thumbs-up" size={13} />
+        {burstKey > 0 ? (
+          <span
+            key={burstKey}
+            className="assistant-feedback-burst"
+            aria-hidden="true"
+          >
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        className="assistant-feedback-button"
+        data-selected={selected === "negative" ? "true" : "false"}
+        aria-pressed={selected === "negative"}
+        aria-label={t("assistant.feedbackNegative")}
+        title={t("assistant.feedbackNegative")}
+        onClick={() => toggleFeedback("negative")}
+      >
+        <Icon name="thumbs-down" size={13} />
+      </button>
+    </span>
+  );
+  return (
+    <div className="assistant-feedback-wrap">
+      <AssistantFooter {...footerProps} feedbackControls={controls} />
+      {reasonRating ? (
+        <div className="assistant-feedback-reasons">
+          <div className="assistant-feedback-reason-title">
+            <span>{t("assistant.feedbackReasonTitle")}</span>
+            <span className="assistant-feedback-reason-emoji" aria-hidden="true">
+              {reasonEmoji}
+            </span>
+          </div>
+          <div className="assistant-feedback-reason-options">
+            {reasonOptions.map((option) => (
+              <label
+                key={option.code}
+                className="assistant-feedback-reason-option"
+                data-selected={draftReasonCodes.has(option.code) ? "true" : "false"}
+              >
+                <input
+                  type="checkbox"
+                  checked={draftReasonCodes.has(option.code)}
+                  onChange={() => toggleReasonCode(option.code)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {showOtherInput ? (
+            <textarea
+              className="assistant-feedback-custom"
+              value={customReason}
+              placeholder={t("assistant.feedbackReasonPlaceholder")}
+              rows={2}
+              onChange={(event) => setCustomReason(event.target.value)}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="assistant-feedback-submit"
+            disabled={!canSubmit}
+            onClick={submitReasons}
+          >
+            {t("assistant.feedbackReasonSubmit")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function feedbackReasonOptions(
+  rating: ChatMessageFeedbackRating,
+  t: TranslateFn,
+): Array<{ code: ChatMessageFeedbackReasonCode; label: string }> {
+  const codes: ChatMessageFeedbackReasonCode[] =
+    rating === "positive"
+      ? [
+          "matched_request",
+          "strong_visual",
+          "useful_structure",
+          "easy_to_continue",
+          "other",
+        ]
+      : [
+          "missed_request",
+          "weak_visual",
+          "incomplete_output",
+          "hard_to_use",
+          "other",
+        ];
+  return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
+}
+
+function feedbackReasonLabel(
+  code: ChatMessageFeedbackReasonCode,
+  t: TranslateFn,
+): string {
+  switch (code) {
+    case "matched_request":
+      return t("assistant.feedbackReasonPositiveMatched");
+    case "strong_visual":
+      return t("assistant.feedbackReasonPositiveVisual");
+    case "useful_structure":
+      return t("assistant.feedbackReasonPositiveUseful");
+    case "easy_to_continue":
+      return t("assistant.feedbackReasonPositiveEasy");
+    case "missed_request":
+      return t("assistant.feedbackReasonNegativeMissed");
+    case "weak_visual":
+      return t("assistant.feedbackReasonNegativeVisual");
+    case "incomplete_output":
+      return t("assistant.feedbackReasonNegativeIncomplete");
+    case "hard_to_use":
+      return t("assistant.feedbackReasonNegativeHard");
+    case "other":
+      return t("assistant.feedbackReasonOther");
+  }
+  return code;
 }
 
 function UnfinishedTodosPanel({
@@ -605,11 +941,13 @@ interface ToolItem {
 function ToolGroupCard({
   items,
   runStreaming,
+  runSucceeded,
   projectFileNames,
   onRequestOpenFile,
 }: {
   items: ToolItem[];
   runStreaming: boolean;
+  runSucceeded: boolean;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
 }) {
@@ -624,14 +962,15 @@ function ToolGroupCard({
         use={items[0]!.use}
         result={items[0]!.result}
         runStreaming={runStreaming}
+        runSucceeded={runSucceeded}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
       />
     );
   }
 
-  const summary = summarizeGroup(items, t);
-  const running = items.some((it) => !it.result);
+  const summary = summarizeGroup(items, t, runStreaming, runSucceeded);
+  const running = runStreaming && items.some((it) => !it.result);
   return (
     <div className="action-card">
       <button
@@ -658,6 +997,7 @@ function ToolGroupCard({
               use={it.use}
               result={it.result}
               runStreaming={runStreaming}
+              runSucceeded={runSucceeded}
               projectFileNames={projectFileNames}
               onRequestOpenFile={onRequestOpenFile}
             />
@@ -670,13 +1010,17 @@ function ToolGroupCard({
 
 function summarizeGroup(
   items: ToolItem[],
-  t: (k: keyof Dict, vars?: Record<string, string | number>) => string
+  t: (k: keyof Dict, vars?: Record<string, string | number>) => string,
+  runStreaming: boolean,
+  runSucceeded: boolean
 ): { label: string; icon: string } {
   // All items share a tool family because the grouper only merges by name.
   const name = items[0]?.use.name ?? "";
   const family = toolFamily(name);
   const icon = familyIcon(family);
-  const verbs = items.map((it) => verbForState(it, t));
+  const verbs = items.map((it) =>
+    verbForState(it, t, runStreaming, runSucceeded)
+  );
   // Roll the verbs into a comma-list with deduplicated last-state. So three
   // edits whose results are all 'Done' render as "Editing ×3, Done"; mixed
   // states render as "Editing, Reading, Done".
@@ -687,7 +1031,7 @@ function summarizeGroup(
 
 function toolFamily(name: string): string {
   if (name === "Edit" || name === "str_replace_edit") return "edit";
-  if (name === "Write" || name === "create_file") return "write";
+  if (name === "Write" || name === "write" || name === "create_file") return "write";
   if (name === "Read" || name === "read_file") return "read";
   if (name === "Glob" || name === "list_files") return "glob";
   if (name === "Grep") return "grep";
@@ -733,9 +1077,15 @@ function countLabel(
   return n > 1 ? `${verb} ×${n}` : verb;
 }
 
-function verbForState(it: ToolItem, t: (k: keyof Dict) => string): string {
-  if (!it.result) return t("assistant.verbRunning");
-  if (it.result.isError) return t("tool.error");
+function verbForState(
+  it: ToolItem,
+  t: (k: keyof Dict) => string,
+  runStreaming = false,
+  runSucceeded = false
+): string {
+  if (!it.result && runStreaming) return t("assistant.verbRunning");
+  if (!it.result && !runSucceeded) return t("tool.error");
+  if (it.result?.isError) return t("tool.error");
   return t("tool.done");
 }
 
@@ -804,27 +1154,28 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "requesting" ||
-        ev.label === "thinking"
+        ev.label === "thinking" ||
+        ev.label === "empty_response"
       )
         continue;
       const last = out[out.length - 1];
-      if (last && last.kind === "status" && last.label === ev.label) continue;
+      if (last && last.kind === "status" && last.label === ev.label) {
+        // Update detail to the latest value rather than skip. When an agent
+        // emits multiple status events with the same label (notably
+        // `label: 'model'` — fired once after `session/new` with the agent's
+        // initial default, then again after the explicit model-selection
+        // call completes), the badge UI must reflect the most recent detail,
+        // not the first one. Without this update the post-selection model
+        // (e.g. `claude-opus-4-7-high`) is silently replaced in the badge
+        // by the stale initial default (`swe-1-6-fast`).
+        last.detail = ev.detail;
+        continue;
+      }
       out.push({ kind: "status", label: ev.label, detail: ev.detail });
       continue;
     }
   }
   return out;
-}
-
-function stripArtifact(content: string): string {
-  const open = content.indexOf("<artifact");
-  if (open === -1) return content;
-  const closeTag = content.indexOf(">", open);
-  const end = content.indexOf("</artifact>", closeTag);
-  return (
-    content.slice(0, open) +
-    content.slice(end === -1 ? content.length : end + 11)
-  ).trim();
 }
 
 // Split prose into alternating plain-text and `<system-reminder>` segments.

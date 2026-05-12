@@ -1,0 +1,75 @@
+---
+/*
+ * /systems/category/<slug>/ — every design system grouped by category
+ * (AI & LLM, Productivity & SaaS, Editorial, Brand, ...).
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import SystemCard from '../../../_components/system-card.astro';
+import {
+  getSystemCategoryIndex,
+  getSystemsForCategory,
+  type TagDescriptor,
+} from '../../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const tags = await getSystemCategoryIndex();
+  return tags.map((tag) => ({
+    params: { category: tag.slug },
+    props: { tag },
+  }));
+}
+
+interface Props {
+  tag: TagDescriptor;
+}
+
+const { tag } = Astro.props as Props;
+const { records, label } = await getSystemsForCategory(tag.slug);
+const heading = label ?? tag.label;
+
+const title = `${heading} design systems — ${records.length} portable visual systems · Open Design`;
+const description =
+  `Every Open Design design system tagged ${heading.toLowerCase()}. ` +
+  `${records.length} portable DESIGN.md token bundles — ready to pair with ` +
+  `any skill in the catalog for instant brand-grade output.`;
+
+const url = new URL(`/systems/category/${tag.slug}/`, Astro.site).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: `${heading} design systems · Open Design`,
+  description,
+  url,
+  numberOfItems: records.length,
+};
+---
+
+<Layout title={title} description={description} active="systems" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/systems/">Design Systems</a>
+      <span aria-hidden="true">/</span>
+      <span>Category</span>
+      <span aria-hidden="true">/</span>
+      <span class="crumb-active">{heading}</span>
+    </nav>
+    <span class="label">Catalog · Nº 02 · Filter</span>
+    <h1 class="display">
+      <em>{heading}</em> — {records.length} portable visual systems<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      Filtered to category <code>{label ?? tag.label}</code>. Pick any of these
+      in the daemon top-bar and every skill in the catalog reads its tokens —
+      colors, type, spacing, voice — as part of its system prompt.
+    </p>
+    <p class="filter-clear">
+      <a href="/systems/">← All design systems</a>
+    </p>
+  </header>
+
+  <section class="catalog-grid systems-grid" aria-label={`${heading} systems`}>
+    <ul>
+      {records.map((s) => <SystemCard system={s} />)}
+    </ul>
+  </section>
+</Layout>

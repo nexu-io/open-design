@@ -233,6 +233,7 @@ export async function writeAssembledApp(
         ...(usePrebundledStandaloneWeb ? { daemonSidecarEntryRelative: MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH } : {}),
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
+        ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
         ...(usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
         webOutputMode: config.webOutputMode,
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),

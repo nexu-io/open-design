@@ -8,6 +8,9 @@ import type {
   AudioKind,
   ChatAttachment,
   ChatCommentAttachment,
+  ChatMessageFeedback,
+  ChatMessageFeedbackRating,
+  ChatMessageFeedbackReasonCode,
   ChatMessage,
   ConnectionTestKind,
   ConnectionTestProtocol,
@@ -32,7 +35,12 @@ import type {
   ProjectDeploymentsResponse,
   ProviderTestRequest,
   PersistedAgentEvent,
+  ProviderModelOption,
+  ProviderModelsKind,
+  ProviderModelsRequest,
+  ProviderModelsResponse,
   Project,
+  ProjectPlatform,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
   PreviewComment,
@@ -45,12 +53,17 @@ import type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  RenameProjectFileResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
+  InstallInput,
+  InstallSkillResponse,
+  InstallDesignSystemResponse,
+  UninstallResponse,
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
 
@@ -144,6 +157,8 @@ export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
   model?: string;
+  apiKeyConfigured?: boolean;
+  apiKeyTail?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -339,7 +354,24 @@ export interface LiveArtifactEventItem {
   event: Extract<AgentEvent, { kind: 'live_artifact' | 'live_artifact_refresh' }>;
 }
 
-export type { ChatAttachment, ChatCommentAttachment, ChatMessage };
+export type ChatMessageFeedbackChange =
+  | ({
+      rating: ChatMessageFeedbackRating;
+    } & Partial<
+      Pick<
+        ChatMessageFeedback,
+        'reasonCodes' | 'customReason' | 'reasonsSubmittedAt'
+      >
+    >)
+  | null;
+
+export type {
+  ChatAttachment,
+  ChatCommentAttachment,
+  ChatMessage,
+  ChatMessageFeedbackRating,
+  ChatMessageFeedbackReasonCode,
+};
 
 export interface Artifact {
   identifier: string;
@@ -413,6 +445,7 @@ export type {
   MediaAspect,
   ProjectDeploymentsResponse,
   Project,
+  ProjectPlatform,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -423,13 +456,22 @@ export type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  RenameProjectFileResponse,
   ProviderTestRequest,
+  ProviderModelOption,
+  ProviderModelsKind,
+  ProviderModelsRequest,
+  ProviderModelsResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
+  InstallInput,
+  InstallSkillResponse,
+  InstallDesignSystemResponse,
+  UninstallResponse,
   UpdateDeployConfigRequest,
 };
 
