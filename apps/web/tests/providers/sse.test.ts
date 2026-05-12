@@ -245,6 +245,113 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('treats an explicit succeeded status with a SIGTERM exit as a successful run', async () => {
+    // ACP agents that don't shut down on stdin.end() (e.g. Devin for Terminal)
+    // are SIGTERM'd by the daemon after a clean prompt completion. The end
+    // event still declares `status: 'succeeded'`, and the chat must trust
+    // that authoritative success even though `signal === 'SIGTERM'` would
+    // otherwise look like a failure to the exit-code/signal safety net.
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stdout',
+              'data: {"chunk":"ok"}',
+              '',
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"succeeded"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('ok');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces an error when the end event has a non-zero code and no status field', async () => {
+    // Regression guard for the local 'succeeded' fallback at the end-event
+    // handler: a compatible or older daemon may omit `status` from the end
+    // payload, in which case `endStatus` is filled with the local default
+    // `'succeeded'`. The exit-code/signal safety net must still apply for
+    // that case so a real failure is not silently suppressed.
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":1}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('agent exited with code 1'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces an error when the end event has a signal but no status field', async () => {
+    // Same regression as above for the signal arm of the safety net. Without
+    // explicit `status: 'succeeded'` from the server, a SIGTERM-style signal
+    // exit must keep producing an error banner — only the explicit ACP
+    // success path is allowed to bypass.
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('agent exited with signal SIGTERM'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
   it('keeps the daemon run alive when the browser-side stream aborts', async () => {
     const handlers = createDaemonHandlers();
     const controller = new AbortController();

@@ -180,8 +180,8 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
 }
 
 async function sendPrompt(page: Page, prompt: string) {

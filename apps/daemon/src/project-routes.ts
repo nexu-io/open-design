@@ -11,7 +11,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
-  const { getTemplate, listTemplates, deleteTemplate, insertTemplate } = ctx.templates;
+  const { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate } = ctx.templates;
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
@@ -504,6 +504,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof name !== 'string' || !name.trim()) {
         return res.status(400).json({ error: 'name required' });
       }
+      if (name.length > 100) {
+        return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+      }
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
@@ -534,14 +537,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           });
         }
       }
-      const t = insertTemplate(db, {
-        id: randomId(),
-        name: name.trim(),
-        description: typeof description === 'string' ? description : null,
-        sourceProjectId,
-        files: snapshot,
-        createdAt: Date.now(),
-      });
+      const trimmedName = name.trim();
+      const descValue = typeof description === 'string' ? description : null;
+      const existing = findTemplateByNameAndProject(db, trimmedName, sourceProjectId);
+      let t;
+      if (existing) {
+        t = updateTemplate(db, existing.id, {
+          description: descValue,
+          files: snapshot,
+        });
+      } else {
+        t = insertTemplate(db, {
+          id: randomId(),
+          name: trimmedName,
+          description: descValue,
+          sourceProjectId,
+          files: snapshot,
+          createdAt: Date.now(),
+        });
+      }
       res.json({ template: t });
     } catch (err: any) {
       res.status(400).json({ error: String(err) });

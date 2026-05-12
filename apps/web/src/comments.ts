@@ -69,8 +69,20 @@ export function liveSnapshotForComment(
   snapshots: Map<string, PreviewCommentSnapshot>,
 ): PreviewCommentSnapshot | null {
   const snapshot = snapshots.get(comment.elementId);
-  if (!snapshot || snapshot.filePath !== comment.filePath) return null;
-  return snapshot;
+  if (snapshot && snapshot.filePath === comment.filePath) return snapshot;
+  if (!comment.elementId.startsWith('pin-')) return null;
+  return {
+    filePath: comment.filePath,
+    elementId: comment.elementId,
+    selector: comment.selector,
+    label: comment.label,
+    text: trimContextText(comment.text),
+    position: normalizePosition(comment.position),
+    htmlHint: trimHtmlHint(comment.htmlHint),
+    selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
+    memberCount: comment.memberCount,
+    podMembers: normalizeMembers(comment.podMembers),
+  };
 }
 
 export function commentToAttachment(

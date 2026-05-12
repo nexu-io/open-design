@@ -38,25 +38,22 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('entry chrome settings menu toggles pet rail visibility', async ({ page }) => {
+test('pet pill toggle hides and shows the pet rail', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await expect(page.locator('.app-chrome-header')).toBeVisible();
-  await expect(page.locator('.app-chrome-brand[aria-label="Open Design"]')).toBeVisible();
-  await expect(page.locator('.entry-brand')).toHaveCount(0);
+  await expect(page.locator('.entry-brand')).toBeVisible();
+  await expect(page.locator('.entry-brand .entry-brand-title')).toHaveText('Open Design');
+  await expect(page.locator('.app-chrome-header')).toHaveCount(0);
+  await expect(page.locator('.pet-rail')).toBeVisible();
 
-  const openSettings = page.getByRole('button', { name: /open settings/i });
-  await openSettings.click();
-  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
-  await expect(settingsMenu).toBeVisible();
-
-  await settingsMenu.getByRole('button', { name: /hide pet picker/i }).click();
-  await expect(settingsMenu).toHaveCount(0);
+  const hideToggle = page.locator('.pet-pill-toggle');
+  await expect(hideToggle).toHaveAttribute('aria-label', /hide pet picker/i);
+  await hideToggle.click();
   await expect(page.locator('.pet-rail')).toHaveCount(0);
 
-  await openSettings.click();
-  await expect(page.getByRole('button', { name: /show pet picker/i })).toBeVisible();
-  await page.getByRole('button', { name: /show pet picker/i }).click();
+  const showToggle = page.locator('.pet-pill-toggle');
+  await expect(showToggle).toHaveAttribute('aria-label', /show pet picker/i);
+  await showToggle.click();
   await expect(page.locator('.pet-rail')).toBeVisible();
 });
 
@@ -85,15 +82,18 @@ test('entry chrome avoids horizontal overflow on compact desktop width', async (
   await page.setViewportSize({ width: 820, height: 900 });
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await expect(page.locator('.app-chrome-header')).toBeVisible();
+  await expect(page.locator('.entry-brand')).toBeVisible();
 
-  const overflow = await page.evaluate(() => {
-    const header = document.querySelector('.app-chrome-header');
-    if (!(header instanceof HTMLElement)) return null;
-    return Math.max(0, header.scrollWidth - header.clientWidth);
+  // The brand row replaced the old global chrome header; if it overflows
+  // horizontally on a compact desktop, the logo/title/settings cog will
+  // wrap or push the layout sideways. Keep it pinned to no-overflow.
+  const brandOverflow = await page.evaluate(() => {
+    const brand = document.querySelector('.entry-brand');
+    if (!(brand instanceof HTMLElement)) return null;
+    return Math.max(0, brand.scrollWidth - brand.clientWidth);
   });
-  expect(overflow).not.toBeNull();
-  expect(overflow!).toBeLessThanOrEqual(2);
+  expect(brandOverflow).not.toBeNull();
+  expect(brandOverflow!).toBeLessThanOrEqual(2);
 
   const pageOverflow = await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),

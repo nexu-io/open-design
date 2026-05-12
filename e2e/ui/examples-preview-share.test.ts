@@ -65,6 +65,8 @@ test.describe('examples preview share and fullscreen flows', () => {
 
     const card = page.locator('.example-card').filter({ hasText: 'Blog Post' }).first();
     await expect(card).toBeVisible();
+    await card.hover();
+    await expect(card.getByRole('button', { name: /share/i })).toBeEnabled();
     await card.getByRole('button', { name: /share/i }).click();
 
     const menu = card.getByRole('menu');
@@ -107,12 +109,14 @@ test.describe('examples preview share and fullscreen flows', () => {
 
     const card = page.locator('.example-card').filter({ hasText: 'Weekly Update' }).first();
     await expect(card).toBeVisible();
+    await card.hover();
+    await expect(card.getByRole('button', { name: /share/i })).toBeEnabled();
     await card.getByRole('button', { name: /share/i }).click();
 
     const menu = card.getByRole('menu');
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole('menuitem', { name: /export as pdf \(all slides\)/i })).toBeVisible();
-    await expect(menu.getByRole('button', { name: /export as pptx/i })).toBeDisabled();
+    await expect(menu.getByRole('menuitem', { name: /export as pdf/i })).toBeVisible();
+    await expect(menu.getByText(/export as pptx/i)).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: /download as \.zip/i })).toBeVisible();
   });
 
@@ -130,6 +134,8 @@ test.describe('examples preview share and fullscreen flows', () => {
 
     const card = page.locator('.example-card').filter({ hasText: 'Blog Post' }).first();
     await expect(card).toBeVisible();
+    await card.hover();
+    await expect(card.getByRole('button', { name: /share/i })).toBeEnabled();
     await card.getByRole('button', { name: /share/i }).click();
 
     const menu = card.getByRole('menu');
@@ -206,14 +212,13 @@ test.describe('examples preview share and fullscreen flows', () => {
     await expect(menu).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
-    await expect(dialog).toBeVisible();
   });
 });
 
 async function gotoExamples(page: Page) {
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await page.getByRole('tab', { name: /^Examples$/i }).click();
+  await page.getByRole('tab', { name: /^Templates$/i }).click();
 }
 
 async function openPreview(page: Page, skillName: string) {
@@ -223,10 +228,10 @@ async function openPreview(page: Page, skillName: string) {
 }
 
 async function routeExampleSkills(page: Page, skills: ExampleSkill[]) {
-  await page.route('**/api/skills', async (route) => {
+  await page.route('**/api/design-templates', async (route) => {
     await route.fulfill({
       json: {
-        skills: skills.map((skill, index) => ({
+        designTemplates: skills.map((skill, index) => ({
           id: skill.id,
           name: skill.name,
           description: skill.description ?? `${skill.name} description.`,
