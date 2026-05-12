@@ -1138,6 +1138,17 @@ export const zhCN: Dict = {
   'critiqueTheater.replaySpeedLive': '实时',
   'critiqueTheater.replaySpeedFast': '快进',
 
+  'feedback.prompt': '本次回复有帮助吗？',
+  'feedback.thumbsUp': '有帮助',
+  'feedback.thumbsDown': '没帮助',
+  'feedback.submittedPositive': '感谢您的反馈。',
+  'feedback.submittedNegative': '感谢您的反馈，我们会据此改进。',
+  'feedback.commentLabel': '哪里可以改进？（可选）',
+  'feedback.commentPlaceholder': '告诉我们可以做得更好的地方',
+  'feedback.commentSubmit': '发送评论',
+  'feedback.commentSaved': '评论已保存',
+  'feedback.change': '更改',
+
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',
   'pet.tabBuiltInHint': 'Open Design 内置的精选宠物 — 一键领养。',

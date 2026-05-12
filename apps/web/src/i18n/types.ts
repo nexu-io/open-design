@@ -1546,4 +1546,16 @@ export interface Dict {
   'critiqueTheater.replaySpeedInstant': string;
   'critiqueTheater.replaySpeedLive': string;
   'critiqueTheater.replaySpeedFast': string;
+
+  // Message-level feedback widget (issue #1288)
+  'feedback.prompt': string;
+  'feedback.thumbsUp': string;
+  'feedback.thumbsDown': string;
+  'feedback.submittedPositive': string;
+  'feedback.submittedNegative': string;
+  'feedback.commentLabel': string;
+  'feedback.commentPlaceholder': string;
+  'feedback.commentSubmit': string;
+  'feedback.commentSaved': string;
+  'feedback.change': string;
 }
