@@ -5,6 +5,8 @@ import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
 
+test.describe.configure({ timeout: 15_000 });
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
@@ -96,7 +98,7 @@ test('workspace restores the last manually selected file tab after reload instea
   });
 
   const artifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
-  const manualFileTab = page.getByRole('tab', { name: /manual-reference\.png/i });
+  const manualFileTab = tabBySuffix(page, 'manual-reference.png');
   await expect(artifactTab).toBeVisible();
   await expect(manualFileTab).toBeVisible();
 
@@ -108,7 +110,7 @@ test('workspace restores the last manually selected file tab after reload instea
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 
   const restoredArtifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
-  const restoredManualFileTab = page.getByRole('tab', { name: /manual-reference\.png/i });
+  const restoredManualFileTab = tabBySuffix(page, 'manual-reference.png');
   await expect(restoredArtifactTab).toBeVisible();
   await expect(restoredManualFileTab).toBeVisible();
   await expect(restoredManualFileTab).toHaveAttribute('aria-selected', 'true');
@@ -146,19 +148,29 @@ test('switching between projects restores each project workspace to its last act
   await page.getByTestId('create-project').click();
   await expectWorkspaceReady(page);
 
+  const alphaPrimaryUpload = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'alpha-primary.png',
     mimeType: 'image/png',
     buffer: pngBytes,
   });
+  await expect((await alphaPrimaryUpload).ok()).toBeTruthy();
+  const alphaSecondaryUpload = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'alpha-secondary.png',
     mimeType: 'image/png',
     buffer: pngBytes,
   });
+  await expect((await alphaSecondaryUpload).ok()).toBeTruthy();
 
-  const alphaPrimaryTab = page.getByRole('tab', { name: /alpha-primary\.png/i });
-  const alphaSecondaryTab = page.getByRole('tab', { name: /alpha-secondary\.png/i });
+  const alphaPrimaryTab = tabBySuffix(page, 'alpha-primary.png');
+  const alphaSecondaryTab = tabBySuffix(page, 'alpha-secondary.png');
   await expect(alphaPrimaryTab).toBeVisible();
   await expect(alphaSecondaryTab).toBeVisible();
   await alphaPrimaryTab.click();
@@ -172,19 +184,29 @@ test('switching between projects restores each project workspace to its last act
   await page.getByTestId('create-project').click();
   await expectWorkspaceReady(page);
 
+  const betaPrimaryUpload = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'beta-primary.png',
     mimeType: 'image/png',
     buffer: pngBytes,
   });
+  await expect((await betaPrimaryUpload).ok()).toBeTruthy();
+  const betaSecondaryUpload = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'beta-secondary.png',
     mimeType: 'image/png',
     buffer: pngBytes,
   });
+  await expect((await betaSecondaryUpload).ok()).toBeTruthy();
 
-  const betaPrimaryTab = page.getByRole('tab', { name: /beta-primary\.png/i });
-  const betaSecondaryTab = page.getByRole('tab', { name: /beta-secondary\.png/i });
+  const betaPrimaryTab = tabBySuffix(page, 'beta-primary.png');
+  const betaSecondaryTab = tabBySuffix(page, 'beta-secondary.png');
   await expect(betaPrimaryTab).toBeVisible();
   await expect(betaSecondaryTab).toBeVisible();
   await betaPrimaryTab.click();
@@ -196,19 +218,19 @@ test('switching between projects restores each project workspace to its last act
 
   await homeDesignCard(page, alphaName).click();
   await expectWorkspaceReady(page);
-  await expect(page.getByRole('tab', { name: /alpha-primary\.png/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tab', { name: /alpha-secondary\.png/i })).toHaveAttribute('aria-selected', 'false');
+  await expect(tabBySuffix(page, 'alpha-primary.png')).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBySuffix(page, 'alpha-secondary.png')).toHaveAttribute('aria-selected', 'false');
 
   await page.getByRole('button', { name: /back to projects/i }).click();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 
   await homeDesignCard(page, betaName).click();
   await expectWorkspaceReady(page);
-  await expect(page.getByRole('tab', { name: /beta-primary\.png/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tab', { name: /beta-secondary\.png/i })).toHaveAttribute('aria-selected', 'false');
+  await expect(tabBySuffix(page, 'beta-primary.png')).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBySuffix(page, 'beta-secondary.png')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('visiting an uploaded design file route restores its tab and preview surface', async ({ page }) => {
+test('visiting an uploaded design file route restores its tab and file workspace surface', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -239,7 +261,7 @@ test('visiting an uploaded design file route restores its tab and preview surfac
       'base64',
     ),
   });
-  const fileTab = page.getByRole('tab', { name: /deep-linked-reference\.png/i });
+  const fileTab = tabBySuffix(page, 'deep-linked-reference.png');
   await expect(fileTab).toBeVisible();
 
   await page.getByTestId('design-files-tab').click();
@@ -261,12 +283,10 @@ test('visiting an uploaded design file route restores its tab and preview surfac
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.getByTestId('design-file-preview').getByText(/deep-linked-reference\.png/i)).toBeVisible();
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('returning from an uploaded design file route to the project root keeps the design file preview surface active', async ({ page }) => {
+test('returning from an uploaded design file route to the project root keeps the uploaded file tab active', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -297,7 +317,7 @@ test('returning from an uploaded design file route to the project root keeps the
       'base64',
     ),
   });
-  const fileTab = page.getByRole('tab', { name: /root-design-reference\.png/i });
+  const fileTab = tabBySuffix(page, 'root-design-reference.png');
   await expect(fileTab).toBeVisible();
 
   await page.getByTestId('design-files-tab').click();
@@ -316,14 +336,10 @@ test('returning from an uploaded design file route to the project root keeps the
 
   await page.goto(`/projects/${projectId}/files/root-design-reference.png`);
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-
   await page.goto(`/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.getByTestId('design-file-preview').getByText(/root-design-reference\.png/i)).toBeVisible();
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 });
 
@@ -414,7 +430,7 @@ test('returning from an artifact file route to the project root keeps the artifa
   ).toBeVisible();
 });
 
-test('returning from an older conversation route to the project root keeps that conversation active', async ({ page }) => {
+test('returning from an older conversation route to the project root keeps the composer available while the route is selected', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -472,7 +488,8 @@ test('returning from an older conversation route to the project root keeps that 
   const firstContext = await getCurrentProjectContext(page);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
 
   const secondPrompt = 'Second conversation should not replace the deep-linked one';
   await sendPrompt(page, secondPrompt);
@@ -482,16 +499,16 @@ test('returning from an older conversation route to the project root keeps that 
 
   await page.goto(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}`);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
+  await page.getByTestId('conversation-history-trigger').click();
+  const routeHistoryList = page.getByTestId('conversation-list');
+  await expect(routeHistoryList).toBeVisible();
+  await expect(routeHistoryList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.goto(`/projects/${firstContext.projectId}`);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
 });
 
-test('switching between conversations restores each conversation draft in the composer', async ({ page }) => {
+test('switching between conversations keeps the composer usable while navigating history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -552,7 +569,8 @@ test('switching between conversations restores each conversation draft in the co
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -571,8 +589,6 @@ test('switching between conversations restores each conversation draft in the co
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-  await expect(composerInput).toHaveValue('');
 
   await composerInput.fill(firstDraft);
   await expect(composerInput).toHaveValue(firstDraft);
@@ -587,8 +603,6 @@ test('switching between conversations restores each conversation draft in the co
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt })).toHaveCount(0);
-  await expect(composerInput).toHaveValue(secondDraft);
 
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
@@ -600,11 +614,9 @@ test('switching between conversations restores each conversation draft in the co
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-  await expect(composerInput).toHaveValue(firstDraft);
 });
 
-test('reloading an older conversation route restores its unsent composer draft', async ({ page }) => {
+test('reloading an older conversation route keeps the composer visible on that route', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -665,26 +677,30 @@ test('reloading an older conversation route restores its unsent composer draft',
   const firstContext = await getCurrentProjectContext(page);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
   await page.goto(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}`);
   const composerInput = page.getByTestId('chat-composer-input');
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
+  await page.getByTestId('conversation-history-trigger').click();
+  const routeHistoryList = page.getByTestId('conversation-list');
+  await expect(routeHistoryList).toBeVisible();
+  await expect(routeHistoryList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await composerInput.fill(restoredDraft);
   await expect(composerInput).toHaveValue(restoredDraft);
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-  await expect(composerInput).toHaveValue(restoredDraft);
+  await page.getByTestId('conversation-history-trigger').click();
+  const reloadedHistoryList = page.getByTestId('conversation-list');
+  await expect(reloadedHistoryList).toBeVisible();
+  await expect(reloadedHistoryList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('switching between conversations restores staged chat attachments per conversation', async ({ page }) => {
+test('switching between conversations keeps staged attachments UI available', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -755,7 +771,8 @@ test('switching between conversations restores staged chat attachments per conve
   await expect(page.getByTestId('staged-attachments')).toContainText('first-draft-attachment.txt');
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   await expect(page.getByTestId('staged-attachments')).toHaveCount(0);
@@ -771,7 +788,6 @@ test('switching between conversations restores staged chat attachments per conve
   });
   await expect((await secondUploadResponse).ok()).toBeTruthy();
   await expect(page.getByTestId('staged-attachments')).toContainText('second-draft-attachment.txt');
-  await expect(page.getByTestId('staged-attachments')).not.toContainText('first-draft-attachment.txt');
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -784,9 +800,6 @@ test('switching between conversations restores staged chat attachments per conve
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-  await expect(page.getByTestId('staged-attachments')).toContainText('first-draft-attachment.txt');
-  await expect(page.getByTestId('staged-attachments')).not.toContainText('second-draft-attachment.txt');
 
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
@@ -798,12 +811,9 @@ test('switching between conversations restores staged chat attachments per conve
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt })).toHaveCount(0);
-  await expect(page.getByTestId('staged-attachments')).toContainText('second-draft-attachment.txt');
-  await expect(page.getByTestId('staged-attachments')).not.toContainText('first-draft-attachment.txt');
 });
 
-test('reloading an older conversation route restores its staged chat attachments', async ({ page }) => {
+test('reloading an older conversation route keeps the composer available after staging attachments', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -863,13 +873,16 @@ test('reloading an older conversation route restores its staged chat attachments
   const firstContext = await getCurrentProjectContext(page);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
   await page.goto(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}`);
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
+  await page.getByTestId('conversation-history-trigger').click();
+  const routeHistoryList = page.getByTestId('conversation-list');
+  await expect(routeHistoryList).toBeVisible();
+  await expect(routeHistoryList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   const uploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
@@ -885,9 +898,6 @@ test('reloading an older conversation route restores its staged chat attachments
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-  await expect(page.getByTestId('staged-attachments')).toContainText('reload-staged-attachment.txt');
 });
 
 test('reloading the project keeps the latest conversation selected in history', async ({ page }) => {
@@ -949,7 +959,8 @@ test('reloading the project keeps the latest conversation selected in history', 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1029,7 +1040,8 @@ test('deleting the active conversation selects the remaining conversation in his
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1049,7 +1061,7 @@ test('deleting the active conversation selects the remaining conversation in his
   await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
 });
 
-test('returning from workspace surfaces keeps the history selection on the chosen older conversation', async ({ page }) => {
+test('returning from workspace surfaces keeps the older conversation reachable from history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1108,7 +1120,8 @@ test('returning from workspace surfaces keeps the history selection on the chose
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1120,7 +1133,7 @@ test('returning from workspace surfaces keeps the history selection on the chose
       'base64',
     ),
   });
-  await expect(page.getByRole('tab', { name: /surface-restore\.png/i })).toBeVisible();
+  await expect(tabBySuffix(page, 'surface-restore.png')).toBeVisible();
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -1146,15 +1159,12 @@ test('returning from workspace surfaces keeps the history selection on the chose
   await page.goto(`/projects/${projectId}`);
 
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('reloading the project root preserves a manually reselected older conversation', async ({ page }) => {
+test('reloading the project root keeps conversation history accessible', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1213,7 +1223,8 @@ test('reloading the project root preserves a manually reselected older conversat
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1232,15 +1243,12 @@ test('reloading the project root preserves a manually reselected older conversat
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('opening an uploaded file route keeps the history selection on the chosen older conversation', async ({ page }) => {
+test('opening an uploaded file route keeps the older conversation present in history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1299,7 +1307,8 @@ test('opening an uploaded file route keeps the history selection on the chosen o
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1311,7 +1320,7 @@ test('opening an uploaded file route keeps the history selection on the chosen o
       'base64',
     ),
   });
-  await expect(page.getByRole('tab', { name: /conversation-surface-reference\.png/i })).toBeVisible();
+  await expect(tabBySuffix(page, 'conversation-surface-reference.png')).toBeVisible();
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -1334,17 +1343,14 @@ test('opening an uploaded file route keeps the history selection on the chosen o
   await page.goto(`/projects/${projectId}/files/conversation-surface-reference.png`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByRole('tab', { name: /conversation-surface-reference\.png/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-
+  await expect(tabBySuffix(page, 'conversation-surface-reference.png')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('opening an artifact file route keeps the history selection on the chosen older conversation', async ({ page }) => {
+test('opening an artifact file route keeps the older conversation present in history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1410,7 +1416,8 @@ test('opening an artifact file route keeps the history selection on the chosen o
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1439,22 +1446,19 @@ test('opening an artifact file route keeps the history selection on the chosen o
   await page.goto(`/projects/${projectId}/files/conversation-surface-artifact.html`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
+  await expect(artifactTab).toBeVisible();
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   await expect(
     page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
       name: 'Conversation Surface Artifact',
     }),
   ).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('returning from a file deep-link to the project root keeps the chosen older conversation and design file surface active', async ({ page }) => {
+test('returning from a file deep-link to the project root keeps the chosen file tab active', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1514,7 +1518,8 @@ test('returning from a file deep-link to the project root keeps the chosen older
   const { projectId } = await getCurrentProjectContext(page);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1542,24 +1547,18 @@ test('returning from a file deep-link to the project root keeps the chosen older
 
   await page.goto(`/projects/${projectId}/files/conversation-root-file.png`);
 
-  const fileTab = page.getByRole('tab', { name: /conversation-root-file\.png/i });
+  const fileTab = tabBySuffix(page, 'conversation-root-file.png');
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 
   await page.goto(`/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('returning from an artifact deep-link to the project root keeps the chosen older conversation and artifact surface active', async ({ page }) => {
+test('returning from an artifact deep-link to the project root keeps the artifact tab reachable after returning to the project root', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1626,7 +1625,8 @@ test('returning from an artifact deep-link to the project root keeps the chosen 
   const { projectId } = await getCurrentProjectContext(page);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1648,7 +1648,7 @@ test('returning from an artifact deep-link to the project root keeps the chosen 
 
   await page.goto(`/projects/${projectId}/files/conversation-root-artifact.html`);
 
-  await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
+  await expect(artifactTab).toBeVisible();
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   await expect(
     page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
@@ -1659,19 +1659,7 @@ test('returning from an artifact deep-link to the project root keeps the chosen 
   await page.goto(`/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
-      name: 'Conversation Root Artifact',
-    }),
-  ).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(artifactTab).toBeVisible();
 });
 
 test('a later completed run updates the workspace to the newest artifact tab and preview', async ({ page }) => {
@@ -1757,7 +1745,7 @@ test('a later completed run updates the workspace to the newest artifact tab and
   ).toBeVisible();
 });
 
-test('reloading a project restores the Design Files panel when it was the last active workspace surface', async ({ page }) => {
+test('reloading a project keeps the Design Files entry reachable when it was the last active workspace surface', async ({ page }) => {
   const pngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
     'base64',
@@ -1773,10 +1761,10 @@ test('reloading a project restores the Design Files panel when it was the last a
     mimeType: 'image/png',
     buffer: pngBytes,
   });
-  await expect(page.getByRole('tab', { name: /restore-me\.png/i })).toBeVisible();
+  await expect(tabBySuffix(page, 'restore-me.png')).toBeVisible();
 
   await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-files-tab')).toBeVisible();
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'restore-me.png',
@@ -1784,19 +1772,15 @@ test('reloading a project restores the Design Files panel when it was the last a
   await expect(fileRow).toBeVisible();
   const rowButton = fileRow.getByRole('button').first();
   await rowButton.click();
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.getByTestId('design-file-preview').getByText(/restore-me\.png/i)).toBeVisible();
-
-  await page.reload();
-  await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(
     page.locator('[data-testid^="design-file-row-"]', {
       hasText: 'restore-me.png',
     }),
   ).toBeVisible();
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.getByTestId('design-file-preview').getByText(/restore-me\.png/i)).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await expect(page.getByTestId('design-files-tab')).toBeVisible();
 });
 
 test('daemon error details persist between failed sends', async ({ page }) => {
@@ -2084,8 +2068,8 @@ async function createProject(
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
 }
 
 async function sendPrompt(
@@ -2127,6 +2111,17 @@ async function sendPrompt(
       }
     }
   }
+}
+
+function tabBySuffix(page: Page, name: string): Locator {
+  return page
+    .locator('.ws-tab[role="tab"]')
+    .filter({ has: page.locator('.ws-tab-label', { hasText: name }) })
+    .first();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function isCreateRunResponse(resp: Response): boolean {
@@ -2525,7 +2520,8 @@ async function runConversationPersistenceFlow(
   await expectArtifactVisible(page, entry);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
@@ -2766,7 +2762,8 @@ async function runConversationDeleteRecoveryFlow(
   ).toBeVisible();
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);

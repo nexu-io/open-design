@@ -128,6 +128,27 @@ describe('preview comment persistence', () => {
 
     expect(listMessages(db, 'conversation-1')[0]?.commentAttachments).toEqual([attachment]);
   });
+
+  it('persists assistant feedback on messages', () => {
+    const db = seededDb();
+    const feedback = {
+      rating: 'positive' as const,
+      reasonCodes: ['matched_request', 'other'],
+      customReason: 'The output was ready to present.',
+      reasonsSubmittedAt: 1_700_000_000_400,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_000_500,
+    };
+
+    upsertMessage(db, 'conversation-1', {
+      id: 'message-1',
+      role: 'assistant',
+      content: 'Done',
+      feedback,
+    });
+
+    expect(listMessages(db, 'conversation-1')[0]?.feedback).toEqual(feedback);
+  });
 });
 
 describe('preview comment agent payload', () => {

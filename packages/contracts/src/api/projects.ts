@@ -11,6 +11,15 @@ export type ProjectKind =
 
 export type MediaAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 
+export type ProjectPlatform =
+  | 'auto'
+  | 'responsive'
+  | 'web-desktop'
+  | 'mobile-ios'
+  | 'mobile-android'
+  | 'tablet'
+  | 'desktop-app';
+
 export type AudioKind = 'music' | 'speech' | 'sfx';
 
 export type ProjectDisplayStatus =
@@ -59,8 +68,14 @@ export interface ProjectMetadata {
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
+  includeLandingPage?: boolean;
+  includeOsWidgets?: boolean;
   templateId?: string;
   templateLabel?: string;
+  /** Primary target surface selected at project creation. */
+  platform?: ProjectPlatform;
+  /** Concrete delivery surfaces the artifact must account for. `responsive` is a web breakpoint target, not a native app expansion. */
+  platformTargets?: ProjectPlatform[];
   inspirationDesignSystemIds?: string[];
   importedFrom?: 'claude-design' | 'folder' | string;
   entryFile?: string;

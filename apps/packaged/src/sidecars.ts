@@ -218,6 +218,7 @@ export type PackagedDaemonSpawnEnvOptions = {
    */
   requireDesktopAuth: boolean;
   legacyDataDir?: string | null;
+  telemetryRelayUrl?: string | null;
 };
 
 /**
@@ -247,6 +248,9 @@ export function buildPackagedDaemonSpawnEnv(
     // Electron userData, bundle names, or ports.
     ...createPackagedDaemonManagedPathEnv(paths),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+    ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
+      ? {}
+      : { OPEN_DESIGN_TELEMETRY_RELAY_URL: options.telemetryRelayUrl }),
     // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
     // upgrading from 0.3.x .od/ layouts. The daemon's startup
     // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
@@ -334,6 +338,7 @@ export async function startPackagedSidecars(
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
     nodeCommand: string | null;
+    telemetryRelayUrl: string | null;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
@@ -369,6 +374,7 @@ export async function startPackagedSidecars(
         daemonCliEntry: options.daemonCliEntry,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
         requireDesktopAuth: options.requireDesktopAuth,
+        telemetryRelayUrl: options.telemetryRelayUrl,
       }),
       nodeCommand: options.nodeCommand,
       paths,

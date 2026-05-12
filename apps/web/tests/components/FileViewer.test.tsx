@@ -24,6 +24,7 @@ import {
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  effectivePreviewScale,
   parseInspectOverridesFromSource,
   serializeInspectOverrides,
   updateInspectOverride,
@@ -59,6 +60,17 @@ function deferredResponse() {
   });
   return { promise, resolve };
 }
+
+describe('FileViewer preview scale', () => {
+  it('uses the requested zoom for desktop preview overlays', () => {
+    expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
+  });
+
+  it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
+    expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
+    expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  });
+});
 
 describe('FileViewer JSON artifacts', () => {
   it('pretty-prints valid JSON in the text viewer', async () => {
@@ -1608,7 +1620,7 @@ describe('LiveArtifactViewer', () => {
     });
 
     const requestFullscreen = vi.fn(() => Promise.reject(new Error('denied')));
-    const previewHost = container.querySelector('.live-artifact-preview-frame-host');
+    const previewHost = container.querySelector('.viewer-body');
     expect(previewHost).toBeTruthy();
     Object.defineProperty(previewHost!, 'requestFullscreen', {
       configurable: true,
@@ -1650,7 +1662,7 @@ describe('LiveArtifactViewer', () => {
     });
 
     const requestFullscreen = vi.fn(() => Promise.resolve());
-    const previewHost = container.querySelector('.live-artifact-preview-frame-host');
+    const previewHost = container.querySelector('.viewer-body');
     expect(previewHost).toBeTruthy();
     Object.defineProperty(previewHost!, 'requestFullscreen', {
       configurable: true,

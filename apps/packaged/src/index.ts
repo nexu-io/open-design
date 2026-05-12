@@ -84,6 +84,7 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    telemetryRelayUrl: config.telemetryRelayUrl,
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
     // pinned ON from request 0. See `apps/packaged/src/headless.ts` for

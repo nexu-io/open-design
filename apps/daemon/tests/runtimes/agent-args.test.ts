@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, pi, qoder, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
@@ -22,6 +22,35 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
     '--trust',
     '--workspace',
     '/tmp/od-project',
+  ]);
+});
+
+test('opencode args deliver prompts via stdin without passing a literal dash prompt', () => {
+  const prompt = 'design a dashboard';
+  const baseArgs = opencode.buildArgs(prompt, [], [], {});
+  assert.equal(opencode.promptViaStdin, true);
+  assert.equal(baseArgs.includes('-'), false);
+  assert.equal(baseArgs.includes(prompt), false);
+  assert.deepEqual(baseArgs, [
+    'run',
+    '--format',
+    'json',
+    '--dangerously-skip-permissions',
+  ]);
+
+  const withModel = opencode.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'anthropic/claude-sonnet-4-5' },
+  );
+  assert.deepEqual(withModel, [
+    'run',
+    '--format',
+    'json',
+    '--dangerously-skip-permissions',
+    '--model',
+    'anthropic/claude-sonnet-4-5',
   ]);
 });
 

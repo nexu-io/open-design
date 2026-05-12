@@ -184,6 +184,25 @@ describe('preview comment attachment helpers', () => {
     expect(liveSnapshotForComment(comment({ filePath: 'other.html' }), snapshots)).toBeNull();
   });
 
+  it('rehydrates saved free-pin markers from persisted comment position after iframe reload', () => {
+    const saved = comment({
+      elementId: 'pin-abc123',
+      selector: '[data-od-pin="pin-abc123"]',
+      label: 'pin',
+      text: '',
+      htmlHint: '',
+      position: { x: 88, y: 144, width: 24, height: 24 },
+    });
+
+    expect(liveSnapshotForComment(saved, new Map())).toMatchObject({
+      filePath: 'index.html',
+      elementId: 'pin-abc123',
+      selector: '[data-od-pin="pin-abc123"]',
+      label: 'pin',
+      position: { x: 88, y: 144, width: 24, height: 24 },
+    });
+  });
+
   it('serializes selected comments into API-mode prompt context without visible input', () => {
     const attachments = commentsToAttachments([
       comment({ id: 'c1', elementId: 'hero-title', note: 'Only shorten this title' }),

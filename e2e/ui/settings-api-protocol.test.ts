@@ -284,9 +284,9 @@ test('BYOK fetch models hydrates model options and reuses cached results', async
     apiKey: 'sk-openai-test',
   });
 
-  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toBeVisible();
-  await expect(modelSelect.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toBeVisible();
-  await expect(modelSelect.getByRole('option', { name: 'ZZ Nightly Model (zz-nightly-model)' })).toBeVisible();
+  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
+  await expect(modelSelect.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toHaveCount(1);
+  await expect(modelSelect.getByRole('option', { name: 'ZZ Nightly Model (zz-nightly-model)' })).toHaveCount(1);
 
   const fetchedValues = await modelSelect.locator('option').evaluateAll((options) =>
     options.slice(0, 3).map((option) => (option as HTMLOptionElement).value),

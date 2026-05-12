@@ -21,7 +21,6 @@ import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
-import { AppChromeHeader } from './AppChromeHeader';
 import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
@@ -34,7 +33,6 @@ import { PetRail } from './pet/PetRail';
 import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
 import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
-import { isMacPlatform } from '../utils/platform';
 
 type TopTab = 'designs' | 'templates' | 'design-systems' | 'image-templates' | 'video-templates';
 
@@ -50,6 +48,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   projects: Project[];
   templates: ProjectTemplate[];
+  onDeleteTemplate: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   defaultDesignSystemId: string | null;
   config: AppConfig;
@@ -70,6 +69,7 @@ interface Props {
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
+  onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'language' | 'appearance' | 'notifications' | 'pet' | 'about') => void;
   onAdoptPet: () => void;
@@ -227,6 +227,7 @@ export function EntryView({
   designSystems,
   projects,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   defaultDesignSystemId,
   config,
@@ -242,6 +243,7 @@ export function EntryView({
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
+  onRenameProject,
   onChangeDefaultDesignSystem,
   onOpenSettings,
   onAdoptPet,
@@ -258,8 +260,6 @@ export function EntryView({
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
   const [petRailHidden, setPetRailHiddenState] = useState<boolean>(() => loadPetRailHidden());
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
 
   function setPetRailHidden(next: boolean) {
     setPetRailHiddenState(next);
@@ -394,82 +394,8 @@ export function EntryView({
     return () => window.removeEventListener('focus', onFocus);
   }, [reloadConnectorStatuses]);
 
-  // Dismiss the avatar dropdown on outside-click / Escape so it behaves
-  // like the project-view AvatarMenu (which uses the same shell CSS).
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (!avatarMenuRef.current) return;
-      if (!avatarMenuRef.current.contains(e.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
-
-  const avatarMenu = (
-    <div className="avatar-menu" ref={avatarMenuRef}>
-      <button
-        type="button"
-        className="settings-icon-btn"
-        onClick={() => setAvatarMenuOpen((v) => !v)}
-        title={t('entry.openSettingsTitle')}
-        aria-label={t('entry.openSettingsAria')}
-        aria-haspopup="menu"
-        aria-expanded={avatarMenuOpen}
-      >
-        <Icon name="settings" size={17} />
-      </button>
-      {avatarMenuOpen ? (
-        <div className="avatar-popover" role="menu">
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setPetRailHidden(!petRailHidden);
-              setAvatarMenuOpen(false);
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
-            </span>
-            <span>
-              {petRailHidden
-                ? t('pet.railShow')
-                : t('pet.railHide')}
-            </span>
-          </button>
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="settings" size={14} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-
   return (
     <div className="entry-shell">
-      <AppChromeHeader actions={avatarMenu} />
       <div
         className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
         style={{
@@ -479,11 +405,22 @@ export function EntryView({
         }}
       >
       <aside className="entry-side" style={{ width: sidebarWidth }}>
+        <div className="entry-brand">
+          <span className="entry-brand-mark" aria-hidden>
+            <img src="/app-icon.svg" alt="" className="brand-mark-img" draggable={false} />
+          </span>
+          <div className="entry-brand-text">
+            <div className="entry-brand-title-row">
+              <span className="entry-brand-title">{t('app.brand')}</span>
+            </div>
+          </div>
+        </div>
         <NewProjectPanel
           skills={skills}
           designSystems={designSystems}
           defaultDesignSystemId={defaultDesignSystemId}
           templates={templates}
+          onDeleteTemplate={onDeleteTemplate}
           promptTemplates={promptTemplates}
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
@@ -496,46 +433,9 @@ export function EntryView({
           loading={skillsLoading || designSystemsLoading}
         />
         <div className="entry-side-foot">
-          <div className="entry-side-foot-row">
-            <button
-              type="button"
-              className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
-              onClick={onAdoptPet}
-              title={
-                config.pet?.adopted
-                  ? t('pet.changePet')
-                  : t('pet.adoptCallout')
-              }
-            >
-              <span className="pet-pill-glyph" aria-hidden>
-                {config.pet?.adopted
-                  ? config.pet.petId === 'custom'
-                    ? config.pet.custom.glyph || '🦄'
-                    : '🐾'
-                  : '🐾'}
-              </span>
-              <span className="foot-pill-pet-label">
-                {config.pet?.adopted
-                  ? t('pet.changePet')
-                  : t('pet.adoptCallout')}
-              </span>
-              {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
-            </button>
-            <a
-              className="foot-pill foot-pill-follow"
-              href="https://x.com/nexudotio"
-              target="_blank"
-              rel="noreferrer noopener"
-              title="Follow @nexudotio on X for releases and milestones"
-              aria-label="Follow @nexudotio on X"
-            >
-              <Icon name="external-link" size={12} />
-              <span className="foot-pill-follow-label">Follow @nexudotio</span>
-            </a>
-          </div>
           <button
             type="button"
-            className="foot-pill"
+            className="foot-pill foot-pill-env"
             onClick={() => onOpenSettings()}
             aria-label={t('settings.envConfigure')}
             title={t('settings.envConfigure')}
@@ -551,7 +451,65 @@ export function EntryView({
               {envMetaLine}
             </span>
           </button>
-          <LanguageMenu />
+          <div className="entry-side-foot-row">
+            <LanguageMenu />
+            <div className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}>
+              <button
+                type="button"
+                className="pet-pill-main"
+                onClick={onAdoptPet}
+                title={
+                  config.pet?.adopted
+                    ? t('pet.changePet')
+                    : t('pet.adoptCallout')
+                }
+              >
+                <span className="pet-pill-glyph" aria-hidden>
+                  {config.pet?.adopted
+                    ? config.pet.petId === 'custom'
+                      ? config.pet.custom.glyph || '🦄'
+                      : '🐾'
+                    : '🐾'}
+                </span>
+                <span className="foot-pill-pet-label">
+                  {config.pet?.adopted
+                    ? t('pet.changePet')
+                    : t('pet.adoptCallout')}
+                </span>
+                {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
+              </button>
+              <span className="pet-pill-divider" aria-hidden />
+              <button
+                type="button"
+                className="pet-pill-toggle"
+                onClick={() => setPetRailHidden(!petRailHidden)}
+                aria-label={petRailHidden ? t('pet.railShow') : t('pet.railHide')}
+                title={petRailHidden ? t('pet.railShow') : t('pet.railHide')}
+              >
+                <Icon name={petRailHidden ? 'eye' : 'eye-off'} size={12} />
+              </button>
+            </div>
+            <a
+              className="foot-pill foot-pill-follow"
+              href="https://discord.com/invite/qhbcCH8Am4"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Join the Open Design Discord community"
+              aria-label="Join the Open Design Discord community"
+            >
+              <Icon name="discord" size={12} />
+            </a>
+            <a
+              className="foot-pill foot-pill-follow"
+              href="https://x.com/nexudotio"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Follow @nexudotio on X for releases and milestones"
+              aria-label="Follow @nexudotio on X"
+            >
+              <Icon name="external-link" size={12} />
+            </a>
+          </div>
         </div>
         <button
           type="button"
@@ -606,6 +564,7 @@ export function EntryView({
                 onOpen={onOpenProject}
                 onOpenLiveArtifact={onOpenLiveArtifact}
                 onDelete={onDeleteProject}
+                onRename={onRenameProject}
               />
             )
           ) : null}

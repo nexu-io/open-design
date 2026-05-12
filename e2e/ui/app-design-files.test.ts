@@ -93,8 +93,8 @@ async function createProjectNameOnly(page: Page, entry: UiScenario) {
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
 }
 
 async function getCurrentProjectContext(page: Page): Promise<{ projectId: string; conversationId: string }> {
