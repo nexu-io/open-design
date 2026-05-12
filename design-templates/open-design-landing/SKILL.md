@@ -92,7 +92,7 @@ parameters:
     type: enum
     values: [fal, azure]
     default: fal
-    description: Provider for `image_strategy: generate`. fal.ai is faster.
+    description: "Provider for `image_strategy: generate`. fal.ai is faster."
 outputs:
   - path: <out>/index.html
     when: output_format in [standalone-html, both]

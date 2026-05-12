@@ -1122,6 +1122,7 @@ export const zhTW: Dict = {
   'critiqueTheater.interrupt': '中斷',
   'critiqueTheater.interrupting': '中斷中…',
   'critiqueTheater.interrupted': '已中斷',
+  'critiqueTheater.interruptedSummary': '已於第 {round} 輪中斷 · 最佳綜合分 {composite}',
   'critiqueTheater.degradedHeading': '本次評審不可用',
   'critiqueTheater.degradedReasonMalformed': '評審區塊格式錯誤，剖析器已拒絕。',
   'critiqueTheater.degradedReasonOversize': '評審輸出超出了安全位元組預算。',

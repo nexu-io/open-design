@@ -935,6 +935,7 @@ export const ja: Dict = {
   'critiqueTheater.interrupt': '中断',
   'critiqueTheater.interrupting': '中断中…',
   'critiqueTheater.interrupted': '中断済み',
+  'critiqueTheater.interruptedSummary': 'ラウンド {round} で中断 · 最高総合 {composite}',
   'critiqueTheater.degradedHeading': 'この実行ではパネル無効',
   'critiqueTheater.degradedReasonMalformed': 'パネル出力の形式が不正です（パーサーが拒否）。',
   'critiqueTheater.degradedReasonOversize': 'パネル出力が安全なバイト予算を超えました。',
