@@ -72,6 +72,7 @@ import {
   isCritiqueEnabled,
   parseEnvEnabled,
   parseRolloutPhase,
+  type SkillCritiquePolicy,
 } from './critique/rollout.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
@@ -2941,6 +2942,11 @@ export async function startServer({
     let skillMode;
     let skillCraftRequires = [];
     let activeSkillDir = null;
+    // Per-skill Critique Theater override sourced from
+    // `od.critique.policy` in the resolved skill's SKILL.md frontmatter.
+    // `null` means the skill has no opinion and the lower-priority tiers
+    // (project override, env override, rollout phase default) decide.
+    let skillCritiquePolicy: SkillCritiquePolicy = null;
     if (effectiveSkillId) {
       // Span both functional skills and design templates so a project
       // saved against either surface keeps its system prompt after the
@@ -2954,6 +2960,7 @@ export async function startServer({
         skillName = skill.name;
         skillMode = skill.mode;
         activeSkillDir = skill.dir;
+        skillCritiquePolicy = skill.critiquePolicy;
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
       }
@@ -3011,14 +3018,15 @@ export async function startServer({
     // override > rollout phase default. On a fresh install with M0
     // dark-launch defaults the resolver returns `false`, so prod traffic
     // is unchanged until an operator flips the env var or a project
-    // opts in. The skill-policy and project-override inputs are passed
-    // through as `null` for the v1 cutover; the daemon-side handler that
-    // round-trips `critiqueTheaterEnabled` on the project settings row
-    // and the `od.critique.policy` frontmatter resolver land as
-    // follow-up commits in this same stack.
+    // opts in. The skill-policy input is sourced from
+    // `od.critique.policy` in the active skill's SKILL.md frontmatter
+    // (parsed in `skills.ts:normalizeCritiquePolicy`); the project
+    // override input is passed as `null` for now and gets wired in the
+    // next commit on this branch, which extends the existing Phase 6
+    // settings endpoint to round-trip `critiqueTheaterEnabled`.
     const critiqueEnabledForRun = isCritiqueEnabled({
       phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
-      skillPolicy: null,
+      skillPolicy: skillCritiquePolicy,
       projectOverride: null,
       envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
     });
