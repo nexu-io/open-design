@@ -560,7 +560,9 @@ export function NewProjectPanel({
       setImportFolderError(null);
       setImportingFolder(true);
       try {
-        const result = await window.electronAPI!.pickAndImport!();
+        const result = await window.electronAPI!.pickAndImport!({
+          skillId: skillIdForTab,
+        });
         if (!result) return;
         if (result.ok === true) {
           await onImportFolderResponse(result.response);
