@@ -4896,10 +4896,9 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 28px;
+  padding: 24px 28px 0;
   border-bottom: 1px solid var(--border);
   min-width: 0;
-  min-height: 52px;
 }
 .entry-header-tabs-row {
   display: flex;
@@ -4907,8 +4906,10 @@ code {
   gap: 24px;
 }
 .entry-tabs {
+  align-self: stretch;
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 24px;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -4919,16 +4920,35 @@ code {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  border-radius: 6px 6px 0 0;
-  padding: 14px 11px;
-  font-size: 14px;
+  border-radius: 0;
+  padding: 6px 4px 8px;
+  font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
   flex: 0 0 auto;
   white-space: nowrap;
+  transition: none;
 }
-.entry-tab:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
-.entry-tab.active {
+.entry-tab:focus,
+.entry-tab:focus-visible,
+.entry-tab:active {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: transparent;
+  outline: none;
+  color: var(--text-muted);
+}
+.entry-tab:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: transparent;
+  outline: none;
+  color: var(--text);
+}
+.entry-tab.active,
+.entry-tab.active:hover:not(:disabled),
+.entry-tab.active:focus,
+.entry-tab.active:focus-visible {
   color: var(--text);
   border-bottom-color: var(--text);
 }
