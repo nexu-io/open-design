@@ -2591,6 +2591,12 @@ function ConnectorSection({
     if (keySaveStatus === 'saving') return;
     if (!hasPendingEdit) return;
     if (composioConfigLoading) return;
+    // Clear any stale timer before transitioning to 'saving' to prevent
+    // it from firing during the await and flipping the button back to idle.
+    if (keySavedTimerRef.current != null) {
+      window.clearTimeout(keySavedTimerRef.current);
+      keySavedTimerRef.current = null;
+    }
     const pendingKey = composio.apiKey ?? '';
     setKeySaveStatus('saving');
     try {
@@ -2617,7 +2623,11 @@ function ConnectorSection({
         setKeySaveStatus('idle');
       }, 2000);
     } catch {
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
       setKeySaveStatus('error');
+      keySavedTimerRef.current = null;
     }
   };
 
@@ -2691,6 +2701,12 @@ function ConnectorSection({
   const handleClearCommit = async () => {
     if (keySaveStatus === 'saving') return;
     if (!clearArmed) return;
+    // Clear any stale timer before transitioning to 'saving', matching
+    // handleSaveKey's pattern for consistency.
+    if (keySavedTimerRef.current != null) {
+      window.clearTimeout(keySavedTimerRef.current);
+      keySavedTimerRef.current = null;
+    }
     setKeySaveStatus('saving');
     try {
       const cleared = {
@@ -2703,12 +2719,13 @@ function ConnectorSection({
       setCatalogRefreshNonce((nonce) => nonce + 1);
       setClearStage('idle');
       setClearArmed(false);
+      setKeySaveStatus('idle');
+    } catch {
       if (keySavedTimerRef.current != null) {
         window.clearTimeout(keySavedTimerRef.current);
       }
-      setKeySaveStatus('idle');
-    } catch {
       setKeySaveStatus('error');
+      keySavedTimerRef.current = null;
     }
   };
 
