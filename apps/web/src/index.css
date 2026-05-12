@@ -3819,7 +3819,7 @@ code {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 24px 20px 18px;
+  padding: 32px 20px 18px;
 }
 .entry-brand-actions {
   margin-left: auto;
