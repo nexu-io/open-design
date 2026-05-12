@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Responsive design handoff improvements: tablet/mobile preview auto-fit, 2025–2026 responsive viewport matrix, landing page and OS widgets metadata chips, stricter cross-platform file output contracts, and DESIGN-HANDOFF/DESIGN-MANIFEST exports for coding-tool implementation.
+- Screen-file-first design handoff policy: landing pages, app/product screens, platform surfaces, and OS widget surfaces are exported as distinct HTML files with matching handoff/manifest guidance instead of being merged into one long artifact.
+
 ## [0.6.0] - 2026-05-09
 
 A connectivity-and-iteration release: Open Design becomes a fully bidirectional MCP citizen (external MCP client with 39 templates), ships **Cloudflare Pages deployment** for generated artifacts (with custom domains), advances Critique Theater to **Phase 6** (interrupt + project-keyed run registry), and lands a redesigned top bar, draggable file tabs, batch delete, **vector PDF export**, **agent-callable research/search**, and **Orbit activity summaries**. Hyperframes learns the HTML-in-Canvas API. New BYOK provider (Ollama Cloud), new agent capabilities (Gemini 3 preview + GPT-5.1 codex picker + DeepSeek v4), new design systems (BMW M, Slack, Cisco, Webex, Mission Control, Urdu Modern), eight new skill bundles, and Turkish + Thai locales. 136 merged PRs since 0.5.0.

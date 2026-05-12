@@ -19,6 +19,7 @@ function createPackagedConfig(config: ToolPackConfig, packagedVersion: string): 
   return {
     appVersion: packagedVersion,
     namespace: config.namespace,
+    ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
     webOutputMode: config.webOutputMode,
     ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
   };

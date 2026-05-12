@@ -322,6 +322,15 @@ async function consumeDaemonRun({
   let exitCode: number | null = null;
   let exitSignal: string | null = null;
   let endStatus: ChatRunStatus | null = null;
+  // Tracks whether the server explicitly declared `status: 'succeeded'` in
+  // the SSE end payload (or via the fallback run-status fetch). Distinct
+  // from `endStatus === 'succeeded'`, which can be a local fallback when
+  // the SSE end event omits or sends an invalid `status` field. Only the
+  // explicit declaration is allowed to bypass the exit-code/signal safety
+  // net below — a missing-status fallback keeps the old behavior so a
+  // failure response with `{code:1}` or `{code:null,signal:"SIGTERM"}` and
+  // no `status` field still surfaces an error banner.
+  let serverDeclaredSuccess = false;
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
   const cancelRun = () => {
@@ -430,6 +439,11 @@ async function consumeDaemonRun({
           if (event.event === 'end') {
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
+            // `serverDeclaredSuccess` records whether the server explicitly
+            // set `status: 'succeeded'` in the end payload — the local
+            // `'succeeded'` fallback below does not count and must keep
+            // hitting the exit-code/signal safety net later.
+            serverDeclaredSuccess = event.data.status === 'succeeded';
             endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
             onRunStatus?.(endStatus);
           }
@@ -444,6 +458,11 @@ async function consumeDaemonRun({
         endStatus = status.status;
         exitCode = status.exitCode ?? null;
         exitSignal = status.signal ?? null;
+        // Fallback REST path: `status.status` is explicitly declared by the
+        // daemon's run record (it passed `isChatRunStatus()` above), so an
+        // explicit `'succeeded'` here is just as authoritative as the SSE
+        // end-event success.
+        serverDeclaredSuccess = status.status === 'succeeded';
         onRunStatus?.(endStatus);
       } else {
         handlers.onError(new Error('daemon stream disconnected before run completed'));
@@ -453,7 +472,24 @@ async function consumeDaemonRun({
 
     if (endStatus === 'canceled') return;
 
-    if (endStatus === 'failed' || exitSignal || (exitCode !== null && exitCode !== 0)) {
+    // Trust the server's authoritative success declaration. When the server
+    // explicitly sets `status: 'succeeded'` (either in the SSE end payload
+    // or via the fallback run-status fetch), the run completed cleanly even
+    // if the underlying process exited via a signal — some agents (e.g.
+    // ACP agents like Devin for Terminal) intentionally exit via SIGTERM
+    // after a clean prompt completion because they don't shut down on
+    // `stdin.end()`. The signal/non-zero-code safety net is bypassed only
+    // for that explicit declaration; a missing/invalid `status` from a
+    // compatible or older daemon still falls back to `endStatus =
+    // 'succeeded'` for the run-status surface but must keep the safety net
+    // intact so a real failure response like `{code:1}` or
+    // `{code:null,signal:"SIGTERM"}` without `status` still surfaces an
+    // error banner.
+    const looksLikeFailure =
+      endStatus === 'failed' ||
+      (!serverDeclaredSuccess &&
+        (exitSignal || (exitCode !== null && exitCode !== 0)));
+    if (looksLikeFailure) {
       const tail = stderrBuf.trim().slice(-400);
       handlers.onError(
         new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
