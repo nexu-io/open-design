@@ -216,7 +216,7 @@ The orchestrator emits a `degraded` event when one of these happens:
 
 | Reason | Cause | Remediation |
 |---|---|---|
-| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Check the adapter's conformance status (`/api/metrics/critique`). |
+| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Re-run the conformance harness locally (`pnpm --filter @open-design/daemon vitest run tests/critique-conformance.test.ts`) to confirm the adapter's transcript shape; once Phase 12 lands the dashboard surfaces this status as a series, but until then the harness is the authoritative source. |
 | `oversize_block` | The block exceeded `parserMaxBlockBytes`. | Usually a runaway model; retry once or raise the budget. |
 | `adapter_unsupported` | The adapter is marked `critique:degraded` for the 24h TTL window. | Wait for the TTL or run `od adapters clear-degraded <id>`. |
 | `protocol_version_mismatch` | The adapter is on an older protocol. | Update the adapter or pin protocol negotiation. |

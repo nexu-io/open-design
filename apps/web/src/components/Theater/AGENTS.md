@@ -23,7 +23,8 @@ without code churn.
 | `TheaterDegraded.tsx` | Single chip surface for runs the orchestrator could not score. `useId()` for the heading id so multiple chips on one page do not collide. |
 | `TheaterCollapsed.tsx` | Post-run summary: shipped, interrupted, failed. The interrupted branch uses `interruptedSummary`, not `shippedSummary`. |
 | `TheaterTranscript.tsx` | Read-only replay surface bound to `useCritiqueReplay`. |
-| `index.ts` | Public barrel. Only the mount + the four surface components + the two hooks are exported; everything else stays internal. |
+| `hooks/useCritiqueTheaterEnabled.ts` | Reads the Settings toggle from `open-design:config` localStorage and stays in sync with cross-tab `storage` events plus the same-tab `open-design:critique-theater-toggle` CustomEvent. Pairs with the `setCritiqueTheaterEnabled` setter so a Settings save reflects in every mounted hook without a reload. |
+| `index.ts` | Public barrel. Exports the mount, the four surface components plus the `InterruptButton`, the three hooks (`useCritiqueStream`, `useCritiqueReplay`, `useCritiqueTheaterEnabled`), the imperative setter (`setCritiqueTheaterEnabled`), and the reducer-derived contract types. Everything else stays internal. |
 
 ## Invariants
 
