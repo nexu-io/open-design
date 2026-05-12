@@ -3832,12 +3832,17 @@ code {
   transition: none;
 }
 .newproj-tab:focus,
-.newproj-tab:focus-visible,
 .newproj-tab:active {
   background: transparent;
   border-color: transparent;
   outline: none;
   color: var(--text-muted);
+}
+.newproj-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--selected);
+  border-radius: 8px 8px 0 0;
+  color: var(--text);
 }
 .newproj-tab:hover:not(:disabled) {
   background: transparent;
@@ -4954,13 +4959,18 @@ code {
   transition: none;
 }
 .entry-tab:focus,
-.entry-tab:focus-visible,
 .entry-tab:active {
   background: transparent;
   border-color: transparent;
   border-bottom-color: transparent;
   outline: none;
   color: var(--text-muted);
+}
+.entry-tab:focus-visible {
+  outline: 2px solid var(--selected);
+  outline-offset: 2px;
+  border-radius: 4px;
+  color: var(--text);
 }
 .entry-tab:hover:not(:disabled) {
   background: transparent;
