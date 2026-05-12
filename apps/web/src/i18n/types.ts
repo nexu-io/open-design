@@ -60,6 +60,7 @@ export interface Dict {
   'common.minutesAgo': string;
   'common.hoursAgo': string;
   'common.daysAgo': string;
+  'common.weeksAgo': string;
   'common.now': string;
   'common.minutesShort': string;
   'common.hoursShort': string;
@@ -920,6 +921,20 @@ export interface Dict {
   'chat.comments.updateSend': string;
   'chat.comments.removeAttachment': string;
   'chat.comments.removeAttachmentAria': string;
+  'chat.comments.comment': string;
+  'chat.comments.sendToChat': string;
+  'chat.comments.sending': string;
+  'chat.comments.edit': string;
+  'chat.comments.select': string;
+  'chat.comments.deselect': string;
+  'chat.comments.nSelected': string;
+  'chat.comments.pin': string;
+  'chat.comments.addNote': string;
+  'chat.comments.savedToast': string;
+  'chat.comments.pinSavedToast': string;
+  'chat.comments.pinAtCoords': string;
+  'chat.comments.capturedItems': string;
+  'chat.comments.clear': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
