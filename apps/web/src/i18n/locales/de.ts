@@ -946,6 +946,7 @@ export const de: Dict = {
   'critiqueTheater.replaySpeed': 'Wiedergabegeschwindigkeit',
   'critiqueTheater.readOnly': 'Nur lesen',
   'critiqueTheater.shippedSummary': 'In Runde {round} freigegeben · Gesamtscore {composite}',
+  'critiqueTheater.interruptedSummary': 'In Runde {round} abgebrochen · bester Gesamtscore {composite}',
   'critiqueTheater.shippedBadge': 'Freigegeben',
   'critiqueTheater.belowThresholdBadge': 'Unter der Schwelle',
   'critiqueTheater.timedOutBadge': 'Zeitüberschreitung',

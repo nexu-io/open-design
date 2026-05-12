@@ -1132,6 +1132,7 @@ export const zhTW: Dict = {
   'critiqueTheater.replaySpeed': '回放速度',
   'critiqueTheater.readOnly': '唯讀',
   'critiqueTheater.shippedSummary': '已於第 {round} 輪發布 · 綜合分 {composite}',
+  'critiqueTheater.interruptedSummary': '已於第 {round} 輪中斷 · 最佳綜合分 {composite}',
   'critiqueTheater.shippedBadge': '已發布',
   'critiqueTheater.belowThresholdBadge': '低於門檻',
   'critiqueTheater.timedOutBadge': '已逾時',

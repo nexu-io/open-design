@@ -945,6 +945,7 @@ export const ja: Dict = {
   'critiqueTheater.replaySpeed': 'リプレイ速度',
   'critiqueTheater.readOnly': '読み取り専用',
   'critiqueTheater.shippedSummary': 'ラウンド {round} で出荷 · 総合 {composite}',
+  'critiqueTheater.interruptedSummary': 'ラウンド {round} で中断 · 最高総合 {composite}',
   'critiqueTheater.shippedBadge': '出荷済み',
   'critiqueTheater.belowThresholdBadge': 'しきい値未達',
   'critiqueTheater.timedOutBadge': 'タイムアウト',

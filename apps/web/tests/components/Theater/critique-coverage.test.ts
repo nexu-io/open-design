@@ -148,7 +148,15 @@ function readCorpus(files: string[]): string {
 }
 
 const SRC_FILES = SRC_ROOTS.flatMap(walk);
-const TEST_FILES = TEST_ROOTS.flatMap(walk);
+// Siri-Ray + lefarcen P2 on PR #1318: the walker walks apps/web/tests,
+// which contains this very file. The hand-maintained PHASE_STRINGS and
+// I18N_KEYS literals declared here would otherwise satisfy the
+// test-side coverage assertion against themselves, so deleting a real
+// Theater test that exercises a symbol would still leave the gate
+// green. Exclude the walker file from TEST_FILES so the test corpus
+// only contains independent evidence.
+const SELF_PATH = path.resolve(__filename);
+const TEST_FILES = TEST_ROOTS.flatMap(walk).filter((f) => path.resolve(f) !== SELF_PATH);
 const SRC_CORPUS = readCorpus(SRC_FILES);
 const TEST_CORPUS = readCorpus(TEST_FILES);
 
