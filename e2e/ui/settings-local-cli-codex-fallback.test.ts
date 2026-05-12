@@ -150,6 +150,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
       },
     });
 
+    await dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i).fill(configuredPath);
     await dialog.getByRole('button', { name: 'Test' }).click();
 
     const status = dialog.locator('.settings-test-status');
@@ -162,6 +163,11 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     expect(lastRequest).toMatchObject({
       mode: 'agent',
       agentId: 'codex',
+      agentCliEnv: {
+        codex: {
+          CODEX_BIN: configuredPath,
+        },
+      },
     });
 
     await dialog.getByRole('button', { name: 'Use detected Codex' }).click();

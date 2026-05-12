@@ -145,6 +145,9 @@ test.describe('examples preview core flows', () => {
     ]);
     await page.route('**/api/skills/html-ppt/example', async (route) => {
       attempt += 1;
+      // The card fetches once while rendering, then opening the modal triggers
+      // the second request. The first manual Retry should therefore become the
+      // third request, which is where we flip the fixture to success.
       if (attempt <= 2) {
         await route.fulfill({ status: 404, body: 'not found' });
         return;

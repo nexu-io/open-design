@@ -86,16 +86,18 @@ async function openConnectorsSettings(
       },
     }),
     pendingAuthorization = null,
+    blockPopup = false,
   }: {
     connectors?: typeof CONNECTORS;
     onPrepare?: () => Record<string, unknown>;
     onConnect?: () => { status: number; body: Record<string, unknown> };
     onCancel?: () => { status: number; body: Record<string, unknown> };
     pendingAuthorization?: Record<string, unknown> | null;
+    blockPopup?: boolean;
   } = {},
 ) {
   await page.addInitScript(
-    ({ key, value, pendingAuthorization }) => {
+    ({ key, value, pendingAuthorization, blockPopup }) => {
       window.localStorage.setItem(key, JSON.stringify(value));
       if (pendingAuthorization) {
         window.sessionStorage.setItem(
@@ -103,13 +105,15 @@ async function openConnectorsSettings(
           JSON.stringify(pendingAuthorization),
         );
       }
-      window.open = ((() => ({
-        document: { title: '', body: { innerHTML: '' } },
-        location: { replace() {} },
-        close() {},
-      })) as unknown) as typeof window.open;
+      window.open = (blockPopup
+        ? (() => null)
+        : (() => ({
+            document: { title: '', body: { innerHTML: '' } },
+            location: { replace() {} },
+            close() {},
+          }))) as unknown as typeof window.open;
     },
-    { key: STORAGE_KEY, value: baseConfig(), pendingAuthorization },
+    { key: STORAGE_KEY, value: baseConfig(), pendingAuthorization, blockPopup },
   );
 
   await page.route('**/api/health', async (route) => {
@@ -205,7 +209,39 @@ async function openConnectorsSettings(
 }
 
 test.describe('Settings connectors auth recovery', () => {
-test('keeps a pending authorization visible when the connector enters authorization-pending state', async ({ page }) => {
+test('clears pending authorization when OAuth launch is blocked after redirect_required', async ({ page }) => {
+    const dialog = await openConnectorsSettings(page, {
+      blockPopup: true,
+      onConnect: () => ({
+        status: 200,
+        body: {
+          connector: {
+            ...CONNECTORS[0],
+            status: 'available',
+          },
+          auth: {
+            kind: 'redirect_required',
+            redirectUrl: 'https://example.com/oauth/start',
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          },
+        },
+      }),
+    });
+
+    const githubCard = connectorCard(dialog, 'github');
+    await githubCard.getByRole('button', { name: 'Connect' }).click();
+    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+    await expect(githubCard.getByRole('alert')).toContainText(
+      'Popup blocked. Allow popups for Open Design and try again.',
+    );
+    await expect
+      .poll(async () =>
+        page.evaluate(() => window.sessionStorage.getItem('od-connectors-authorization-pending')),
+      )
+      .toBe(null);
+  });
+
+  test('keeps a pending authorization visible when the connector enters authorization-pending state', async ({ page }) => {
     const dialog = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
     });
