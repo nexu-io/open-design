@@ -39,12 +39,15 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^28.0.1",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "jsdom": "29.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   },

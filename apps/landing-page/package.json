@@ -7,6 +7,7 @@
     "dev": "astro dev --host 127.0.0.1 --port 17574",
     "build": "astro check && astro build",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
+    "previews": "tsx scripts/generate-previews.ts",
     "typecheck": "astro check"
   },
   "dependencies": {
@@ -20,6 +21,8 @@
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "playwright": "^1.59.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.6.3"
   },
   "engines": {

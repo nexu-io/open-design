@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CritiqueTheaterMount } from '../../../src/components/Theater/CritiqueTheaterMount';
@@ -227,5 +227,62 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     });
     const btn = screen.getByRole('button', { name: 'Interrupt' }) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
+  });
+
+  it('synthesizes interrupted with the round paired to the composite (PerishCode P3 on PR #1315)', async () => {
+    // Previously bestRoundOf returned the LAST round that had a composite,
+    // and bestCompositeOf returned the MAX composite. With non-monotonic
+    // composites (round 1 closes at 8.5, round 2 closes at 6.0) the two
+    // helpers disagreed: the synthesized interrupted action shipped
+    // bestRound: 2 paired with composite: 8.5 -- a pair that never
+    // existed. Folded into a single bestRoundAndComposite helper so the
+    // round and the score it advertises always refer to the same round.
+    const { factory, handles } = makeFactory();
+    render(
+      <CritiqueTheaterMount
+        projectId="proj-1"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={vi.fn(async () => new Response(null, { status: 204 }))}
+      />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-multi',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+      handles[0]!.send({
+        type: 'round_end',
+        runId: 'run-multi',
+        round: 1,
+        composite: 8.5,
+        mustFix: 0,
+        decision: 'continue',
+        reason: 'borderline',
+      });
+      handles[0]!.send({
+        type: 'round_end',
+        runId: 'run-multi',
+        round: 2,
+        composite: 6.0,
+        mustFix: 1,
+        decision: 'continue',
+        reason: 'regression',
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    await waitFor(() => {
+      expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    });
+    // The collapsed surface should advertise round 1 / composite 8.5
+    // (the round with the highest composite), not round 2 / 8.5
+    // (the buggy split-helper pair that crosses two rounds).
+    expect(screen.getByText(/Interrupted at round 1/)).toBeTruthy();
+    expect(screen.queryByText(/Interrupted at round 2/)).toBeNull();
   });
 });

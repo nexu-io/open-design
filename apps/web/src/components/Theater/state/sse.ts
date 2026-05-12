@@ -33,33 +33,92 @@ export function critiqueEventsUrl(projectId: string): string {
 
 /**
  * Lift an SSE-wire `CritiqueSseEvent` back into the flat `PanelEvent` shape
- * the reducer consumes. Inverse of `panelEventToSse` in the contracts
- * package: the daemon emits one channel per event name with the payload
- * (sans `type`) as JSON.
+ * the reducer consumes. The daemon emits one channel per event name with
+ * the payload (sans `type`) as JSON; this is the inverse of
+ * `panelEventToSse` in the contracts package.
  *
- * The function does only two things:
+ * Two defensive moves matter here:
  *
- *   1. Derive `type` from the channel name and pin it last so a payload
- *      `type` field cannot override the channel (a malformed or hostile
- *      frame on `critique.run_started` carrying `type: 'ship'` must not be
- *      routed as a ship action).
- *   2. Run the contract-level strict `isPanelEvent` guard on the merged
- *      object. That guard owns the full validation surface (variant
- *      fields, closed-enum membership, finite numerics) so a frame that
- *      passes here is safe for the reducer and every downstream component
- *      that indexes badge / role / reason tables by enum value.
+ *   1. The SSE channel name is authoritative for `type`. A payload-provided
+ *      `type` (malformed or compromised frame) must NOT override the
+ *      channel-derived value, so we spread `data` first and pin `type`
+ *      last. Otherwise a daemon bug or a man-in-the-middle could route a
+ *      `critique.run_started` channel into a `ship` action shape.
+ *
+ *   2. The result has to pass `isPanelEvent` before it leaves this
+ *      function. That predicate is the contract-level source of truth for
+ *      "this is a recognised event with a non-empty runId"; if the cast
+ *      fails (missing runId, unknown type), we drop the frame and the
+ *      reducer never sees it.
  */
+/** Per-variant required-fields validator. `isPanelEvent` from contracts only
+ *  checks `type` is known and `runId` is non-empty, so a frame like
+ *  `{ type: 'ship', runId: 'r' }` would slip through to the reducer with every
+ *  other field undefined and crash downstream code that calls
+ *  `final.composite.toFixed(1)`. This second-pass filter enforces the shape
+ *  of each variant before the action is dispatched (lefarcen + Siri-Ray +
+ *  codex P2 on PR #1314). */
+function hasValidVariantShape(event: PanelEvent): boolean {
+  switch (event.type) {
+    case 'run_started':
+      return typeof event.protocolVersion === 'number'
+        && Array.isArray(event.cast) && event.cast.length > 0
+        && event.cast.every((r) => typeof r === 'string')
+        && typeof event.maxRounds === 'number'
+        && typeof event.threshold === 'number'
+        && typeof event.scale === 'number';
+    case 'panelist_open':
+      return typeof event.round === 'number' && typeof event.role === 'string';
+    case 'panelist_dim':
+      return typeof event.round === 'number'
+        && typeof event.role === 'string'
+        && typeof event.dimName === 'string'
+        && typeof event.dimScore === 'number'
+        && typeof event.dimNote === 'string';
+    case 'panelist_must_fix':
+      return typeof event.round === 'number'
+        && typeof event.role === 'string'
+        && typeof event.text === 'string';
+    case 'panelist_close':
+      return typeof event.round === 'number'
+        && typeof event.role === 'string'
+        && typeof event.score === 'number';
+    case 'round_end':
+      return typeof event.round === 'number'
+        && typeof event.composite === 'number'
+        && typeof event.mustFix === 'number'
+        && (event.decision === 'continue' || event.decision === 'ship')
+        && typeof event.reason === 'string';
+    case 'ship':
+      return typeof event.round === 'number'
+        && typeof event.composite === 'number'
+        && typeof event.status === 'string'
+        && event.artifactRef !== null
+        && typeof event.artifactRef === 'object'
+        && typeof (event.artifactRef as { projectId?: unknown }).projectId === 'string'
+        && typeof (event.artifactRef as { artifactId?: unknown }).artifactId === 'string'
+        && typeof event.summary === 'string';
+    case 'degraded':
+      return typeof event.reason === 'string' && typeof event.adapter === 'string';
+    case 'interrupted':
+      return typeof event.bestRound === 'number' && typeof event.composite === 'number';
+    case 'failed':
+      return typeof event.cause === 'string';
+    case 'parser_warning':
+      return typeof event.kind === 'string' && typeof event.position === 'number';
+  }
+}
+
 export function sseToPanelEvent(eventName: CritiqueSseEventName, data: unknown): PanelEvent | null {
   if (data === null || typeof data !== 'object') return null;
   const type = eventName.slice('critique.'.length);
-  // Channel name is authoritative for `type`; spread payload first then pin
-  // `type` last so a hostile or malformed frame cannot route a `ship`
-  // payload through the `run_started` channel.
   const candidate = { ...(data as Record<string, unknown>), type };
-  // `isPanelEvent` is the contract-level strict guard (Siri-Ray round-3 P1
-  // on PR #1314): header + every variant-specific field + closed-enum
-  // membership + finite numerics, in one pass.
-  return isPanelEvent(candidate) ? candidate : null;
+  if (!isPanelEvent(candidate)) return null;
+  // Variant-level guard: a frame that passes the cheap predicate but
+  // is missing variant-specific fields would otherwise reach the
+  // reducer and crash the UI on `undefined.toFixed()` / `undefined.cast`
+  // (lefarcen + Siri-Ray + codex P2 on PR #1314).
+  return hasValidVariantShape(candidate) ? candidate : null;
 }
 
 /**

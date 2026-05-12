@@ -14,7 +14,7 @@
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-pr": "pnpm exec tools-pr",
-    "guard": "tsx ./scripts/guard.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
     "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",

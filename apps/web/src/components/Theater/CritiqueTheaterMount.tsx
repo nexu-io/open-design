@@ -95,11 +95,12 @@ export function CritiqueTheaterMount({
       }
     });
 
+    const { round, composite } = bestRoundAndComposite(state);
     dispatch({
       type: 'interrupted',
       runId: state.runId,
-      bestRound: bestRoundOf(state),
-      composite: bestCompositeOf(state),
+      bestRound: round,
+      composite,
     });
   }, [interruptPending, state, dispatch, projectId, fetchInterrupt]);
 
@@ -115,18 +116,28 @@ export function CritiqueTheaterMount({
   );
 }
 
-function bestRoundOf(state: Extract<CritiqueState, { phase: 'running' }>): number {
-  let best = 0;
+/**
+ * Single-pass helper returning the round number paired to the highest
+ * composite seen so far. The earlier split (`bestRoundOf` walked rounds
+ * top-down and stamped the round of the LAST closed entry; `bestCompositeOf`
+ * found the MAX composite) could disagree on non-monotonic runs: round 1
+ * at 8.5 followed by round 2 at 6.0 shipped `bestRound: 2, composite: 8.5`,
+ * a pair that never existed (PerishCode P3 on PR #1315). Falls back to
+ * `(activeRound, 0)` when no round has closed with a numeric composite,
+ * which is the typical state when the user interrupts before the first
+ * `round_end` event.
+ */
+function bestRoundAndComposite(
+  state: Extract<CritiqueState, { phase: 'running' }>,
+): { round: number; composite: number } {
+  let bestRound = 0;
+  let bestComposite = -Infinity;
   for (const r of state.rounds) {
-    if (typeof r.composite === 'number') best = r.n;
+    if (typeof r.composite === 'number' && r.composite > bestComposite) {
+      bestComposite = r.composite;
+      bestRound = r.n;
+    }
   }
-  return best || state.activeRound;
-}
-
-function bestCompositeOf(state: Extract<CritiqueState, { phase: 'running' }>): number {
-  let best = 0;
-  for (const r of state.rounds) {
-    if (typeof r.composite === 'number' && r.composite > best) best = r.composite;
-  }
-  return best;
+  if (bestRound === 0) return { round: state.activeRound, composite: 0 };
+  return { round: bestRound, composite: bestComposite };
 }
