@@ -1,0 +1,42 @@
+---
+/*
+ * Shared skill row used on `/skills/`, `/skills/mode/<slug>/`,
+ * `/skills/scenario/<slug>/`, and any future faceted view.
+ *
+ * Renders a `<li class="catalog-row catalog-row-skill">` with the
+ * canonical 5-column grid (index, thumb, body, meta, arrow). Centralizes
+ * the markup so all faceted views stay visually identical to the
+ * unfiltered index.
+ */
+import type { SkillRecord } from '../_lib/catalog';
+
+export interface Props {
+  skill: SkillRecord;
+  index: number;
+}
+
+const { skill, index } = Astro.props;
+---
+
+<li class="catalog-row catalog-row-skill">
+  <a href={`/skills/${skill.slug}/`}>
+    <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
+    <span class="row-thumb">
+      {skill.previewUrl ? (
+        <img src={skill.previewUrl} alt="" loading="lazy" decoding="async" />
+      ) : (
+        <span class="row-thumb-empty" aria-hidden="true" />
+      )}
+    </span>
+    <span class="row-body">
+      <span class="row-name">{skill.name}</span>
+      <span class="row-desc">{skill.description}</span>
+    </span>
+    <span class="row-meta">
+      {skill.mode && <span class="meta-tag">{skill.mode}</span>}
+      {skill.scenario && <span class="meta-tag muted">{skill.scenario}</span>}
+      {skill.platform && <span class="meta-tag muted">{skill.platform}</span>}
+    </span>
+    <span class="row-arrow" aria-hidden="true">→</span>
+  </a>
+</li>

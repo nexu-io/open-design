@@ -1,4 +1,108 @@
+@layer theme, base, utilities;
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Open Design Tailwind token vocabulary.
+   Colors intentionally clear Tailwind's default palette and expose only
+   project-approved tokens backed by the runtime CSS variables below. Use
+   native Tailwind utilities for spacing and standard type sizes; use the
+   `text-ui-*` aliases only when matching existing compact UI text exactly.
+
+   Examples:
+   - `bg-panel text-text border border-border rounded-card shadow-token-sm`
+   - `bg-accent text-accent-foreground hover:bg-accent-hover`
+   - `bg-selection-overlay border-selection-outline ring-selection-outline`
+
+   The local base-layer border reset below keeps examples like
+   `border border-border` rendering solid borders while Preflight is omitted. */
+@theme {
+  --color-*: initial;
+
+  /* Surfaces */
+  --color-bg: var(--bg);
+  --color-app: var(--bg-app);
+  --color-panel: var(--bg-panel);
+  --color-subtle: var(--bg-subtle);
+  --color-muted-surface: var(--bg-muted);
+  --color-elevated: var(--bg-elevated);
+
+  /* Borders */
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-soft: var(--border-soft);
+
+  /* Text */
+  --color-text: var(--text);
+  --color-strong: var(--text-strong);
+  --color-muted: var(--text-muted);
+  --color-soft: var(--text-soft);
+  --color-faint: var(--text-faint);
+
+  /* Accent */
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-foreground: var(--accent-foreground);
+
+  /* Semantic status */
+  --color-success: var(--green);
+  --color-success-surface: var(--green-bg);
+  --color-success-border: var(--green-border);
+  --color-info: var(--blue);
+  --color-info-surface: var(--blue-bg);
+  --color-info-border: var(--blue-border);
+  --color-discovery: var(--purple);
+  --color-discovery-surface: var(--purple-bg);
+  --color-discovery-border: var(--purple-border);
+  --color-danger: var(--red);
+  --color-danger-surface: var(--red-bg);
+  --color-danger-border: var(--red-border);
+  --color-danger-foreground: var(--bg-panel);
+  --color-warning: var(--amber);
+  --color-warning-surface: var(--amber-bg);
+  --color-warning-border: var(--warning-border);
+
+  /* Interaction and overlays */
+  --color-focus: var(--accent);
+  --color-focus-ring: var(--accent-soft);
+  --color-overlay: var(--overlay);
+  --color-selection-overlay: var(--selection-overlay);
+  --color-selection-outline: var(--selection-outline);
+  --color-inspect-overlay: var(--inspect-overlay);
+  --color-control-hover: var(--bg-subtle);
+  --color-control-active: var(--bg-muted);
+
+  /* Radius */
+  --radius-control: var(--radius-sm);
+  --radius-card: var(--radius);
+  --radius-panel: var(--radius-lg);
+  --radius-token-pill: var(--radius-pill);
+
+  /* Shadows */
+  --shadow-token-xs: var(--shadow-xs);
+  --shadow-token-sm: var(--shadow-sm);
+  --shadow-token-md: var(--shadow-md);
+  --shadow-token-lg: var(--shadow-lg);
+
+  /* Fonts */
+  --font-sans: var(--sans);
+  --font-serif: var(--serif);
+  --font-mono: var(--mono);
+
+  /* Exact existing UI type sizes */
+  --text-ui-9: 9px;
+  --text-ui-10: 10px;
+  --text-ui-10_5: 10.5px;
+  --text-ui-11: 11px;
+  --text-ui-11_5: 11.5px;
+  --text-ui-12_5: 12.5px;
+  --text-ui-13: 13px;
+  --text-ui-13_5: 13.5px;
+}
 
 /* ============================================================
    Open Design — neutral product workspace
@@ -29,6 +133,8 @@
   --accent-soft: #f5d8cb;
   --accent-tint: #fbeee5;
   --accent-hover: #b45a3b;
+  --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-foreground: #fff;
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #1f7a3a;
@@ -45,6 +151,12 @@
   --red-border: #f5c6c2;
   --amber: #b26200;
   --amber-bg: #fff3e0;
+  --warning-border: color-mix(in srgb, var(--amber) 35%, transparent);
+
+  --overlay: rgba(28, 27, 26, 0.42);
+  --selection-overlay: rgba(22, 119, 255, 0.18);
+  --selection-outline: rgba(22, 119, 255, 0.55);
+  --inspect-overlay: rgba(37, 99, 235, 0.12);
 
   --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
   --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
@@ -162,6 +274,20 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Tailwind foundation policy: Preflight stays out of this slice. Retained
+   element/reset rules that may conflict with migrated utilities must live in
+   @layer base, be constrained to non-migrated scopes, or be removed before the
+   affected elements migrate. */
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    border: 0 solid;
   }
 }
 
@@ -11175,11 +11301,15 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 .present-exit {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 20px);
+  right: calc(env(safe-area-inset-right, 0px) + 20px);
   z-index: 1001;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   font-size: 12px;
+  line-height: 1;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -18243,7 +18373,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   top: 0;
   background: var(--bg-panel);
   padding: 8px 10px 4px;
+  min-height: 32px;
   z-index: 1;
+  border-bottom: 1px solid var(--border);
 }
 
 .palette-tweaks-anchor { position: relative; display: inline-flex; }

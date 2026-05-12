@@ -3,23 +3,53 @@
  * hide/show and the live GitHub star count are attached by the tiny inline
  * script in `app/pages/index.astro`, so this marketing page ships no React
  * runtime to the browser.
+ *
+ * The nav links go to internal multi-page routes (`/skills/`, `/systems/`,
+ * `/templates/`, `/craft/`) so Google sees a real site hierarchy. Numbers
+ * reflect the live counts of the canonical Markdown bundles in the repo
+ * root and are kept in sync with `getCatalogCounts()` at build time.
  */
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
-const REPO_SKILLS = `${REPO}/tree/main/skills`;
-const REPO_DESIGN_SYSTEMS = `${REPO}/tree/main/design-systems`;
 
 const ext = {
   target: '_blank',
   rel: 'noreferrer noopener',
 } as const;
 
-export function Header() {
+export interface HeaderProps {
+  /** Nav highlight target. `'home'` is the default for `/`. */
+  active?: 'home' | 'skills' | 'systems' | 'templates' | 'craft';
+  /**
+   * Live counts from the Markdown catalogs. Required so we can never
+   * silently render stale fallback numbers when a caller forgets to
+   * thread `getCatalogCounts()` through. Header only consumes these
+   * four scalar fields; the homepage passes the wider `CatalogCounts`
+   * value (with `byMode` / `byPlatform`) by structural subtyping.
+   */
+  counts: {
+    skills: number;
+    systems: number;
+    templates: number;
+    craft: number;
+  };
+  /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
+  brandHref?: string;
+}
+
+export function Header({
+  active = 'home',
+  counts,
+  brandHref = '#top',
+}: HeaderProps) {
+  const linkClass = (key: NonNullable<HeaderProps['active']>) =>
+    active === key ? 'is-active' : undefined;
+
   return (
     <header className='nav' data-od-id='nav' data-nav-headroom>
       <div className='container nav-inner'>
-        <a href='#top' className='brand'>
+        <a href={brandHref} className='brand'>
           <span className='brand-mark'>Ø</span>
           <span>Open Design</span>
           <span className='brand-meta'>
@@ -29,27 +59,29 @@ export function Header() {
         <nav>
           <ul className='nav-links'>
             <li>
-              <a href={REPO_SKILLS} {...ext}>
-                Skills<span className='num'>31</span>
+              <a href='/skills/' className={linkClass('skills')}>
+                Skills<span className='num'>{counts.skills}</span>
               </a>
             </li>
             <li>
-              <a href={REPO_DESIGN_SYSTEMS} {...ext}>
-                Systems<span className='num'>72</span>
+              <a href='/systems/' className={linkClass('systems')}>
+                Systems<span className='num'>{counts.systems}</span>
               </a>
             </li>
             <li>
-              <a href='#agents'>
-                Agents<span className='num'>12</span>
+              <a href='/templates/' className={linkClass('templates')}>
+                Templates<span className='num'>{counts.templates}</span>
               </a>
             </li>
             <li>
-              <a href='#labs'>
-                Labs<span className='num'>05</span>
+              <a href='/craft/' className={linkClass('craft')}>
+                Craft<span className='num'>{counts.craft}</span>
               </a>
             </li>
             <li>
-              <a href='#contact'>Contact</a>
+              <a href={brandHref === '#top' ? '#contact' : '/#contact'}>
+                Contact
+              </a>
             </li>
           </ul>
         </nav>
