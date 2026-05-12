@@ -3502,107 +3502,60 @@ code {
 .field-row { display: flex; gap: 6px; align-items: stretch; }
 .field-row input { flex: 1; }
 .field-row .icon-btn { white-space: nowrap; padding: 6px 12px; }
-.settings-language-picker { position: relative; }
-.settings-language-button {
-  width: 100%;
+.settings-language-grid {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.settings-language-tile {
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 10px 12px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   text-align: left;
   box-shadow: none;
+  min-width: 0;
 }
-.settings-language-button:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-}
-.settings-language-button[aria-expanded="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.settings-language-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--bg-panel) 0%, var(--bg-subtle) 100%);
-  border: 1px solid var(--border);
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.settings-language-text,
-.settings-language-option > span:first-child {
+.settings-language-tile-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
-.settings-language-title,
-.settings-language-option-title {
+.settings-language-tile-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.settings-language-code,
-.settings-language-option-code {
+.settings-language-tile-code {
   font-size: 11px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
-.settings-language-menu {
-  position: fixed;
-  z-index: 1000;
-  max-width: calc(100vw - 24px);
-  /* 7 locales × ~58px + menu chrome (padding, gap, border) ≈ 428px;
-     --menu-available-h is set by JS to the distance between the trigger
-     and whichever viewport edge the menu opens toward, so the menu never
-     overflows the viewport regardless of placement direction. The 60vh
-     cap keeps the menu from feeling cramped on short viewports. */
-  max-height: min(428px, 60vh, var(--menu-available-h, 428px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.14);
-}
-.settings-language-option {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  text-align: left;
-  color: var(--text);
+.settings-language-tile:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
 }
 /* Differentiate hover, selected, and keyboard-focus states so the
    currently-selected language is visually distinct even when the
-   pointer is hovering a different row. Issue #628. */
-.settings-language-option:hover { background: var(--bg-subtle); }
-.settings-language-option.active {
+   pointer is hovering a different tile. Issue #628 (carries over from
+   the previous dropdown form). */
+.settings-language-tile.active {
   background: var(--accent-tint);
+  border-color: var(--accent);
   color: var(--accent);
   font-weight: 500;
 }
-.settings-language-option.active:hover { background: var(--accent-soft); }
-.settings-language-option:focus-visible {
+.settings-language-tile.active .settings-language-tile-title { color: var(--accent); }
+.settings-language-tile.active:hover { background: var(--accent-soft); }
+.settings-language-tile:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }

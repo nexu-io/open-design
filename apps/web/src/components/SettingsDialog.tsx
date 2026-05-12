@@ -648,7 +648,6 @@ export function SettingsDialog({
     };
   }, [initial.theme, initial.accentColor]);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [languageOpen, setLanguageOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   // Scroll the right-hand content pane back to the top whenever the user
   // picks a different settings section. Without this, switching from a
@@ -656,7 +655,6 @@ export function SettingsDialog({
   // (About) keeps the previous scrollTop, so the new section's header
   // can land out of view and the panel reads as half-loaded. Issue #634.
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
-  const [languageMenuRect, setLanguageMenuRect] = useState<DOMRect | null>(null);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
@@ -681,7 +679,6 @@ export function SettingsDialog({
   const [agentCustomModelIds, setAgentCustomModelIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const languageRef = useRef<HTMLDivElement | null>(null);
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
   // single Save button at the bottom instead of hunting for the inner one.
@@ -743,41 +740,6 @@ export function SettingsDialog({
       providerModelsAbortRef.current?.abort();
     };
   }, []);
-
-  useEffect(() => {
-    if (!languageOpen) return;
-    const updateRect = () => {
-      const button = languageRef.current?.querySelector('button');
-      setLanguageMenuRect(button?.getBoundingClientRect() ?? null);
-    };
-    updateRect();
-    function onDown(e: MouseEvent) {
-      if (languageRef.current?.contains(e.target as Node)) return;
-      setLanguageOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setLanguageOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', updateRect);
-    window.addEventListener('scroll', updateRect, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', updateRect);
-      window.removeEventListener('scroll', updateRect, true);
-    };
-  }, [languageOpen]);
-
-  // Close the language menu on window resize so its placement (computed on
-  // open) cannot end up stale relative to the new viewport dimensions.
-  useEffect(() => {
-    if (!languageOpen) return;
-    const handleResize = () => setLanguageOpen(false);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [languageOpen]);
 
   const installedCount = useMemo(
     () => agents.filter((a) => a.available).length,
@@ -1274,19 +1236,15 @@ export function SettingsDialog({
   }, [onPersist]);
 
   // Global Escape closes the dialog. With no footer button anymore the
-  // close affordances are: top-right X · backdrop click · Escape. We
-  // skip the handler when an inline popover (e.g. the language menu
-  // listbox) is open, because that menu owns its own Escape handling
-  // and closing the dialog out from under it would be jarring.
+  // close affordances are: top-right X · backdrop click · Escape.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
-      if (languageOpen) return;
       onClose();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, languageOpen]);
+  }, [onClose]);
 
   const protocolProviders = useMemo(
     () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
@@ -2392,73 +2350,30 @@ export function SettingsDialog({
                 <p className="hint">{t('settings.languageHint')}</p>
               </div>
             </div>
-            <div className="settings-language-picker" ref={languageRef}>
-              <button
-                type="button"
-                className="settings-language-button"
-                aria-haspopup="menu"
-                aria-expanded={languageOpen}
-                onClick={() => setLanguageOpen((v) => !v)}
-              >
-                <span className="settings-language-icon" aria-hidden="true">
-                  <Icon name="languages" size={22} strokeWidth={1.8} />
-                </span>
-                <span className="settings-language-text">
-                  <span className="settings-language-title">
-                    {LOCALE_LABEL[locale]}
-                  </span>
-                  <span className="settings-language-code">{locale}</span>
-                </span>
-                <Icon name="chevron-down" size={16} />
-              </button>
-              {languageOpen && languageMenuRect ? (() => {
-                const spaceBelow = window.innerHeight - languageMenuRect.bottom;
-                const spaceAbove = languageMenuRect.top;
-                // Prefer downward if at least 200px available (enough for ~5 options)
-                const openDownward = spaceBelow >= spaceAbove || spaceBelow >= 200;
+            <div className="settings-language-grid" role="radiogroup" aria-label={t('settings.language')}>
+              {LOCALES.map((code) => {
+                const active = locale === code;
                 return (
-                <div
-                  className="settings-language-menu"
-                  role="menu"
-                  style={{
-                    top: openDownward ? languageMenuRect.bottom + 6 : undefined,
-                    bottom: openDownward
-                      ? undefined
-                      : window.innerHeight - languageMenuRect.top + 6,
-                    left: languageMenuRect.left,
-                    width: languageMenuRect.width,
-                    '--menu-available-h': `${(openDownward ? spaceBelow : spaceAbove) - 6}px`,
-                  } as React.CSSProperties}
-                >
-                  {LOCALES.map((code) => {
-                    const active = locale === code;
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={active}
-                        className={`settings-language-option${active ? ' active' : ''}`}
-                        onClick={() => {
-                          setLocale(code as Locale);
-                          setLanguageOpen(false);
-                        }}
-                      >
-                        <span>
-                          <span className="settings-language-option-title">
-                            {LOCALE_LABEL[code]}
-                          </span>
-                          <span className="settings-language-option-code">
-                            {code}
-                          </span>
-                        </span>
-                        {active ? <Icon name="check" size={16} /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
+                  <button
+                    key={code}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`settings-language-tile${active ? ' active' : ''}`}
+                    onClick={() => setLocale(code as Locale)}
+                  >
+                    <span className="settings-language-tile-text">
+                      <span className="settings-language-tile-title">
+                        {LOCALE_LABEL[code]}
+                      </span>
+                      <span className="settings-language-tile-code">
+                        {code}
+                      </span>
+                    </span>
+                    {active ? <Icon name="check" size={16} /> : null}
+                  </button>
                 );
-              })() : null}
+              })}
             </div>
           </section>
           ) : null}
