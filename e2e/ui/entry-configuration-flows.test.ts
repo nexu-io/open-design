@@ -281,6 +281,58 @@ test('saving a Composio key from Settings unlocks the connectors gate immediatel
   });
 });
 
+test('typing a draft replacement Composio key does not trigger global autosave', async ({ page }) => {
+  await routeConnectors(page, CONNECTORS);
+  await routeComposioConfig(page, { configured: true, apiKeyTail: '1234' });
+  await page.addInitScript((key) => {
+    const next = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: 'mock',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: {},
+      composio: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+      },
+    };
+    window.localStorage.setItem(key, JSON.stringify(next));
+  }, STORAGE_KEY);
+
+  const appConfigPersistBodies: unknown[] = [];
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, json: { config: null } });
+      return;
+    }
+    appConfigPersistBodies.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByRole('button', { name: 'Configure execution mode' }).click();
+  const settingsDialog = page.getByRole('dialog');
+  await expect(settingsDialog).toBeVisible();
+  await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();
+  await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  await expect(settingsDialog.getByText('Saved · ••••1234')).toBeVisible();
+
+  const appConfigPersistCountBeforeDraftEdit = appConfigPersistBodies.length;
+
+  const replacementInput = settingsDialog.getByPlaceholder('Paste a new key to replace the saved one');
+  await replacementInput.fill('cmp-draft-secret-9999');
+  await expect(settingsDialog.getByRole('button', { name: 'Save key', exact: true })).toBeEnabled();
+
+  await page.waitForTimeout(900);
+  expect(appConfigPersistBodies).toHaveLength(appConfigPersistCountBeforeDraftEdit);
+  await expect(settingsDialog.locator('.settings-autosave')).not.toContainText(/Saving|All changes saved/);
+});
+
 async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
   await page.route('**/api/connectors', async (route) => {
     await route.fulfill({ json: { connectors } });

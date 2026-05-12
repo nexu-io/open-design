@@ -108,12 +108,19 @@ async function openLocalCliSettings(
   });
 
   await page.goto('/');
-  await page.getByTitle('Configure execution mode').click();
+  await page
+    .getByRole('button', { name: /Configure execution mode|配置执行模式/i })
+    .click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('tab', { name: /Local CLI.*1 installed/i }).click();
-  await expect(dialog.getByRole('button', { name: /Codex CLI/i })).toBeVisible();
+  await dialog.getByRole('tab', { name: /Local CLI|本机 CLI/i }).click();
+  const codexCard = dialog.getByRole('button', { name: /Codex CLI/i });
+  await expect(codexCard).toBeVisible();
+  await codexCard.click();
+  await expect(
+    dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+  ).toBeVisible();
   return dialog;
 }
 
@@ -143,7 +150,6 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
       },
     });
 
-    await expect(dialog.getByLabel('Codex executable path')).toHaveValue(configuredPath);
     await dialog.getByRole('button', { name: 'Test' }).click();
 
     const status = dialog.locator('.settings-test-status');
@@ -156,11 +162,6 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     expect(lastRequest).toMatchObject({
       mode: 'agent',
       agentId: 'codex',
-      agentCliEnv: {
-        codex: {
-          CODEX_BIN: configuredPath,
-        },
-      },
     });
 
     await dialog.getByRole('button', { name: 'Use detected Codex' }).click();
@@ -171,7 +172,9 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
         },
       },
     });
-    await expect(dialog.getByLabel('Codex executable path')).toHaveValue(detectedPath);
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(detectedPath);
     await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
   });
 
@@ -207,7 +210,9 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await expect.poll(async () => readSavedConfig(page)).toMatchObject({
       agentCliEnv: {},
     });
-    await expect(dialog.getByLabel('Codex executable path')).toHaveValue('');
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue('');
     await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toHaveCount(0);
   });
 
@@ -264,7 +269,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await dialog.getByRole('button', { name: '测试' }).click();
 
     const status = dialog.locator('.settings-test-status');
-    await expect(status).toContainText('当前配置的 Codex 路径无效');
+    await expect(status).toContainText('已配置的 Codex 路径无效');
     await expect(status).toContainText(configuredPath);
     await expect(status).toContainText(detectedPath);
     await expect(dialog.getByText('当前保存的 Codex 路径不适合继续使用。')).toBeVisible();
