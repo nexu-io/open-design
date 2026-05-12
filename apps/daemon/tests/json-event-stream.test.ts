@@ -397,3 +397,36 @@ test('unhandled structured events fall back to raw', () => {
 
   assert.deepEqual(events, [{ type: 'raw', line: '{"type":"unhandled.event","foo":"bar"}' }]);
 });
+test('codex json stream treats reconnect errors as status warnings not fatal (regression of #1471)', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'thread.started', thread_id: 'thr-1' }) + '\n' +
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({ type: 'error', message: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' }) + '\n' +
+    JSON.stringify({ type: 'item.completed', item: { id: 'item-0', type: 'agent_message', text: 'OK' } }) + '\n' +
+    JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 5, output_tokens: 2, cached_input_tokens: 0 } }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'running' },
+    { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+    { type: 'text_delta', delta: 'OK' },
+    { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
+  ]);
+});
+
+test('codex json stream still treats real errors as fatal after reconnect warnings', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'error', message: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' }) + '\n' +
+    JSON.stringify({ type: 'error', message: 'Authentication failed: invalid API key' }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+    { type: 'error', message: 'Authentication failed: invalid API key' },
+  ]);
+});
