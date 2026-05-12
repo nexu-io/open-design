@@ -1,0 +1,131 @@
+---
+/*
+ * /skills/ — index of every shippable skill in the repo.
+ *
+ * Pulls live data from `skills/<slug>/SKILL.md` via Astro Content
+ * Collections so adding a skill anywhere in the monorepo
+ * automatically surfaces here on the next build.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import SkillRow from '../../_components/skill-row.astro';
+import {
+  getSkillRecords,
+  getSkillModeIndex,
+  getSkillScenarioIndex,
+  tally,
+} from '../../_lib/catalog';
+
+const skills = await getSkillRecords();
+
+const modeTags = await getSkillModeIndex();
+const scenarioTags = await getSkillScenarioIndex();
+const platformTally = tally(
+  skills.map((s) => s.platform).filter((p): p is string => Boolean(p)),
+);
+
+const featured = skills.filter((s) => typeof s.featured === 'number').slice(0, 6);
+
+const title = `Skills — ${skills.length} composable design capabilities | Open Design`;
+const description =
+  'Browse the full Open Design skills catalog: 100+ file-based SKILL.md bundles spanning decks, prototypes, dashboards, mobile flows, video, and live artifacts. Each skill is a folder you drop into the daemon.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Open Design Skills catalog',
+  description,
+  url: new URL('/skills/', Astro.site).toString(),
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Open Design',
+    url: Astro.site?.toString(),
+  },
+  numberOfItems: skills.length,
+};
+---
+
+<Layout title={title} description={description} active="skills" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">Catalog · Nº 01</span>
+    <h1 class="display">
+      <em>Skills</em> — {skills.length} composable design capabilities<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      Each skill is a single folder with one <code>SKILL.md</code>. Drop it in,
+      restart the daemon, the picker shows it. Filter by surface, scenario,
+      or platform below to find the one that matches your brief.
+    </p>
+  </header>
+
+  <section class="filter-strip" aria-label="Skill filters">
+    <div class="filter-group">
+      <span class="filter-label">Mode</span>
+      <ul>
+        {modeTags.map((tag) => (
+          <li>
+            <a class="chip chip-link" href={`/skills/mode/${tag.slug}/`}>
+              {tag.label}<span class="chip-num">{tag.count}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Scenario</span>
+      <ul>
+        {scenarioTags.slice(0, 12).map((tag) => (
+          <li>
+            <a class="chip chip-link" href={`/skills/scenario/${tag.slug}/`}>
+              {tag.label}<span class="chip-num">{tag.count}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+    {platformTally.length > 0 && (
+      <div class="filter-group">
+        <span class="filter-label">Platform</span>
+        <ul>
+          {platformTally.map(([key, count]) => (
+            <li>
+              <span class="chip">
+                {key}<span class="chip-num">{count}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </section>
+
+  {featured.length > 0 && (
+    <section class="featured-strip" aria-labelledby="featured-skills">
+      <h2 id="featured-skills" class="strip-title">Featured</h2>
+      <ul class="featured-grid">
+        {featured.map((s) => (
+          <li class="featured-card">
+            <a href={`/skills/${s.slug}/`}>
+              {s.previewUrl ? (
+                <span class="featured-thumb">
+                  <img src={s.previewUrl} alt="" loading="lazy" decoding="async" />
+                </span>
+              ) : (
+                <span class="featured-thumb featured-thumb-empty" aria-hidden="true" />
+              )}
+              <span class="featured-num">Nº {String(s.featured).padStart(2, '0')}</span>
+              <span class="featured-name">{s.name}</span>
+              <p>{s.description}</p>
+              {s.mode && <span class="meta-tag">{s.mode}</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  <section class="catalog-grid catalog-grid-skills" aria-label="All skills">
+    <ol>
+      {skills.map((s, idx) => <SkillRow skill={s} index={idx} />)}
+    </ol>
+  </section>
+</Layout>

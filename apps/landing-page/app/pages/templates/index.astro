@@ -1,0 +1,56 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import { getTemplateRecords } from '../../_lib/catalog';
+
+const templates = await getTemplateRecords();
+
+const title = `Templates — ${templates.length} ready-to-fork artifact templates | Open Design`;
+const description =
+  'Ready-to-fork artifact templates: refreshable Live Artifacts (Notion-style team dashboards, ops briefs) plus deck and prototype starting points. Each template ships as a fork-friendly bundle with sample data.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Open Design Templates catalog',
+  description,
+  url: new URL('/templates/', Astro.site).toString(),
+  numberOfItems: templates.length,
+};
+---
+
+<Layout title={title} description={description} active="templates" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">Catalog · Nº 04</span>
+    <h1 class="display">
+      <em>Templates</em> — {templates.length} ready-to-fork artifacts<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      Pre-wired artifact bundles with sample data and a known-good
+      visual language. Fork the folder, swap the sample data with yours,
+      and ship.
+    </p>
+  </header>
+
+  <section class="template-grid" aria-label="All templates">
+    <ul>
+      {templates.map((t) => (
+        <li class="template-card">
+          <a href={t.detailHref}>
+            {t.previewUrl ? (
+              <span class="template-thumb">
+                <img src={t.previewUrl} alt="" loading="lazy" decoding="async" />
+              </span>
+            ) : (
+              <span class="template-thumb template-thumb-empty" aria-hidden="true" />
+            )}
+            <span class={`meta-tag ${t.origin === 'live-artifact' ? 'coral' : ''}`}>
+              {t.origin === 'live-artifact' ? 'Live Artifact' : 'Skill template'}
+            </span>
+            <span class="template-name">{t.name}</span>
+            <p class="template-summary">{t.summary}</p>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+</Layout>
