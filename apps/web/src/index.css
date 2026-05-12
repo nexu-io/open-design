@@ -15215,17 +15215,26 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 
 .library-search {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
   font-size: 13px;
-  background: var(--bg);
+  background: var(--bg-panel);
   color: var(--text);
   outline: none;
+  box-shadow: var(--shadow-xs);
+  cursor: text;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.library-search:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
 }
 
 .library-search:focus {
-  border-color: var(--accent);
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft), var(--shadow-xs);
 }
 
 .library-filters {
