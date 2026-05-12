@@ -1,7 +1,0 @@
-{
-  "$schema": "https://app.kilo.ai/config.json",
-  "indexing": {
-    "enabled": true
-  },
-  "snapshot": false
-}
