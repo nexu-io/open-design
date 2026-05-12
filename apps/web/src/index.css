@@ -247,8 +247,8 @@ input, textarea, select {
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 /* Native <select> on macOS uses its own intrinsic min-height that ends up
    shorter than <input> at the same `padding: 7px 10px` rule above, so any
@@ -4211,10 +4211,10 @@ code {
 }
 .fidelity-card:hover { border-color: var(--border-strong); }
 .fidelity-card.active {
-  border-color: var(--accent);
+  border-color: var(--selected);
   box-shadow:
-    0 0 0 1px var(--accent),
-    0 1px 0 rgba(180, 90, 59, 0.04);
+    0 0 0 1px var(--selected),
+    0 1px 0 rgba(37, 99, 235, 0.04);
 }
 .fidelity-thumb {
   display: block;
@@ -4227,7 +4227,7 @@ code {
 }
 .fidelity-thumb-wireframe { background: #fbfaf6; }
 .fidelity-thumb-high-fidelity { background: var(--bg-panel); }
-.fidelity-card.active .fidelity-thumb { border-color: var(--accent-soft); }
+.fidelity-card.active .fidelity-thumb { border-color: var(--selected-soft); }
 .fidelity-label {
   text-align: center;
   font-size: 12px;
@@ -6404,7 +6404,7 @@ button.connector-action.is-loading {
   padding: 3px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius);
   gap: 2px;
   max-width: 100%;
   overflow-x: auto;
@@ -6414,7 +6414,7 @@ button.connector-action.is-loading {
 .subtab-pill button {
   background: transparent;
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   padding: 5px 16px;
   font-size: 12px;
   color: var(--text-muted);
@@ -6423,8 +6423,8 @@ button.connector-action.is-loading {
 }
 .subtab-pill button:hover:not(.active) { background: rgba(255,255,255,0.6); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
-  background: var(--text);
-  color: var(--bg);
+  background: var(--bg-panel);
+  color: var(--text);
   box-shadow: var(--shadow-xs);
 }
 /* Icon-only variant: any pill button whose sole child is an SVG icon.
