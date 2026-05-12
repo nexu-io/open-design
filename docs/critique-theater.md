@@ -85,10 +85,31 @@ contract identical to a normal generation: same auth, same env, same logs.
 
 ### Enable / disable
 
-The feature is gated behind the `OD_CRITIQUE_ENABLED` env var and, after
-Phase 15 lands, the **Settings → Critique Theater (beta)** toggle. The web
-toggle persists into the daemon's settings store; both surfaces flip the
-same flag.
+The feature is gated by a four-tier resolver on the daemon side:
+
+1. **Per-skill `od.critique.policy`** (highest priority). A skill that
+   sets `policy: required` forces the panel on for every generation
+   that uses it; `policy: opt-out` forces it off; `policy: opt-in`
+   lets the panel run only at M2 and above.
+2. **Per-project override.** The web's `setCritiqueTheaterEnabled`
+   setter (Phase 15.2) writes the toggle to `localStorage` for the
+   in-session UI and, when called with a `projectId`, also
+   round-trips the value through the existing
+   `PATCH /api/projects/:id` settings endpoint as
+   `metadata.critiqueTheaterEnabled`. The daemon reads that field on
+   the next spawn. A dedicated Settings panel control that wires the
+   `projectId`-aware call lands in a follow-up PR; integrators
+   embedding the Theater can already call the setter directly today.
+3. **`OD_CRITIQUE_ENABLED` env override.** Power-user lane / CI
+   fixtures.
+4. **Rollout phase default** (lowest priority). M0 / M1 = `false`,
+   M2 = true for `policy: opt-in` skills, M3 = `true` everywhere.
+
+The web hook (`useCritiqueTheaterEnabled`) reads localStorage and
+governs whether the Theater UI renders for the active session; the
+daemon-side resolver makes the actual routing decision per
+generation. The two layers share the same toggle but answer
+different questions.
 
 Defaults: **disabled** during M0 dark-launch and M1 settings-toggle phases.
 Enabled by default per skill during M2, then globally during M3 after
@@ -159,9 +180,9 @@ The orchestrator emits a `degraded` event when one of these happens:
 
 | Reason | Cause | Remediation |
 |---|---|---|
-| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Check the adapter's conformance status (`/api/metrics/critique`). |
+| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Re-run the conformance harness locally (`pnpm --filter @open-design/daemon vitest run tests/critique-conformance.test.ts`) to confirm the adapter's transcript shape. The Phase 12 dashboard surfaces this status as a Prometheus series once that PR lands; until then the harness is the authoritative source. |
 | `oversize_block` | The block exceeded `parserMaxBlockBytes`. | Usually a runaway model; retry once or raise the budget. |
-| `adapter_unsupported` | The adapter is marked `critique:degraded` for the 24h TTL window. | Wait for the TTL or run `od adapters clear-degraded <id>`. |
+| `adapter_unsupported` | The adapter is marked `critique:degraded` for the 24h TTL window. | Wait for the TTL to elapse. The adapter-degraded registry exposes `clearDegraded(adapterId)` from `apps/daemon/src/critique/adapter-degraded.ts` for programmatic resets; a `od adapters clear-degraded <id>` CLI wrapper is planned in a follow-up. |
 | `protocol_version_mismatch` | The adapter is on an older protocol. | Update the adapter or pin protocol negotiation. |
 | `missing_artifact` | The run finished but no `<artifact>` body landed. | Almost always a prompt bug; check the skill template. |
 

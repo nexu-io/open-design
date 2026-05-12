@@ -70,10 +70,42 @@ export function useCritiqueTheaterEnabled(): boolean {
 
 /**
  * Imperative setter the Settings panel calls. Mutates the stored
- * config and emits the same-tab CustomEvent so every mounted
- * `useCritiqueTheaterEnabled` updates without a reload.
+ * config, emits the same-tab CustomEvent so every mounted
+ * `useCritiqueTheaterEnabled` updates without a reload, and (when a
+ * project id is supplied) round-trips the same value through the
+ * existing `PATCH /api/projects/:id` settings endpoint so the
+ * daemon's spawn-time resolver picks the override up the next time
+ * the project starts a generation.
+ *
+ * Both writes are best-effort:
+ *
+ *   - The localStorage write is what the web's `useCritiqueTheaterEnabled`
+ *     hook reads, so the in-session UI flips immediately.
+ *   - The daemon PATCH writes `metadata.critiqueTheaterEnabled` on the
+ *     project's row; the daemon's `isCritiqueEnabled({ projectOverride })`
+ *     resolver tier reads from that field on the next spawn.
+ *
+ * Failures on either side do not break the other. The same-tab
+ * CustomEvent is dispatched regardless so every mounted hook in the
+ * session reflects the user's intent, and the daemon round-trip is
+ * skipped silently when no `projectId` is passed (the bare hook still
+ * works for integrators that drive a non-project surface).
+ *
+ * The `fetchProjectSettings` option is a test seam mirroring the
+ * `fetchInterrupt` pattern on `CritiqueTheaterMount`; production
+ * callers pass nothing and the platform `fetch` is used.
  */
-export function setCritiqueTheaterEnabled(next: boolean): void {
+export interface SetCritiqueTheaterEnabledOptions {
+  /** Project id to round-trip the override through the daemon. */
+  projectId?: string;
+  /** Test seam: swap the PATCH transport. */
+  fetchProjectSettings?: (url: string, init: RequestInit) => Promise<Response>;
+}
+
+export function setCritiqueTheaterEnabled(
+  next: boolean,
+  options: SetCritiqueTheaterEnabledOptions = {},
+): void {
   if (typeof window === 'undefined') return;
   let parsed: ConfigShape = {};
   try {
@@ -99,6 +131,32 @@ export function setCritiqueTheaterEnabled(next: boolean): void {
     window.dispatchEvent(new CustomEvent(TOGGLE_EVENT, { detail: { enabled: next } }));
   } catch {
     /* CustomEvent shim missing: single mount remains correct. */
+  }
+  // Round-trip the override through the existing project-settings
+  // endpoint so the daemon's spawn-time resolver picks it up on the
+  // next generation. The endpoint accepts arbitrary `metadata`
+  // patches (apps/daemon/src/project-routes.ts handles the merge
+  // server-side), so no new endpoint is needed. Skipped silently
+  // when no projectId is provided (the bare hook still works for
+  // integrators that drive a non-project surface). Failures are
+  // swallowed so a transient network issue does not unwind the
+  // in-session UI flip; the next save retries.
+  if (options.projectId) {
+    const fetcher = options.fetchProjectSettings
+      ?? ((url: string, init: RequestInit) => fetch(url, init));
+    fetcher(`/api/projects/${encodeURIComponent(options.projectId)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: { critiqueTheaterEnabled: next } }),
+    }).catch((err) => {
+      if (
+        typeof process !== 'undefined'
+        && process.env?.NODE_ENV === 'development'
+      ) {
+        // eslint-disable-next-line no-console
+        console.warn('[critique-theater] project-settings PATCH failed', err);
+      }
+    });
   }
 }
 

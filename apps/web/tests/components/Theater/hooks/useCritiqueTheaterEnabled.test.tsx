@@ -8,7 +8,7 @@
  */
 
 import { act, cleanup, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   setCritiqueTheaterEnabled,
@@ -241,5 +241,59 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     } finally {
       restore();
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Project-settings round-trip (lefarcen P2 on PR #1338). The setter writes
+  // the override to localStorage AND, when a projectId is provided, PATCHes
+  // /api/projects/:id with metadata.critiqueTheaterEnabled so the daemon's
+  // spawn-time resolver picks up the same value on the next generation.
+  // ---------------------------------------------------------------------------
+
+  it('PATCHes the project settings endpoint when a projectId is supplied', async () => {
+    const fetchCalls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchProjectSettings = (url: string, init: RequestInit) => {
+      fetchCalls.push({ url, init });
+      return Promise.resolve(new Response(null, { status: 200 }));
+    };
+    act(() => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-abc',
+        fetchProjectSettings,
+      });
+    });
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]!.url).toBe('/api/projects/proj-abc');
+    expect(fetchCalls[0]!.init.method).toBe('PATCH');
+    const body = JSON.parse(String(fetchCalls[0]!.init.body));
+    expect(body).toEqual({ metadata: { critiqueTheaterEnabled: true } });
+  });
+
+  it('skips the daemon PATCH when no projectId is supplied (bare integrator surface)', () => {
+    const fetchProjectSettings = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
+    act(() => {
+      setCritiqueTheaterEnabled(true, { fetchProjectSettings });
+    });
+    expect(fetchProjectSettings).not.toHaveBeenCalled();
+  });
+
+  it('swallows a rejected project-settings PATCH so the in-session UI still flips', () => {
+    const fetchProjectSettings = vi.fn(() => Promise.reject(new Error('boom')));
+    const sink: { enabled?: boolean } = {};
+    render(<Probe sink={sink} />);
+    expect(sink.enabled).toBe(false);
+    act(() => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-abc',
+        fetchProjectSettings,
+      });
+    });
+    // The localStorage write + the CustomEvent dispatch fire before
+    // the PATCH, so the in-session UI flips regardless of the network
+    // outcome. A transient failure does not unwind the flip; the next
+    // save retries.
+    expect(sink.enabled).toBe(true);
   });
 });
