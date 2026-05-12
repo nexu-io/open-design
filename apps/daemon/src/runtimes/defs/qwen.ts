@@ -11,15 +11,16 @@ export const qwenAgentDef = {
       { id: 'qwen3-coder-plus', label: 'qwen3-coder-plus' },
       { id: 'qwen3-coder-flash', label: 'qwen3-coder-flash' },
     ],
-    // Prompt delivered via stdin (`qwen -`) to avoid Windows
+    // Prompt delivered via stdin to avoid Windows
     // `spawn ENAMETOOLONG` for large composed prompts. Qwen Code is a
     // Gemini-CLI fork and supports the same `--yolo` non-interactive mode.
+    // `-` sentinel arg not required here
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
       const args = ['--yolo'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
-      args.push('-');
+   
       return args;
     },
     promptViaStdin: true,
