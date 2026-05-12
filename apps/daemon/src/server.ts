@@ -69,6 +69,7 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
+import { getCritiqueMetrics, register } from './metrics/index.js';
 import {
   isCritiqueEnabled,
   parseEnvEnabled,
@@ -2261,6 +2262,19 @@ export async function startServer({
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
   });
+
+  // Prometheus scrape endpoint (Phase 12). Returns the full exposition
+  // format string. Operators put this behind their existing auth proxy;
+  // there is no built-in authn on the daemon HTTP server. To disable
+  // the endpoint entirely (air-gapped installs, regulatory contexts),
+  // set `OD_METRICS_ENDPOINT=disabled`; the route is registered only
+  // when that env value is not the literal string 'disabled'.
+  if (process.env.OD_METRICS_ENDPOINT !== 'disabled') {
+    app.get('/api/metrics', async (_req, res) => {
+      res.setHeader('Content-Type', register.contentType);
+      res.send(await getCritiqueMetrics());
+    });
+  }
 
   registerConnectorRoutes(app, {
     sendApiError,
