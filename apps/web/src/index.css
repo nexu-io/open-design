@@ -57,6 +57,12 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
+  /* "Active option" indicator color, intentionally separate from --accent
+     (brand orange used by primary CTAs like Create / Save). Use --selected
+     for "this option is the one currently picked" affordances — selected
+     fidelity card, focused input ring, active filter pill — so a primary
+     CTA and a selected state can coexist on the same screen without
+     competing. --selected-soft is the 16% tint for outer rings / fills. */
   --selected: #2563eb;
   --selected-soft: rgba(37, 99, 235, 0.16);
 
