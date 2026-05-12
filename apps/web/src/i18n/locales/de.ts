@@ -936,6 +936,7 @@ export const de: Dict = {
   'critiqueTheater.interrupt': 'Abbrechen',
   'critiqueTheater.interrupting': 'Wird abgebrochen…',
   'critiqueTheater.interrupted': 'Abgebrochen',
+  'critiqueTheater.interruptedSummary': 'In Runde {round} abgebrochen · bester Gesamtscore {composite}',
   'critiqueTheater.degradedHeading': 'Jury für diesen Lauf offline',
   'critiqueTheater.degradedReasonMalformed': 'Ungültige Jury-Ausgabe (Parser hat den Block abgelehnt).',
   'critiqueTheater.degradedReasonOversize': 'Jury-Ausgabe hat das sichere Byte-Budget überschritten.',
