@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CritiqueTheaterMount } from '../../../src/components/Theater/CritiqueTheaterMount';
@@ -227,5 +227,86 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     });
     const btn = screen.getByRole('button', { name: 'Interrupt' }) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
+  });
+
+  it('multi-round interrupt ships bestRound + composite from the same round (lefarcen P3 on PR #1338)', async () => {
+    // Regression test for the round / composite drift bug the
+    // previous bestRoundOf had: a run where round 1 closes at 8.5
+    // and round 2 closes at 6.0 must dispatch interrupted with
+    // bestRound=1, composite=8.5, NOT bestRound=2 paired with 8.5
+    // (the two helpers had disagreed). bestRoundAndComposite now
+    // walks state.rounds once and returns the matching pair so the
+    // drift cannot reappear; this test locks the fix in.
+    const { factory, handles } = makeFactory();
+    render(
+      <CritiqueTheaterMount
+        projectId="proj-1"
+        enabled
+        connectionFactory={factory}
+        fetchInterrupt={vi.fn(async () => new Response(null, { status: 204 }))}
+      />,
+    );
+    const cast = ['designer', 'critic', 'brand', 'a11y', 'copy'] as const;
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-multi',
+        protocolVersion: 1,
+        cast: [...cast],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+      // Round 1 closes with the high composite (8.5).
+      for (const role of cast) {
+        handles[0]!.send({
+          type: 'panelist_close',
+          runId: 'run-multi',
+          round: 1,
+          role,
+          score: 8.5,
+        });
+      }
+      handles[0]!.send({
+        type: 'round_end',
+        runId: 'run-multi',
+        round: 1,
+        composite: 8.5,
+        mustFix: 0,
+        decision: 'continue',
+        reason: 'continue',
+      });
+      // Round 2 closes with the LOW composite (6.0), which would
+      // be the "last numeric composite seen" under the buggy helper.
+      for (const role of cast) {
+        handles[0]!.send({
+          type: 'panelist_close',
+          runId: 'run-multi',
+          round: 2,
+          role,
+          score: 6.0,
+        });
+      }
+      handles[0]!.send({
+        type: 'round_end',
+        runId: 'run-multi',
+        round: 2,
+        composite: 6.0,
+        mustFix: 1,
+        decision: 'continue',
+        reason: 'continue',
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    // The collapsed badge renders the interruptedSummary key with
+    // {round} and {composite} placeholders. The right answer is
+    // round 1 (the high-composite round) paired with 8.5.
+    await waitFor(() => {
+      expect(screen.getByRole('status').getAttribute('data-phase')).toBe('interrupted');
+    });
+    expect(screen.getByText(/round 1/i)).toBeTruthy();
+    // The badge must not display round 2 paired with the round-1
+    // composite. The buggy helper would have produced that pair.
+    expect(screen.queryByText(/round 2.*8\.5/i)).toBeNull();
   });
 });
