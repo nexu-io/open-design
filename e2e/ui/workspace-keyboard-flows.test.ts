@@ -207,7 +207,7 @@ test('quick switcher only lists files from the active project after switching pr
 
   await uploadTinyPng(page, 'alpha-project-file.png');
   await uploadTinyPng(page, 'alpha-project-secondary.png');
-  await page.getByRole('link', { name: 'Open Design' }).click();
+  await page.getByRole('button', { name: /back to projects/i }).click();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 
   await createProject(page, 'Quick switcher Project Beta');
@@ -423,8 +423,8 @@ async function createProject(
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
 }
 
 async function uploadTinyPng(

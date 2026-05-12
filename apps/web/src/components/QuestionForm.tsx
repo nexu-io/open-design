@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useT } from '../i18n';
-import type { DirectionCard, QuestionForm } from '../artifacts/question-form';
-import { formatFormAnswers } from '../artifacts/question-form';
+import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
+import { formatFormAnswers, formOptionValueForLabel } from '../artifacts/question-form';
 
 interface Props {
   form: QuestionForm;
@@ -102,16 +102,21 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
               {q.type === 'radio' && q.options ? (
                 <div className="qf-options">
                   {q.options.map((opt) => (
-                    <label key={opt} className={`qf-chip${value === opt ? ' qf-chip-on' : ''}`}>
+                    <label
+                      key={opt.value}
+                      className={`qf-chip${value === opt.value ? ' qf-chip-on' : ''}`}
+                      title={opt.description}
+                    >
                       <input
                         type="radio"
                         name={`${form.id}-${q.id}`}
-                        value={opt}
-                        checked={value === opt}
+                        value={opt.value}
+                        checked={value === opt.value}
                         disabled={locked}
-                        onChange={() => update(q.id, opt)}
+                        aria-label={opt.label}
+                        onChange={() => update(q.id, opt.value)}
                       />
-                      <span>{opt}</span>
+                      <OptionCopy option={opt} />
                     </label>
                   ))}
                 </div>
@@ -120,22 +125,24 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                 <div className="qf-options">
                   {q.options.map((opt) => {
                     const arr = Array.isArray(value) ? value : [];
-                    const on = arr.includes(opt);
+                    const on = arr.includes(opt.value);
                     const maxed =
                       q.maxSelections !== undefined && !on && arr.length >= q.maxSelections;
                     return (
                       <label
-                        key={opt}
+                        key={opt.value}
+                        title={opt.description}
                         className={`qf-chip${on ? ' qf-chip-on' : ''}${maxed ? ' qf-chip-disabled' : ''}`}
                       >
                         <input
                           type="checkbox"
-                          value={opt}
+                          value={opt.value}
                           checked={on}
                           disabled={locked || maxed}
-                          onChange={() => toggleCheckbox(q.id, opt, q.maxSelections)}
+                          aria-label={opt.label}
+                          onChange={() => toggleCheckbox(q.id, opt.value, q.maxSelections)}
                         />
-                        <span>{opt}</span>
+                        <OptionCopy option={opt} />
                       </label>
                     );
                   })}
@@ -152,8 +159,8 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                     {t('qf.choose')}
                   </option>
                   {q.options.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
+                    <option key={opt.value} value={opt.value} title={opt.description}>
+                      {opt.label}
                     </option>
                   ))}
                 </select>
@@ -218,6 +225,15 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
         ) : null}
       </div>
     </div>
+  );
+}
+
+function OptionCopy({ option }: { option: FormOption }) {
+  return (
+    <span className="qf-chip-copy">
+      <span>{option.label}</span>
+      {option.description ? <span className="qf-chip-desc">{option.description}</span> : null}
+    </span>
   );
 }
 
@@ -340,10 +356,17 @@ export function parseSubmittedAnswers(
       answers[id] = value
         .split(',')
         .map((s) => s.trim())
-        .filter((s) => s.length > 0 && s.toLowerCase() !== '(skipped)');
+        .filter((s) => s.length > 0 && s.toLowerCase() !== '(skipped)')
+        .map((s) => formOptionValueForLabel(q, parseSubmittedOptionToken(s)));
     } else {
-      answers[id] = value.toLowerCase() === '(skipped)' ? '' : value;
+      answers[id] = value.toLowerCase() === '(skipped)' ? '' : formOptionValueForLabel(q, parseSubmittedOptionToken(value));
     }
   }
   return Object.keys(answers).length > 0 ? answers : null;
+}
+
+function parseSubmittedOptionToken(raw: string): string {
+  const match = /\s+\[value:\s*([^\]]+)\]\s*$/i.exec(raw);
+  if (!match) return raw.trim();
+  return match[1]!.trim();
 }

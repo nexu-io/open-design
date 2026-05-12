@@ -55,31 +55,31 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
     id: 'editorial-monocle',
     label: 'Editorial — Monocle / FT magazine',
     mood:
-      'Print-magazine feel. Generous whitespace, large serif headlines, restrained palette of off-white paper + ink + a single warm accent. Confident, quietly intelligent.',
+      'Print-magazine feel for explicitly editorial or publishing briefs. Generous whitespace, large serif headlines, restrained palette of neutral paper + ink + a single brand-justified accent. Do not use this as the default for commerce, SaaS, dashboards, or product utilities.',
     references: ['Monocle', 'The Financial Times Weekend', 'NYT Magazine', 'It\'s Nice That'],
     displayFont: "'Iowan Old Style', 'Charter', Georgia, serif",
     bodyFont:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
     palette: {
-      bg:      'oklch(97% 0.012 80)',     // off-white paper
-      surface: 'oklch(99% 0.005 80)',
-      fg:      'oklch(20% 0.02 60)',      // ink
-      muted:   'oklch(48% 0.015 60)',
-      border:  'oklch(89% 0.012 80)',
-      accent:  'oklch(58% 0.16 35)',      // warm rust / clay
+      bg:      'oklch(98% 0.004 95)',     // neutral paper, not beige wash
+      surface: 'oklch(100% 0.002 95)',
+      fg:      'oklch(20% 0.018 70)',      // ink
+      muted:   'oklch(48% 0.012 70)',
+      border:  'oklch(90% 0.006 95)',
+      accent:  'oklch(52% 0.10 28)',      // restrained editorial red; override from brand when available
     },
     posture: [
       'serif display, sans body, mono for metadata only',
       'no shadows, no rounded cards — borders + whitespace do the work',
       'one decisive image, cropped only at the bottom',
-      'kicker / eyebrow in mono uppercase, one accent color, used at most twice',
+      'kicker / eyebrow in mono uppercase, one accent color, used at most twice; never create peach/pink/orange-beige page washes unless the brand/reference requires them',
     ],
   },
   {
     id: 'modern-minimal',
     label: 'Modern minimal — Linear / Vercel',
     mood:
-      'Quiet, precise, software-native. System fonts, near-greyscale palette, a single saturated accent. The chrome disappears so content is the only thing that registers.',
+      'Quiet, precise, software-native. System fonts, crisp neutral foundations, and a small but visible product palette (primary + secondary + status/accent) so the interface feels shipped rather than greyscale. The chrome stays restrained while interaction states, illustrations, charts, and product moments carry color.',
     references: ['Linear', 'Vercel', 'Notion 2024', 'Stripe docs'],
     displayFont:
       "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
@@ -97,34 +97,34 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
       'tight letter-spacing on display sizes (-0.02em)',
       'hairline borders only, no shadows except dropdowns/modals',
       'mono numerics with `font-variant-numeric: tabular-nums`',
-      'sticky frosted nav, content-led layouts (no hero illustrations)',
-      'one accent: links + primary CTA, nothing else',
+      'sticky frosted nav, content-led layouts with one product illustration, device mockup, or data visualization when it clarifies the product',
+      'controlled color system: primary action color + one secondary signal + status colors; avoid monochrome/unstyled outputs, but never flood every card with gradients',
     ],
   },
   {
-    id: 'warm-soft',
-    label: 'Warm & soft — Stripe pre-2020 / Headspace',
+    id: 'human-approachable',
+    label: 'Human / approachable — Airbnb / Duolingo systems',
     mood:
-      'Cream backgrounds, soft accent, gentle radii. Reads like a thoughtful product magazine — friendly without being cute. Good for fintech, wellness, indie SaaS.',
-    references: ['Stripe pre-2020', 'Headspace', 'Substack', 'Mercury'],
+      'Friendly and tactile without the generic cozy canvas. Uses a clean neutral background, product-led color system, generous radii, and clear hierarchy. Good for consumer tools, marketplaces, wellness, education, translation, AI assistants, and indie SaaS when the brand has not supplied a palette.',
+    references: ['Airbnb', 'Duolingo product surfaces', 'Miro', 'Mercury'],
     displayFont:
-      "'Tiempos Headline', 'Newsreader', 'Iowan Old Style', Georgia, serif",
+      "'Söhne', 'Avenir Next', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
     bodyFont:
-      "'Söhne', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+      "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
     palette: {
-      bg:      'oklch(97% 0.018 70)',     // warm cream
-      surface: 'oklch(99% 0.008 70)',
-      fg:      'oklch(22% 0.02 50)',
-      muted:   'oklch(50% 0.018 50)',
-      border:  'oklch(90% 0.014 70)',
-      accent:  'oklch(64% 0.13 28)',      // terracotta
+      bg:      'oklch(98% 0.004 240)',
+      surface: 'oklch(100% 0 0)',
+      fg:      'oklch(20% 0.02 240)',
+      muted:   'oklch(50% 0.018 240)',
+      border:  'oklch(90% 0.006 240)',
+      accent:  'oklch(56% 0.12 170)',     // brand-safe teal
     },
     posture: [
-      'serif display, soft sans body',
-      'gentle radii (12–16px), no hard 0px corners on content cards',
-      'single accent used for primary CTA + one editorial flourish (a quote mark, a stat)',
-      'soft inner glow on hero cards rather than drop shadows',
-      'avoid icons; use real screenshots / photographs / illustrations',
+      'sans display with strong weight contrast, system body for readability',
+      'comfortable radii (12–18px) paired with crisp grid alignment',
+      'primary action color plus a secondary/domain accent and clear status colors; use color to separate panels, states, and product moments',
+      'subtle elevation only on interactive cards; tasteful gradients/glows are allowed for hero/device/product moments, never as a full-page beige/pastel wash',
+      'avoid generic pastel/beige gradients; use real product screenshots, data, or labelled placeholders',
     ],
   },
   {
@@ -165,7 +165,7 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
     bodyFont:
       "ui-monospace, 'IBM Plex Mono', 'JetBrains Mono', Menlo, monospace",
     palette: {
-      bg:      'oklch(96% 0.004 100)',    // off-white printer paper
+      bg:      'oklch(98% 0.004 240)',   // neutral printer paper
       surface: 'oklch(100% 0 0)',
       fg:      'oklch(15% 0.02 100)',
       muted:   'oklch(40% 0.02 100)',

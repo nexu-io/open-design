@@ -1,17 +1,31 @@
 name: Contributor Card Bot
 
+# Triggers chosen for fork-safety: every event below either targets the base
+# repo directly (issues, discussions, discussion_comment) or is the GitHub-
+# blessed fork-safe variant (pull_request_target).
+#
+# Intentionally NOT included: pull_request_review, pull_request_review_comment,
+# issue_comment. GitHub withholds repository secrets from these events when
+# they originate on forked PRs, which is precisely the path most external
+# contributor activity takes; the bot requires BOT_APP_* secrets to authenticate,
+# so wiring those events here would fail-closed exactly for the contributors we
+# want to recognize. They can be re-added later via a workflow_run handoff.
 on:
   pull_request_target:
     types: [closed]
   issues:
     types: [opened]
+  discussion:
+    types: [created]
+  discussion_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: contributor-card-bot-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  group: contributor-card-bot-${{ github.event.pull_request.number || github.event.issue.number || github.event.discussion.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -20,6 +34,8 @@ jobs:
     if: |
       (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
       (github.event_name == 'issues' && github.event.action == 'opened') ||
+      (github.event_name == 'discussion' && github.event.action == 'created') ||
+      (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -50,9 +66,4 @@ jobs:
           BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
           BOT_APP_INSTALLATION_ID: ${{ secrets.BOT_APP_INSTALLATION_ID }}
           BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
-            GITHUB_EVENT_NAME=pull_request pnpm exec tsx scripts/action-handler.ts
-          else
-            pnpm exec tsx scripts/action-handler.ts
-          fi
+        run: pnpm exec tsx scripts/action-handler.ts

@@ -28,6 +28,8 @@ export type SrcdocOptions = {
   commentBridge?: boolean;
   inspectBridge?: boolean;
   editBridge?: boolean;
+  paletteBridge?: boolean;
+  initialPalette?: string | null;
 };
 
 export function buildSrcdoc(
@@ -64,7 +66,148 @@ export function buildSrcdoc(
         initialInspectMode: !!options.inspectBridge,
       })
     : withDeck;
-  return options.editBridge ? injectManualEditBridge(withSelection) : withSelection;
+  const withPalette = options.paletteBridge
+    ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
+    : withSelection;
+  return options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
+}
+
+// Palette bridge: re-skin the page on host postMessage. Generated pages
+// hard-code multiple shades of one accent and a CSS-variable swap will
+// not catch them. We walk the DOM and shift any chromatic paint to the
+// target palette's hue while keeping each color's saturation and
+// lightness — pale tints stay pale, bold CTAs stay bold, just in the
+// new color family. Mono-noir desaturates instead of shifting.
+function injectPaletteBridge(
+  doc: string,
+  options: { initialPalette: string | null } = { initialPalette: null },
+): string {
+  const initial = options.initialPalette
+    ? JSON.stringify(String(options.initialPalette))
+    : 'null';
+  const script = `<script data-od-palette-bridge>(function(){
+  var PALETTES = {
+    'coral':       { hue: 10,  satFloor: 0.55, mono: false },
+    'electric':    { hue: 262, satFloor: 0.55, mono: false },
+    'acid-forest': { hue: 142, satFloor: 0.55, mono: false },
+    'risograph':   { hue: 349, satFloor: 0.60, mono: false },
+    'mono-noir':   { hue: 0,   satFloor: 0,    mono: true  }
+  };
+  var current = ${initial};
+  var ATTR = 'data-od-palette-fix';
+  var SAVED = '__odPaletteSaved__';
+  var MIN_SAT = 0.08;
+  var WALK_LIMIT = 12000;
+  function parseRgb(s){
+    var str = String(s||'').trim();
+    if (!str || str === 'transparent' || str === 'none') return null;
+    var m = str.match(/rgba?\\(([^)]+)\\)/);
+    if (!m) return null;
+    var p = m[1].split(/[\\s,/]+/).filter(Boolean).map(function(x){ return parseFloat(x); });
+    if (p.length < 3) return null;
+    return { r: p[0]||0, g: p[1]||0, b: p[2]||0, a: p[3] == null ? 1 : p[3] };
+  }
+  function rgbToHsl(r,g,b){
+    r/=255; g/=255; b/=255;
+    var max=Math.max(r,g,b), min=Math.min(r,g,b);
+    var h=0, s=0, l=(max+min)/2;
+    if (max!==min){
+      var d=max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      if (max===r) h=(g-b)/d + (g<b?6:0);
+      else if (max===g) h=(b-r)/d + 2;
+      else h=(r-g)/d + 4;
+      h *= 60;
+    }
+    return {h:h, s:s, l:l};
+  }
+  function h2rgb(p,q,t){
+    if (t<0) t+=1;
+    if (t>1) t-=1;
+    if (t<1/6) return p+(q-p)*6*t;
+    if (t<1/2) return q;
+    if (t<2/3) return p+(q-p)*(2/3-t)*6;
+    return p;
+  }
+  function hslStr(h,s,l){
+    h = ((h%360)+360)%360/360;
+    var r,g,b;
+    if (s===0){ r=g=b=l; }
+    else {
+      var q = l<0.5 ? l*(1+s) : l+s-l*s;
+      var p = 2*l-q;
+      r=h2rgb(p,q,h+1/3); g=h2rgb(p,q,h); b=h2rgb(p,q,h-1/3);
+    }
+    return 'rgb('+Math.round(r*255)+','+Math.round(g*255)+','+Math.round(b*255)+')';
+  }
+  function chromatic(c){
+    if (!c || c.a < 0.3) return null;
+    var hsl = rgbToHsl(c.r,c.g,c.b);
+    if (hsl.s < MIN_SAT) return null;
+    if (hsl.l < 0.04 || hsl.l > 0.98) return null;
+    return hsl;
+  }
+  function shift(hsl, palette){
+    if (palette.mono) return hslStr(0, 0, hsl.l);
+    var sat = Math.max(hsl.s, palette.satFloor * 0.7);
+    return hslStr(palette.hue, sat, hsl.l);
+  }
+  function restoreAll(){
+    var nodes = document.querySelectorAll('['+ATTR+']');
+    for (var i=0;i<nodes.length;i++){
+      var el = nodes[i], saved = el[SAVED];
+      if (saved){
+        if ('bg' in saved) el.style.backgroundColor = saved.bg;
+        if ('color' in saved) el.style.color = saved.color;
+        if ('border' in saved) el.style.borderColor = saved.border;
+        if ('fill' in saved){ if (saved.fill) el.setAttribute('fill', saved.fill); else el.removeAttribute('fill'); }
+        if ('stroke' in saved){ if (saved.stroke) el.setAttribute('stroke', saved.stroke); else el.removeAttribute('stroke'); }
+      }
+      el.removeAttribute(ATTR);
+      delete el[SAVED];
+    }
+  }
+  function applyTint(id){
+    var palette = PALETTES[id];
+    if (!palette) return;
+    var all = document.body ? document.body.querySelectorAll('*') : [];
+    for (var i=0; i<all.length && i<WALK_LIMIT; i++){
+      var el = all[i], cs = getComputedStyle(el), saved = {}, changed = false;
+      var bg = chromatic(parseRgb(cs.backgroundColor));
+      if (bg){ saved.bg = el.style.backgroundColor; el.style.setProperty('background-color', shift(bg, palette), 'important'); changed = true; }
+      var fg = chromatic(parseRgb(cs.color));
+      if (fg){ saved.color = el.style.color; el.style.setProperty('color', shift(fg, palette), 'important'); changed = true; }
+      var bd = chromatic(parseRgb(cs.borderTopColor));
+      if (bd){ saved.border = el.style.borderColor; el.style.setProperty('border-color', shift(bd, palette), 'important'); changed = true; }
+      var fillAttr = el.getAttribute && el.getAttribute('fill');
+      if (fillAttr){
+        var f = chromatic(parseRgb(cs.fill));
+        if (f){ saved.fill = fillAttr; el.setAttribute('fill', shift(f, palette)); changed = true; }
+      }
+      var strokeAttr = el.getAttribute && el.getAttribute('stroke');
+      if (strokeAttr){
+        var sk = chromatic(parseRgb(cs.stroke));
+        if (sk){ saved.stroke = strokeAttr; el.setAttribute('stroke', shift(sk, palette)); changed = true; }
+      }
+      if (changed){ el[SAVED] = saved; el.setAttribute(ATTR, '1'); }
+    }
+  }
+  function apply(id){
+    restoreAll();
+    if (!id || !PALETTES[id]){ current = null; return; }
+    current = id;
+    applyTint(id);
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:palette') return;
+    apply(data.palette ? String(data.palette) : null);
+  });
+  function boot(){ if (current) apply(current); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
 }
 
 function annotateManualEditSourcePaths(doc: string): string {
@@ -689,11 +832,48 @@ function injectSelectionBridge(
   document.addEventListener('click', function(ev){
     if (!pickerActive()) return;
     var el = closestTarget(ev);
-    if (!el) return;
+    if (el) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+      if (payload) window.parent.postMessage(payload, '*');
+      return;
+    }
+    // Free-pin fallback (comment mode only). Lets users drop a comment
+    // at a click location even when the artifact has no data-od-id
+    // annotations. Skipped for pod mode (drawing) and inspect mode
+    // (needs a real selector for live overrides).
+    if (!canUseDomFallback() || mode === 'pod') return;
+    // Skip clicks on interactive elements so links / buttons / inputs
+    // keep their native behavior; pin only on inert surfaces.
+    var t = ev.target;
+    var walk = t && t.nodeType === 1 ? t : null;
+    while (walk && walk !== document.documentElement) {
+      var tag = walk.tagName;
+      if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') return;
+      if (walk.isContentEditable) return;
+      walk = walk.parentElement;
+    }
     ev.preventDefault();
     ev.stopPropagation();
-    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
-    if (payload) window.parent.postMessage(payload, '*');
+    // Store viewport coordinates to match regular getBoundingClientRect()
+    // element targets; the host overlay renders this position directly.
+    var pinX = Math.round(ev.clientX);
+    var pinY = Math.round(ev.clientY);
+    var pinId = 'pin-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
+    window.parent.postMessage({
+      type: 'od:comment-target',
+      elementId: pinId,
+      // Synthetic selector / label so daemon upsert validation (which
+      // requires both to be non-empty) accepts the saved free-pin.
+      selector: '[data-od-pin="' + pinId + '"]',
+      label: 'pin',
+      text: '',
+      position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 },
+      htmlHint: '',
+      style: null,
+      freePin: true
+    }, '*');
   }, true);
   // Pod drawing — only active in comment mode with the 'pod' tool.
   document.addEventListener('pointerdown', function(ev){

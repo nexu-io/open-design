@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildTracePayload,
   readLangfuseConfig,
+  readTelemetrySinkConfig,
   reportRunCompleted,
   type LangfuseConfig,
   type ReportContext,
+  type TelemetrySinkConfig,
 } from '../src/langfuse-trace.js';
 
 function makeCtx(overrides: Partial<ReportContext> = {}): ReportContext {
@@ -138,6 +140,48 @@ describe('readLangfuseConfig', () => {
     });
     expect(cfg!.timeoutMs).toBe(20_000);
     expect(cfg!.retries).toBe(1);
+  });
+});
+
+describe('readTelemetrySinkConfig', () => {
+  it('prefers the Open Design telemetry relay when configured', () => {
+    const cfg = readTelemetrySinkConfig({
+      OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
+      LANGFUSE_PUBLIC_KEY: 'pk',
+      LANGFUSE_SECRET_KEY: 'sk',
+    });
+    expect(cfg).toEqual({
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      timeoutMs: 20_000,
+      retries: 1,
+    });
+  });
+
+  it('uses relay-specific timeout and retry tuning when present', () => {
+    const cfg = readTelemetrySinkConfig({
+      OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse',
+      OPEN_DESIGN_TELEMETRY_TIMEOUT_MS: '30000',
+      OPEN_DESIGN_TELEMETRY_RETRIES: '3',
+      LANGFUSE_TIMEOUT_MS: '1',
+      LANGFUSE_RETRIES: '0',
+    });
+    expect(cfg).toMatchObject({
+      kind: 'relay',
+      timeoutMs: 30_000,
+      retries: 3,
+    });
+  });
+
+  it('falls back to direct Langfuse config for local smoke tests', () => {
+    const cfg = readTelemetrySinkConfig({
+      LANGFUSE_PUBLIC_KEY: 'pk',
+      LANGFUSE_SECRET_KEY: 'sk',
+    });
+    expect(cfg).toMatchObject({
+      kind: 'langfuse',
+      baseUrl: 'https://us.cloud.langfuse.com',
+    });
   });
 });
 
@@ -488,6 +532,55 @@ describe('reportRunCompleted', () => {
       'span-create',
       'span-create',
     ]);
+  });
+
+  it('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
+    const relayConfig: TelemetrySinkConfig = {
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      timeoutMs: 20_000,
+      retries: 0,
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response('{}', { status: 200 }),
+    );
+    await reportRunCompleted(makeCtx(), {
+      config: relayConfig,
+      fetchImpl: fetchSpy as any,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const call = fetchSpy.mock.calls[0]!;
+    const url = call[0] as string;
+    const init = call[1] as RequestInit & { headers: Record<string, string> };
+    expect(url).toBe('https://telemetry.open-design.ai/api/langfuse');
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(init.headers['Content-Type']).toBe('application/json');
+    expect(init.headers['X-Open-Design-Telemetry']).toBe('langfuse-ingestion-v1');
+    const body = JSON.parse(init.body as string);
+    expect(Array.isArray(body.batch)).toBe(true);
+  });
+
+  it('warns when the relay returns per-event errors', async () => {
+    const relayConfig: TelemetrySinkConfig = {
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      timeoutMs: 20_000,
+      retries: 0,
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ successes: [], errors: [{ id: 'bad', status: 400 }] }),
+        { status: 207 },
+      ),
+    );
+    await reportRunCompleted(makeCtx(), {
+      config: relayConfig,
+      fetchImpl: fetchSpy as any,
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Relay per-event errors (1)'),
+    );
   });
 
   it('warns and drops when serialized batch exceeds the hard cap', async () => {
