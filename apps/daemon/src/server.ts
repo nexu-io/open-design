@@ -69,6 +69,7 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
+import { getCritiqueMetrics, register } from './metrics/index.js';
 import {
   isCritiqueEnabled,
   parseEnvEnabled,
@@ -155,6 +156,7 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
   RoutineService,
   validateSchedule as validateRoutineSchedule,
@@ -2343,6 +2345,19 @@ export async function startServer({
     res.json({ version });
   });
 
+  // Prometheus scrape endpoint (Phase 12). Returns the full exposition
+  // format string. Operators put this behind their existing auth proxy;
+  // there is no built-in authn on the daemon HTTP server. To disable
+  // the endpoint entirely (air-gapped installs, regulatory contexts),
+  // set `OD_METRICS_ENDPOINT=disabled`; the route is registered only
+  // when that env value is not the literal string 'disabled'.
+  if (process.env.OD_METRICS_ENDPOINT !== 'disabled') {
+    app.get('/api/metrics', async (_req, res) => {
+      res.setHeader('Content-Type', register.contentType);
+      res.send(await getCritiqueMetrics());
+    });
+  }
+
   registerConnectorRoutes(app, {
     sendApiError,
     authorizeToolRequest,
@@ -4205,6 +4220,16 @@ export async function startServer({
             artifactId: critiqueRunId,
             artifactDir: critiqueArtifactDir,
             adapter: typeof agentId === 'string' ? agentId : 'unknown',
+            // Codex P2 on PR #1485: thread the resolved skill id into the
+            // orchestrator so the Phase 12 metrics carry the real label
+            // instead of falling through to 'unknown' for every live run.
+            // `effectiveSkillId` was already computed above (line ~2951) as
+            // the request skillId with a project-row fallback; pass it
+            // through verbatim, and leave the orchestrator's own default
+            // of 'unknown' for runs that genuinely have no skill assigned.
+            skill: typeof effectiveSkillId === 'string' && effectiveSkillId
+              ? effectiveSkillId
+              : undefined,
             cfg: critiqueCfg,
             db,
             bus: critiqueBus,
@@ -4627,7 +4652,9 @@ export async function startServer({
         ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
         summary: artifact?.id
           ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
-          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+          : finalStatus.status === 'succeeded'
+            ? buildOrbitNoLiveArtifactSummary(run.events)
+            : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
       };
     })();
 
