@@ -512,7 +512,10 @@ function normalizeBoolHint(value: unknown): boolean | null {
  *     critique:
  *       policy: required   # or 'opt-in', 'opt-out'
  */
-function normalizeCritiquePolicy(value: unknown): SkillCritiquePolicy {
+// Exported so the spawn-input glue tests can pin the trim / lowercase /
+// reject-typo behavior in isolation from `listSkills()` filesystem
+// scanning (PerishCode P3 on PR #1338).
+export function normalizeCritiquePolicy(value: unknown): SkillCritiquePolicy {
   if (typeof value !== "string") return null;
   const v = value.trim().toLowerCase();
   if (v === "required" || v === "opt-in" || v === "opt-out") return v;
