@@ -33,13 +33,48 @@ type Block =
   | { kind: 'table'; aligns: TableAlign[]; headers: string[]; rows: string[][] }
   | { kind: 'hr' };
 
-const PIPE_PLACEHOLDER = ' ODPIPE ';
-
 function splitTableCells(line: string): string[] {
-  let s = line.replace(/\\\|/g, PIPE_PLACEHOLDER);
-  s = s.replace(/^\s*\|/, '').replace(/\|\s*$/, '');
-  if (s === '') return [];
-  return s.split('|').map((cell) => cell.replace(new RegExp(PIPE_PLACEHOLDER, 'g'), '|').trim());
+  // Walk char-by-char so we can respect three GFM cell-content rules without
+  // any placeholder substitution:
+  //   - `\|` resolves to a literal `|` inside the current cell.
+  //   - A `|` inside a backtick code span is cell content, not a column
+  //     boundary (handles cells like `` | status | `a | b` | ``).
+  //   - A single optional leading `|` and unescaped trailing `|` are row
+  //     terminators, not empty cells.
+  // Placeholder-based escaping was rejected in review for two reasons: a
+  // string sentinel can collide with real cell text, and an earlier draft
+  // used NUL bytes which made the file render as binary on GitHub.
+  const cells: string[] = [];
+  let cur = '';
+  let inCode = false;
+  let i = 0;
+  while (i < line.length && line[i] === ' ') i++;
+  if (line[i] === '|') i++;
+  for (; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === '\\' && line[i + 1] === '|') {
+      cur += '|';
+      i++;
+      continue;
+    }
+    if (ch === '`') {
+      inCode = !inCode;
+      cur += ch;
+      continue;
+    }
+    if (ch === '|' && !inCode) {
+      cells.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  // A trailing unescaped `|` leaves `cur` empty — that's a row terminator,
+  // not a final empty cell. Anything else (content after the last `|`, or a
+  // row with no pipes at all) gets pushed.
+  const tail = cur.trim();
+  if (cells.length === 0 || tail !== '') cells.push(tail);
+  return cells;
 }
 
 function parseTableAlignRow(line: string): TableAlign[] | null {

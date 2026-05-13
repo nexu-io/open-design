@@ -132,4 +132,13 @@ describe('renderMarkdownToSafeHtml', () => {
     expect(out).toContain('<p>Just a line with a | pipe in it.</p>');
     expect(out).not.toContain('<table');
   });
+
+  it('treats pipes inside a backtick code span as cell content, not column boundaries', () => {
+    // Common TypeScript-style union-type cell — the `|` between `"ready"`
+    // and `"done"` lives inside the backtick code span and must not split
+    // the cell. Without this, the row collapses from 2 columns to 3.
+    const md = ['| status | type |', '|---|---|', '| ok | `"ready" \| "done"` |'].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<tr><td>ok</td><td><code>&quot;ready&quot; | &quot;done&quot;</code></td></tr>');
+  });
 });

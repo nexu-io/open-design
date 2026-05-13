@@ -89,4 +89,18 @@ describe('renderMarkdown', () => {
     expect(out).not.toContain('<table');
     expect(out).toContain('| pipe');
   });
+
+  it('treats pipes inside a backtick code span as cell content, not column boundaries', () => {
+    // TypeScript-style union cells contain a literal `|` inside backticks.
+    // The pre-review splitter ran before inline parsing and shredded such
+    // rows; this asserts the scan-based splitter keeps the code span whole
+    // (one body cell, not two).
+    const md = ['| status | type |', '|---|---|', '| ok | `"ready" | "done"` |'].join('\n');
+    const out = html(md);
+    expect(out).toContain('<code class="md-inline-code">&quot;ready&quot; | &quot;done&quot;</code>');
+    // Exactly two <td> cells in the body row — pipe inside backticks must
+    // not have introduced a phantom third column.
+    const bodyTd = (out.match(/<tbody>[\s\S]*<\/tbody>/)?.[0] ?? '').match(/<td/g) ?? [];
+    expect(bodyTd.length).toBe(2);
+  });
 });
