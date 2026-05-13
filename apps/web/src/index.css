@@ -982,6 +982,13 @@ code {
   min-width: 0;
   max-width: 100%;
 }
+.msg.user {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: min(78%, 560px);
+}
 .msg .role {
   display: flex;
   align-items: baseline;
@@ -1017,7 +1024,20 @@ code {
   flex: 1;
 }
 .msg.user .role::before { content: ''; }
-.msg.user .user-text { white-space: pre-wrap; color: var(--text); }
+.msg.user .role {
+  justify-content: flex-end;
+  color: var(--text-muted);
+}
+.msg.user .user-text {
+  white-space: pre-wrap;
+  color: #fff;
+  background: var(--selected);
+  border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
+  border-radius: 14px 14px 4px 14px;
+  padding: 8px 11px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-xs);
+}
 .msg.assistant .prose { margin-top: 4px; }
 .msg .artifact-badge {
   display: inline-block;
@@ -1268,6 +1288,7 @@ code {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  justify-content: flex-end;
   margin-bottom: 8px;
 }
 .user-attachment {
