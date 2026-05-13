@@ -809,7 +809,14 @@ export function ProjectView({
   // Sync the URL when the active tab changes, so reload + share-link both
   // land back on the same view. Replace (not push) on tab activation so the
   // history stack doesn't fill with every tab click.
-  const lastSyncedFileRef = useRef<string | null>(null);
+  // Composite sync key: tracks BOTH the active file target AND the active
+  // conversation id, so a conversation-only change (e.g. `listConversations`
+  // resolves after `loadTabs` hydrated the active tab, or the user picks a
+  // different conversation under the same tab) still triggers the navigate
+  // and pushes `/conversations/:cid` into the URL. Keying only on the file
+  // target lost that update because the early-return saw `target` unchanged
+  // and skipped the navigate (lefarcen P1 on PR #1508).
+  const lastSyncedRouteKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const target = openTabsState.active && (
       openTabsState.tabs.includes(openTabsState.active)
@@ -818,8 +825,9 @@ export function ProjectView({
     )
       ? openTabsState.active
       : null;
-    if (target === lastSyncedFileRef.current) return;
-    lastSyncedFileRef.current = target;
+    const nextKey = `${activeConversationId ?? ''}:${target ?? ''}`;
+    if (nextKey === lastSyncedRouteKeyRef.current) return;
+    lastSyncedRouteKeyRef.current = nextKey;
     // PerishCode + Codex P1 on PR #1508: the prior version of this
     // sync stripped any `/conversations/:cid` segment from the URL as
     // soon as a tab became active, which regressed the deep-link
