@@ -117,6 +117,72 @@ describe('parseProvenance', () => {
     expect(result!.generatedAt!.toISOString()).toBe('2026-05-08T11:55:00.000Z');
   });
 
+  // PR #1584 review (lefarcen): the round-1 strip used `^[\s*_]+` /
+  // `[\s*_]+$`, which stripped a literal leading/trailing underscore
+  // from values like `_draft.html` (corrupting it to `draft.html`).
+  // Narrow the strip to only consume Markdown residue, never literal
+  // characters in the value itself.
+  it('preserves a literal leading underscore in a plain-label value (e.g. _draft.html)', () => {
+    const text = `## Provenance
+
+- Project ID: abc-123
+- Design system: alphatrace
+- Current artifact: _draft.html
+- Transcript message count: 7
+- Generated UTC timestamp: 2026-05-08T00:00:00Z
+`;
+    const result = parseProvenance(text);
+    expect(result).not.toBeNull();
+    // The whole filename must survive — no leading underscore strip.
+    expect(result!.currentArtifact).toBe('_draft.html');
+  });
+
+  it('preserves a literal trailing underscore in a plain-label id-like value', () => {
+    const text = `## Provenance
+
+- Project ID: build_id_v1_
+- Design system: alphatrace
+- Current artifact: deck.html
+- Transcript message count: 7
+- Generated UTC timestamp: 2026-05-08T00:00:00Z
+`;
+    const result = parseProvenance(text);
+    expect(result).not.toBeNull();
+    expect(result!.projectId).toBe('build_id_v1_');
+  });
+
+  it('preserves a literal leading underscore even when the label is Markdown-bold', () => {
+    const text = `## Provenance
+
+- **Project ID:** abc-123
+- **Design system:** alphatrace
+- **Current artifact:** _draft.html
+- **Transcript message count:** 7
+- **Generated UTC timestamp:** 2026-05-08T00:00:00Z
+`;
+    const result = parseProvenance(text);
+    expect(result).not.toBeNull();
+    // The bold-label residue (`** `) must be stripped, but the literal
+    // leading underscore on the filename must remain.
+    expect(result!.currentArtifact).toBe('_draft.html');
+  });
+
+  it('strips a balanced **value** wrap (residue case, no preceding bold-label residue)', () => {
+    const text = `## Provenance
+
+- Project ID: **wrapped-id**
+- Design system: alphatrace
+- Current artifact: deck.html
+- Transcript message count: 7
+- Generated UTC timestamp: 2026-05-08T00:00:00Z
+`;
+    const result = parseProvenance(text);
+    expect(result).not.toBeNull();
+    // **X** is unambiguously Markdown emphasis residue per the issue
+    // spec; strip the balanced wrap.
+    expect(result!.projectId).toBe('wrapped-id');
+  });
+
   it('still treats "none" as the null sentinel after the bold-label prefix is stripped', () => {
     const text = `## Provenance
 

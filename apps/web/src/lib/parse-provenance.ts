@@ -41,10 +41,24 @@ export function parseProvenance(designMdText: string): ProvenanceFields | null {
 // (`- **Field:** value`) per Markdown convention. The capture starts
 // just after the label's `:`, so a leading `** ` (and any trailing
 // emphasis if the value itself is wrapped) leaks into the value.
-// Strip both ends; backticks are intentionally kept (the rendered
-// clipboard text reads fine with them).
+//
+// PR #1584 review (lefarcen): narrow the strip to only consume
+// Markdown residue, never literal `*`/`_` characters in the value:
+//   1. Leading `*`/`_` tokens FOLLOWED BY WHITESPACE
+//      (the `** ` left over from `- **Field:** value`).
+//   2. Trailing WHITESPACE followed by `*`/`_` tokens
+//      (mirror of step 1 if Claude closes after the value).
+//   3. A single balanced wrap around the whole remaining value
+//      (`**X**` / `*X*` / `__X__` / `_X_`).
+// Asymmetric literal `*`/`_` without a whitespace separator AND
+// without a balanced closing token are preserved
+// (e.g. `_draft.html`, `build_id_v1_`). Backticks are intentionally
+// kept (the rendered clipboard text reads fine with them).
 function stripMarkdownEmphasis(value: string): string {
-  return value.replace(/^[\s*_]+/, '').replace(/[\s*_]+$/, '');
+  let v = value.replace(/^[*_]+\s+/, '').replace(/\s+[*_]+$/, '');
+  const wrap = v.match(/^(\*\*|__|\*|_)(.+?)\1$/);
+  if (wrap && wrap[2]) v = wrap[2];
+  return v;
 }
 
 function extractRawValue(body: string, re: RegExp): string | null {
