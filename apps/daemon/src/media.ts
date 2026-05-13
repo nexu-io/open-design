@@ -1807,12 +1807,15 @@ const FAL_VIDEO_NO_DURATION = new Set([
   'fal-ai/wan-i2v',
 ]);
 
-// Video models that expect duration as a suffixed string ("5s") rather
-// than a bare integer.
+// Video models that expect duration as a suffixed string ("4s"/"6s"/"8s") and
+// only accept those specific buckets.
 const FAL_VIDEO_STRING_DURATION = new Set([
   'fal-ai/veo3',
   'fal-ai/veo2',
 ]);
+
+// Valid Veo duration buckets (seconds). Nearest-bucket clamp applied below.
+const FAL_VEO_DURATION_BUCKETS = [4, 6, 8];
 
 async function falQueueRun(
   endpoint: string,
@@ -1965,11 +1968,16 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
     aspect_ratio: aspectRatio,
   };
   // Some models (Wan) have no duration parameter; others (Veo) require a
-  // suffixed string ("5s") rather than a bare integer.
+  // suffixed string from a fixed bucket set ("4s"/"6s"/"8s").
   if (!FAL_VIDEO_NO_DURATION.has(endpoint)) {
-    input.duration = FAL_VIDEO_STRING_DURATION.has(endpoint)
-      ? `${durationSec}s`
-      : durationSec;
+    if (FAL_VIDEO_STRING_DURATION.has(endpoint)) {
+      const closest = FAL_VEO_DURATION_BUCKETS.reduce((a, b) =>
+        Math.abs(b - durationSec) < Math.abs(a - durationSec) ? b : a,
+      );
+      input.duration = `${closest}s`;
+    } else {
+      input.duration = durationSec;
+    }
   }
   if (ctx.imageRef?.dataUrl) {
     input.image_url = ctx.imageRef.dataUrl;
