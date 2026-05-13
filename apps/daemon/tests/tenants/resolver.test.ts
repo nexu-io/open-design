@@ -358,8 +358,9 @@ describe('tenantResolverMiddleware', () => {
   });
 
   test('(8) JWT expired → 302 to handshake (re-mint), NOT 401 dead-end', async () => {
-    // Cookie outlives Clerk JWT (cookie Max-Age=300s, but stale cookies can
-    // arrive after JWT exp). Bouncing through the handshake endpoint silently
+    // Cookie outlives Clerk JWT by design (cookie Max-Age=30d, JWT TTL ~5min).
+    // Stale JWT inside still-valid cookie is the COMMON case after the user
+    // sits idle on the canvas. Bouncing through the handshake endpoint silently
     // mints a fresh JWT off the user's primary-host Clerk session instead of
     // dead-ending the user at 401 with no auto-recovery.
     setEnvForPrimaryKey();

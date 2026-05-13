@@ -227,15 +227,23 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
           }
           const cleanUrl = stripHandshakeParam(req.url ?? '/');
           const cookieDomain = `${subdomain}${PLATFORM_DOMAIN_SUFFIX}`;
-          // Cookie TTL matches Clerk default JWT TTL (300s). Cookie outliving
-          // JWT means browser keeps sending stale token, gets 401, never
-          // auto-recovers. Align them so cookie expiry triggers re-handshake
-          // via the no-cookie path at 6b.
+          // Cookie TTL = 30 days, matching design-tool industry standard
+          // (Figma/Notion/Canva/Adobe). Non-technical users may stay on a
+          // design canvas for hours or days across a single project; the
+          // cookie must not die mid-session. The cookie is only a transport
+          // for the JWT — every request re-verifies the JWT via
+          // verifyClerkSession, so an expired JWT inside a long-lived cookie
+          // is caught at step 7 and silently re-minted through the
+          // handshake (~150ms round-trip). A SHORT cookie (300s, attempted
+          // earlier) caused a worse bug: user filling a question form for
+          // >5 min lost the cookie entirely, next fetch 302'd cross-origin
+          // which browsers cannot follow with credentials → silent "Failed
+          // to fetch" mid-session.
           const cookie =
             `__session=${handshakeToken}` +
             `; Domain=${cookieDomain}` +
             `; Path=/` +
-            `; Max-Age=300` +
+            `; Max-Age=2592000` +
             `; Secure` +
             `; HttpOnly` +
             `; SameSite=Lax`;
@@ -261,7 +269,26 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
       // session, mints a fresh JWT, and 302s back here with the handshake
       // param set. If the user is not signed in to the primary, the
       // handshake endpoint itself 302s to /sign-in first.
-      const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${req.url ?? '/'}`;
+      //
+      // EXCEPTION: /api/* requests cannot follow cross-origin 302s while
+      // carrying cookies (browser fetch CORS). Return 401 instead so the
+      // JS layer can surface a refresh prompt rather than silently failing
+      // with "TypeError: Failed to fetch".
+      const reqPath = req.url ?? '/';
+      if (reqPath.startsWith('/api/')) {
+        logResolution({
+          requestId,
+          host: rawHost,
+          subdomain,
+          result: 'denied',
+          stepFailed: 'no_session',
+          statusCode: 401,
+          extra: { reason: 'api_request_no_session' },
+        });
+        respondUnauthorized(res);
+        return;
+      }
+      const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${reqPath}`;
       const location = `${HANDSHAKE_URL}?target_url=${encodeURIComponent(returnUrl)}`;
       logResolution({
         requestId,
@@ -290,8 +317,27 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
         // even though their primary-host Clerk session is still valid. The
         // handshake re-mint round-trip is fast (~150ms) and silent to the
         // user.
+        //
+        // EXCEPTION: /api/* requests cannot follow cross-origin 302s while
+        // carrying cookies (browser fetch CORS). Return 401 instead so the
+        // JS layer can surface a refresh prompt rather than silently failing
+        // with "TypeError: Failed to fetch".
         if (kind === 'expired') {
-          const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${req.url ?? '/'}`;
+          const reqPath = req.url ?? '/';
+          if (reqPath.startsWith('/api/')) {
+            logResolution({
+              requestId,
+              host: rawHost,
+              subdomain,
+              result: 'denied',
+              stepFailed: 'jwt_invalid',
+              statusCode: 401,
+              extra: { jwt_failure_kind: kind, reason: 'api_request_expired_jwt' },
+            });
+            respondUnauthorized(res);
+            return;
+          }
+          const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${reqPath}`;
           const location = `${HANDSHAKE_URL}?target_url=${encodeURIComponent(returnUrl)}`;
           logResolution({
             requestId,
