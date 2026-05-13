@@ -85,7 +85,9 @@ def generate_single_tts(
             "responseModalities": ["AUDIO"],
             "speechConfig": {
                 "voiceConfig": {
-                    "predefinedVoice": cfg["voice_name"]
+                    "prebuiltVoiceConfig": {
+                        "voiceName": cfg["voice_name"]
+                    }
                 }
             }
         },

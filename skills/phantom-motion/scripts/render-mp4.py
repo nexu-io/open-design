@@ -68,7 +68,7 @@ module.paths.push('SKILL_DIR/node_modules');
 
     console.log(`🚀 物理采集启动: ${totalFrames} 帧`);
     const browser = await puppeteer.launch({
-        headless: false, // 强制可见窗口以获得全显卡加速
+        headless: 'new', // 强制可见窗口以获得全显卡加速
         args: ['--window-size=1920,1080', '--enable-webgl', '--ignore-gpu-blocklist']
     });
     
@@ -97,7 +97,19 @@ module.paths.push('SKILL_DIR/node_modules');
     for (let i = 0; i < totalFrames; i++) {
         const currentTime = i / fps;
         await page.evaluate((t) => {
-            if (window.renderFrame) window.renderFrame(t);
+            if (window.__timelines) {
+                if (Array.isArray(window.__timelines)) {
+                    window.__timelines.forEach(tl => {
+                        if (tl && tl.time) tl.time(t);
+                    });
+                } else {
+                    Object.values(window.__timelines).forEach(tl => {
+                        if (tl && tl.time) tl.time(t);
+                    });
+                }
+            } else if (window.renderFrame) {
+                window.renderFrame(t);
+            }
         }, currentTime);
         
         const framePath = path.join(outputDir, `frame_${String(i).padStart(5, '0')}.png`);
@@ -130,7 +142,7 @@ module.paths.push('SKILL_DIR/node_modules');
             "-i", str(temp_dir / "frame_%05d.png"),
             "-i", str(tts_path),
             "-i", str(bgm_path),
-            "-filter_complex", "[1:a]adelay=3000|3000[v1]; [2:a]volume=0.4[v2]; [v1][v2]amix=inputs=2:duration=first[a]",
+            "-filter_complex", "[1:a]adelay=3000|3000[v1]; [2:a]volume=0.4[v2]; [v1][v2]amix=inputs=2:duration=longest[a]",
             "-map", "0:v", "-map", "[a]",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
             "-shortest",
