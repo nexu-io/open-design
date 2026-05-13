@@ -18592,19 +18592,26 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 .routines-radio:hover,
-.routines-radio:active,
-.routines-radio:focus {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-  outline: none;
+.routines-radio:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .routines-radio input[type="radio"] {
-  display: none !important;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.routines-radio input:focus {
-  outline: none;
+.routines-radio input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .routines-radio:has(input[type="radio"]:checked) {
