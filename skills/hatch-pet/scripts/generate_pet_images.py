@@ -9,11 +9,10 @@ import hashlib
 import json
 import os
 import shutil
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-
-import requests
 
 ALL_STATES = [
     "idle",
@@ -102,18 +101,19 @@ def run_image_edit(
     for image_path in image_paths:
         fields.append(("image[]", (image_path.name, image_path.read_bytes(), "image/png")))
     fields.extend([
-        ("prompt", ("prompt.txt", prompt_file.read_bytes(), "text/plain")),
+        ("prompt", prompt_file.read_text(encoding="utf-8")),
         ("size", size),
         ("output_format", "png"),
     ])
     body, content_type = _multipart_body(fields)
-    resp = requests.post(
+    req = urllib.request.Request(
         "https://api.openai.com/v1/images/edits",
         data=body,
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": content_type},
-        timeout=300,
+        method="POST",
     )
-    output_json.write_bytes(resp.content)
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        output_json.write_bytes(resp.read())
     response = json.loads(output_json.read_text(encoding="utf-8"))
     if response.get("error"):
         raise SystemExit(json.dumps(response["error"], indent=2))
@@ -135,13 +135,14 @@ def run_image_generation(
         "size": size,
         "output_format": "png",
     }).encode()
-    resp = requests.post(
+    req = urllib.request.Request(
         "https://api.openai.com/v1/images/generations",
         data=payload,
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        timeout=300,
+        method="POST",
     )
-    output_json.write_bytes(resp.content)
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        output_json.write_bytes(resp.read())
     response = json.loads(output_json.read_text(encoding="utf-8"))
     if response.get("error"):
         raise SystemExit(json.dumps(response["error"], indent=2))
