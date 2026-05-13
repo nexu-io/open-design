@@ -120,6 +120,8 @@ export interface Dict {
   'settings.agentInstall.stepRescan': string;
   'settings.agentInstall.stepSelect': string;
   'settings.noAgentsDetected': string;
+  'settings.agentAuthRequired': string;
+  'settings.agentAuthUnknown': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.customProvider': string;

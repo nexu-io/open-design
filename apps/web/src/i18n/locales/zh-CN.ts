@@ -93,6 +93,8 @@ export const zhCN: Dict = {
   'settings.agentInstall.stepSelect': '当代理显示为已安装后，选择该代理卡片。',
   'settings.noAgentsDetected':
     '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen 或 GitHub Copilot CLI 中的一个，然后点击「重新扫描」。',
+  'settings.agentAuthRequired': '需要认证',
+  'settings.agentAuthUnknown': '认证状态未知',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': '快速填充提供方',
   'settings.customProvider': '自定义提供方',
