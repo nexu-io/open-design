@@ -52,8 +52,7 @@ describe('renderMarkdown', () => {
       '|:---|:---:|---:|',
       '| a | b | c |',
       '| d | e | f |',
-    ].join('
-');
+    ].join('\n');
     const out = html(md);
     expect(out).toContain('<div class="md-table-wrap">');
     expect(out).toContain('<table class="md-table">');
@@ -66,29 +65,31 @@ describe('renderMarkdown', () => {
   });
 
   it('renders inline code and bold inside table cells', () => {
-    const md = ['| k | v |', '|---|---|', '| `id` | **bold** |'].join('
-');
+    const md = ['| k | v |', '|---|---|', '| `id` | **bold** |'].join('\n');
     const out = html(md);
     expect(out).toContain('<code class="md-inline-code">id</code>');
     expect(out).toContain('<strong>bold</strong>');
   });
 
   it('keeps escaped pipes literal inside a cell', () => {
-    const md = ['| a | b |', '|---|---|', '| x \| y | z |'].join('
-');
+    const md = ['| a | b |', '|---|---|', '| x \\| y | z |'].join('\n');
     const out = html(md);
     expect(out).toContain('x | y');
   });
 
   it('breaks the preceding paragraph at a table start without a blank line', () => {
-    const md = ['Intro paragraph', '| a | b |', '|---|---|', '| 1 | 2 |'].join('
-');
+    const md = ['Intro paragraph', '| a | b |', '|---|---|', '| 1 | 2 |'].join('\n');
     const out = html(md);
     expect(out).toContain('Intro paragraph');
     expect(out).toContain('<div class="md-table-wrap">');
     expect(out).toContain('<table class="md-table">');
-    expect(out).not.toContain('Intro paragraph
-| a');
+    expect(out).not.toContain('Intro paragraph\n| a');
+  });
+
+  it('does not promote mismatched header and separator widths to a table', () => {
+    const md = ['A | B', '---'].join('\n');
+    const out = html(md);
+    expect(out).not.toContain('<table');
   });
 
   it('does not promote a stray pipe-containing line to a table', () => {
@@ -102,8 +103,7 @@ describe('renderMarkdown', () => {
     // The pre-review splitter ran before inline parsing and shredded such
     // rows; this asserts the scan-based splitter keeps the code span whole
     // (one body cell, not two).
-    const md = ['| status | type |', '|---|---|', '| ok | `"ready" | "done"` |'].join('
-');
+    const md = ['| status | type |', '|---|---|', '| ok | `"ready" | "done"` |'].join('\n');
     const out = html(md);
     expect(out).toContain('<code class="md-inline-code">&quot;ready&quot; | &quot;done&quot;</code>');
     // Exactly two <td> cells in the body row — pipe inside backticks must

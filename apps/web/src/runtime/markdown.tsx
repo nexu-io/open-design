@@ -52,7 +52,7 @@ function splitTableCells(line: string): string[] {
   if (line[i] === '|') i++;
   for (; i < line.length; i++) {
     const ch = line[i]!;
-    if (ch === '\' && line[i + 1] === '|') {
+    if (ch === '\\' && line[i + 1] === '|') {
       cur += '|';
       i++;
       continue;
@@ -93,7 +93,9 @@ function isTableStartAt(lines: string[], i: number): boolean {
   const sep = lines[i + 1];
   if (header === undefined || sep === undefined) return false;
   if (!header.includes('|')) return false;
-  return parseTableAlignRow(sep) !== null;
+  const headerCells = splitTableCells(header);
+  const aligns = parseTableAlignRow(sep);
+  return aligns !== null && headerCells.length === aligns.length;
 }
 
 function parseBlocks(input: string): Block[] {
@@ -118,8 +120,7 @@ function parseBlocks(input: string): Block[] {
       }
       // Skip the closing fence (if present).
       if (i < lines.length) i++;
-      out.push({ kind: 'code', lang, body: buf.join('
-') });
+      out.push({ kind: 'code', lang, body: buf.join('\n') });
       continue;
     }
     // Table.
@@ -266,9 +267,7 @@ function renderBlock(block: Block, key: number): ReactNode {
 // span (which itself still gets autolink scanning).
 function renderInline(text: string): ReactNode {
   const out: ReactNode[] = [];
-  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*
-]+\*)|(_[^_
-]+_)/g;
+  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
   let lastIndex = 0;
   let m: RegExpExecArray | null;
   let key = 0;
@@ -354,8 +353,7 @@ function pushText(out: ReactNode[], text: string, baseKey: number): void {
 }
 
 function withBreaks(text: string, baseKey: string): ReactNode[] {
-  const parts = text.split('
-');
+  const parts = text.split('\n');
   const out: ReactNode[] = [];
   parts.forEach((part, i) => {
     if (i > 0) out.push(<br key={`${baseKey}-br-${i}`} />);

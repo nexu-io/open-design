@@ -84,7 +84,7 @@ function splitCells(line: string): string[] {
   if (line[i] === '|') i++;
   for (; i < line.length; i++) {
     const ch = line[i]!;
-    if (ch === '\' && line[i + 1] === '|') {
+    if (ch === '\\' && line[i + 1] === '|') {
       cur += '|';
       i++;
       continue;
@@ -125,7 +125,9 @@ function isTableStartAt(lines: string[], i: number): boolean {
   const sep = lines[i + 1];
   if (header === undefined || sep === undefined) return false;
   if (!header.includes('|')) return false;
-  return parseTableAlignRow(sep) !== null;
+  const headerCells = splitCells(header);
+  const aligns = parseTableAlignRow(sep);
+  return aligns !== null && headerCells.length === aligns.length;
 }
 
 function alignAttr(align: TableAlign): string {
@@ -161,8 +163,7 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
         i += 1;
       }
       if (i < lines.length) i += 1;
-      out.push(`<pre><code>${escapeHtml(code.join('
-'))}</code></pre>`);
+      out.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
       continue;
     }
 
@@ -222,7 +223,7 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
         items.push((lines[i] ?? '').replace(/^\s*[-*+]\s+/, ''));
         i++;
       }
-      out.push(`<ul>${items.join('')}</ul>`);
+      out.push(`<ul>${items.map((item) => `<li>${formatInline(item)}</li>`).join('')}</ul>`);
       continue;
     }
 
@@ -232,7 +233,7 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
         items.push((lines[i] ?? '').replace(/^\s*\d+\.\s+/, ''));
         i++;
       }
-      out.push(`<ol>${items.join('')}</ol>`);
+      out.push(`<ol>${items.map((item) => `<li>${formatInline(item)}</li>`).join('')}</ol>`);
       continue;
     }
 
@@ -252,6 +253,5 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
     out.push(`<p>${formatInline(buf.join(' '))}</p>`);
   }
 
-  return out.join('
-');
+  return out.join('\n');
 }
