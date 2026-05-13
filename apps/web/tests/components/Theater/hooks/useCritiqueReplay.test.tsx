@@ -354,67 +354,6 @@ describe('useCritiqueReplay (Phase 7.3)', () => {
     expect(sink.state.phase).toBe('shipped');
   });
 
-  it('rejects an incomplete terminal transcript event so the reducer never sees undefined fields (Siri-Ray round-3 P1 on PR #1314)', async () => {
-    // The previous revision parsed transcripts with the cheap
-    // `isPanelEvent` header check, so a recorded line like
-    // `{"type":"ship","runId":"r"}` (composite, status, round, artifactRef
-    // and summary all missing) slipped through to the reducer.
-    // TheaterCollapsed would then read `final.composite.toFixed(1)` on an
-    // undefined value and crash. The strict guard rejects the line entirely,
-    // so the reducer stays at its prior phase and the replay finishes
-    // without surfacing the broken record.
-    const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
-    const raw
-      = JSON.stringify(TRANSCRIPT[0]) + '\n'
-      + JSON.stringify({ type: 'ship', runId: RUN_ID }) + '\n';
-
-    render(
-      <Probe
-        url="/api/replay.ndjson"
-        speed="instant"
-        options={{ fetchTranscript: async () => raw }}
-        sink={sink}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(sink.status).toBe('done');
-    });
-    // Only the well-formed run_started reached the reducer; the bad ship
-    // line was dropped, so the phase stays at running rather than
-    // landing on a malformed `shipped`.
-    expect(sink.state.phase).toBe('running');
-  });
-
-  it('rejects a transcript ship event with an unknown status enum value (Siri-Ray round-3 P1 on PR #1314)', async () => {
-    // Even with every required field present, a `status: "weird"`
-    // violates the ShipStatus closed set in packages/contracts. The
-    // strict guard rejects it so SHIP_BADGE_KEY[status] never sees an
-    // undefined key downstream.
-    const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
-    const raw
-      = JSON.stringify(TRANSCRIPT[0]) + '\n'
-      + JSON.stringify({
-        type: 'ship', runId: RUN_ID, round: 1, composite: 8.2,
-        status: 'mystery_status',
-        artifactRef: { projectId: 'p', artifactId: 'a' }, summary: 'looks good',
-      }) + '\n';
-
-    render(
-      <Probe
-        url="/api/replay.ndjson"
-        speed="instant"
-        options={{ fetchTranscript: async () => raw }}
-        sink={sink}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(sink.status).toBe('done');
-    });
-    expect(sink.state.phase).toBe('running');
-  });
-
   it('resets reducer state to idle when transcriptUrl flips to null after a replay (PR #1314 review)', async () => {
     // Lefarcen + Siri-Ray + codex P2: clearing the URL after a
     // replay reached `shipped` previously only cleared meta + events

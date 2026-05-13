@@ -28,6 +28,39 @@ afterEach(() => {
 });
 
 describe('ChatPane streaming state', () => {
+  it('renders user turns with the chat bubble styling hook', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Generate a simple sign-in page',
+        createdAt: 1,
+      },
+    ];
+
+    render(
+      <ChatPane
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    const bubble = screen.getByText('Generate a simple sign-in page');
+    expect(bubble.classList.contains('user-bubble')).toBe(true);
+    expect(bubble.closest('.msg.user')).not.toBeNull();
+  });
+
   it('keeps composer idle while active-run messages still render as streaming', () => {
     const messages: ChatMessage[] = [
       {

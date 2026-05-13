@@ -2319,7 +2319,7 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'routines' ? <RoutinesSection /> : null}
+          {activeSection === 'routines' ? <RoutinesSection onClose={onClose} /> : null}
 
           {activeSection === 'orbit' ? (
             <OrbitSection
@@ -2398,7 +2398,27 @@ export function SettingsDialog({
             <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'memory' ? <MemorySection /> : null}
+          {activeSection === 'memory' ? (
+            <>
+              <section className="settings-section">
+                <div className="section-head">
+                  <div>
+                    <h3>{t('settings.customInstructionsTitle')}</h3>
+                    <p className="hint">{t('settings.customInstructionsHint')}</p>
+                  </div>
+                </div>
+                <textarea
+                  className="custom-instructions-input"
+                  rows={5}
+                  maxLength={5000}
+                  placeholder={t('settings.customInstructionsPlaceholder')}
+                  value={cfg.customInstructions ?? ''}
+                  onChange={(e) => setCfg({ ...cfg, customInstructions: e.target.value || undefined })}
+                />
+              </section>
+              <MemorySection />
+            </>
+          ) : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />
@@ -2518,12 +2538,27 @@ function ConnectorSection({
   // completes, the daemon returns a tail-only echo, and we land in
   // the saved state with the same UI as a key loaded from disk.
   const [keySaveStatus, setKeySaveStatus] =
-    useState<'idle' | 'saving' | 'error'>('idle');
+    useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [catalogRefreshNonce, setCatalogRefreshNonce] = useState(0);
+  const keySavedTimerRef = useRef<number | null>(null);
+  // Clear the saved-state timer on unmount to avoid setState after unmount
+  useEffect(() => {
+    return () => {
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
+    };
+  }, []);
   const handleSaveKey = async () => {
     if (keySaveStatus === 'saving') return;
     if (!hasPendingEdit) return;
     if (composioConfigLoading) return;
+    // Clear any stale timer before transitioning to 'saving' to prevent
+    // it from firing during the await and flipping the button back to idle.
+    if (keySavedTimerRef.current != null) {
+      window.clearTimeout(keySavedTimerRef.current);
+      keySavedTimerRef.current = null;
+    }
     const pendingKey = composio.apiKey ?? '';
     setKeySaveStatus('saving');
     try {
@@ -2539,9 +2574,22 @@ function ConnectorSection({
         apiKeyTail: pendingKey.trim().slice(-4),
       });
       setCatalogRefreshNonce((nonce) => nonce + 1);
-      setKeySaveStatus('idle');
+      // Clear any existing timer before starting a new one to avoid
+      // a stale timeout flipping status back to 'idle' after a
+      // subsequent save or clear.
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
+      setKeySaveStatus('saved');
+      keySavedTimerRef.current = window.setTimeout(() => {
+        setKeySaveStatus('idle');
+      }, 2000);
     } catch {
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
       setKeySaveStatus('error');
+      keySavedTimerRef.current = null;
     }
   };
 
@@ -2615,6 +2663,12 @@ function ConnectorSection({
   const handleClearCommit = async () => {
     if (keySaveStatus === 'saving') return;
     if (!clearArmed) return;
+    // Clear any stale timer before transitioning to 'saving', matching
+    // handleSaveKey's pattern for consistency.
+    if (keySavedTimerRef.current != null) {
+      window.clearTimeout(keySavedTimerRef.current);
+      keySavedTimerRef.current = null;
+    }
     setKeySaveStatus('saving');
     try {
       const cleared = {
@@ -2629,7 +2683,11 @@ function ConnectorSection({
       setClearArmed(false);
       setKeySaveStatus('idle');
     } catch {
+      if (keySavedTimerRef.current != null) {
+        window.clearTimeout(keySavedTimerRef.current);
+      }
       setKeySaveStatus('error');
+      keySavedTimerRef.current = null;
     }
   };
 
@@ -2732,6 +2790,11 @@ function ConnectorSection({
               <>
                 <Icon name="spinner" size={12} className="icon-spin" />
                 <span>{t('settings.connectorsKeySaving')}</span>
+              </>
+            ) : keySaveStatus === 'saved' ? (
+              <>
+                <Icon name="check" size={12} />
+                <span>{t('settings.connectorsKeySaved')}</span>
               </>
             ) : (
               t('settings.connectorsSaveKey')

@@ -6,6 +6,12 @@ import { promisify } from "node:util";
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import {
+  WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
+  WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
+  WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
+  shouldUseWinStandalonePrebundle,
+} from "../win-prebundle.js";
 import { buildCustomWinNsisInstaller } from "./custom-installer.js";
 import {
   ELECTRON_BUILDER_ASAR,
@@ -64,6 +70,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPa
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
+        requireRootWebPackageAudit: !shouldUseWinStandalonePrebundle(config.webOutputMode),
         resourceName: WEB_STANDALONE_RESOURCE_NAME,
         standaloneSourceRoot: join(webRoot, ".next", "standalone"),
         version: 1,
@@ -246,6 +253,14 @@ export async function runElectronBuilder(
   resourceTree: ResourceTreeResult,
 ): Promise<void> {
   const packagedVersion = await readPackagedVersion(config);
+  const usePrebundle = shouldUseWinStandalonePrebundle(config.webOutputMode);
+  const packagedConfigEntrypoints = usePrebundle
+    ? {
+        daemonCliEntryRelative: WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
+        daemonSidecarEntryRelative: WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
+        webSidecarEntryRelative: WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
+      }
+    : {};
   const key = hashJson({
     afterPackHook: config.webOutputMode === "standalone" ? await hashPath(winResources.webStandaloneAfterPackHook) : null,
     asar: ELECTRON_BUILDER_ASAR,
@@ -258,7 +273,7 @@ export async function runElectronBuilder(
     npmRebuild: ELECTRON_BUILDER_NPM_REBUILD,
     packagedAppKey,
     packagedVersion,
-    packagedConfigSchemaVersion: 1,
+    packagedConfigSchemaVersion: usePrebundle ? 2 : 1,
     portable: config.portable,
     platform: "win32",
     resourceTreeKey: resourceTree.key,
@@ -309,7 +324,7 @@ export async function runElectronBuilder(
   const cachedUnpackedRoot = join(cachedBuilderRoot, "win-unpacked");
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
   await removeTree(paths.appBuilderOutputRoot);
-  await writePackagedConfig(config, paths, packagedVersion);
+  await writePackagedConfig(config, paths, packagedVersion, packagedConfigEntrypoints);
   await materializeCachedElectronBuilderAudit(manifest.entryPath, paths);
   await writeBuiltAppManifest(paths, {
     appBuilderOutputRoot: cachedBuilderRoot,
