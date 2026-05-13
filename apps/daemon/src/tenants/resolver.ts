@@ -201,6 +201,37 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
         } catch (err) {
           const kind =
             err instanceof ClerkVerificationError ? err.kind : 'invalid';
+          // Bug 9: when the handshake URL JWT is itself expired (Clerk
+          // JWT TTL = 300s; network/processing latency + user idle can
+          // exceed that between mint at primary and consume at satellite),
+          // bounce back to the handshake endpoint to mint a fresh JWT
+          // instead of 401. Without this, the cascade Bug 6+7+8 is
+          // incomplete: stale-cookie → fresh handshake URL → expired
+          // before consume → 401 → infinite reload. Only `expired`
+          // triggers 302; other kinds (invalid_signature, malformed)
+          // remain 401 since those indicate tampering.
+          if (kind === 'expired') {
+            logResolution({
+              requestId,
+              host: rawHost,
+              subdomain,
+              result: 'redirect',
+              stepFailed: 'jwt_invalid',
+              statusCode: 302,
+              extra: {
+                jwt_failure_kind: kind,
+                source: 'handshake',
+                action: 're_handshake',
+              },
+            });
+            const cleanUrl = stripHandshakeParam(req.url ?? '/');
+            const targetUrl = `https://${rawHost}${cleanUrl}`;
+            respondRedirect(
+              res,
+              `${HANDSHAKE_URL}?target_url=${encodeURIComponent(targetUrl)}`,
+            );
+            return;
+          }
           logResolution({
             requestId,
             host: rawHost,

@@ -491,6 +491,58 @@ describe('tenantResolverMiddleware', () => {
     expect(setCookie).toContain('Max-Age=2592000');
   });
 
+  test('(14) REGRESSION Bug 9: expired handshake URL JWT → 302 to re-handshake (NOT 401)', async () => {
+    setEnvForPrimaryKey();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    // Handshake JWT minted but expired in transit (network latency + user
+    // idle past 300s TTL). v3+v5 returned 401 here — the real cause of
+    // the prod redirect loop after Bug 6+7+8 stacked fixes.
+    const expiredHandshakeToken = await signTestToken(
+      buildClaims('ericedmeades'),
+      {
+        keyPair: primaryKey,
+        iat: nowSeconds - 1200,
+        exp: nowSeconds - 600,
+        nbf: nowSeconds - 1205,
+      },
+    );
+
+    const result = await invoke({
+      host: 'ericedmeades.opendesign.holalumina.com',
+      url: `/?__od_handshake=${expiredHandshakeToken}`,
+    });
+
+    expect(result.nextCalled).toBe(false);
+    expect(result.captured.status).toBe(302);
+    const location = result.captured.headers['location'];
+    expect(location).toBeDefined();
+    // Must bounce back to handshake endpoint so primary mints a fresh JWT.
+    expect(location).toContain('app.holalumina.com/api/od-handshake');
+    expect(location).toContain(
+      encodeURIComponent('https://ericedmeades.opendesign.holalumina.com/'),
+    );
+    // Must NOT set a cookie (that path is reserved for successful consume).
+    expect(result.captured.headers['set-cookie']).toBeUndefined();
+  });
+
+  test('(15) invalid-signature handshake URL JWT still returns 401 (NOT 302)', async () => {
+    setEnvForPrimaryKey();
+    // Token signed with a FOREIGN key, but resolver only trusts primary.
+    // invalid-signature ≠ expired → must NOT 302 (no infinite-mint loop risk).
+    const wrongKeyToken = await signTestToken(buildClaims('ericedmeades'), {
+      keyPair: foreignKey,
+    });
+
+    const result = await invoke({
+      host: 'ericedmeades.opendesign.holalumina.com',
+      url: `/?__od_handshake=${wrongKeyToken}`,
+    });
+
+    expect(result.nextCalled).toBe(false);
+    expect(result.captured.status).toBe(401);
+    expect(result.captured.headers['location']).toBeUndefined();
+  });
+
   // -------------------------------------------------------------------------
   // Cross-cutting: byte-identical 404 — invariant across all 6 cases.
   // -------------------------------------------------------------------------
