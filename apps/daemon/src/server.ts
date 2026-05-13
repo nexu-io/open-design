@@ -157,6 +157,7 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
   RoutineService,
   validateSchedule as validateRoutineSchedule,
@@ -4700,7 +4701,9 @@ export async function startServer({
         ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
         summary: artifact?.id
           ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
-          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+          : finalStatus.status === 'succeeded'
+            ? buildOrbitNoLiveArtifactSummary(run.events)
+            : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
       };
     })();
 
