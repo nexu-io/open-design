@@ -648,14 +648,6 @@ async function runCommentAttachmentFlow(
   await expect(page.getByTestId('comments-panel').getByRole('heading', { name: 'Saved comments' })).toBeVisible();
   await page.getByTestId('comments-panel')
     .locator('[data-testid="comment-card-hero-title"]')
-    .getByRole('button', { name: 'Select' })
-    .click();
-  await page.getByTestId('comments-panel')
-    .locator('[data-testid="comment-card-hero-title"]')
-    .getByRole('button', { name: 'Deselect' })
-    .click();
-  await page.getByTestId('comments-panel')
-    .locator('[data-testid="comment-card-hero-title"]')
     .getByRole('button', { name: 'Add' })
     .click();
   await page.getByRole('tab', { name: 'Chat' }).click();
