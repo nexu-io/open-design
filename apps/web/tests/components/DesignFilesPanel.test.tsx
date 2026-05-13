@@ -123,7 +123,20 @@ describe('DesignFilesPanel grouping', () => {
     expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
   });
 
-  it('keeps the ungrouped table view as the default view', () => {
+  it('groups files by kind when kind grouping is selected', () => {
+    renderPanel([
+      file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
+      file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
+    ]);
+
+    expect(screen.getByText('HTML page')).toBeTruthy();
+    expect(screen.getByText('Image')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-page.html')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-chart.png')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
+  });
+
+  it('keeps kind grouping selected by default', () => {
     renderPanel([
       file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
       file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),

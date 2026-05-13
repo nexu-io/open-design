@@ -501,6 +501,29 @@ export function DesignFilesPanel({
     });
   }
 
+  function renderKindSections() {
+    const grouped = new Map<ProjectFileKind, ProjectFile[]>();
+    for (const file of pageFiles) {
+      const next = grouped.get(file.kind) ?? [];
+      next.push(file);
+      grouped.set(file.kind, next);
+    }
+
+    return [...grouped.entries()]
+      .sort(([a], [b]) => kindSortPriority(a) - kindSortPriority(b))
+      .flatMap(([kind, kindFiles]) => [
+        <tr className="df-section-row" key={`${kind}-label`}>
+          <td colSpan={6}>
+            <div className="df-section-label">
+              <span>{kindLabel(kind, t)}</span>
+              <span className="df-section-count">{kindFiles.length}</span>
+            </div>
+          </td>
+        </tr>,
+        ...kindFiles.map(renderFileRow),
+      ]);
+  }
+
   async function handleBatchDownload() {
     const fileList = [...selected];
     if (fileList.length === 0) return;
@@ -807,7 +830,9 @@ export function DesignFilesPanel({
                     <tbody>
                       {groupMode === 'modified'
                         ? renderModifiedSections()
-                        : pageFiles.map(renderFileRow)}
+                        : groupMode === 'kind'
+                          ? renderKindSections()
+                          : pageFiles.map(renderFileRow)}
                     </tbody>
                   </table>
                   <div className="df-pagination df-pagination-center">
