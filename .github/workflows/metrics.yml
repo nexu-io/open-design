@@ -18,6 +18,7 @@ permissions:
 jobs:
   metrics:
     name: Generate repository metrics SVG
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub repository metrics

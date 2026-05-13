@@ -36,6 +36,7 @@ env:
 jobs:
   metadata:
     name: Prepare release metadata
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

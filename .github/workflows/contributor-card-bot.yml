@@ -32,11 +32,14 @@ jobs:
   recognize:
     name: Render and post contributor card
     if: |
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
-      (github.event_name == 'issues' && github.event.action == 'opened') ||
-      (github.event_name == 'discussion' && github.event.action == 'created') ||
-      (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
-      github.event_name == 'workflow_dispatch'
+      github.repository == 'nexu-io/open-design' &&
+      (
+        (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+        (github.event_name == 'issues' && github.event.action == 'opened') ||
+        (github.event_name == 'discussion' && github.event.action == 'created') ||
+        (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
