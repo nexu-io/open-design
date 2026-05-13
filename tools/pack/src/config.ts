@@ -73,6 +73,18 @@ export type ToolPackConfig = {
   silent: boolean;
   signed: boolean;
   telemetryRelayUrl?: string;
+  /**
+   * PostHog product-analytics ingest key, sourced from process.env.POSTHOG_KEY
+   * at packaging time. Baked into open-design-config.json so the packaged
+   * daemon can read it as POSTHOG_KEY env at launch — only official Open
+   * Design builds (CI with the secret set) ship with this; forks compiling
+   * locally produce binaries that omit the key and the integration
+   * short-circuits cleanly. Apache-2.0 keeps the bundle public, but `phc_`
+   * keys are write-only event ingest keys (cannot read your project data),
+   * so embedding them in the binary is the PostHog-recommended pattern.
+   */
+  posthogKey?: string;
+  posthogHost?: string;
   to: ToolPackBuildOutput;
   webOutputMode: ToolPackWebOutputMode;
   workspaceRoot: string;
@@ -107,6 +119,36 @@ function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string 
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
+}
+
+function resolveToolPackPosthogKey(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  // PostHog public keys start with `phc_`. We don't hard-fail on other
+  // shapes — third-party PostHog deployments may use different prefixes —
+  // but flag obviously-wrong values (whitespace, control chars) so a
+  // misconfigured CI secret doesn't silently bake garbage into the bundle.
+  if (/[\s\x00-\x1f]/.test(normalized)) {
+    throw new Error(`POSTHOG_KEY contains whitespace or control chars: ${value}`);
+  }
+  return normalized;
+}
+
+function resolveToolPackPosthogHost(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`POSTHOG_HOST must be an absolute URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`POSTHOG_HOST must be http(s): ${value}`);
+  }
+  return normalized.replace(/\/+$/, "");
 }
 
 function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | undefined {
@@ -195,6 +237,8 @@ export function resolveToolPackConfig(
     silent: options.silent !== false,
     signed: options.signed === true,
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
+    posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
+    posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -33,8 +33,10 @@
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "lucide-react": "^1.14.0",
     "next": "^16.2.5",
     "openai": "^6.36.0",
+    "posthog-js": "^1.205.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

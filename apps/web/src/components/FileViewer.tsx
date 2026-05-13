@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
+import {
+  anonymizeArtifactId,
+  artifactKindToTracking,
+  type TrackingProjectKind,
+} from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackArtifactExportResult,
+  trackStudioClickShareOption,
+  trackStudioViewArtifact,
+} from '../analytics/events';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useT, useI18n } from '../i18n';
@@ -367,21 +378,69 @@ function PreviewViewportControls({
   t: TranslateFn;
   tabIndex?: number;
 }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const listboxId = useId();
+  const activePreset =
+    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className="viewer-viewport-switcher" role="group" aria-label={t('fileViewer.viewportAria')}>
-      {PREVIEW_VIEWPORT_PRESETS.map((preset) => (
-        <button
-          key={preset.id}
-          type="button"
-          className={`viewer-action viewer-viewport-button${viewport === preset.id ? ' active' : ''}`}
-          aria-pressed={viewport === preset.id}
-          title={t(preset.titleKey)}
-          tabIndex={tabIndex}
-          onClick={() => onViewport(preset.id)}
-        >
-          {t(preset.labelKey)}
-        </button>
-      ))}
+    <div className="viewer-viewport-switcher" ref={menuRef}>
+      <button
+        type="button"
+        className="viewer-action viewer-viewport-trigger"
+        aria-label={t('fileViewer.viewportAria')}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        title={t(activePreset.titleKey)}
+        tabIndex={tabIndex}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>{t(activePreset.labelKey)}</span>
+        <Icon name="chevron-down" size={11} />
+      </button>
+      {open ? (
+        <div className="viewer-viewport-menu" id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
+          {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
+            const selected = viewport === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className={`viewer-viewport-menu-item${selected ? ' active' : ''}`}
+                role="option"
+                aria-selected={selected}
+                title={t(preset.titleKey)}
+                onClick={() => {
+                  onViewport(preset.id);
+                  setOpen(false);
+                }}
+              >
+                <span>{t(preset.labelKey)}</span>
+                {selected ? <Icon name="check" size={13} /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -514,6 +573,7 @@ function setSlideStateCached(key: string, state: SlideState) {
 
 interface Props {
   projectId: string;
+  projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
   isDeck?: boolean;
@@ -528,6 +588,7 @@ interface Props {
 
 export function FileViewer({
   projectId,
+  projectKind,
   file,
   liveHtml,
   isDeck,
@@ -544,10 +605,36 @@ export function FileViewer({
     isDeckHint: Boolean(isDeck),
   });
 
+  // studio_view artifact — fire once per (project, file) pair so the
+  // activation funnel can attribute "user opened the produced artifact"
+  // even when the sub-viewer below is HtmlViewer / MarkdownViewer / etc.
+  // artifact_id is anonymized to satisfy the CSV's no-filename rule.
+  const analytics = useAnalytics();
+  const studioViewKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${projectId}::${file.name}`;
+    if (studioViewKeyRef.current === key) return;
+    studioViewKeyRef.current = key;
+    trackStudioViewArtifact(analytics.track, {
+      page: 'studio',
+      area: 'artifact',
+      element: 'artifact_view',
+      view_type: 'artifact',
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({
+        rendererId: rendererMatch?.renderer.id ?? null,
+        fileKind: file.kind ?? null,
+      }),
+      project_id: projectId,
+      project_kind: projectKind,
+    });
+  }, [projectId, projectKind, file.name, file.kind, rendererMatch?.renderer.id, analytics.track]);
+
   if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') {
     return (
       <HtmlViewer
         projectId={projectId}
+        projectKind={projectKind}
         file={file}
         liveHtml={liveHtml}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
@@ -3374,6 +3461,7 @@ function DocumentPreviewViewer({
 
 function HtmlViewer({
   projectId,
+  projectKind,
   file,
   liveHtml,
   isDeck,
@@ -3386,6 +3474,7 @@ function HtmlViewer({
   onFileSaved,
 }: {
   projectId: string;
+  projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
   isDeck: boolean;
@@ -3398,6 +3487,73 @@ function HtmlViewer({
   onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
+  // Shared helper for the share menu: emit studio_click share_option on
+  // entry and artifact_export_result on resolution. Sync exports report
+  // success immediately after the call returns; async exports get .then
+  // / .catch. The same request_id threads both events so PostHog can
+  // stitch click → result via $insert_id correlation.
+  const fireShareExport = (
+    format:
+      | 'pdf'
+      | 'pptx'
+      | 'zip'
+      | 'html'
+      | 'markdown'
+      | 'template'
+      | 'vercel'
+      | 'cloudflare_pages',
+    fn: () => Promise<unknown> | unknown,
+  ) => {
+    const requestId = analytics.newRequestId();
+    const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
+    trackStudioClickShareOption(
+      analytics.track,
+      {
+        page: 'studio',
+        area: 'app_header',
+        artifact_id: artifactId,
+        element: 'share_option',
+        action: 'select_share_option',
+        share_context: 'artifact',
+        export_format: format,
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
+    const started = performance.now();
+    const finish = (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page: 'studio',
+          area: 'app_header',
+          artifact_id: artifactId,
+          project_id: projectId,
+          project_kind: projectKind,
+          export_format: format,
+          result,
+          ...(errorCode ? { error_code: errorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+        },
+        { requestId },
+      );
+    };
+    try {
+      const out = fn();
+      if (out && typeof (out as Promise<unknown>).then === 'function') {
+        (out as Promise<unknown>).then(
+          () => finish('success'),
+          (err) => finish('failed', err instanceof Error ? err.name : 'UNKNOWN'),
+        );
+      } else {
+        finish('success');
+      }
+    } catch (err) {
+      finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
+    }
+  };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
@@ -4965,6 +5121,7 @@ function HtmlViewer({
     return t('fileViewer.deployLinkPreparingLabel');
   };
   const boardAvailable = mode === 'preview' && source !== null;
+  const showPreviewToolbarControls = mode === 'preview';
 
   return (
     <div className="viewer html-viewer">
@@ -4996,7 +5153,7 @@ function HtmlViewer({
               {t('fileViewer.source')}
             </button>
           </div>
-          {effectiveDeck ? (
+          {showPreviewToolbarControls && effectiveDeck ? (
             <span
               className="deck-nav"
               role="group"
@@ -5034,41 +5191,83 @@ function HtmlViewer({
           ) : null}
         </div>
         <div className="viewer-toolbar-actions">
-          <div className="palette-tweaks-anchor">
-            <button
-              type="button"
-              className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
-              data-testid="palette-tweaks-toggle"
-              title="Tweaks"
-              aria-haspopup="dialog"
-              aria-expanded={palettePopoverOpen}
-              onClick={() => setPalettePopoverOpen((v) => !v)}
-            >
-              <Icon name="tweaks" size={13} />
-              <span>Tweaks</span>
-              {selectedPalette ? (
-                <span
-                  className="palette-tweaks-badge"
-                  aria-hidden
-                  style={{
-                    backgroundColor:
-                      selectedPalette === 'coral' ? '#ff5a3c' :
-                      selectedPalette === 'electric' ? '#7c3aed' :
-                      selectedPalette === 'acid-forest' ? '#16a34a' :
-                      selectedPalette === 'risograph' ? '#e11d48' :
-                      '#0a0a0a',
-                  }}
+          {showPreviewToolbarControls ? (
+            <>
+              <div className="palette-tweaks-anchor">
+                <button
+                  type="button"
+                  className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
+                  data-testid="palette-tweaks-toggle"
+                  title="Tweaks"
+                  aria-haspopup="dialog"
+                  aria-expanded={palettePopoverOpen}
+                  onClick={() => setPalettePopoverOpen((v) => !v)}
+                >
+                  <Icon name="tweaks" size={13} />
+                  <span>Tweaks</span>
+                  {selectedPalette ? (
+                    <span
+                      className="palette-tweaks-badge"
+                      aria-hidden
+                      style={{
+                        backgroundColor:
+                          selectedPalette === 'coral' ? '#ff5a3c' :
+                          selectedPalette === 'electric' ? '#7c3aed' :
+                          selectedPalette === 'acid-forest' ? '#16a34a' :
+                          selectedPalette === 'risograph' ? '#e11d48' :
+                          '#0a0a0a',
+                      }}
+                    />
+                  ) : null}
+                </button>
+                <PaletteTweaks
+                  open={palettePopoverOpen}
+                  selected={selectedPalette}
+                  onChange={setSelectedPalette}
+                  onPreview={setPreviewPalette}
+                  onClose={() => setPalettePopoverOpen(false)}
                 />
-              ) : null}
-            </button>
-            <PaletteTweaks
-              open={palettePopoverOpen}
-              selected={selectedPalette}
-              onChange={setSelectedPalette}
-              onPreview={setPreviewPalette}
-              onClose={() => setPalettePopoverOpen(false)}
-            />
-          </div>
+              </div>
+              <button
+                className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
+                type="button"
+                data-testid="draw-overlay-toggle"
+                title={t('fileViewer.draw')}
+                aria-pressed={drawOverlayOpen}
+                onClick={() => {
+                  const next = !drawOverlayOpen;
+                  if (!next) {
+                    setDrawOverlayOpen(false);
+                    return;
+                  }
+                  const activateDraw = () => {
+                    setBoardMode(false);
+                    clearBoardComposer();
+                    setInspectMode(false);
+                    setDrawOverlayMode('draw');
+                    setMode('preview');
+                    setDrawOverlayOpen(true);
+                  };
+                  if (manualEditMode) {
+                    void exitManualEditModeAfterFlush().then((ok) => {
+                      if (ok) activateDraw();
+                    });
+                    return;
+                  }
+                  activateDraw();
+                }}
+              >
+                <Icon name="draw" size={13} />
+                <span>{t('fileViewer.draw')}</span>
+              </button>
+              <span className="viewer-divider" aria-hidden />
+              <PreviewViewportControls
+                viewport={previewViewport}
+                onViewport={setPreviewViewport}
+                t={t}
+              />
+            </>
+          ) : null}
           <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
@@ -5092,44 +5291,6 @@ function HtmlViewer({
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
           </button>
-          <button
-            className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
-            type="button"
-            data-testid="draw-overlay-toggle"
-            title={t('fileViewer.draw')}
-            aria-pressed={drawOverlayOpen}
-            onClick={() => {
-              const next = !drawOverlayOpen;
-              if (!next) {
-                setDrawOverlayOpen(false);
-                return;
-              }
-              const activateDraw = () => {
-                setBoardMode(false);
-                clearBoardComposer();
-                setInspectMode(false);
-                setDrawOverlayMode('draw');
-                setMode('preview');
-                setDrawOverlayOpen(true);
-              };
-              if (manualEditMode) {
-                void exitManualEditModeAfterFlush().then((ok) => {
-                  if (ok) activateDraw();
-                });
-                return;
-              }
-              activateDraw();
-            }}
-          >
-            <Icon name="draw" size={13} />
-            <span>{t('fileViewer.draw')}</span>
-          </button>
-          <span className="viewer-divider" aria-hidden />
-          <PreviewViewportControls
-            viewport={previewViewport}
-            onViewport={setPreviewViewport}
-            t={t}
-          />
           <span className="viewer-divider" aria-hidden />
           <button
             type="button"
@@ -5238,13 +5399,13 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      void exportProjectAsPdf({
+                      fireShareExport('pdf', () => exportProjectAsPdf({
                         deck: effectiveDeck,
                         fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
                         filePath: file.name,
                         projectId,
                         title: exportTitle,
-                      });
+                      }));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
@@ -5268,7 +5429,9 @@ function HtmlViewer({
                     }
                     onClick={() => {
                       setShareMenuOpen(false);
-                      if (onExportAsPptx) onExportAsPptx(file.name);
+                      fireShareExport('pptx', () => {
+                        if (onExportAsPptx) onExportAsPptx(file.name);
+                      });
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="present" size={14} /></span>
@@ -5281,12 +5444,12 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      void exportProjectAsZip({
+                      fireShareExport('zip', () => exportProjectAsZip({
                         projectId,
                         filePath: file.name,
                         fallbackHtml: source ?? '',
                         fallbackTitle: exportTitle,
-                      });
+                      }));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="download" size={14} /></span>
@@ -5298,7 +5461,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsHtml(source ?? '', exportTitle);
+                      fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file-code" size={14} /></span>
@@ -5316,7 +5479,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
-                      exportAsMd(source ?? '', exportTitle);
+                      fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
@@ -5329,7 +5492,9 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      openSaveAsTemplateModal();
+                      fireShareExport('template', () => {
+                        openSaveAsTemplateModal();
+                      });
                     }}
                   >
                     <span className="share-menu-icon"><Icon name="copy" size={14} /></span>
@@ -5349,7 +5514,13 @@ function HtmlViewer({
                       className="share-menu-item"
                       role="menuitem"
                       onClick={() => {
-                        void openDeployModal(option.id);
+                        const format =
+                          option.id === 'cloudflare-pages'
+                            ? 'cloudflare_pages'
+                            : option.id === 'vercel-self'
+                              ? 'vercel'
+                              : 'vercel';
+                        fireShareExport(format, () => openDeployModal(option.id));
                       }}
                     >
                       <span className="share-menu-icon"><Icon name="upload" size={14} /></span>
