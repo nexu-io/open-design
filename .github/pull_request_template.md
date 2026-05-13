@@ -3,10 +3,16 @@
      Delete this whole block if the PR genuinely doesn't close any issue. -->
 Fixes #
 
-## Problem
+## Why
 
-<!-- What user-facing problem does this solve? For non-trivial features, please
-     open a discussion or issue first to align on scope and UX before writing code. -->
+<!-- Why are you opening this PR? Cover two things:
+       - Your use case — what made you write this today? Did you hit it yourself
+         while building on top of OD, are you scratching an itch for a team, or
+         are you speculatively adding for others? All are fine, but say which.
+       - The pain being addressed — user-facing problem, technical debt, a prod
+         issue, or unblocking another change.
+     For non-trivial features, please open a discussion or issue first to align
+     on scope and UX before writing code. -->
 
 
 ## What users will see
@@ -29,7 +35,7 @@ Fixes #
 - [ ] **API / contract** — new `/api/*` endpoint, new SSE event, or changed shape in `packages/contracts`
 - [ ] **Extension point** — new entry under `skills/`, `design-systems/`, `design-templates/`, or `craft/`, or change to the skills protocol
 - [ ] **i18n keys** — added new translation keys (see `TRANSLATIONS.md` for the locale workflow)
-- [ ] **New top-level dependency** — adding any new entry to `package.json` (`dependencies` or `devDependencies`); include a paragraph on what we get vs. what bytes we ship (see `CONTRIBUTING.md` → Code style)
+- [ ] **New top-level dependency** — adding any new entry to the **root** `package.json` (`dependencies` or `devDependencies`); workspace-package `package.json` files are out of scope. Include a paragraph on what we get vs. what bytes we ship (see `CONTRIBUTING.md` → Code style)
 - [ ] **Default behavior change** — changes what existing users experience without opting in (default model, default setting, file/SQLite schema, auto-network on startup, auto-install)
 - [ ] **None** — internal refactor, docs, tests, or translation update only
 
@@ -39,6 +45,20 @@ Fixes #
 <!-- If you checked "UI" above, attach screenshots showing the entry point —
      where users discover the change — not just the feature in isolation.
      Before/after is best for behavior changes. Short GIFs welcome. -->
+
+
+## Bug fix verification
+
+<!-- Skip if this PR isn't a bug fix.
+
+     Per AGENTS.md → "Bug follow-up workflow", bugs should be encoded as a
+     falsifiable test that goes red before the source change. Confirm:
+       - Test path that reproduces the bug:
+       - Did the test go red on `main` and green on this branch? (yes / no)
+       - If a red spec wasn't cheap to write, explain why and what verification
+         you did instead. -->
+
+-
 
 
 ## Validation
