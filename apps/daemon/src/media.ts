@@ -294,27 +294,42 @@ export async function generateMedia(args: {
       `unsupported audioKind: ${audioKind}. Allowed: music | speech | sfx.`,
     );
   }
-  const def = findMediaModel(model);
+  // Arbitrary fal.ai model paths (e.g. "fal-ai/flux/dev") bypass the
+  // catalog so users can reach any model on fal without waiting for a
+  // catalog entry. Surface comes from the caller; no cross-surface guard
+  // is needed because the fal renderer reads ctx.surface directly.
+  let def = findMediaModel(model);
+  let isFalCustomPath = false;
   if (!def) {
-    throw new Error(
-      `unknown model: ${model}. Pass --model from the registered list (see /api/media/models).`,
-    );
+    if (/^fal-ai\//.test(model)) {
+      isFalCustomPath = true;
+      def = {
+        id: model,
+        label: model,
+        hint: 'Fal.ai',
+        provider: 'fal',
+        caps: surface === 'image' ? ['t2i'] : surface === 'video' ? ['t2v'] : [],
+      };
+    } else {
+      throw new Error(
+        `unknown model: ${model}. Pass --model from the registered list (see /api/media/models), ` +
+        `or pass a full fal-ai/* path (e.g. fal-ai/flux/dev) for any Fal model.`,
+      );
+    }
   }
-  // Reject cross-surface combinations (e.g. surface=image + model=seedance-2)
-  // here so the dispatcher never silently routes a video model id through
-  // the image renderer. We compare against the surface-specific list — for
-  // audio we further restrict to the kind-specific bucket so a `music`
-  // surface can't bill an `elevenlabs-v3` (speech) call.
+  // Reject cross-surface combinations for catalogued models.
   const resolvedAudioKind =
     surface === 'audio' ? audioKind || 'music' : undefined;
-  const allowed = modelsForSurface(surface, resolvedAudioKind);
-  if (!allowed.some((m) => m.id === model)) {
-    const ids = allowed.map((m) => m.id).join(', ');
-    const where =
-      surface === 'audio' ? `audio · ${resolvedAudioKind}` : surface;
-    throw new Error(
-      `model "${model}" is not registered for surface "${where}". Allowed: ${ids}.`,
-    );
+  if (!isFalCustomPath) {
+    const allowed = modelsForSurface(surface, resolvedAudioKind);
+    if (!allowed.some((m) => m.id === model)) {
+      const ids = allowed.map((m) => m.id).join(', ');
+      const where =
+        surface === 'audio' ? `audio · ${resolvedAudioKind}` : surface;
+      throw new Error(
+        `model "${model}" is not registered for surface "${where}". Allowed: ${ids}.`,
+      );
+    }
   }
 
   // Clamp registry-bound numeric inputs to their allowed buckets so a
@@ -474,6 +489,16 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fishaudio' && surface === 'audio') {
       const result = await renderFishAudioTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'fal' && surface === 'image') {
+      const result = await renderFalImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'fal' && surface === 'video') {
+      const result = await renderFalVideo(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1725,6 +1750,221 @@ async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig
     bytes,
     providerNote: `fishaudio/${wireModel} · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Fal.ai — generic queue-based renderer for image + video.
+//
+// All fal models share the same queue protocol:
+//   POST https://queue.fal.run/{endpoint}  → { request_id }
+//   GET  .../requests/{id}/status?logs=0   → { status: QUEUED|IN_PROGRESS|COMPLETED|FAILED }
+//   GET  .../requests/{id}                 → result payload
+//
+// Image result shape: { images: [{ url, content_type }] }
+// Video result shape: { video: { url } } or { videos: [{ url }] }
+//
+// Endpoint resolution: FAL_ENDPOINTS maps catalogue IDs to their fal-ai/*
+// path. Any model ID that doesn't appear in the map is passed through
+// verbatim — this is what enables "fal-ai/flux/dev" custom paths.
+// ---------------------------------------------------------------------------
+
+const FAL_ENDPOINTS: Record<string, string> = {
+  'sd-3.5':              'fal-ai/stable-diffusion-v35-large',
+  'flux-pro-ultra':      'fal-ai/flux-pro/v1.1-ultra',
+  'flux-dev-fal':        'fal-ai/flux/dev',
+  'flux-schnell-fal':    'fal-ai/flux/schnell',
+  'ideogram-v3-fal':     'fal-ai/ideogram/v3',
+  'recraft-v3-fal':      'fal-ai/recraft-v3',
+  'sora-2':              'fal-ai/sora',
+  'sora-2-pro':          'fal-ai/sora',
+  'veo-3-fal':           'fal-ai/veo3',
+  'veo-2-fal':           'fal-ai/veo2',
+  'wan-2.1-t2v':         'fal-ai/wan-video/v2.1/text-to-video',
+  'wan-2.1-i2v':         'fal-ai/wan-video/v2.1/image-to-video',
+  'seedance-1-pro-fal':  'fal-ai/bytedance/seedance-1-pro',
+  'kling-2.1-t2v-fal':   'fal-ai/kling-video/v2.1/pro/text-to-video',
+};
+
+const FAL_IMAGE_SIZES: Record<string, string> = {
+  '1:1':  'square_hd',
+  '16:9': 'landscape_16_9',
+  '9:16': 'portrait_16_9',
+  '4:3':  'landscape_4_3',
+  '3:4':  'portrait_4_3',
+};
+
+async function falQueueRun(
+  endpoint: string,
+  queueBase: string,
+  apiKey: string,
+  body: Record<string, unknown>,
+  maxMs: number,
+  onProgress?: ProgressFn,
+  modelLabel?: string,
+): Promise<any> {
+  const authHeader = { 'authorization': `Key ${apiKey}` };
+
+  const submitResp = await fetch(`${queueBase}/${endpoint}`, {
+    method: 'POST',
+    headers: { ...authHeader, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`fal submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try { submitData = JSON.parse(submitText); } catch {
+    throw new Error(`fal submit non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const requestId: string = submitData?.request_id;
+  if (!requestId) {
+    throw new Error(`fal submit missing request_id: ${truncate(submitText, 200)}`);
+  }
+
+  // Status and result URLs are model-agnostic on the fal queue API:
+  //   queue.fal.run/requests/{id}/status
+  //   queue.fal.run/requests/{id}
+  // The submit response also returns status_url / response_url pointing
+  // to these same paths — we derive them directly so there's no second
+  // source of truth.
+  const statusUrl = submitData.status_url
+    ?? `${queueBase}/requests/${encodeURIComponent(requestId)}/status?logs=0`;
+  const resultUrl = submitData.response_url
+    ?? `${queueBase}/requests/${encodeURIComponent(requestId)}`;
+  const startedAt = Date.now();
+  let lastStatus = '';
+
+  if (onProgress) {
+    onProgress(`fal ${modelLabel || endpoint} task ${requestId.slice(0, 8)} accepted; polling…`);
+  }
+
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(3000);
+    const statusResp = await fetch(statusUrl, { headers: authHeader });
+    const statusText = await statusResp.text();
+    if (!statusResp.ok) {
+      throw new Error(`fal poll ${statusResp.status}: ${truncate(statusText, 240)}`);
+    }
+    let statusData: any;
+    try { statusData = JSON.parse(statusText); } catch {
+      throw new Error(`fal poll non-JSON: ${truncate(statusText, 200)}`);
+    }
+    lastStatus = statusData?.status || '';
+    if (onProgress) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`fal task ${requestId.slice(0, 8)} status=${lastStatus} (${elapsed}s)`);
+    }
+    if (lastStatus === 'COMPLETED') {
+      const resultResp = await fetch(resultUrl, { headers: authHeader });
+      const resultText = await resultResp.text();
+      if (!resultResp.ok) {
+        throw new Error(`fal result ${resultResp.status}: ${truncate(resultText, 240)}`);
+      }
+      try { return JSON.parse(resultText); } catch {
+        throw new Error(`fal result non-JSON: ${truncate(resultText, 200)}`);
+      }
+    }
+    if (lastStatus === 'FAILED') {
+      const errRaw = statusData?.error?.message
+        ?? (typeof statusData?.error === 'string' ? statusData.error : null)
+        ?? 'unknown error';
+      throw new Error(`fal task failed: ${errRaw}`);
+    }
+  }
+  const elapsed = Math.round((Date.now() - startedAt) / 1000);
+  const ceil = Math.round(maxMs / 1000);
+  throw new Error(
+    `fal timed out after ${elapsed}s waiting for COMPLETED ` +
+    `(last status: ${lastStatus || 'unknown'}, ceiling ${ceil}s). ` +
+    `Raise OD_FAL_MAX_POLL_MS to extend the ceiling.`,
+  );
+}
+
+function falMaxPollMs(defaultMs: number): number {
+  const v = Number(process.env.OD_FAL_MAX_POLL_MS);
+  return Number.isFinite(v) && v >= 30_000 ? v : defaultMs;
+}
+
+async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
+  }
+  const baseUrl = (credentials.baseUrl || 'https://fal.run').replace(/\/$/, '');
+  const queueBase = baseUrl.includes('queue.fal.run')
+    ? baseUrl
+    : baseUrl.replace('fal.run', 'queue.fal.run');
+  const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
+  const imageSize = FAL_IMAGE_SIZES[ctx.aspect ?? '1:1'] ?? 'square_hd';
+
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality image.',
+    image_size: imageSize,
+    num_images: 1,
+  };
+  if (ctx.imageRef?.dataUrl) {
+    body.image_url = ctx.imageRef.dataUrl;
+  }
+
+  const result = await falQueueRun(endpoint, queueBase, credentials.apiKey, body, falMaxPollMs(5 * 60 * 1000));
+
+  const imageEntry = Array.isArray(result?.images) ? result.images[0] : null;
+  if (!imageEntry?.url) {
+    throw new Error(`fal image missing images[0].url: ${truncate(JSON.stringify(result), 200)}`);
+  }
+  const dlResp = await fetch(imageEntry.url);
+  if (!dlResp.ok) throw new Error(`fal image download ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+
+  return {
+    bytes,
+    providerNote: `fal/${endpoint} · ${imageSize} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
+  }
+  const baseUrl = (credentials.baseUrl || 'https://fal.run').replace(/\/$/, '');
+  const queueBase = baseUrl.includes('queue.fal.run')
+    ? baseUrl
+    : baseUrl.replace('fal.run', 'queue.fal.run');
+  const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
+  const aspectRatio = ctx.aspect ?? '16:9';
+  const duration = ctx.length ?? 5;
+
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    aspect_ratio: aspectRatio,
+    duration,
+  };
+  if (ctx.imageRef?.dataUrl) {
+    body.image_url = ctx.imageRef.dataUrl;
+  }
+
+  const result = await falQueueRun(
+    endpoint, queueBase, credentials.apiKey, body,
+    falMaxPollMs(10 * 60 * 1000), onProgress, ctx.model,
+  );
+
+  const videoUrl: string | null =
+    result?.video?.url
+    ?? (Array.isArray(result?.videos) ? result.videos[0]?.url : null)
+    ?? null;
+  if (!videoUrl) {
+    throw new Error(`fal video missing video.url: ${truncate(JSON.stringify(result), 200)}`);
+  }
+  const dlResp = await fetch(videoUrl);
+  if (!dlResp.ok) throw new Error(`fal video download ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+
+  return {
+    bytes,
+    providerNote: `fal/${endpoint} · ${aspectRatio} · ${duration}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
   };
 }
 
