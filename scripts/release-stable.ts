@@ -301,6 +301,18 @@ async function validateStableNightlyMetadata(options: {
   requireVersionedUrlField(macZip, "url", expectedVersionUrl, `${sourceName}.platforms.mac.artifacts.zip`);
   requireVersionedUrlField(macZip, "sha256Url", expectedVersionUrl, `${sourceName}.platforms.mac.artifacts.zip`);
 
+  const macIntel = requireObjectField(platforms, "macIntel", `${sourceName}.platforms`);
+  expectBooleanField(macIntel, "enabled", true, `${sourceName}.platforms.macIntel`);
+  expectStringField(macIntel, "arch", "x64", `${sourceName}.platforms.macIntel`);
+  expectBooleanField(macIntel, "signed", true, `${sourceName}.platforms.macIntel`);
+  const macIntelArtifacts = requireObjectField(macIntel, "artifacts", `${sourceName}.platforms.macIntel`);
+  const macIntelDmg = requireObjectField(macIntelArtifacts, "dmg", `${sourceName}.platforms.macIntel.artifacts`);
+  requireVersionedUrlField(macIntelDmg, "url", expectedVersionUrl, `${sourceName}.platforms.macIntel.artifacts.dmg`);
+  requireVersionedUrlField(macIntelDmg, "sha256Url", expectedVersionUrl, `${sourceName}.platforms.macIntel.artifacts.dmg`);
+  const macIntelZip = requireObjectField(macIntelArtifacts, "zip", `${sourceName}.platforms.macIntel.artifacts`);
+  requireVersionedUrlField(macIntelZip, "url", expectedVersionUrl, `${sourceName}.platforms.macIntel.artifacts.zip`);
+  requireVersionedUrlField(macIntelZip, "sha256Url", expectedVersionUrl, `${sourceName}.platforms.macIntel.artifacts.zip`);
+
   const win = requireObjectField(platforms, "win", `${sourceName}.platforms`);
   expectBooleanField(win, "enabled", true, `${sourceName}.platforms.win`);
   expectStringField(win, "arch", "x64", `${sourceName}.platforms.win`);

@@ -84,6 +84,14 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    telemetryRelayUrl: config.telemetryRelayUrl,
+    posthogKey: config.posthogKey,
+    posthogHost: config.posthogHost,
+    // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
+    // main alongside the daemon, so the import-folder gate must be
+    // pinned ON from request 0. See `apps/packaged/src/headless.ts` for
+    // the daemon+web-only counterpart that passes `false`.
+    requireDesktopAuth: true,
     webSidecarEntry: config.webSidecarEntry,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,
@@ -101,6 +109,13 @@ async function main(): Promise<void> {
     },
     async discoverWebUrl() {
       return packagedEntryUrl();
+    },
+    // Round-7 (lefarcen P2 @ runtime.ts:336): packaged main-process
+    // fetch targets the daemon sidecar's real http URL — never the
+    // od://app/ renderer URL, which Node/undici cannot resolve through
+    // Electron's protocol handler.
+    async discoverDaemonUrl() {
+      return sidecars.daemon.url;
     },
   });
 }

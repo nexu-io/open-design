@@ -14,6 +14,9 @@ import type {
   ChatAttachment,
   CodexPetSummary,
   CodexPetsResponse,
+  InstallDesignSystemResponse,
+  InstallInput,
+  InstallSkillResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   PreviewComment,
@@ -32,20 +35,14 @@ import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
   ProjectFile,
+  RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      openExternal?: (url: string) => Promise<boolean>;
-      pickFolder?: () => Promise<string | null>;
-    };
-  }
-}
+// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -94,6 +91,32 @@ export async function fetchSkills(): Promise<SkillSummary[]> {
     return json.skills ?? [];
   } catch {
     return [];
+  }
+}
+
+// Design templates — the rendering catalogue (decks, prototypes, image/
+// video/audio templates). Same SkillSummary shape as functional skills,
+// fetched from a separate registry root so the EntryView Templates tab
+// and Settings → Skills surface stay decoupled. See
+// specs/current/skills-and-design-templates.md.
+export async function fetchDesignTemplates(): Promise<SkillSummary[]> {
+  try {
+    const resp = await fetch('/api/design-templates');
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { designTemplates: SkillSummary[] };
+    return json.designTemplates ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchDesignTemplate(id: string): Promise<SkillDetail | null> {
+  try {
+    const resp = await fetch(`/api/design-templates/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as SkillDetail;
+  } catch {
+    return null;
   }
 }
 
@@ -158,6 +181,142 @@ export function codexPetSpritesheetUrl(pet: CodexPetSummary): string {
   // that prefix is empty (default), it is already a same-origin path
   // we can hand to <img src> or fetch() as-is.
   return pet.spritesheetUrl;
+}
+
+// Body for POST /api/skills/import. Mirrors the contracts type but is
+// repeated here so the registry module is self-describing for callers.
+export interface SkillImportInput {
+  name: string;
+  description?: string;
+  body: string;
+  triggers?: string[];
+}
+
+export interface SkillImportError {
+  code?: string;
+  message: string;
+}
+
+export async function importSkill(
+  input: SkillImportInput,
+): Promise<{ skill: SkillSummary } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/skills/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: SkillImportError }
+        | null;
+      return {
+        error: {
+          code: payload?.error?.code,
+          message: payload?.error?.message ?? `Import failed (${resp.status}).`,
+        },
+      };
+    }
+    return (await resp.json()) as { skill: SkillSummary };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
+// Update an existing skill's body. For built-in skills the daemon writes
+// a "shadow" copy under the user-skills root; the next listSkills() pass
+// surfaces it in place of the bundled copy. The id passed here must
+// match the SKILL.md frontmatter `name` — the daemon refuses cross-id
+// renames so callers can drop "edit" into the same surface they use for
+// "edit my own draft".
+export interface SkillUpdateInput {
+  name?: string;
+  description?: string;
+  body: string;
+  triggers?: string[];
+}
+
+export async function updateSkill(
+  id: string,
+  input: SkillUpdateInput,
+): Promise<{ skill: SkillSummary } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: SkillImportError }
+        | null;
+      return {
+        error: {
+          code: payload?.error?.code,
+          message:
+            payload?.error?.message ?? `Update failed (${resp.status}).`,
+        },
+      };
+    }
+    return (await resp.json()) as { skill: SkillSummary };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Update request failed.',
+      },
+    };
+  }
+}
+
+export interface SkillFileEntry {
+  path: string;
+  kind: 'file' | 'directory';
+  size: number | null;
+}
+
+export async function fetchSkillFiles(id: string): Promise<SkillFileEntry[]> {
+  try {
+    const resp = await fetch(
+      `/api/skills/${encodeURIComponent(id)}/files`,
+    );
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { files: SkillFileEntry[] };
+    return json.files ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteSkill(
+  id: string,
+): Promise<{ ok: true } | { error: SkillImportError }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: SkillImportError }
+        | null;
+      return {
+        error: {
+          code: payload?.error?.code,
+          message: payload?.error?.message ?? `Delete failed (${resp.status}).`,
+        },
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Delete request failed.',
+      },
+    };
+  }
 }
 
 export async function fetchSkill(id: string): Promise<SkillDetail | null> {
@@ -361,8 +520,21 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
           return { connector: json.connector ?? null, error: popupBlockedMessage() };
         }
       }
+    } else if (json.auth?.kind === 'connected') {
+      renderConnectorAuthInfo(authWindow, {
+        title: 'Already connected',
+        body: 'This connector is already authorized. You can close this window.',
+      });
+    } else if (json.auth?.kind === 'pending') {
+      renderConnectorAuthInfo(authWindow, {
+        title: 'Authorization pending',
+        body: 'Authorization is in progress but no redirect URL was returned. Watch for an email confirmation, or open the Composio dashboard to continue.',
+      });
     } else {
-      authWindow?.close();
+      renderConnectorAuthInfo(authWindow, {
+        title: 'No authorization URL returned',
+        body: 'The connector responded without a redirect URL. If this seems wrong, retry from Settings → Connectors, and confirm your Composio API key.',
+      });
     }
     return { connector: json.connector ?? null, ...(json.auth === undefined ? {} : { auth: json.auth }) };
   } catch (err) {
@@ -417,6 +589,23 @@ function renderConnectorAuthLoading(authWindow: Window | null, copy: { title: st
           <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
         </div>
         <style>@keyframes od-spin{to{transform:rotate(360deg)}}</style>
+      </main>
+    `;
+  } catch {
+    /* Popup may be unavailable or already navigated; ignore. */
+  }
+}
+
+function renderConnectorAuthInfo(authWindow: Window | null, copy: { title: string; body: string }): void {
+  if (!authWindow) return;
+  try {
+    authWindow.document.title = copy.title;
+    authWindow.document.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
+          <div style="font-size:15px;font-weight:600;">${escapeHtmlText(copy.title)}</div>
+          <div style="max-width:360px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
+        </div>
       </main>
     `;
   } catch {
@@ -552,6 +741,13 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
 
 export type SkillExampleResult =
   | { html: string }
+  // The skill declares a non-HTML preview surface (image / markdown / …)
+  // and the daemon's `/example` endpoint only ships HTML, so calling it
+  // would 404 into a misleading "failed to fetch" state. The modal
+  // renders a calm "no shipped preview" affordance instead. The `kind`
+  // is the raw `od.preview.type` from SKILL.md so future preview kinds
+  // can be picked up by name without a registry change. Issue #897.
+  | { unavailable: true; kind: string }
   | { error: string };
 
 // Returns a discriminated result so callers can distinguish a real
@@ -559,7 +755,18 @@ export type SkillExampleResult =
 // load. Previously this collapsed every failure into `null`, which
 // left the example preview modal stuck at its loading state with no
 // recovery affordance. Issue #860.
-export async function fetchSkillExample(id: string): Promise<SkillExampleResult> {
+//
+// `previewType` is the skill's `od.preview.type` (defaults to `'html'`
+// daemon-side). Anything other than `'html'` short-circuits to an
+// `unavailable` result so we don't fire a network call against a
+// daemon endpoint that only resolves HTML files. Issue #897.
+export async function fetchSkillExample(
+  id: string,
+  previewType: string = 'html',
+): Promise<SkillExampleResult> {
+  if (previewType !== 'html') {
+    return { unavailable: true, kind: previewType };
+  }
   try {
     const resp = await fetch(`/api/skills/${encodeURIComponent(id)}/example`);
     if (!resp.ok) {
@@ -1196,6 +1403,23 @@ export async function deleteProjectFile(
   }
 }
 
+export async function renameProjectFile(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<RenameProjectFileResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!resp.ok) {
+    const errorBody = await readApiErrorBody(resp);
+    throw new Error(errorBody.message);
+  }
+  return (await resp.json()) as RenameProjectFileResponse;
+}
+
 export async function openFolderDialog(): Promise<string | null> {
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
@@ -1224,5 +1448,69 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
     return await resp.text();
   } catch {
     return null;
+  }
+}
+
+export async function installSkill(
+  input: InstallInput,
+): Promise<{ skill: SkillSummary } | { error: string }> {
+  try {
+    const resp = await fetch('/api/skills/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    return json as InstallSkillResponse;
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function uninstallSkill(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const resp = await fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
+    return { ok: true };
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function installDesignSystem(
+  input: InstallInput,
+): Promise<{ designSystem: DesignSystemSummary } | { error: string }> {
+  try {
+    const resp = await fetch('/api/design-systems/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    return json as InstallDesignSystemResponse;
+  } catch {
+    return { error: 'Network error' };
+  }
+}
+
+export async function uninstallDesignSystem(
+  id: string,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const json = await resp.json();
+    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
+    return { ok: true };
+  } catch {
+    return { error: 'Network error' };
   }
 }

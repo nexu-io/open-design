@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>kami — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/kami. Every visible
+        token comes from tokens.css; the page itself follows kami's
+        print-first rules — parchment background, ink-blue accent
+        capped at ≤5%, serif at one weight, no italic, no rgba tints,
+        no hard drop shadows, no cool grays."
+    />
+
+    <style>
+      /* :root paste — sourced verbatim from
+         design-systems/kami/tokens.css. Keep this block in sync
+         when tokens.css changes. CJK overrides (`:root[lang="zh-CN"]`,
+         `:root[lang="ja"]`) live in tokens.css and should be pasted
+         only when the artifact's <html lang="..."> matches. */
+      :root {
+        --bg: #f5f4ed;
+        --surface: #faf9f5;
+        --surface-warm: #e8e6dc;
+
+        --fg: #141413;
+        --fg-2: #3d3d3a;
+        --muted: #504e49;
+        --meta: #6b6a64;
+
+        --border: #e8e6dc;
+        --border-soft: #e5e3d8;
+
+        --accent: #1b365d;
+        --accent-on: #faf9f5;
+        --accent-light: #2d5a8a;
+        --accent-hover: var(--accent);
+        --accent-active: #142a48;
+
+        --success: #4a6b3a;
+        --warn: #8a6b1f;
+        --danger: #8a3a30;
+
+        --font-display:
+          Charter, Georgia, Palatino, "Times New Roman", serif;
+        --font-body:
+          Charter, Georgia, Palatino, "Times New Roman", serif;
+        --font-mono:
+          "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco,
+          "TsangerJinKai02", "Source Han Serif SC", monospace;
+
+        --text-xs: 11px;
+        --text-sm: 12px;
+        --text-base: 14px;
+        --text-md: 15px;
+        --text-lg: 17px;
+        --text-xl: 22px;
+        --text-2xl: 32px;
+        --text-3xl: 48px;
+        --text-4xl: 96px;
+
+        --leading-display: 1.1;
+        --leading-tight: 1.25;
+        --leading-body: 1.55;
+        --leading-dense: 1.4;
+
+        --tracking-display: -1.2px;
+        --tracking-eyebrow: 1.2px;
+        --tracking-label: 0.4px;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-7: 28px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --space-18: 72px;
+        --space-22: 88px;
+
+        --section-y-desktop: 72px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+
+        --radius-xs: 2px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-ring-accent: 0 0 0 1px var(--accent);
+        --elev-raised: 0 4px 24px rgba(0, 0, 0, 0.05);
+
+        --focus-ring: 0 0 0 2px var(--accent-active);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1120px;
+        --container-gutter-desktop: 64px;
+        --container-gutter-tablet: 32px;
+        --container-gutter-phone: 16px;
+
+        --tag-bg-faint: #eef2f7;
+        --tag-bg-soft: #e4ecf5;
+        --tag-bg-base: #d6e1ee;
+        --tag-bg-strong: #d0dce9;
+      }
+
+      /* ─── Reset (minimal) ───────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+        /* Print fidelity — kami is page-first. The on-screen render
+           still benefits from the same color-adjust hint so background
+           parchment doesn't get optimized away in print preview. */
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      strong { font-weight: 500; } /* kami forbids synthetic bold (>500) */
+      em, i { font-style: normal; }  /* kami forbids italic — keep upright */
+
+      /* ─── Layout primitives ─────────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section {
+        padding-block: var(--section-y-desktop);
+      }
+      section + section {
+        border-top: 1px solid var(--border);
+      }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ────────────────────────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        line-height: var(--leading-display);
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+        letter-spacing: 0.4px;
+      }
+      h3 {
+        font-size: var(--text-lg);
+        line-height: 1.3;
+      }
+      p { margin: 0; }
+
+      .lede {
+        font-size: var(--text-md);
+        line-height: var(--leading-body);
+        color: var(--muted);
+      }
+      .body-muted { color: var(--muted); }
+      .body-meta { color: var(--meta); font-size: var(--text-sm); }
+      .body-sm { font-size: var(--text-sm); }
+
+      /* `.eyebrow` is the only place sans is used (and "sans" literally
+         equals serif here per DESIGN.md §3 — kami has no separate
+         sans family). Uppercase + tracking 1.2px — well above the
+         craft 0.06em floor. */
+      .eyebrow {
+        font-family: var(--font-display);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1;
+        color: var(--meta);
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-eyebrow);
+      }
+
+      /* Section number pattern — DESIGN.md §4: the number IS the
+         marker. No underline, no left bar, no eyebrow. Same serif
+         as the title, ink-blue, 14px. */
+      .section-num {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: var(--text-base);
+        color: var(--accent);
+        letter-spacing: var(--tracking-label);
+        font-variant-numeric: tabular-nums;
+        margin-block-end: var(--space-3);
+      }
+
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ───────────────────────────────────────────────
+       * kami buttons use `box-shadow: 0 0 0 1px ...` as the edge
+       * instead of border, so the rectangle aligns perfectly with
+       * the fill. Hover lifts via whisper shadow only — no color
+       * shift, no transform. This is kami's elevation-led
+       * interaction, encoded in tokens. */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 8px 14px;
+        border: none;
+        border-radius: var(--radius-md);
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: var(--text-sm);
+        line-height: 1;
+        letter-spacing: var(--tracking-label);
+        cursor: pointer;
+        text-decoration: none;
+        transition:
+          box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .btn:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+        box-shadow: var(--elev-ring-accent);
+      }
+      .btn-primary:hover {
+        /* Layered: ring stays as edge; whisper adds lift. */
+        box-shadow: var(--elev-ring-accent), var(--elev-raised);
+      }
+      .btn-secondary {
+        background: var(--surface-warm);
+        color: var(--fg-2);
+        box-shadow: var(--elev-ring);
+      }
+      .btn-secondary:hover {
+        box-shadow: var(--elev-ring), var(--elev-raised);
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--accent);
+        box-shadow: var(--elev-ring-accent);
+      }
+      .btn-ghost:hover {
+        box-shadow: var(--elev-ring-accent), var(--elev-raised);
+      }
+
+      /* ─── Cards ─────────────────────────────────────────────────
+       * Cards lift one shade above bg (ivory on parchment). 1px
+       * hairline border + whisper shadow on hover — no transform,
+       * no brightness shift. */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-7) var(--space-7) var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        transition: box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .card:hover {
+        box-shadow: var(--elev-raised);
+      }
+
+      /* ─── Tags / chips ──────────────────────────────────────────
+       * Solid hex backgrounds, NEVER rgba — print renderers double-
+       * paint alpha. The pre-blends live as --tag-bg-* tokens.
+       * radius is 2px, 4px max — kami forbids pill chips with heavy
+       * borders. */
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: var(--text-sm);
+        line-height: 1;
+        color: var(--accent);
+        letter-spacing: var(--tracking-label);
+        padding: 4px 8px;
+        border-radius: var(--radius-xs);
+        background: var(--tag-bg-soft);
+      }
+      .tag-faint { background: var(--tag-bg-faint); }
+      .tag-strong {
+        background: var(--tag-bg-strong);
+        padding: 4px 10px;
+        border-radius: var(--radius-sm);
+      }
+
+      /* ─── Quote ─────────────────────────────────────────────────
+       * Left rule in ink-blue, olive body, 1.55 line-height. The
+       * single place letter-spacing 0.05em earns its keep. */
+      .quote {
+        border-left: 2px solid var(--accent);
+        padding: var(--space-1) 0 var(--space-1) var(--space-3);
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: var(--text-md);
+        line-height: var(--leading-body);
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+
+      /* ─── Metric (DESIGN.md §4) ─────────────────────────────────
+       * Big ink-blue value with tabular-nums so columns of metrics
+       * align across the row; olive label below. */
+      .metric {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .metric-value {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: var(--text-xl);
+        line-height: 1.1;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+      }
+      .metric-label {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: var(--text-sm);
+        color: var(--muted);
+      }
+
+      /* ─── Dash list (DESIGN.md §4) ──────────────────────────────
+       * Bullets are en-dashes in ink-blue. Never filled discs. */
+      ul.dash {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      ul.dash li {
+        position: relative;
+        padding-left: var(--space-4);
+        line-height: var(--leading-body);
+      }
+      ul.dash li::before {
+        content: "\2013"; /* en-dash */
+        position: absolute;
+        left: 0;
+        color: var(--accent);
+      }
+
+      /* ─── Code block ────────────────────────────────────────────
+       * Ivory bg + hairline border + warm fg. Mono font has CJK
+       * fallback so labels in CJK code don't render as boxes. */
+      .code {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-3) var(--space-4);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        line-height: var(--leading-body);
+        color: var(--fg);
+        white-space: pre;
+        overflow-x: auto;
+      }
+      .code .k { color: var(--accent); }   /* keyword */
+      .code .c { color: var(--meta); }     /* comment */
+
+      /* ─── Links ─────────────────────────────────────────────────
+       * Default link color is ink-blue. Underline on hover at
+       * generous offset so the rule reads as a deliberate gesture,
+       * not a default. */
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      /* ─── Section-specific layout ───────────────────────────── */
+      .hero {
+        padding-block: var(--space-22) var(--space-18);
+      }
+      .hero h1 { margin-block-end: var(--space-6); max-width: 14ch; }
+      .hero .lede { max-width: 56ch; }
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-8);
+      }
+
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-12);
+      }
+      @media (max-width: 639px) {
+        .metric-row { grid-template-columns: 1fr 1fr; }
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-5);
+        margin-block-start: var(--space-8);
+      }
+      @media (max-width: 767px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+
+      .quote-block {
+        max-width: 56ch;
+        margin-block-start: var(--space-6);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- ════════════════════════════════════════════════════════════
+           HERO — exercises: section-num pattern, h1 (96px serif at
+           tracking -1.2px), .lede, .btn-primary (ring-shadow edge),
+           .btn-secondary (warm-sand bg), .tag (solid hex). The grid
+           is single-column intentionally — kami heroes don't use
+           asymmetric two-column layouts; the page IS the column.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section class="hero" data-od-id="hero">
+        <p class="section-num">00 · Reference</p>
+        <h1>One paper, set carefully, can hold every brand decision.</h1>
+        <p class="lede">
+          A token system distilled from the kami print rules: warm
+          parchment canvas, single ink-blue accent capped under five
+          percent of the page, serif at one weight. The fixture you
+          are reading uses the same token block agents paste into
+          every artifact.
+        </p>
+        <div class="hero-actions">
+          <a href="./tokens.css" class="btn btn-primary">View tokens</a>
+          <a href="./DESIGN.md" class="btn btn-secondary">
+            Read the spec
+          </a>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           METRICS — exercises: .metric pattern with tabular-nums
+           values, ink-blue at the W500 weight, olive label. Numbers
+           describe the fixture itself, not invented claims.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="metrics">
+        <p class="section-num">01</p>
+        <h2>Schema in numbers</h2>
+
+        <div class="metric-row" style="margin-block-start: var(--space-8)">
+          <div class="metric">
+            <div class="metric-value">42</div>
+            <div class="metric-label">tokens in :root</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">3</div>
+            <div class="metric-label">font stacks (EN · zh · ja)</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">≤5%</div>
+            <div class="metric-label">accent surface cap</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FEATURE CARDS — exercises: .card (ivory bg, hairline
+           border, whisper shadow on hover), h3, body text, dash list,
+           tag (solid hex bg).
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="components">
+        <p class="section-num">02</p>
+        <h2>What this fixture exercises</h2>
+
+        <div class="features-grid">
+          <article class="card">
+            <span class="tag tag-faint">Surface</span>
+            <h3>Three-tier surface ramp</h3>
+            <p class="body-muted body-sm">
+              Parchment for the page, ivory for cards, warm sand for
+              secondary buttons. Cards lift one half-shade above the
+              page; the contrast is what gives them edge without a
+              shadow.
+            </p>
+            <ul class="dash body-sm">
+              <li>--bg covers the page</li>
+              <li>--surface lifts containers</li>
+              <li>--surface-warm fills secondary controls</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <span class="tag">Accent</span>
+            <h3>One color, two states</h3>
+            <p class="body-muted body-sm">
+              Ink blue is the only chromatic move. Hover holds the
+              same color — kami expresses lift through elevation, not
+              brightness. Active darkens by a hand-picked value, not a
+              formula.
+            </p>
+            <ul class="dash body-sm">
+              <li>--accent appears at most twice on this page</li>
+              <li>--accent-hover identical to --accent</li>
+              <li>Active state is a hand-picked deeper ink</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <span class="tag tag-strong">Type</span>
+            <h3>One weight does the work</h3>
+            <p class="body-muted body-sm">
+              Serif at weight 500 carries every heading. There is no
+              bold, no italic, no second face. Hierarchy comes from
+              size, tracking, and color — never from another type
+              family.
+            </p>
+            <ul class="dash body-sm">
+              <li>--font-display equals --font-body equals serif</li>
+              <li>Display tracking compresses (-1.2px at 96px)</li>
+              <li>Eyebrow tracking opens (1.2px on uppercase)</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <span class="tag">Elevation</span>
+            <h3>Ring before whisper before drop</h3>
+            <p class="body-muted body-sm">
+              Three sanctioned levels. A 1px hairline ring is the
+              default edge; a 4-24-rgba whisper appears only on hover.
+              The schema reserves --elev-ring as a first-class level so
+              brands like this one don't have to misuse --elev-raised
+              for hairlines.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           QUOTE + CODE — exercises: .quote (left rule in ink-blue),
+           .code with .k / .c spans, link.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="quote">
+        <p class="section-num">03</p>
+        <h2>The token block, in full</h2>
+
+        <div class="quote-block">
+          <blockquote class="quote">
+            kami is not a UI framework. It is a constraint system for
+            the page, designed to keep deliverables stable, clear, and
+            unmistakably printed.
+          </blockquote>
+        </div>
+
+        <pre class="code" style="margin-block-start: var(--space-8)"><span class="c">/* Paste this block into the first &lt;style&gt; of every kami artifact. */</span>
+<span class="k">:root</span> {
+  <span class="c">/* Surface */</span>
+  <span class="k">--bg</span>: <span>#f5f4ed</span>;
+  <span class="k">--surface</span>: <span>#faf9f5</span>;
+  <span class="k">--accent</span>: <span>#1b365d</span>;
+  <span class="c">/* … 38 more, see tokens.css */</span>
+}</pre>
+
+        <p class="body-meta" style="margin-block-start: var(--space-4)">
+          Full reference at
+          <a href="./tokens.css">tokens.css</a> ·
+          spec at
+          <a href="./DESIGN.md">DESIGN.md</a>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -295,6 +295,100 @@ Safety:
 Request / response types: `ImportFolderRequest`, `ImportFolderResponse`
 in `@open-design/contracts`.
 
+#### Desktop folder-import auth (PR #974)
+
+The desktop build adds a privileged `shell.openPath` IPC bridge so the
+"Continue in CLI" / "Finalize design package" buttons can reveal a
+project's working directory in Finder/Explorer. To prevent a
+compromised renderer from abusing that bridge to open arbitrary local
+paths via project-creation laundering, `POST /api/import/folder` is
+fronted by an HMAC gate when the daemon is paired with a desktop:
+
+- **Trust handshake.** At desktop main-process startup, before the
+  `BrowserWindow` is created, desktop generates a fresh 32-byte secret
+  (`randomBytes(32)`) and registers it with the daemon over the
+  daemon's sidecar IPC (`SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH`).
+- **Token shape.** When the user picks a folder via the
+  `dialog:pick-and-import` IPC, the desktop main process mints an HMAC
+  token `${nonce}~${expISO}~${signatureB64url}` where
+  `signature = HMAC-SHA256(secret, baseDir + "\n" + nonce + "\n" + exp)`.
+  The token is sent in `X-OD-Desktop-Import-Token` alongside the
+  `POST /api/import/folder` body. Field separator is `~` (not `.`)
+  because ISO 8601 expiries embed `.` and would split the token into
+  four parts.
+- **TTL & replay.** Tokens are single-use: the daemon rejects nonces
+  it has already consumed and prunes them on expiry. TTL is 60s;
+  expiries beyond 2× TTL are also rejected so a compromised desktop
+  cannot mint long-lived tokens against a small TTL contract.
+- **Fail-closed.** Two coordinated mechanisms prevent the gate from
+  silently relaxing when the desktop's registration is in flight or
+  has been lost (daemon restart mid-session, IPC race at startup):
+  - A **sticky in-process flag**: once a secret has ever been
+    registered with this daemon process, the gate stays active for
+    the rest of the process lifetime (a `setDesktopAuthSecret(null)`
+    call from tests does not relax it).
+  - An **orchestrator-pinned mode** via the `OD_REQUIRE_DESKTOP_AUTH=1`
+    env var, set by `tools-dev` / `tools-pack` / `apps/packaged` when
+    the daemon is spawned in a desktop-bundled flow. With the env set,
+    the gate is active from request 0 — a renderer that races to call
+    `/api/import/folder` before the desktop has registered gets a 503
+    `DESKTOP_AUTH_PENDING` (transient, retry).
+- **Web-only deployments are unaffected.** When neither mechanism
+  fires (standalone daemon spawn, no env var, no desktop ever paired),
+  the gate stays dormant and `/api/import/folder` behaves as before.
+  Browser-only builds have no `shell.openPath` surface, so a
+  renderer-named path cannot escalate.
+- **Trusted-picker marker on `openPath`.** Every import that passes
+  the HMAC gate is stamped with `metadata.fromTrustedPicker: true`.
+  The desktop main process's `shell:open-path` IPC refuses
+  folder-imported projects whose metadata lacks this marker — even if
+  a future codepath inadvertently sets `metadata.baseDir` outside the
+  trusted flow, the open-path surface stays closed. `POST /api/projects`
+  and `PATCH /api/projects/:id` reject any client-supplied
+  `fromTrustedPicker` so the marker cannot be smuggled or stripped.
+- **Legacy migration.** Folder-imported projects created before this
+  gate landed have no `fromTrustedPicker` flag. The "Continue in CLI"
+  button will return an error toast for those projects; the user
+  re-imports the same folder via the picker to restore the button.
+- **Daemon restart edge.** If the daemon is restarted while desktop
+  keeps running, the new daemon process will be in `OD_REQUIRE_DESKTOP_AUTH`
+  mode (orchestrator env survives restart) but has no secret registered
+  yet, so the first import after the restart returns `503
+  DESKTOP_AUTH_PENDING`. The desktop runtime catches that response in
+  `dialog:pick-and-import`, re-invokes its registration callback to
+  re-handshake with the new daemon, mints a fresh token (new nonce + new
+  exp — replay protection still works), and retries once. A persistent
+  failure (daemon truly down, IPC socket missing) surfaces in the
+  renderer toast instead of silently dropping. No desktop restart needed.
+- **Headless packaged mode.** The headless entrypoint
+  (`apps/packaged/src/headless.ts`) starts daemon + web only — no
+  Electron, no `shell.openPath` surface, no desktop main process to
+  register a secret. It calls `startPackagedSidecars(...)` with
+  `requireDesktopAuth: false`, which keeps the daemon's gate dormant
+  for that deployment. The Electron entry
+  (`apps/packaged/src/index.ts`) passes `true` because it does start
+  desktop main alongside the daemon.
+- **tools-dev split-start hardening.** `tools-dev start desktop`
+  introspects the running daemon's STATUS over IPC before launching
+  desktop main. The split-start dev sequence
+  `tools-dev start daemon` → `tools-dev start desktop` would
+  otherwise leave the daemon running without
+  `OD_REQUIRE_DESKTOP_AUTH=1` (the env var is only injected when
+  daemon and desktop spawn in the same orchestrator invocation, or
+  when a desktop is already alive at daemon spawn time). When
+  `start desktop` finds an ungated daemon
+  (`desktopAuthGateActive: false` on the new STATUS field), tools-dev
+  stops the daemon (and web, if running), respawns the daemon with
+  the env var pinned, restarts web, and only then launches desktop
+  main. The user sees a single `[tools-dev] daemon is running
+  without desktop-auth gate; restarting daemon (and web, if running)
+  before desktop start` line; in-flight daemon work is interrupted
+  but the gate is guaranteed armed before the BrowserWindow loads.
+  The bundled-targets path (`pnpm tools-dev`) is unaffected — its
+  daemon was already spawned gated by the same-invocation trigger,
+  so the helper is a single STATUS roundtrip with no side effects.
+  Packaged Electron and packaged headless modes are unaffected
+  because their gate state is fixed at packaged-runtime startup.
 
 Shared API contract types live in [`packages/contracts/src`](../packages/contracts/src).
 

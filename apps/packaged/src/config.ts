@@ -21,6 +21,17 @@ export type RawPackagedConfig = {
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
+  // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
+  // the daemon at runtime; Langfuse credentials never ship in packaged config.
+  telemetryRelayUrl?: string;
+  // PostHog product-analytics ingest key, baked by tools/pack from
+  // process.env.POSTHOG_KEY at packaging time. Forwarded to the daemon
+  // sidecar's spawn env as POSTHOG_KEY. `phc_` keys are public ingest
+  // tokens (write-only event capture); embedding them in the bundle is
+  // the PostHog-recommended pattern. The integration short-circuits when
+  // either this is absent or the user has declined Privacy → metrics.
+  posthogKey?: string;
+  posthogHost?: string;
   webSidecarEntryRelative?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -34,6 +45,9 @@ export type PackagedConfig = {
   namespaceBaseRoot: string;
   nodeCommand: string | null;
   resourceRoot: string;
+  telemetryRelayUrl: string | null;
+  posthogKey: string | null;
+  posthogHost: string | null;
   webSidecarEntry: string | null;
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
@@ -152,6 +166,9 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     namespaceBaseRoot,
     nodeCommand,
     resourceRoot,
+    telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
+    posthogKey: cleanOptionalString(raw.posthogKey),
+    posthogHost: cleanOptionalString(raw.posthogHost),
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

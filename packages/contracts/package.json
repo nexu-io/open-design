@@ -1,6 +1,6 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
@@ -26,6 +26,10 @@
       "types": "./dist/api/finalize.d.ts",
       "default": "./dist/api/finalize.mjs"
     },
+    "./api/providerModels": {
+      "types": "./dist/api/providerModels.d.ts",
+      "default": "./dist/api/providerModels.mjs"
+    },
     "./api/research": {
       "types": "./dist/api/research.d.ts",
       "default": "./dist/api/research.mjs"
@@ -33,6 +37,10 @@
     "./critique": {
       "types": "./dist/critique.d.ts",
       "default": "./dist/critique.mjs"
+    },
+    "./analytics": {
+      "types": "./dist/analytics/index.d.ts",
+      "default": "./dist/analytics/index.mjs"
     }
   },
   "scripts": {

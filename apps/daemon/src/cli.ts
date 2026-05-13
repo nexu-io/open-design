@@ -5,6 +5,7 @@ import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
+import { openBrowser } from './browser-open.js';
 
 const argv = process.argv.slice(2);
 
@@ -39,6 +40,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'aspect',
   'length',
   'duration',
+  'prompt-influence',
   'voice',
   'audio-kind',
   'composition-dir',
@@ -49,6 +51,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
 const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
+  'loop',
 ]);
 
 const MCP_STRING_FLAGS = new Set([
@@ -173,12 +176,7 @@ startServer({ port, host, returnServer: true }).then((started) => {
   process.on('SIGTERM', stop);
   console.log(`[od] listening on ${url}`);
   if (open) {
-    const opener = process.platform === 'darwin' ? 'open'
-      : process.platform === 'win32' ? 'start'
-      : 'xdg-open';
-    import('node:child_process').then(({ spawn }) => {
-      spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
-    });
+    openBrowser(url);
   }
 });
 }
@@ -374,6 +372,8 @@ async function runMediaGenerate(rawArgs) {
   };
   if (flags.length != null) body.length = Number(flags.length);
   if (flags.duration != null) body.duration = Number(flags.duration);
+  if (flags['prompt-influence'] != null) body.promptInfluence = Number(flags['prompt-influence']);
+  if (flags.loop === true) body.loop = true;
 
   const url = `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
   let resp;
@@ -607,11 +607,13 @@ Required:
   --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
 
 Common options:
-  --prompt "<text>"         Generation prompt.
+  --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
   --length <seconds>        Video length.
   --duration <seconds>      Audio duration.
+  --prompt-influence <0-1>  ElevenLabs SFX prompt adherence. Higher values follow the prompt more closely.
+  --loop                    ElevenLabs SFX only: request a seamless loop.
   --voice <voice-id>        Speech / TTS voice.
   --language <lang>         Language boost for TTS (e.g. Chinese,Yue for Cantonese).
   --audio-kind music|speech|sfx

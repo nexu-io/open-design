@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildPersistedConfig,
+  isAutosaveDraftOnlyChange,
   persistComposioConfigChange,
   resolveSettingsCloseConfig,
   shouldSyncMediaProvidersOnSave,
@@ -66,6 +67,38 @@ describe('buildPersistedConfig', () => {
         { ...baseConfig, onboardingCompleted: true },
       ),
     ).toMatchObject({ onboardingCompleted: true });
+  });
+});
+
+describe('isAutosaveDraftOnlyChange', () => {
+  const savedComposio: AppConfig = {
+    ...baseConfig,
+    composio: { apiKey: '', apiKeyConfigured: true, apiKeyTail: 'beef' },
+  };
+
+  it('treats an in-flight Composio API key edit as draft-only', () => {
+    const typing: AppConfig = {
+      ...savedComposio,
+      composio: { ...savedComposio.composio, apiKey: '111' },
+    };
+    expect(isAutosaveDraftOnlyChange(typing, savedComposio)).toBe(true);
+  });
+
+  it('flags a real change (non-draft field) as persist-worthy', () => {
+    const flipped: AppConfig = { ...savedComposio, model: 'claude-opus-4-7' };
+    expect(isAutosaveDraftOnlyChange(flipped, savedComposio)).toBe(false);
+  });
+
+  it('flags apiKeyConfigured / tail flips as persist-worthy', () => {
+    const cleared: AppConfig = {
+      ...savedComposio,
+      composio: { apiKey: '', apiKeyConfigured: false, apiKeyTail: '' },
+    };
+    expect(isAutosaveDraftOnlyChange(cleared, savedComposio)).toBe(false);
+  });
+
+  it('returns true for an identical snapshot (no-op autosave tick)', () => {
+    expect(isAutosaveDraftOnlyChange(savedComposio, savedComposio)).toBe(true);
   });
 });
 

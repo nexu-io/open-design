@@ -11,8 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: refresh-contributors-wall
@@ -37,17 +36,27 @@ jobs:
           fi
           perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" README*.md
 
+      - name: Generate Open Design bot token
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Create refresh pull request
         uses: peter-evans/create-pull-request@v8
         with:
-          # Auth mirrors the metrics workflow: prefer a repository token that can
-          # create pull requests, with GITHUB_TOKEN as a fallback for repos where
-          # Actions-created PRs are allowed.
-          token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.open-design-bot-token.outputs.token }}
           add-paths: 'README*.md'
           branch: automation/refresh-contributors-wall
           delete-branch: true
           commit-message: 'docs(readme): refresh contributors wall'
+          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
           title: 'docs(readme): refresh contributors wall'
           body: |
             Refreshes the contributors wall cache bust date in README files.

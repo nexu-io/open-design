@@ -29,7 +29,7 @@ export async function listDesignSystems(root: string): Promise<DesignSystemSumma
     return out;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const designPath = path.join(root, entry.name, 'DESIGN.md');
     try {
       const stats = await stat(designPath);
@@ -60,6 +60,60 @@ export async function readDesignSystem(root: string, id: string): Promise<string
   } catch {
     return null;
   }
+}
+
+/**
+ * Structured (compiled) form of a brand's design system. Optional sibling
+ * files alongside DESIGN.md that, when present, give agents a
+ * machine-readable token contract and a worked fixture instead of having
+ * to re-derive both from prose. Both fields are individually optional —
+ * the daemon falls back to the DESIGN.md-only path when neither is
+ * available, which is the current state for the ~138 brands without
+ * hand-authored or derived tokens.
+ *
+ * - `tokensCss`     — verbatim content of `<brand>/tokens.css`.
+ * - `fixtureHtml`   — verbatim content of `<brand>/components.html`.
+ */
+export type DesignSystemAssets = {
+  tokensCss?: string | undefined;
+  fixtureHtml?: string | undefined;
+};
+
+export async function readDesignSystemAssets(
+  root: string,
+  id: string,
+): Promise<DesignSystemAssets> {
+  const [tokensCss, fixtureHtml] = await Promise.all([
+    readFileOptional(path.join(root, id, 'tokens.css')),
+    readFileOptional(path.join(root, id, 'components.html')),
+  ]);
+  return { tokensCss, fixtureHtml };
+}
+
+async function readFileOptional(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, 'utf8');
+  } catch (err) {
+    // Only swallow "file genuinely does not exist" failures. Today the
+    // ~138 brands without hand-authored or derived tokens.css /
+    // components.html siblings hit this path on the empty side, which
+    // is the legacy fallback we deliberately preserve. Every other
+    // failure mode — permission denied (`EACCES`), parent-shadowed by
+    // a non-directory (`EPERM`), a directory at the file path
+    // (`EISDIR`), a broken packaged-resource symlink, a transient I/O
+    // error — means the token channel is misconfigured; the caller
+    // (and the smoke-test rollout) needs to see that explicitly
+    // instead of silently degrading to the DESIGN.md-only prompt and
+    // making the experiment look ineffective for the wrong reason.
+    if (isAbsenceError(err)) return undefined;
+    throw err;
+  }
+}
+
+function isAbsenceError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 function summarize(raw: string): string {

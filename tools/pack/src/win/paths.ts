@@ -2,6 +2,15 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
+import {
+  WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME,
+  WIN_PREBUNDLE_META_DIR_NAME,
+  WIN_PREBUNDLED_APP_DIR_NAME,
+  WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
+  WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
+  WIN_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH,
+  WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
+} from "../win-prebundle.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { resolveWinInstallIdentity } from "./identity.js";
@@ -22,8 +31,15 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     assembledAppRoot: join(namespaceRoot, "assembled", "app"),
     assembledMainEntryPath: join(namespaceRoot, "assembled", "app", "main.cjs"),
     assembledPackageJsonPath: join(namespaceRoot, "assembled", "app", "package.json"),
+    assembledPrebundledRoot: join(namespaceRoot, "assembled", "app", WIN_PREBUNDLED_APP_DIR_NAME),
     blockmapPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-setup.exe.blockmap`),
     builtManifestPath: join(namespaceRoot, "built-app.json"),
+    daemonCliPrebundleEntrypointPath: join(namespaceRoot, WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME, "daemon-cli.js"),
+    daemonCliPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH),
+    daemonPrebundleMetaPath: join(namespaceRoot, WIN_PREBUNDLE_META_DIR_NAME, "daemon.meta.json"),
+    daemonPrebundleRoot: join(namespaceRoot, "assembled", "app", WIN_PREBUNDLED_APP_DIR_NAME, "daemon"),
+    daemonSidecarPrebundleEntrypointPath: join(namespaceRoot, WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME, "daemon-sidecar.js"),
+    daemonSidecarPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH),
     exePath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}.exe`),
     installDir,
     installedExePath: join(installDir, `${PRODUCT_NAME}.exe`),
@@ -36,6 +52,8 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     nsisLogPath: join(namespaceRoot, "logs", "nsis.log"),
     nsisIncludePath: join(namespaceRoot, "nsis", "installer.nsh"),
     packagedConfigPath: join(namespaceRoot, "open-design-config.json"),
+    packagedMainPrebundleMetaPath: join(namespaceRoot, WIN_PREBUNDLE_META_DIR_NAME, "packaged-main.meta.json"),
+    packagedMainPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH),
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
     setupPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-setup.exe`),
     startMenuShortcutPath: join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Microsoft", "Windows", "Start Menu", "Programs", identity.shortcutName),
@@ -46,6 +64,8 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     uninstallerPath: join(installDir, identity.uninstallerName),
     webStandaloneHookAuditPath: join(namespaceRoot, "web-standalone-after-pack-audit.json"),
     webStandaloneHookConfigPath: join(namespaceRoot, "web-standalone-after-pack-config.json"),
+    webSidecarPrebundleMetaPath: join(namespaceRoot, WIN_PREBUNDLE_META_DIR_NAME, "web-sidecar.meta.json"),
+    webSidecarPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH),
     winIconPath: join(namespaceRoot, "resources", "win", "icon.ico"),
     unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", `${PRODUCT_NAME}.exe`),
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),

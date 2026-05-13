@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in ENABLE_LINUX ENABLE_MAC ENABLE_WIN R2_METADATA_URL RELEASE_CHANNEL RELEASE_VERSION RUNNER_TEMP; do
+for name in ENABLE_LINUX ENABLE_MAC ENABLE_MAC_INTEL ENABLE_WIN R2_METADATA_URL RELEASE_CHANNEL RELEASE_VERSION RUNNER_TEMP; do
   if [ -z "${!name:-}" ]; then
     echo "$name is required" >&2
     exit 1
@@ -48,6 +48,7 @@ downloaded_metadata="$RUNNER_TEMP/metadata.json"
 curl -fsSL "$R2_METADATA_URL?run=${GITHUB_RUN_ID:-local}" -o "$downloaded_metadata"
 DOWNLOADED_METADATA="$downloaded_metadata" \
 EXPECTED_CHANNEL="$RELEASE_CHANNEL" \
+EXPECTED_MAC_INTEL_SIGNED="${MAC_INTEL_SIGNED:-}" \
 EXPECTED_NIGHTLY_NUMBER="${NIGHTLY_NUMBER:-}" \
 EXPECTED_RELEASE_VERSION="$RELEASE_VERSION" \
 node --input-type=module <<'NODE'
@@ -71,6 +72,12 @@ if (metadata.channel === "beta") {
     if (metadata.nightlyNumber !== Number(process.env.EXPECTED_NIGHTLY_NUMBER)) {
       throw new Error("unexpected metadata nightlyNumber: " + metadata.nightlyNumber);
     }
+  }
+}
+if (process.env.EXPECTED_MAC_INTEL_SIGNED !== "") {
+  const expected = process.env.EXPECTED_MAC_INTEL_SIGNED === "true";
+  if (metadata.platforms?.macIntel?.signed !== expected) {
+    throw new Error("unexpected metadata platforms.macIntel.signed: " + metadata.platforms?.macIntel?.signed);
   }
 }
 NODE
@@ -98,6 +105,7 @@ if [ "$ENABLE_MAC" = "true" ]; then
   fi
   require_report_file "mac/manifest.json"
   require_report_file "mac/screenshots/open-design-mac-smoke.png"
+  require_report_file "mac/suite-result.json"
   require_report_file "mac/tools-pack.json"
   require_report_file "mac/tools-pack.log"
   require_report_file "mac/vitest.log"
@@ -117,8 +125,20 @@ if [ "$ENABLE_WIN" = "true" ]; then
   curl -fsSI "$R2_WIN_INSTALLER_URL" >/dev/null
   require_report_file "win/manifest.json"
   require_report_file "win/screenshots/open-design-win-smoke.png"
+  require_report_file "win/suite-result.json"
   require_report_file "win/tools-pack.json"
   require_report_file "win/vitest.log"
+fi
+
+if [ "$ENABLE_MAC_INTEL" = "true" ]; then
+  for name in R2_MAC_INTEL_DMG_URL R2_MAC_INTEL_ZIP_URL; do
+    if [ -z "${!name:-}" ]; then
+      echo "$name is required when ENABLE_MAC_INTEL=true" >&2
+      exit 1
+    fi
+  done
+  curl -fsSI "$R2_MAC_INTEL_DMG_URL" >/dev/null
+  curl -fsSI "$R2_MAC_INTEL_ZIP_URL" >/dev/null
 fi
 
 if [ "$ENABLE_LINUX" = "true" ]; then

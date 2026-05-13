@@ -13,6 +13,7 @@ const buildTargets = [
   "packages/platform",
   "tools/dev",
   "tools/pack",
+  "tools/pr",
 ];
 
 const jsExtensions = new Set([".js", ".cjs", ".mjs"]);

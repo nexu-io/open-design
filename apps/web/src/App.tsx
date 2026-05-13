@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from './analytics/provider';
+import { trackAppLaunch, trackProjectCreateResult } from './analytics/events';
+import { detectClientType, detectLaunchSource } from './analytics/identity';
+import {
+  projectKindToTracking,
+  fidelityToTracking,
+} from '@open-design/contracts/analytics';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
+import { MemoryToast } from './components/MemoryToast';
 import { PetOverlay } from './components/pet/PetOverlay';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
@@ -14,6 +22,7 @@ import {
   fetchAppVersionInfo,
   fetchAgents,
   fetchDesignSystems,
+  fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
 } from './providers/registry';
@@ -21,16 +30,20 @@ import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
+  fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
   mergeDaemonConfig,
+  mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { applyAppearanceToDocument } from './state/appearance';
+import { isMacPlatform } from './utils/platform';
 import {
   createProject,
   deleteProject as deleteProjectApi,
@@ -38,8 +51,10 @@ import {
   importFolderProject,
   listProjects,
   listTemplates,
+  deleteTemplate,
   patchProject,
 } from './state/projects';
+import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
@@ -99,6 +114,26 @@ export function buildPersistedConfig(next: AppConfig, current: AppConfig): AppCo
   };
 }
 
+/**
+ * True when `next` and `last` produce an identical persisted shape —
+ * i.e. the only diffs between them are fields that buildPersistedConfig
+ * intentionally strips before disk/daemon writes (the Composio API key
+ * draft today; any future save-on-explicit-confirm secrets later).
+ *
+ * The autosave loop in Settings uses this to skip the "All changes
+ * saved" indicator transition when the user has only typed an unsaved
+ * secret. Without it, autosave completes a no-op write and flashes
+ * "Saved" — misleading users into trusting that a sensitive key has
+ * been persisted when in fact only the section-local "Save key"
+ * gesture commits it.
+ */
+export function isAutosaveDraftOnlyChange(next: AppConfig, last: AppConfig): boolean {
+  return (
+    JSON.stringify(buildPersistedConfig(next, next))
+    === JSON.stringify(buildPersistedConfig(last, last))
+  );
+}
+
 export function resolveSettingsCloseConfig(
   rendered: AppConfig,
   latestPersisted: AppConfig,
@@ -108,6 +143,7 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -118,7 +154,13 @@ export function App() {
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  // Functional skills (capabilities the agent invokes mid-task) — stays
+  // small and lives under the Settings → Skills surface.
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  // Design templates (rendering catalogue: decks, prototypes, image/video/
+  // audio templates) — sourced from /api/design-templates and shown in the
+  // EntryView Templates tab. See specs/current/skills-and-design-templates.md.
+  const [designTemplates, setDesignTemplates] = useState<SkillSummary[]>([]);
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
@@ -128,6 +170,13 @@ export function App() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+  const [daemonMediaProviders, setDaemonMediaProviders] = useState<
+    AppConfig['mediaProviders'] | null
+  >(null);
+  const [daemonMediaProvidersFetchState, setDaemonMediaProvidersFetchState] = useState<
+    'idle' | 'ok' | 'error'
+  >('idle');
+  const [mediaProvidersNotice, setMediaProvidersNotice] = useState<string | null>(null);
   // Per-resource loading flags. Each goes false the moment its own fetch
   // resolves so each entry-view tab can render as its data lands instead of
   // every tab waiting on the slowest endpoint (typically `/api/agents`,
@@ -153,6 +202,43 @@ export function App() {
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
+  const analytics = useAnalytics();
+
+  // app_launch — fired exactly once per page load. Mounting in App, not the
+  // RootLayout, so we capture after the first React tick and the analytics
+  // provider has had a chance to wire its identity. Gated on
+  // `config.telemetry?.metrics` so a freshly-opted-in user gets the event
+  // on their next reload, and a declined user fires nothing.
+  const appLaunchFiredRef = useRef(false);
+  useEffect(() => {
+    if (appLaunchFiredRef.current) return;
+    if (config.telemetry?.metrics !== true) return;
+    appLaunchFiredRef.current = true;
+    trackAppLaunch(analytics.track, {
+      page: 'app',
+      launch_source: detectLaunchSource(),
+      platform: detectClientType(),
+    });
+  }, [analytics.track, config.telemetry?.metrics]);
+
+  // Propagate the Privacy toggle through to PostHog without a reload —
+  // posthog-js's opt_out_capturing flips a localStorage flag that makes
+  // every subsequent capture() a no-op. When the user opts back in we
+  // call opt_in_capturing to resume.
+  useEffect(() => {
+    analytics.setConsent(config.telemetry?.metrics === true);
+  }, [analytics.setConsent, config.telemetry?.metrics]);
+
+  // Sync PostHog's distinct_id with the anonymous installationId, both on
+  // first opt-in (when the daemon stamps a fresh id) and on Delete-my-data
+  // rotation (when PrivacySection.tsx generates a new one). posthog-js
+  // caches the previous id in localStorage; identify() alone would stitch
+  // the two ids together, so applyIdentity() does reset() first to
+  // guarantee the new session is fully decoupled from the deleted one.
+  useEffect(() => {
+    if (config.telemetry?.metrics !== true) return;
+    analytics.setIdentity(config.installationId ?? null);
+  }, [analytics.setIdentity, config.installationId, config.telemetry?.metrics]);
 
   // Sync theme preference to the <html> element so CSS variables pick it up.
   // useLayoutEffect (vs useEffect) fires before the browser paints, so a
@@ -198,7 +284,6 @@ export function App() {
       const alive = await daemonIsLive();
       if (cancelled) return;
       setDaemonLive(alive);
-
       if (!alive) {
         // No daemon — clear every loading flag so empty states render
         // instead of the entry view sitting on indefinite spinners.
@@ -221,10 +306,27 @@ export function App() {
         setAgentsLoading(false);
       });
 
+      // Functional skills + design templates land independently. Both
+      // gate `skillsLoading` together so the EntryView stops rendering
+      // its loader once both registries respond — neither tab would have
+      // a complete picture if we cleared the flag on the first reply.
+      let functionalReady = false;
+      let templatesReady = false;
+      const maybeClearLoading = () => {
+        if (functionalReady && templatesReady) setSkillsLoading(false);
+      };
       void fetchSkills().then((list) => {
         if (cancelled) return;
         setSkills(list);
-        setSkillsLoading(false);
+        functionalReady = true;
+        maybeClearLoading();
+      });
+
+      void fetchDesignTemplates().then((list) => {
+        if (cancelled) return;
+        setDesignTemplates(list);
+        templatesReady = true;
+        maybeClearLoading();
       });
 
       void fetchDesignSystems().then((list) => {
@@ -255,28 +357,57 @@ export function App() {
         setAppVersionInfo(info);
       });
 
-      // Daemon-persisted config + composio config land together so the
-      // welcome-modal decision and the daemon-side composio key both apply
-      // in one merge, avoiding a flash where local-only state is shown
+      // Daemon-persisted config + composio config + media provider config land
+      // together so the welcome-modal decision and daemon-backed settings
+      // apply in one merge, avoiding a flash where local-only state is shown
       // before daemon overrides it.
       void Promise.all([
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
-      ]).then(([daemonConfig, daemonComposioConfig]) => {
+        fetchMediaProvidersFromDaemon(),
+      ]).then(([
+        daemonConfig,
+        daemonComposioConfig,
+        daemonMediaProvidersResult,
+      ]) => {
         if (cancelled) return;
+        const daemonMediaProvidersLoaded =
+          daemonMediaProvidersResult.status === 'ok'
+            ? daemonMediaProvidersResult.providers
+            : null;
+        setDaemonMediaProviders(daemonMediaProvidersLoaded);
+        setDaemonMediaProvidersFetchState(daemonMediaProvidersResult.status);
+        setMediaProvidersNotice(
+          daemonMediaProvidersResult.status === 'error'
+            ? t('settings.mediaProviderLoadError')
+            : null,
+        );
         setConfig((prev) => {
-          const next = mergeDaemonConfig(prev, daemonConfig);
+          const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
+            prev.mediaProviders,
+            daemonMediaProvidersLoaded,
+          );
+          const next = mergeDaemonMediaProviders(
+            mergeDaemonConfig(prev, daemonConfig),
+            daemonMediaProvidersLoaded,
+          );
           const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
           if (!hasLocalComposioKey && daemonComposioConfig) {
             next.composio = daemonComposioConfig;
           }
           saveConfig(next);
-          if (hasAnyConfiguredProvider(next.mediaProviders)) {
-            void syncMediaProvidersToDaemon(next.mediaProviders);
+          if (
+            daemonMediaProvidersResult.status === 'ok' &&
+            migratedLocalMediaProviders &&
+            hasAnyConfiguredProvider(next.mediaProviders)
+          ) {
+            void syncMediaProvidersToDaemon(next.mediaProviders, {
+              daemonProviders: daemonMediaProvidersLoaded,
+            });
           }
           // Migrate localStorage prefs to daemon on first boot with the new
-          // endpoint. If daemon already had values the merge above used
-          // them; writing back is idempotent and keeps both sides in sync.
+          // endpoint. If daemon already had values the merge above used them;
+          // writing back is idempotent and keeps both sides in sync.
           void syncConfigToDaemon(next);
           void syncComposioConfigToDaemon(next.composio);
 
@@ -379,6 +510,32 @@ export function App() {
     setTemplates(list);
   }, []);
 
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    const ok = await deleteTemplate(id);
+    if (ok) await refreshTemplates();
+    return ok;
+  }, [refreshTemplates]);
+
+  const reloadMediaProvidersFromDaemon = useCallback(async () => {
+    const result = await fetchMediaProvidersFromDaemon();
+    if (result.status !== 'ok') {
+      setDaemonMediaProvidersFetchState('error');
+      setMediaProvidersNotice(
+        t('settings.mediaProviderLoadError'),
+      );
+      return null;
+    }
+    setDaemonMediaProviders(result.providers);
+    setDaemonMediaProvidersFetchState('ok');
+    setMediaProvidersNotice(null);
+    setConfig((prev) => {
+      const merged = mergeDaemonMediaProviders(prev, result.providers);
+      saveConfig(merged);
+      return merged;
+    });
+    return result.providers;
+  }, []);
+
   /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
@@ -400,18 +557,22 @@ export function App() {
     latestPersistedConfigRef.current = persisted;
     saveConfig(persisted);
     setConfig(persisted);
-    await Promise.all([
-      shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
+    const shouldSyncMediaProviders =
+      daemonMediaProvidersFetchState === 'ok'
+      && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
         force: options?.forceMediaProviderSync,
-      })
+      });
+    await Promise.all([
+      shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
             force: options?.forceMediaProviderSync,
+            daemonProviders: daemonMediaProviders,
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
       syncConfigToDaemon(persisted),
     ]);
-  }, []);
+  }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
   /**
    * Explicit Composio API-key save. Called from the section-local
@@ -493,7 +654,9 @@ export function App() {
   );
 
   const handleCreateProject = useCallback(
-    async (input: CreateInput & { pendingPrompt?: string }) => {
+    async (
+      input: CreateInput & { pendingPrompt?: string; requestId?: string },
+    ) => {
       // Honor an explicit `null` design system — the create panel defaults
       // to "None" for every kind now, and the user expects that to land
       // as a no-design-system project rather than silently inheriting the
@@ -502,6 +665,10 @@ export function App() {
       input.pendingPrompt ??
       (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
 
+      const kind = input.metadata?.kind ?? null;
+      const fidelity = fidelityToTracking(input.metadata?.fidelity ?? null);
+      const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
+        kind === 'template' ? 'template' : 'blank';
       const result = await createProject({
         name: input.name,
         skillId: input.skillId,
@@ -509,7 +676,38 @@ export function App() {
         pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
       });
-      if (!result) return;
+      if (!result) {
+        trackProjectCreateResult(
+          analytics.track,
+          {
+            page: 'home',
+            area: 'create_panel',
+            action_source: 'create_button',
+            project_id: null,
+            project_kind: projectKindToTracking(kind),
+            creation_source: creationSource,
+            fidelity,
+            result: 'failed',
+            error_code: 'CREATE_REQUEST_FAILED',
+          },
+          { requestId: input.requestId },
+        );
+        return;
+      }
+      trackProjectCreateResult(
+        analytics.track,
+        {
+          page: 'home',
+          area: 'create_panel',
+          action_source: 'create_button',
+          project_id: result.project.id,
+          project_kind: projectKindToTracking(kind),
+          creation_source: creationSource,
+          fidelity,
+          result: 'success',
+        },
+        { requestId: input.requestId },
+      );
       setProjects((curr) => [
         result.project,
         ...curr.filter((p) => p.id !== result.project.id),
@@ -520,7 +718,7 @@ export function App() {
         fileName: null,
       });
     },
-    [],
+    [analytics.track],
   );
 
   const handleImportClaudeDesign = useCallback(async (file: File) => {
@@ -548,6 +746,20 @@ export function App() {
     });
   }, []);
 
+  // PR #974: on Electron, the desktop main process owns the picker and
+  // the import POST atomically (`pickAndImport`). The renderer never
+  // sees the path or the HMAC token; it just receives the same
+  // ImportFolderResponse shape that `importFolderProject` would
+  // produce on web, and the App-level state update is identical.
+  const handleImportFolderResponse = useCallback(async (result: import('@open-design/contracts').ImportFolderResponse) => {
+    setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
+    navigate({
+      kind: 'project',
+      projectId: result.project.id,
+      fileName: result.entryFile,
+    });
+  }, []);
+
   const handleOpenProject = useCallback((id: string) => {
     navigate({ kind: 'project', projectId: id, fileName: null });
   }, []);
@@ -565,6 +777,15 @@ export function App() {
     }
   }, [route]);
 
+  const handleRenameProject = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setProjects((curr) =>
+      curr.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+    );
+    void patchProject(id, { name: trimmed });
+  }, []);
+
   const handleBack = useCallback(() => {
     navigate({ kind: 'home' });
   }, []);
@@ -577,7 +798,7 @@ export function App() {
         p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
       ),
     );
-    void patchProject(projectId, { pendingPrompt: undefined });
+    void patchProject(projectId, { pendingPrompt: null });
   }, [route]);
 
   const handleTouchProject = useCallback(() => {
@@ -639,6 +860,22 @@ export function App() {
     setSettingsOpen(true);
   }, []);
 
+  // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
+  // beat the browser's default Preferences dialog. Platform-gated so
+  // meta/ctrl don't conflict across OS.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (primary && !e.shiftKey && !e.altKey && e.key === ',') {
+        if (e.isComposing) return;
+        e.preventDefault();
+        openSettings();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [openSettings]);
+
   // Explicit enabled toggle — true = wake, false = tuck. Persists to
   // localStorage so the overlay state survives across reloads. We keep
   // `adopted` untouched so the entry-view CTA does not regress to
@@ -694,9 +931,42 @@ export function App() {
     void refreshTemplates();
   }, [route.kind, refreshTemplates]);
 
+  // Existing card grids (DesignsTab, ProjectView), pickers (NewProjectPanel,
+  // ChatComposer mention) all look skills up by id without caring whether
+  // the id resolves to a functional skill or a design template. Pass them
+  // the union so the post-split refactor stays invisible to those callers.
+  const allSkillSummaries = useMemo(
+    () => [...skills, ...designTemplates],
+    [skills, designTemplates],
+  );
   const enabledSkills = useMemo(
-    () => skills.filter((s) => !(config.disabledSkills ?? []).includes(s.id)),
+    () =>
+      allSkillSummaries.filter(
+        (s) => !(config.disabledSkills ?? []).includes(s.id),
+      ),
+    [allSkillSummaries, config.disabledSkills],
+  );
+  // Functional-skills-only enabled subset — what ProjectView's chat
+  // composer @-picker should see. Without this, a skill the user has
+  // disabled in Settings still appears in an existing project's @-mention
+  // popover and can ride along to the daemon via skillIds, breaking the
+  // Library toggle for projects opened on the post-split branch.
+  const enabledFunctionalSkills = useMemo(
+    () =>
+      skills.filter(
+        (s) => !(config.disabledSkills ?? []).includes(s.id),
+      ),
     [skills, config.disabledSkills],
+  );
+  // Templates-only enabled subset — what the EntryView Templates gallery
+  // actually renders. Filtering in App keeps the EntryView prop surface
+  // narrow ("here are the templates the user has not disabled").
+  const enabledDesignTemplates = useMemo(
+    () =>
+      designTemplates.filter(
+        (s) => !(config.disabledSkills ?? []).includes(s.id),
+      ),
+    [designTemplates, config.disabledSkills],
   );
   const enabledDS = useMemo(
     () =>
@@ -715,7 +985,8 @@ export function App() {
           routeFileName={route.kind === 'project' ? route.fileName : null}
           config={config}
           agents={agents}
-          skills={skills}
+          skills={enabledFunctionalSkills}
+          designTemplates={designTemplates}
           designSystems={designSystems}
           daemonLive={daemonLive}
           onModeChange={handleModeChange}
@@ -736,9 +1007,11 @@ export function App() {
       ) : (
         <EntryView
           skills={enabledSkills}
+          designTemplates={enabledDesignTemplates}
           designSystems={enabledDS}
           projects={projects}
           templates={templates}
+          onDeleteTemplate={handleDeleteTemplate}
           promptTemplates={promptTemplates}
           defaultDesignSystemId={config.designSystemId}
           config={config}
@@ -750,9 +1023,11 @@ export function App() {
           onCreateProject={handleCreateProject}
           onImportClaudeDesign={handleImportClaudeDesign}
           onImportFolder={handleImportFolder}
+          onImportFolderResponse={handleImportFolderResponse}
           onOpenProject={handleOpenProject}
           onOpenLiveArtifact={handleOpenLiveArtifact}
           onDeleteProject={handleDeleteProject}
+          onRenameProject={handleRenameProject}
           onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
           onOpenSettings={openSettings}
           onAdoptPet={openPetSettings}
@@ -792,8 +1067,13 @@ export function App() {
             setSettingsOpen(false);
           }}
           onRefreshAgents={refreshAgents}
+          daemonMediaProviders={daemonMediaProviders}
+          daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+          mediaProvidersNotice={mediaProvidersNotice}
+          onReloadMediaProviders={reloadMediaProvidersFromDaemon}
         />
       ) : null}
+      <MemoryToast onOpenMemory={() => openSettings('memory')} />
       {/* First-run privacy consent banner. It waits for daemon config
           hydration because privacyDecisionAt is daemon-owned and stripped
           from localStorage. It also yields while Settings is open so the

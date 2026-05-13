@@ -6,6 +6,12 @@ import { promisify } from "node:util";
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import {
+  WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
+  WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
+  WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
+  shouldUseWinStandalonePrebundle,
+} from "../win-prebundle.js";
 import { buildCustomWinNsisInstaller } from "./custom-installer.js";
 import {
   ELECTRON_BUILDER_ASAR,
@@ -64,6 +70,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPa
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
+        requireRootWebPackageAudit: !shouldUseWinStandalonePrebundle(config.webOutputMode),
         resourceName: WEB_STANDALONE_RESOURCE_NAME,
         standaloneSourceRoot: join(webRoot, ".next", "standalone"),
         version: 1,
@@ -207,11 +214,24 @@ async function materializeCachedElectronBuilderAudit(entryRoot: string, paths: W
   );
 }
 
-export async function materializeCachedUnpackedForInstaller(cachedUnpackedRoot: string, paths: WinPaths): Promise<WinBuiltAppManifest> {
+async function rewriteUnpackedAppPackageVersion(unpackedRoot: string, packagedVersion: string): Promise<void> {
+  const packageJsonPath = join(unpackedRoot, "resources", "app", "package.json");
+  if (!(await pathExists(packageJsonPath))) return;
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
+  packageJson.version = packagedVersion;
+  await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+}
+
+export async function materializeCachedUnpackedForInstaller(
+  cachedUnpackedRoot: string,
+  paths: WinPaths,
+  packagedVersion?: string,
+): Promise<WinBuiltAppManifest> {
   await removeTree(paths.unpackedRoot);
   await mkdir(dirname(paths.unpackedRoot), { recursive: true });
   await cp(cachedUnpackedRoot, paths.unpackedRoot, { recursive: true });
   await cp(paths.packagedConfigPath, join(paths.unpackedRoot, "resources", "open-design-config.json"));
+  if (packagedVersion != null) await rewriteUnpackedAppPackageVersion(paths.unpackedRoot, packagedVersion);
   return {
     appBuilderOutputRoot: paths.appBuilderOutputRoot,
     cacheEntryPath: null,
@@ -233,6 +253,14 @@ export async function runElectronBuilder(
   resourceTree: ResourceTreeResult,
 ): Promise<void> {
   const packagedVersion = await readPackagedVersion(config);
+  const usePrebundle = shouldUseWinStandalonePrebundle(config.webOutputMode);
+  const packagedConfigEntrypoints = usePrebundle
+    ? {
+        daemonCliEntryRelative: WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
+        daemonSidecarEntryRelative: WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
+        webSidecarEntryRelative: WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
+      }
+    : {};
   const key = hashJson({
     afterPackHook: config.webOutputMode === "standalone" ? await hashPath(winResources.webStandaloneAfterPackHook) : null,
     asar: ELECTRON_BUILDER_ASAR,
@@ -244,11 +272,12 @@ export async function runElectronBuilder(
     nodeGypRebuild: ELECTRON_BUILDER_NODE_GYP_REBUILD,
     npmRebuild: ELECTRON_BUILDER_NPM_REBUILD,
     packagedAppKey,
-    packagedConfigSchemaVersion: 1,
+    packagedVersion,
+    packagedConfigSchemaVersion: usePrebundle ? 2 : 1,
     portable: config.portable,
     platform: "win32",
     resourceTreeKey: resourceTree.key,
-    schemaVersion: 4,
+    schemaVersion: 5,
     target: "dir",
     webOutputMode: config.webOutputMode,
     winIcon: await hashPath(winResources.icon),
@@ -295,7 +324,7 @@ export async function runElectronBuilder(
   const cachedUnpackedRoot = join(cachedBuilderRoot, "win-unpacked");
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
   await removeTree(paths.appBuilderOutputRoot);
-  await writePackagedConfig(config, paths, packagedVersion);
+  await writePackagedConfig(config, paths, packagedVersion, packagedConfigEntrypoints);
   await materializeCachedElectronBuilderAudit(manifest.entryPath, paths);
   await writeBuiltAppManifest(paths, {
     appBuilderOutputRoot: cachedBuilderRoot,
@@ -307,6 +336,6 @@ export async function runElectronBuilder(
     webStandaloneHookAuditPath: (await pathExists(paths.webStandaloneHookAuditPath)) ? paths.webStandaloneHookAuditPath : null,
   });
   if (config.to === "nsis" || config.to === "all") {
-    await buildCustomWinNsisInstaller(config, paths, await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths));
+    await buildCustomWinNsisInstaller(config, paths, await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths, packagedVersion));
   }
 }

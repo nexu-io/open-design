@@ -156,9 +156,14 @@ export async function deleteTemplate(id: string): Promise<boolean> {
   }
 }
 
+type ProjectPatch = Omit<Partial<Project>, 'pendingPrompt' | 'customInstructions'> & {
+  pendingPrompt?: Project['pendingPrompt'] | null;
+  customInstructions?: string | null;
+};
+
 export async function patchProject(
   id: string,
-  patch: Partial<Project>,
+  patch: ProjectPatch,
 ): Promise<Project | null> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {

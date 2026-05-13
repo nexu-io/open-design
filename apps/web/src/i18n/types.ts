@@ -112,7 +112,16 @@ export interface Dict {
   'settings.testAgentMissing': string;
   'settings.testAgentSpawn': string;
   'settings.testUnknown': string;
+  'settings.agentInstall.install': string;
+  'settings.agentInstall.docs': string;
+  'settings.agentInstall.pathHint': string;
+  'settings.agentInstall.stepOpenLinks': string;
+  'settings.agentInstall.stepAuth': string;
+  'settings.agentInstall.stepRescan': string;
+  'settings.agentInstall.stepSelect': string;
   'settings.noAgentsDetected': string;
+  'settings.agentAuthRequired': string;
+  'settings.agentAuthUnknown': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.customProvider': string;
@@ -122,6 +131,13 @@ export interface Dict {
   'settings.show': string;
   'settings.hide': string;
   'settings.model': string;
+  'settings.fetchModels': string;
+  'settings.fetchModelsTitle': string;
+  'settings.fetchModelsRunning': string;
+  'settings.fetchModelsSuccess': string;
+  'settings.fetchModelsEmpty': string;
+  'settings.fetchModelsUnsupported': string;
+  'settings.fetchModelsFailed': string;
   'settings.suggestedModelsHint': string;
   'settings.maxTokens': string;
   'settings.maxTokensHint': string;
@@ -129,6 +145,7 @@ export interface Dict {
   'settings.baseUrlInvalid': string;
   'settings.azureDeploymentModel': string;
   'settings.azureDeploymentModelHint': string;
+  'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
@@ -150,8 +167,12 @@ export interface Dict {
   'settings.cliEnvTitle': string;
   'settings.cliEnvHint': string;
   'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvClaudeBaseUrl': string;
+  'settings.cliEnvClaudeApiKey': string;
   'settings.cliEnvCodexHome': string;
   'settings.cliEnvCodexBin': string;
+  'settings.cliEnvCodexBaseUrl': string;
+  'settings.cliEnvCodexApiKey': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
@@ -169,6 +190,10 @@ export interface Dict {
   'settings.mediaProviderClearConfirm': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
+  'settings.mediaProviderReload': string;
+  'settings.mediaProviderReloadError': string;
+  'settings.mediaProviderReloadSuccess': string;
+  'settings.mediaProviderLoadError': string;
   'settings.privacy': string;
   'settings.privacyHint': string;
   'settings.privacyConsentKicker': string;
@@ -196,8 +221,24 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
-  'settings.library': string;
-  'settings.libraryHint': string;
+  'settings.skills': string;
+  'settings.skillsHint': string;
+  'settings.skillsNew': string;
+  'settings.skillsEmpty': string;
+  'settings.skillsEdit': string;
+  'settings.skillsDelete': string;
+  'settings.skillsDeleteConfirm': string;
+  'settings.skillsName': string;
+  'settings.skillsTriggers': string;
+  'settings.skillsDescription': string;
+  'settings.skillsBody': string;
+  'settings.skillsCreate': string;
+  'settings.skillsSave': string;
+  'settings.skillsSaving': string;
+  'settings.skillsFiles': string;
+  'settings.skillsNoFiles': string;
+  'settings.designSystems': string;
+  'settings.designSystemsHint': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
@@ -209,6 +250,15 @@ export interface Dict {
   'settings.libraryEnabled': string;
   'settings.libraryDisabled': string;
   'settings.libraryToggleLabel': string;
+  'settings.libraryInstall': string;
+  'settings.libraryInstallGithub': string;
+  'settings.libraryInstallLocal': string;
+  'settings.libraryInstallUrl': string;
+  'settings.libraryInstallPath': string;
+  'settings.libraryInstallButton': string;
+  'settings.libraryUninstall': string;
+  'settings.libraryBuiltIn': string;
+  'settings.libraryInstalled': string;
   'settings.connectorsNavHint': string;
   'settings.connectorsHint': string;
   'settings.connectorsComposioApiKey': string;
@@ -230,6 +280,7 @@ export interface Dict {
   'settings.connectorsSaveKey': string;
   'settings.connectorsSaveKeyTitle': string;
   'settings.connectorsKeySaving': string;
+  'settings.connectorsKeySaved': string;
   'settings.connectorsKeyError': string;
   'settings.connectorsHelpSaved': string;
   'settings.connectorsHelpUnsaved': string;
@@ -301,6 +352,134 @@ export interface Dict {
   'settings.orbit.controlsLockedBadge': string;
   'settings.orbit.controlsLockedHint': string;
 
+  // Memory (auto-extracted personalization saved as on-disk markdown)
+  'settings.memory': string;
+  'settings.memoryHint': string;
+  'settings.customInstructionsTitle': string;
+  'settings.customInstructionsHint': string;
+  'settings.customInstructionsPlaceholder': string;
+  'settings.memoryDescription': string;
+  'settings.memoryEnabled': string;
+  'settings.memoryDisabled': string;
+  'settings.memoryEnableLabel': string;
+  'settings.memoryDisabledBanner': string;
+  'settings.memoryNew': string;
+  'settings.memoryEdit': string;
+  'settings.memoryDelete': string;
+  'settings.memoryPreview': string;
+  'settings.memoryEmpty': string;
+  'settings.memoryEmptyHintZh': string;
+  'settings.memoryEmptyHintEn': string;
+  'settings.memoryName': string;
+  'settings.memoryDesc': string;
+  'settings.memoryBody': string;
+  'settings.memoryBodyHint': string;
+  'settings.memoryStartersLabel': string;
+  'settings.memoryStarterUserName': string;
+  'settings.memoryStarterUserDesc': string;
+  'settings.memoryStarterUserBody': string;
+  'settings.memoryStarterFeedbackName': string;
+  'settings.memoryStarterFeedbackDesc': string;
+  'settings.memoryStarterFeedbackBody': string;
+  'settings.memoryStarterProjectName': string;
+  'settings.memoryStarterProjectDesc': string;
+  'settings.memoryStarterProjectBody': string;
+  'settings.memorySaveHint': string;
+  'settings.memoryIndexSaveHint': string;
+  'settings.memoryIndexUnsaved': string;
+  'settings.memoryFlashCreated': string;
+  'settings.memoryFlashSaved': string;
+  'settings.memoryFlashDeleted': string;
+  'settings.memoryFlashIndexSaved': string;
+  'settings.memoryNameLabel': string;
+  'settings.memoryTypeLabel': string;
+  'settings.memoryDescLabel': string;
+  'settings.memoryBodyLabel': string;
+  'settings.memoryTypeUser': string;
+  'settings.memoryTypeFeedback': string;
+  'settings.memoryTypeProject': string;
+  'settings.memoryTypeReference': string;
+  'settings.memoryIndex': string;
+  'settings.memoryIndexSave': string;
+  'settings.memoryIndexReset': string;
+  'settings.memoryToastChanged': string;
+  'settings.memoryToastClickHint': string;
+  'settings.memoryAll': string;
+  // Memory → LLM extraction observability
+  'settings.memoryExtractions': string;
+  'settings.memoryExtractionsHint': string;
+  'settings.memoryExtractionsEmpty': string;
+  'settings.memoryExtractionsRefresh': string;
+  'settings.memoryExtractionsRefreshing': string;
+  'settings.memoryExtractionPhaseRunning': string;
+  'settings.memoryExtractionPhaseSuccess': string;
+  'settings.memoryExtractionPhaseSkipped': string;
+  'settings.memoryExtractionPhaseFailed': string;
+  'settings.memoryExtractionSkipNoProvider': string;
+  'settings.memoryExtractionSkipDisabled': string;
+  'settings.memoryExtractionSkipEmpty': string;
+  'settings.memoryExtractionSkipNoMatch': string;
+  'settings.memoryExtractionKindHeuristic': string;
+  'settings.memoryExtractionKindLlm': string;
+  'settings.memoryExtractionProviderEnv': string;
+  'settings.memoryExtractionProviderMediaConfig': string;
+  'settings.memoryExtractionProviderOverride': string;
+  'settings.memoryExtractionProposed': string;
+  'settings.memoryExtractionWritten': string;
+  'settings.memoryExtractionDuration': string;
+  'settings.memoryExtractionDelete': string;
+  'settings.memoryExtractionsClear': string;
+  'settings.memoryExtractionsClearTitle': string;
+  'settings.memoryNoProviderBannerTitle': string;
+  'settings.memoryNoProviderBannerBody': string;
+  // Memory model picker — rendered inline next to the chat model picker
+  // so picking "the fast model that mines facts each turn" lives in the
+  // same row as the chat agent + model. Reuses the surrounding chat
+  // protocol/CLI context (key, baseUrl, apiVersion); the user only
+  // chooses the model id.
+  'settings.memoryModelInlineLabel': string;
+  'settings.memoryModelInlineSameAsChat': string;
+  'settings.memoryModelInlineSameAsChatWithModel': string;
+  'settings.memoryModelInlineSameAsChatWithProvider': string;
+  'settings.memoryModelInlineHintCli': string;
+  'settings.memoryModelInlineHintCliConstrained': string;
+  'settings.memoryModelInlineHintByok': string;
+  'settings.memoryModelInlineFlashSaved': string;
+  'settings.memoryModelInlineFlashCleared': string;
+
+  // MCP server settings
+  'settings.mcpTitle': string;
+  'settings.mcpHint': string;
+  'settings.mcpDaemonError': string;
+  'settings.mcpBuildDaemon': string;
+  'settings.mcpNodeMissing': string;
+  'settings.mcpBuildHint': string;
+  'settings.mcpMethodCli': string;
+  'settings.mcpInstructionCli': string;
+  'settings.mcpMethodToml': string;
+  'settings.mcpInstructionCodex': string;
+  'settings.mcpMethodOneClick': string;
+  'settings.mcpInstructionCursor': string;
+  'settings.mcpDeeplinkInstallCursor': string;
+  'settings.mcpMethodJson': string;
+  'settings.mcpInstructionCopilot': string;
+  'settings.mcpInstructionAntigravity': string;
+  'settings.mcpInstructionZed': string;
+  'settings.mcpInstructionWindsurf': string;
+  'settings.mcpCopyAria': string;
+  'settings.mcpResolvingFailed': string;
+  'settings.mcpLoadingPaths': string;
+  'settings.mcpCopied': string;
+  'settings.mcpCopy': string;
+  'settings.mcpCursorApproval': string;
+  'settings.mcpRestartNote': string;
+  'settings.mcpRestartDetail': string;
+  'settings.mcpCapabilitiesTitle': string;
+  'settings.mcpCapabilityRead': string;
+  'settings.mcpCapabilityPull': string;
+  'settings.mcpCapabilityDefault': string;
+  'settings.mcpRunningNote': string;
+
   // Notifications (settings + system notifications)
   'settings.notifications': string;
   'settings.notificationsHint': string;
@@ -329,7 +508,7 @@ export interface Dict {
 
   // Entry view / tabs
   'entry.tabDesigns': string;
-  'entry.tabExamples': string;
+  'entry.tabTemplates': string;
   'entry.tabDesignSystems': string;
   'entry.tabConnectors': string;
   'entry.tabImageTemplates': string;
@@ -447,6 +626,7 @@ export interface Dict {
   'newproj.tabLiveArtifact': string;
   'newproj.tabDeck': string;
   'newproj.tabTemplate': string;
+  'newproj.tabMedia': string;
   'newproj.tabOther': string;
   'newproj.titlePrototype': string;
   'newproj.titleLiveArtifact': string;
@@ -455,6 +635,7 @@ export interface Dict {
   'newproj.titleImage': string;
   'newproj.titleVideo': string;
   'newproj.titleAudio': string;
+  'newproj.titleMedia': string;
   'newproj.titleOther': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;
@@ -464,6 +645,26 @@ export interface Dict {
   'newproj.toggleSpeakerNotesHint': string;
   'newproj.toggleAnimations': string;
   'newproj.toggleAnimationsHint': string;
+  'newproj.targetPlatformsLabel': string;
+  'newproj.targetPlatformsHint': string;
+  'newproj.platform.responsive.label': string;
+  'newproj.platform.responsive.hint': string;
+  'newproj.platform.webDesktop.label': string;
+  'newproj.platform.webDesktop.hint': string;
+  'newproj.platform.mobileIos.label': string;
+  'newproj.platform.mobileIos.hint': string;
+  'newproj.platform.mobileAndroid.label': string;
+  'newproj.platform.mobileAndroid.hint': string;
+  'newproj.platform.tablet.label': string;
+  'newproj.platform.tablet.hint': string;
+  'newproj.platform.desktopApp.label': string;
+  'newproj.platform.desktopApp.hint': string;
+  'newproj.surfaceOptionsLabel': string;
+  'newproj.includeLandingPage': string;
+  'newproj.includeLandingPageHint': string;
+  'newproj.includeOsWidgets': string;
+  'newproj.includeOsWidgetsHint': string;
+  'newproj.includeOsWidgetsDisabledHint': string;
   'newproj.templateLabel': string;
   'newproj.noTemplatesTitle': string;
   'newproj.noTemplatesBody': string;
@@ -499,9 +700,12 @@ export interface Dict {
   'newproj.surfaceVideo': string;
   'newproj.surfaceAudio': string;
   'newproj.modelLabel': string;
+  'newproj.modelSearch': string;
+  'newproj.modelEmpty': string;
+  'newproj.modelRecommended': string;
+  'newproj.modelMissingTitle': string;
+  'newproj.modelMissingSub': string;
   'newproj.aspectLabel': string;
-  'newproj.imageStyleLabel': string;
-  'newproj.imageStylePlaceholder': string;
   'newproj.videoLengthLabel': string;
   'newproj.videoLengthSeconds': string;
   'newproj.audioKindLabel': string;
@@ -583,6 +787,22 @@ export interface Dict {
   'designs.viewKanban': string;
   'designs.kanbanEmptyColumn': string;
   'designs.deleteAria': string;
+  'designs.menuMore': string;
+  'designs.menuRename': string;
+  'designs.menuDelete': string;
+  'designs.renamePrompt': string;
+  'designs.selectMode': string;
+  'designs.cancelSelect': string;
+  'designs.deleteSelected': string;
+  'designs.selectedCount': string;
+  'designs.deleteSelectedConfirm': string;
+  'designs.tagPrototype': string;
+  'designs.tagLiveArtifact': string;
+  'designs.tagSlide': string;
+  'designs.tagMedia': string;
+  'designs.renameTitle': string;
+  'designs.renameSave': string;
+  'designs.renameCancel': string;
 
   // Examples tab
   'examples.typeLabel': string;
@@ -623,6 +843,12 @@ export interface Dict {
   'examples.previewModalTitle': string;
   'examples.shareTitle': string;
   'examples.shareLoadFirst': string;
+  // Card placeholder + share-button hint for skills whose
+  // `od.preview.type` is not `html` (image / markdown / …) so the
+  // gallery doesn't sit on a forever "Loading preview…" shimmer for
+  // skills that ship no fetchable artifact. Issue #897.
+  'examples.unavailablePlaceholder': string;
+  'examples.shareUnavailable': string;
   'examples.shareMenu': string;
   'examples.exportPdfAllSlides': string;
   'examples.exportPptxLocked': string;
@@ -676,6 +902,8 @@ export interface Dict {
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
+  'project.customInstructions': string;
+  'project.customInstructionsPlaceholder': string;
   'project.resizeChatPanel': string;
   'chat.tabChat': string;
   'chat.tabComments': string;
@@ -752,6 +980,13 @@ export interface Dict {
   'preview.errorTitle': string;
   'preview.errorBody': string;
   'preview.retry': string;
+  // Friendly placeholder copy for skills whose `od.preview.type` is not
+  // `html` — they ship no fetchable example artifact, so the loading /
+  // error states are misleading. Issue #897.
+  'preview.unavailableTitle': string;
+  // Body copy uses the `{kind}` placeholder (raw `od.preview.type`
+  // token, e.g. "markdown" or "image") so each kind reads naturally.
+  'preview.unavailableBody': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 
@@ -800,12 +1035,22 @@ export interface Dict {
   'designFiles.previewClose': string;
   'designFiles.modified': string;
   'designFiles.weeksAgo': string;
+  'designFiles.groupBy': string;
+  'designFiles.groupByKind': string;
+  'designFiles.groupByModified': string;
+  'designFiles.expandGroup': string;
+  'designFiles.collapseGroup': string;
   'designFiles.sectionPages': string;
   'designFiles.sectionScripts': string;
   'designFiles.sectionImages': string;
   'designFiles.sectionSketches': string;
   'designFiles.sectionLiveArtifacts': string;
   'designFiles.sectionOther': string;
+  'designFiles.modifiedToday': string;
+  'designFiles.modifiedYesterday': string;
+  'designFiles.modifiedPrevious7Days': string;
+  'designFiles.modifiedPrevious30Days': string;
+  'designFiles.modifiedOlder': string;
   'designFiles.showMore': string;
   'designFiles.kindHtml': string;
   'designFiles.kindImage': string;
@@ -927,6 +1172,13 @@ export interface Dict {
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
+  'fileViewer.viewportAria': string;
+  'fileViewer.viewportDesktop': string;
+  'fileViewer.viewportDesktopTitle': string;
+  'fileViewer.viewportTablet': string;
+  'fileViewer.viewportTabletTitle': string;
+  'fileViewer.viewportMobile': string;
+  'fileViewer.viewportMobileTitle': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;
@@ -972,6 +1224,42 @@ export interface Dict {
   'liveArtifact.refresh.statusReady': string;
   'liveArtifact.refresh.statusSucceeded': string;
   'liveArtifact.refresh.statusFailed': string;
+  'liveArtifact.refresh.statusRunning': string;
+  'liveArtifact.refresh.statusRunningDescription': string;
+  'liveArtifact.refresh.statusSucceededDescription': string;
+  'liveArtifact.refresh.statusFailedDescription': string;
+  'liveArtifact.refresh.statusReadyDescription': string;
+  'liveArtifact.refresh.statusNeverDescription': string;
+  'liveArtifact.refresh.eventStarted': string;
+  'liveArtifact.refresh.eventSucceeded': string;
+  'liveArtifact.refresh.eventFailed': string;
+  'liveArtifact.refresh.eventStartedDetail': string;
+  'liveArtifact.refresh.sourcesUpdatedOne': string;
+  'liveArtifact.refresh.sourcesUpdatedMany': string;
+  'liveArtifact.refresh.timelineEmpty': string;
+  'liveArtifact.refresh.heroLastRefreshedLabel': string;
+  'liveArtifact.refresh.heroLastRefreshedNever': string;
+  'liveArtifact.refresh.justNow': string;
+  'liveArtifact.refresh.factCreated': string;
+  'liveArtifact.refresh.factLastUpdated': string;
+  'liveArtifact.refresh.factUnknown': string;
+  'liveArtifact.refresh.persistedTitle': string;
+  'liveArtifact.refresh.persistedHint': string;
+  'liveArtifact.refresh.persistedEmpty': string;
+  'liveArtifact.refresh.persistedStatusSucceeded': string;
+  'liveArtifact.refresh.persistedStatusRunning': string;
+  'liveArtifact.refresh.persistedStatusFailed': string;
+  'liveArtifact.refresh.persistedStatusCancelled': string;
+  'liveArtifact.refresh.persistedStatusSkipped': string;
+  'liveArtifact.refresh.sessionTitle': string;
+  'liveArtifact.refresh.sessionHint': string;
+  'liveArtifact.refresh.docSourceTitle': string;
+  'liveArtifact.refresh.docSourceHint': string;
+  'liveArtifact.refresh.docSourceType': string;
+  'liveArtifact.refresh.docSourceTool': string;
+  'liveArtifact.refresh.docSourceConnector': string;
+  'liveArtifact.refresh.debugSummary': string;
+  'liveArtifact.refresh.debugNote': string;
   'fileViewer.deployProviderLabel': string;
   'fileViewer.vercelProvider': string;
   'fileViewer.cloudflarePagesProvider': string;
@@ -1100,6 +1388,23 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.feedbackPrompt': string;
+  'assistant.feedbackPositive': string;
+  'assistant.feedbackNegative': string;
+  'assistant.feedbackReasonTitle': string;
+  'assistant.feedbackReasonPositiveMatched': string;
+  'assistant.feedbackReasonPositiveVisual': string;
+  'assistant.feedbackReasonPositiveUseful': string;
+  'assistant.feedbackReasonPositiveEasy': string;
+  'assistant.feedbackReasonNegativeMissed': string;
+  'assistant.feedbackReasonNegativeVisual': string;
+  'assistant.feedbackReasonNegativeIncomplete': string;
+  'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonOther': string;
+  'assistant.feedbackReasonPlaceholder': string;
+  'assistant.feedbackReasonSubmit': string;
+  'assistant.emptyResponseLabel': string;
+  'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;
   'assistant.unfinishedSummary': string;
   'assistant.unfinishedMore': string;
@@ -1276,4 +1581,45 @@ export interface Dict {
   'sketch.closeConfirm': string;
   'sketch.textPrompt': string;
   'sketch.textModalTitle': string;
+  // Critique Theater (Phase 8 components; Phase 9 fills non-English locales)
+  'critiqueTheater.userFacingName': string;
+  'critiqueTheater.roleDesigner': string;
+  'critiqueTheater.roleCritic': string;
+  'critiqueTheater.roleBrand': string;
+  'critiqueTheater.roleA11y': string;
+  'critiqueTheater.roleCopy': string;
+  'critiqueTheater.roundLabel': string;
+  'critiqueTheater.mustFix': string;
+  'critiqueTheater.composite': string;
+  'critiqueTheater.threshold': string;
+  'critiqueTheater.consensus': string;
+  'critiqueTheater.interrupt': string;
+  'critiqueTheater.interrupting': string;
+  'critiqueTheater.interrupted': string;
+  'critiqueTheater.degradedHeading': string;
+  'critiqueTheater.degradedReasonMalformed': string;
+  'critiqueTheater.degradedReasonOversize': string;
+  'critiqueTheater.degradedReasonAdapter': string;
+  'critiqueTheater.degradedReasonProtocol': string;
+  'critiqueTheater.degradedReasonMissingArtifact': string;
+  'critiqueTheater.replay': string;
+  'critiqueTheater.replaySpeed': string;
+  'critiqueTheater.readOnly': string;
+  'critiqueTheater.shippedSummary': string;
+  'critiqueTheater.interruptedSummary': string;
+  'critiqueTheater.shippedBadge': string;
+  'critiqueTheater.belowThresholdBadge': string;
+  'critiqueTheater.timedOutBadge': string;
+  'critiqueTheater.failedHeading': string;
+  'critiqueTheater.failedReasonCliExit': string;
+  'critiqueTheater.failedReasonPerRoundTimeout': string;
+  'critiqueTheater.failedReasonTotalTimeout': string;
+  'critiqueTheater.failedReasonOrchestrator': string;
+  'critiqueTheater.transcriptEmpty': string;
+  'critiqueTheater.transcriptLoading': string;
+  'critiqueTheater.transcriptError': string;
+  'critiqueTheater.replaySpeedPaused': string;
+  'critiqueTheater.replaySpeedInstant': string;
+  'critiqueTheater.replaySpeedLive': string;
+  'critiqueTheater.replaySpeedFast': string;
 }

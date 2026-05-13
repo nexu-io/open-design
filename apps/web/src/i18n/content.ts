@@ -6,25 +6,19 @@ import type {
 import type { Locale } from './types';
 import {
   FR_DESIGN_SYSTEM_CATEGORIES,
-  FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
   FR_DESIGN_SYSTEM_SUMMARIES,
   FR_PROMPT_TEMPLATE_CATEGORIES,
   FR_PROMPT_TEMPLATE_COPY,
-  FR_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
   FR_PROMPT_TEMPLATE_TAGS,
   FR_SKILL_COPY,
-  FR_SKILL_IDS_WITH_EN_FALLBACK,
 } from './content.fr';
 import {
   RU_DESIGN_SYSTEM_CATEGORIES,
-  RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
   RU_DESIGN_SYSTEM_SUMMARIES,
   RU_PROMPT_TEMPLATE_CATEGORIES,
   RU_PROMPT_TEMPLATE_COPY,
-  RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
   RU_PROMPT_TEMPLATE_TAGS,
   RU_SKILL_COPY,
-  RU_SKILL_IDS_WITH_EN_FALLBACK,
 } from './content.ru';
 
 type LocalizedSkillCopy = { description?: string; examplePrompt?: string };
@@ -39,12 +33,9 @@ type LocalizedContentIds = {
 };
 type LocalizedContentBundle = {
   skillCopy: Record<string, LocalizedSkillCopy>;
-  skillIdsWithEnFallback: readonly string[];
   designSystemSummaries: Record<string, string>;
   designSystemCategories: Record<string, string>;
-  designSystemIdsWithEnFallback: readonly string[];
   promptTemplateCategories: Record<string, string>;
-  promptTemplateIdsWithEnFallback: readonly string[];
   promptTemplateTags: Record<string, string>;
   promptTemplateCopy: Record<string, LocalizedPromptTemplateCopy>;
 };
@@ -55,6 +46,12 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
       'Ein fröhlicher 30-Sekunden-Indie-Pop-Jingle für den Launch eines Coffee Shops — warmes E-Piano, Besen-Drums, sanfter Bass und ein einzelner sonniger „ahhh“-Chor im Refrain. Ohne Gesang. Loop-freundliches Ende.',
     description:
       'Audio-Generierung für Jingles, Musikbetten, Voiceover und Soundeffekte. Musik-Anfragen werden an Suno V5 / Udio / Lyria geleitet, Sprache an MiniMax TTS / FishAudio / ElevenLabs V3 und SFX an ElevenLabs SFX oder AudioCraft. Die Ausgabe ist eine MP3/WAV-Datei im Projektordner.',
+  },
+  'agent-browser': {
+    examplePrompt:
+      'Verifizieren Sie die lokale Open-Design-Vorschau mit agent-browser: starten oder verbinden Sie CDP Chrome, öffnen Sie http://127.0.0.1:17573/, melden Sie Titel, URL, sichtbare Texte und speichern Sie einen Screenshot.',
+    description:
+      'Browser-Automation für lokale Open-Design-Preview-Validierung. Verbindet sich mit einem geprüften CDP-Chrome-Endpunkt, liest gerenderten Seitenzustand, kann bei Bedarf klicken/tippen und speichert einen Screenshot.',
   },
   'blog-post': {
     examplePrompt:
@@ -98,6 +95,10 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   'eng-runbook': {
     examplePrompt:
       'Schreiben Sie ein Runbook für unseren Auth-Service — Alerts, Dashboards, Standardverfahren, On-Call-Rotation.',
+  },
+  'faq-page': {
+    examplePrompt:
+      'Eine FAQ-Seite mit zusammenklappbaren Akkordeon-Abschnitten, Suchfunktion und Kategoriefilterung.',
   },
   'finance-report': {
     examplePrompt:
@@ -334,6 +335,7 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   wise: 'Geldtransfer. Leuchtend grüner Akzent, freundlich und klar.',
   'x-ai': 'Elon Musks AI-Lab. Strenger Monochrom-Look, futuristischer Minimalismus.',
   xiaohongshu: 'Lifestyle-UGC-Social-Plattform. Singuläres Brand-Rot, großzügiger Radius, content-first.',
+  wechat: 'WeChat Mini Programs. Frisches Grün (#07C160), PingFang SC, Chat-Bubble-UI, Tab-Leiste.',
   zapier: 'Automatisierungsplattform. Warmes Orange, freundlich illustrationsgetrieben.',
 };
 
@@ -353,6 +355,7 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Fintech & Crypto': 'Fintech & Krypto',
   'E-Commerce & Retail': 'E-Commerce & Handel',
   'Media & Consumer': 'Medien & Consumer',
+  'Social & Messaging': 'Social & Messaging',
   Automotive: 'Automotive',
   'Editorial & Print': 'Editorial & Print',
   'Editorial · Studio': 'Editorial · Studio',
@@ -361,146 +364,6 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Editorial / Personal / Publication': 'Editorial / Persönlich / Publikation',
   Uncategorized: 'Nicht kategorisiert',
 };
-
-const DE_SKILL_IDS_WITH_EN_FALLBACK = [
-  'clinical-case-report',
-  'dcf-valuation',
-  'editorial-burgundy-principles-template',
-  'flowai-live-dashboard-template',
-  'html-ppt-taste-brutalist',
-  'html-ppt-taste-editorial',
-  // Vendored upstream English-language Zara templates (zarazhangrui/beautiful-html-templates).
-  // Localized copy is not maintained; fall back to the upstream English description.
-  'html-ppt-zhangzara-8-bit-orbit',
-  'html-ppt-zhangzara-biennale-yellow',
-  'html-ppt-zhangzara-block-frame',
-  'html-ppt-zhangzara-blue-professional',
-  'html-ppt-zhangzara-bold-poster',
-  'html-ppt-zhangzara-broadside',
-  'html-ppt-zhangzara-capsule',
-  'html-ppt-zhangzara-cartesian',
-  'html-ppt-zhangzara-cobalt-grid',
-  'html-ppt-zhangzara-coral',
-  'html-ppt-zhangzara-creative-mode',
-  'html-ppt-zhangzara-daisy-days',
-  'html-ppt-zhangzara-editorial-tri-tone',
-  'html-ppt-zhangzara-grove',
-  'html-ppt-zhangzara-long-table',
-  'html-ppt-zhangzara-mat',
-  'html-ppt-zhangzara-monochrome',
-  'html-ppt-zhangzara-neo-grid-bold',
-  'html-ppt-zhangzara-peoples-platform',
-  'html-ppt-zhangzara-pin-and-paper',
-  'html-ppt-zhangzara-pink-script',
-  'html-ppt-zhangzara-playful',
-  'html-ppt-zhangzara-raw-grid',
-  'html-ppt-zhangzara-retro-windows',
-  'html-ppt-zhangzara-retro-zine',
-  'html-ppt-zhangzara-sakura-chroma',
-  'html-ppt-zhangzara-scatterbrain',
-  'html-ppt-zhangzara-signal',
-  'html-ppt-zhangzara-soft-editorial',
-  'html-ppt-zhangzara-stencil-tablet',
-  'html-ppt-zhangzara-studio',
-  'html-ppt-zhangzara-vellum',
-  // IB pitch-book skill (#888): English-only skill copy for now.
-  'ib-pitch-book',
-  'last30days',
-  'live-dashboard',
-  'orbit-general',
-  'orbit-github',
-  'orbit-gmail',
-  'orbit-linear',
-  'orbit-notion',
-  // TODO: add localized copy for social-media-dashboard (introduced in #678).
-  // Fallback for now so the localized-content coverage test passes.
-  'social-media-dashboard',
-  'social-media-matrix-tracker-template',
-  'swiss-user-research-video-template',
-  'web-prototype-taste-brutalist',
-  'web-prototype-taste-editorial',
-  'web-prototype-taste-soft',
-  'waitlist-page',
-  'x-research',
-  'trading-analysis-dashboard-template',
-  'swiss-creative-mode-template',
-  'github-dashboard',
-  'after-hours-editorial-template',
-] as const;
-
-const DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
-  'agentic',
-  'ant',
-  'application',
-  'arc',
-  'artistic',
-  'bento',
-  'bmw-m',
-  'bold',
-  'brutalism',
-  'cafe',
-  'canva',
-  'cisco',
-  'claymorphism',
-  'clean',
-  'colorful',
-  'contemporary',
-  'corporate',
-  'cosmic',
-  'creative',
-  'dashboard',
-  'discord',
-  'dithered',
-  'doodle',
-  'dramatic',
-  'duolingo',
-  'editorial',
-  'elegant',
-  'energetic',
-  'enterprise',
-  'expressive',
-  'fantasy',
-  'flat',
-  'friendly',
-  'futuristic',
-  'github',
-  'glassmorphism',
-  'gradient',
-  'huggingface',
-  'levels',
-  'lingo',
-  'luxury',
-  'material',
-  'minimal',
-  'mission-control',
-  'modern',
-  'mono',
-  'neobrutalism',
-  'neon',
-  'neumorphism',
-  'openai',
-  'pacman',
-  'paper',
-  'perspective',
-  'premium',
-  'professional',
-  'publication',
-  'refined',
-  'retro',
-  'shadcn',
-  'simple',
-  'skeumorphism',
-  'slack',
-  'sleek',
-  'spacious',
-  'storytelling',
-  'totality-festival',
-  'tetris',
-  'urdu',
-  'vibrant',
-  'vintage',
-  'webex',
-] as const;
 
 const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Infographic: 'Infografik',
@@ -524,9 +387,8 @@ const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   'Short Form': 'Short Form',
   Travel: 'Reise',
   'Live Artifact': 'Live-Artefakt',
+  'VFX / HTML-in-Canvas': 'VFX / HTML-in-Canvas',
 };
-
-const DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = ['notion-team-dashboard-live-artifact'] as const;
 
 const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
@@ -627,6 +489,25 @@ const DE_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'website-to-video': 'Website-zu-Video',
   wuxia: 'Wuxia',
   zhaoyun: 'Zhaoyun',
+  dashboard: 'Dashboard',
+  data: 'Daten',
+  destruction: 'Zerstörung',
+  displacement: 'Displacement',
+  hero: 'Hero',
+  'html-in-canvas': 'HTML-in-Canvas',
+  iphone: 'iPhone',
+  keynote: 'Keynote',
+  liquid: 'Liquid',
+  'liquid-glass': 'Liquid Glass',
+  macbook: 'MacBook',
+  magnetic: 'Magnetic',
+  particles: 'Partikel',
+  portal: 'Portal',
+  'product-demo': 'Produkt-Demo',
+  shader: 'Shader',
+  shatter: 'Shatter',
+  text: 'Text',
+  webgl: 'WebGL',
 };
 
 const DE_PROMPT_TEMPLATE_COPY: Record<string, LocalizedPromptTemplateCopy> = {
@@ -1073,34 +954,25 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, LocalizedPromptTemplateCopy> = {
 const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
   de: {
     skillCopy: DE_SKILL_COPY,
-    skillIdsWithEnFallback: DE_SKILL_IDS_WITH_EN_FALLBACK,
     designSystemSummaries: DE_DESIGN_SYSTEM_SUMMARIES,
     designSystemCategories: DE_DESIGN_SYSTEM_CATEGORIES,
-    designSystemIdsWithEnFallback: DE_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
     promptTemplateCategories: DE_PROMPT_TEMPLATE_CATEGORIES,
-    promptTemplateIdsWithEnFallback: DE_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
     promptTemplateTags: DE_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: DE_PROMPT_TEMPLATE_COPY,
   },
   ru: {
     skillCopy: RU_SKILL_COPY,
-    skillIdsWithEnFallback: RU_SKILL_IDS_WITH_EN_FALLBACK,
     designSystemSummaries: RU_DESIGN_SYSTEM_SUMMARIES,
     designSystemCategories: RU_DESIGN_SYSTEM_CATEGORIES,
-    designSystemIdsWithEnFallback: RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
     promptTemplateCategories: RU_PROMPT_TEMPLATE_CATEGORIES,
-    promptTemplateIdsWithEnFallback: RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
     promptTemplateTags: RU_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: RU_PROMPT_TEMPLATE_COPY,
   },
   fr: {
     skillCopy: FR_SKILL_COPY,
-    skillIdsWithEnFallback: FR_SKILL_IDS_WITH_EN_FALLBACK,
     designSystemSummaries: FR_DESIGN_SYSTEM_SUMMARIES,
     designSystemCategories: FR_DESIGN_SYSTEM_CATEGORIES,
-    designSystemIdsWithEnFallback: FR_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK,
     promptTemplateCategories: FR_PROMPT_TEMPLATE_CATEGORIES,
-    promptTemplateIdsWithEnFallback: FR_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK,
     promptTemplateTags: FR_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: FR_PROMPT_TEMPLATE_COPY,
   },
@@ -1108,19 +980,10 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
 
 function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedContentIds {
   return {
-    skills: [
-      ...Object.keys(content.skillCopy),
-      ...content.skillIdsWithEnFallback,
-    ],
-    designSystems: [
-      ...Object.keys(content.designSystemSummaries),
-      ...content.designSystemIdsWithEnFallback,
-    ],
+    skills: Object.keys(content.skillCopy),
+    designSystems: Object.keys(content.designSystemSummaries),
     designSystemCategories: Object.keys(content.designSystemCategories),
-    promptTemplates: [
-      ...Object.keys(content.promptTemplateCopy),
-      ...content.promptTemplateIdsWithEnFallback,
-    ],
+    promptTemplates: Object.keys(content.promptTemplateCopy),
     promptTemplateCategories: Object.keys(content.promptTemplateCategories),
     promptTemplateTags: Object.keys(content.promptTemplateTags),
   };

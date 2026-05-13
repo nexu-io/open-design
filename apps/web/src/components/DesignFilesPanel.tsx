@@ -5,6 +5,7 @@ import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -15,17 +16,43 @@ interface Props {
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
   onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
+  onRenameFile: (from: string, to: string) => Promise<ProjectFile | null> | ProjectFile | null;
   onDeleteFile: (name: string) => void;
   onDeleteFiles: (names: string[]) => Promise<void> | void;
   onUpload: () => void;
   onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
   onNewSketch: () => void;
+  uploadError?: string | null;
+  onClearUploadError?: () => void;
 }
 
+type DesignFilesGroupMode = 'kind' | 'modified';
+type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
 type SortKey = 'name' | 'kind' | 'mtime';
 type SortDir = 'asc' | 'desc';
 
+const MODIFIED_SECTION_ORDER: ModifiedSection[] = [
+  'today',
+  'yesterday',
+  'previous7Days',
+  'previous30Days',
+  'older',
+];
+const MODIFIED_SECTION_LABEL_KEY: Record<ModifiedSection, keyof Dict> = {
+  today: 'designFiles.modifiedToday',
+  yesterday: 'designFiles.modifiedYesterday',
+  previous7Days: 'designFiles.modifiedPrevious7Days',
+  previous30Days: 'designFiles.modifiedPrevious30Days',
+  older: 'designFiles.modifiedOlder',
+};
+
+/**
+ * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
+ * Claude Design's "Design Files" surface: grouped sections, hover-revealed
+ * row menu, drop-files footer, and (when a row is selected) a right-side
+ * preview pane. Triggered as a sticky first tab in FileWorkspace.
+ */
 export function DesignFilesPanel({
   projectId,
   files,
@@ -33,12 +60,15 @@ export function DesignFilesPanel({
   onRefreshFiles,
   onOpenFile,
   onOpenLiveArtifact,
+  onRenameFile,
   onDeleteFile,
   onDeleteFiles,
   onUpload,
   onUploadFiles,
   onPaste,
   onNewSketch,
+  uploadError = null,
+  onClearUploadError,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
@@ -46,7 +76,7 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
-  const MENU_ESTIMATED_HEIGHT = 115;
+  const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,6 +84,12 @@ export function DesignFilesPanel({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
+  const [groupMode, setGroupMode] = useState<DesignFilesGroupMode>('kind');
+  const [collapsedModifiedSections, setCollapsedModifiedSections] = useState<
+    Set<ModifiedSection>
+  >(new Set());
+  const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
+  const [dayBoundary, setDayBoundary] = useState(() => Date.now());
 
   const sortedFiles = useMemo(() => {
     return [...files].sort((a, b) => {
@@ -71,7 +107,31 @@ export function DesignFilesPanel({
   const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
   const safePage = Math.min(page, totalPages - 1);
-  const pageFiles = sortedFiles.slice(safePage * effectivePageSize, (safePage + 1) * effectivePageSize);
+  const pageFiles = useMemo(
+    () =>
+      sortedFiles.slice(
+        safePage * effectivePageSize,
+        (safePage + 1) * effectivePageSize,
+      ),
+    [effectivePageSize, safePage, sortedFiles],
+  );
+  const modifiedGroups = useMemo(() => {
+    const groups: Record<ModifiedSection, ProjectFile[]> = {
+      today: [],
+      yesterday: [],
+      previous7Days: [],
+      previous30Days: [],
+      older: [],
+    };
+    const thresholds = modifiedSectionThresholds(dayBoundary);
+    for (const f of pageFiles) {
+      groups[modifiedSectionFor(f.mtime, thresholds)].push(f);
+    }
+    return groups;
+  }, [dayBoundary, pageFiles]);
+  const visibleModifiedSections = MODIFIED_SECTION_ORDER.filter(
+    (section) => modifiedGroups[section].length > 0,
+  );
   const rangeStart = safePage * effectivePageSize + 1;
   const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
   const allPageSelected = pageFiles.every((f) => selected.has(f.name));
@@ -85,6 +145,21 @@ export function DesignFilesPanel({
     if (Number.isFinite(totalPages)) setPage((p) => Math.min(p, totalPages - 1));
   }, [totalPages]);
 
+  useEffect(() => {
+    const now = Date.now();
+    const startOfTomorrow = new Date(now);
+    startOfTomorrow.setHours(24, 0, 0, 0);
+    const timer = window.setTimeout(
+      () => setDayBoundary(Date.now()),
+      Math.max(1, startOfTomorrow.getTime() - now),
+    );
+    return () => window.clearTimeout(timer);
+  }, [dayBoundary]);
+
+  // Prune selections that no longer exist in the current file list
+  // (e.g. after a refresh or delete within the same project).
+  // Cross-project leaks are handled by the parent remounting this
+  // component via key={projectId}.
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
@@ -197,6 +272,37 @@ export function DesignFilesPanel({
     setMenuPos({ name, top, left });
   }
 
+  function startRename(name: string) {
+    setMenuPos(null);
+    setPreview(name);
+    setRenaming({ name, draft: name, saving: false });
+  }
+
+  async function commitRename(name: string, draft: string) {
+    const nextName = draft.trim();
+    if (!nextName || nextName === name) {
+      setRenaming(null);
+      return;
+    }
+    setRenaming({ name, draft, saving: true });
+    try {
+      const renamed = await onRenameFile(name, nextName);
+      if (!renamed) throw new Error('Rename failed');
+      setPreview((curr) => (curr === name ? renamed.name : curr));
+      setSelected((prev) => {
+        if (!prev.has(name)) return prev;
+        const next = new Set(prev);
+        next.delete(name);
+        next.add(renamed.name);
+        return next;
+      });
+      setRenaming(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+      setRenaming({ name, draft, saving: false });
+    }
+  }
+
   async function handleBatchDelete() {
     if (deleting) return;
     const fileList = [...selected];
@@ -211,6 +317,188 @@ export function DesignFilesPanel({
     } finally {
       setDeleting(false);
     }
+  }
+
+  function toggleModifiedSection(section: ModifiedSection) {
+    setCollapsedModifiedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  }
+
+  function renderFileRow(f: ProjectFile) {
+    const active = preview === f.name;
+    const isHovered = hover === f.name;
+    const renameState = renaming?.name === f.name ? renaming : null;
+    return (
+      <tr
+        key={f.name}
+        data-testid={`design-file-row-${f.name}`}
+        className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
+        onMouseEnter={() => setHover(f.name)}
+        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+      >
+        <td className="df-cell-check">
+          <span
+            className="df-row-check"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSelect(f.name);
+            }}
+            role="checkbox"
+            aria-checked={selected.has(f.name)}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSelect(f.name);
+              }
+            }}
+          >
+            {selected.has(f.name) ? '\u2611' : '\u2610'}
+          </span>
+        </td>
+        <td
+          className="df-cell-icon df-cell-openable"
+          onClick={() => setPreview(f.name)}
+          onDoubleClick={() => onOpenFile(f.name)}
+        >
+          <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+            {kindGlyph(f.kind)}
+          </span>
+        </td>
+        <td
+          className="df-cell-name df-cell-openable"
+          onClick={() => {
+            if (!renameState) setPreview(f.name);
+          }}
+          onDoubleClick={() => {
+            if (!renameState) onOpenFile(f.name);
+          }}
+        >
+          {renameState ? (
+            <input
+              autoFocus
+              className="df-rename-input"
+              value={renameState.draft}
+              disabled={renameState.saving}
+              onChange={(e) => setRenaming({ ...renameState, draft: e.target.value })}
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              onBlur={(e) => {
+                if (e.currentTarget.dataset.skipRenameCommit === '1') return;
+                void commitRename(f.name, renameState.draft);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.dataset.skipRenameCommit = '1';
+                  void commitRename(f.name, renameState.draft);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.currentTarget.dataset.skipRenameCommit = '1';
+                  setRenaming(null);
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="df-row-name-btn"
+              onClick={() => setPreview(f.name)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  const now = Date.now();
+                  const last = lastKeyPress.current.get(f.name) ?? 0;
+                  if (now - last < 300) {
+                    lastKeyPress.current.delete(f.name);
+                    onOpenFile(f.name);
+                  } else {
+                    lastKeyPress.current.set(f.name, now);
+                    setPreview(f.name);
+                  }
+                }
+              }}
+            >
+              <span className="df-row-name-wrap">
+                <span className="df-row-name">{f.name}</span>
+                <span className="df-row-sub">{humanBytes(f.size)}</span>
+              </span>
+            </button>
+          )}
+        </td>
+        <td
+          className="df-cell-kind df-cell-openable"
+          onClick={() => setPreview(f.name)}
+          onDoubleClick={() => onOpenFile(f.name)}
+        >
+          <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
+        </td>
+        <td
+          className="df-cell-time df-cell-openable"
+          onClick={() => setPreview(f.name)}
+          onDoubleClick={() => onOpenFile(f.name)}
+        >
+          {relativeTime(f.mtime, t)}
+        </td>
+        <td className="df-cell-menu">
+          <span
+            data-testid={`design-file-menu-${f.name}`}
+            className="df-row-menu"
+            style={isHovered || active ? { opacity: 1 } : undefined}
+            role="button"
+            tabIndex={0}
+            aria-label={t('designFiles.rowMenu')}
+            onClick={(e) => {
+              e.stopPropagation();
+              openMenuFor(f.name, e.target as HTMLElement);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                openMenuFor(f.name, e.currentTarget as HTMLElement);
+              }
+            }}
+          >
+            ⋯
+          </span>
+        </td>
+      </tr>
+    );
+  }
+
+  function renderModifiedSections() {
+    return visibleModifiedSections.flatMap((section) => {
+      const sectionFiles = modifiedGroups[section];
+      const collapsed = collapsedModifiedSections.has(section);
+      const label = t(MODIFIED_SECTION_LABEL_KEY[section]);
+      return [
+        <tr className="df-section-row" key={`${section}-label`}>
+          <td colSpan={6}>
+            <button
+              type="button"
+              className="df-section-toggle"
+              aria-expanded={!collapsed}
+              aria-label={`${collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')} ${label}`}
+              onClick={() => toggleModifiedSection(section)}
+            >
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+              <span>{label}</span>
+              <span className="df-section-count">{sectionFiles.length}</span>
+            </button>
+          </td>
+        </tr>,
+        ...(collapsed ? [] : sectionFiles.map(renderFileRow)),
+      ];
+    });
   }
 
   async function handleBatchDownload() {
@@ -317,10 +605,65 @@ export function DesignFilesPanel({
           )}
         </div>
         <div className="df-body">
+          {uploadError && !preview ? (
+            <div className="df-upload-banner" data-testid="upload-error-banner">
+              <span>{uploadError}</span>
+              {onClearUploadError ? (
+                <button
+                  type="button"
+                  data-testid="upload-error-dismiss"
+                  onClick={onClearUploadError}
+                >
+                  Dismiss
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {files.length === 0 && liveArtifacts.length === 0 ? (
-            <div className="df-empty">{t('designFiles.empty')}</div>
+            <div className="df-empty" data-testid="design-files-empty">
+              <div className="df-empty-pill">
+                <span className="df-empty-title">
+                  {t('designFiles.empty')}
+                </span>
+                <button
+                  type="button"
+                  className="df-empty-cta"
+                  data-testid="design-files-empty-new-sketch"
+                  onClick={onNewSketch}
+                  title={t('designFiles.newSketch')}
+                >
+                  <Icon name="pencil" size={13} />
+                  <span>{t('designFiles.newSketch')}</span>
+                </button>
+              </div>
+            </div>
           ) : (
             <>
+              {files.length > 0 ? (
+                <div
+                  className="df-group-toggle"
+                  role="group"
+                  aria-label={t('designFiles.groupBy')}
+                >
+                  <span>{t('designFiles.groupBy')}</span>
+                  <button
+                    type="button"
+                    className={groupMode === 'kind' ? 'active' : ''}
+                    aria-pressed={groupMode === 'kind'}
+                    onClick={() => setGroupMode('kind')}
+                  >
+                    {t('designFiles.groupByKind')}
+                  </button>
+                  <button
+                    type="button"
+                    className={groupMode === 'modified' ? 'active' : ''}
+                    aria-pressed={groupMode === 'modified'}
+                    onClick={() => setGroupMode('modified')}
+                  >
+                    {t('designFiles.groupByModified')}
+                  </button>
+                </div>
+              ) : null}
               {liveArtifacts.length > 0 ? (
                 <div className="df-section" key="live-artifacts">
                   <div className="df-section-label">{t('designFiles.sectionLiveArtifacts')}</div>
@@ -377,9 +720,6 @@ export function DesignFilesPanel({
                       {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
                     </span>
                     <div className="df-select-bar">
-                      <button type="button" className="df-select-all" onClick={toggleSelectPage}>
-                        {t('designFiles.selectPage')}
-                      </button>
                       {selected.size < sortedFiles.length ? (
                         <button type="button" className="df-select-all" onClick={selectAllFiles}>
                           {t('designFiles.selectAll', { n: sortedFiles.length })}
@@ -465,117 +805,9 @@ export function DesignFilesPanel({
                       </tr>
                     </thead>
                     <tbody>
-                      {pageFiles.map((f) => {
-                        const active = preview === f.name;
-                        const isHovered = hover === f.name;
-                        return (
-                          <tr
-                            key={f.name}
-                            data-testid={`design-file-row-${f.name}`}
-                            className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
-                            onMouseEnter={() => setHover(f.name)}
-                            onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
-                          >
-                            <td className="df-cell-check">
-                              <span
-                                className="df-row-check"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSelect(f.name);
-                                }}
-                                role="checkbox"
-                                aria-checked={selected.has(f.name)}
-                                tabIndex={0}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    toggleSelect(f.name);
-                                  }
-                                }}
-                              >
-                                {selected.has(f.name) ? '\u2611' : '\u2610'}
-                              </span>
-                            </td>
-                            <td
-                              className="df-cell-icon df-cell-openable"
-                              onClick={() => setPreview(f.name)}
-                              onDoubleClick={() => onOpenFile(f.name)}
-                            >
-                              <span className="df-row-icon" data-kind={f.kind} aria-hidden>
-                                {kindGlyph(f.kind)}
-                              </span>
-                            </td>
-                            <td
-                              className="df-cell-name df-cell-openable"
-                              onClick={() => setPreview(f.name)}
-                              onDoubleClick={() => onOpenFile(f.name)}
-                            >
-                              <button
-                                type="button"
-                                className="df-row-name-btn"
-                                onClick={() => setPreview(f.name)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    const now = Date.now();
-                                    const last = lastKeyPress.current.get(f.name) ?? 0;
-                                    if (now - last < 300) {
-                                      lastKeyPress.current.delete(f.name);
-                                      onOpenFile(f.name);
-                                    } else {
-                                      lastKeyPress.current.set(f.name, now);
-                                      setPreview(f.name);
-                                    }
-                                  }
-                                }}
-                              >
-                                <span className="df-row-name-wrap">
-                                  <span className="df-row-name">{f.name}</span>
-                                  <span className="df-row-sub">{humanBytes(f.size)}</span>
-                                </span>
-                              </button>
-                            </td>
-                            <td
-                              className="df-cell-kind df-cell-openable"
-                              onClick={() => setPreview(f.name)}
-                              onDoubleClick={() => onOpenFile(f.name)}
-                            >
-                              <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
-                            </td>
-                            <td
-                              className="df-cell-time df-cell-openable"
-                              onClick={() => setPreview(f.name)}
-                              onDoubleClick={() => onOpenFile(f.name)}
-                            >
-                              {relativeTime(f.mtime, t)}
-                            </td>
-                            <td className="df-cell-menu">
-                              <span
-                                data-testid={`design-file-menu-${f.name}`}
-                                className="df-row-menu"
-                                style={isHovered || active ? { opacity: 1 } : undefined}
-                                role="button"
-                                tabIndex={0}
-                                aria-label={t('designFiles.rowMenu')}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openMenuFor(f.name, e.target as HTMLElement);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openMenuFor(f.name, e.currentTarget as HTMLElement);
-                                  }
-                                }}
-                              >
-                                ⋯
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {groupMode === 'modified'
+                        ? renderModifiedSections()
+                        : pageFiles.map(renderFileRow)}
                     </tbody>
                   </table>
                   <div className="df-pagination df-pagination-center">
@@ -670,6 +902,15 @@ export function DesignFilesPanel({
           >
             {t('designFiles.openInTab')}
           </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              startRename(menuPos.name);
+            }}
+          >
+            {t('common.rename')}
+          </button>
           <a
             href={projectFileUrl(projectId, menuPos.name)}
             download={menuPos.name}
@@ -718,10 +959,13 @@ function DfPreview({
 }) {
   const t = useT();
   const url = projectFileUrl(projectId, file.name);
+  const rendersSketchJson = isRenderableSketchJson(file);
   return (
     <aside className="df-preview">
       <div className="df-preview-thumb">
-        {file.kind === 'image' || file.kind === 'sketch' ? (
+        {rendersSketchJson ? (
+          <SketchPreview projectId={projectId} file={file} />
+        ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
           <iframe title={file.name} src={url} sandbox="allow-scripts" />
@@ -799,6 +1043,39 @@ function kindSortPriority(kind: ProjectFileKind): number {
   if (kind === 'video') return 9;
   if (kind === 'audio') return 10;
   return 11;
+}
+
+interface ModifiedSectionThresholds {
+  todayStart: number;
+  yesterdayStart: number;
+  previous7DaysStart: number;
+  previous30DaysStart: number;
+}
+
+function modifiedSectionThresholds(now: number): ModifiedSectionThresholds {
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  return {
+    todayStart: startOfToday.getTime(),
+    yesterdayStart: dateDaysBefore(startOfToday, 1).getTime(),
+    previous7DaysStart: dateDaysBefore(startOfToday, 7).getTime(),
+    previous30DaysStart: dateDaysBefore(startOfToday, 30).getTime(),
+  };
+}
+
+function modifiedSectionFor(ts: number, thresholds: ModifiedSectionThresholds): ModifiedSection {
+  const { todayStart, yesterdayStart, previous7DaysStart, previous30DaysStart } = thresholds;
+  if (ts >= todayStart) return 'today';
+  if (ts >= yesterdayStart) return 'yesterday';
+  if (ts >= previous7DaysStart) return 'previous7Days';
+  if (ts >= previous30DaysStart) return 'previous30Days';
+  return 'older';
+}
+
+function dateDaysBefore(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() - days);
+  return result;
 }
 
 function kindGlyph(kind: ProjectFileKind): string {

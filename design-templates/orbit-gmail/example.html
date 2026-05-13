@@ -1,0 +1,643 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head><script>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+})();</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Orbit · Gmail Daily Digest — Eli</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { height: 100%; }
+body {
+  min-height: 100%;
+  font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 14px;
+  color: #202124;
+  background: #f6f8fc;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --red: #D93025;
+  --blue: #1a73e8;
+  --yellow: #f4b400;
+  --green: #0f9d58;
+  --bg: #f6f8fc;
+  --white: #ffffff;
+  --border: #e0e0e0;
+  --text: #202124;
+  --text-secondary: #5f6368;
+  --text-muted: #80868b;
+  --surface-hover: #f1f3f4;
+}
+
+/* ── Gmail Top Bar ── */
+.gmail-bar {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  height: 64px;
+  display: flex; align-items: center;
+  padding: 0 24px;
+}
+.gmail-bar-left {
+  display: flex; align-items: center; gap: 16px;
+}
+.hamburger {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--text-secondary); cursor: pointer;
+}
+.hamburger:hover { background: var(--surface-hover); }
+.gmail-logo {
+  display: flex; align-items: center; gap: 4px;
+}
+.gmail-logo svg { height: 24px; }
+.gmail-logo-text {
+  font-size: 22px; font-weight: 500; color: var(--text-secondary);
+  font-family: 'Google Sans', sans-serif;
+  margin-left: 2px;
+}
+
+.search-bar {
+  flex: 1; max-width: 720px; margin: 0 auto;
+  display: flex; align-items: center; gap: 12px;
+  background: #eaf1fb; border-radius: 28px;
+  height: 48px; padding: 0 16px;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.search-bar:hover {
+  background: var(--white);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.search-bar svg { width: 20px; height: 20px; color: var(--text-secondary); flex-shrink: 0; }
+.search-bar input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-size: 16px; font-family: inherit; color: var(--text);
+}
+.search-bar input::placeholder { color: var(--text-secondary); }
+
+.gmail-bar-right {
+  display: flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 16px;
+}
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--text-secondary); cursor: pointer;
+  border: none; background: none;
+}
+.icon-btn:hover { background: var(--surface-hover); }
+.icon-btn svg { width: 20px; height: 20px; }
+.app-grid {
+  display: grid; grid-template-columns: repeat(3, 4px); gap: 3px;
+}
+.app-grid span { width: 4px; height: 4px; border-radius: 50%; background: var(--text-secondary); }
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--blue); color: white;
+  display: grid; place-items: center;
+  font-size: 14px; font-weight: 500; cursor: pointer;
+}
+
+/* ── Digest Container ── */
+.digest-wrap {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ── Email Chrome (looks like an opened email) ── */
+.email-chrome {
+  background: var(--white);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+
+/* Toolbar row */
+.email-toolbar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f3f4;
+}
+.email-toolbar .icon-btn { width: 36px; height: 36px; }
+.email-toolbar .icon-btn svg { width: 18px; height: 18px; }
+.toolbar-spacer { flex: 1; }
+
+/* Subject */
+.email-subject-area {
+  padding: 20px 24px 0;
+}
+.email-subject {
+  font-size: 22px; font-weight: 400; color: var(--text);
+  font-family: 'Google Sans', sans-serif;
+  line-height: 1.35;
+}
+.email-subject .tag {
+  display: inline-block; vertical-align: middle;
+  font-size: 11px; font-weight: 500;
+  background: #fef7e0; color: #b06000;
+  padding: 2px 8px; border-radius: 4px;
+  margin-left: 8px;
+}
+
+/* Sender row */
+.sender-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 24px;
+}
+.sender-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 18px; font-weight: 500; color: white;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
+}
+.sender-info { flex: 1; line-height: 1.4; }
+.sender-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.sender-name span { font-weight: 400; color: var(--text-secondary); }
+.sender-to { font-size: 12px; color: var(--text-secondary); }
+.sender-date { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+
+/* ── Digest Body ── */
+.digest-body {
+  padding: 8px 24px 32px;
+  font-size: 14px; line-height: 1.7; color: #3c4043;
+}
+
+.greeting {
+  font-size: 15px; color: var(--text); margin-bottom: 28px;
+  line-height: 1.65;
+}
+
+/* Section */
+.section { margin-bottom: 28px; }
+.section-header {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border);
+}
+.section-header .emoji { font-size: 15px; }
+.section-count {
+  font-size: 11px; font-weight: 500; color: var(--text-secondary);
+  background: #f1f3f4; padding: 2px 8px; border-radius: 10px;
+  margin-left: 4px;
+}
+
+/* Card */
+.card {
+  display: flex; gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f8f9fa;
+  margin-bottom: 8px;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+}
+.card:hover { background: #eef2f7; border-color: #e0e4ea; }
+
+.card-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 600; color: white;
+  flex-shrink: 0;
+}
+.card-body { flex: 1; min-width: 0; }
+.card-top {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-bottom: 3px;
+}
+.card-sender { font-size: 13px; font-weight: 600; color: var(--text); }
+.card-role { font-size: 11px; color: var(--text-muted); }
+.card-subject {
+  font-size: 14px; font-weight: 500; color: var(--text);
+  margin-bottom: 4px;
+}
+.card-summary {
+  font-size: 13px; color: var(--text-secondary); line-height: 1.55;
+}
+
+.action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 10px;
+  padding: 7px 18px;
+  border-radius: 18px;
+  font-size: 12px; font-weight: 500;
+  font-family: 'Google Sans', sans-serif;
+  border: none; cursor: pointer;
+  transition: background 0.15s;
+}
+.action-btn.primary { background: var(--blue); color: white; }
+.action-btn.primary:hover { background: #1765cc; }
+.action-btn.ghost {
+  background: transparent; color: var(--blue);
+  border: 1px solid #dadce0;
+}
+.action-btn.ghost:hover { background: #f6f8fc; }
+
+/* Collapsed row */
+.collapsed {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #f8f9fa;
+  margin-bottom: 8px;
+  font-size: 13px; color: var(--text-secondary);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.collapsed:hover { background: #eef2f7; border-color: #e0e4ea; }
+.collapsed-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #24292e; color: white;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 600; flex-shrink: 0;
+}
+.collapsed-text { flex: 1; }
+.collapsed-title { font-weight: 500; color: var(--text); margin-bottom: 2px; }
+.highlight { color: var(--blue); font-weight: 500; }
+
+/* Priority indicator on section header */
+.priority-high { border-bottom-color: var(--red); }
+.priority-mid { border-bottom-color: var(--yellow); }
+.priority-low { border-bottom-color: #dadce0; }
+
+/* Footer */
+.digest-footer {
+  margin-top: 36px; padding-top: 20px;
+  border-top: 1px solid #e8eaed;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.orbit-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-muted);
+  background: #f8f9fa; padding: 6px 14px; border-radius: 14px;
+}
+.orbit-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+.footer-links {
+  display: flex; gap: 16px;
+  font-size: 11px;
+}
+.footer-links a {
+  color: var(--text-muted); text-decoration: none;
+}
+.footer-links a:hover { color: var(--blue); }
+
+/* ── Summary strip at top of digest ── */
+.summary-strip {
+  display: flex; gap: 0;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.summary-cell {
+  flex: 1;
+  padding: 16px;
+  text-align: center;
+  background: var(--white);
+  border-right: 1px solid var(--border);
+}
+.summary-cell:last-child { border-right: none; }
+.summary-num {
+  font-size: 28px; font-weight: 500; color: var(--text);
+  font-family: 'Google Sans', sans-serif;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.summary-label {
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.summary-cell.urgent .summary-num { color: var(--red); }
+
+/* ── Reply Bar ── */
+.reply-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 24px;
+  border-top: 1px solid #e8eaed;
+}
+.reply-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 20px;
+  border-radius: 18px;
+  border: 1px solid #dadce0;
+  background: var(--white);
+  font-size: 13px; font-weight: 500; color: #3c4043;
+  cursor: pointer; font-family: 'Google Sans', sans-serif;
+  transition: background 0.15s;
+}
+.reply-btn:hover { background: var(--surface-hover); }
+.reply-btn svg { width: 16px; height: 16px; color: var(--text-secondary); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #bdc1c6; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Gmail Top Bar ═══ -->
+<header class="gmail-bar">
+  <div class="gmail-bar-left">
+    <div class="hamburger">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+    </div>
+    <div class="gmail-logo">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
+        <path d="M2 6a2 2 0 0 1 2-4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z" fill="none"/>
+        <rect x="2" y="4" width="20" height="16" rx="2" fill="#EA4335" opacity="0.12"/>
+        <path d="M22 6l-10 7L2 6" stroke="#EA4335" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="2" y="4" width="20" height="16" rx="2" stroke="#EA4335" stroke-width="1.5" fill="none"/>
+      </svg>
+      <span class="gmail-logo-text">Gmail</span>
+    </div>
+  </div>
+
+  <div class="search-bar">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+    <input type="text" placeholder="搜索邮件">
+    <svg viewBox="0 0 24 24" fill="currentColor" style="cursor:pointer;"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+  </div>
+
+  <div class="gmail-bar-right">
+    <button class="icon-btn" title="帮助">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>
+    </button>
+    <button class="icon-btn" title="设置">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+    </button>
+    <div class="icon-btn" title="Google 应用">
+      <div class="app-grid">
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="user-avatar">E</div>
+  </div>
+</header>
+
+<!-- ═══ Digest ═══ -->
+<main class="digest-wrap">
+  <div class="email-chrome">
+
+    <!-- Toolbar -->
+    <div class="email-toolbar">
+      <button class="icon-btn" title="返回" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+      <button class="icon-btn" title="归档" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 5.99 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.51-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg>
+      </button>
+      <button class="icon-btn" title="删除" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      </button>
+      <button class="icon-btn" title="标记未读" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+      </button>
+      <button class="icon-btn" title="标签" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"/></svg>
+      </button>
+      <div class="toolbar-spacer"></div>
+      <button class="icon-btn" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <button class="icon-btn" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+    </div>
+
+    <!-- Subject -->
+    <div class="email-subject-area">
+      <h1 class="email-subject">
+        ☀ Eli, 你昨天的 6 封重要邮件 — Open Orbit Daily
+        <span class="tag">Orbit</span>
+      </h1>
+    </div>
+
+    <!-- Sender -->
+    <div class="sender-row">
+      <div class="sender-avatar">O</div>
+      <div class="sender-info">
+        <div class="sender-name">Open Orbit <span>&lt;orbit@opendesign.local&gt;</span></div>
+        <div class="sender-to">收件人：我 ▾</div>
+      </div>
+      <div class="sender-date">2026年5月6日 06:42</div>
+      <button class="icon-btn" title="回复" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+      </button>
+      <button class="icon-btn" title="更多" style="width:36px;height:36px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+      </button>
+    </div>
+
+    <!-- ═══ Digest Content ═══ -->
+    <div class="digest-body">
+
+      <div class="greeting">
+        你好 Eli 👋<br>
+        以下是你昨天（5月5日）的 Gmail 简报。共 <strong>6 封值得关注</strong>，已按优先级分组。
+      </div>
+
+      <!-- Summary strip -->
+      <div class="summary-strip">
+        <div class="summary-cell urgent">
+          <div class="summary-num">2</div>
+          <div class="summary-label">需要处理</div>
+        </div>
+        <div class="summary-cell">
+          <div class="summary-num">2</div>
+          <div class="summary-label">值得关注</div>
+        </div>
+        <div class="summary-cell">
+          <div class="summary-num">2</div>
+          <div class="summary-label">仅供知悉</div>
+        </div>
+      </div>
+
+      <!-- ── Section 1: 需要处理 ── -->
+      <div class="section">
+        <div class="section-header priority-high">
+          <span class="emoji">🔴</span>
+          需要处理
+          <span class="section-count">2</span>
+        </div>
+
+        <div class="card">
+          <div class="card-avatar" style="background: #1a73e8;">A</div>
+          <div class="card-body">
+            <div class="card-top">
+              <span class="card-sender">Allen Liu</span>
+              <span class="card-role">CFO</span>
+            </div>
+            <div class="card-subject">Q3 预算确认</div>
+            <div class="card-summary">财务已审核通过 Q3 预算方案，倾向同意当前版本。等你 sign-off 后即可进入执行阶段。</div>
+            <button class="action-btn primary">查看邮件并回复</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-avatar" style="background: #0f9d58;">N</div>
+          <div class="card-body">
+            <div class="card-top">
+              <span class="card-sender">Nina Park</span>
+              <span class="card-role">客户</span>
+            </div>
+            <div class="card-subject">Login redesign 反馈</div>
+            <div class="card-summary">Nina 对新 login 方案提了 3 个问题：①密码重置流程 ②第三方登录按钮位置 ③无障碍对比度。建议尽快回复。</div>
+            <button class="action-btn primary">查看邮件并回复</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Section 2: 值得关注 ── -->
+      <div class="section">
+        <div class="section-header priority-mid">
+          <span class="emoji">🟡</span>
+          值得关注
+          <span class="section-count">2</span>
+        </div>
+
+        <div class="card">
+          <div class="card-avatar" style="background: #e91e63;">M</div>
+          <div class="card-body">
+            <div class="card-top">
+              <span class="card-sender">Marie</span>
+            </div>
+            <div class="card-subject">设计评审纪要</div>
+            <div class="card-summary">Marie 在纪要中 @了你和 Bob，附件包含昨天设计评审的要点。无需回复，仅供确认。</div>
+            <button class="action-btn ghost">查看原文</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-avatar" style="background: #ff9800;">招</div>
+          <div class="card-body">
+            <div class="card-top">
+              <span class="card-sender">招聘团队</span>
+            </div>
+            <div class="card-subject">候选人 Sarah 二面安排</div>
+            <div class="card-summary">Sarah Chen 的二面已排好，cc 你作为面试官之一。时间待确认。</div>
+            <button class="action-btn ghost">查看原文</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Section 3: 仅供知悉 ── -->
+      <div class="section">
+        <div class="section-header priority-low">
+          <span class="emoji">⚪</span>
+          仅供知悉
+          <span class="section-count">2</span>
+        </div>
+
+        <div class="collapsed">
+          <div class="collapsed-icon">G</div>
+          <div class="collapsed-text">
+            <div class="collapsed-title">GitHub 通知摘要</div>
+            <div>已折叠 12 封通知 · <span class="highlight">1 条值得看：PR #347 已合并到 main</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-avatar" style="background: #5f6368;">全</div>
+          <div class="card-body">
+            <div class="card-top">
+              <span class="card-sender">公司全员</span>
+            </div>
+            <div class="card-subject">本周 Town Hall 提醒</div>
+            <div class="card-summary">本周四下午 3:00 Town Hall，议题包括 Q3 目标回顾和下半年规划。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="digest-footer">
+        <div class="orbit-badge">
+          <span class="orbit-dot"></span>
+          已使用 Open Orbit 自动整理 · 2026-05-06 06:42 生成
+        </div>
+      </div>
+    </div>
+
+    <!-- Reply bar -->
+    <div class="reply-bar">
+      <button class="reply-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+        回复
+      </button>
+      <button class="reply-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 8V5l-7 7 7 7v-3l-4-4 4-4zm6 1V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+        全部回复
+      </button>
+      <button class="reply-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z"/></svg>
+        转发
+      </button>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  // Open the matching Gmail thread in a new tab when an action button or
+  // reply-bar button is clicked. Uses Gmail's #search/from: deep link
+  // built from the sender's display name.
+  function openInGmail(sender, subject) {
+    const q = sender ? `from:${sender}` : (subject || '');
+    const url = 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(q);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+  document.querySelectorAll('.card').forEach(card => {
+    const sender = card.querySelector('.card-sender')?.textContent?.trim();
+    const subject = card.querySelector('.card-subject')?.textContent?.trim();
+    card.querySelectorAll('.action-btn').forEach(btn => {
+      btn.style.cursor = 'pointer';
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        openInGmail(sender, subject);
+      });
+    });
+  });
+  document.querySelectorAll('.reply-btn').forEach(btn => {
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      window.open('https://mail.google.com/mail/u/0/#inbox', '_blank', 'noopener,noreferrer');
+    });
+  });
+</script>
+</body>
+</html>

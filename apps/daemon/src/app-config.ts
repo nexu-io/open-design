@@ -1,11 +1,16 @@
 // Daemon-backed app preferences (onboarding state, agent/skill/DS selection).
 //
-// The web frontend pushes non-sensitive preferences here via PUT
-// /api/app-config; the daemon persists them to <dataDir>/app-config.json
-// (where dataDir defaults to <projectRoot>/.od but follows OD_DATA_DIR when
-// set, keeping test and multi-namespace runs isolated).
-// This survives browser storage resets and origin changes so onboarding
-// and agent selection don't reappear unexpectedly.
+// The web frontend pushes preferences here via PUT /api/app-config; the
+// daemon persists them to <dataDir>/app-config.json (where dataDir defaults
+// to <projectRoot>/.od but follows OD_DATA_DIR when set, keeping test and
+// multi-namespace runs isolated). This survives browser storage resets and
+// origin changes so onboarding and agent selection don't reappear unexpectedly.
+//
+// `agentCliEnv` is intentionally limited by allowlist below. It may include
+// proxy/auth overrides for local CLIs (for example ANTHROPIC_BASE_URL +
+// ANTHROPIC_API_KEY for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY for
+// Codex). Those values are local-only and should not be logged or returned
+// outside this machine.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -43,6 +48,7 @@ export interface AppConfigPrefs {
   telemetry?: TelemetryPrefs;
   privacyDecisionAt?: number | null;
   orbit?: OrbitConfigPrefs;
+  customInstructions?: string | null;
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -58,6 +64,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'telemetry',
   'privacyDecisionAt',
   'orbit',
+  'customInstructions',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -85,8 +92,8 @@ function validateTelemetry(raw: unknown): TelemetryPrefs | undefined {
 }
 
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN'])],
-  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN'])],
+  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'])],
+  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'OPENAI_API_KEY'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
   ['deepseek', new Set(['DEEPSEEK_BIN'])],
@@ -254,6 +261,14 @@ function applyConfigValue(
     } else {
       delete target[key];
     }
+  }
+  if (key === 'customInstructions') {
+    if (typeof value === 'string') {
+      target[key] = value.slice(0, 5000);
+    } else if (value === null) {
+      target[key] = value;
+    }
+    return;
   }
 }
 

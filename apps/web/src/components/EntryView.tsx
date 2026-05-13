@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type { ConnectorDetail, ConnectorStatusResponse, ImportFolderResponse } from '@open-design/contracts';
+import { topTabToTracking } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackHomeViewAssetPanel,
+  trackHomeViewPage,
+} from '../analytics/events';
 import { useT } from '../i18n';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -21,7 +27,6 @@ import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { ExamplesTab } from './ExamplesTab';
-import { AppChromeHeader } from './AppChromeHeader';
 import { Icon } from './Icon';
 import { LanguageMenu } from './LanguageMenu';
 import { CenteredLoader } from './Loading';
@@ -34,14 +39,23 @@ import { PetRail } from './pet/PetRail';
 import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
 import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { AppChromeHeader, SettingsIconButton } from './AppChromeHeader';
 
-type TopTab = 'designs' | 'examples' | 'design-systems' | 'image-templates' | 'video-templates';
+type TopTab = 'designs' | 'templates' | 'design-systems' | 'image-templates' | 'video-templates';
 
 interface Props {
+  // Union of functional skills + design templates — used for id-based
+  // lookups (DesignsTab project chips, NewProjectPanel skill picker).
+  // The Templates gallery itself reads `designTemplates` instead so it
+  // doesn't accidentally show functional skills as renderable cards.
   skills: SkillSummary[];
+  // Design templates only. Sourced from /api/design-templates. See
+  // specs/current/skills-and-design-templates.md.
+  designTemplates: SkillSummary[];
   designSystems: DesignSystemSummary[];
   projects: Project[];
   templates: ProjectTemplate[];
+  onDeleteTemplate: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   defaultDesignSystemId: string | null;
   config: AppConfig;
@@ -58,9 +72,11 @@ interface Props {
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
+  onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'language' | 'appearance' | 'notifications' | 'pet' | 'about') => void;
   onAdoptPet: () => void;
@@ -214,9 +230,11 @@ function loadPetRailHidden(): boolean {
 
 export function EntryView({
   skills,
+  designTemplates,
   designSystems,
   projects,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   defaultDesignSystemId,
   config,
@@ -228,9 +246,11 @@ export function EntryView({
   onCreateProject,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
+  onRenameProject,
   onChangeDefaultDesignSystem,
   onOpenSettings,
   onAdoptPet,
@@ -238,7 +258,80 @@ export function EntryView({
   onTogglePet,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [topTab, setTopTab] = useState<TopTab>('designs');
+
+  // home_view (page) — fire once per EntryView mount with a snapshot of the
+  // CLI / BYOK availability so the new-user activation funnel can read
+  // execution_availability without needing a server-side join. Gated on
+  // agents loading so has_available_cli isn't transiently false.
+  const homeViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (homeViewFiredRef.current) return;
+    if (skillsLoading) return;
+    homeViewFiredRef.current = true;
+    const hasCli = agents.some((a) => a.available);
+    const hasByok = Boolean(config.apiKey?.trim());
+    const configuredProviderType: 'local_cli' | 'byok' | 'both' | 'none' | 'unknown' = hasCli && hasByok
+      ? 'both'
+      : hasCli
+        ? 'local_cli'
+        : hasByok
+          ? 'byok'
+          : 'none';
+    trackHomeViewPage(analytics.track, {
+      page: 'home',
+      has_available_cli: hasCli,
+      has_available_byok: hasByok,
+      configured_provider_type: configuredProviderType,
+      execution_availability: hasCli || hasByok ? 'available' : 'unavailable',
+    });
+  }, [skillsLoading, agents, config.apiKey, analytics.track]);
+
+  // home_view (asset_panel) — fires on tab change (and on initial render
+  // once the tab's underlying resource has loaded) so the funnel can
+  // attribute downstream clicks to the correct surface.
+  const assetTabFiredRef = useRef<TopTab | null>(null);
+  useEffect(() => {
+    if (assetTabFiredRef.current === topTab) return;
+    // Gate per-tab on its source resource so result_count isn't reported as
+    // 0 just because the fetch hasn't landed yet.
+    const tabLoading: Record<TopTab, boolean | undefined> = {
+      designs: projectsLoading,
+      templates: promptTemplatesLoading,
+      'design-systems': designSystemsLoading,
+      'image-templates': promptTemplatesLoading,
+      'video-templates': promptTemplatesLoading,
+    };
+    if (tabLoading[topTab]) return;
+    assetTabFiredRef.current = topTab;
+    const counts: Record<TopTab, number> = {
+      designs: projects.length,
+      templates: promptTemplates.length,
+      'design-systems': designSystems.length,
+      'image-templates': promptTemplates.filter((p) => p.surface === 'image').length,
+      'video-templates': promptTemplates.filter((p) => p.surface === 'video').length,
+    };
+    const count = counts[topTab] ?? 0;
+    trackHomeViewAssetPanel(analytics.track, {
+      page: 'home',
+      area: 'asset_panel',
+      element: 'tab_content',
+      view_type: 'tab_content',
+      target_id: topTabToTracking(topTab),
+      result_count: count,
+      is_empty: count === 0,
+    });
+  }, [
+    topTab,
+    analytics.track,
+    projects.length,
+    promptTemplates,
+    designSystems.length,
+    projectsLoading,
+    designSystemsLoading,
+    promptTemplatesLoading,
+  ]);
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [previewPromptTemplate, setPreviewPromptTemplate] =
     useState<PromptTemplateSummary | null>(null);
@@ -247,8 +340,6 @@ export function EntryView({
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
   const [petRailHidden, setPetRailHiddenState] = useState<boolean>(() => loadPetRailHidden());
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
 
   function setPetRailHidden(next: boolean) {
     setPetRailHiddenState(next);
@@ -383,81 +474,17 @@ export function EntryView({
     return () => window.removeEventListener('focus', onFocus);
   }, [reloadConnectorStatuses]);
 
-  // Dismiss the avatar dropdown on outside-click / Escape so it behaves
-  // like the project-view AvatarMenu (which uses the same shell CSS).
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (!avatarMenuRef.current) return;
-      if (!avatarMenuRef.current.contains(e.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
-
-  const avatarMenu = (
-    <div className="avatar-menu" ref={avatarMenuRef}>
-      <button
-        type="button"
-        className="settings-icon-btn"
-        onClick={() => setAvatarMenuOpen((v) => !v)}
-        title={t('entry.openSettingsTitle')}
-        aria-label={t('entry.openSettingsAria')}
-        aria-haspopup="menu"
-        aria-expanded={avatarMenuOpen}
-      >
-        <Icon name="settings" size={17} />
-      </button>
-      {avatarMenuOpen ? (
-        <div className="avatar-popover" role="menu">
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setPetRailHidden(!petRailHidden);
-              setAvatarMenuOpen(false);
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name={petRailHidden ? 'sparkles' : 'eye'} size={14} />
-            </span>
-            <span>
-              {petRailHidden
-                ? t('pet.railShow')
-                : t('pet.railHide')}
-            </span>
-          </button>
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="settings" size={14} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-
   return (
     <div className="entry-shell">
-      <AppChromeHeader actions={avatarMenu} />
+      <AppChromeHeader
+        actions={(
+          <SettingsIconButton
+            onClick={() => onOpenSettings()}
+            title={t('settings.title')}
+            ariaLabel={t('settings.title')}
+          />
+        )}
+      />
       <div
         className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
         style={{
@@ -472,10 +499,12 @@ export function EntryView({
           designSystems={designSystems}
           defaultDesignSystemId={defaultDesignSystemId}
           templates={templates}
+          onDeleteTemplate={onDeleteTemplate}
           promptTemplates={promptTemplates}
           onCreate={handleCreate}
           onImportClaudeDesign={onImportClaudeDesign}
           onImportFolder={onImportFolder}
+          onImportFolderResponse={onImportFolderResponse}
           mediaProviders={config.mediaProviders}
           connectors={connectors}
           connectorsLoading={connectorsLoading}
@@ -485,31 +514,7 @@ export function EntryView({
         <div className="entry-side-foot">
           <button
             type="button"
-            className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}
-            onClick={onAdoptPet}
-            title={
-              config.pet?.adopted
-                ? t('pet.changePet')
-                : t('pet.adoptCallout')
-            }
-          >
-            <span className="pet-pill-glyph" aria-hidden>
-              {config.pet?.adopted
-                ? config.pet.petId === 'custom'
-                  ? config.pet.custom.glyph || '🦄'
-                  : '🐾'
-                : '🐾'}
-            </span>
-            <span>
-              {config.pet?.adopted
-                ? t('pet.changePet')
-                : t('pet.adoptCallout')}
-            </span>
-            {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
-          </button>
-          <button
-            type="button"
-            className="foot-pill"
+            className="foot-pill foot-pill-env"
             onClick={() => onOpenSettings()}
             aria-label={t('settings.envConfigure')}
             title={t('settings.envConfigure')}
@@ -521,22 +526,68 @@ export function EntryView({
                 : apiProtocolLabel(config.apiProtocol)}
             </span>
             <span style={{ color: 'var(--text-faint)' }}>·</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 142 }}>
               {envMetaLine}
             </span>
           </button>
-          <a
-            className="foot-pill"
-            href="https://x.com/nexudotio"
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Follow @nexudotio on X for releases and milestones"
-            aria-label="Follow @nexudotio on X"
-          >
-            <Icon name="external-link" size={12} />
-            <span>Follow @nexudotio</span>
-          </a>
-          <LanguageMenu />
+          <div className="entry-side-foot-row">
+            <LanguageMenu />
+            <div className={`foot-pill pet-pill${config.pet?.adopted ? '' : ' pet-pill-fresh'}`}>
+              <button
+                type="button"
+                className="pet-pill-main"
+                onClick={onAdoptPet}
+                title={
+                  config.pet?.adopted
+                    ? t('pet.changePet')
+                    : t('pet.adoptCallout')
+                }
+              >
+                <span className="pet-pill-glyph" aria-hidden>
+                  {config.pet?.adopted
+                    ? config.pet.petId === 'custom'
+                      ? config.pet.custom.glyph || '🦄'
+                      : '🐾'
+                    : '🐾'}
+                </span>
+                <span className="foot-pill-pet-label">
+                  {config.pet?.adopted
+                    ? t('pet.changePet')
+                    : t('pet.adoptCallout')}
+                </span>
+              </button>
+              <span className="pet-pill-divider" aria-hidden />
+              <button
+                type="button"
+                className="pet-pill-toggle"
+                onClick={() => setPetRailHidden(!petRailHidden)}
+                aria-label={petRailHidden ? t('pet.railShow') : t('pet.railHide')}
+                title={petRailHidden ? t('pet.railShow') : t('pet.railHide')}
+              >
+                <Icon name={petRailHidden ? 'eye' : 'eye-off'} size={12} />
+              </button>
+            </div>
+            <a
+              className="foot-pill foot-pill-follow"
+              href="https://discord.com/invite/qhbcCH8Am4"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Join the Open Design Discord community"
+              aria-label="Join the Open Design Discord community"
+            >
+              <Icon name="discord" size={12} />
+            </a>
+            <a
+              className="foot-pill foot-pill-follow"
+              href="https://x.com/nexudotio"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Follow @nexudotio on X for releases and milestones"
+              aria-label="Follow @nexudotio on X"
+            >
+              <Icon name="external-link" size={12} />
+            </a>
+          </div>
         </div>
         <button
           type="button"
@@ -554,7 +605,7 @@ export function EntryView({
         <div className="entry-header">
           <div className="entry-tabs" role="tablist">
             <TopTabButton current={topTab} value="designs" label={t('entry.tabDesigns')} onClick={setTopTab} />
-            <TopTabButton current={topTab} value="examples" label={t('entry.tabExamples')} onClick={setTopTab} />
+            <TopTabButton current={topTab} value="templates" label={t('entry.tabTemplates')} onClick={setTopTab} />
             <TopTabButton
               current={topTab}
               value="design-systems"
@@ -591,14 +642,18 @@ export function EntryView({
                 onOpen={onOpenProject}
                 onOpenLiveArtifact={onOpenLiveArtifact}
                 onDelete={onDeleteProject}
+                onRename={onRenameProject}
               />
             )
           ) : null}
-          {topTab === 'examples' ? (
+          {topTab === 'templates' ? (
             skillsLoading ? (
               <CenteredLoader label={t('common.loading')} />
             ) : (
-              <ExamplesTab skills={skills} onUsePrompt={usePromptFromSkill} />
+              <ExamplesTab
+                skills={designTemplates}
+                onUsePrompt={usePromptFromSkill}
+              />
             )
           ) : null}
           {topTab === 'design-systems' ? (

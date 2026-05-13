@@ -11,6 +11,15 @@ export type ProjectKind =
 
 export type MediaAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 
+export type ProjectPlatform =
+  | 'auto'
+  | 'responsive'
+  | 'web-desktop'
+  | 'mobile-ios'
+  | 'mobile-android'
+  | 'tablet'
+  | 'desktop-app';
+
 export type AudioKind = 'music' | 'speech' | 'sfx';
 
 export type ProjectDisplayStatus =
@@ -59,8 +68,14 @@ export interface ProjectMetadata {
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
+  includeLandingPage?: boolean;
+  includeOsWidgets?: boolean;
   templateId?: string;
   templateLabel?: string;
+  /** Primary target surface selected at project creation. */
+  platform?: ProjectPlatform;
+  /** Concrete delivery surfaces the artifact must account for. `responsive` is a web breakpoint target, not a native app expansion. */
+  platformTargets?: ProjectPlatform[];
   inspirationDesignSystemIds?: string[];
   importedFrom?: 'claude-design' | 'folder' | string;
   entryFile?: string;
@@ -70,6 +85,18 @@ export interface ProjectMetadata {
   // directly inside the user's folder. Stored as the realpath() result so
   // symlinks can't redirect writes after import time.
   baseDir?: string;
+  // PR #974: marker stamped by the daemon's HMAC-gated import handler
+  // when a folder import passed the desktop-main-process trust gate.
+  // Only set on folder-imported projects (`baseDir` set) and only when
+  // the import request carried a valid `X-OD-Desktop-Import-Token`
+  // signed with the secret the desktop main process registered with the
+  // daemon at startup. The desktop `shell.openPath` IPC refuses to
+  // forward folder-imported projects whose metadata lacks this marker,
+  // so a renderer cannot launder an attacker-chosen baseDir into a
+  // file-manager reveal even if a future codepath inadvertently lets
+  // it set `baseDir` outside the trusted flow. Privileged: rejected
+  // by `POST /api/projects` and `PATCH /api/projects/:id`.
+  fromTrustedPicker?: true;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
@@ -98,6 +125,7 @@ export interface Project {
   status?: ProjectStatusInfo;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  customInstructions?: string;
 }
 
 export interface ProjectTemplate {
@@ -123,6 +151,7 @@ export interface CreateProjectRequest {
   designSystemId?: string | null;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  customInstructions?: string;
 }
 
 export interface UpdateProjectRequest {
@@ -131,6 +160,7 @@ export interface UpdateProjectRequest {
   designSystemId?: string | null;
   pendingPrompt?: string | null;
   metadata?: ProjectMetadata | null;
+  customInstructions?: string | null;
 }
 
 export interface ProjectsResponse {
@@ -139,6 +169,17 @@ export interface ProjectsResponse {
 
 export interface ProjectResponse {
   project: Project;
+}
+
+// Response body for `GET /api/projects/:id`. Carries the same `project`
+// payload as `ProjectResponse` plus a derived `resolvedDir` so the web
+// client can address the on-disk working directory directly (e.g. for
+// `shell.openPath` from the desktop bridge). For folder-imported projects
+// `resolvedDir === metadata.baseDir`; for native projects it is
+// `path.join(<daemon projects root>, project.id)`. Computed server-side via
+// `resolveProjectDir(...)` so the web client never reconstructs the path.
+export interface ProjectDetailResponse extends ProjectResponse {
+  resolvedDir: string;
 }
 
 export interface CreateProjectResponse extends ProjectResponse {

@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildMediaProvidersForDaemonSave,
   DEFAULT_CONFIG,
+  fetchMediaProvidersFromDaemon,
+  isStoredMediaProviderEntryEmpty,
+  isStoredMediaProviderEntryPresent,
   loadConfig,
   mergeDaemonConfig,
+  mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -94,6 +100,27 @@ describe('syncConfigToDaemon', () => {
       agentCliEnv: {
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
+      },
+    });
+  });
+
+  it('syncs proxy API key env values to daemon app config while localStorage strips them', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
+        codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      agentCliEnv: {
+        claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
+        codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
       },
     });
   });
@@ -194,6 +221,364 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.installationId).toBe('install-1');
     expect(typeof merged.privacyDecisionAt).toBe('number');
+  });
+});
+
+describe('mergeDaemonMediaProviders', () => {
+  it('prefers daemon-backed media provider state when present', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+      },
+      {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://daemon.example/v1',
+        },
+      },
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: 'https://daemon.example/v1',
+      },
+    });
+  });
+
+  it('preserves local-only providers when daemon returns a partial provider set', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: 'sk-local-openai',
+            baseUrl: 'https://local-openai.example/v1',
+          },
+          fal: {
+            apiKey: 'sk-local-fal',
+            baseUrl: 'https://queue.fal.run',
+            model: 'fal-ai/imagen4/preview',
+          },
+        },
+      },
+      {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://daemon-openai.example/v1',
+        },
+      },
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: 'https://daemon-openai.example/v1',
+      },
+      fal: {
+        apiKey: 'sk-local-fal',
+        baseUrl: 'https://queue.fal.run',
+        model: 'fal-ai/imagen4/preview',
+      },
+    });
+  });
+
+  it('keeps local media providers when daemon has no stored state yet', () => {
+    const localConfig = {
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        openai: {
+          apiKey: 'sk-local',
+          baseUrl: 'https://local.example/v1',
+        },
+      },
+    };
+
+    const merged = mergeDaemonMediaProviders(localConfig, {
+      openai: {
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+        baseUrl: '',
+      },
+    });
+
+    expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
+  });
+
+  it('drops stale marker-only local entries when daemon definitively has no stored state', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+            model: '',
+          },
+          fal: {
+            apiKey: 'sk-local-fal',
+            baseUrl: 'https://queue.fal.run',
+            model: 'fal-ai/imagen4/preview',
+          },
+        },
+      },
+      {},
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      fal: {
+        apiKey: 'sk-local-fal',
+        baseUrl: 'https://queue.fal.run',
+        model: 'fal-ai/imagen4/preview',
+      },
+    });
+  });
+});
+
+describe('media provider entry presence helpers', () => {
+  it('treat saved-marker entries as present even when visible fields are empty', () => {
+    expect(
+      isStoredMediaProviderEntryPresent({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: '',
+      }),
+    ).toBe(true);
+    expect(
+      isStoredMediaProviderEntryEmpty({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: '',
+      }),
+    ).toBe(false);
+  });
+
+  it('treats entries as empty only after clear-level fields and markers are removed', () => {
+    expect(
+      isStoredMediaProviderEntryEmpty({
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+        baseUrl: '',
+        model: '',
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('shouldSyncLocalMediaProvidersToDaemon', () => {
+  it('returns true when local providers exist and daemon has none yet', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: false,
+            apiKeyTail: '',
+            baseUrl: '',
+          },
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false when daemon already has persisted media provider state', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+          },
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false when daemon media config could not be fetched', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        null,
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false when local state only has masked saved markers', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+            model: '',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: false,
+            apiKeyTail: '',
+            baseUrl: '',
+            model: '',
+          },
+        },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('fetchMediaProvidersFromDaemon', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('maps daemon media config into masked local config state', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          providers: {
+            openai: {
+              configured: true,
+              apiKeyTail: '1234',
+              baseUrl: 'https://daemon.example/v1',
+              model: 'gpt-image-1',
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({
+      status: 'ok',
+      providers: {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://daemon.example/v1',
+          model: 'gpt-image-1',
+        },
+      },
+    });
+  });
+
+  it('returns an error status when daemon media config fetch fails', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({ status: 'error' });
+  });
+});
+
+describe('buildMediaProvidersForDaemonSave', () => {
+  it('preserves a stored key while applying daemon/default non-secret values', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: '',
+          },
+        },
+        { force: true },
+      ),
+    ).toEqual({
+      providers: {
+        openai: {
+          preserveApiKey: true,
+          baseUrl: 'https://api.openai.com/v1',
+        },
+      },
+      force: true,
+    });
+  });
+
+  it('keeps an existing stored key when only baseUrl or model changes', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          nanobanana: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '9999',
+            baseUrl: 'https://custom.gateway.example',
+            model: 'gemini-custom',
+          },
+        },
+        {
+          nanobanana: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '9999',
+            baseUrl: 'https://generativelanguage.googleapis.com',
+            model: 'gemini-3.1-flash-image-preview',
+          },
+        },
+      ),
+    ).toEqual({
+      providers: {
+        nanobanana: {
+          preserveApiKey: true,
+          baseUrl: 'https://custom.gateway.example',
+          model: 'gemini-custom',
+        },
+      },
+      force: false,
+    });
   });
 });
 
@@ -401,6 +786,7 @@ describe('loadConfig', () => {
   it('sets an explicit apiProtocol for new default configs', () => {
     expect(DEFAULT_CONFIG.apiProtocol).toBe('anthropic');
     expect(DEFAULT_CONFIG.configMigrationVersion).toBe(1);
+    expect(DEFAULT_CONFIG.accentColor).toBe('#c96442');
   });
 });
 
@@ -417,5 +803,33 @@ describe('saveConfig', () => {
     expect(saved.installationId).toBeUndefined();
     expect(saved.privacyDecisionAt).toBeUndefined();
     expect(saved.telemetry).toBeUndefined();
+  });
+
+  it('keeps proxy API key env values out of localStorage while preserving non-secret env', () => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        claude: {
+          ANTHROPIC_API_KEY: 'sk-anthropic',
+          ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
+          CLAUDE_CONFIG_DIR: '~/.claude-2',
+        },
+        codex: {
+          OPENAI_API_KEY: 'sk-openai',
+          OPENAI_BASE_URL: 'https://proxy.example/openai',
+          CODEX_HOME: '~/.codex-alt',
+        },
+      },
+    });
+
+    const saved = JSON.parse(store.get('open-design:config') ?? '{}');
+    expect(saved.agentCliEnv.claude).toEqual({
+      ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
+      CLAUDE_CONFIG_DIR: '~/.claude-2',
+    });
+    expect(saved.agentCliEnv.codex).toEqual({
+      OPENAI_BASE_URL: 'https://proxy.example/openai',
+      CODEX_HOME: '~/.codex-alt',
+    });
   });
 });

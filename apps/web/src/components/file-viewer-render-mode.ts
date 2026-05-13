@@ -29,6 +29,10 @@ export interface UrlLoadDecision {
   commentMode: boolean;
   /** Inspect mode is active — needs the selection bridge for live tuning. */
   inspectMode?: boolean;
+  /** Tweaks palette popover open or palette committed — needs the palette bridge. */
+  paletteActive?: boolean;
+  /** Draw annotations need the srcDoc snapshot bridge for screenshot export. */
+  drawMode?: boolean;
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
 }
@@ -46,6 +50,10 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // Inspect needs the selection bridge injected via buildSrcdoc; a raw
   // URL-loaded iframe has no listener to apply per-element overrides.
   if (d.inspectMode) return false;
+  // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
+  // no parent-injected listener to recolor against.
+  if (d.paletteActive) return false;
+  if (d.drawMode) return false;
   if (d.forceInline) return false;
   return true;
 }

@@ -1,33 +1,44 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind } from '../../src/types';
 
 function extForKind(kind: ProjectFileKind): string {
   if (kind === 'html') return 'html';
   if (kind === 'image') return 'png';
-  if (kind === 'sketch') return 'svg';
+  if (kind === 'sketch') return 'sketch.json';
   if (kind === 'text') return 'txt';
   if (kind === 'code') return 'ts';
   if (kind === 'pdf') return 'pdf';
   return 'bin';
 }
 
+function file(overrides: Partial<ProjectFile> & Pick<ProjectFile, 'name'>): ProjectFile {
+  return {
+    path: overrides.name,
+    type: 'file',
+    size: 1024,
+    mtime: Date.now(),
+    kind: 'html',
+    mime: 'text/html',
+    ...overrides,
+  };
+}
+
 function generateFiles(count: number): ProjectFile[] {
-  const kinds: ProjectFileKind[] = [
-    'html', 'image', 'sketch', 'text', 'code', 'pdf',
-  ];
+  const kinds: ProjectFileKind[] = ['html', 'image', 'sketch', 'text', 'code', 'pdf'];
   return Array.from({ length: count }, (_, i) => {
-    const kind = kinds[i % kinds.length];
-    return {
-      name: `file-${i + 1}.${extForKind(kind!)}`,
-      kind: kind!,
+    const kind = kinds[i % kinds.length]!;
+    return file({
+      name: `file-${i + 1}.${extForKind(kind)}`,
+      kind,
       size: 1024 * (i + 1),
       mtime: Date.now() - i * 60_000,
       mime: 'text/plain',
-    };
+    });
   });
 }
 
@@ -42,6 +53,7 @@ function renderPanel(files: ProjectFile[]) {
       onRefreshFiles={vi.fn()}
       onOpenFile={onOpenFile}
       onOpenLiveArtifact={vi.fn()}
+      onRenameFile={vi.fn()}
       onDeleteFile={vi.fn()}
       onDeleteFiles={onDeleteFiles}
       onUpload={vi.fn()}
@@ -66,6 +78,207 @@ function getPageBtns(container: HTMLElement) {
 function getSelects(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLSelectElement>('select'));
 }
+
+describe('DesignFilesPanel grouping', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('does not show grouping controls when only live artifacts are available', () => {
+    render(
+      <DesignFilesPanel
+        projectId="project-1"
+        files={[]}
+        liveArtifacts={[
+          {
+            kind: 'live-artifact',
+            artifactId: 'artifact-1',
+            tabId: 'live:artifact-1',
+            projectId: 'project-1',
+            title: 'Live Preview',
+            slug: 'live-preview',
+            status: 'active',
+            refreshStatus: 'idle',
+            pinned: false,
+            preview: { type: 'html', entry: 'index.html' },
+            hasDocument: true,
+            updatedAt: '2026-05-09T12:00:00.000Z',
+          },
+        ]}
+        onRefreshFiles={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onRenameFile={vi.fn()}
+        onDeleteFile={vi.fn()}
+        onDeleteFiles={vi.fn()}
+        onUpload={vi.fn()}
+        onUploadFiles={vi.fn()}
+        onPaste={vi.fn()}
+        onNewSketch={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('group', { name: 'Group by' })).toBeNull();
+    expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
+  });
+
+  it('keeps the ungrouped table view as the default view', () => {
+    renderPanel([
+      file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
+      file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
+    ]);
+
+    const groupControls = screen.getByRole('group', { name: 'Group by' });
+    const kindGroupButton = within(groupControls).getByRole('button', { name: 'Kind' });
+    expect(kindGroupButton.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Name')).toBeTruthy();
+    expect(document.querySelector('.df-th-kind')?.textContent).toContain('Kind');
+    expect(screen.queryByText('Today')).toBeNull();
+  });
+
+  it('can group files by modified date and collapse a date group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({ name: 'today.html', mtime: new Date(2026, 4, 9, 11).getTime() }),
+      file({ name: 'yesterday.html', mtime: new Date(2026, 4, 8, 12).getTime() }),
+    ]);
+
+    expect(screen.queryByText('Today')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.getByText('Yesterday')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-today.html')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-yesterday.html')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Collapse Today/i }));
+
+    expect(screen.queryByTestId('design-file-row-today.html')).toBeNull();
+    expect(screen.getByTestId('design-file-row-yesterday.html')).toBeTruthy();
+  });
+
+  it('keeps files from seven calendar days ago in the previous 7 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([file({ name: 'week-old.html', mtime: new Date(2026, 4, 2, 12).getTime() })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 7 days')).toBeTruthy();
+    expect(screen.queryByText('Previous 30 days')).toBeNull();
+    expect(screen.getByTestId('design-file-row-week-old.html')).toBeTruthy();
+  });
+
+  it('keeps files at the seven calendar day boundary in the previous 7 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({ name: 'week-boundary.html', mtime: new Date(2026, 4, 2, 0, 0, 0, 0).getTime() }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 7 days')).toBeTruthy();
+    expect(screen.queryByText('Previous 30 days')).toBeNull();
+    expect(screen.getByTestId('design-file-row-week-boundary.html')).toBeTruthy();
+  });
+
+  it('keeps files from thirty calendar days ago in the previous 30 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({ name: 'month-old.html', mtime: new Date(2026, 3, 9, 12).getTime() }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 30 days')).toBeTruthy();
+    expect(screen.queryByText('Older')).toBeNull();
+    expect(screen.getByTestId('design-file-row-month-old.html')).toBeTruthy();
+  });
+
+  it('keeps files at the thirty calendar day boundary in the previous 30 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({
+        name: 'month-boundary.html',
+        mtime: new Date(2026, 3, 9, 0, 0, 0, 0).getTime(),
+      }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 30 days')).toBeTruthy();
+    expect(screen.queryByText('Older')).toBeNull();
+    expect(screen.getByTestId('design-file-row-month-boundary.html')).toBeTruthy();
+  });
+
+  it('groups files older than thirty calendar days into older', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([file({ name: 'archive.html', mtime: new Date(2026, 3, 8, 12).getTime() })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Older')).toBeTruthy();
+    expect(screen.queryByText('Previous 30 days')).toBeNull();
+    expect(screen.getByTestId('design-file-row-archive.html')).toBeTruthy();
+  });
+
+  it('groups only the current page so large file lists stay paginated', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel(
+      Array.from({ length: 31 }, (_, i) =>
+        file({ name: `today-${String(i + 1).padStart(2, '0')}.html`, mtime: now - i }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByTestId('design-file-row-today-01.html')).toBeTruthy();
+    expect(screen.queryByTestId('design-file-row-today-31.html')).toBeNull();
+    expect(getPageInfo(document.body)).toContain('1–30 of 31');
+  });
+
+  it('updates modified date groups when the local day changes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 9, 23, 59, 50));
+
+    renderPanel([file({ name: 'late-edit.html', mtime: new Date(2026, 4, 9, 23, 59).getTime() })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.queryByText('Yesterday')).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(10_001);
+    });
+
+    expect(screen.getByText('Yesterday')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
+    expect(screen.getByTestId('design-file-row-late-edit.html')).toBeTruthy();
+  });
+});
 
 describe('DesignFilesPanel large-list regression', () => {
   it('renders only the default page size (30) rows with 500 files', () => {
@@ -147,6 +360,14 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(getPageInfo(container)).toContain('31–60 of 500');
   });
 
+  it('keeps the bulk toolbar focused on the all-files action instead of duplicating page select', () => {
+    const { container } = renderPanel(generateFiles(3));
+
+    const toolbar = container.querySelector('.df-select-bar');
+    expect(toolbar?.textContent).toContain('Select everything');
+    expect(toolbar?.textContent).not.toContain('Select all on page');
+  });
+
   it('uses non-control table cells as file row click targets', () => {
     const files = generateFiles(1);
     const { container, onOpenFile } = renderPanel(files);
@@ -187,6 +408,43 @@ describe('DesignFilesPanel large-list regression', () => {
     fireEvent.click(row.querySelector('.df-row-menu')!);
     expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
     expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('renders sketch files with the static sketch preview instead of a broken image', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      version: 1,
+      items: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 16,
+          w: 120,
+          h: 72,
+          color: '#1c1b1a',
+          size: 2,
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const sketchFile = file({
+      name: 'board.sketch.json',
+      path: 'board.sketch.json',
+      kind: 'sketch',
+      mime: 'application/json; charset=utf-8',
+    });
+    const { container } = renderPanel([sketchFile]);
+
+    fireEvent.click(container.querySelector('.df-file-row .df-row-name-btn')!);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeTruthy();
+    });
+    expect(container.querySelector('.df-preview-thumb img')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/test-project/raw/board.sketch.json', { cache: 'no-store' });
   });
 
   it('passes every selected file to batch delete', () => {

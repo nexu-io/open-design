@@ -113,7 +113,7 @@ function injectPrintStylesheet(doc: string, css: string): string {
   return `${tag}${doc}`;
 }
 
-async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
+export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
   await window.webContents.executeJavaScript(
     `Promise.all([
       document.fonts && document.fonts.ready ? document.fonts.ready.catch(function(){}) : Promise.resolve(),
@@ -127,6 +127,40 @@ async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
     ]).then(function(){ return true; })`,
     true,
   );
+}
+
+export async function waitForPrintReadyHandshake(webContents: Electron.WebContents, nonce: string): Promise<void> {
+  // The parent wrapper document caches 'OD_PRINT_READY' in
+  // window.__odPrintReady as soon as it arrives (injected by
+  // injectParentPrintReadyCache in apps/web/src/runtime/exports.ts).
+  // Check the cache first to avoid missing a message that fired before
+  // this listener was attached.
+  // The nonce is a per-export random UUID embedded in the artifact's
+  // handshake script; we verify it here to prevent spoofed messages
+  // from untrusted artifact code.
+  const handshake = webContents.executeJavaScript(
+    `(function() {
+      if (window.__odPrintReady) return Promise.resolve(true);
+      return new Promise(function(resolve) {
+        window.addEventListener('message', function handler(event) {
+          if (event.data && event.data.type === 'OD_PRINT_READY' && event.data.nonce === '${nonce}') {
+            window.__odPrintReady = true;
+            window.removeEventListener('message', handler);
+            resolve(true);
+          }
+        });
+      });
+    })()`,
+    true,
+  );
+
+  // Prevent indefinite hangs if the document is malformed or the
+  // injected handshake script was blocked (e.g. by a CSP violation).
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Print handshake timed out')), 30_000),
+  );
+
+  await Promise.race([handshake, timeout]);
 }
 
 async function inferPageSize(window: BrowserWindow): Promise<PageSize> {

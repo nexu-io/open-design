@@ -27,6 +27,16 @@ describe('buildSrcdoc', () => {
     expect(doc).toContain('var initialSlideIndex = 0;');
   });
 
+  it('injects the snapshot bridge used by draw annotations', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('data-od-snapshot-bridge');
+    expect(srcdoc).toContain("data.type !== 'od:snapshot'");
+    expect(srcdoc).toContain("type: 'od:snapshot:result'");
+    expect(srcdoc).toContain('copyComputedStyle');
+    expect(srcdoc).toContain('foreignObject');
+  });
+
   it('only uses directly mutable slide conventions for setActive support', () => {
     const srcdoc = buildSrcdoc(
       '<section class="slide">One</section><section class="slide">Two</section>',
@@ -64,6 +74,21 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('MutationObserver(schedulePostTargets)');
     expect(srcdoc).toContain("document.addEventListener('scroll', schedulePostTargets, true);");
     expect(srcdoc).toContain('data-od-selection-bridge-style');
+  });
+
+  it('emits free-pin fallback coordinates in viewport space', () => {
+    const srcdoc = buildSrcdoc('<main>Hero</main>', { commentBridge: true });
+    const freePinStart = srcdoc.indexOf('var pinX = Math.round(ev.clientX);');
+    const freePinEnd = srcdoc.indexOf('// Pod drawing', freePinStart);
+    const freePinBlock = srcdoc.slice(freePinStart, freePinEnd);
+
+    expect(freePinBlock).toContain('var pinX = Math.round(ev.clientX);');
+    expect(freePinBlock).toContain('var pinY = Math.round(ev.clientY);');
+    expect(freePinBlock).toContain('position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 }');
+    expect(freePinBlock).not.toContain('scrollX');
+    expect(freePinBlock).not.toContain('scrollY');
+    expect(freePinBlock).not.toContain('pageXOffset');
+    expect(freePinBlock).not.toContain('pageYOffset');
   });
 
   it('injects the selection bridge for inspect mode and exposes override hooks', () => {
@@ -188,5 +213,20 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('data-od-source-path="path-0-0"');
     expect(srcdoc).not.toContain('<script data-od-source-path=');
     expect(srcdoc.indexOf('data-od-source-path="path-0"')).toBeLessThan(srcdoc.indexOf('document.body.prepend'));
+  });
+
+  it('injects only the manual edit bridge when edit mode is enabled without picker bridges', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      editBridge: true,
+    });
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-source-path=');
+    expect(srcdoc).toContain('data-od-edit-bridge');
+    expect(srcdoc).not.toContain('data-od-selection-bridge');
+    expect(srcdoc).not.toContain("type: 'od:comment-target'");
+    expect(srcdoc).not.toContain("type: 'od:inspect-overrides'");
   });
 });
