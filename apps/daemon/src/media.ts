@@ -77,6 +77,8 @@ type MediaContext = {
   voice: string;
   audioKind: AudioKind | undefined;
   language: string;
+  loop: boolean;
+  promptInfluence: number | undefined;
   compositionDir: string | null;
   imageRef: ImageRef | null;
 };
@@ -253,7 +255,8 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
-  audioKind?: AudioKind; language?: string; compositionDir?: string; image?: string; onProgress?: ProgressFn;
+  audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
+  compositionDir?: string; image?: string; onProgress?: ProgressFn;
 }) {
   const {
     projectRoot,
@@ -269,6 +272,8 @@ export async function generateMedia(args: {
     voice,
     audioKind,
     language,
+    loop,
+    promptInfluence,
     compositionDir,
     image,
   } = args;
@@ -319,12 +324,18 @@ export async function generateMedia(args: {
     surface === 'video'
       ? clampWithWarning(length, VIDEO_LENGTHS_SEC, 'length')
       : { value: undefined, warning: null };
+  const usesProviderSpecificAudioDuration =
+    def.provider === 'elevenlabs'
+    && surface === 'audio'
+    && resolvedAudioKind === 'sfx';
   const durationClamp =
-    surface === 'audio'
+    surface === 'audio' && !usesProviderSpecificAudioDuration
       ? clampWithWarning(duration, AUDIO_DURATIONS_SEC, 'duration')
       : { value: undefined, warning: null };
   const clampedLength = lengthClamp.value;
-  const clampedDuration = durationClamp.value;
+  const clampedDuration = usesProviderSpecificAudioDuration
+    ? duration
+    : durationClamp.value;
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
   const dir = await ensureProject(projectsRoot, projectId);
@@ -353,6 +364,10 @@ export async function generateMedia(args: {
     voice: voice || '',
     audioKind: resolvedAudioKind,
     language: language || '',
+    loop: loop === true,
+    promptInfluence: typeof promptInfluence === 'number' && Number.isFinite(promptInfluence)
+      ? promptInfluence
+      : undefined,
     // Project-relative path to the directory the agent scaffolded with
     // hyperframes.json / meta.json / index.html. Only consumed by the
     // hyperframes renderer; null/empty for every other provider.
@@ -415,6 +430,24 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'nanobanana' && surface === 'image') {
       const result = await renderNanoBananaImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'elevenlabs'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderElevenLabsTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'elevenlabs'
+      && surface === 'audio'
+      && ctx.audioKind === 'sfx'
+    ) {
+      const result = await renderElevenLabsSfx(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1361,6 +1394,161 @@ function grokAspectFor(aspect?: string): string {
     return aspect;
   }
   return '16:9';
+}
+
+// ---------------------------------------------------------------------------
+// Provider: ElevenLabs — v3 text-to-speech (synchronous).
+//
+// Docs: https://elevenlabs.io/docs/api-reference/text-to-speech/convert
+// The API returns MP3 bytes directly. The catalogue id `elevenlabs-v3`
+// maps to the wire model `eleven_v3`, while `--voice` selects the
+// voice id in the path.
+// ---------------------------------------------------------------------------
+
+const ELEVENLABS_DEFAULT_BASE_URL = 'https://api.elevenlabs.io';
+const ELEVENLABS_DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
+
+const ELEVENLABS_TTS_MODEL_MAP = {
+  'elevenlabs-v3': 'eleven_v3',
+} as Record<string, string>;
+
+const ELEVENLABS_SFX_MODEL_MAP = {
+  'elevenlabs-sfx': 'eleven_text_to_sound_v2',
+} as Record<string, string>;
+const ELEVENLABS_SFX_MAX_PROMPT_CHARS = 450;
+const ELEVENLABS_SFX_DEFAULT_PROMPT_INFLUENCE = 0.3;
+
+function clampElevenLabsSfxDuration(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 5;
+  return Math.min(30, Math.max(0.5, value));
+}
+
+function clampElevenLabsSfxPromptInfluence(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ELEVENLABS_SFX_DEFAULT_PROMPT_INFLUENCE;
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
+function requireElevenLabsPrompt(text: string, kind: 'TTS' | 'SFX'): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error(`ElevenLabs ${kind} prompt must not be empty. Pass --prompt before retrying.`);
+  }
+  return trimmed;
+}
+
+function assertElevenLabsSfxPromptLength(text: string) {
+  const promptChars = Array.from(text).length;
+  if (promptChars > ELEVENLABS_SFX_MAX_PROMPT_CHARS) {
+    throw new Error(
+      `ElevenLabs SFX prompt exceeds ${ELEVENLABS_SFX_MAX_PROMPT_CHARS} characters (${promptChars}). Shorten --prompt before retrying.`,
+    );
+  }
+}
+
+async function renderElevenLabsTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || ELEVENLABS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = ELEVENLABS_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  const text = requireElevenLabsPrompt(ctx.prompt ?? '', 'TTS');
+  const voiceId = (ctx.voice && ctx.voice.trim()) || ELEVENLABS_DEFAULT_VOICE_ID;
+  const body = {
+    text,
+    model_id: wireModel,
+    voice_settings: {
+      stability: 1,
+      similarity_boost: 1,
+      style: 0,
+      speed: 1,
+      use_speaker_boost: true,
+    },
+  };
+
+  const resp = await fetch(
+    `${baseUrl}/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': credentials.apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`elevenlabs tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('elevenlabs tts returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `elevenlabs/${wireModel} · ${voiceId} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+async function renderElevenLabsSfx(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || ELEVENLABS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = ELEVENLABS_SFX_MODEL_MAP[ctx.model] || ctx.model;
+  const text = requireElevenLabsPrompt(ctx.prompt ?? '', 'SFX');
+  assertElevenLabsSfxPromptLength(text);
+  const durationSeconds = clampElevenLabsSfxDuration(ctx.duration);
+  const promptInfluence = clampElevenLabsSfxPromptInfluence(ctx.promptInfluence);
+  const body = {
+    text,
+    duration_seconds: durationSeconds,
+    prompt_influence: promptInfluence,
+    ...(ctx.loop ? { loop: true } : {}),
+    model_id: wireModel,
+  };
+
+  const resp = await fetch(
+    `${baseUrl}/v1/sound-generation?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': credentials.apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`elevenlabs sfx ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('elevenlabs sfx returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `elevenlabs/${wireModel} · ${durationSeconds}s${ctx.loop ? ' · loop' : ''} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
 }
 
 // ---------------------------------------------------------------------------

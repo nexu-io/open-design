@@ -192,14 +192,14 @@ The `e2e/tests/localized-content.test.ts` test enforces that every directory und
 For a non-featured skill, the cheap path is to keep the source metadata complete:
 
 - [ ] **Ensure `SKILL.md` has complete English display copy**: title/name, description, example prompt, and any picker metadata required by the skill schema. The localized runtime uses these fields as the fallback display path.
-- [ ] **Run `pnpm --filter @open-design/web test` and `pnpm --filter @open-design/e2e test tests/localized-content.test.ts`** locally before pushing. These suites catch missing localized dictionaries and undisplayable discovered resources.
+- [ ] **Run `pnpm --filter @open-design/web test` and `pnpm --filter @open-design/e2e test tests/localized-content.test.ts`** locally before pushing. These suites catch undisplayable discovered resources and verify localized fallback behavior.
 
 ### Featured skills (optional path)
 
 If you set `od.featured: 1`, also:
 
 - [ ] **Add a screenshot** at `docs/screenshots/skills/<skill>.png`. PNG, ~1024×640 retina, captured from the real `example.html` at zoomed-out browser scale.
-- [ ] **Add full localized display copy** in `content.ts` (DE), `content.fr.ts` (FR), `content.ru.ts` (RU) — title, summary, scenario tag. The featured row in the picker uses this copy; the default fallback path renders English everywhere.
+- [ ] **Optionally add full localized display copy** in `content.ts` (DE), `content.fr.ts` (FR), `content.ru.ts` (RU) — title, summary, scenario tag. The featured row in the picker uses this copy when present; the default fallback path renders English everywhere.
 
 ### Forking
 

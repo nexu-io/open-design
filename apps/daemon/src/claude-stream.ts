@@ -32,6 +32,10 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
 
   // Per-content-block scratch, keyed by `${messageId}:${blockIndex}`.
   const blocks = new Map<string, BlockState>();
+  // Tool uses already emitted from streamed `input_json_delta` data.
+  // Claude Code still repeats them in the final assistant wrapper, often with
+  // empty `{}` inputs, so we suppress that duplicate emission.
+  const streamedToolUseIds = new Set<string>();
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
   let currentMessageId: string | null = null;
@@ -112,6 +116,10 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       for (const block of obj.message.content) {
         if (!isRecord(block)) continue;
         if (block.type === 'tool_use') {
+          if (typeof block.id === 'string' && streamedToolUseIds.has(block.id)) {
+            streamedToolUseIds.delete(block.id);
+            continue;
+          }
           onEvent({
             type: 'tool_use',
             id: block.id,
@@ -208,7 +216,23 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     }
 
     if (ev.type === 'content_block_stop') {
-      blocks.delete(blockKey(ev.index));
+      const key = blockKey(ev.index);
+      const state = blocks.get(key);
+      if (state && state.type === 'tool_use' && typeof state.id === 'string' && state.input.trim()) {
+        try {
+          onEvent({
+            type: 'tool_use',
+            id: state.id,
+            name: state.name,
+            input: JSON.parse(state.input),
+          });
+          streamedToolUseIds.add(state.id);
+        } catch {
+          // Fall through to the final assistant wrapper's input if the
+          // streamed JSON is malformed or incomplete.
+        }
+      }
+      blocks.delete(key);
       return;
     }
   }
