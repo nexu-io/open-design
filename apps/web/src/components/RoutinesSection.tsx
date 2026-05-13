@@ -309,7 +309,7 @@ function ScheduleEditor({
   );
 }
 
-function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: number }) {
+function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; refreshKey: number; onClose?: () => void }) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
 
   useEffect(() => {
@@ -345,9 +345,10 @@ function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: 
           <button
             type="button"
             className="routines-history-link"
-            onClick={() =>
-              navigate({ kind: 'project', projectId: r.projectId, fileName: null })
-            }
+            onClick={() => {
+              navigate({ kind: 'project', projectId: r.projectId, fileName: null });
+              onClose?.();
+            }}
             title="Open the project this run wrote to"
           >
             Open project
@@ -359,7 +360,7 @@ function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: 
   );
 }
 
-export function RoutinesSection() {
+export function RoutinesSection({ onClose }: { onClose?: () => void }) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -707,7 +708,7 @@ export function RoutinesSection() {
                 </div>
                 {isExpanded ? (
                   <div className="routines-item-history">
-                    <RunHistory routineId={r.id} refreshKey={historyTick} />
+                    <RunHistory routineId={r.id} refreshKey={historyTick} onClose={onClose} />
                   </div>
                 ) : null}
               </li>

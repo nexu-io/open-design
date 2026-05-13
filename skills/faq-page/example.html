@@ -10,42 +10,42 @@
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       line-height: 1.6;
       color: #1a1a1a;
       background: #fafafa;
     }
-    
+
     .container {
       max-width: 800px;
       margin: 0 auto;
       padding: 60px 24px;
     }
-    
+
     header {
       text-align: center;
       margin-bottom: 48px;
     }
-    
+
     h1 {
       font-size: 2.5rem;
       font-weight: 700;
       margin-bottom: 12px;
       color: #0a0a0a;
     }
-    
+
     .subtitle {
       font-size: 1.125rem;
       color: #666;
     }
-    
+
     .search-box {
       position: relative;
       margin-bottom: 32px;
     }
-    
+
     .search-input {
       width: 100%;
       padding: 16px 48px 16px 20px;
@@ -55,12 +55,12 @@
       background: white;
       transition: border-color 0.2s;
     }
-    
+
     .search-input:focus {
       outline: none;
       border-color: #0066ff;
     }
-    
+
     .search-icon {
       position: absolute;
       right: 20px;
@@ -68,7 +68,7 @@
       transform: translateY(-50%);
       color: #999;
     }
-    
+
     .categories {
       display: flex;
       gap: 12px;
@@ -76,7 +76,7 @@
       margin-bottom: 40px;
       justify-content: center;
     }
-    
+
     .category-btn {
       padding: 10px 20px;
       border: 2px solid #e0e0e0;
@@ -88,24 +88,24 @@
       cursor: pointer;
       transition: all 0.2s;
     }
-    
+
     .category-btn:hover {
       border-color: #0066ff;
       color: #0066ff;
     }
-    
+
     .category-btn.active {
       background: #0066ff;
       border-color: #0066ff;
       color: white;
     }
-    
+
     .faq-list {
       display: flex;
       flex-direction: column;
       gap: 16px;
     }
-    
+
     .faq-item {
       background: white;
       border: 1px solid #e0e0e0;
@@ -113,15 +113,15 @@
       overflow: hidden;
       transition: box-shadow 0.2s;
     }
-    
+
     .faq-item:hover {
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
-    
+
     .faq-item.hidden {
       display: none;
     }
-    
+
     .faq-question {
       width: 100%;
       padding: 20px 24px;
@@ -137,39 +137,39 @@
       align-items: center;
       gap: 16px;
     }
-    
+
     .faq-question:hover {
       color: #0066ff;
     }
-    
+
     .faq-icon {
       flex-shrink: 0;
       width: 20px;
       height: 20px;
       transition: transform 0.3s;
     }
-    
+
     .faq-item.open .faq-icon {
       transform: rotate(180deg);
     }
-    
+
     .faq-answer {
       max-height: 0;
       overflow: hidden;
       transition: max-height 0.3s ease-out;
     }
-    
+
     .faq-answer-content {
       padding: 0 24px 20px;
       color: #555;
       font-size: 1rem;
       line-height: 1.7;
     }
-    
+
     .faq-item.open .faq-answer {
       max-height: 500px;
     }
-    
+
     .footer-cta {
       margin-top: 64px;
       padding: 32px;
@@ -178,18 +178,18 @@
       border-radius: 12px;
       text-align: center;
     }
-    
+
     .footer-cta h2 {
       font-size: 1.5rem;
       margin-bottom: 12px;
       color: #0a0a0a;
     }
-    
+
     .footer-cta p {
       color: #666;
       margin-bottom: 20px;
     }
-    
+
     .contact-link {
       display: inline-block;
       padding: 12px 32px;
@@ -200,18 +200,18 @@
       font-weight: 600;
       transition: background 0.2s;
     }
-    
+
     .contact-link:hover {
       background: #0052cc;
     }
-    
+
     .no-results {
       text-align: center;
       padding: 48px 24px;
       color: #999;
       display: none;
     }
-    
+
     .no-results.show {
       display: block;
     }
@@ -223,12 +223,12 @@
       <h1>Frequently Asked Questions</h1>
       <p class="subtitle">Find answers to common questions about our product and services</p>
     </header>
-    
+
     <div class="search-box" data-od-id="search">
-      <input 
-        type="text" 
-        class="search-input" 
-        id="searchInput" 
+      <input
+        type="text"
+        class="search-input"
+        id="searchInput"
         placeholder="Search for answers..."
         aria-label="Search FAQ"
       >
@@ -236,7 +236,7 @@
         <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM18 18l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
     </div>
-    
+
     <div class="categories" data-od-id="categories">
       <button class="category-btn active" data-category="all">All</button>
       <button class="category-btn" data-category="billing">Billing</button>
@@ -244,7 +244,7 @@
       <button class="category-btn" data-category="technical">Technical</button>
       <button class="category-btn" data-category="general">General</button>
     </div>
-    
+
     <div class="faq-list" data-od-id="faq-list">
       <!-- Billing -->
       <div class="faq-item" data-category="billing">
@@ -260,7 +260,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="billing">
         <button class="faq-question" aria-expanded="false">
           <span>What payment methods do you accept?</span>
@@ -274,7 +274,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="billing">
         <button class="faq-question" aria-expanded="false">
           <span>Can I get a refund?</span>
@@ -288,7 +288,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Account -->
       <div class="faq-item" data-category="account">
         <button class="faq-question" aria-expanded="false">
@@ -303,7 +303,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="account">
         <button class="faq-question" aria-expanded="false">
           <span>Can I change my email address?</span>
@@ -317,7 +317,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="account">
         <button class="faq-question" aria-expanded="false">
           <span>How do I delete my account?</span>
@@ -331,7 +331,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Technical -->
       <div class="faq-item" data-category="technical">
         <button class="faq-question" aria-expanded="false">
@@ -346,7 +346,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="technical">
         <button class="faq-question" aria-expanded="false">
           <span>Is there a mobile app?</span>
@@ -360,7 +360,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="technical">
         <button class="faq-question" aria-expanded="false">
           <span>How do I export my data?</span>
@@ -374,7 +374,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- General -->
       <div class="faq-item" data-category="general">
         <button class="faq-question" aria-expanded="false">
@@ -389,7 +389,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="general">
         <button class="faq-question" aria-expanded="false">
           <span>How do I get started?</span>
@@ -403,7 +403,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="faq-item" data-category="general">
         <button class="faq-question" aria-expanded="false">
           <span>Do you offer customer support?</span>
@@ -418,34 +418,34 @@
         </div>
       </div>
     </div>
-    
+
     <div class="no-results" id="noResults">
       <p>No questions found matching your search.</p>
     </div>
-    
+
     <div class="footer-cta" data-od-id="footer-cta">
       <h2>Still have questions?</h2>
       <p>Can't find what you're looking for? Our support team is here to help.</p>
       <a href="mailto:support@example.com" class="contact-link">Contact Support</a>
     </div>
   </div>
-  
+
   <script>
     // Accordion functionality
     const faqItems = document.querySelectorAll('.faq-item');
-    
+
     faqItems.forEach(item => {
       const question = item.querySelector('.faq-question');
-      
+
       question.addEventListener('click', () => {
         const isOpen = item.classList.contains('open');
-        
+
         // Close all items
         faqItems.forEach(i => {
           i.classList.remove('open');
           i.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
         });
-        
+
         // Open clicked item if it was closed
         if (!isOpen) {
           item.classList.add('open');
@@ -453,21 +453,21 @@
         }
       });
     });
-    
+
     // Search functionality
     const searchInput = document.getElementById('searchInput');
     const noResults = document.getElementById('noResults');
-    
+
     searchInput.addEventListener('input', (e) => {
       const searchTerm = e.target.value.toLowerCase();
       let visibleCount = 0;
-      
+
       faqItems.forEach(item => {
         const question = item.querySelector('.faq-question span').textContent.toLowerCase();
         const answer = item.querySelector('.faq-answer-content').textContent.toLowerCase();
         const matchesSearch = question.includes(searchTerm) || answer.includes(searchTerm);
         const matchesCategory = item.dataset.category === currentCategory || currentCategory === 'all';
-        
+
         if (matchesSearch && matchesCategory) {
           item.classList.remove('hidden');
           visibleCount++;
@@ -475,32 +475,32 @@
           item.classList.add('hidden');
         }
       });
-      
+
       noResults.classList.toggle('show', visibleCount === 0);
     });
-    
+
     // Category filtering
     const categoryBtns = document.querySelectorAll('.category-btn');
     let currentCategory = 'all';
-    
+
     categoryBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         currentCategory = btn.dataset.category;
-        
+
         // Update active state
         categoryBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        
+
         // Filter items
         const searchTerm = searchInput.value.toLowerCase();
         let visibleCount = 0;
-        
+
         faqItems.forEach(item => {
           const question = item.querySelector('.faq-question span').textContent.toLowerCase();
           const answer = item.querySelector('.faq-answer-content').textContent.toLowerCase();
           const matchesSearch = !searchTerm || question.includes(searchTerm) || answer.includes(searchTerm);
           const matchesCategory = currentCategory === 'all' || item.dataset.category === currentCategory;
-          
+
           if (matchesSearch && matchesCategory) {
             item.classList.remove('hidden');
             visibleCount++;
@@ -508,7 +508,7 @@
             item.classList.add('hidden');
           }
         });
-        
+
         noResults.classList.toggle('show', visibleCount === 0);
       });
     });

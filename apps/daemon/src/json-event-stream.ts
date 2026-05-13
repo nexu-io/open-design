@@ -267,16 +267,23 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
-  if (obj.type === 'error') {
-    if (!state.codexErrorEmitted) {
-      state.codexErrorEmitted = true;
-      onEvent({
-        type: 'error',
-        message: extractErrorMessage(obj.message ?? obj.error, 'Codex error'),
-      });
-    }
+if (obj.type === 'error') {
+  const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
+  // Reconnecting events are recoverable — treat as status warning, not fatal
+  if (
+    typeof message === 'string' &&
+    message.includes('Reconnecting...') &&
+    message.includes('timeout waiting for child process to exit')
+  ) {
+    onEvent({ type: 'status', label: message });
     return true;
   }
+  if (!state.codexErrorEmitted) {
+    state.codexErrorEmitted = true;
+    onEvent({ type: 'error', message });
+  }
+  return true;
+}
 
   if (obj.type === 'turn.failed') {
     if (!state.codexErrorEmitted) {

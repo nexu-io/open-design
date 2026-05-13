@@ -631,6 +631,9 @@ export function mergeDaemonConfig(
     // has resolved the first-run prompt and should not see it again.
     next.privacyDecisionAt = Date.now();
   }
+  if (daemonConfig.customInstructions !== undefined) {
+    next.customInstructions = daemonConfig.customInstructions ?? undefined;
+  }
   return next;
 }
 
@@ -734,6 +737,7 @@ export async function syncConfigToDaemon(
     installationId: config.installationId,
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
+    customInstructions: config.customInstructions ?? null,
   };
   try {
     const response = await fetch('/api/app-config', {

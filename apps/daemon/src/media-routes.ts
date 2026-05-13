@@ -8,7 +8,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
-  const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject } = ctx.media;
+  const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { orbitService } = ctx.orbit;
   const { openNativeFolderDialog } = ctx.nativeDialogs;
@@ -49,6 +49,22 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       res
         .status(status)
         .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get('/api/media/providers/elevenlabs/voices', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const rawLimit = Number(req.query.limit);
+      const limit = Number.isFinite(rawLimit) ? rawLimit : undefined;
+      const voices = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit });
+      res.json({ voices });
+    } catch (err: any) {
+      const message = String(err && err.message ? err.message : err);
+      const status = message.includes('no ElevenLabs API key') ? 400 : 502;
+      res.status(status).json({ error: message });
     }
   });
 
@@ -167,6 +183,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         voice: req.body?.voice,
         audioKind: req.body?.audioKind,
         language: typeof req.body?.language === 'string' ? req.body.language : undefined,
+        loop: typeof req.body?.loop === 'boolean' ? req.body.loop : undefined,
+        promptInfluence: typeof req.body?.promptInfluence === 'number'
+          ? req.body.promptInfluence
+          : undefined,
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
         onProgress: (line: any) => appendTaskProgress(task, line),
