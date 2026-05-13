@@ -177,93 +177,100 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
       return;
     }
 
-    // 6. Session cookie check.
-    const sessionToken = readSessionCookie(req);
-    if (!sessionToken) {
-      // 6a. Cross-domain handshake path. The primary auth host (app.holalumina.com)
-      // 302s here with `?__od_handshake=<jwt>` after the user has signed in.
-      // The JWT is identical in shape to what Clerk would have set as
-      // __session, so we run it through the same verifier. On success we set
-      // __session as a Set-Cookie scoped to THIS subdomain (not the apex —
-      // that would leak the cookie across tenants) and 302 to the same URL
-      // with the handshake param stripped so the browser re-enters this
-      // middleware on the next hop with a real cookie.
-      const handshakeToken = readHandshakeToken(req);
-      if (handshakeToken) {
-        void (async () => {
-          let claims;
-          try {
-            claims = await verifyClerkSession(handshakeToken);
-          } catch (err) {
-            const kind =
-              err instanceof ClerkVerificationError ? err.kind : 'invalid';
-            logResolution({
-              requestId,
-              host: rawHost,
-              subdomain,
-              result: 'denied',
-              stepFailed: 'jwt_invalid',
-              statusCode: 401,
-              extra: { jwt_failure_kind: kind, source: 'handshake' },
-            });
-            respondUnauthorized(res);
-            return;
-          }
-          if (claims.o.slg !== subdomain) {
-            logResolution({
-              requestId,
-              host: rawHost,
-              subdomain,
-              result: 'denied',
-              stepFailed: 'org_mismatch',
-              statusCode: 404,
-              tenantResolved: claims.o.slg,
-              userId: claims.sub,
-              auditSeverity: 'high',
-              extra: { source: 'handshake' },
-            });
-            respondNotFound(res);
-            return;
-          }
-          const cleanUrl = stripHandshakeParam(req.url ?? '/');
-          const cookieDomain = `${subdomain}${PLATFORM_DOMAIN_SUFFIX}`;
-          // Cookie TTL = 30 days, matching design-tool industry standard
-          // (Figma/Notion/Canva/Adobe). Non-technical users may stay on a
-          // design canvas for hours or days across a single project; the
-          // cookie must not die mid-session. The cookie is only a transport
-          // for the JWT — every request re-verifies the JWT via
-          // verifyClerkSession, so an expired JWT inside a long-lived cookie
-          // is caught at step 7 and silently re-minted through the
-          // handshake (~150ms round-trip). A SHORT cookie (300s, attempted
-          // earlier) caused a worse bug: user filling a question form for
-          // >5 min lost the cookie entirely, next fetch 302'd cross-origin
-          // which browsers cannot follow with credentials → silent "Failed
-          // to fetch" mid-session.
-          const cookie =
-            `__session=${handshakeToken}` +
-            `; Domain=${cookieDomain}` +
-            `; Path=/` +
-            `; Max-Age=2592000` +
-            `; Secure` +
-            `; HttpOnly` +
-            `; SameSite=Lax`;
-          res.setHeader('Set-Cookie', cookie);
+    // 6a. Cross-domain handshake path. The primary auth host (app.holalumina.com)
+    // 302s here with `?__od_handshake=<jwt>` after the user has signed in.
+    // The JWT is identical in shape to what Clerk would have set as
+    // __session, so we run it through the same verifier. On success we set
+    // __session as a Set-Cookie scoped to THIS subdomain (not the apex —
+    // that would leak the cookie across tenants) and 302 to the same URL
+    // with the handshake param stripped so the browser re-enters this
+    // middleware on the next hop with a real cookie.
+    //
+    // CRITICAL: Process handshake BEFORE reading the session cookie. A stale
+    // __session cookie may be present from a parent-domain Set-Cookie (Clerk
+    // sets __session at .holalumina.com when the user signs in to
+    // app.holalumina.com). That stale cookie would otherwise short-circuit
+    // the handshake-consume branch, send the user to step 7, fail expired,
+    // bounce to handshake → infinite loop. Fresh URL JWT always wins.
+    const handshakeToken = readHandshakeToken(req);
+    if (handshakeToken) {
+      void (async () => {
+        let claims;
+        try {
+          claims = await verifyClerkSession(handshakeToken);
+        } catch (err) {
+          const kind =
+            err instanceof ClerkVerificationError ? err.kind : 'invalid';
           logResolution({
             requestId,
             host: rawHost,
             subdomain,
-            result: 'redirect',
-            stepFailed: null,
-            statusCode: 302,
+            result: 'denied',
+            stepFailed: 'jwt_invalid',
+            statusCode: 401,
+            extra: { jwt_failure_kind: kind, source: 'handshake' },
+          });
+          respondUnauthorized(res);
+          return;
+        }
+        if (claims.o.slg !== subdomain) {
+          logResolution({
+            requestId,
+            host: rawHost,
+            subdomain,
+            result: 'denied',
+            stepFailed: 'org_mismatch',
+            statusCode: 404,
             tenantResolved: claims.o.slg,
             userId: claims.sub,
-            extra: { source: 'handshake', action: 'cookie_set' },
+            auditSeverity: 'high',
+            extra: { source: 'handshake' },
           });
-          respondRedirect(res, `https://${cookieDomain}${cleanUrl}`);
-        })();
-        return;
-      }
+          respondNotFound(res);
+          return;
+        }
+        const cleanUrl = stripHandshakeParam(req.url ?? '/');
+        const cookieDomain = `${subdomain}${PLATFORM_DOMAIN_SUFFIX}`;
+        // Cookie TTL = 30 days, matching design-tool industry standard
+        // (Figma/Notion/Canva/Adobe). Non-technical users may stay on a
+        // design canvas for hours or days across a single project; the
+        // cookie must not die mid-session. The cookie is only a transport
+        // for the JWT — every request re-verifies the JWT via
+        // verifyClerkSession, so an expired JWT inside a long-lived cookie
+        // is caught at step 7 and silently re-minted through the
+        // handshake (~150ms round-trip). A SHORT cookie (300s, attempted
+        // earlier) caused a worse bug: user filling a question form for
+        // >5 min lost the cookie entirely, next fetch 302'd cross-origin
+        // which browsers cannot follow with credentials → silent "Failed
+        // to fetch" mid-session.
+        const cookie =
+          `__session=${handshakeToken}` +
+          `; Domain=${cookieDomain}` +
+          `; Path=/` +
+          `; Max-Age=2592000` +
+          `; Secure` +
+          `; HttpOnly` +
+          `; SameSite=Lax`;
+        res.setHeader('Set-Cookie', cookie);
+        logResolution({
+          requestId,
+          host: rawHost,
+          subdomain,
+          result: 'redirect',
+          stepFailed: null,
+          statusCode: 302,
+          tenantResolved: claims.o.slg,
+          userId: claims.sub,
+          extra: { source: 'handshake', action: 'cookie_set' },
+        });
+        respondRedirect(res, `https://${cookieDomain}${cleanUrl}`);
+      })();
+      return;
+    }
 
+    // 6. Session cookie check.
+    const sessionToken = readSessionCookie(req);
+    if (!sessionToken) {
       // 6b. No cookie, no handshake → bounce to the primary handshake
       // endpoint. That endpoint reads the user's app.holalumina.com Clerk
       // session, mints a fresh JWT, and 302s back here with the handshake

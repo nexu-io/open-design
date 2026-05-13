@@ -443,6 +443,55 @@ describe('tenantResolverMiddleware', () => {
   });
 
   // -------------------------------------------------------------------------
+  // (13) REGRESSION — Bug 8: handshake URL param MUST override stale __session
+  // cookie. Clerk sets a __session cookie at the parent domain (.holalumina.com)
+  // when the user signs in to app.holalumina.com. That cookie is sent to every
+  // subdomain. If the resolver reads the stale cookie first and only consumes
+  // __od_handshake when no cookie is present, the user enters an infinite
+  // redirect loop: stale cookie → step-7 expired → re-handshake → primary mints
+  // fresh JWT → 302 back with __od_handshake=<fresh> → resolver sees stale
+  // cookie again → loop. Fix: handshake consume runs BEFORE cookie read.
+  // -------------------------------------------------------------------------
+
+  test('(13) REGRESSION: handshake URL param overrides stale __session cookie (no redirect loop)', async () => {
+    setEnvForPrimaryKey();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    // Stale parent-domain cookie (expired 10 min ago — would normally trigger
+    // step-7 expired → re-handshake bounce, causing the loop).
+    const staleCookieToken = await signTestToken(buildClaims('ericedmeades'), {
+      keyPair: primaryKey,
+      iat: nowSeconds - 1200,
+      exp: nowSeconds - 600,
+      nbf: nowSeconds - 1205,
+    });
+    // Fresh handshake JWT in URL — should win.
+    const handshakeToken = await signTestToken(buildClaims('ericedmeades'), {
+      keyPair: primaryKey,
+    });
+
+    const result = await invoke({
+      host: 'ericedmeades.opendesign.holalumina.com',
+      url: `/?__od_handshake=${handshakeToken}`,
+      cookie: `__session=${staleCookieToken}`,
+    });
+    expect(result.nextCalled).toBe(false);
+    expect(result.captured.status).toBe(302);
+    // Redirect target must be clean URL (handshake param stripped), NOT a
+    // bounce back to app.holalumina.com/api/od-handshake (the loop signature).
+    const location = result.captured.headers['location'];
+    expect(location).toBeDefined();
+    expect(location).toBe('https://ericedmeades.opendesign.holalumina.com/');
+    expect(location).not.toContain('app.holalumina.com/api/od-handshake');
+    // Set-Cookie MUST be present — proves handshake-consume path ran, not the
+    // expired-JWT re-handshake path (which never sets a cookie).
+    const setCookie = result.captured.headers['set-cookie'];
+    expect(setCookie).toBeDefined();
+    expect(setCookie).toContain(`__session=${handshakeToken}`);
+    expect(setCookie).toContain('Domain=ericedmeades.opendesign.holalumina.com');
+    expect(setCookie).toContain('Max-Age=2592000');
+  });
+
+  // -------------------------------------------------------------------------
   // Cross-cutting: byte-identical 404 — invariant across all 6 cases.
   // -------------------------------------------------------------------------
 
