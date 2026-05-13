@@ -21,6 +21,10 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, inspectMode: true })).toBe(false);
   });
 
+  it('falls back to srcDoc when draw mode is active (snapshot bridge required)', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
+  });
+
   it('falls back to srcDoc when the user opts in via forceInline', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, forceInline: true })).toBe(false);
   });
