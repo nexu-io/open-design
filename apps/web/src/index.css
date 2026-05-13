@@ -18301,9 +18301,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   padding: 0 6px;
 }
 .routines-radio {
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px 10px;
+  padding: 10px 8px;
   border-radius: var(--radius);
   cursor: pointer;
   transition: background 120ms ease;
@@ -18311,7 +18312,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .routines-radio:hover { background: var(--bg-subtle); }
 .routines-radio input { margin-top: 3px; }
-.routines-radio span { display: flex; flex-direction: column; gap: 2px; }
+.routines-radio span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .routines-radio strong { font-size: 14px; color: var(--text); font-weight: 600; }
 .routines-radio small { font-size: 12px; color: var(--text-muted); }
 
