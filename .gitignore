@@ -23,6 +23,11 @@ e2e/reports/test-results
 e2e/reports/results.json
 e2e/reports/junit.xml
 e2e/reports/latest.md
+e2e/reports/playwright-html-report-prod
+e2e/reports/test-results-prod
+e2e/reports/results-prod.json
+e2e/reports/junit-prod.xml
+e2e/reports/latest-prod.md
 
 # Legacy folder name from before the rename; keep ignored so existing
 # clones don't accidentally stage stale runtime data.
@@ -43,3 +48,7 @@ tsconfig.tsbuildinfo
 task.md
 specs/change/active
 .ralph/
+
+# E2E prod creds + storage state (NEVER commit)
+e2e/.env.prod.local
+e2e/.auth/

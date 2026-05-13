@@ -19,10 +19,12 @@
   },
   "include": [
     "playwright.config.ts",
+    "playwright.prod.config.ts",
     "vitest.config.ts",
     "cases/report-metadata.ts",
     "reporters/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "specs/**/*.ts"
   ],
   "exclude": ["node_modules", "reports", ".od-data"]
 }
