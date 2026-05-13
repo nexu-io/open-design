@@ -23,8 +23,17 @@ export type Route =
        * the user on that run's own conversation, not on whatever the
        * project happens to default to. Without this field the latest
        * conversation always wins and earlier rows look "absorbed".
+       *
+       * Optional (PerishCode + Codex P1 on PR #1508): the existing
+       * project-route call sites in App.tsx, ProjectView.tsx, and the
+       * older tests all construct `{ kind, projectId, fileName }`
+       * without a conversation segment. Treating the field as optional
+       * keeps those literals type-safe while letting the routine
+       * history surface populate it where the deep-link matters. The
+       * `parseRoute` and `buildPath` round-trip normalize undefined to
+       * null at the wire layer.
        */
-      conversationId: string | null;
+      conversationId?: string | null;
       fileName: string | null;
     };
 

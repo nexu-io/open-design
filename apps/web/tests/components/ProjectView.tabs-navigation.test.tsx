@@ -181,7 +181,16 @@ describe('ProjectView tab URL hydration', () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith(
-        { kind: 'project', projectId: project.id, fileName: 'index.html' },
+        // The active conversation id is threaded into the URL alongside
+        // the active tab so a reload / share preserves the conversation
+        // segment of `/projects/:id/conversations/:cid/files/...`
+        // (PerishCode + Codex P1 on PR #1508).
+        {
+          kind: 'project',
+          projectId: project.id,
+          conversationId: 'conv-1',
+          fileName: 'index.html',
+        },
         { replace: true },
       );
     });

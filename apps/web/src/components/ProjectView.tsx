@@ -820,11 +820,24 @@ export function ProjectView({
       : null;
     if (target === lastSyncedFileRef.current) return;
     lastSyncedFileRef.current = target;
+    // PerishCode + Codex P1 on PR #1508: the prior version of this
+    // sync stripped any `/conversations/:cid` segment from the URL as
+    // soon as a tab became active, which regressed the deep-link
+    // behavior the parent commit was meant to add (reload / share
+    // would fall back to `list[0]` instead of the routed run's
+    // conversation). Thread the active conversation id so the URL
+    // always reflects the conversation the project view is actually
+    // showing, matching how `fileName` already tracks the active tab.
     navigate(
-      { kind: 'project', projectId: project.id, fileName: target },
+      {
+        kind: 'project',
+        projectId: project.id,
+        conversationId: activeConversationId,
+        fileName: target,
+      },
       { replace: true },
     );
-  }, [openTabsState.active, projectFileNames, project.id]);
+  }, [openTabsState.active, projectFileNames, project.id, activeConversationId]);
 
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
     return project.id;
