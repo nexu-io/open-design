@@ -234,6 +234,8 @@ export async function writeAssembledApp(
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
         ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
+        ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
+        ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
         ...(usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
         webOutputMode: config.webOutputMode,
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),

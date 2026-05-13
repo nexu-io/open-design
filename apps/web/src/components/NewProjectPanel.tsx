@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  createTabToTracking,
+  projectKindToTracking,
+} from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import { trackHomeClickCreateButton } from '../analytics/events';
 import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
 
 // Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
@@ -138,7 +144,7 @@ interface Props {
   templates: ProjectTemplate[];
   onDeleteTemplate: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
-  onCreate: (input: CreateInput) => void;
+  onCreate: (input: CreateInput & { requestId?: string }) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
   // Web fallback: the user types an absolute baseDir into the manual
   // input and the renderer POSTs `/api/import/folder` itself. Browser
@@ -213,6 +219,7 @@ export function NewProjectPanel({
   loading = false,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
   const [baseDir, setBaseDir] = useState('');
@@ -526,11 +533,29 @@ export function NewProjectPanel({
       inspirationIds: inspirations,
       promptTemplate: promptTemplatePick,
     });
+    // Generate the click→result correlation id here so the home_click and
+    // the eventual project_create_result share request_id.
+    const requestId = analytics.newRequestId();
+    const trackedKind = projectKindToTracking(metadata?.kind ?? null) ?? 'prototype';
+    trackHomeClickCreateButton(
+      analytics.track,
+      {
+        page: 'home',
+        area: 'create_panel',
+        element: 'create_button',
+        action: 'create_project',
+        source_tab: createTabToTracking(tab),
+        project_kind: trackedKind,
+        has_project_name: name.trim().length > 0,
+      },
+      { requestId },
+    );
     onCreate({
       name: name.trim() || autoName(tab, mediaSurface, t),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
       metadata,
+      requestId,
     });
   }
 
@@ -718,7 +743,6 @@ export function NewProjectPanel({
           <SurfaceOptions
             includeLandingPage={includeLandingPage}
             includeOsWidgets={includeOsWidgets}
-            osWidgetsAvailable={platformTargetsSupportOsWidgets(platformTargets)}
             onIncludeLandingPage={setIncludeLandingPage}
             onIncludeOsWidgets={setIncludeOsWidgets}
           />
@@ -900,6 +924,10 @@ function PlatformPicker({
   onChange: (v: NewProjectPlatform[]) => void;
 }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const listboxId = useId();
+
   function togglePlatform(next: NewProjectPlatform) {
     const active = value.includes(next);
     const updated = active
@@ -908,30 +936,97 @@ function PlatformPicker({
     onChange(updated.length > 0 ? updated : ['responsive']);
   }
 
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    // Defer listener registration by a tick so the very click that opened
+    // the popover doesn't get re-interpreted as an outside-click on the
+    // mousedown that follows in the same event cycle.
+    const tid = window.setTimeout(() => {
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(tid);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const primary = DESIGN_PLATFORMS.find((o) => o.value === value[0]) ?? null;
+  const extraCount = Math.max(0, value.length - 1);
+
   return (
-    <div className="newproj-section">
-      <label className="newproj-label">{t('newproj.targetPlatformsLabel')}</label>
-      <p className="platform-picker-hint">{t('newproj.targetPlatformsHint')}</p>
-      <div className="platform-grid">
-        {DESIGN_PLATFORMS.map((option) => {
-          const active = value.includes(option.value);
-          const label = t(option.labelKey);
-          const hint = t(option.hintKey);
-          return (
-            <button
-              key={option.value}
-              type="button"
-              className={`newproj-card platform-card${active ? ' active' : ''}`}
-              onClick={() => togglePlatform(option.value)}
-              title={hint}
-              aria-pressed={active}
-            >
-              <span className="platform-card-title">{label}</span>
-              <span className="platform-card-hint">{hint}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div
+      className="newproj-section ds-picker platform-picker"
+      ref={wrapRef}
+    >
+      <label className="newproj-label">Target platforms</label>
+      <button
+        type="button"
+        className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+      >
+        <span className="ds-picker-meta">
+          <span className="ds-picker-title">
+            {primary ? t(primary.labelKey) : 'Pick a platform'}
+            {extraCount > 0 ? (
+              <span className="ds-picker-extra-pill">+{extraCount}</span>
+            ) : null}
+          </span>
+        </span>
+        <Icon
+          name="chevron-down"
+          size={14}
+          className="ds-picker-chevron"
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </button>
+      {open ? (
+        <div
+          className="ds-picker-popover"
+          id={listboxId}
+          role="listbox"
+          aria-label="Target platforms"
+          aria-multiselectable="true"
+        >
+          <div className="ds-picker-list">
+            {DESIGN_PLATFORMS.map((option) => {
+              const active = value.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={`ds-picker-item${active ? ' active' : ''}`}
+                  onClick={() => togglePlatform(option.value)}
+                >
+                  <span className="ds-picker-item-text">
+                    <span className="ds-picker-item-title">{t(option.labelKey)}</span>
+                    <span className="ds-picker-item-sub">{t(option.hintKey)}</span>
+                  </span>
+                  <span
+                    className={`ds-picker-mark check${active ? ' active' : ''}`}
+                    aria-hidden
+                  >
+                    {active ? '✓' : ''}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -939,13 +1034,11 @@ function PlatformPicker({
 function SurfaceOptions({
   includeLandingPage,
   includeOsWidgets,
-  osWidgetsAvailable,
   onIncludeLandingPage,
   onIncludeOsWidgets,
 }: {
   includeLandingPage: boolean;
   includeOsWidgets: boolean;
-  osWidgetsAvailable: boolean;
   onIncludeLandingPage: (v: boolean) => void;
   onIncludeOsWidgets: (v: boolean) => void;
 }) {
@@ -953,24 +1046,52 @@ function SurfaceOptions({
   return (
     <div className="newproj-section surface-options">
       <label className="newproj-label">{t('newproj.surfaceOptionsLabel')}</label>
-      <ToggleRow
-        label={t('newproj.includeLandingPage')}
-        hint={t('newproj.includeLandingPageHint')}
-        checked={includeLandingPage}
-        onChange={onIncludeLandingPage}
-      />
-      <ToggleRow
-        label={t('newproj.includeOsWidgets')}
-        hint={
-          osWidgetsAvailable
-            ? t('newproj.includeOsWidgetsHint')
-            : t('newproj.includeOsWidgetsDisabledHint')
-        }
-        checked={osWidgetsAvailable && includeOsWidgets}
-        disabled={!osWidgetsAvailable}
-        onChange={onIncludeOsWidgets}
-      />
+      <div className="compact-toggle-list">
+        <CompactToggle
+          label={t('newproj.includeLandingPage')}
+          hint={t('newproj.includeLandingPageHint')}
+          checked={includeLandingPage}
+          onChange={onIncludeLandingPage}
+        />
+        <CompactToggle
+          label={t('newproj.includeOsWidgets')}
+          hint={t('newproj.includeOsWidgetsHint')}
+          checked={includeOsWidgets}
+          onChange={onIncludeOsWidgets}
+        />
+      </div>
     </div>
+  );
+}
+
+// Lightweight inline toggle row. The hint moves to a native tooltip so the
+// row stays one line tall — used by SurfaceOptions where the toggles are
+// secondary controls and the full card treatment of ToggleRow felt too heavy.
+function CompactToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`compact-toggle${checked ? ' on' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
+      aria-pressed={checked}
+      disabled={disabled}
+      title={hint}
+    >
+      <span className="compact-toggle-label">{label}</span>
+      <span className="compact-toggle-switch" aria-hidden />
+    </button>
   );
 }
 

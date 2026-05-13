@@ -61,9 +61,7 @@ describe('FileViewer manual edit regressions', () => {
       const first = htmlPreviewFile();
       const second = { ...htmlPreviewFile(), name: 'second.html', path: 'second.html' };
       const { rerender } = render(
-        <FileViewer
-          projectId="project-1"
-          file={first}
+        <FileViewer projectId="project-1" projectKind="prototype" file={first}
           liveHtml='<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>'
         />,
       );
@@ -76,9 +74,7 @@ describe('FileViewer manual edit regressions', () => {
       fireEvent.change(baseSizeInput, { target: { value: '18' } });
 
       rerender(
-        <FileViewer
-          projectId="project-1"
-          file={second}
+        <FileViewer projectId="project-1" projectKind="prototype" file={second}
           liveHtml='<!doctype html><html><body><main data-od-id="second">Second</main></body></html>'
         />,
       );
@@ -116,7 +112,7 @@ describe('FileViewer manual edit regressions', () => {
     try {
       const first = htmlPreviewFile();
       const second = { ...htmlPreviewFile(), name: 'second.html', path: 'second.html' };
-      const { rerender } = render(<FileViewer projectId="project-1" file={first} />);
+      const { rerender } = render(<FileViewer projectId="project-1" projectKind="prototype" file={first} />);
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/raw/preview.html', {}));
       fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
@@ -129,7 +125,7 @@ describe('FileViewer manual edit regressions', () => {
       });
       fireEvent.change(baseSizeInput, { target: { value: '18' } });
 
-      rerender(<FileViewer projectId="project-1" file={second} />);
+      rerender(<FileViewer projectId="project-1" projectKind="prototype" file={second} />);
       fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 1100));

@@ -53,6 +53,10 @@ export interface RoutineDeps {
   routineService: RoutineRoutesService;
 }
 
+export interface TelemetryDeps {
+  reportFinalizedMessage: (saved: any, body?: any) => void;
+}
+
 export interface ServerContext {
   db: any;
   design: any;
@@ -82,6 +86,7 @@ export interface ServerContext {
   mcp: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
+  telemetry?: TelemetryDeps;
   validation: any;
   finalize: any;
   chat: any;
