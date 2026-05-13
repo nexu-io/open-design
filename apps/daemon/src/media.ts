@@ -1967,6 +1967,9 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
     prompt: ctx.prompt || 'A short cinematic clip.',
     aspect_ratio: aspectRatio,
   };
+  // Track the effective duration label (what we actually send upstream).
+  let effectiveDurationLabel: string | undefined;
+  let durationSnappedNote = '';
   // Some models (Wan) have no duration parameter; others (Veo) require a
   // suffixed string from a fixed bucket set ("4s"/"6s"/"8s").
   if (!FAL_VIDEO_NO_DURATION.has(endpoint)) {
@@ -1975,8 +1978,13 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
         Math.abs(b - durationSec) < Math.abs(a - durationSec) ? b : a,
       );
       input.duration = `${closest}s`;
+      effectiveDurationLabel = `${closest}s`;
+      if (closest !== durationSec) {
+        durationSnappedNote = ` (requested ${durationSec}s → snapped to ${closest}s)`;
+      }
     } else {
       input.duration = durationSec;
+      effectiveDurationLabel = `${durationSec}s`;
     }
   }
   if (ctx.imageRef?.dataUrl) {
@@ -1998,10 +2006,11 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
   const dlResp = await fetch(videoUrl);
   if (!dlResp.ok) throw new Error(`fal video download ${dlResp.status}`);
   const bytes = Buffer.from(await dlResp.arrayBuffer());
+  const durationPart = effectiveDurationLabel ? ` · ${effectiveDurationLabel}${durationSnappedNote}` : '';
 
   return {
     bytes,
-    providerNote: `fal/${endpoint} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
+    providerNote: `fal/${endpoint} · ${aspectRatio}${durationPart} · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
   };
 }
