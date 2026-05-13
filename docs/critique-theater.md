@@ -142,33 +142,10 @@ contract identical to a normal generation: same auth, same env, same logs.
 
 ### Enable / disable
 
-What ships in Phase 15:
-
-- A pure **rollout resolver** (`isCritiqueEnabled` in
-  `apps/daemon/src/critique/rollout.ts`) that combines four inputs into a
-  single boolean: skill policy (top priority), per-project override, env
-  override (`OD_CRITIQUE_ENABLED`), and rollout phase default.
-- A **client-side toggle hook** (`useCritiqueTheaterEnabled` in
-  `apps/web/src/components/Theater/hooks/`) plus a `setCritiqueTheaterEnabled`
-  setter that writes the value into the existing `open-design:config`
-  localStorage blob and dispatches a same-tab CustomEvent so every mounted
-  hook updates in place. The setter is callable by integrators today; the
-  Settings UI control that exposes it to end users is a focused follow-up.
-
-What does **not** ship in Phase 15 (deferred to the wireup PR):
-
-- The daemon's spawn-time gate still reads `critiqueCfg.enabled` directly
-  (`apps/daemon/src/server.ts`); it does not yet call `isCritiqueEnabled`.
-  Phase 15 ships the resolver in isolation so it can land green and be
-  reviewed on its own. The one-line wiring change ships in the wireup PR
-  that follows.
-- The localStorage flag is not yet round-tripped into the daemon's
-  project settings store. Until the Settings UI follow-up adds a
-  daemon-side write, the toggle is in-session only: the web UI flips
-  visibly but the spawn gate still depends on `OD_CRITIQUE_ENABLED` /
-  rollout phase / skill policy. Operators who want to enable the feature
-  today should set `OD_CRITIQUE_ENABLED=1` rather than relying on the
-  client toggle.
+The feature is gated behind the `OD_CRITIQUE_ENABLED` env var and, after
+Phase 15 lands, the **Settings → Critique Theater (beta)** toggle. The web
+toggle persists into the daemon's settings store; both surfaces flip the
+same flag.
 
 Defaults: **disabled** during M0 dark-launch and M1 settings-toggle phases.
 Enabled by default per skill during M2, then globally during M3 after

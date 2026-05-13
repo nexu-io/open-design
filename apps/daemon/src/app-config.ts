@@ -48,6 +48,7 @@ export interface AppConfigPrefs {
   telemetry?: TelemetryPrefs;
   privacyDecisionAt?: number | null;
   orbit?: OrbitConfigPrefs;
+  customInstructions?: string | null;
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -63,6 +64,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'telemetry',
   'privacyDecisionAt',
   'orbit',
+  'customInstructions',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -259,6 +261,14 @@ function applyConfigValue(
     } else {
       delete target[key];
     }
+  }
+  if (key === 'customInstructions') {
+    if (typeof value === 'string') {
+      target[key] = value.slice(0, 5000);
+    } else if (value === null) {
+      target[key] = value;
+    }
+    return;
   }
 }
 

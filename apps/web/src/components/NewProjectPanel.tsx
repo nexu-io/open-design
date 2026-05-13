@@ -78,44 +78,46 @@ type PromptTemplatePick = {
   prompt: string;
 };
 
+const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
+
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 type NewProjectPlatform = Exclude<ProjectPlatform, 'auto'>;
 
 const DESIGN_PLATFORMS: Array<{
   value: NewProjectPlatform;
-  label: string;
-  hint: string;
+  labelKey: keyof Dict;
+  hintKey: keyof Dict;
 }> = [
   {
     value: 'responsive',
-    label: 'Responsive web',
-    hint: 'One web experience adapted for desktop, tablet, and mobile browsers',
+    labelKey: 'newproj.platform.responsive.label',
+    hintKey: 'newproj.platform.responsive.hint',
   },
   {
     value: 'web-desktop',
-    label: 'Desktop web',
-    hint: 'Browser-first product or landing page',
+    labelKey: 'newproj.platform.webDesktop.label',
+    hintKey: 'newproj.platform.webDesktop.hint',
   },
   {
     value: 'mobile-ios',
-    label: 'iOS app',
-    hint: 'iPhone frames and iOS interaction rules',
+    labelKey: 'newproj.platform.mobileIos.label',
+    hintKey: 'newproj.platform.mobileIos.hint',
   },
   {
     value: 'mobile-android',
-    label: 'Android app',
-    hint: 'Pixel frames and Material interaction rules',
+    labelKey: 'newproj.platform.mobileAndroid.label',
+    hintKey: 'newproj.platform.mobileAndroid.hint',
   },
   {
     value: 'tablet',
-    label: 'Tablet app',
-    hint: 'Native-style tablet experience with split views',
+    labelKey: 'newproj.platform.tablet.label',
+    hintKey: 'newproj.platform.tablet.hint',
   },
   {
     value: 'desktop-app',
-    label: 'Desktop app',
-    hint: 'macOS/Windows app chrome',
+    labelKey: 'newproj.platform.desktopApp.label',
+    hintKey: 'newproj.platform.desktopApp.hint',
   },
 ];
 
@@ -560,7 +562,9 @@ export function NewProjectPanel({
       setImportFolderError(null);
       setImportingFolder(true);
       try {
-        const result = await window.electronAPI!.pickAndImport!();
+        const result = await window.electronAPI!.pickAndImport!({
+          skillId: skillIdForTab,
+        });
         if (!result) return;
         if (result.ok === true) {
           await onImportFolderResponse(result.response);
@@ -795,6 +799,9 @@ export function NewProjectPanel({
             onAudioKind={(kind) => {
               setAudioKind(kind);
               setAudioModel(DEFAULT_AUDIO_MODEL[kind]);
+              if (kind === 'sfx') {
+                setAudioDuration((duration) => Math.min(duration, SFX_AUDIO_DURATIONS_SEC.at(-1) ?? 30));
+              }
             }}
             onAudioModel={setAudioModel}
             onAudioDuration={setAudioDuration}
@@ -892,6 +899,7 @@ function PlatformPicker({
   value: NewProjectPlatform[];
   onChange: (v: NewProjectPlatform[]) => void;
 }) {
+  const t = useT();
   function togglePlatform(next: NewProjectPlatform) {
     const active = value.includes(next);
     const updated = active
@@ -902,25 +910,24 @@ function PlatformPicker({
 
   return (
     <div className="newproj-section">
-      <label className="newproj-label">Target platforms</label>
-      <p className="platform-picker-hint">
-        Pick one or more. Responsive web covers browser breakpoints only; add iOS,
-        Android, tablet app, or desktop app for native cross-platform variants.
-      </p>
+      <label className="newproj-label">{t('newproj.targetPlatformsLabel')}</label>
+      <p className="platform-picker-hint">{t('newproj.targetPlatformsHint')}</p>
       <div className="platform-grid">
         {DESIGN_PLATFORMS.map((option) => {
           const active = value.includes(option.value);
+          const label = t(option.labelKey);
+          const hint = t(option.hintKey);
           return (
             <button
               key={option.value}
               type="button"
               className={`newproj-card platform-card${active ? ' active' : ''}`}
               onClick={() => togglePlatform(option.value)}
-              title={option.hint}
+              title={hint}
               aria-pressed={active}
             >
-              <span className="platform-card-title">{option.label}</span>
-              <span className="platform-card-hint">{option.hint}</span>
+              <span className="platform-card-title">{label}</span>
+              <span className="platform-card-hint">{hint}</span>
             </button>
           );
         })}
@@ -2023,12 +2030,16 @@ function MediaProjectOptions(props:
   }
 
   const models = supportedModels('audio', AUDIO_MODELS_BY_KIND[props.audioKind]);
+  const audioDurations = props.audioKind === 'sfx'
+    ? SFX_AUDIO_DURATIONS_SEC
+    : AUDIO_DURATIONS_SEC;
   return (
     <div className="newproj-media-options">
       <OptionCards
         label={t('newproj.audioKindLabel')}
         options={[
           { value: 'speech' as const, title: t('newproj.audioKindSpeech') },
+          { value: 'sfx' as const, title: t('newproj.audioKindSfx') },
         ]}
         value={props.audioKind}
         onChange={props.onAudioKind}
@@ -2043,7 +2054,7 @@ function MediaProjectOptions(props:
       <label className="newproj-label">
         <span>{t('newproj.audioDurationLabel')}</span>
         <select value={props.audioDuration} onChange={(e) => props.onAudioDuration(Number(e.target.value))}>
-          {AUDIO_DURATIONS_SEC.map((sec) => (
+          {audioDurations.map((sec) => (
             <option key={sec} value={sec}>{t('newproj.audioDurationSeconds', { n: sec })}</option>
           ))}
         </select>
@@ -2066,7 +2077,7 @@ export function supportedModels(surface: 'image' | 'video' | 'audio', models: Me
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
     image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
     video: new Set(['volcengine', 'hyperframes', 'grok']),
-    audio: new Set(['minimax', 'fishaudio']),
+    audio: new Set(['minimax', 'fishaudio', 'elevenlabs']),
   };
   return models.filter((model) => {
     const provider = findProvider(model.provider);
@@ -2462,7 +2473,9 @@ function buildMetadata(input: {
       audioKind: input.audioKind,
       audioModel: input.audioModel,
       audioDuration: input.audioDuration,
-      voice: input.voice.trim() || undefined,
+      ...(input.audioKind === 'speech' && input.voice.trim()
+        ? { voice: input.voice.trim() }
+        : {}),
       ...inspirations,
     };
   }

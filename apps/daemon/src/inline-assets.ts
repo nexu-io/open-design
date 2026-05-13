@@ -410,4 +410,3 @@ export function escapeHtmlAttr(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 }
-
