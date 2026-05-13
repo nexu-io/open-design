@@ -87,6 +87,11 @@ import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
+  createAnalyticsService,
+  readAnalyticsContext,
+  readPublicConfigResponse,
+} from './analytics.js';
+import {
   redactSecrets,
   testAgentConnection,
   testProviderConnection,
@@ -106,6 +111,7 @@ import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
+import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import {
@@ -284,6 +290,7 @@ import {
 /** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
 /** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
 /** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
+/** @typedef {import('@open-design/contracts').ProjectConversationCreatedSsePayload} ProjectConversationCreatedSsePayload */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1120,7 +1127,7 @@ function emitLiveArtifactEvent(grant, action, artifact) {
     title: artifact.title ?? artifact.id,
     refreshStatus: artifact.refreshStatus,
   };
-  let emitted = emitProjectLiveArtifactEvent(payload.projectId, payload);
+  let emitted = emitProjectEvent(payload.projectId, payload);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
   return emitted;
 }
@@ -1132,12 +1139,16 @@ function emitLiveArtifactRefreshEvent(grant, payload) {
     projectId: grant.projectId,
     ...payload,
   };
-  let emitted = emitProjectLiveArtifactEvent(grant.projectId, event);
+  let emitted = emitProjectEvent(grant.projectId, event);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
   return emitted;
 }
 
-function emitProjectLiveArtifactEvent(projectId, payload) {
+// Broadcast an event to every SSE subscriber currently watching the given
+// project's `/api/projects/:id/events` stream. The payload's `type` field
+// becomes the SSE event name (see project-routes.ts). Used for live-artifact
+// events and `conversation-created` events emitted by routine runs (#1361).
+function emitProjectEvent(projectId, payload) {
   const sinks = activeProjectEventSinks.get(projectId);
   if (!sinks || sinks.size === 0) return false;
   for (const sink of Array.from(sinks)) {
@@ -1286,6 +1297,37 @@ export function shouldReportRunCompletedFromMessage(saved, body = {}) {
 
 export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
+}
+
+export function createFinalizedMessageTelemetryReporter({
+  design,
+  db,
+  dataDir,
+  reportedRuns,
+  getAppVersion = () => null,
+  report = reportRunCompletedFromDaemon,
+}: {
+  design: any;
+  db: unknown;
+  dataDir: string;
+  reportedRuns: Set<string>;
+  getAppVersion?: () => any;
+  report?: typeof reportRunCompletedFromDaemon;
+}) {
+  return (saved, body = {}) => {
+    if (!shouldReportRunCompletedFromMessage(saved, body)) return;
+    const run = design.runs.get(saved.runId);
+    if (!run || reportedRuns.has(run.id)) return;
+    reportedRuns.add(run.id);
+    void report({
+      db,
+      dataDir,
+      run,
+      persistedRunStatus: saved.runStatus,
+      persistedEndedAt: saved.endedAt,
+      appVersion: getAppVersion(),
+    });
+  };
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -2642,9 +2684,43 @@ export async function startServer({
     }
   });
 
+  const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
   const design = {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
+    analytics: analyticsService,
+    getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
+    readAnalyticsContext,
   };
+
+  // PostHog runtime config — gated on BOTH a server-side key (POSTHOG_KEY)
+  // and the user's opt-in metrics consent (Privacy → "Share usage data").
+  // The web bundle short-circuits when enabled=false so opt-out behaviour
+  // is instant after the user toggles metrics off and reloads.
+  app.get('/api/analytics/config', async (_req, res) => {
+    const baseline = readPublicConfigResponse();
+    if (!baseline.enabled) {
+      res.json(baseline);
+      return;
+    }
+    try {
+      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      const consentGranted = appCfg.telemetry?.metrics === true;
+      if (!consentGranted) {
+        res.json({ enabled: false, key: null, host: null });
+        return;
+      }
+      // Echo the installationId so the web client uses the same anonymous
+      // id PostHog already saw on prior runs (and that Langfuse uses too).
+      const installationId =
+        typeof appCfg.installationId === 'string' && appCfg.installationId
+          ? appCfg.installationId
+          : null;
+      res.json({ ...baseline, installationId });
+    } catch {
+      // If the config file is unreadable, fail closed — no events.
+      res.json({ enabled: false, key: null, host: null });
+    }
+  });
 
   // Tracks runs whose completion has already been forwarded to Langfuse so
   // repeated message updates only emit one trace per run.
@@ -2659,6 +2735,14 @@ export async function startServer({
       // Telemetry is best-effort; appVersion is omitted when unavailable.
     }
   })();
+
+  const reportFinalizedMessage = createFinalizedMessageTelemetryReporter({
+    design,
+    db,
+    dataDir: RUNTIME_DATA_DIR,
+    reportedRuns,
+    getAppVersion: () => cachedAppVersion,
+  });
 
   const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrl(baseUrl);
 
@@ -2804,6 +2888,7 @@ export async function startServer({
     getLiveMediaTask: (taskId) => getLiveMediaTask(db, taskId),
     mediaTaskSnapshot,
     listMediaTasksByProject,
+    listElevenLabsVoiceOptions,
   };
   const appConfigDeps = { readAppConfig, writeAppConfig };
   const orbitDeps = { orbitService };
@@ -2881,6 +2966,7 @@ export async function startServer({
     status: projectStatusDeps,
     events: projectEventDeps,
     ids: idDeps,
+    telemetry: { reportFinalizedMessage },
   });
   registerImportRoutes(app, {
     db,
@@ -3049,6 +3135,18 @@ export async function startServer({
       console.warn('[memory] composeMemoryBody failed', err);
     }
 
+    // User-level custom instructions from app-config.json.
+    let userInstructions = '';
+    try {
+      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
+    } catch (err) {
+      console.warn('[custom-instructions] readAppConfig failed', err);
+    }
+
+    // Project-level custom instructions from the projects table.
+    const projectInstructions = project?.customInstructions ?? '';
+
     let designSystemBody;
     let designSystemTitle;
     // Compiled (tokens.css + components.html) form of the active brand.
@@ -3091,6 +3189,21 @@ export async function startServer({
       metadata?.kind === 'template' && typeof metadata.templateId === 'string'
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
+    let audioVoiceOptions = [];
+    let audioVoiceOptionsError;
+    if (
+      metadata?.kind === 'audio' &&
+      metadata?.audioKind === 'speech' &&
+      metadata?.audioModel === 'elevenlabs-v3' &&
+      !metadata?.voice
+    ) {
+      try {
+        audioVoiceOptions = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit: 100 });
+      } catch (err) {
+        audioVoiceOptionsError = err && err.message ? err.message : String(err);
+        console.warn('[elevenlabs] voice option lookup failed:', audioVoiceOptionsError);
+      }
+    }
 
     // Thread the critique config plus the active design-system / skill data
     // into the composer when critique is enabled. Without this the spawned
@@ -3187,6 +3300,8 @@ export async function startServer({
       memoryBody,
       metadata,
       template,
+      audioVoiceOptions,
+      audioVoiceOptionsError,
       // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
       // run that the resolver enabled via phase / project / skill (env
       // unset) would have critiqueShouldRun = true while critiqueCfg.enabled
@@ -3203,6 +3318,8 @@ export async function startServer({
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
+      userInstructions,
+      projectInstructions,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -4595,6 +4712,25 @@ export async function startServer({
       updatedAt: now,
     });
 
+    // Notify any open `ProjectView` watching this project so its
+    // conversation list picks up the new routine conversation without
+    // requiring the user to leave and re-enter the project (#1361).
+    // For reuse-an-existing-project mode this is the only path the
+    // open view has to learn the conversation exists; for new-project
+    // mode this is harmless (no subscribers for a project that was
+    // just created milliseconds ago). The payload shape is the shared
+    // `ProjectConversationCreatedSsePayload` from `@open-design/contracts`
+    // so the daemon producer and the web consumer cannot drift.
+    /** @type {ProjectConversationCreatedSsePayload} */
+    const conversationCreatedEvent = {
+      type: 'conversation-created',
+      projectId,
+      conversationId,
+      title: conversationTitle,
+      createdAt: now,
+    };
+    emitProjectEvent(projectId, conversationCreatedEvent);
+
     const assistantMessageId = `routine-assistant-${randomUUID()}`;
     const run = design.runs.create({
       projectId,
@@ -4731,6 +4867,7 @@ export async function startServer({
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
+      await design.analytics.shutdown();
     };
     let server;
     try {

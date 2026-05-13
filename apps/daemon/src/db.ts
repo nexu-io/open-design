@@ -200,6 +200,9 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'metadata_json')) {
     db.exec(`ALTER TABLE projects ADD COLUMN metadata_json TEXT`);
   }
+  if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
+  }
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
@@ -419,6 +422,7 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   design_system_id AS designSystemId,
   pending_prompt AS pendingPrompt,
   metadata_json AS metadataJson,
+  custom_instructions AS customInstructions,
   created_at AS createdAt,
   updated_at AS updatedAt`;
 
@@ -504,8 +508,8 @@ export function insertProject(db: SqliteDb, p: DbRow) {
   db.prepare(
     `INSERT INTO projects
        (id, name, skill_id, design_system_id, pending_prompt,
-        metadata_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        metadata_json, custom_instructions, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     p.id,
     p.name,
@@ -513,6 +517,7 @@ export function insertProject(db: SqliteDb, p: DbRow) {
     p.designSystemId ?? null,
     p.pendingPrompt ?? null,
     p.metadata ? JSON.stringify(p.metadata) : null,
+    p.customInstructions ?? null,
     p.createdAt,
     p.updatedAt,
   );
@@ -534,6 +539,7 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
             design_system_id = ?,
             pending_prompt = ?,
             metadata_json = ?,
+            custom_instructions = ?,
             updated_at = ?
       WHERE id = ?`,
   ).run(
@@ -542,6 +548,7 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
     merged.designSystemId ?? null,
     merged.pendingPrompt ?? null,
     merged.metadata ? JSON.stringify(merged.metadata) : null,
+    merged.customInstructions ?? null,
     merged.updatedAt,
     id,
   );
@@ -568,6 +575,7 @@ function normalizeProject(row: DbRow) {
     designSystemId: row.designSystemId,
     pendingPrompt: row.pendingPrompt ?? undefined,
     metadata,
+    customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };
