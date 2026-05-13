@@ -72,6 +72,7 @@ import { handleCritiqueArtifact } from './critique/artifact-handler.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
+import { formatOrbitCompletionSummary } from './orbit-summary.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
@@ -4469,13 +4470,16 @@ export async function startServer({
       const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId });
       const artifact = artifacts.find((candidate) => candidate.createdByRunId === run.id);
       const status = finalStatus.status === 'succeeded' && !artifact ? 'failed' : finalStatus.status;
+      const assistantMessage = listMessages(db, conversationId).find((message) => message.id === assistantMessageId)?.content ?? null;
       return {
         agentRunId: run.id,
         status,
         ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
-        summary: artifact?.id
-          ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
-          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+        summary: formatOrbitCompletionSummary({
+          status,
+          artifactTitle: artifact?.title ?? null,
+          assistantMessage,
+        }),
       };
     })();
 
