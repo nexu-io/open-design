@@ -223,7 +223,7 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
           return `<tr>${cells}${pad}</tr>`;
         })
         .join('');
-      out.push(`<table class="md-table"><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+      out.push(`<div class="md-table-wrap"><table class="md-table"><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`);
       continue;
     }
 

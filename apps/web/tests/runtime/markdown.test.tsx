@@ -54,6 +54,7 @@ describe('renderMarkdown', () => {
       '| d | e | f |',
     ].join('\n');
     const out = html(md);
+    expect(out).toContain('<div class="md-table-wrap">');
     expect(out).toContain('<table class="md-table">');
     expect(out).toContain('<th style="text-align:left">L</th>');
     expect(out).toContain('<th style="text-align:center">C</th>');
@@ -80,6 +81,7 @@ describe('renderMarkdown', () => {
     const md = ['Intro paragraph', '| a | b |', '|---|---|', '| 1 | 2 |'].join('\n');
     const out = html(md);
     expect(out).toContain('Intro paragraph');
+    expect(out).toContain('<div class="md-table-wrap">');
     expect(out).toContain('<table class="md-table">');
     expect(out).not.toContain('Intro paragraph\n| a');
   });

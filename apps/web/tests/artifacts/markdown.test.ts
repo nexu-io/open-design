@@ -77,7 +77,7 @@ describe('renderMarkdownToSafeHtml', () => {
       '| name | string | 简称 |',
     ].join('\n');
     const out = renderMarkdownToSafeHtml(md);
-    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<div class="md-table-wrap"><table class="md-table">');
     expect(out).toContain('<thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>');
     expect(out).toContain('<td>id</td><td>string</td><td>主键</td>');
     expect(out).toContain('<td>name</td><td>string</td><td>简称</td>');
@@ -123,7 +123,7 @@ describe('renderMarkdownToSafeHtml', () => {
     const md = ['Some paragraph', '| a | b |', '|---|---|', '| 1 | 2 |'].join('\n');
     const out = renderMarkdownToSafeHtml(md);
     expect(out).toContain('<p>Some paragraph</p>');
-    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<div class="md-table-wrap"><table class="md-table">');
   });
 
   it('does not promote a stray pipe-containing paragraph to a table', () => {

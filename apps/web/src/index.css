@@ -10597,17 +10597,21 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-top: 1px solid var(--border);
   margin: 10px 0;
 }
-/* GFM pipe tables. Rule is intentionally unscoped so both the chat path
+/* GFM pipe tables. Rules are intentionally unscoped so both the chat path
    (`.prose-block`) and the artifact preview (`.markdown-rendered`) get
-   the same treatment. The wrapping element gets a block-level scroll so
-   wide tables don't blow out narrow chat columns. */
-.md-table {
+   the same treatment. Horizontal scroll lives on the wrapper so the
+   inner <table> can keep `display: table; width: 100%` and distribute
+   column widths across the container instead of collapsing to content. */
+.md-table-wrap {
   display: block;
   overflow-x: auto;
   max-width: 100%;
   margin: 12px 0;
   border: 1px solid var(--border);
   border-radius: 6px;
+}
+.md-table {
+  width: 100%;
   border-collapse: collapse;
   font-size: 0.95em;
 }

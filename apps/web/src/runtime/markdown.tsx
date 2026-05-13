@@ -234,24 +234,26 @@ function renderBlock(block: Block, key: number): ReactNode {
       return a ? { textAlign: a } : undefined;
     };
     return (
-      <table key={key} className="md-table">
-        <thead>
-          <tr>
-            {headers.map((cell, idx) => (
-              <th key={idx} style={cellStyle(idx)}>{renderInline(cell)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rIdx) => (
-            <tr key={rIdx}>
-              {headers.map((_, cIdx) => (
-                <td key={cIdx} style={cellStyle(cIdx)}>{renderInline(row[cIdx] ?? '')}</td>
+      <div key={key} className="md-table-wrap">
+        <table className="md-table">
+          <thead>
+            <tr>
+              {headers.map((cell, idx) => (
+                <th key={idx} style={cellStyle(idx)}>{renderInline(cell)}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, rIdx) => (
+              <tr key={rIdx}>
+                {headers.map((_, cIdx) => (
+                  <td key={cIdx} style={cellStyle(cIdx)}>{renderInline(row[cIdx] ?? '')}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
   if (block.kind === 'hr') {
