@@ -3754,6 +3754,22 @@ code {
   flex-shrink: 0;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.08);
 }
+/* Theme-aware rendering for monochrome brand SVGs whose paths use
+   `fill="currentColor"`. Loaded through `<img>` they'd resolve to the
+   SVG document's default (black) and disappear against dark surfaces.
+   Painting them via a CSS mask lets `background-color: currentColor`
+   inherit the surrounding text color, so the same mark stays legible
+   under light + dark themes. */
+.agent-icon-mono {
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
 
 .error {
   border-color: var(--red-border);
