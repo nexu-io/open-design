@@ -433,6 +433,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(
       <FileViewer
         projectId="project-1"
+        projectKind="prototype"
         file={file}
         isDeck
         liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
