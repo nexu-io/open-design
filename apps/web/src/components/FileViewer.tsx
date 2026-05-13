@@ -5073,29 +5073,6 @@ function HtmlViewer({
                 />
               </div>
               <button
-                className={`viewer-action${manualEditMode ? ' active' : ''}`}
-                type="button"
-                data-testid="manual-edit-mode-toggle"
-                title={t('fileViewer.edit')}
-                aria-pressed={manualEditMode}
-                onClick={() => {
-                  if (!manualEditMode) {
-                    setBoardMode(false);
-                    clearBoardComposer();
-                    setInspectMode(false);
-                    setDrawOverlayOpen(false);
-                    setMode('preview');
-                    setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
-                    setManualEditMode(true);
-                    return;
-                  }
-                  void exitManualEditModeAfterFlush();
-                }}
-              >
-                <Icon name="edit" size={13} />
-                <span>{t('fileViewer.edit')}</span>
-              </button>
-              <button
                 className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
                 type="button"
                 data-testid="draw-overlay-toggle"
@@ -5133,61 +5110,84 @@ function HtmlViewer({
                 onViewport={setPreviewViewport}
                 t={t}
               />
-              <span className="viewer-divider" aria-hidden />
-              <button
-                type="button"
-                className="icon-only"
-                onClick={() => bumpZoom(-25)}
-                title={t('fileViewer.zoomOut')}
-                aria-label={t('fileViewer.zoomOut')}
-              >
-                <Icon name="minus" size={14} />
-              </button>
-              <div className="zoom-menu" ref={zoomMenuRef}>
-                <button
-                  type="button"
-                  className="viewer-action zoom-trigger"
-                  aria-haspopup="menu"
-                  aria-expanded={zoomMenuOpen}
-                  onClick={() => setZoomMenuOpen((v) => !v)}
-                  style={{ minWidth: 64 }}
-                >
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-                  <Icon name="chevron-down" size={11} />
-                </button>
-                {zoomMenuOpen ? (
-                  <div className="zoom-menu-popover" role="menu">
-                    {[50, 75, 100, 125, 150, 200].map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
-                        role="menuitem"
-                        onClick={() => {
-                          setZoom(level);
-                          setZoomMenuOpen(false);
-                        }}
-                      >
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
-                        {zoom === level ? (
-                          <Icon name="check" size={13} />
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                className="icon-only"
-                onClick={() => bumpZoom(25)}
-                title={t('fileViewer.zoomIn')}
-                aria-label={t('fileViewer.zoomIn')}
-              >
-                <Icon name="plus" size={14} />
-              </button>
             </>
           ) : null}
+          <button
+            className={`viewer-action${manualEditMode ? ' active' : ''}`}
+            type="button"
+            data-testid="manual-edit-mode-toggle"
+            title={t('fileViewer.edit')}
+            aria-pressed={manualEditMode}
+            onClick={() => {
+              if (!manualEditMode) {
+                setBoardMode(false);
+                clearBoardComposer();
+                setInspectMode(false);
+                setDrawOverlayOpen(false);
+                setMode('preview');
+                setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
+                setManualEditMode(true);
+                return;
+              }
+              void exitManualEditModeAfterFlush();
+            }}
+          >
+            <Icon name="edit" size={13} />
+            <span>{t('fileViewer.edit')}</span>
+          </button>
+          <span className="viewer-divider" aria-hidden />
+          <button
+            type="button"
+            className="icon-only"
+            onClick={() => bumpZoom(-25)}
+            title={t('fileViewer.zoomOut')}
+            aria-label={t('fileViewer.zoomOut')}
+          >
+            <Icon name="minus" size={14} />
+          </button>
+          <div className="zoom-menu" ref={zoomMenuRef}>
+            <button
+              type="button"
+              className="viewer-action zoom-trigger"
+              aria-haspopup="menu"
+              aria-expanded={zoomMenuOpen}
+              onClick={() => setZoomMenuOpen((v) => !v)}
+              style={{ minWidth: 64 }}
+            >
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
+              <Icon name="chevron-down" size={11} />
+            </button>
+            {zoomMenuOpen ? (
+              <div className="zoom-menu-popover" role="menu">
+                {[50, 75, 100, 125, 150, 200].map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => {
+                      setZoom(level);
+                      setZoomMenuOpen(false);
+                    }}
+                  >
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                    {zoom === level ? (
+                      <Icon name="check" size={13} />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="icon-only"
+            onClick={() => bumpZoom(25)}
+            title={t('fileViewer.zoomIn')}
+            aria-label={t('fileViewer.zoomIn')}
+          >
+            <Icon name="plus" size={14} />
+          </button>
         </div>
       </div>
       {((filePrimaryActions: ReactNode) => (

@@ -453,9 +453,11 @@ describe('FileViewer SVG artifacts', () => {
       expect(container.querySelector('.deck-nav')).toBeNull();
       expect(container.querySelector('.palette-tweaks-anchor')).toBeNull();
       expect(container.querySelector('.viewer-viewport-switcher')).toBeNull();
-      expect(screen.queryByTestId('manual-edit-mode-toggle')).toBeNull();
+      expect(screen.getByTestId('manual-edit-mode-toggle')).toBeTruthy();
       expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
       expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
+      expect(screen.getByRole('button', { name: /zoom out/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /zoom in/i })).toBeTruthy();
     });
   });
 
