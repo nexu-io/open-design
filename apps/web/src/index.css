@@ -10650,6 +10650,28 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   word-break: break-all;
   overflow-wrap: anywhere;
 }
+.prose-block .md-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.prose-block .md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.prose-block .md-table th,
+.prose-block .md-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.prose-block .md-table th {
+  background: var(--bg-subtle);
+  font-weight: 600;
+  color: var(--text-strong);
+}
 .prose-block .md-hr {
   border: none;
   border-top: 1px solid var(--border);

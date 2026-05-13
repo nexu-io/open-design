@@ -4,7 +4,7 @@
  * We deliberately avoid a full parser library — chat output rarely uses
  * the long tail of markdown features and a hand-rolled walker keeps the
  * bundle slim. Block-level: ATX headings (# … ###), fenced code (```),
- * ordered (1.) and unordered (- / *) lists, paragraphs, blank-line
+ * tables, ordered (1.) and unordered (- / *) lists, paragraphs, blank-line
  * separation. Inline: backtick code spans, **bold**, *italic* / _italic_,
  * and bare links (autolinked URLs).
  *
@@ -27,8 +27,53 @@ type Block =
   | { kind: 'h'; level: 1 | 2 | 3 | 4; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
+  | { kind: 'table'; headers: string[]; aligns: TableAlign[]; rows: string[][] }
   | { kind: 'code'; lang: string | null; body: string }
   | { kind: 'hr' };
+
+type TableAlign = 'left' | 'center' | 'right';
+
+function splitTableRow(line: string): string[] {
+  let trimmed = line.trim();
+  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+
+  const cells: string[] = [];
+  let current = '';
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i] ?? '';
+    const next = trimmed[i + 1] ?? '';
+    if (ch === '\\' && next === '|') {
+      current += '|';
+      i += 1;
+      continue;
+    }
+    if (ch === '|') {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseTableAlign(cell: string): TableAlign | null {
+  const trimmed = cell.trim();
+  if (!/^:?-{3,}:?$/.test(trimmed)) return null;
+  const left = trimmed.startsWith(':');
+  const right = trimmed.endsWith(':');
+  if (left && right) return 'center';
+  if (left) return 'left';
+  if (right) return 'right';
+  return 'left';
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  const cells = splitTableRow(line);
+  return cells.length > 0 && cells.every((cell) => parseTableAlign(cell) !== null);
+}
 
 function parseBlocks(input: string): Block[] {
   const lines = input.replace(/\r\n/g, '\n').split('\n');
@@ -54,6 +99,38 @@ function parseBlocks(input: string): Block[] {
       if (i < lines.length) i++;
       out.push({ kind: 'code', lang, body: buf.join('\n') });
       continue;
+    }
+    // Table.
+    if (
+      line.includes('|') &&
+      i + 1 < lines.length &&
+      isTableSeparatorLine(lines[i + 1] ?? '')
+    ) {
+      const headers = splitTableRow(line);
+      const aligns = splitTableRow(lines[i + 1] ?? '').map((cell) => parseTableAlign(cell) ?? 'left');
+      if (headers.length >= 1 && aligns.length >= 1) {
+        const rows: string[][] = [];
+        i += 2;
+        while (i < lines.length) {
+          const rowLine = lines[i] ?? '';
+          if (rowLine.trim() === '') break;
+          if (
+            /^```/.test(rowLine) ||
+            /^(#{1,4})\s+/.test(rowLine) ||
+            /^\s*[-*+]\s+/.test(rowLine) ||
+            /^\s*\d+\.\s+/.test(rowLine) ||
+            /^\s*(-{3,}|_{3,}|\*{3,})\s*$/.test(rowLine) ||
+            /^>\s?/.test(rowLine) ||
+            !rowLine.includes('|')
+          ) {
+            break;
+          }
+          rows.push(splitTableRow(rowLine));
+          i++;
+        }
+        out.push({ kind: 'table', headers, aligns, rows });
+        continue;
+      }
     }
     // ATX heading.
     const heading = /^(#{1,4})\s+(.*\S)\s*$/.exec(line);
@@ -131,6 +208,35 @@ function renderBlock(block: Block, key: number): ReactNode {
           <li key={i}>{renderInline(item)}</li>
         ))}
       </ol>
+    );
+  }
+  if (block.kind === 'table') {
+    const columnCount = Math.max(block.headers.length, block.aligns.length, ...block.rows.map((row) => row.length));
+    return (
+      <div key={key} className="md-table-wrap">
+        <table className="md-table">
+          <thead>
+            <tr>
+              {Array.from({ length: columnCount }, (_v, i) => (
+                <th key={i} style={block.aligns[i] ? { textAlign: block.aligns[i] } : undefined}>
+                  {renderInline(block.headers[i] ?? '')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, i) => (
+              <tr key={i}>
+                {Array.from({ length: columnCount }, (_v, j) => (
+                  <td key={j} style={block.aligns[j] ? { textAlign: block.aligns[j] } : undefined}>
+                    {renderInline(row[j] ?? '')}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
   if (block.kind === 'code') {

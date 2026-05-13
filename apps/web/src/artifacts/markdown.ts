@@ -63,12 +63,86 @@ function headingLevel(line: string): number {
   return m?.[1]?.length ?? 0;
 }
 
+type TableAlign = 'left' | 'center' | 'right';
+
+function splitTableRow(line: string): string[] {
+  let trimmed = line.trim();
+  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+
+  const cells: string[] = [];
+  let current = '';
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i] ?? '';
+    const next = trimmed[i + 1] ?? '';
+    if (ch === '\\' && next === '|') {
+      current += '|';
+      i += 1;
+      continue;
+    }
+    if (ch === '|') {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseTableAlign(cell: string): TableAlign | null {
+  const trimmed = cell.trim();
+  if (!/^:?-{3,}:?$/.test(trimmed)) return null;
+  const left = trimmed.startsWith(':');
+  const right = trimmed.endsWith(':');
+  if (left && right) return 'center';
+  if (left) return 'left';
+  if (right) return 'right';
+  return 'left';
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  const cells = splitTableRow(line);
+  return cells.length > 0 && cells.every((cell) => parseTableAlign(cell) !== null);
+}
+
+function renderTableHtml(headerLine: string, separatorLine: string, bodyLines: string[]): string | null {
+  const headers = splitTableRow(headerLine);
+  const aligns = splitTableRow(separatorLine).map((cell) => parseTableAlign(cell));
+  if (headers.length < 1 || aligns.length < 1) return null;
+
+  const rows = bodyLines.map((line) => splitTableRow(line));
+  const columnCount = Math.max(headers.length, aligns.length, ...rows.map((row) => row.length));
+
+  let html = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
+  for (let col = 0; col < columnCount; col += 1) {
+    const align = aligns[col] ?? null;
+    const style = align ? ` style="text-align:${align}"` : '';
+    html += `<th${style}>${formatInline(headers[col] ?? '')}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (const row of rows) {
+    html += '<tr>';
+    for (let col = 0; col < columnCount; col += 1) {
+      const align = aligns[col] ?? null;
+      const style = align ? ` style="text-align:${align}"` : '';
+      html += `<td${style}>${formatInline(row[col] ?? '')}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
 export function renderMarkdownToSafeHtml(markdown: string): string {
   // Intentionally small markdown subset for conservative preview rendering.
   // Supported: headings, paragraphs, blockquotes, ul/ol lists, fenced code,
-  // inline code, bold/italic, and links.
+  // tables, inline code, bold/italic, and links.
   // Not supported on purpose: full CommonMark edge cases (nested lists,
-  // escaped markdown syntax, raw HTML blocks, tables, etc.).
+  // raw HTML blocks, etc.).
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];
   let i = 0;
@@ -94,6 +168,38 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
       if (i < lines.length) i += 1;
       out.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
       continue;
+    }
+
+    if (
+      /\|/.test(line) &&
+      i + 1 < lines.length &&
+      isTableSeparatorLine(lines[i + 1] ?? '')
+    ) {
+      const bodyLines: string[] = [];
+      let j = i + 2;
+      while (j < lines.length) {
+        const rowLine = lines[j];
+        if (rowLine === undefined || /^\s*$/.test(rowLine)) break;
+        if (
+          /^```/.test(rowLine) ||
+          headingLevel(rowLine) > 0 ||
+          /^>\s?/.test(rowLine) ||
+          /^\s*[-*]\s+/.test(rowLine) ||
+          /^\s*\d+\.\s+/.test(rowLine) ||
+          !/\|/.test(rowLine)
+        ) {
+          break;
+        }
+        bodyLines.push(rowLine);
+        j += 1;
+      }
+
+      const tableHtml = renderTableHtml(line, lines[i + 1] ?? '', bodyLines);
+      if (tableHtml) {
+        out.push(tableHtml);
+        i = j;
+        continue;
+      }
     }
 
     const h = headingLevel(line);

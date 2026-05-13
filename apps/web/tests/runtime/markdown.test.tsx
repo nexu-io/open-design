@@ -45,4 +45,18 @@ describe('renderMarkdown', () => {
     // The URL should appear inside a <code> tag, not turned into an anchor.
     expect(out).toContain('<code class="md-inline-code">https://example.com/x</code>');
   });
+
+  it('renders aligned tables with escaped pipes', () => {
+    const md = [
+      '| Left | Right |',
+      '|:---|---:|',
+      '| A\\|B | C |',
+    ].join('\n');
+    const out = html(md);
+    expect(out).toContain('<div class="md-table-wrap">');
+    expect(out).toContain('<th style="text-align:left">Left</th>');
+    expect(out).toContain('<th style="text-align:right">Right</th>');
+    expect(out).toContain('<td style="text-align:left">A|B</td>');
+    expect(out).toContain('<td style="text-align:right">C</td>');
+  });
 });

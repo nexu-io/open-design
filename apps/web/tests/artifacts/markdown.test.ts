@@ -68,4 +68,16 @@ describe('renderMarkdownToSafeHtml', () => {
     expect(out).not.toContain('javascript:');
     expect(out).not.toContain('<a ');
   });
+
+  it('renders one-column tables and keeps escaped pipes literal', () => {
+    const md = [
+      '| Only |',
+      '|---|',
+      '| A\\|B |',
+    ].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<th style="text-align:left">Only</th>');
+    expect(out).toContain('<td style="text-align:left">A|B</td>');
+  });
 });
