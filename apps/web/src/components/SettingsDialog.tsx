@@ -1542,7 +1542,6 @@ export function SettingsDialog({
             </>
           ) : (
             <>
-              <span className="kicker">{t('settings.kicker')}</span>
               <h2>{activeHeader.title}</h2>
               <p className="subtitle">{activeHeader.subtitle}</p>
             </>
@@ -1688,7 +1687,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
               onClick={() => setActiveSection('pet')}
             >
-              <Icon name="sparkles" size={18} />
+              <Icon name="paw" size={18} />
               <span>
                 <strong>{t('pet.navTitle')}</strong>
                 <small>{t('pet.navHint')}</small>
@@ -1957,7 +1956,7 @@ export function SettingsDialog({
                             }}
                             aria-pressed={active}
                           >
-                            <AgentIcon id={a.id} size={40} />
+                            <AgentIcon id={a.id} size={32} />
                             <div className="agent-card-body">
                               <div className="agent-card-name">{a.name}</div>
                               <div className="agent-card-meta">
@@ -1990,7 +1989,7 @@ export function SettingsDialog({
                           role="group"
                           aria-label={cardLabel}
                         >
-                          <AgentIcon id={a.id} size={40} />
+                          <AgentIcon id={a.id} size={32} />
                           <div className="agent-card-body">
                             <div className="agent-card-name">{a.name}</div>
                             <div className="agent-card-meta">

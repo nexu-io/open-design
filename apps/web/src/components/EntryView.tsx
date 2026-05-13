@@ -523,7 +523,7 @@ export function EntryView({
                 : apiProtocolLabel(config.apiProtocol)}
             </span>
             <span style={{ color: 'var(--text-faint)' }}>·</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 142 }}>
               {envMetaLine}
             </span>
           </button>
@@ -552,7 +552,6 @@ export function EntryView({
                     ? t('pet.changePet')
                     : t('pet.adoptCallout')}
                 </span>
-                {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
               </button>
               <span className="pet-pill-divider" aria-hidden />
               <button
@@ -565,16 +564,18 @@ export function EntryView({
                 <Icon name={petRailHidden ? 'eye' : 'eye-off'} size={12} />
               </button>
             </div>
-            <a
-              className="foot-pill foot-pill-follow"
-              href="https://x.com/nexudotio"
-              target="_blank"
-              rel="noreferrer noopener"
-              title="Follow @nexudotio on X for releases and milestones"
-              aria-label="Follow @nexudotio on X"
-            >
-              <Icon name="external-link" size={12} />
-            </a>
+            <div className="entry-side-foot-social">
+              <a
+                className="foot-pill foot-pill-follow"
+                href="https://x.com/nexudotio"
+                target="_blank"
+                rel="noreferrer noopener"
+                title="Follow @nexudotio on X for releases and milestones"
+                aria-label="Follow @nexudotio on X"
+              >
+                <Icon name="x-brand" size={12} />
+              </a>
+            </div>
           </div>
         </div>
         <button

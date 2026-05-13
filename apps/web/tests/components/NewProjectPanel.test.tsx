@@ -164,7 +164,9 @@ describe('NewProjectPanel design system defaults', () => {
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Responsive web payload' },
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: /OS widgets/i }));
+    // CompactToggle renders as a `<button aria-pressed>` so screen readers
+    // announce it as a toggle button; the role is `button`, not `checkbox`.
+    fireEvent.click(screen.getByRole('button', { name: /OS widgets/i }));
     fireEvent.click(screen.getByTestId('create-project'));
 
     const payload = onCreate.mock.calls[0]?.[0];

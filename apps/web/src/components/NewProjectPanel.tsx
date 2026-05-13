@@ -914,31 +914,8 @@ function PlatformPicker({
   onChange: (v: NewProjectPlatform[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const listboxId = useId();
-  const selectedOptions = DESIGN_PLATFORMS.filter((option) => value.includes(option.value));
-  const triggerLabel =
-    selectedOptions.length === 1
-      ? selectedOptions[0]!.label
-      : `${selectedOptions.length} platforms`;
-  const triggerTitle = selectedOptions.map((option) => `${option.label}: ${option.hint}`).join('\n');
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(e: MouseEvent) {
-      if (pickerRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   function togglePlatform(next: NewProjectPlatform) {
     const active = value.includes(next);
@@ -948,60 +925,97 @@ function PlatformPicker({
     onChange(updated.length > 0 ? updated : ['responsive']);
   }
 
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    // Defer listener registration by a tick so the very click that opened
+    // the popover doesn't get re-interpreted as an outside-click on the
+    // mousedown that follows in the same event cycle.
+    const tid = window.setTimeout(() => {
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(tid);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const primary = DESIGN_PLATFORMS.find((o) => o.value === value[0]) ?? null;
+  const extraCount = Math.max(0, value.length - 1);
+
   return (
-    <div className="newproj-section">
+    <div
+      className="newproj-section ds-picker platform-picker"
+      ref={wrapRef}
+    >
       <label className="newproj-label">Target platforms</label>
-      <p className="platform-picker-hint">
-        Pick one or more. Responsive web covers browser breakpoints only; add iOS,
-        Android, tablet app, or desktop app for native cross-platform variants.
-      </p>
-      <div className="platform-dropdown" ref={pickerRef}>
-        <button
-          type="button"
-          className="platform-dropdown-trigger"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-controls={open ? listboxId : undefined}
-          title={triggerTitle}
-          onClick={() => setOpen((value) => !value)}
+      <button
+        type="button"
+        className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+      >
+        <span className="ds-picker-meta">
+          <span className="ds-picker-title">
+            {primary ? primary.label : 'Pick a platform'}
+            {extraCount > 0 ? (
+              <span className="ds-picker-extra-pill">+{extraCount}</span>
+            ) : null}
+          </span>
+        </span>
+        <Icon
+          name="chevron-down"
+          size={14}
+          className="ds-picker-chevron"
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </button>
+      {open ? (
+        <div
+          className="ds-picker-popover"
+          id={listboxId}
+          role="listbox"
+          aria-label="Target platforms"
+          aria-multiselectable="true"
         >
-          <span className="platform-dropdown-label">{triggerLabel}</span>
-          <span className="platform-dropdown-count">{selectedOptions.length}</span>
-          <Icon name="chevron-down" size={12} />
-        </button>
-        {open ? (
-          <div
-            className="platform-dropdown-menu"
-            id={listboxId}
-            role="listbox"
-            aria-label="Target platforms"
-            aria-multiselectable="true"
-          >
+          <div className="ds-picker-list">
             {DESIGN_PLATFORMS.map((option) => {
               const active = value.includes(option.value);
               return (
                 <button
                   key={option.value}
                   type="button"
-                  className={`platform-dropdown-item${active ? ' active' : ''}`}
                   role="option"
                   aria-selected={active}
-                  title={option.hint}
+                  className={`ds-picker-item${active ? ' active' : ''}`}
                   onClick={() => togglePlatform(option.value)}
                 >
-                  <span className="platform-dropdown-check" aria-hidden>
-                    {active ? <Icon name="check" size={12} /> : null}
+                  <span className="ds-picker-item-text">
+                    <span className="ds-picker-item-title">{option.label}</span>
+                    <span className="ds-picker-item-sub">{option.hint}</span>
                   </span>
-                  <span className="platform-dropdown-copy">
-                    <span className="platform-dropdown-title">{option.label}</span>
-                    <span className="platform-dropdown-hint">{option.hint}</span>
+                  <span
+                    className={`ds-picker-mark check${active ? ' active' : ''}`}
+                    aria-hidden
+                  >
+                    {active ? '✓' : ''}
                   </span>
                 </button>
               );
             })}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1021,14 +1035,14 @@ function SurfaceOptions({
   return (
     <div className="newproj-section surface-options">
       <label className="newproj-label">{t('newproj.surfaceOptionsLabel')}</label>
-      <div className="surface-checkbox-row">
-        <SurfaceOptionCheckbox
+      <div className="compact-toggle-list">
+        <CompactToggle
           label={t('newproj.includeLandingPage')}
           hint={t('newproj.includeLandingPageHint')}
           checked={includeLandingPage}
           onChange={onIncludeLandingPage}
         />
-        <SurfaceOptionCheckbox
+        <CompactToggle
           label={t('newproj.includeOsWidgets')}
           hint={t('newproj.includeOsWidgetsHint')}
           checked={includeOsWidgets}
@@ -1039,33 +1053,33 @@ function SurfaceOptions({
   );
 }
 
-function SurfaceOptionCheckbox({
+// Lightweight inline toggle row. The hint moves to a native tooltip so the
+// row stays one line tall — used by SurfaceOptions where the toggles are
+// secondary controls and the full card treatment of ToggleRow felt too heavy.
+function CompactToggle({
   label,
   hint,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
-  hint: string;
+  hint?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
     <button
       type="button"
-      className={`surface-checkbox${checked ? ' active' : ''}`}
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={`${label}. ${hint}`}
-      onClick={() => onChange(!checked)}
+      className={`compact-toggle${checked ? ' on' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
+      aria-pressed={checked}
+      disabled={disabled}
+      title={hint}
     >
-      <span className="surface-checkbox-box" aria-hidden>
-        {checked ? <Icon name="check" size={12} /> : null}
-      </span>
-      <span className="surface-checkbox-label">{label}</span>
-      <span className="surface-checkbox-tip" role="tooltip">
-        {hint}
-      </span>
+      <span className="compact-toggle-label">{label}</span>
+      <span className="compact-toggle-switch" aria-hidden />
     </button>
   );
 }
