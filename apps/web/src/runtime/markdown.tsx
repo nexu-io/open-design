@@ -4,9 +4,9 @@
  * We deliberately avoid a full parser library — chat output rarely uses
  * the long tail of markdown features and a hand-rolled walker keeps the
  * bundle slim. Block-level: ATX headings (# … ###), fenced code (```),
- * ordered (1.) and unordered (- / *) lists, paragraphs, blank-line
- * separation. Inline: backtick code spans, **bold**, *italic* / _italic_,
- * and bare links (autolinked URLs).
+ * ordered (1.) and unordered (- / *) lists, GFM pipe tables, paragraphs,
+ * blank-line separation. Inline: backtick code spans, **bold**,
+ * *italic* / _italic_, and bare links (autolinked URLs).
  *
  * Output is a React fragment of typed elements — no dangerouslySetInnerHTML,
  * so untrusted text can't smuggle markup through.
@@ -22,13 +22,47 @@ export function renderMarkdown(input: string): ReactNode {
   );
 }
 
+type TableAlign = 'left' | 'right' | 'center' | null;
+
 type Block =
   | { kind: 'p'; text: string }
   | { kind: 'h'; level: 1 | 2 | 3 | 4; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
   | { kind: 'code'; lang: string | null; body: string }
+  | { kind: 'table'; aligns: TableAlign[]; headers: string[]; rows: string[][] }
   | { kind: 'hr' };
+
+const PIPE_PLACEHOLDER = ' ODPIPE ';
+
+function splitTableCells(line: string): string[] {
+  let s = line.replace(/\\\|/g, PIPE_PLACEHOLDER);
+  s = s.replace(/^\s*\|/, '').replace(/\|\s*$/, '');
+  if (s === '') return [];
+  return s.split('|').map((cell) => cell.replace(new RegExp(PIPE_PLACEHOLDER, 'g'), '|').trim());
+}
+
+function parseTableAlignRow(line: string): TableAlign[] | null {
+  if (!line.includes('|')) return null;
+  const cells = splitTableCells(line);
+  if (cells.length === 0) return null;
+  const aligns: TableAlign[] = [];
+  for (const cell of cells) {
+    if (!/^:?-{1,}:?$/.test(cell)) return null;
+    const left = cell.startsWith(':');
+    const right = cell.endsWith(':');
+    aligns.push(left && right ? 'center' : right ? 'right' : left ? 'left' : null);
+  }
+  return aligns;
+}
+
+function isTableStartAt(lines: string[], i: number): boolean {
+  const header = lines[i];
+  const sep = lines[i + 1];
+  if (header === undefined || sep === undefined) return false;
+  if (!header.includes('|')) return false;
+  return parseTableAlignRow(sep) !== null;
+}
 
 function parseBlocks(input: string): Block[] {
   const lines = input.replace(/\r\n/g, '\n').split('\n');
@@ -79,6 +113,23 @@ function parseBlocks(input: string): Block[] {
       out.push({ kind: 'ul', items });
       continue;
     }
+    // GFM pipe table: header row + alignment row + body rows.
+    if (isTableStartAt(lines, i)) {
+      const header = lines[i] as string;
+      const sep = lines[i + 1] as string;
+      const aligns = parseTableAlignRow(sep) as TableAlign[];
+      const headers = splitTableCells(header);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length) {
+        const row = lines[i];
+        if (row === undefined || row.trim() === '' || !row.includes('|')) break;
+        rows.push(splitTableCells(row));
+        i++;
+      }
+      out.push({ kind: 'table', aligns, headers, rows });
+      continue;
+    }
     // Ordered list.
     if (/^\s*\d+\.\s+/.test(line)) {
       const items: string[] = [];
@@ -99,6 +150,7 @@ function parseBlocks(input: string): Block[] {
       if (/^#{1,4}\s+/.test(next)) break;
       if (/^\s*[-*+]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
+      if (isTableStartAt(lines, i)) break;
       buf.push(next);
       i++;
     }
@@ -138,6 +190,33 @@ function renderBlock(block: Block, key: number): ReactNode {
       <pre key={key} className="md-code">
         <code data-lang={block.lang ?? undefined}>{block.body}</code>
       </pre>
+    );
+  }
+  if (block.kind === 'table') {
+    const { aligns, headers, rows } = block;
+    const cellStyle = (idx: number): { textAlign: 'left' | 'right' | 'center' } | undefined => {
+      const a = aligns[idx];
+      return a ? { textAlign: a } : undefined;
+    };
+    return (
+      <table key={key} className="md-table">
+        <thead>
+          <tr>
+            {headers.map((cell, idx) => (
+              <th key={idx} style={cellStyle(idx)}>{renderInline(cell)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rIdx) => (
+            <tr key={rIdx}>
+              {headers.map((_, cIdx) => (
+                <td key={cIdx} style={cellStyle(cIdx)}>{renderInline(row[cIdx] ?? '')}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     );
   }
   if (block.kind === 'hr') {

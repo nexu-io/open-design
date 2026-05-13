@@ -10597,6 +10597,23 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-top: 1px solid var(--border);
   margin: 10px 0;
 }
+.prose-block .md-table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.prose-block .md-table th,
+.prose-block .md-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.prose-block .md-table th {
+  font-weight: 600;
+}
 .op-waiting {
   font-size: 12px;
   color: var(--text-muted);

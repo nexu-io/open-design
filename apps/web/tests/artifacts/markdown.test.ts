@@ -68,4 +68,68 @@ describe('renderMarkdownToSafeHtml', () => {
     expect(out).not.toContain('javascript:');
     expect(out).not.toContain('<a ');
   });
+
+  it('renders a GFM pipe table with header and body rows', () => {
+    const md = [
+      '| 字段 | 类型 | 说明 |',
+      '|---|---|---|',
+      '| id | string | 主键 |',
+      '| name | string | 简称 |',
+    ].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>');
+    expect(out).toContain('<td>id</td><td>string</td><td>主键</td>');
+    expect(out).toContain('<td>name</td><td>string</td><td>简称</td>');
+    expect(out).not.toContain('<p>| 字段');
+  });
+
+  it('honors :--- / ---: / :---: column alignment markers', () => {
+    const md = [
+      '| L | C | R |',
+      '|:---|:---:|---:|',
+      '| a | b | c |',
+    ].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<th style="text-align:left">L</th>');
+    expect(out).toContain('<th style="text-align:center">C</th>');
+    expect(out).toContain('<th style="text-align:right">R</th>');
+    expect(out).toContain('<td style="text-align:left">a</td>');
+    expect(out).toContain('<td style="text-align:center">b</td>');
+    expect(out).toContain('<td style="text-align:right">c</td>');
+  });
+
+  it('formats inline markup inside table cells', () => {
+    const md = ['| key | value |', '|---|---|', '| `id` | **bold** |'].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<td><code>id</code></td>');
+    expect(out).toContain('<td><strong>bold</strong></td>');
+  });
+
+  it('keeps escaped pipes \\| as literal | inside a cell', () => {
+    const md = ['| a | b |', '|---|---|', '| x \\| y | z |'].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<td>x | y</td>');
+    expect(out).toContain('<td>z</td>');
+  });
+
+  it('pads short rows with empty cells', () => {
+    const md = ['| a | b | c |', '|---|---|---|', '| x | y |'].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<tr><td>x</td><td>y</td><td></td></tr>');
+  });
+
+  it('breaks a preceding paragraph at a table start without a blank line', () => {
+    const md = ['Some paragraph', '| a | b |', '|---|---|', '| 1 | 2 |'].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<p>Some paragraph</p>');
+    expect(out).toContain('<table class="md-table">');
+  });
+
+  it('does not promote a stray pipe-containing paragraph to a table', () => {
+    const md = 'Just a line with a | pipe in it.';
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<p>Just a line with a | pipe in it.</p>');
+    expect(out).not.toContain('<table');
+  });
 });
