@@ -11,21 +11,23 @@
  */
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import url from 'node:url';
 
-const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * Module-URL-anchored fixture path (mirrors `synthetic-good.ts`; see
+ * lefarcen P2 on PR #1317 for the rationale).
+ */
+export const SYNTHETIC_BAD_FIXTURE_URL = new URL(
+  '../v1/malformed-unbalanced.txt',
+  import.meta.url,
+);
 
-export const SYNTHETIC_BAD_FIXTURE_PATH = path.join(
-  __dirname,
-  '..',
-  'v1',
-  'malformed-unbalanced.txt',
+export const SYNTHETIC_BAD_FIXTURE_PATH = url.fileURLToPath(
+  SYNTHETIC_BAD_FIXTURE_URL,
 );
 
 export function syntheticBadTranscript(): string {
-  return readFileSync(SYNTHETIC_BAD_FIXTURE_PATH, 'utf8');
+  return readFileSync(SYNTHETIC_BAD_FIXTURE_URL, 'utf8');
 }
 
 export async function* syntheticBadStream(): AsyncIterable<string> {

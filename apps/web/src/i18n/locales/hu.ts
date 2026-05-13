@@ -96,6 +96,8 @@ export const hu: Dict = {
   'settings.agentInstall.stepSelect': 'Válaszd ki az ügynök kártyáját, amint telepítettként jelenik meg.',
   'settings.noAgentsDetected':
     'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
+  'settings.agentAuthRequired': 'Hitelesítés szükséges',
+  'settings.agentAuthUnknown': 'A hitelesítési állapot ismeretlen',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'Szolgáltató gyors kitöltése',
   'settings.customProvider': 'Egyéni szolgáltató',

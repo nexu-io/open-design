@@ -3,23 +3,45 @@
  *
  * The plan's rollout track is M0 dark-launch -> M1 settings toggle ->
  * M2 default-on per skill -> M3 global default. This module is the
- * single decision point every caller consults to know "should the
- * orchestrator wire the critique pipeline for this run?" The same
- * helper is consumed by:
+ * intended single decision point every backend caller will consult
+ * to answer "should the orchestrator wire the critique pipeline for
+ * this run?"
  *
- *   - The orchestrator entry, before it spawns the critique CLI
- *     adapter for a generation.
- *   - The settings endpoint (GET /api/settings/critique) which echoes
- *     the resolved value to the Settings UI.
+ * What ships in Phase 15:
+ *
+ *   - `isCritiqueEnabled` as a pure resolver function plus its
+ *     supporting parsers (`parseRolloutPhase`, `parseEnvEnabled`).
+ *     Full unit coverage of the priority matrix.
+ *
+ * Planned consumers (not yet wired; each lands in a focused
+ * follow-up PR):
+ *
+ *   - The orchestrator entry in `apps/daemon/src/server.ts`, before
+ *     it spawns the critique CLI adapter for a generation. The
+ *     current spawn gate still reads `critiqueCfg.enabled` directly;
+ *     swapping that to `isCritiqueEnabled({...})` is the one-line
+ *     change the wireup PR makes.
+ *   - A future settings endpoint that echoes the resolved value to
+ *     the Settings UI. The endpoint does not ship in Phase 15;
+ *     `setCritiqueTheaterEnabled` on the web side is localStorage-
+ *     only this phase, with daemon persistence deferred to the
+ *     Settings UI PR.
  *   - The conformance harness, so a nightly cycle can run against an
  *     adapter even when the human-facing flag is off.
+ *
+ * Operators who want to enable the feature today should set
+ * `OD_CRITIQUE_ENABLED=1` rather than relying on the client toggle,
+ * because the spawn-time gate has not been re-pointed at this
+ * resolver yet. The resolver itself is correct and ready; the wiring
+ * change is the only blocker.
  *
  * Resolution order (highest priority first):
  *
  *   1. Per-skill override declared in `SKILL.md` frontmatter
  *      (`od.critique.policy: required | opt-in | opt-out`).
  *   2. Per-project override stored in the project settings table
- *      (the M1 Settings toggle writes here).
+ *      (the M1 Settings toggle will write here once the Settings UI
+ *      follow-up adds the daemon-side write path).
  *   3. Environment override (`OD_CRITIQUE_ENABLED=1`). Useful for
  *      power users and CI fixtures.
  *   4. Global default. M0 / M1 = false. M2 = true for skills tagged
