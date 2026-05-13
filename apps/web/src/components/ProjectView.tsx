@@ -106,6 +106,7 @@ import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
 import { useProjectDetail } from '../hooks/useProjectDetail';
 import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
+import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
@@ -2339,22 +2340,7 @@ export function ProjectView({
       return;
     }
     const launched = await terminalLauncher.open(project.id);
-    if (launched.kind === 'electron' && launched.ok) {
-      setProjectActionsToast({
-        message: 'Folder opened. Run `claude` in your terminal here and paste the prompt.',
-        details: null,
-      });
-    } else if (launched.kind === 'electron' && !launched.ok) {
-      setProjectActionsToast({
-        message: `Couldn't open the folder. Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
-        details: null,
-      });
-    } else {
-      setProjectActionsToast({
-        message: `Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
-        details: null,
-      });
-    }
+    setProjectActionsToast(buildContinueInCliToast(projectDir, launched));
   }, [
     project.id,
     project.name,
