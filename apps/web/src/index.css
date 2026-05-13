@@ -18591,7 +18591,11 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   transition: border-color 120ms ease, background 120ms ease;
 }
 
-.routines-radio:hover,
+.routines-radio:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+
 .routines-radio:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -18607,11 +18611,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.routines-radio input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .routines-radio:has(input[type="radio"]:checked) {
