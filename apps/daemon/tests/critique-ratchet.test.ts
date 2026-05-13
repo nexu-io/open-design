@@ -144,6 +144,47 @@ describe('evaluateRollout (Phase 16)', () => {
       expect(decision.reason).toContain('near-miss');
     }
   });
+
+  it('refuses to promote on a zero-windowDays request even with no history (Codex + lefarcen P1)', () => {
+    // 0 >= 0 would trivially pass the promote gate at zero observed
+    // days without the entry-validation guard; assert that we hold
+    // with an explicit reason instead.
+    const decision = evaluateRollout({ current: 'M1', history: [], windowDays: 0, now: FROZEN_NOW });
+    expect(decision.kind).toBe('hold');
+    if (decision.kind === 'hold') {
+      expect(decision.reason).toContain('invalid windowDays');
+      expect(decision.passingDays).toBe(0);
+      expect(decision.observedDays).toBe(0);
+    }
+  });
+
+  it('refuses to evaluate on a negative windowDays', () => {
+    const decision = evaluateRollout({ current: 'M1', history: [], windowDays: -7, now: FROZEN_NOW });
+    expect(decision.kind).toBe('hold');
+    if (decision.kind === 'hold') expect(decision.reason).toContain('invalid windowDays');
+  });
+
+  it('refuses to evaluate on an out-of-range shippedThreshold', () => {
+    const decision = evaluateRollout({
+      current: 'M1',
+      history: [],
+      shippedThreshold: 1.5,
+      now: FROZEN_NOW,
+    });
+    expect(decision.kind).toBe('hold');
+    if (decision.kind === 'hold') expect(decision.reason).toContain('invalid shippedThreshold');
+  });
+
+  it('refuses to evaluate on a negative cleanParseThreshold', () => {
+    const decision = evaluateRollout({
+      current: 'M1',
+      history: [],
+      cleanParseThreshold: -0.1,
+      now: FROZEN_NOW,
+    });
+    expect(decision.kind).toBe('hold');
+    if (decision.kind === 'hold') expect(decision.reason).toContain('invalid cleanParseThreshold');
+  });
 });
 
 // Type assertion: every RatchetDecision should be one of three kinds.

@@ -50,18 +50,17 @@ jobs:
       - name: Build daemon
         run: pnpm --filter @open-design/daemon build
 
-      # The script below is intentionally a placeholder. The full
-      # adapter sweep lives in a follow-up that wires every production
-      # agent CLI into the harness; here we drive the synthetic-good
-      # and synthetic-bad fixtures so the workflow proves the cron
-      # plumbing end-to-end (install + build + harness invocation +
-      # history write) without depending on every adapter binary
-      # being installable in the CI image.
+      # The full adapter sweep lives in a follow-up that wires every
+      # production agent CLI into the harness; here we drive the
+      # synthetic-good and synthetic-bad fixtures so the workflow
+      # proves the cron plumbing end-to-end (install + build + harness
+      # invocation + history write) without depending on every adapter
+      # binary being installable in the CI image. The runner exits
+      # non-zero on any thrown error so the workflow fails loudly
+      # instead of uploading an empty history snapshot.
       - name: Run conformance harness (synthetic adapters)
         run: |
-          node --experimental-strip-types \
-            apps/daemon/src/critique/__fixtures__/run-nightly.ts \
-            || echo "synthetic-adapter sweep not wired yet (Phase 16 v1)"
+          node --import tsx apps/daemon/src/critique/__fixtures__/run-nightly.ts
 
       - name: Upload history snapshot
         if: always()

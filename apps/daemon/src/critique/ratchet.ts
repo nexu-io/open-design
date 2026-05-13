@@ -135,9 +135,48 @@ function rollingWindowDates(now: Date, windowDays: number): string[] {
  * why.
  */
 export function evaluateRollout(params: EvaluateRolloutParams): RatchetDecision {
-  const windowDays = params.windowDays ?? 14;
-  const shippedThreshold = params.shippedThreshold ?? 0.90;
-  const cleanParseThreshold = params.cleanParseThreshold ?? 0.95;
+  const rawWindow = params.windowDays ?? 14;
+  const rawShipped = params.shippedThreshold ?? 0.90;
+  const rawClean = params.cleanParseThreshold ?? 0.95;
+
+  // Codex + lefarcen P1 on PR #1499: defend at the evaluator entry so a
+  // malformed query string (`?windowDays=0`) or a buggy caller cannot
+  // produce a zero-evidence promotion. A non-positive window would make
+  // `passingDays >= windowDays` trivially true at 0 >= 0, and a
+  // threshold outside [0, 1] would either reject every legitimate day
+  // (> 1) or accept nonsense (< 0). Hold with a clear reason in either
+  // case instead.
+  if (!Number.isFinite(rawWindow) || rawWindow <= 0) {
+    return {
+      kind: 'hold',
+      current: params.current,
+      reason: `invalid windowDays: ${rawWindow}`,
+      passingDays: 0,
+      observedDays: 0,
+    };
+  }
+  if (!Number.isFinite(rawShipped) || rawShipped < 0 || rawShipped > 1) {
+    return {
+      kind: 'hold',
+      current: params.current,
+      reason: `invalid shippedThreshold: ${rawShipped}`,
+      passingDays: 0,
+      observedDays: 0,
+    };
+  }
+  if (!Number.isFinite(rawClean) || rawClean < 0 || rawClean > 1) {
+    return {
+      kind: 'hold',
+      current: params.current,
+      reason: `invalid cleanParseThreshold: ${rawClean}`,
+      passingDays: 0,
+      observedDays: 0,
+    };
+  }
+
+  const windowDays = Math.floor(rawWindow);
+  const shippedThreshold = rawShipped;
+  const cleanParseThreshold = rawClean;
   const now = (params.now ?? (() => new Date()))();
   const windowDates = new Set(rollingWindowDates(now, windowDays));
 
