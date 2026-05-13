@@ -104,7 +104,7 @@ export function App() {
         // routes all AI calls server-side via LUMINA_GATEWAY_URL/_TOKEN.
         // BYOK is invisible to the user — auto-mark onboarding complete so the
         // welcome modal never appears. See README.lumina.md.
-        if (import.meta.env.VITE_LUMINA_PROXY_MODE === 'true') {
+        if ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_LUMINA_PROXY_MODE === 'true') {
           next.onboardingCompleted = true;
         }
         if (!next.onboardingCompleted) {

@@ -61,6 +61,13 @@ import {
 
 const PLATFORM_DOMAIN_SUFFIX = '.opendesign.holalumina.com';
 const SIGN_IN_URL = 'https://app.holalumina.com/sign-in';
+// Cross-domain handshake endpoint on the primary Clerk-auth host. The primary
+// mints a short-lived JWT bound to the user's active session and 302s back to
+// the satellite subdomain with `?__od_handshake=<jwt>`. The satellite (this
+// middleware) consumes the token, sets the `__session` cookie on its own
+// subdomain, and 302s to the clean URL. See web/src/app/api/od-handshake/.
+const HANDSHAKE_URL = 'https://app.holalumina.com/api/od-handshake';
+const HANDSHAKE_PARAM = '__od_handshake';
 const SUBDOMAIN_PATTERN = /^[a-z0-9-]+$/;
 const NOT_FOUND_BODY = 'Not Found\n';
 const NOT_FOUND_BYTES = Buffer.byteLength(NOT_FOUND_BODY, 'utf8');
@@ -173,11 +180,89 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
     // 6. Session cookie check.
     const sessionToken = readSessionCookie(req);
     if (!sessionToken) {
+      // 6a. Cross-domain handshake path. The primary auth host (app.holalumina.com)
+      // 302s here with `?__od_handshake=<jwt>` after the user has signed in.
+      // The JWT is identical in shape to what Clerk would have set as
+      // __session, so we run it through the same verifier. On success we set
+      // __session as a Set-Cookie scoped to THIS subdomain (not the apex —
+      // that would leak the cookie across tenants) and 302 to the same URL
+      // with the handshake param stripped so the browser re-enters this
+      // middleware on the next hop with a real cookie.
+      const handshakeToken = readHandshakeToken(req);
+      if (handshakeToken) {
+        void (async () => {
+          let claims;
+          try {
+            claims = await verifyClerkSession(handshakeToken);
+          } catch (err) {
+            const kind =
+              err instanceof ClerkVerificationError ? err.kind : 'invalid';
+            logResolution({
+              requestId,
+              host: rawHost,
+              subdomain,
+              result: 'denied',
+              stepFailed: 'jwt_invalid',
+              statusCode: 401,
+              extra: { jwt_failure_kind: kind, source: 'handshake' },
+            });
+            respondUnauthorized(res);
+            return;
+          }
+          if (claims.o.slg !== subdomain) {
+            logResolution({
+              requestId,
+              host: rawHost,
+              subdomain,
+              result: 'denied',
+              stepFailed: 'org_mismatch',
+              statusCode: 404,
+              tenantResolved: claims.o.slg,
+              userId: claims.sub,
+              auditSeverity: 'high',
+              extra: { source: 'handshake' },
+            });
+            respondNotFound(res);
+            return;
+          }
+          const cleanUrl = stripHandshakeParam(req.url ?? '/');
+          const cookieDomain = `${subdomain}${PLATFORM_DOMAIN_SUFFIX}`;
+          // Cookie TTL matches Clerk default JWT TTL (300s). Cookie outliving
+          // JWT means browser keeps sending stale token, gets 401, never
+          // auto-recovers. Align them so cookie expiry triggers re-handshake
+          // via the no-cookie path at 6b.
+          const cookie =
+            `__session=${handshakeToken}` +
+            `; Domain=${cookieDomain}` +
+            `; Path=/` +
+            `; Max-Age=300` +
+            `; Secure` +
+            `; HttpOnly` +
+            `; SameSite=Lax`;
+          res.setHeader('Set-Cookie', cookie);
+          logResolution({
+            requestId,
+            host: rawHost,
+            subdomain,
+            result: 'redirect',
+            stepFailed: null,
+            statusCode: 302,
+            tenantResolved: claims.o.slg,
+            userId: claims.sub,
+            extra: { source: 'handshake', action: 'cookie_set' },
+          });
+          respondRedirect(res, `https://${cookieDomain}${cleanUrl}`);
+        })();
+        return;
+      }
+
+      // 6b. No cookie, no handshake → bounce to the primary handshake
+      // endpoint. That endpoint reads the user's app.holalumina.com Clerk
+      // session, mints a fresh JWT, and 302s back here with the handshake
+      // param set. If the user is not signed in to the primary, the
+      // handshake endpoint itself 302s to /sign-in first.
       const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${req.url ?? '/'}`;
-      // Use redirect_url (Clerk + app convention) so the sign-in page picks
-      // it up via useSearchParams().get('redirect_url'). Older code shipped
-      // ?return= which the app ignored, dropping the user on /cms.
-      const location = `${SIGN_IN_URL}?redirect_url=${encodeURIComponent(returnUrl)}`;
+      const location = `${HANDSHAKE_URL}?target_url=${encodeURIComponent(returnUrl)}`;
       logResolution({
         requestId,
         host: rawHost,
@@ -200,6 +285,26 @@ export function tenantResolverMiddleware(deps: TenantResolverDeps): ExpressLikeM
       } catch (err) {
         const kind =
           err instanceof ClerkVerificationError ? err.kind : 'invalid';
+        // EXPIRED JWT → bounce through handshake endpoint to mint fresh.
+        // Without this, the user dead-ends at 401 once the JWT TTL elapses,
+        // even though their primary-host Clerk session is still valid. The
+        // handshake re-mint round-trip is fast (~150ms) and silent to the
+        // user.
+        if (kind === 'expired') {
+          const returnUrl = `https://${subdomain}${PLATFORM_DOMAIN_SUFFIX}${req.url ?? '/'}`;
+          const location = `${HANDSHAKE_URL}?target_url=${encodeURIComponent(returnUrl)}`;
+          logResolution({
+            requestId,
+            host: rawHost,
+            subdomain,
+            result: 'redirect',
+            stepFailed: 'jwt_invalid',
+            statusCode: 302,
+            extra: { jwt_failure_kind: kind, action: 're_handshake' },
+          });
+          respondRedirect(res, location);
+          return;
+        }
         logResolution({
           requestId,
           host: rawHost,
@@ -311,6 +416,47 @@ function extractSubdomain(host: string): string | null {
   const sub = host.slice(0, host.length - PLATFORM_DOMAIN_SUFFIX.length);
   if (sub.length === 0) return null;
   return sub;
+}
+
+/**
+ * Read `__od_handshake=<jwt>` from the request's query string. Returns the
+ * decoded JWT string, or null if absent / empty.
+ */
+function readHandshakeToken(req: IncomingMessage): string | null {
+  const url = req.url ?? '';
+  const queryIdx = url.indexOf('?');
+  if (queryIdx === -1) return null;
+  const qs = url.slice(queryIdx + 1);
+  const prefix = `${HANDSHAKE_PARAM}=`;
+  for (const part of qs.split('&')) {
+    if (!part.startsWith(prefix)) continue;
+    const raw = part.slice(prefix.length);
+    if (raw.length === 0) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Strip the `__od_handshake` param from a URL, preserving every other query
+ * pair. Used to redirect the browser to the "clean" target URL after the
+ * handshake cookie is set.
+ */
+function stripHandshakeParam(url: string): string {
+  const queryIdx = url.indexOf('?');
+  if (queryIdx === -1) return url;
+  const path = url.slice(0, queryIdx);
+  const qs = url.slice(queryIdx + 1);
+  const prefix = `${HANDSHAKE_PARAM}=`;
+  const kept = qs.split('&').filter(
+    (part) => part.length > 0 && !part.startsWith(prefix),
+  );
+  if (kept.length === 0) return path;
+  return `${path}?${kept.join('&')}`;
 }
 
 function readSessionCookie(req: IncomingMessage): string | null {

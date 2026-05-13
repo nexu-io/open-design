@@ -515,7 +515,9 @@ describe('Cross-tenant isolation — 8-vector attack matrix (T047-T055)', () => 
 
     it('XFH=tenant-b without any JWT → 302 redirect (cookie missing dominates)', async () => {
       // Defense-in-depth corollary: even without auth, the resolver does NOT
-      // emit a tenant-discriminating response. Missing cookie → 302 to sign-in.
+      // emit a tenant-discriminating response. Missing cookie → 302 to the
+      // cross-domain handshake endpoint (which itself bounces to /sign-in if
+      // the primary host has no Clerk session).
       setEnvForPrimaryKey();
 
       const result = await invokeResolver({
@@ -524,7 +526,7 @@ describe('Cross-tenant isolation — 8-vector attack matrix (T047-T055)', () => 
       });
 
       expect(result.captured.status).toBe(302);
-      expect(result.captured.headers['location']).toContain('/sign-in');
+      expect(result.captured.headers['location']).toContain('/api/od-handshake');
     });
   });
 

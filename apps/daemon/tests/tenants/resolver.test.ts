@@ -327,7 +327,7 @@ describe('tenantResolverMiddleware', () => {
     expect(result.captured.headers['content-length']).toBe('10');
   });
 
-  test('(6) no __session cookie → 302 to Clerk sign-in with return URL preserved', async () => {
+  test('(6) no __session cookie → 302 to handshake endpoint with target_url preserved', async () => {
     setEnvForPrimaryKey();
     const result = await invoke({
       host: 'ericedmeades.opendesign.holalumina.com',
@@ -337,7 +337,7 @@ describe('tenantResolverMiddleware', () => {
     expect(result.captured.status).toBe(302);
     const location = result.captured.headers['location'];
     expect(location).toBeDefined();
-    expect(location).toContain('https://app.holalumina.com/sign-in');
+    expect(location).toContain('https://app.holalumina.com/api/od-handshake');
     expect(location).toContain(
       encodeURIComponent('https://ericedmeades.opendesign.holalumina.com/projects/abc?ref=email'),
     );
@@ -357,7 +357,11 @@ describe('tenantResolverMiddleware', () => {
     expect(result.captured.body.toString('utf8')).toBe('Unauthorized\n');
   });
 
-  test('(8) JWT expired → 401', async () => {
+  test('(8) JWT expired → 302 to handshake (re-mint), NOT 401 dead-end', async () => {
+    // Cookie outlives Clerk JWT (cookie Max-Age=300s, but stale cookies can
+    // arrive after JWT exp). Bouncing through the handshake endpoint silently
+    // mints a fresh JWT off the user's primary-host Clerk session instead of
+    // dead-ending the user at 401 with no auto-recovery.
     setEnvForPrimaryKey();
     const nowSeconds = Math.floor(Date.now() / 1000);
     const token = await signTestToken(buildClaims('ericedmeades'), {
@@ -369,11 +373,18 @@ describe('tenantResolverMiddleware', () => {
 
     const result = await invoke({
       host: 'ericedmeades.opendesign.holalumina.com',
+      url: '/projects/xyz',
       cookie: `__session=${token}`,
     });
     expect(result.nextCalled).toBe(false);
-    expect(result.captured.status).toBe(401);
-    expect(result.captured.body.toString('utf8')).toBe('Unauthorized\n');
+    expect(result.captured.status).toBe(302);
+    const location = result.captured.headers['location'];
+    expect(location).toBeDefined();
+    expect(location).toContain('https://app.holalumina.com/api/od-handshake');
+    expect(location).toContain(
+      encodeURIComponent('https://ericedmeades.opendesign.holalumina.com/projects/xyz'),
+    );
+    expect(result.captured.body.length).toBe(0);
   });
 
   test('(9) JWT missing org → 401', async () => {
