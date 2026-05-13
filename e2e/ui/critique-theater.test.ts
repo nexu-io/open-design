@@ -121,6 +121,7 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
   });
 }
 
+<<<<<<< HEAD
 /**
  * Parked behind `test.describe.fixme` until the next follow-up PR
  * (PerishCode P1 on PR #1338). The suite as written assumes the route
@@ -136,6 +137,14 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
  * wireup.
  */
 test.describe.fixme('Critique Theater e2e (Phase 11) [awaiting full mount-route follow-up, see file header]', () => {
+=======
+// Parked behind test.describe.fixme until the follow-up that lands the
+// PNG baselines + the goto('/projects/:id') fixture (the current bootstrap
+// lands on '/' where ProjectView is not mounted, so CritiqueTheaterMount
+// never renders and every assertion times out). Removed from
+// test:ui:extended in the same merge per PerishCode P1 on PR #1338.
+test.describe.fixme('Critique Theater e2e (Phase 11)', () => {
+>>>>>>> origin/main
   test.beforeEach(async ({ page }) => {
     await bootAppWithCritiqueEnabled(page);
   });

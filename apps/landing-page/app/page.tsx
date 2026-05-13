@@ -1075,7 +1075,9 @@ export default function Page({ counts }: PageProps) {
             <div className='foot-grid'>
               <div className='foot-brand'>
                 <a href='#top' className='brand'>
-                  <span className='brand-mark'>Ø</span>
+                  <span className='brand-mark'>
+                    <img src='/logo.png' alt='' width={36} height={36} />
+                  </span>
                   <span>Open Design</span>
                 </a>
                 <p style={{ marginTop: 18 }}>

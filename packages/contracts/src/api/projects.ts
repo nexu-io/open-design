@@ -125,6 +125,7 @@ export interface Project {
   status?: ProjectStatusInfo;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  customInstructions?: string;
 }
 
 export interface ProjectTemplate {
@@ -150,6 +151,7 @@ export interface CreateProjectRequest {
   designSystemId?: string | null;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  customInstructions?: string;
 }
 
 export interface UpdateProjectRequest {
@@ -158,6 +160,7 @@ export interface UpdateProjectRequest {
   designSystemId?: string | null;
   pendingPrompt?: string | null;
   metadata?: ProjectMetadata | null;
+  customInstructions?: string | null;
 }
 
 export interface ProjectsResponse {

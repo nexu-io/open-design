@@ -498,12 +498,28 @@ describe('reportRunCompleted', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('does nothing when content gate is off', async () => {
+    const fetchSpy = vi.fn();
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: false, artifactManifest: true },
+      }),
+      { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('does nothing when no Langfuse config is available', async () => {
     const fetchSpy = vi.fn();
-    await reportRunCompleted(makeCtx(), {
-      config: null,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: null,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -511,10 +527,15 @@ describe('reportRunCompleted', () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('{}', { status: 200 }),
     );
-    await reportRunCompleted(makeCtx(), {
-      config: TEST_CONFIG,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const call = fetchSpy.mock.calls[0]!;
     const url = call[0] as string;
@@ -544,10 +565,15 @@ describe('reportRunCompleted', () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('{}', { status: 200 }),
     );
-    await reportRunCompleted(makeCtx(), {
-      config: relayConfig,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: relayConfig,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const call = fetchSpy.mock.calls[0]!;
     const url = call[0] as string;
@@ -574,10 +600,15 @@ describe('reportRunCompleted', () => {
         { status: 207 },
       ),
     );
-    await reportRunCompleted(makeCtx(), {
-      config: relayConfig,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: relayConfig,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Relay per-event errors (1)'),
     );
@@ -596,7 +627,7 @@ describe('reportRunCompleted', () => {
     await reportRunCompleted(
       makeCtx({
         artifacts: fatArtifacts,
-        prefs: { metrics: true, content: false, artifactManifest: true },
+        prefs: { metrics: true, content: true, artifactManifest: true },
       }),
       { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
     );
@@ -609,10 +640,15 @@ describe('reportRunCompleted', () => {
   it('only warns (does not throw) when fetch rejects', async () => {
     const fetchSpy = vi.fn().mockRejectedValue(new Error('network down'));
     await expect(
-      reportRunCompleted(makeCtx(), {
-        config: TEST_CONFIG,
-        fetchImpl: fetchSpy as any,
-      }),
+      reportRunCompleted(
+        makeCtx({
+          prefs: { metrics: true, content: true, artifactManifest: false },
+        }),
+        {
+          config: TEST_CONFIG,
+          fetchImpl: fetchSpy as any,
+        },
+      ),
     ).resolves.toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Fetch error'),
@@ -624,10 +660,15 @@ describe('reportRunCompleted', () => {
       .fn()
       .mockRejectedValueOnce(new Error('timeout'))
       .mockResolvedValueOnce(new Response('{}', { status: 207 }));
-    await reportRunCompleted(makeCtx(), {
-      config: { ...TEST_CONFIG, retries: 1 },
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: { ...TEST_CONFIG, retries: 1 },
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(warnSpy).not.toHaveBeenCalled();
   });
@@ -636,10 +677,15 @@ describe('reportRunCompleted', () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('rate limited', { status: 429 }),
     );
-    await reportRunCompleted(makeCtx(), {
-      config: TEST_CONFIG,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Ingestion failed 429'),
     );
@@ -664,10 +710,15 @@ describe('reportRunCompleted', () => {
         { status: 207 },
       ),
     );
-    await reportRunCompleted(makeCtx(), {
-      config: TEST_CONFIG,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Per-event errors (1)'),
     );
@@ -686,10 +737,15 @@ describe('reportRunCompleted', () => {
         { status: 207 },
       ),
     );
-    await reportRunCompleted(makeCtx(), {
-      config: TEST_CONFIG,
-      fetchImpl: fetchSpy as any,
-    });
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });

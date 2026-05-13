@@ -23,7 +23,12 @@ without code churn.
 | `TheaterDegraded.tsx` | Single chip surface for runs the orchestrator could not score. `useId()` for the heading id so multiple chips on one page do not collide. |
 | `TheaterCollapsed.tsx` | Post-run summary: shipped, interrupted, failed. The interrupted branch uses `interruptedSummary`, not `shippedSummary`. |
 | `TheaterTranscript.tsx` | Read-only replay surface bound to `useCritiqueReplay`. |
+<<<<<<< HEAD
 | `index.ts` | Public barrel. Only the mount + the four surface components + the two hooks are exported; everything else stays internal. |
+=======
+| `hooks/useCritiqueTheaterEnabled.ts` | Reads the Settings toggle from `open-design:config` localStorage and stays in sync with cross-tab `storage` events plus the same-tab `open-design:critique-theater-toggle` CustomEvent. Pairs with the `setCritiqueTheaterEnabled` setter so a Settings save reflects in every mounted hook without a reload. |
+| `index.ts` | Public barrel. Exports the mount, the four surface components plus the `InterruptButton`, the three hooks (`useCritiqueStream`, `useCritiqueReplay`, `useCritiqueTheaterEnabled`), the imperative setter (`setCritiqueTheaterEnabled`), and the reducer-derived contract types. Everything else stays internal. |
+>>>>>>> origin/main
 
 ## Invariants
 
@@ -50,6 +55,25 @@ without code churn.
   /api/projects/:id/critique/:runId/interrupt`. A failed fetch is
   swallowed with a dev-mode warning so the UI still moves to the
   collapsed badge.
+<<<<<<< HEAD
+=======
+- **Designer weight is frozen at 0.0 until v2 cast config lands.**
+  Mirror of the same invariant in
+  [`apps/daemon/src/critique/AGENTS.md`](../../../../daemon/src/critique/AGENTS.md):
+  the v1 weight distribution (designer 0 / critic 0.4 / brand 0.2 /
+  a11y 0.2 / copy 0.2) is wire-shape, not a tuning knob. The web
+  side reflects that by treating composite weights as read-only:
+  `ScoreTicker` and `TheaterCollapsed` read `composite` straight off
+  the wire and never recompute it from per-panelist scores. V2
+  lands per-skill cast configuration as a Settings surface
+  (`apps/web/src/components/Settings/`) that writes to the project's
+  settings row; the daemon resolver reads that row and feeds the
+  per-run weight map into the composite computation, so the web
+  layer continues to render whatever number the daemon produces. Do
+  not add a `weights` prop to any component in this directory and
+  do not recompute the composite client-side until the contracts
+  package carries the v2 cast type.
+>>>>>>> origin/main
 
 ## When you change anything here
 

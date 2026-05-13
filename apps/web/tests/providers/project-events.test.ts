@@ -158,6 +158,85 @@ describe('createProjectEventsConnection', () => {
     conn.close();
   });
 
+  it('parses conversation-created events emitted by routine reuse runs (#1361)', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('conversation-created', {
+      data: JSON.stringify({
+        type: 'conversation-created',
+        projectId: 'p1',
+        conversationId: 'routine-conv-aaa',
+        title: 'Routine · 2026-05-13',
+        createdAt: 1747109840000,
+      }),
+    });
+
+    expect(seen).toEqual([
+      {
+        type: 'conversation-created',
+        projectId: 'p1',
+        conversationId: 'routine-conv-aaa',
+        title: 'Routine · 2026-05-13',
+        createdAt: 1747109840000,
+      },
+    ]);
+    conn.close();
+  });
+
+  // Concurrent routine runs (#1502): two Run-now clicks against the same
+  // reuse-an-existing-project routine each create their own conversation.
+  // Both events should be delivered to the open `ProjectView` so the
+  // conversation list surfaces all of them, not just the latest one.
+  it('delivers multiple concurrent conversation-created events (covers #1502)', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('conversation-created', {
+      data: JSON.stringify({
+        type: 'conversation-created',
+        projectId: 'p1',
+        conversationId: 'routine-conv-aaa',
+        title: 'Routine · 8:12 AM',
+        createdAt: 1747109520000,
+      }),
+    });
+    es.dispatch('conversation-created', {
+      data: JSON.stringify({
+        type: 'conversation-created',
+        projectId: 'p1',
+        conversationId: 'routine-conv-bbb',
+        title: 'Routine · 8:13 AM',
+        createdAt: 1747109580000,
+      }),
+    });
+
+    expect(seen.map((e) => e.type === 'conversation-created' ? e.conversationId : null))
+      .toEqual(['routine-conv-aaa', 'routine-conv-bbb']);
+    conn.close();
+  });
+
+  it('ignores malformed conversation-created payloads instead of throwing', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    expect(() => es.dispatch('conversation-created', { data: '{not-json' })).not.toThrow();
+    expect(seen).toEqual([]);
+    conn.close();
+  });
+
   it('reconnects with exponential backoff on error', () => {
     let nextDelay = 0;
     const setTimeoutFn = vi.fn((cb: () => void, ms: number) => {
