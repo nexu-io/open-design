@@ -35,17 +35,25 @@ WORKDIR /workspace
 # independently of source-only changes.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/daemon/package.json ./apps/daemon/package.json
+COPY apps/web/package.json ./apps/web/package.json
 COPY packages ./packages
 COPY tools ./tools
 # Root postinstall script referenced by package.json.
 COPY scripts ./scripts
 
-# Now copy daemon sources.
+# Copy daemon + web sources.
 COPY apps/daemon ./apps/daemon
+COPY apps/web ./apps/web
 
-# Install the entire workspace (frozen lockfile) and compile the daemon.
+# Install the entire workspace (frozen lockfile) and compile daemon + web.
+# v7: apps/web/out static export must land in the image so the daemon's SPA
+# fallback (server.ts STATIC_DIR fs.existsSync check) serves index.html for
+# every non-/api/* path. Without this, v6 returned `Cannot GET /` for every
+# UI route and broke the demo. NODE_ENV=production + OD_WEB_OUTPUT_MODE
+# unset triggers Next.js static export to apps/web/out (next.config.ts:18).
 RUN pnpm install --frozen-lockfile \
-    && pnpm --filter @open-design/daemon run build
+    && pnpm --filter @open-design/daemon run build \
+    && NODE_ENV=production pnpm --filter @open-design/web run build
 
 # Produce a self-contained, production-only deploy directory at /deploy.
 # `pnpm deploy` resolves workspace:* protocol references, copies only the
@@ -69,6 +77,11 @@ RUN mkdir -p /data /etc/opendesign \
 
 # Copy the pruned deploy directory from the builder.
 COPY --from=builder --chown=node:node /deploy ./
+
+# v7: bundle the static-exported web frontend so the daemon SPA fallback
+# (server.ts STATIC_DIR = PROJECT_ROOT + apps/web/out) finds index.html.
+# Without this, every non-/api/* request returns 404 "Cannot GET /".
+COPY --from=builder --chown=node:node /workspace/apps/web/out /apps/web/out
 
 USER node
 
