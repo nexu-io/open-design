@@ -667,7 +667,6 @@ export const ar: Dict = {
   'designFiles.download': 'تحميل',
   'designFiles.downloadSelected': 'تنزيل {n} كـ ZIP',
   'designFiles.clearSelection': 'مسح التحديد',
-  'designFiles.selectPage': 'تحديد الكل في الصفحة',
   'designFiles.selectAll': 'تحديد الكل',
   'designFiles.dropTitle': '⤓ أسقط الملفات هنا',
   'designFiles.dropDesc':

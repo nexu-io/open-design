@@ -751,7 +751,6 @@ export const zhCN: Dict = {
   'designFiles.downloadSelected': '下载选中的 {n} 个文件为 ZIP',
   'designFiles.deleteSelected': '删除 {n} 个',
   'designFiles.clearSelection': '取消选择',
-  'designFiles.selectPage': '全选此页',
   'designFiles.selectAll': '全选',
   'designFiles.dropTitle': '⤓ 把文件拖到这里',
   'designFiles.dropDesc': '图片、文档、参考资料或文件夹 — 智能体都会用作上下文。',

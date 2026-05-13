@@ -689,7 +689,6 @@ export const fa: Dict = {
   'designFiles.download': 'دانلود',
   'designFiles.downloadSelected': 'دانلود {n} به صورت ZIP',
   'designFiles.clearSelection': 'پاک کردن انتخاب',
-  'designFiles.selectPage': 'انتخاب همه در صفحه',
   'designFiles.selectAll': 'انتخاب همه',
   'designFiles.dropTitle': '⤓ فایل‌ها را اینجا رها کنید',
   'designFiles.dropDesc':

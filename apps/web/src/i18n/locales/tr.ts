@@ -653,7 +653,6 @@ export const tr: Dict = {
   'designFiles.download': 'İndir',
   'designFiles.downloadSelected': '{n} dosyayı ZIP olarak indir',
   'designFiles.clearSelection': 'Seçimi temizle',
-  'designFiles.selectPage': 'Sayfadaki tümünü seç',
   'designFiles.selectAll': 'Tümünü seç',
   'designFiles.deleteSelected': '{n} sil',
   'designFiles.dropTitle': '⤓ Dosyaları buraya sürükleyin',

@@ -687,7 +687,6 @@ export const ptBR: Dict = {
   'designFiles.download': 'Baixar',
   'designFiles.downloadSelected': 'Baixar {n} selecionados como ZIP',
   'designFiles.clearSelection': 'Limpar seleção',
-  'designFiles.selectPage': 'Selecionar tudo na página',
   'designFiles.selectAll': 'Selecionar tudo',
   'designFiles.deleteSelected': 'Excluir {n}',
   'designFiles.dropTitle': '⤓ Solte arquivos aqui',

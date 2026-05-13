@@ -556,7 +556,6 @@ export const esES: Dict = {
   'designFiles.downloadSelected': 'Descargar {n} como ZIP',
   'designFiles.deleteSelected': 'Eliminar {n}',
   'designFiles.clearSelection': 'Limpiar selección',
-  'designFiles.selectPage': 'Seleccionar todo en la página',
   'designFiles.selectAll': 'Seleccionar todo',
   'designFiles.dropTitle': '⤓ Suelta archivos aquí',
   'designFiles.dropDesc':

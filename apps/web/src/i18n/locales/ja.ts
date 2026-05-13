@@ -554,7 +554,6 @@ export const ja: Dict = {
   'designFiles.downloadSelected': '{n}件をZIPとしてダウンロード',
   'designFiles.deleteSelected': '{n} 件を削除',
   'designFiles.clearSelection': '選択をクリア',
-  'designFiles.selectPage': 'このページをすべて選択',
   'designFiles.selectAll': 'すべて選択',
   'designFiles.dropTitle': '⤓ ファイルをここにドロップ',
   'designFiles.dropDesc':

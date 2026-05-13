@@ -646,7 +646,6 @@ export const th: Dict = {
   'designFiles.downloadSelected': 'โหลด {n} ลงเป็น ZIP',
   'designFiles.deleteSelected': 'ลบ {n}',
   'designFiles.clearSelection': 'ล้างการเลือก',
-  'designFiles.selectPage': 'เลือกทั้งหมดหน้านี้',
   'designFiles.selectAll': 'เลือกทุกอย่าง',
   'designFiles.dropTitle': '⤓ วางไฟล์ที่นี่',
   'designFiles.dropDesc': 'รูป เอกสาร อ้างอิง — เอเจนต์จะเก็บมาใช้วิเคราะห์',

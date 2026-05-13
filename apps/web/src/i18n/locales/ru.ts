@@ -687,7 +687,6 @@ export const ru: Dict = {
   'designFiles.download': 'Скачать',
   'designFiles.downloadSelected': 'Скачать {n} как ZIP',
   'designFiles.clearSelection': 'Очистить выделение',
-  'designFiles.selectPage': 'Выбрать всё на странице',
   'designFiles.selectAll': 'Выбрать всё',
   'designFiles.deleteSelected': 'Удалить {n}',
   'designFiles.dropTitle': '⤓ Перетащите файлы сюда',

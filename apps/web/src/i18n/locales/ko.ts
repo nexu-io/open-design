@@ -666,7 +666,6 @@ export const ko: Dict = {
   'designFiles.download': '다운로드',
   'designFiles.downloadSelected': '{n}개를 ZIP으로 다운로드',
   'designFiles.clearSelection': '선택 해제',
-  'designFiles.selectPage': '페이지에서 모두 선택',
   'designFiles.selectAll': '모두 선택',
   'designFiles.deleteSelected': '{n}개 삭제',
   'designFiles.dropTitle': '⤓ 여기에 파일을 놓으세요',
