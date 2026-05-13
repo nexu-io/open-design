@@ -41,9 +41,9 @@ test.beforeEach(async ({ page }) => {
 test('pet pill toggle hides and shows the pet rail', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await expect(page.locator('.entry-brand')).toBeVisible();
-  await expect(page.locator('.entry-brand .entry-brand-title')).toHaveText('Open Design');
-  await expect(page.locator('.app-chrome-header')).toHaveCount(0);
+  await expect(page.locator('.app-chrome-header')).toBeVisible();
+  await expect(page.locator('.app-chrome-header .app-chrome-name')).toHaveText('Open Design');
+  await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.locator('.pet-rail')).toBeVisible();
 
   const hideToggle = page.locator('.pet-pill-toggle');
@@ -82,18 +82,17 @@ test('entry chrome avoids horizontal overflow on compact desktop width', async (
   await page.setViewportSize({ width: 820, height: 900 });
   await page.goto('/');
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await expect(page.locator('.entry-brand')).toBeVisible();
+  await expect(page.locator('.app-chrome-header')).toBeVisible();
 
-  // The brand row replaced the old global chrome header; if it overflows
-  // horizontally on a compact desktop, the logo/title/settings cog will
-  // wrap or push the layout sideways. Keep it pinned to no-overflow.
-  const brandOverflow = await page.evaluate(() => {
-    const brand = document.querySelector('.entry-brand');
-    if (!(brand instanceof HTMLElement)) return null;
-    return Math.max(0, brand.scrollWidth - brand.clientWidth);
+  // The shared app chrome header should stay one row and avoid pushing
+  // the entry layout sideways on compact desktop widths.
+  const headerOverflow = await page.evaluate(() => {
+    const header = document.querySelector('.app-chrome-header');
+    if (!(header instanceof HTMLElement)) return null;
+    return Math.max(0, header.scrollWidth - header.clientWidth);
   });
-  expect(brandOverflow).not.toBeNull();
-  expect(brandOverflow!).toBeLessThanOrEqual(2);
+  expect(headerOverflow).not.toBeNull();
+  expect(headerOverflow!).toBeLessThanOrEqual(2);
 
   const pageOverflow = await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),

@@ -58,9 +58,7 @@ describe('FileViewer manual edit history regressions', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={htmlPreviewFile()}
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml={initialSource}
       />,
     );
@@ -119,9 +117,7 @@ describe('FileViewer manual edit history regressions', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={htmlPreviewFile()}
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml={initialSource}
       />,
     );

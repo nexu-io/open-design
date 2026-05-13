@@ -7,8 +7,8 @@
   /* Surface palette — neutral app chrome that does not bias generated artifacts.
      Keep warm/brand colors out of preview backgrounds; generated product UI
      must choose its own palette through the active skill/design brief. */
-  --bg: #f6f7f9;
-  --bg-app: #f6f7f9;
+  --bg: #faf9f7;
+  --bg-app: #faf9f7;
   --bg-panel: #ffffff;
   --bg-subtle: #eef1f5;
   --bg-muted: #e4e8ef;
@@ -255,14 +255,17 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--selected);
   box-shadow: 0 0 0 3px var(--selected-soft);
 }
-/* Entry sidebar form fields keep a quieter focus so the orange "Create"
-   CTA stays the loudest thing in the panel. Settings, dialogs, and the
-   right-column tab content still get the global ring above. */
+/* Entry sidebar form fields keep a quieter, neutral focus so the orange
+   "Create" CTA stays the loudest thing in the panel. A low-opacity black
+   halo reads as "focused" without re-introducing the global blue/accent
+   ring. Using rgba directly because the Next CSS pipeline collapses
+   `color-mix(in srgb, var(--text) 8%, transparent)` to a solid var(--text)
+   ring (would render a 3px black band — too loud). */
 .entry-side input:focus,
 .entry-side textarea:focus,
 .entry-side select:focus {
-  border-color: var(--border-strong);
-  box-shadow: none;
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px rgba(28, 27, 26, 0.08);
 }
 /* Native <select> on macOS uses its own intrinsic min-height that ends up
    shorter than <input> at the same `padding: 7px 10px` rule above, so any
@@ -1703,16 +1706,20 @@ code {
 .modal-settings {
   --modal-padding: 24px;
   width: min(920px, calc(100vw - 48px));
+  /* Fixed height regardless of which section is active — short sections
+     pad out with empty space inside `.settings-content`, long sections
+     scroll internally. Keeps the dialog from jumping in size as the user
+     switches sidebar items. */
+  height: min(720px, calc(100vh - 64px));
   padding: 0;
   gap: 0;
-  max-height: calc(100vh - 64px);
   /* Anchor for the absolutely-positioned `.settings-chrome` strip
      (close button + autosave indicator). Without this the chrome
      would escape to the viewport on long-scrolling sections. */
   position: relative;
 }
 @media (max-height: 600px) {
-  .modal-settings { max-height: 90vh; }
+  .modal-settings { height: 90vh; }
 }
 .modal-settings .modal-body {
   overflow: hidden;
@@ -1723,7 +1730,6 @@ code {
   gap: 0;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--border);
 }
 .modal-head {
   display: flex;
@@ -1736,7 +1742,7 @@ code {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--text-muted);
   font-weight: 600;
 }
 .modal-head h2 {
@@ -2154,40 +2160,46 @@ code {
 .settings-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 22px 12px;
-  background: var(--bg-subtle);
+  gap: 2px;
+  padding: 16px 10px;
+  background: var(--bg-panel);
   border-right: 1px solid var(--border);
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* Sidebar items follow the ChatGPT-style settings rhythm: single line,
+   icon + label only, gray pill fill on active. The `<small>` description
+   that ships in the JSX is hidden — the label alone is the navigation
+   handle; the section's own subtitle in the content area carries any
+   intro copy. */
 .settings-nav-item {
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text);
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  padding: 12px;
+  padding: 7px 10px;
   text-align: left;
   cursor: pointer;
 }
 .settings-nav-item:hover {
-  background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
-  color: var(--text);
+  background: rgba(0, 0, 0, 0.04);
 }
-.settings-nav-item.active {
-  background: var(--bg-panel);
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+.settings-nav-item.active,
+.settings-nav-item.active:hover {
+  background: var(--bg-subtle);
+  border-color: transparent;
   color: var(--text);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .settings-nav-item svg {
   justify-self: center;
+  opacity: 0.75;
 }
 .settings-nav-item span {
   min-width: 0;
@@ -2198,20 +2210,23 @@ code {
 .settings-nav-item strong {
   color: currentColor;
   font-size: 13px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-weight: 500;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
+.settings-nav-item.active strong {
+  font-weight: 600;
+}
 .settings-nav-item small {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
+  display: none;
 }
 .settings-content {
   min-width: 0;
   min-height: 0;
-  padding: 22px var(--modal-padding);
+  /* Top inset matches `.settings-sidebar`'s `padding-top: 16` so the first
+     content row (the Local CLI / BYOK pill) sits level with the first
+     sidebar nav-item across the gutter. */
+  padding: 16px var(--modal-padding) 22px;
   overflow: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -2239,37 +2254,53 @@ code {
 }
 
 /* Segmented control */
+/* Compact single-line segmented control (Local CLI / BYOK and friends).
+   Mirrors `.subtab-pill` and `.ds-picker-mode`: gray rounded container,
+   white raised tab for active, just a title — the meta sub-line that used
+   to render here is hidden because the section right below already prints
+   the same context ("Local CLI · Detected by scanning..."). */
 .seg-control {
   display: grid;
   grid-template-columns: repeat(var(--seg-cols, 2), minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
+  /* Height-match the active sidebar nav-item across the gutter so the
+     top of the content area lines up neatly with the picked section. */
+  min-height: 42px;
   min-width: 0;
 }
 .seg-btn {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   min-width: 0;
 }
-.seg-btn:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, 0.5); }
+.seg-btn:hover:not(:disabled):not(.active) { color: var(--text); }
 .seg-btn.active {
   background: var(--bg-panel);
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+  border-color: transparent;
+  box-shadow: var(--shadow-xs);
 }
-.seg-btn .seg-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.seg-btn .seg-meta { font-size: 11px; color: var(--text-muted); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.seg-btn .seg-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.seg-btn.active .seg-title { font-weight: 600; }
+.seg-btn .seg-meta { display: none; }
 .seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Secondary protocol selector — pill chips, wraps to multiple rows */
@@ -2288,8 +2319,8 @@ code {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 4px 12px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
@@ -2304,11 +2335,11 @@ code {
   border-color: var(--border-strong);
 }
 .protocol-chip.active {
-  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--accent-tint) 100%);
-  border-color: var(--accent);
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: var(--shadow-xs);
 }
 
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
@@ -3724,24 +3755,29 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  /* Uniform height regardless of state: an installed agent only renders
+     name + version, while an unavailable one adds an Install/Docs row.
+     Without `min-height` the two variants render ~50px vs ~68px and the
+     grid looks ragged. Pinning to ~64px lets installed cards center their
+     two-line body in the same box that the action variant fills. */
+  min-height: 64px;
+  padding: 6px 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   position: relative;
-  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 .agent-card:hover:not(.disabled) {
   border-color: var(--border-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-subtle);
 }
 .agent-card.active {
-  border-color: var(--accent);
-  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--accent-tint) 100%);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  box-shadow: none;
 }
 .agent-card.disabled {
   cursor: not-allowed;
@@ -3754,17 +3790,20 @@ code {
 .agent-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-top: 6px;
+  gap: 6px 10px;
+  margin-top: 3px;
 }
 .agent-card-link {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
+  font-weight: 500;
+  color: var(--text-muted);
   text-decoration: none;
+  transition: color 120ms ease;
 }
 .agent-card-link:hover {
+  color: var(--text);
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .agent-install-path-hint {
   margin-top: 10px;
@@ -3785,13 +3824,14 @@ code {
 }
 .agent-card-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .agent-card-name {
-  font-size: 13px; font-weight: 600; color: var(--text);
+  font-size: 12.5px; font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .agent-card-meta {
   font-size: 11px; color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.35;
 }
 .agent-card-meta .muted { color: var(--text-soft); font-style: italic; }
 .agent-model-row {
@@ -3847,12 +3887,39 @@ code {
   background: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+/* Flat brand glyph rendered single-color via currentColor — no surrounding
+   colored block. Brands that ship with simple-icons get their official
+   mark; the rest fall back to .agent-icon-fallback below. */
 .agent-icon {
+  flex-shrink: 0;
+  color: var(--text);
+}
+.agent-icon-fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.08);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border-radius: 6px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0;
+}
+/* Theme-aware rendering for monochrome brand SVGs whose paths use
+   `fill="currentColor"`. Loaded through `<img>` they'd resolve to the
+   SVG document's default (black) and disappear against dark surfaces.
+   Painting them via a CSS mask lets `background-color: currentColor`
+   inherit the surrounding text color, so the same mark stays legible
+   under light + dark themes. */
+.agent-icon-mono {
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 .error {
@@ -3941,7 +4008,7 @@ code {
    ============================================================ */
 .entry-shell {
   display: grid;
-  grid-template-rows: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
   background: var(--bg);
@@ -3962,74 +4029,37 @@ code {
   flex-direction: column;
 }
 
-.entry-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 20px 18px;
-}
-.entry-brand-actions {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-}
-.entry-brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
-  color: var(--accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.entry-brand-mark .brand-mark-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  padding: 2px;
-  user-select: none;
-  -webkit-user-drag: none;
-}
-.entry-brand-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.entry-brand-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.entry-brand-title {
-  font-family: var(--serif);
-  font-weight: 450;
-  font-size: 22px;
-  letter-spacing: -0.015em;
-  line-height: 1;
-  color: var(--text);
-}
-.entry-brand-pill {
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.entry-brand-subtitle {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  letter-spacing: 0.01em;
-}
+/* ============================================================
+   NEW PROJECT PANEL — design standards
+   This block applies to every tab inside `.newproj` (prototype,
+   live-artifact, slide deck, template, media, other). Pickers and
+   options added to new tabs should slot into these rules instead
+   of inventing local variants.
 
-/* New project panel */
+   Heights
+     text input ............ 30px   (.newproj-name, .newproj-folder-input)
+     dropdown trigger ...... 38px   (.newproj-section .ds-picker-trigger)
+     compact toggle ........ 36px   (.compact-toggle)
+     popover item .......... 38px   (.ds-picker-item)
+
+   Color rules — neutral only. The orange accent is reserved for
+   the Create CTA. Nothing else inside `.newproj` should pull from
+   `var(--accent)` / `--accent-tint` / `--accent-soft`.
+     hover bg .............. var(--bg-subtle)
+     focused input ......... border var(--text) + 8% black halo
+                             (.entry-side input:focus)
+     active border ......... var(--border-strong)
+     active mark ........... var(--text)
+     segmented control ..... mirror .subtab-pill (gray rounded
+                             container + white raised active button)
+   ============================================================ */
 .newproj {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding-top: 24px;
 }
 .newproj-tabs-shell {
   position: relative;
@@ -4147,7 +4177,7 @@ code {
 }
 .newproj-body {
   margin: 0 24px;
-  padding: 16px 18px 18px;
+  padding: 16px 18px 12px;
   border: 1px solid var(--border);
   border-radius: 0 0 12px 12px;
   background: var(--bg-panel);
@@ -4157,10 +4187,20 @@ code {
   gap: 12px;
   /* The parent `.newproj` is `overflow: hidden`; the card needs to be the
      scroll container so taller form variants (image/media tabs, validation
-     messages, compact-height windows) stay reachable inside the sidebar. */
-  flex: 1 1 auto;
+     messages, compact-height windows) stay reachable inside the sidebar.
+     `flex: 0 1 auto` keeps the card at its natural content height when the
+     form is short (so there's no big white void at the bottom of the
+     card), but lets `flex-shrink: 1` collapse it down to the available
+     space when content is long — at which point `overflow-y: auto` takes
+     over and the body scrolls. */
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* Hard-stop at top/bottom: disable both scroll chaining and the element's
+     own rubber-band. The body's parents are transparent up to the gray
+     `--bg`, so any rubber-band travel briefly exposes that gray above/below
+     the white card. `none` removes the rubber-band entirely. */
+  overscroll-behavior: none;
 }
 .newproj-title {
   margin: 0;
@@ -4177,46 +4217,28 @@ code {
   align-items: center;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
-  color: var(--accent);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1.4;
 }
-.newproj-name { width: 100%; }
+.newproj-name { width: 100%; height: 30px; padding: 0 10px; }
 .newproj-section { display: flex; flex-direction: column; gap: 6px; }
-.platform-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
 .platform-picker-hint {
   margin: 0;
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.35;
 }
-.platform-card {
-  min-height: 64px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.platform-card-title {
-  color: var(--text-strong);
-  font-size: 12.5px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-.platform-card-hint {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.3;
-}
+/* PlatformPicker reuses the DS picker visual language (`.ds-picker-*`)
+   declared further down, so its bespoke `.platform-dropdown-*` rules were
+   removed — the dropdown trigger and popover render through the shared
+   `.ds-picker-trigger` / `.ds-picker-popover` / `.ds-picker-item` styles
+   for a neutral, accent-free look that matches the rest of the panel. */
 .newproj-label {
   font-size: 11.5px;
   color: var(--text-muted);
@@ -4301,9 +4323,9 @@ code {
   background: var(--bg-subtle);
 }
 .newproj-card.active {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  box-shadow: none;
 }
 .newproj-model-card {
   min-height: 74px;
@@ -4382,7 +4404,6 @@ code {
 @media (max-width: 560px) {
   .newproj-model-grid,
   .newproj-option-grid,
-  .platform-grid,
   .newproj-option-grid.aspect-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4490,7 +4511,8 @@ code {
 }
 .newproj-folder-input {
   width: 100%;
-  padding: 8px 10px;
+  height: 30px;
+  padding: 0 10px;
   font-size: 12px;
   font-family: var(--font-mono, monospace);
   border: 1px solid var(--border);
@@ -4508,11 +4530,14 @@ code {
   opacity: 0.7;
 }
 .newproj-footer {
-  padding: 12px 24px 16px;
+  padding: 6px 24px 16px;
   font-size: 11px;
   color: var(--text-muted);
   text-align: center;
   flex: 0 0 auto;
+  /* Sits a fixed, tight distance below the body card. Visible card→text
+     gap = padding-top (6). */
+  margin-top: 0;
 }
 
 /* -------- Fidelity cards (prototype tab) ---------------------------- */
@@ -4526,8 +4551,8 @@ code {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 8px 8px 10px;
+  gap: 4px;
+  padding: 6px 6px 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -4544,7 +4569,7 @@ code {
 .fidelity-thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 7;
+  aspect-ratio: 16 / 5;
   border-radius: 4px;
   overflow: hidden;
   background: var(--bg-subtle);
@@ -4555,7 +4580,7 @@ code {
 .fidelity-card.active .fidelity-thumb { border-color: var(--selected-soft); }
 .fidelity-label {
   text-align: center;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--text);
 }
@@ -4575,7 +4600,7 @@ code {
   transition: border-color 120ms ease, background 120ms ease;
 }
 .toggle-row:hover { border-color: var(--border-strong); }
-.toggle-row.on { border-color: var(--accent); background: var(--accent-tint); }
+.toggle-row.on { border-color: var(--border-strong); background: var(--bg-subtle); }
 .toggle-row.disabled,
 .toggle-row:disabled {
   cursor: not-allowed;
@@ -4622,8 +4647,71 @@ code {
   box-shadow: 0 1px 2px rgba(28, 27, 26, 0.18);
   transition: transform 160ms cubic-bezier(0.2, 0, 0.2, 1);
 }
-.toggle-row.on .toggle-row-switch { background: var(--accent); }
+.toggle-row.on .toggle-row-switch { background: var(--text); }
 .toggle-row.on .toggle-row-switch::after { transform: translateX(14px); }
+
+/* -------- Compact toggle (lightweight inline variant used by
+   SurfaceOptions; one-line, no border, hint moves to a native tooltip). -- */
+.compact-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.compact-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms ease;
+}
+.compact-toggle:hover { background: var(--bg-subtle); }
+.compact-toggle.disabled,
+.compact-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  background: transparent;
+}
+.compact-toggle.disabled:hover,
+.compact-toggle:disabled:hover { background: transparent; }
+.compact-toggle-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compact-toggle-switch {
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 160ms ease;
+}
+.compact-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(28, 27, 26, 0.18);
+  transition: transform 160ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.compact-toggle.on .compact-toggle-switch { background: var(--text); }
+.compact-toggle.on .compact-toggle-switch::after { transform: translateX(12px); }
 
 /* -------- Template picker (template tab) ---------------------------- */
 .template-list {
@@ -4882,10 +4970,17 @@ code {
   text-align: left;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+/* New project panel triggers run a tighter 38px row so the dropdowns sit
+   close to the project-name input and the Companion toggle. Other call
+   sites (Settings dialog, model picker) keep their own sizing. */
+.newproj-section .ds-picker-trigger {
+  min-height: 38px;
+  padding: 2px 10px;
+}
 .ds-picker-trigger:hover { border-color: var(--border-strong); }
 .ds-picker-trigger.open {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 .ds-picker-meta {
   flex: 1;
@@ -4900,6 +4995,7 @@ code {
   gap: 6px;
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1.2;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4916,6 +5012,7 @@ code {
 }
 .ds-picker-sub {
   font-size: 11px;
+  line-height: 1.2;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4932,8 +5029,8 @@ code {
 .ds-avatar {
   position: relative;
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 5px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -4994,7 +5091,7 @@ code {
   gap: 8px;
   padding: 8px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
+  background: var(--bg-panel);
 }
 .ds-picker-search {
   flex: 1;
@@ -5004,27 +5101,36 @@ code {
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
 }
+/* Mirror the `.subtab-pill` segmented control so all left/right toggles in
+   the app share one visual language — gray container, white raised tab for
+   active. Density stays popover-tight (smaller padding than the toolbar
+   variant). */
 .ds-picker-mode {
   flex: none;
   display: inline-flex;
-  padding: 2px;
-  background: var(--bg-panel);
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius);
 }
 .ds-picker-mode-btn {
-  padding: 3px 10px !important;
+  padding: 3px 12px !important;
   font-size: 11px !important;
   font-weight: 500;
   border: none !important;
   background: transparent !important;
   color: var(--text-muted) !important;
-  border-radius: 999px !important;
+  border-radius: var(--radius-sm) !important;
   box-shadow: none !important;
 }
+.ds-picker-mode-btn:hover:not(.active) {
+  color: var(--text) !important;
+}
 .ds-picker-mode-btn.active {
-  background: var(--accent) !important;
-  color: #fff !important;
+  background: var(--bg-panel) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-xs) !important;
 }
 .ds-picker-list {
   display: flex;
@@ -5046,7 +5152,8 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  min-height: 38px;
+  padding: 4px 8px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -5055,8 +5162,7 @@ code {
 }
 .ds-picker-item:hover { background: var(--bg-subtle); }
 .ds-picker-item.active {
-  background: var(--accent-tint);
-  border-color: var(--accent-soft);
+  border-color: var(--border-strong);
 }
 .ds-picker-item-text {
   flex: 1;
@@ -5071,6 +5177,7 @@ code {
   gap: 6px;
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1.2;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5081,12 +5188,14 @@ code {
   font-weight: 600;
   letter-spacing: 0.06em;
   padding: 2px 5px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 .ds-picker-item-sub {
   font-size: 11px;
+  line-height: 1.2;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5113,14 +5222,14 @@ code {
   position: relative;
 }
 .ds-picker-mark.radio.active {
-  border-color: var(--accent);
+  border-color: var(--text);
 }
 .ds-picker-mark.radio.active::after {
   content: '';
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--text);
 }
 .ds-picker-mark.check {
   border-radius: 4px;
@@ -5129,9 +5238,9 @@ code {
   color: var(--bg-panel);
 }
 .ds-picker-mark.check.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg-panel);
 }
 
 .ds-picker-foot {
@@ -5193,6 +5302,15 @@ code {
 .entry-side-foot-row .foot-pill-follow {
   flex: 0 1 auto;
 }
+/* Social cluster (Discord + X) — sits at the right end of the bottom row
+   via `margin-left: auto`, which opens flex space between the left
+   "your stuff" group (Language, Pet) and the right "follow us" group. */
+.entry-side-foot-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
 .entry-side-foot-row .foot-pill-pet-label,
 .entry-side-foot-row .foot-pill-follow-label {
   flex: 1 1 auto;
@@ -5203,6 +5321,20 @@ code {
 }
 .entry-side-foot .foot-pill:hover { background: var(--bg-panel); border-color: var(--border-strong); color: var(--text); }
 .entry-side-foot .foot-pill .ico { font-size: 12px; opacity: 0.7; }
+/* The Icon component renders inline SVG with `stroke: currentColor`, so by
+   default it tracks the pill's text color exactly. Override via opacity to
+   keep the glyph muted relative to the label — on hover the icon "lifts"
+   just enough to feel active without going full black, which would make
+   it compete with the label for attention. */
+.entry-side-foot .foot-pill svg {
+  width: 10px;
+  height: 10px;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+.entry-side-foot .foot-pill:hover svg {
+  opacity: 0.75;
+}
 
 /* Language switcher pill + popover (entry sidebar foot). */
 .lang-menu-wrap {
@@ -9208,25 +9340,64 @@ button.connector-action.is-loading {
   background: white;
 }
 .viewer-viewport-switcher {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  width: 96px;
+}
+.viewer-viewport-trigger {
+  width: 100%;
+  min-height: 26px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 4px 10px;
+  border-color: var(--border);
+  background-color: var(--bg-panel);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.2;
+  box-shadow: var(--shadow-xs);
+}
+.viewer-viewport-trigger:hover:not(:disabled),
+.viewer-viewport-trigger[aria-expanded='true'] {
+  border-color: var(--border-strong);
+  background-color: var(--bg-subtle);
+}
+.viewer-viewport-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: 100%;
+  padding: 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-}
-.viewer-viewport-button {
-  min-height: 26px;
-  padding-inline: 8px;
-  border-color: transparent;
-  background: transparent;
-}
-.viewer-viewport-button.active {
-  color: var(--text);
-  border-color: var(--border);
   background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.viewer-viewport-menu-item {
+  width: 100%;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: left;
+}
+.viewer-viewport-menu-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.viewer-viewport-menu-item.active {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
 }
 .live-artifact-preview-layer,
 .comment-preview-layer {
@@ -12423,13 +12594,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .entry-side-resizer:hover,
 .entry-side-resizer.dragging { background: var(--accent-soft); }
 body.entry-resizing { cursor: col-resize; user-select: none; }
-
-/* Branded header — title + research-preview pill on a single line, with
-   the "by …" subtitle underneath. */
-.entry-brand-title-row {
-  flex-wrap: wrap;
-  row-gap: 4px;
-}
 
 /* ============================================================
    Composer Import popover (coming-soon menu)
@@ -18464,30 +18628,32 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
    surface picker, compact aspect ratio segmented, combobox-style
    model picker). See NewProjectPanel.tsx.
    ============================================================ */
+/* Media surface picker — mirror .subtab-pill / .ds-picker-mode so all
+   segmented controls in the panel share one visual language. */
 .newproj-media-segmented {
   display: inline-flex;
   align-self: flex-start;
-  padding: 2px;
-  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  gap: 2px;
+  border-radius: var(--radius);
 }
 .newproj-media-surface {
   border: none;
   background: transparent;
-  padding: 6px 12px;
+  padding: 3px 12px;
   font-size: 12px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
 }
 .newproj-media-surface:hover:not(.active) { color: var(--text); }
 .newproj-media-surface.active {
-  background: var(--bg);
+  background: var(--bg-panel);
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-xs);
 }
 
 .newproj-aspect-segmented {

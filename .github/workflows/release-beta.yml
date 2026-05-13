@@ -34,6 +34,13 @@ concurrency:
 
 env:
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  # PostHog product-analytics ingest. Both vars must be defined as
+  # repository/organization secrets/vars for official builds to ship with
+  # analytics enabled. PR builds and forks run without these — the daemon's
+  # /api/analytics/config short-circuits to enabled=false in that case and
+  # no events leave the user's machine.
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
 
 jobs:
   metadata:
