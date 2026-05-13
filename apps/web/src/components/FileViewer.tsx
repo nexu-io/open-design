@@ -4996,7 +4996,7 @@ function HtmlViewer({
               {t('fileViewer.source')}
             </button>
           </div>
-          {effectiveDeck ? (
+          {effectiveDeck && mode === 'preview' ? (
             <span
               className="deck-nav"
               role="group"
@@ -5034,41 +5034,43 @@ function HtmlViewer({
           ) : null}
         </div>
         <div className="viewer-toolbar-actions">
-          <div className="palette-tweaks-anchor">
-            <button
-              type="button"
-              className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
-              data-testid="palette-tweaks-toggle"
-              title="Tweaks"
-              aria-haspopup="dialog"
-              aria-expanded={palettePopoverOpen}
-              onClick={() => setPalettePopoverOpen((v) => !v)}
-            >
-              <Icon name="tweaks" size={13} />
-              <span>Tweaks</span>
-              {selectedPalette ? (
-                <span
-                  className="palette-tweaks-badge"
-                  aria-hidden
-                  style={{
-                    backgroundColor:
-                      selectedPalette === 'coral' ? '#ff5a3c' :
-                      selectedPalette === 'electric' ? '#7c3aed' :
-                      selectedPalette === 'acid-forest' ? '#16a34a' :
-                      selectedPalette === 'risograph' ? '#e11d48' :
-                      '#0a0a0a',
-                  }}
-                />
-              ) : null}
-            </button>
-            <PaletteTweaks
-              open={palettePopoverOpen}
-              selected={selectedPalette}
-              onChange={setSelectedPalette}
-              onPreview={setPreviewPalette}
-              onClose={() => setPalettePopoverOpen(false)}
-            />
-          </div>
+          {mode === 'preview' ? (
+            <div className="palette-tweaks-anchor">
+              <button
+                type="button"
+                className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
+                data-testid="palette-tweaks-toggle"
+                title="Tweaks"
+                aria-haspopup="dialog"
+                aria-expanded={palettePopoverOpen}
+                onClick={() => setPalettePopoverOpen((v) => !v)}
+              >
+                <Icon name="tweaks" size={13} />
+                <span>Tweaks</span>
+                {selectedPalette ? (
+                  <span
+                    className="palette-tweaks-badge"
+                    aria-hidden
+                    style={{
+                      backgroundColor:
+                        selectedPalette === 'coral' ? '#ff5a3c' :
+                        selectedPalette === 'electric' ? '#7c3aed' :
+                        selectedPalette === 'acid-forest' ? '#16a34a' :
+                        selectedPalette === 'risograph' ? '#e11d48' :
+                        '#0a0a0a',
+                    }}
+                  />
+                ) : null}
+              </button>
+              <PaletteTweaks
+                open={palettePopoverOpen}
+                selected={selectedPalette}
+                onChange={setSelectedPalette}
+                onPreview={setPreviewPalette}
+                onClose={() => setPalettePopoverOpen(false)}
+              />
+            </div>
+          ) : null}
           <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
@@ -5092,44 +5094,48 @@ function HtmlViewer({
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
           </button>
-          <button
-            className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
-            type="button"
-            data-testid="draw-overlay-toggle"
-            title={t('fileViewer.draw')}
-            aria-pressed={drawOverlayOpen}
-            onClick={() => {
-              const next = !drawOverlayOpen;
-              if (!next) {
-                setDrawOverlayOpen(false);
-                return;
-              }
-              const activateDraw = () => {
-                setBoardMode(false);
-                clearBoardComposer();
-                setInspectMode(false);
-                setDrawOverlayMode('draw');
-                setMode('preview');
-                setDrawOverlayOpen(true);
-              };
-              if (manualEditMode) {
-                void exitManualEditModeAfterFlush().then((ok) => {
-                  if (ok) activateDraw();
-                });
-                return;
-              }
-              activateDraw();
-            }}
-          >
-            <Icon name="draw" size={13} />
-            <span>{t('fileViewer.draw')}</span>
-          </button>
-          <span className="viewer-divider" aria-hidden />
-          <PreviewViewportControls
-            viewport={previewViewport}
-            onViewport={setPreviewViewport}
-            t={t}
-          />
+          {mode === 'preview' ? (
+            <>
+              <button
+                className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
+                type="button"
+                data-testid="draw-overlay-toggle"
+                title={t('fileViewer.draw')}
+                aria-pressed={drawOverlayOpen}
+                onClick={() => {
+                  const next = !drawOverlayOpen;
+                  if (!next) {
+                    setDrawOverlayOpen(false);
+                    return;
+                  }
+                  const activateDraw = () => {
+                    setBoardMode(false);
+                    clearBoardComposer();
+                    setInspectMode(false);
+                    setDrawOverlayMode('draw');
+                    setMode('preview');
+                    setDrawOverlayOpen(true);
+                  };
+                  if (manualEditMode) {
+                    void exitManualEditModeAfterFlush().then((ok) => {
+                      if (ok) activateDraw();
+                    });
+                    return;
+                  }
+                  activateDraw();
+                }}
+              >
+                <Icon name="draw" size={13} />
+                <span>{t('fileViewer.draw')}</span>
+              </button>
+              <span className="viewer-divider" aria-hidden />
+              <PreviewViewportControls
+                viewport={previewViewport}
+                onViewport={setPreviewViewport}
+                t={t}
+              />
+            </>
+          ) : null}
           <span className="viewer-divider" aria-hidden />
           <button
             type="button"

@@ -1049,6 +1049,37 @@ describe('FileViewer tweaks toolbar', () => {
     expect(send.disabled).toBe(true);
     expect(send.getAttribute('title')).toBe('当前正有任务在执行');
   });
+
+  it('hides preview-only controls in source view', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    // Preview mode: preview-only controls should be present
+    expect(screen.getByTestId('palette-tweaks-toggle')).toBeTruthy();
+    expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
+    expect(screen.getByRole('group', { name: /viewport/i })).toBeTruthy();
+
+    // Switch to source view
+    fireEvent.click(screen.getByRole('button', { name: /source/i }));
+
+    // Preview-only controls should be hidden
+    expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
+    expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
+    expect(screen.queryByRole('group', { name: /viewport/i })).toBeNull();
+
+    // Edit and Zoom controls should remain visible in source view
+    expect(screen.getByTestId('manual-edit-mode-toggle')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /zoom out/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /zoom in/i })).toBeTruthy();
+
+    // Source tab should be active
+    expect(screen.getByRole('button', { name: /source/i }).classList.contains('active')).toBe(true);
+  });
 });
 
 describe('applyInspectOverridesToSource', () => {
