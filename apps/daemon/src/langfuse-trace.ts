@@ -7,11 +7,12 @@
 // LANGFUSE_SECRET_KEY in the env, every entry point becomes a no-op so that
 // dev runs and forks of this open-source repo do not accidentally report.
 //
-// Privacy gates are layered: `prefs.metrics` is the master switch (off => no
-// network call at all), `prefs.content` decides whether the prompt /
-// assistant text is included, and `prefs.artifactManifest` decides whether
-// the produced-files manifest is included. None of these defaults to true;
-// the Web onboarding flow flips them after explicit consent.
+// Privacy gates are layered: `prefs.metrics` is the master switch, and
+// `prefs.content` is required for Langfuse traces because this sink is used
+// for turn-quality evals. If either is off, no network call is made.
+// `prefs.artifactManifest` decides whether the produced-files manifest is
+// included. None of these defaults to true; the Web onboarding flow flips
+// metrics + content after explicit consent.
 //
 // See: specs/change/20260507-langfuse-telemetry/spec.md
 
@@ -615,6 +616,7 @@ export async function reportRunCompleted(
   opts: ReportRunOpts = {},
 ): Promise<void> {
   if (ctx.prefs.metrics !== true) return;
+  if (ctx.prefs.content !== true) return;
 
   const config = resolveReportConfig(opts);
   if (!config) {
