@@ -1757,7 +1757,7 @@ async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig
 // Provider: Fal.ai — generic queue-based renderer for image + video.
 //
 // Queue protocol (raw HTTP, no SDK):
-//   POST https://queue.fal.run/{endpoint}          body: { input: {...} }
+//   POST https://queue.fal.run/{endpoint}          body: flat model input (no wrapper)
 //   GET  {status_url}?logs=0                       → { status: QUEUED|IN_PROGRESS|COMPLETED|FAILED }
 //   GET  {response_url}                            → result payload
 //
