@@ -1153,6 +1153,10 @@ export const zhTW: Dict = {
   'critiqueTheater.settingsEnabledLabel': '在代理執行期間顯示設計評審團',
   'critiqueTheater.settingsEnabledDescription':
     '啟用後，五人評審面板會在代理產生時同步進行，並在交付前為結果評分。可隨時中斷。',
+  'critiqueTheater.settingsEnabledProjectHint':
+    '已為此專案儲存。此專案的新執行將在伺服器端經過設計評審團。',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    '請開啟專案以將設定持久化至伺服器端。目前僅修改瀏覽器內偏好。',
 
   'pet.title': '寵物',
   'pet.tabBuiltIn': '內建',

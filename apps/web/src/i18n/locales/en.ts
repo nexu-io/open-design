@@ -1233,6 +1233,10 @@ export const en: Dict = {
   'critiqueTheater.settingsEnabledLabel': 'Show Design Jury during agent runs',
   'critiqueTheater.settingsEnabledDescription':
     'When enabled, a five-panel review appears alongside agent generations and scores the output before shipping. You can interrupt at any time.',
+  'critiqueTheater.settingsEnabledProjectHint':
+    'Saved for this project. New runs in this project will route through Design Jury server-side.',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    'Open a project to persist this server-side. Until then, this only changes the in-browser preference.',
 
   'pet.title': 'Pets',
   'pet.subtitle': 'Adopt a tiny companion that floats over your workspace.',

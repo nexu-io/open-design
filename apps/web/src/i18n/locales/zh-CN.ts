@@ -1198,6 +1198,10 @@ export const zhCN: Dict = {
   'critiqueTheater.settingsEnabledLabel': '在代理运行期间显示设计评审团',
   'critiqueTheater.settingsEnabledDescription':
     '启用后，五人评审面板会在代理生成时同时显示，并在交付前对结果评分。你可以随时中断。',
+  'critiqueTheater.settingsEnabledProjectHint':
+    '已为该项目保存。该项目的新运行将在服务端经过设计评审团。',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    '打开项目后此设置才会服务端持久化；目前仅修改浏览器本地偏好。',
 
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',

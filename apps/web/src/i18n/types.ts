@@ -1603,4 +1603,6 @@ export interface Dict {
   'critiqueTheater.settingsNavHint': string;
   'critiqueTheater.settingsEnabledLabel': string;
   'critiqueTheater.settingsEnabledDescription': string;
+  'critiqueTheater.settingsEnabledProjectHint': string;
+  'critiqueTheater.settingsEnabledNoProjectHint': string;
 }

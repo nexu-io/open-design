@@ -1079,6 +1079,10 @@ export const ko: Dict = {
   'critiqueTheater.settingsEnabledLabel': '에이전트 실행 중 디자인 배심원단 표시',
   'critiqueTheater.settingsEnabledDescription':
     '활성화하면 에이전트가 생성하는 동안 5인 패널 리뷰가 함께 진행되며 출하 전에 결과에 점수를 매깁니다. 언제든지 중단할 수 있습니다.',
+  'critiqueTheater.settingsEnabledProjectHint':
+    '이 프로젝트에 저장되었습니다. 새 실행은 서버 측에서 디자인 배심원단을 통과합니다.',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    '서버 측에 저장하려면 프로젝트를 여세요. 지금은 브라우저 내 환경설정만 변경됩니다.',
 
   'pet.title': '펫',
   'pet.tabBuiltIn': '내장',

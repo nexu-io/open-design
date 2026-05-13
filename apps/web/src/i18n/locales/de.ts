@@ -967,6 +967,10 @@ export const de: Dict = {
   'critiqueTheater.settingsEnabledLabel': 'Design Jury während Agent-Runs anzeigen',
   'critiqueTheater.settingsEnabledDescription':
     'Aktiviert, läuft während jeder Agent-Generierung eine Fünf-Panel-Review mit, die das Ergebnis vor der Auslieferung bewertet. Du kannst jederzeit unterbrechen.',
+  'critiqueTheater.settingsEnabledProjectHint':
+    'Für dieses Projekt gespeichert. Neue Runs in diesem Projekt laufen serverseitig durch die Design Jury.',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    'Öffne ein Projekt, damit dies serverseitig persistiert. Bis dahin ändert sich nur die Browser-Voreinstellung.',
 
   'pet.title': 'Haustiere',
   'pet.tabBuiltIn': 'Vorgegeben',
