@@ -185,6 +185,40 @@ describe('evaluateRollout (Phase 16)', () => {
     expect(decision.kind).toBe('hold');
     if (decision.kind === 'hold') expect(decision.reason).toContain('invalid cleanParseThreshold');
   });
+
+  it('refuses NaN on every numeric input (PerishCode follow-up on PR #1499)', () => {
+    // Number.isFinite() rejects NaN, so the guard already handles
+    // these. Pin the behavior explicitly so a future refactor of the
+    // guard (`>= 0 && <= 1`, a typed parser, a clamp helper) cannot
+    // accidentally let NaN through and surface a zero-evidence
+    // promote signal.
+    const windowNaN = evaluateRollout({
+      current: 'M1',
+      history: [],
+      windowDays: Number.NaN,
+      now: FROZEN_NOW,
+    });
+    expect(windowNaN.kind).toBe('hold');
+    if (windowNaN.kind === 'hold') expect(windowNaN.reason).toContain('invalid windowDays');
+
+    const shippedNaN = evaluateRollout({
+      current: 'M1',
+      history: [],
+      shippedThreshold: Number.NaN,
+      now: FROZEN_NOW,
+    });
+    expect(shippedNaN.kind).toBe('hold');
+    if (shippedNaN.kind === 'hold') expect(shippedNaN.reason).toContain('invalid shippedThreshold');
+
+    const cleanNaN = evaluateRollout({
+      current: 'M1',
+      history: [],
+      cleanParseThreshold: Number.NaN,
+      now: FROZEN_NOW,
+    });
+    expect(cleanNaN.kind).toBe('hold');
+    if (cleanNaN.kind === 'hold') expect(cleanNaN.reason).toContain('invalid cleanParseThreshold');
+  });
 });
 
 // Type assertion: every RatchetDecision should be one of three kinds.
