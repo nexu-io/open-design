@@ -1756,17 +1756,17 @@ async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig
 // ---------------------------------------------------------------------------
 // Provider: Fal.ai — generic queue-based renderer for image + video.
 //
-// All fal models share the same queue protocol:
-//   POST https://queue.fal.run/{endpoint}  → { request_id }
-//   GET  .../requests/{id}/status?logs=0   → { status: QUEUED|IN_PROGRESS|COMPLETED|FAILED }
-//   GET  .../requests/{id}                 → result payload
+// Queue protocol (raw HTTP, no SDK):
+//   POST https://queue.fal.run/{endpoint}          body: { input: {...} }
+//   GET  {status_url}?logs=0                       → { status: QUEUED|IN_PROGRESS|COMPLETED|FAILED }
+//   GET  {response_url}                            → result payload
 //
 // Image result shape: { images: [{ url, content_type }] }
 // Video result shape: { video: { url } } or { videos: [{ url }] }
 //
 // Endpoint resolution: FAL_ENDPOINTS maps catalogue IDs to their fal-ai/*
-// path. Any model ID that doesn't appear in the map is passed through
-// verbatim — this is what enables "fal-ai/flux/dev" custom paths.
+// path. Any model ID not in the map is used verbatim — this is what
+// enables arbitrary "fal-ai/..." custom paths without catalog entries.
 // ---------------------------------------------------------------------------
 
 const FAL_ENDPOINTS: Record<string, string> = {
@@ -1780,11 +1780,18 @@ const FAL_ENDPOINTS: Record<string, string> = {
   'sora-2-pro':          'fal-ai/sora',
   'veo-3-fal':           'fal-ai/veo3',
   'veo-2-fal':           'fal-ai/veo2',
-  'wan-2.1-t2v':         'fal-ai/wan-video/v2.1/text-to-video',
-  'wan-2.1-i2v':         'fal-ai/wan-video/v2.1/image-to-video',
+  'wan-2.1-t2v':         'fal-ai/wan-t2v',
+  'wan-2.1-i2v':         'fal-ai/wan-i2v',
   'seedance-1-pro-fal':  'fal-ai/bytedance/seedance-1-pro',
-  'kling-2.1-t2v-fal':   'fal-ai/kling-video/v2.1/pro/text-to-video',
+  'kling-2.1-t2v-fal':   'fal-ai/kling-video/v2.1/master/text-to-video',
 };
+
+// Image models that expect `aspect_ratio` (e.g. "16:9") instead of the
+// named `image_size` enum ("landscape_16_9") used by FLUX Dev/Schnell/SD.
+const FAL_IMAGE_USES_ASPECT_RATIO = new Set([
+  'fal-ai/flux-pro/v1.1-ultra',
+  'fal-ai/flux-pro/v1.1',
+]);
 
 const FAL_IMAGE_SIZES: Record<string, string> = {
   '1:1':  'square_hd',
@@ -1794,11 +1801,24 @@ const FAL_IMAGE_SIZES: Record<string, string> = {
   '3:4':  'portrait_4_3',
 };
 
+// Video models that do not accept a duration field at all.
+const FAL_VIDEO_NO_DURATION = new Set([
+  'fal-ai/wan-t2v',
+  'fal-ai/wan-i2v',
+]);
+
+// Video models that expect duration as a suffixed string ("5s") rather
+// than a bare integer.
+const FAL_VIDEO_STRING_DURATION = new Set([
+  'fal-ai/veo3',
+  'fal-ai/veo2',
+]);
+
 async function falQueueRun(
   endpoint: string,
   queueBase: string,
   apiKey: string,
-  body: Record<string, unknown>,
+  input: Record<string, unknown>,
   maxMs: number,
   onProgress?: ProgressFn,
   modelLabel?: string,
@@ -1808,7 +1828,7 @@ async function falQueueRun(
   const submitResp = await fetch(`${queueBase}/${endpoint}`, {
     method: 'POST',
     headers: { ...authHeader, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(input),
   });
   const submitText = await submitResp.text();
   if (!submitResp.ok) {
@@ -1823,12 +1843,8 @@ async function falQueueRun(
     throw new Error(`fal submit missing request_id: ${truncate(submitText, 200)}`);
   }
 
-  // Status and result URLs are model-agnostic on the fal queue API:
-  //   queue.fal.run/requests/{id}/status
-  //   queue.fal.run/requests/{id}
-  // The submit response also returns status_url / response_url pointing
-  // to these same paths — we derive them directly so there's no second
-  // source of truth.
+  // Prefer the URLs returned by the submit response; fall back to the
+  // well-known model-agnostic queue paths as a safety net.
   const statusUrl = submitData.status_url
     ?? `${queueBase}/requests/${encodeURIComponent(requestId)}/status?logs=0`;
   const resultUrl = submitData.response_url
@@ -1887,27 +1903,37 @@ function falMaxPollMs(defaultMs: number): number {
   return Number.isFinite(v) && v >= 30_000 ? v : defaultMs;
 }
 
+function falQueueBase(baseUrl: string): string {
+  if (baseUrl.includes('queue.fal.run')) return baseUrl;
+  // Replace only the exact host to avoid mangling custom base URLs that
+  // happen to contain "fal.run" as a substring.
+  return baseUrl.replace(/^https:\/\/fal\.run/, 'https://queue.fal.run');
+}
+
 async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
   }
-  const baseUrl = (credentials.baseUrl || 'https://fal.run').replace(/\/$/, '');
-  const queueBase = baseUrl.includes('queue.fal.run')
-    ? baseUrl
-    : baseUrl.replace('fal.run', 'queue.fal.run');
+  const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
   const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
-  const imageSize = FAL_IMAGE_SIZES[ctx.aspect ?? '1:1'] ?? 'square_hd';
+  const aspectRatio = ctx.aspect ?? '1:1';
 
-  const body: Record<string, unknown> = {
+  const input: Record<string, unknown> = {
     prompt: ctx.prompt || 'A high-quality image.',
-    image_size: imageSize,
     num_images: 1,
   };
+  // flux-pro-ultra and similar pro variants expect `aspect_ratio` as a
+  // ratio string; most other fal image models use a named `image_size`.
+  if (FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint)) {
+    input.aspect_ratio = aspectRatio;
+  } else {
+    input.image_size = FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd';
+  }
   if (ctx.imageRef?.dataUrl) {
-    body.image_url = ctx.imageRef.dataUrl;
+    input.image_url = ctx.imageRef.dataUrl;
   }
 
-  const result = await falQueueRun(endpoint, queueBase, credentials.apiKey, body, falMaxPollMs(5 * 60 * 1000));
+  const result = await falQueueRun(endpoint, queueBase, credentials.apiKey, input, falMaxPollMs(5 * 60 * 1000));
 
   const imageEntry = Array.isArray(result?.images) ? result.images[0] : null;
   if (!imageEntry?.url) {
@@ -1916,10 +1942,11 @@ async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): P
   const dlResp = await fetch(imageEntry.url);
   if (!dlResp.ok) throw new Error(`fal image download ${dlResp.status}`);
   const bytes = Buffer.from(await dlResp.arrayBuffer());
+  const sizeLabel = FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint) ? aspectRatio : (FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd');
 
   return {
     bytes,
-    providerNote: `fal/${endpoint} · ${imageSize} · ${bytes.length} bytes`,
+    providerNote: `fal/${endpoint} · ${sizeLabel} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
@@ -1928,25 +1955,28 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
   if (!credentials.apiKey) {
     throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
   }
-  const baseUrl = (credentials.baseUrl || 'https://fal.run').replace(/\/$/, '');
-  const queueBase = baseUrl.includes('queue.fal.run')
-    ? baseUrl
-    : baseUrl.replace('fal.run', 'queue.fal.run');
+  const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
   const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
   const aspectRatio = ctx.aspect ?? '16:9';
-  const duration = ctx.length ?? 5;
+  const durationSec = ctx.length ?? 5;
 
-  const body: Record<string, unknown> = {
+  const input: Record<string, unknown> = {
     prompt: ctx.prompt || 'A short cinematic clip.',
     aspect_ratio: aspectRatio,
-    duration,
   };
+  // Some models (Wan) have no duration parameter; others (Veo) require a
+  // suffixed string ("5s") rather than a bare integer.
+  if (!FAL_VIDEO_NO_DURATION.has(endpoint)) {
+    input.duration = FAL_VIDEO_STRING_DURATION.has(endpoint)
+      ? `${durationSec}s`
+      : durationSec;
+  }
   if (ctx.imageRef?.dataUrl) {
-    body.image_url = ctx.imageRef.dataUrl;
+    input.image_url = ctx.imageRef.dataUrl;
   }
 
   const result = await falQueueRun(
-    endpoint, queueBase, credentials.apiKey, body,
+    endpoint, queueBase, credentials.apiKey, input,
     falMaxPollMs(10 * 60 * 1000), onProgress, ctx.model,
   );
 
@@ -1963,7 +1993,7 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
 
   return {
     bytes,
-    providerNote: `fal/${endpoint} · ${aspectRatio} · ${duration}s · ${bytes.length} bytes`,
+    providerNote: `fal/${endpoint} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
   };
 }
