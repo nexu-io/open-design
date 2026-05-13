@@ -418,6 +418,47 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).not.toContain('data-od-render-mode="url-load"');
   });
 
+  it('hides preview-only toolbar controls when switching an HTML deck to source view', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    expect(container.querySelector('.deck-nav')).toBeTruthy();
+    expect(container.querySelector('.palette-tweaks-anchor')).toBeTruthy();
+    expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^source$/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.deck-nav')).toBeNull();
+      expect(container.querySelector('.palette-tweaks-anchor')).toBeNull();
+      expect(container.querySelector('.viewer-viewport-switcher')).toBeNull();
+      expect(screen.queryByTestId('manual-edit-mode-toggle')).toBeNull();
+      expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
+      expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
+    });
+  });
+
   it('shows Cloudflare Pages as a deploy action without requiring a project name input', async () => {
     const file = baseFile({
       name: 'index.html',

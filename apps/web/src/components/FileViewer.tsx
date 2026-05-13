@@ -4965,6 +4965,7 @@ function HtmlViewer({
     return t('fileViewer.deployLinkPreparingLabel');
   };
   const boardAvailable = mode === 'preview' && source !== null;
+  const showPreviewToolbarControls = mode === 'preview';
 
   return (
     <div className="viewer html-viewer">
@@ -4996,7 +4997,7 @@ function HtmlViewer({
               {t('fileViewer.source')}
             </button>
           </div>
-          {effectiveDeck ? (
+          {showPreviewToolbarControls && effectiveDeck ? (
             <span
               className="deck-nav"
               role="group"
@@ -5034,155 +5035,159 @@ function HtmlViewer({
           ) : null}
         </div>
         <div className="viewer-toolbar-actions">
-          <div className="palette-tweaks-anchor">
-            <button
-              type="button"
-              className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
-              data-testid="palette-tweaks-toggle"
-              title="Tweaks"
-              aria-haspopup="dialog"
-              aria-expanded={palettePopoverOpen}
-              onClick={() => setPalettePopoverOpen((v) => !v)}
-            >
-              <Icon name="tweaks" size={13} />
-              <span>Tweaks</span>
-              {selectedPalette ? (
-                <span
-                  className="palette-tweaks-badge"
-                  aria-hidden
-                  style={{
-                    backgroundColor:
-                      selectedPalette === 'coral' ? '#ff5a3c' :
-                      selectedPalette === 'electric' ? '#7c3aed' :
-                      selectedPalette === 'acid-forest' ? '#16a34a' :
-                      selectedPalette === 'risograph' ? '#e11d48' :
-                      '#0a0a0a',
-                  }}
+          {showPreviewToolbarControls ? (
+            <>
+              <div className="palette-tweaks-anchor">
+                <button
+                  type="button"
+                  className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
+                  data-testid="palette-tweaks-toggle"
+                  title="Tweaks"
+                  aria-haspopup="dialog"
+                  aria-expanded={palettePopoverOpen}
+                  onClick={() => setPalettePopoverOpen((v) => !v)}
+                >
+                  <Icon name="tweaks" size={13} />
+                  <span>Tweaks</span>
+                  {selectedPalette ? (
+                    <span
+                      className="palette-tweaks-badge"
+                      aria-hidden
+                      style={{
+                        backgroundColor:
+                          selectedPalette === 'coral' ? '#ff5a3c' :
+                          selectedPalette === 'electric' ? '#7c3aed' :
+                          selectedPalette === 'acid-forest' ? '#16a34a' :
+                          selectedPalette === 'risograph' ? '#e11d48' :
+                          '#0a0a0a',
+                      }}
+                    />
+                  ) : null}
+                </button>
+                <PaletteTweaks
+                  open={palettePopoverOpen}
+                  selected={selectedPalette}
+                  onChange={setSelectedPalette}
+                  onPreview={setPreviewPalette}
+                  onClose={() => setPalettePopoverOpen(false)}
                 />
-              ) : null}
-            </button>
-            <PaletteTweaks
-              open={palettePopoverOpen}
-              selected={selectedPalette}
-              onChange={setSelectedPalette}
-              onPreview={setPreviewPalette}
-              onClose={() => setPalettePopoverOpen(false)}
-            />
-          </div>
-          <button
-            className={`viewer-action${manualEditMode ? ' active' : ''}`}
-            type="button"
-            data-testid="manual-edit-mode-toggle"
-            title={t('fileViewer.edit')}
-            aria-pressed={manualEditMode}
-            onClick={() => {
-              if (!manualEditMode) {
-                setBoardMode(false);
-                clearBoardComposer();
-                setInspectMode(false);
-                setDrawOverlayOpen(false);
-                setMode('preview');
-                setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
-                setManualEditMode(true);
-                return;
-              }
-              void exitManualEditModeAfterFlush();
-            }}
-          >
-            <Icon name="edit" size={13} />
-            <span>{t('fileViewer.edit')}</span>
-          </button>
-          <button
-            className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
-            type="button"
-            data-testid="draw-overlay-toggle"
-            title={t('fileViewer.draw')}
-            aria-pressed={drawOverlayOpen}
-            onClick={() => {
-              const next = !drawOverlayOpen;
-              if (!next) {
-                setDrawOverlayOpen(false);
-                return;
-              }
-              const activateDraw = () => {
-                setBoardMode(false);
-                clearBoardComposer();
-                setInspectMode(false);
-                setDrawOverlayMode('draw');
-                setMode('preview');
-                setDrawOverlayOpen(true);
-              };
-              if (manualEditMode) {
-                void exitManualEditModeAfterFlush().then((ok) => {
-                  if (ok) activateDraw();
-                });
-                return;
-              }
-              activateDraw();
-            }}
-          >
-            <Icon name="draw" size={13} />
-            <span>{t('fileViewer.draw')}</span>
-          </button>
-          <span className="viewer-divider" aria-hidden />
-          <PreviewViewportControls
-            viewport={previewViewport}
-            onViewport={setPreviewViewport}
-            t={t}
-          />
-          <span className="viewer-divider" aria-hidden />
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => bumpZoom(-25)}
-            title={t('fileViewer.zoomOut')}
-            aria-label={t('fileViewer.zoomOut')}
-          >
-            <Icon name="minus" size={14} />
-          </button>
-          <div className="zoom-menu" ref={zoomMenuRef}>
-            <button
-              type="button"
-              className="viewer-action zoom-trigger"
-              aria-haspopup="menu"
-              aria-expanded={zoomMenuOpen}
-              onClick={() => setZoomMenuOpen((v) => !v)}
-              style={{ minWidth: 64 }}
-            >
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-              <Icon name="chevron-down" size={11} />
-            </button>
-            {zoomMenuOpen ? (
-              <div className="zoom-menu-popover" role="menu">
-                {[50, 75, 100, 125, 150, 200].map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={() => {
-                      setZoom(level);
-                      setZoomMenuOpen(false);
-                    }}
-                  >
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
-                    {zoom === level ? (
-                      <Icon name="check" size={13} />
-                    ) : null}
-                  </button>
-                ))}
               </div>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => bumpZoom(25)}
-            title={t('fileViewer.zoomIn')}
-            aria-label={t('fileViewer.zoomIn')}
-          >
-            <Icon name="plus" size={14} />
-          </button>
+              <button
+                className={`viewer-action${manualEditMode ? ' active' : ''}`}
+                type="button"
+                data-testid="manual-edit-mode-toggle"
+                title={t('fileViewer.edit')}
+                aria-pressed={manualEditMode}
+                onClick={() => {
+                  if (!manualEditMode) {
+                    setBoardMode(false);
+                    clearBoardComposer();
+                    setInspectMode(false);
+                    setDrawOverlayOpen(false);
+                    setMode('preview');
+                    setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
+                    setManualEditMode(true);
+                    return;
+                  }
+                  void exitManualEditModeAfterFlush();
+                }}
+              >
+                <Icon name="edit" size={13} />
+                <span>{t('fileViewer.edit')}</span>
+              </button>
+              <button
+                className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
+                type="button"
+                data-testid="draw-overlay-toggle"
+                title={t('fileViewer.draw')}
+                aria-pressed={drawOverlayOpen}
+                onClick={() => {
+                  const next = !drawOverlayOpen;
+                  if (!next) {
+                    setDrawOverlayOpen(false);
+                    return;
+                  }
+                  const activateDraw = () => {
+                    setBoardMode(false);
+                    clearBoardComposer();
+                    setInspectMode(false);
+                    setDrawOverlayMode('draw');
+                    setMode('preview');
+                    setDrawOverlayOpen(true);
+                  };
+                  if (manualEditMode) {
+                    void exitManualEditModeAfterFlush().then((ok) => {
+                      if (ok) activateDraw();
+                    });
+                    return;
+                  }
+                  activateDraw();
+                }}
+              >
+                <Icon name="draw" size={13} />
+                <span>{t('fileViewer.draw')}</span>
+              </button>
+              <span className="viewer-divider" aria-hidden />
+              <PreviewViewportControls
+                viewport={previewViewport}
+                onViewport={setPreviewViewport}
+                t={t}
+              />
+              <span className="viewer-divider" aria-hidden />
+              <button
+                type="button"
+                className="icon-only"
+                onClick={() => bumpZoom(-25)}
+                title={t('fileViewer.zoomOut')}
+                aria-label={t('fileViewer.zoomOut')}
+              >
+                <Icon name="minus" size={14} />
+              </button>
+              <div className="zoom-menu" ref={zoomMenuRef}>
+                <button
+                  type="button"
+                  className="viewer-action zoom-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={zoomMenuOpen}
+                  onClick={() => setZoomMenuOpen((v) => !v)}
+                  style={{ minWidth: 64 }}
+                >
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
+                  <Icon name="chevron-down" size={11} />
+                </button>
+                {zoomMenuOpen ? (
+                  <div className="zoom-menu-popover" role="menu">
+                    {[50, 75, 100, 125, 150, 200].map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
+                        role="menuitem"
+                        onClick={() => {
+                          setZoom(level);
+                          setZoomMenuOpen(false);
+                        }}
+                      >
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                        {zoom === level ? (
+                          <Icon name="check" size={13} />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="icon-only"
+                onClick={() => bumpZoom(25)}
+                title={t('fileViewer.zoomIn')}
+                aria-label={t('fileViewer.zoomIn')}
+              >
+                <Icon name="plus" size={14} />
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
       {((filePrimaryActions: ReactNode) => (
