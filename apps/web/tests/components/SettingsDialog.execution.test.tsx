@@ -968,6 +968,21 @@ describe('SettingsDialog media providers interactions', () => {
     expect(bflBaseUrl.disabled).toBe(true);
   });
 
+  it('renders ElevenLabs as an integrated media provider with enabled inputs', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'media' },
+    );
+
+    const apiKeyInput = screen.getByLabelText('ElevenLabs API key') as HTMLInputElement;
+    const baseUrlInput = screen.getByLabelText('ElevenLabs Base URL') as HTMLInputElement;
+    const row = apiKeyInput.closest('.media-provider-row') as HTMLElement;
+
+    expect(within(row).getByText('Integrated')).toBeTruthy();
+    expect(apiKeyInput.disabled).toBe(false);
+    expect(baseUrlInput.disabled).toBe(false);
+  });
+
   it('clears an existing provider config and removes it from the persisted payload', async () => {
     const { onPersist } = renderSettingsDialog(
       {

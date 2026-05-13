@@ -1010,7 +1010,7 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content ? <div className="user-text">{message.content}</div> : null}
+      {message.content ? <div className="user-text user-bubble">{message.content}</div> : null}
     </div>
   );
 }

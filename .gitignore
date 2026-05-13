@@ -51,6 +51,7 @@ tsconfig.tsbuildinfo
 task.md
 specs/change/active
 .ralph/
+docs/superpowers/
 
 # Nix and direnv
 .direnv/

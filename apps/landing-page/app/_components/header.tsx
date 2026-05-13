@@ -50,7 +50,9 @@ export function Header({
     <header className='nav' data-od-id='nav' data-nav-headroom>
       <div className='container nav-inner'>
         <a href={brandHref} className='brand'>
-          <span className='brand-mark'>Ø</span>
+          <span className='brand-mark'>
+            <img src='/logo.png' alt='' width={36} height={36} />
+          </span>
           <span>Open Design</span>
           <span className='brand-meta'>
             <b>Studio Nº 01</b>Berlin / Open / Earth
