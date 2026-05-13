@@ -1,26 +1,20 @@
 import { useEffect, useRef } from 'react';
-import type { LiveArtifactRefreshSsePayload, LiveArtifactSsePayload } from '@open-design/contracts';
+import type {
+  LiveArtifactRefreshSsePayload,
+  LiveArtifactSsePayload,
+  ProjectConversationCreatedSsePayload,
+} from '@open-design/contracts';
 export interface ProjectFileChangeEvent {
   type: 'file-changed';
   path: string;
   kind: 'add' | 'change' | 'unlink';
 }
 
-// Emitted by the daemon when a new conversation is inserted into a project
-// from a path the open project view can't observe through its own state
-// (currently: Routines "Run now" in reuse-an-existing-project mode). The
-// open `ProjectView` listens for these so its conversation list stays
-// aligned with the database without requiring the user to leave and re-enter
-// the project. The active conversation is intentionally NOT changed here —
-// the user keeps their current context; auto-switch is a separate UX
-// decision tracked in #1361.
-export interface ProjectConversationCreatedEvent {
-  type: 'conversation-created';
-  projectId: string;
-  conversationId: string;
-  title: string | null;
-  createdAt: number;
-}
+// Re-exported under the local "project event" naming so consumers in this
+// package keep their existing import shape; the canonical type lives in
+// `packages/contracts` alongside the other SSE payloads (per repo review
+// guidance on contract/protocol seams).
+export type ProjectConversationCreatedEvent = ProjectConversationCreatedSsePayload;
 
 export type ProjectLiveArtifactEvent = LiveArtifactSsePayload | LiveArtifactRefreshSsePayload;
 

@@ -419,6 +419,24 @@ export function ProjectView({
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
   const creatingConversationRef = useRef(false);
+  // Live mirror of the currently-viewed project id. Used to bail out of
+  // the conversation-created async refresh (#1361) if the user switches
+  // projects while the refetch is in flight — the existing project-load
+  // effects use the same kind of cancellation guard.
+  const projectIdRef = useRef(project.id);
+  useEffect(() => {
+    projectIdRef.current = project.id;
+  }, [project.id]);
+  // Monotonic token bumped on every `conversation-created` refresh dispatch.
+  // Two rapid events (e.g. concurrent routine runs against the same reused
+  // project, #1502) can start overlapping `listConversations` calls; if the
+  // later request resolves first with N+1 conversations and the earlier
+  // request resolves afterwards with only N, an unconditional
+  // `setConversations(list)` would drop the newest conversation. Each
+  // dispatch captures the token at start; only the dispatch whose token
+  // still equals `conversationsRefreshTokenRef.current` at await-return is
+  // allowed to apply its result.
+  const conversationsRefreshTokenRef = useRef(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
   const currentConversationHasActiveRun = useMemo(
     () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
@@ -761,9 +779,24 @@ export function ProjectView({
       // user keeps their current context. Auto-switch is a separate UX
       // decision tracked in #1361.
       if (evt.projectId !== project.id) return;
+      const capturedProjectId = project.id;
+      const myToken = ++conversationsRefreshTokenRef.current;
       void (async () => {
         try {
-          const list = await listConversations(project.id);
+          const list = await listConversations(capturedProjectId);
+          // Bail if the user switched projects while this request was in
+          // flight (#1361 review, Codex P1). The captured project id is the
+          // one we asked the daemon about; the live ref is the one the
+          // user is looking at right now. If they don't match, applying
+          // the list would overwrite the new project's sidebar with
+          // stale data from the old one.
+          if (projectIdRef.current !== capturedProjectId) return;
+          // Bail if a newer conversation-created event already dispatched
+          // its own refresh after us (#1361 review, lefarcen P2). With two
+          // rapid events the later request may resolve first; if this
+          // earlier request resolves afterwards it would drop the newer
+          // conversation. Only the latest dispatch is allowed to apply.
+          if (conversationsRefreshTokenRef.current !== myToken) return;
           setConversations(list);
         } catch {
           // Defensive: refresh failed (network blip, daemon gone). The

@@ -275,6 +275,7 @@ import {
 /** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
 /** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
 /** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
+/** @typedef {import('@open-design/contracts').ProjectConversationCreatedSsePayload} ProjectConversationCreatedSsePayload */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -4457,14 +4458,18 @@ export async function startServer({
     // For reuse-an-existing-project mode this is the only path the
     // open view has to learn the conversation exists; for new-project
     // mode this is harmless (no subscribers for a project that was
-    // just created milliseconds ago).
-    emitProjectEvent(projectId, {
+    // just created milliseconds ago). The payload shape is the shared
+    // `ProjectConversationCreatedSsePayload` from `@open-design/contracts`
+    // so the daemon producer and the web consumer cannot drift.
+    /** @type {ProjectConversationCreatedSsePayload} */
+    const conversationCreatedEvent = {
       type: 'conversation-created',
       projectId,
       conversationId,
       title: conversationTitle,
       createdAt: now,
-    });
+    };
+    emitProjectEvent(projectId, conversationCreatedEvent);
 
     const assistantMessageId = `routine-assistant-${randomUUID()}`;
     const run = design.runs.create({
