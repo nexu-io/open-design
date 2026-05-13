@@ -10597,22 +10597,42 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-top: 1px solid var(--border);
   margin: 10px 0;
 }
-.prose-block .md-table {
-  border-collapse: collapse;
-  margin: 8px 0;
+/* GFM pipe tables. Rule is intentionally unscoped so both the chat path
+   (`.prose-block`) and the artifact preview (`.markdown-rendered`) get
+   the same treatment. The wrapping element gets a block-level scroll so
+   wide tables don't blow out narrow chat columns. */
+.md-table {
   display: block;
   overflow-x: auto;
   max-width: 100%;
-}
-.prose-block .md-table th,
-.prose-block .md-table td {
+  margin: 12px 0;
   border: 1px solid var(--border);
-  padding: 4px 8px;
+  border-radius: 6px;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.md-table th,
+.md-table td {
+  padding: 8px 12px;
   text-align: left;
   vertical-align: top;
+  border-bottom: 1px solid var(--border);
 }
-.prose-block .md-table th {
+.md-table th + th,
+.md-table td + td {
+  border-left: 1px solid var(--border);
+}
+.md-table thead th {
+  background: var(--bg-panel);
+  color: var(--text);
   font-weight: 600;
+  border-bottom-color: var(--border);
+}
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.md-table tbody tr:nth-child(even) td {
+  background: color-mix(in oklab, var(--bg-panel) 40%, transparent);
 }
 .op-waiting {
   font-size: 12px;
