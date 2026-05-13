@@ -4072,6 +4072,16 @@ export async function startServer({
             artifactId: critiqueRunId,
             artifactDir: critiqueArtifactDir,
             adapter: typeof agentId === 'string' ? agentId : 'unknown',
+            // Codex P2 on PR #1485: thread the resolved skill id into the
+            // orchestrator so the Phase 12 metrics carry the real label
+            // instead of falling through to 'unknown' for every live run.
+            // `effectiveSkillId` was already computed above (line ~2951) as
+            // the request skillId with a project-row fallback; pass it
+            // through verbatim, and leave the orchestrator's own default
+            // of 'unknown' for runs that genuinely have no skill assigned.
+            skill: typeof effectiveSkillId === 'string' && effectiveSkillId
+              ? effectiveSkillId
+              : undefined,
             cfg: critiqueCfg,
             db,
             bus: critiqueBus,

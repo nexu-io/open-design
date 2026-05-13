@@ -367,23 +367,33 @@ export async function runOrchestrator(
             completedRounds.push({ ...rs });
           }
           roundDeadline = null;
-          critiqueRoundsTotal.inc({ adapter, skill });
-          critiqueCompositeScore.observe({ adapter, skill }, event.composite);
-          const startedAtMs = roundStartMs.get(event.round);
-          if (startedAtMs !== undefined) {
-            critiqueRoundDurationMs.observe(
-              { adapter, skill, round: String(event.round) },
-              Date.now() - startedAtMs,
-            );
+          // Siri-Ray P2 on PR #1485: observe / log the daemon-authoritative
+          // round values (rs.composite, rs.mustFix), not the agent's
+          // <ROUND_END composite=...> attribute. If they disagree the
+          // composite_mismatch warning above already flagged it; persistence
+          // and ship decisions use rs, so dashboards must too. Skip the
+          // bumps entirely when rs is missing (degenerate round_end with no
+          // matching panelist_open): a metric series labeled with an
+          // untrusted composite is worse than one missing sample.
+          if (rs !== undefined) {
+            critiqueRoundsTotal.inc({ adapter, skill });
+            critiqueCompositeScore.observe({ adapter, skill }, rs.composite);
+            const startedAtMs = roundStartMs.get(event.round);
+            if (startedAtMs !== undefined) {
+              critiqueRoundDurationMs.observe(
+                { adapter, skill, round: String(event.round) },
+                Date.now() - startedAtMs,
+              );
+            }
+            logCritique({
+              event: 'round_closed',
+              runId,
+              round: event.round,
+              composite: rs.composite,
+              mustFix: rs.mustFix,
+              decision: event.decision,
+            });
           }
-          logCritique({
-            event: 'round_closed',
-            runId,
-            round: event.round,
-            composite: event.composite,
-            mustFix: event.mustFix,
-            decision: event.decision,
-          });
           break;
         }
 

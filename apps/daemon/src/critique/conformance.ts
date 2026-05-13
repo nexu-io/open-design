@@ -22,6 +22,7 @@
  */
 
 import type { PanelEvent } from '@open-design/contracts/critique';
+import { CRITIQUE_PROTOCOL_VERSION } from '@open-design/contracts/critique';
 
 import { parseCritiqueStream, type ShipArtifactPayload } from './parser.js';
 import {
@@ -36,7 +37,11 @@ import {
 
 export type ConformanceOutcome =
   | { kind: 'shipped'; round: number; composite: number; events: PanelEvent[] }
-  | { kind: 'degraded'; reason: 'malformed_block' | 'oversize_block' | 'missing_artifact'; events: PanelEvent[] }
+  | {
+      kind: 'degraded';
+      reason: 'malformed_block' | 'oversize_block' | 'missing_artifact' | 'protocol_version_mismatch';
+      events: PanelEvent[];
+    }
   | { kind: 'failed'; cause: 'no_ship' | 'unexpected_error'; events: PanelEvent[]; error?: string };
 
 export interface RunConformanceParams {
@@ -74,6 +79,25 @@ export async function runAdapterConformance(
       },
     })) {
       events.push(event);
+      // Codex P2 on PR #1485: a `run_started` carrying a non-current
+      // protocol version cannot be routed safely. The parser does not
+      // know which fields a future protocol revision adds or drops, so
+      // even a valid-looking SHIP would be misinterpreted. Reject the
+      // adapter as degraded with `protocol_version_mismatch` the moment
+      // we see the mismatch; this is the same reason value the
+      // contracts package already lists in DEGRADED_REASONS.
+      if (
+        event.type === 'run_started'
+        && event.protocolVersion !== CRITIQUE_PROTOCOL_VERSION
+      ) {
+        markDegraded(
+          params.adapterId,
+          'protocol_version_mismatch',
+          ADAPTER_DEGRADED_DEFAULT_TTL_MS,
+          'conformance',
+        );
+        return { kind: 'degraded', reason: 'protocol_version_mismatch', events };
+      }
       if (event.type === 'ship') {
         return {
           kind: 'shipped',

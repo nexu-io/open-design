@@ -118,7 +118,7 @@
       "gridPos": { "x": 0, "y": 19, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum(rate(open_design_critique_runs_total[1h])) by (status)",
+          "expr": "sum(rate(open_design_critique_runs_total[1h])) by (status) * 3600",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
