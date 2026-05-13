@@ -78,6 +78,11 @@ import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
+  createAnalyticsService,
+  readAnalyticsContext,
+  readPublicConfigResponse,
+} from './analytics.js';
+import {
   redactSecrets,
   testAgentConnection,
   testProviderConnection,
@@ -1283,6 +1288,37 @@ export function shouldReportRunCompletedFromMessage(saved, body = {}) {
 
 export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
+}
+
+export function createFinalizedMessageTelemetryReporter({
+  design,
+  db,
+  dataDir,
+  reportedRuns,
+  getAppVersion = () => null,
+  report = reportRunCompletedFromDaemon,
+}: {
+  design: any;
+  db: unknown;
+  dataDir: string;
+  reportedRuns: Set<string>;
+  getAppVersion?: () => any;
+  report?: typeof reportRunCompletedFromDaemon;
+}) {
+  return (saved, body = {}) => {
+    if (!shouldReportRunCompletedFromMessage(saved, body)) return;
+    const run = design.runs.get(saved.runId);
+    if (!run || reportedRuns.has(run.id)) return;
+    reportedRuns.add(run.id);
+    void report({
+      db,
+      dataDir,
+      run,
+      persistedRunStatus: saved.runStatus,
+      persistedEndedAt: saved.endedAt,
+      appVersion: getAppVersion(),
+    });
+  };
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -2585,9 +2621,43 @@ export async function startServer({
     }
   });
 
+  const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
   const design = {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
+    analytics: analyticsService,
+    getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
+    readAnalyticsContext,
   };
+
+  // PostHog runtime config — gated on BOTH a server-side key (POSTHOG_KEY)
+  // and the user's opt-in metrics consent (Privacy → "Share usage data").
+  // The web bundle short-circuits when enabled=false so opt-out behaviour
+  // is instant after the user toggles metrics off and reloads.
+  app.get('/api/analytics/config', async (_req, res) => {
+    const baseline = readPublicConfigResponse();
+    if (!baseline.enabled) {
+      res.json(baseline);
+      return;
+    }
+    try {
+      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      const consentGranted = appCfg.telemetry?.metrics === true;
+      if (!consentGranted) {
+        res.json({ enabled: false, key: null, host: null });
+        return;
+      }
+      // Echo the installationId so the web client uses the same anonymous
+      // id PostHog already saw on prior runs (and that Langfuse uses too).
+      const installationId =
+        typeof appCfg.installationId === 'string' && appCfg.installationId
+          ? appCfg.installationId
+          : null;
+      res.json({ ...baseline, installationId });
+    } catch {
+      // If the config file is unreadable, fail closed — no events.
+      res.json({ enabled: false, key: null, host: null });
+    }
+  });
 
   // Tracks runs whose completion has already been forwarded to Langfuse so
   // repeated message updates only emit one trace per run.
@@ -2602,6 +2672,14 @@ export async function startServer({
       // Telemetry is best-effort; appVersion is omitted when unavailable.
     }
   })();
+
+  const reportFinalizedMessage = createFinalizedMessageTelemetryReporter({
+    design,
+    db,
+    dataDir: RUNTIME_DATA_DIR,
+    reportedRuns,
+    getAppVersion: () => cachedAppVersion,
+  });
 
   const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrl(baseUrl);
 
@@ -2825,6 +2903,7 @@ export async function startServer({
     status: projectStatusDeps,
     events: projectEventDeps,
     ids: idDeps,
+    telemetry: { reportFinalizedMessage },
   });
   registerImportRoutes(app, {
     db,
@@ -4626,6 +4705,7 @@ export async function startServer({
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
+      await design.analytics.shutdown();
     };
     let server;
     try {

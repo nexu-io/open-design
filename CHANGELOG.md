@@ -7,9 +7,149 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-12
+
+A memory-plus-UI release: **auto-memory store** carries agent context across runs and projects, **Critique Theater advances to Phase 7** (state machine + replay) with daemon-side **Phase 6.2** artifact extraction, **HyperFrames** lands **HTML-in-Canvas** end-to-end, and the web UI gets a **top-to-bottom Designs tab redesign**, **in-context preview comments**, a **unified Media tab**, and a **tweaks palette with HSL hue-shift recoloring**. Plus **responsive design handoff** outputs, **install/uninstall skills & design systems in-app**, **HTTP 206 range requests** for video/audio, **scheduled routines** for unattended agent runs, **macOS Intel (x64) builds**, an official **Nix flake**, four new design systems (hud, loom, trading-terminal, WeChat), and an `agent-browser` skill. 107 merged PRs since 0.6.0.
+
 ### Added
-- Responsive design handoff improvements: tablet/mobile preview auto-fit, 2025–2026 responsive viewport matrix, landing page and OS widgets metadata chips, stricter cross-platform file output contracts, and DESIGN-HANDOFF/DESIGN-MANIFEST exports for coding-tool implementation.
-- Screen-file-first design handoff policy: landing pages, app/product screens, platform surfaces, and OS widget surfaces are exported as distinct HTML files with matching handoff/manifest guidance instead of being merged into one long artifact.
+
+#### Critique Theater
+- **Phase 7 — web client state machine.** Reducer plus `useCritiqueStream` / `useCritiqueReplay` hooks so the critique UI replays cleanly and reconnects mid-run. ([#1307])
+- **Phase 6.2 — daemon artifact extraction + endpoint.** Critique-tagged artifacts are extracted server-side and exposed via a dedicated endpoint. ([#1085])
+
+#### Web / UI
+- **Designs tab redesign** — cards with covers, tags, overflow menu, and multi-select. ([#1161])
+- **In-context comment thread for the artifact preview** — comment directly on a preview without leaving the workspace. ([#1276])
+- **Unified Media tab** — Image / Video / Audio entries consolidated into a single tab. ([#1167])
+- **Tweaks palette popover with HSL hue-shift recoloring** — adjust hue/saturation/lightness inline. ([#1292])
+- **Responsive preview + design handoff outputs** — tablet/mobile preview auto-fit, 2025–2026 responsive viewport matrix, screen-file-first export policy, DESIGN-HANDOFF / DESIGN-MANIFEST exports for coding-tool implementation. ([#1224])
+- **Thumbs-up / thumbs-down feedback widget** under completed assistant turns. ([#1308])
+- **`Cmd/Ctrl+,` opens Settings** with a platform shortcut badge in the menu. ([#1173])
+- **Finalize design package + Continue in CLI buttons.** ([#974])
+- **Fetch models button for BYOK providers** so newly added models discover themselves on demand. ([#1034])
+- Provider-model fetch results sorted alphabetically. ([#1097])
+- **Collapsible MCP JSON field-mapping helper.** ([#1136])
+- Question forms scroll to top of viewport instead of pinning to the bottom. ([#1044])
+- Sidebar tabs flush to the workspace edge with internal scrolling. ([#1038])
+- Design file rename support. ([#894])
+
+#### Daemon, agents & runtime
+- **Auto-memory store with chat-protocol-aware extraction.** Agents accumulate durable context across runs and projects. ([#999])
+- **Install / uninstall for skills & design systems** directly from the desktop app. ([#1003])
+- **HTTP 206 range request support for video / audio files** (closes #784). ([#1105])
+- **Scheduled routines for unattended agent runs.** ([#1033])
+- Guard against agent-emitted stub artifact regressions. ([#1171])
+- Reject filesystem root folder imports. ([#1266])
+- Split agent runtime definitions into per-runtime modules. ([#1063])
+- Split route registration into focused modules. ([#1043])
+
+#### HyperFrames
+- **HTML-in-Canvas lands across web + skills.** Embedded HTML renders inside canvas-mode templates end-to-end. ([#866])
+
+#### Skills, design systems & prompt templates
+- **Generic skills + skills/design-templates split + finalize-design API.** Skill model refactor that separates code-driven skills from design-template assets. ([#955])
+- **Reliable `agent-browser` skill.** ([#1284])
+- **WeChat design system + `login-flow` skill** (also fixes API-mode `tool_calls` bug). ([#1083])
+- **Three new design systems: `hud`, `loom`, `trading-terminal`** with locale coverage. ([#1069])
+- **`release-notes-one-pager` skill** with supporting docs. ([#873])
+- Improve design files grouping. ([#1082])
+- Replace time-specific Orbit greetings with neutral defaults. ([#1291])
+
+#### Design Systems infrastructure
+- **`tokens.css` schema for design systems** (`default` + `kami`). ([#1231])
+
+#### Settings & onboarding
+- Install onboarding links for unavailable local CLIs. ([#985])
+
+#### Packaging & distribution
+- **macOS Intel (x64) build support** in release workflows. ([#759])
+- **Official Nix flake** with home-manager and NixOS support. ([#402])
+- Beta release packaging cache optimizations. ([#1095])
+
+#### Internationalization
+- **Traditional Chinese QUICKSTART** + Chinese doc links fixed. ([#753])
+
+### Changed
+
+- Conversation run isolation enforced — concurrent runs no longer cross-contaminate state. ([#1271])
+- Default English resource i18n fallback so missing translations don't break agent prompts. ([#1270])
+- `[codex]` Claude Code exit diagnostics improved. ([#1267])
+- `[codex]` empty API responses handled as no output (not as errors). ([#1244])
+- Codex CLI path fallback UX improvements. ([#1205])
+
+### Fixed
+
+#### Web
+- Persist Appearance accent color selection so swatch picks survive Settings close. ([#1439])
+- Load Orbit template choices from `design-templates` instead of `skills` (aligns with the skill model refactor). ([#1442])
+- Restore custom dropdown chevron for the timezone selector in dark mode. ([#1368])
+- Polish EntryView UI — sidebar layout, folder tabs, slim form, blue selected token. ([#1360])
+- Translate Design Files refresh strings instead of hardcoding English. ([#1300])
+- Pretty-print JSON file previews. ([#1206])
+- Keep Tweaks selection usable without annotations. ([#1268])
+- Render static previews for sketch JSON files. ([#1060])
+- Ignore `<artifact>` tags inside markdown code spans and fences. ([#1132])
+- Refresh home projects after deleting a conversation. ([#1219])
+- Complete finished tool calls missing results. ([#1240])
+- Intercept prose-as-HTML artifacts before they hit disk. ([#1144])
+- Truncate entry footer pet label. ([#1150])
+- Surface connector auth errors and stop silent popup close. ([#1128])
+- Center close button in MCP picker dialog. ([#1137])
+- Prevent chat messages overflowing into the workspace area. ([#1104])
+- Prevent creating a new conversation when the current one is empty. ([#1086])
+- Dispatch Examples preview on `od.preview.type`. ([#1001])
+- Scroll Settings content back to top on section change. ([#997])
+- Allow pod-to-chat comment text to wrap instead of truncating. ([#1156])
+- Localize MCP server settings panel for Chinese UI. ([#760])
+- Restore media config from daemon on startup. ([#687])
+- Suppress autosave indicator for draft-only Connector key edits. ([#1232])
+- Fix link handling in example preview iframe sandbox. ([#701])
+- Handle popup-blocked PDF export with native Electron print dialog. ([#973])
+- Translate comments panel UI to Chinese. ([#1139])
+- Hide surface filter tabs with zero count in Design Systems view. ([#965])
+- Prevent design system filter popover from shifting position on reopen. ([#960])
+
+#### Desktop
+- Exit fullscreen before hiding window on macOS close. ([#1249])
+- Enforce minimum window size on main client. ([#1203])
+- Allow `about:blank` popup for PDF export fallback. ([#1081])
+- Fix daemon browser opener on Windows. ([#953])
+
+#### Daemon, agents & contracts
+- Wire finalized assistant message writes to the Langfuse report bridge so reports settle reliably. ([#1402])
+- Remove OpenCode stdin dash sentinel. ([#1365])
+- Use ACP config options for model selection. ([#1208])
+- Persist `runStatus` / `endedAt` on chat run termination. ([#1230])
+- Prefer `opencode-cli` over `opencode` binary so OpenCode Desktop installs resolve to the CLI. ([#818])
+- Support OpenCode Write tool display as card. ([#1126])
+- Pin API-mode override above discovery layer. ([#1207])
+
+#### Packaging
+- Close running app before silent reinstall on Windows. ([#1238])
+- Build desktop before packaged typecheck. ([#1093])
+- Prevent project type selector arrows from overlapping tabs. ([#1091])
+- Increase top padding in modal footer for better visual balance. ([#957])
+
+#### Misc
+- Clear stale upload failure banner when previewing files. ([#797])
+- Remove Trump pet from bundled community pets. ([#1103])
+- Add "When NOT to emit" guardrail to artifact handoff prompt. ([#1145])
+- Pending prompt clearing for templates. ([#1148])
+- Set writable `OD_DATA_DIR` default for `nix run`. ([#1159])
+- Landing-page SEO: correct canonical, add `robots.txt` + favicons. ([#1061])
+
+### Documentation
+
+- **`MAINTAINERS.md` + CONTRIBUTING entry-point** for maintainer rules. ([#1290])
+- **Traditional Chinese QUICKSTART** + Chinese doc link fixes. ([#753])
+
+### Internal
+
+- Stabilize extended Playwright coverage. ([#1341])
+- Expand nightly UI and desktop regression coverage. ([#1256])
+- Harden e2e smoke and release reports. ([#1140])
+- Expand entry and settings automation coverage. ([#954])
+- Refreshed generated GitHub metrics SVG and contributors wall. ([#1115], [#1117], [#1183], [#1188], [#1328], [#1330])
 
 ## [0.6.0] - 2026-05-09
 
@@ -698,7 +838,9 @@ First public release of Open Design — a local-first, open-source alternative t
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])
 
-[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.5.0...HEAD
+[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.7.0...HEAD
+[0.7.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.7.0
+[0.6.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.6.0
 [0.5.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.5.0
 [0.4.1]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.4.1
 [0.4.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.4.0
@@ -1156,3 +1298,112 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1068]: https://github.com/nexu-io/open-design/pull/1068
 [#1071]: https://github.com/nexu-io/open-design/pull/1071
 [#1079]: https://github.com/nexu-io/open-design/pull/1079
+[#402]: https://github.com/nexu-io/open-design/pull/402
+[#687]: https://github.com/nexu-io/open-design/pull/687
+[#701]: https://github.com/nexu-io/open-design/pull/701
+[#753]: https://github.com/nexu-io/open-design/pull/753
+[#759]: https://github.com/nexu-io/open-design/pull/759
+[#760]: https://github.com/nexu-io/open-design/pull/760
+[#797]: https://github.com/nexu-io/open-design/pull/797
+[#818]: https://github.com/nexu-io/open-design/pull/818
+[#866]: https://github.com/nexu-io/open-design/pull/866
+[#873]: https://github.com/nexu-io/open-design/pull/873
+[#894]: https://github.com/nexu-io/open-design/pull/894
+[#932]: https://github.com/nexu-io/open-design/pull/932
+[#953]: https://github.com/nexu-io/open-design/pull/953
+[#954]: https://github.com/nexu-io/open-design/pull/954
+[#955]: https://github.com/nexu-io/open-design/pull/955
+[#957]: https://github.com/nexu-io/open-design/pull/957
+[#960]: https://github.com/nexu-io/open-design/pull/960
+[#965]: https://github.com/nexu-io/open-design/pull/965
+[#973]: https://github.com/nexu-io/open-design/pull/973
+[#974]: https://github.com/nexu-io/open-design/pull/974
+[#985]: https://github.com/nexu-io/open-design/pull/985
+[#997]: https://github.com/nexu-io/open-design/pull/997
+[#999]: https://github.com/nexu-io/open-design/pull/999
+[#1001]: https://github.com/nexu-io/open-design/pull/1001
+[#1003]: https://github.com/nexu-io/open-design/pull/1003
+[#1033]: https://github.com/nexu-io/open-design/pull/1033
+[#1034]: https://github.com/nexu-io/open-design/pull/1034
+[#1038]: https://github.com/nexu-io/open-design/pull/1038
+[#1043]: https://github.com/nexu-io/open-design/pull/1043
+[#1044]: https://github.com/nexu-io/open-design/pull/1044
+[#1060]: https://github.com/nexu-io/open-design/pull/1060
+[#1061]: https://github.com/nexu-io/open-design/pull/1061
+[#1063]: https://github.com/nexu-io/open-design/pull/1063
+[#1069]: https://github.com/nexu-io/open-design/pull/1069
+[#1081]: https://github.com/nexu-io/open-design/pull/1081
+[#1082]: https://github.com/nexu-io/open-design/pull/1082
+[#1083]: https://github.com/nexu-io/open-design/pull/1083
+[#1085]: https://github.com/nexu-io/open-design/pull/1085
+[#1086]: https://github.com/nexu-io/open-design/pull/1086
+[#1091]: https://github.com/nexu-io/open-design/pull/1091
+[#1092]: https://github.com/nexu-io/open-design/pull/1092
+[#1093]: https://github.com/nexu-io/open-design/pull/1093
+[#1095]: https://github.com/nexu-io/open-design/pull/1095
+[#1097]: https://github.com/nexu-io/open-design/pull/1097
+[#1103]: https://github.com/nexu-io/open-design/pull/1103
+[#1104]: https://github.com/nexu-io/open-design/pull/1104
+[#1105]: https://github.com/nexu-io/open-design/pull/1105
+[#1115]: https://github.com/nexu-io/open-design/pull/1115
+[#1117]: https://github.com/nexu-io/open-design/pull/1117
+[#1126]: https://github.com/nexu-io/open-design/pull/1126
+[#1128]: https://github.com/nexu-io/open-design/pull/1128
+[#1132]: https://github.com/nexu-io/open-design/pull/1132
+[#1136]: https://github.com/nexu-io/open-design/pull/1136
+[#1137]: https://github.com/nexu-io/open-design/pull/1137
+[#1139]: https://github.com/nexu-io/open-design/pull/1139
+[#1140]: https://github.com/nexu-io/open-design/pull/1140
+[#1144]: https://github.com/nexu-io/open-design/pull/1144
+[#1145]: https://github.com/nexu-io/open-design/pull/1145
+[#1148]: https://github.com/nexu-io/open-design/pull/1148
+[#1150]: https://github.com/nexu-io/open-design/pull/1150
+[#1156]: https://github.com/nexu-io/open-design/pull/1156
+[#1159]: https://github.com/nexu-io/open-design/pull/1159
+[#1171]: https://github.com/nexu-io/open-design/pull/1171
+[#1173]: https://github.com/nexu-io/open-design/pull/1173
+[#1183]: https://github.com/nexu-io/open-design/pull/1183
+[#1188]: https://github.com/nexu-io/open-design/pull/1188
+[#1203]: https://github.com/nexu-io/open-design/pull/1203
+[#1206]: https://github.com/nexu-io/open-design/pull/1206
+[#1205]: https://github.com/nexu-io/open-design/pull/1205
+[#1207]: https://github.com/nexu-io/open-design/pull/1207
+[#1219]: https://github.com/nexu-io/open-design/pull/1219
+[#1230]: https://github.com/nexu-io/open-design/pull/1230
+[#1231]: https://github.com/nexu-io/open-design/pull/1231
+[#1232]: https://github.com/nexu-io/open-design/pull/1232
+[#1238]: https://github.com/nexu-io/open-design/pull/1238
+[#1240]: https://github.com/nexu-io/open-design/pull/1240
+[#1244]: https://github.com/nexu-io/open-design/pull/1244
+[#1249]: https://github.com/nexu-io/open-design/pull/1249
+[#1256]: https://github.com/nexu-io/open-design/pull/1256
+[#1259]: https://github.com/nexu-io/open-design/pull/1259
+[#1263]: https://github.com/nexu-io/open-design/pull/1263
+[#1266]: https://github.com/nexu-io/open-design/pull/1266
+[#1267]: https://github.com/nexu-io/open-design/pull/1267
+[#1268]: https://github.com/nexu-io/open-design/pull/1268
+[#1270]: https://github.com/nexu-io/open-design/pull/1270
+[#1271]: https://github.com/nexu-io/open-design/pull/1271
+[#1284]: https://github.com/nexu-io/open-design/pull/1284
+[#1285]: https://github.com/nexu-io/open-design/pull/1285
+[#1287]: https://github.com/nexu-io/open-design/pull/1287
+[#1290]: https://github.com/nexu-io/open-design/pull/1290
+[#1291]: https://github.com/nexu-io/open-design/pull/1291
+[#1300]: https://github.com/nexu-io/open-design/pull/1300
+[#1307]: https://github.com/nexu-io/open-design/pull/1307
+[#1308]: https://github.com/nexu-io/open-design/pull/1308
+[#1328]: https://github.com/nexu-io/open-design/pull/1328
+[#1330]: https://github.com/nexu-io/open-design/pull/1330
+[#1161]: https://github.com/nexu-io/open-design/pull/1161
+[#1167]: https://github.com/nexu-io/open-design/pull/1167
+[#1208]: https://github.com/nexu-io/open-design/pull/1208
+[#1224]: https://github.com/nexu-io/open-design/pull/1224
+[#1276]: https://github.com/nexu-io/open-design/pull/1276
+[#1292]: https://github.com/nexu-io/open-design/pull/1292
+[#1341]: https://github.com/nexu-io/open-design/pull/1341
+[#1360]: https://github.com/nexu-io/open-design/pull/1360
+[#1365]: https://github.com/nexu-io/open-design/pull/1365
+[#1368]: https://github.com/nexu-io/open-design/pull/1368
+[#1402]: https://github.com/nexu-io/open-design/pull/1402
+[#1439]: https://github.com/nexu-io/open-design/pull/1439
+[#1442]: https://github.com/nexu-io/open-design/pull/1442
