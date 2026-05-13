@@ -18,6 +18,7 @@ import {
   fetchProjectDeployments,
   fetchProjectFilePreview,
   fetchProjectFileText,
+  uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
   projectRawUrl,
@@ -89,6 +90,9 @@ import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
+const MANUAL_EDIT_LEFT_WIDTH_KEY = 'od.manualEdit.leftWidth';
+const MANUAL_EDIT_RIGHT_WIDTH_KEY = 'od.manualEdit.rightWidth';
+const MANUAL_EDIT_FOCUS_SLIDES_KEY = 'od.manualEdit.focusSlides';
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
 export type ManualEditPendingStyleSave = {
@@ -3449,6 +3453,12 @@ function HtmlViewer({
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
+  const [manualEditFocusSlides, setManualEditFocusSlides] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(MANUAL_EDIT_FOCUS_SLIDES_KEY) === '1';
+  });
+  const manualEditLeftPanelRef = useRef<HTMLElement | null>(null);
+  const manualEditRightPanelRef = useRef<HTMLElement | null>(null);
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const setManualEditMode = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
@@ -3517,6 +3527,55 @@ function HtmlViewer({
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
+
+  function readStoredManualPanelWidth(key: string): number | null {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(MANUAL_EDIT_FOCUS_SLIDES_KEY, manualEditFocusSlides ? '1' : '0');
+  }, [manualEditFocusSlides]);
+
+  useEffect(() => {
+    if (!manualEditMode) return;
+    const left = readStoredManualPanelWidth(MANUAL_EDIT_LEFT_WIDTH_KEY);
+    const right = readStoredManualPanelWidth(MANUAL_EDIT_RIGHT_WIDTH_KEY);
+    if (left && manualEditLeftPanelRef.current) {
+      manualEditLeftPanelRef.current.style.width = `${left}px`;
+    }
+    if (right && manualEditRightPanelRef.current) {
+      manualEditRightPanelRef.current.style.width = `${right}px`;
+    }
+  }, [manualEditMode]);
+
+  useEffect(() => {
+    if (!manualEditMode) return;
+    if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') return;
+    const leftNode = manualEditLeftPanelRef.current;
+    const rightNode = manualEditRightPanelRef.current;
+    if (!leftNode && !rightNode) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = Math.round(entry.contentRect.width);
+        if (width <= 0) continue;
+        if (entry.target === leftNode) {
+          window.localStorage.setItem(MANUAL_EDIT_LEFT_WIDTH_KEY, String(width));
+        }
+        if (entry.target === rightNode) {
+          window.localStorage.setItem(MANUAL_EDIT_RIGHT_WIDTH_KEY, String(width));
+        }
+      }
+    });
+    if (leftNode) observer.observe(leftNode);
+    if (rightNode) observer.observe(rightNode);
+    return () => observer.disconnect();
+  }, [manualEditMode]);
 
   function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
@@ -5092,6 +5151,18 @@ function HtmlViewer({
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
           </button>
+          {manualEditMode ? (
+            <button
+              className={`viewer-action${manualEditFocusSlides ? ' active' : ''}`}
+              type="button"
+              title={manualEditFocusSlides ? 'Show panels' : 'Focus slides'}
+              aria-pressed={manualEditFocusSlides}
+              onClick={() => setManualEditFocusSlides((value) => !value)}
+            >
+              <Icon name="tweaks" size={13} />
+              <span>{manualEditFocusSlides ? 'Show panels' : 'Focus slides'}</span>
+            </button>
+          ) : null}
           <button
             className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
             type="button"
@@ -5384,8 +5455,11 @@ function HtmlViewer({
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
+            className={`${manualEditMode ? `manual-edit-workspace${manualEditFocusSlides ? ' manual-edit-focus' : ''}` : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
+            style={{
+              ...previewViewportStyle(previewViewport, previewScale, previewBodySize),
+              ...(manualEditMode && manualEditFocusSlides ? { gridTemplateColumns: '1fr' } : null),
+            }}
           >
             {manualEditMode ? (
               <ManualEditPanel
@@ -5420,6 +5494,19 @@ function HtmlViewer({
                 onRedo={() => {
                   void redoManualEdit();
                 }}
+                onPickImage={async (pickedFile) => {
+                  const result = await uploadProjectFiles(projectId, [pickedFile]);
+                  const uploaded = result.uploaded[0];
+                  if (!uploaded?.path) {
+                    setManualEditError(result.error ?? 'Could not upload image.');
+                    return null;
+                  }
+                  setManualEditError(null);
+                  return projectFileUrl(projectId, uploaded.path);
+                }}
+                leftPanelRef={manualEditLeftPanelRef}
+                rightPanelRef={manualEditRightPanelRef}
+                hidePanels={manualEditFocusSlides}
               />
             ) : null}
             <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
