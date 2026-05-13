@@ -1825,7 +1825,7 @@ describe('SettingsDialog appearance interactions', () => {
 
     expect(screen.getByText('主题色')).toBeTruthy();
     expect(screen.getByRole('radiogroup', { name: '主题色' })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: '默认 主题色' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: '默认主题色' })).toBeTruthy();
     expect(screen.getByLabelText('自定义颜色')).toBeTruthy();
   });
 });

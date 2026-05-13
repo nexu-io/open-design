@@ -4744,7 +4744,7 @@ function AppearanceSection({
   const current = cfg.theme ?? 'system';
   const currentAccent = normalizeAccentColor(cfg.accentColor) ?? DEFAULT_ACCENT_COLOR;
   const accentLabel = t('pet.fieldAccent');
-  const defaultAccentLabel = `${t('common.default')} ${accentLabel}`;
+  const defaultAccentLabel = t('pet.fieldAccentDefault');
   const customAccentLabel = t('pet.fieldAccentCustom');
 
   // Apply the draft theme immediately so the user sees a live preview

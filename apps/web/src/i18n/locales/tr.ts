@@ -1052,6 +1052,7 @@ export const tr: Dict = {
   'pet.fieldGreeting': 'Selamlama',
   'pet.fieldAccent': 'Vurgu rengi',
   'pet.fieldAccentCustom': 'Özel renk',
+  'pet.fieldAccentDefault': 'Varsayılan vurgu rengi',
   'pet.overlayAria': 'Evcil dost yoldaş',
   'pet.spriteAria': '{name} — taşımak için sürükle, sohbet için tıkla',
   'pet.spriteTitle': '{name} merhaba diyor! Sohbet için tıkla.',
