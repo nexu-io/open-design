@@ -1058,7 +1058,16 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
-  function slides(){ return document.querySelectorAll('.deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide'); }
+  function slides(){
+    // Structured selectors first so decorative .slide markup in non-deck
+    // pages (icons, badges, code samples) is not counted as deck slides;
+    // fall back to all .slide only when nothing structured matched, so
+    // freeform decks that nest slides under an extra wrapper still report
+    // the real count instead of leaving the host counter at 1 / 0.
+    var structured = document.querySelectorAll('.deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    if (structured.length) return structured;
+    return document.querySelectorAll('.slide');
+  }
   function scroller(){
     if (document.body && document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
     return document.scrollingElement || document.documentElement;

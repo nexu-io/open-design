@@ -8,6 +8,8 @@ type ParserState = {
   openCodeToolUses: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
+  codexPreviousEventWasAgentMessage: boolean;
+  codexLastAgentMessageEndedWithNewline: boolean;
 };
 
 type Usage = {
@@ -302,6 +304,8 @@ if (obj.type === 'error') {
   }
 
   if (obj.type === 'turn.started') {
+    state.codexPreviousEventWasAgentMessage = false;
+    state.codexLastAgentMessageEndedWithNewline = false;
     onEvent({ type: 'status', label: 'running' });
     return true;
   }
@@ -309,6 +313,8 @@ if (obj.type === 'error') {
   if (obj.type === 'item.started' && isRecord(obj.item)) {
     const item = obj.item;
     if (item.type === 'command_execution' && typeof item.id === 'string') {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
       if (!state.codexToolUses.has(item.id)) {
         state.codexToolUses.add(item.id);
         onEvent({
@@ -327,6 +333,8 @@ if (obj.type === 'error') {
   if (obj.type === 'item.completed' && isRecord(obj.item)) {
     const item = obj.item;
     if (item.type === 'command_execution' && typeof item.id === 'string') {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
       if (!state.codexToolUses.has(item.id)) {
         state.codexToolUses.add(item.id);
         onEvent({
@@ -355,7 +363,15 @@ if (obj.type === 'error') {
     typeof obj.item.text === 'string' &&
     obj.item.text.length > 0
   ) {
-    onEvent({ type: 'text_delta', delta: obj.item.text });
+    const text = obj.item.text;
+    const needsBoundary =
+      state.codexPreviousEventWasAgentMessage &&
+      !state.codexLastAgentMessageEndedWithNewline &&
+      !text.startsWith('\n');
+    const delta = needsBoundary ? `\n${text}` : text;
+    onEvent({ type: 'text_delta', delta });
+    state.codexPreviousEventWasAgentMessage = true;
+    state.codexLastAgentMessageEndedWithNewline = text.endsWith('\n');
     return true;
   }
 
@@ -380,6 +396,8 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     openCodeToolUses: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
+    codexPreviousEventWasAgentMessage: false,
+    codexLastAgentMessageEndedWithNewline: false,
   };
 
   function handleLine(line: string): void {

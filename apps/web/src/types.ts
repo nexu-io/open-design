@@ -8,6 +8,7 @@ import type {
   AudioKind,
   ChatAttachment,
   ChatCommentAttachment,
+  ChatCommentSelectionKind,
   ChatMessageFeedback,
   ChatMessageFeedbackRating,
   ChatMessageFeedbackReasonCode,
@@ -47,6 +48,7 @@ import type {
   PreviewCommentStatus,
   PreviewCommentTarget,
   PreviewCommentUpsertRequest,
+  PreviewVisualMarkKind,
   ProjectDisplayStatus,
   ProjectFile,
   ProjectFileKind,
@@ -71,10 +73,12 @@ export type {
   CloudflarePagesDeploySelection,
   CloudflarePagesDeploymentInfo,
   CloudflarePagesZonesResponse,
+  ChatCommentSelectionKind,
   OrbitRunSummary,
   OrbitStatusResponse,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
+  PreviewVisualMarkKind,
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';

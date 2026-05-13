@@ -1250,6 +1250,16 @@ code {
   margin: 0 8px;
 }
 
+.preview-draw-note-input::placeholder {
+  color: rgba(255, 225, 210, 0.86);
+}
+
+.preview-draw-note-input:focus {
+  background: rgba(218, 97, 56, 0.26) !important;
+  border-color: rgba(255, 184, 140, 0.95) !important;
+  box-shadow: 0 0 0 3px rgba(218, 97, 56, 0.34), 0 0 18px rgba(218, 97, 56, 0.24) !important;
+}
+
 /* -------- Staged attachments -------------------------------------- */
 .staged-row {
   display: flex;
@@ -1274,6 +1284,34 @@ code {
   height: 28px;
   border-radius: 6px;
   object-fit: cover;
+}
+.staged-preview-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.staged-preview-trigger:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.staged-preview-trigger img {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+}
+.staged-preview-trigger .staged-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .staged-preview-modal {
   position: fixed;
@@ -10654,6 +10692,47 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border: none;
   border-top: 1px solid var(--border);
   margin: 10px 0;
+}
+/* GFM pipe tables. Rules are intentionally unscoped so both the chat path
+   (`.prose-block`) and the artifact preview (`.markdown-rendered`) get
+   the same treatment. Horizontal scroll lives on the wrapper so the
+   inner <table> can keep `display: table; width: 100%` and distribute
+   column widths across the container instead of collapsing to content. */
+.md-table-wrap {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.md-table th,
+.md-table td {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.md-table th + th,
+.md-table td + td {
+  border-left: 1px solid var(--border);
+}
+.md-table thead th {
+  background: var(--bg-panel);
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--border);
+}
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.md-table tbody tr:nth-child(even) td {
+  background: color-mix(in oklab, var(--bg-panel) 40%, transparent);
 }
 .op-waiting {
   font-size: 12px;

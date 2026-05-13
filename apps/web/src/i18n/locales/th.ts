@@ -93,6 +93,8 @@ export const th: Dict = {
   'settings.agentInstall.stepRescan': 'คลิกสแกนใหม่ในส่วนนี้',
   'settings.agentInstall.stepSelect': 'เลือกการ์ดเอเจนต์เมื่อแสดงว่าได้ติดตั้งแล้ว',
   'settings.noAgentsDetected': 'ยังไม่พบเอเจนต์ โปรดติดตั้งอย่างใดอย่างหนึ่ง: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen หรือ GitHub Copilot CLI แล้วคลิกสแกนใหม่',
+  'settings.agentAuthRequired': 'ต้องยืนยันตัวตน',
+  'settings.agentAuthUnknown': 'ไม่ทราบสถานะการยืนยันตัวตน',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'เลือกผู้ให้บริการอย่างรวดเร็ว',
   'settings.customProvider': 'กำหนดผู้ให้บริการเอง',

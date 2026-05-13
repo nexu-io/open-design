@@ -1131,6 +1131,8 @@ export function SettingsDialog({
         return t('settings.testTimeout', { ms });
       case 'agent_not_installed':
         return t('settings.testAgentMissing', { agentName });
+      case 'agent_auth_required':
+        return result.detail || 'Agent authentication is required.';
       case 'agent_spawn_failed':
         return t('settings.testAgentSpawn', {
           agentName,
@@ -1918,7 +1920,15 @@ export function SettingsDialog({
                             <div className="agent-card-body">
                               <div className="agent-card-name">{a.name}</div>
                               <div className="agent-card-meta">
-                                {a.version ? (
+                                {a.authStatus === 'missing' ? (
+                                  <span title={a.authMessage ?? a.path ?? ''}>
+                                    {t('settings.agentAuthRequired')}
+                                  </span>
+                                ) : a.authStatus === 'unknown' ? (
+                                  <span title={a.authMessage ?? a.path ?? ''}>
+                                    {t('settings.agentAuthUnknown')}
+                                  </span>
+                                ) : a.version ? (
                                   <span title={a.path ?? ''}>{a.version}</span>
                                 ) : (
                                   <span title={a.path ?? ''}>
