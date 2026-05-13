@@ -624,6 +624,7 @@ async function runCommentAttachmentFlow(
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await frame.locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await expect(page.getByTestId('comment-popover').getByRole('button', { name: 'Send to chat' })).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
   await page.getByTestId('comment-popover').getByRole('button', { name: 'Save comment' }).click();
 
@@ -649,7 +650,6 @@ async function runCommentAttachmentFlow(
     .locator('[data-testid="comment-card-hero-title"]')
     .getByRole('button', { name: 'Select' })
     .click();
-  await expect(page.getByTestId('comments-panel').getByRole('button', { name: 'Send to chat' })).toBeVisible();
   await page.getByTestId('comments-panel')
     .locator('[data-testid="comment-card-hero-title"]')
     .getByRole('button', { name: 'Deselect' })
