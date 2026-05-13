@@ -1166,6 +1166,13 @@ export interface Dict {
   'manualEdit.border': string;
   'manualEdit.width': string;
   'manualEdit.minHeight': string;
+  'manualEdit.deleteElement': string;
+  'manualEdit.deleteElementConfirm': string;
+  'manualEdit.uploadImage': string;
+  'manualEdit.uploadingImage': string;
+  'manualEdit.uploadImageFailed': string;
+  'manualEdit.focusSlides': string;
+  'manualEdit.showPanels': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;

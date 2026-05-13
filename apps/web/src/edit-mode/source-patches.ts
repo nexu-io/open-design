@@ -51,6 +51,9 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
     if (!el.parentElement) {
       return { ok: false, source, error: 'Cannot remove the root element.' };
     }
+    if (el.parentElement === doc.body && doc.body.children.length === 1) {
+      return { ok: false, source, error: 'Cannot remove the last element in the document.' };
+    }
     el.remove();
   }
 
