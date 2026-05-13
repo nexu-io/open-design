@@ -198,12 +198,22 @@ export async function runAdapterConformance(
     };
   }
 
-  if (shipEvent === null) {
-    return { kind: 'failed', cause: 'no_ship', events };
-  }
-
+  // Rule 3 (parser_warning anywhere → degraded) is checked BEFORE rule
+  // 6 (no_ship → failed) to preserve the docstring's top-to-bottom
+  // priority: a stream that emits a `parser_warning` and then dies
+  // without a `SHIP` (adapter crash, EOF, run-out-of-rounds) is
+  // protocol-degraded, not protocol-clean-but-incomplete. Without this
+  // ordering, an adapter emitting a clean degraded signal stays
+  // UNMARKED in the registry while one with a clean SHIP after a late
+  // warning gets the 24h mark, exactly opposite of what the docstring
+  // promises and what the rollout gate consumes downstream (PerishCode
+  // P3 on PR #1317).
   if (parserWarningSeen) {
     return mark(params.adapterId, 'parser_warning', events);
+  }
+
+  if (shipEvent === null) {
+    return { kind: 'failed', cause: 'no_ship', events };
   }
 
   const expected = castRoles ?? ['designer', 'critic', 'brand', 'a11y', 'copy'];
