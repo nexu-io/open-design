@@ -80,4 +80,21 @@ describe('renderMarkdownToSafeHtml', () => {
     expect(out).toContain('<th style="text-align:left">Only</th>');
     expect(out).toContain('<td style="text-align:left">A|B</td>');
   });
+
+
+  it('renders tables after intro lines and keeps pipes inside code spans literal', () => {
+    const md = [
+      'Intro',
+      '| Name | State |',
+      '|:---|---:|',
+      '| status | `"ready" | "done"` |',
+    ].join('\n');
+    const out = renderMarkdownToSafeHtml(md);
+    expect(out).toContain('<p>Intro</p>');
+    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<th style="text-align:left">Name</th>');
+    expect(out).toContain('<th style="text-align:right">State</th>');
+    expect(out).toContain('<td style="text-align:left">status</td>');
+    expect(out).toContain('<code>"ready" | "done"</code>');
+  });
 });

@@ -40,15 +40,21 @@ function splitTableRow(line: string): string[] {
 
   const cells: string[] = [];
   let current = '';
+  let inCodeSpan = false;
   for (let i = 0; i < trimmed.length; i += 1) {
     const ch = trimmed[i] ?? '';
     const next = trimmed[i + 1] ?? '';
+    if (ch === '`') {
+      inCodeSpan = !inCodeSpan;
+      current += ch;
+      continue;
+    }
     if (ch === '\\' && next === '|') {
       current += '|';
       i += 1;
       continue;
     }
-    if (ch === '|') {
+    if (ch === '|' && !inCodeSpan) {
       cells.push(current.trim());
       current = '';
       continue;
@@ -73,6 +79,10 @@ function parseTableAlign(cell: string): TableAlign | null {
 function isTableSeparatorLine(line: string): boolean {
   const cells = splitTableRow(line);
   return cells.length > 0 && cells.every((cell) => parseTableAlign(cell) !== null);
+}
+
+function isTableStart(line: string, nextLine: string | undefined): boolean {
+  return line.includes('|') && nextLine !== undefined && isTableSeparatorLine(nextLine);
 }
 
 function parseBlocks(input: string): Block[] {
@@ -101,11 +111,7 @@ function parseBlocks(input: string): Block[] {
       continue;
     }
     // Table.
-    if (
-      line.includes('|') &&
-      i + 1 < lines.length &&
-      isTableSeparatorLine(lines[i + 1] ?? '')
-    ) {
+    if (isTableStart(line, lines[i + 1])) {
       const headers = splitTableRow(line);
       const aligns = splitTableRow(lines[i + 1] ?? '').map((cell) => parseTableAlign(cell) ?? 'left');
       if (headers.length >= 1 && aligns.length >= 1) {
@@ -176,6 +182,7 @@ function parseBlocks(input: string): Block[] {
       if (/^#{1,4}\s+/.test(next)) break;
       if (/^\s*[-*+]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
+      if (isTableStart(next, lines[i + 1])) break;
       buf.push(next);
       i++;
     }

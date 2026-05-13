@@ -72,15 +72,21 @@ function splitTableRow(line: string): string[] {
 
   const cells: string[] = [];
   let current = '';
+  let inCodeSpan = false;
   for (let i = 0; i < trimmed.length; i += 1) {
     const ch = trimmed[i] ?? '';
     const next = trimmed[i + 1] ?? '';
+    if (ch === '`') {
+      inCodeSpan = !inCodeSpan;
+      current += ch;
+      continue;
+    }
     if (ch === '\\' && next === '|') {
       current += '|';
       i += 1;
       continue;
     }
-    if (ch === '|') {
+    if (ch === '|' && !inCodeSpan) {
       cells.push(current.trim());
       current = '';
       continue;
@@ -105,6 +111,10 @@ function parseTableAlign(cell: string): TableAlign | null {
 function isTableSeparatorLine(line: string): boolean {
   const cells = splitTableRow(line);
   return cells.length > 0 && cells.every((cell) => parseTableAlign(cell) !== null);
+}
+
+function isTableStart(line: string, nextLine: string | undefined): boolean {
+  return line.includes('|') && nextLine !== undefined && isTableSeparatorLine(nextLine);
 }
 
 function renderTableHtml(headerLine: string, separatorLine: string, bodyLines: string[]): string | null {
@@ -170,11 +180,7 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
       continue;
     }
 
-    if (
-      /\|/.test(line) &&
-      i + 1 < lines.length &&
-      isTableSeparatorLine(lines[i + 1] ?? '')
-    ) {
+    if (isTableStart(line, lines[i + 1])) {
       const bodyLines: string[] = [];
       let j = i + 2;
       while (j < lines.length) {
@@ -254,7 +260,8 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
         headingLevel(paraLine) > 0 ||
         /^>\s?/.test(paraLine) ||
         /^\s*[-*]\s+/.test(paraLine) ||
-        /^\s*\d+\.\s+/.test(paraLine)
+        /^\s*\d+\.\s+/.test(paraLine) ||
+        isTableStart(paraLine, lines[i + 1])
       ) {
         break;
       }

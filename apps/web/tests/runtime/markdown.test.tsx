@@ -59,4 +59,21 @@ describe('renderMarkdown', () => {
     expect(out).toContain('<td style="text-align:left">A|B</td>');
     expect(out).toContain('<td style="text-align:right">C</td>');
   });
+
+
+  it('renders tables after intro lines and keeps pipes inside code spans literal', () => {
+    const md = [
+      'Intro',
+      '| Name | State |',
+      '|:---|---:|',
+      '| status | `"ready" | "done"` |',
+    ].join('\n');
+    const out = html(md);
+    expect(out).toContain('<p>Intro</p>');
+    expect(out).toContain('<div class="md-table-wrap">');
+    expect(out).toContain('<th style="text-align:left">Name</th>');
+    expect(out).toContain('<th style="text-align:right">State</th>');
+    expect(out).toContain('<td style="text-align:left">status</td>');
+    expect(out).toContain('<code class="md-inline-code">"ready" | "done"</code>');
+  });
 });
