@@ -1,10 +1,21 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 
-export interface RegisterLiveArtifactRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'auth' | 'liveArtifacts' | 'projectStore'> {}
+export interface RegisterLiveArtifactRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'auth' | 'liveArtifacts' | 'projectStore'> {}
+
+export function finalizeLiveArtifactRun(
+  design: RegisterLiveArtifactRoutesDeps['design'],
+  runId: string | undefined,
+): boolean {
+  if (!runId) return false;
+  const run = design.runs.get(runId);
+  if (!run || design.runs.isTerminal(run.status)) return false;
+  design.runs.finish(run, 'succeeded', 0, null);
+  return true;
+}
 
 export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifactRoutesDeps) {
-  const { db } = ctx;
+  const { db, design } = ctx;
   const { sendApiError, sendLiveArtifactRouteError, requireLocalDaemonRequest } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { authorizeToolRequest, requestProjectOverride, requestRunOverride } = ctx.auth;
@@ -125,6 +136,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         provenanceJson,
         createdByRunId: toolGrant.runId,
       });
+      finalizeLiveArtifactRun(design, toolGrant.runId);
       emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
       res.json({ artifact: record.artifact });
     } catch (err: any) {
