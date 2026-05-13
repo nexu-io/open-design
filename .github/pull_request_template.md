@@ -29,7 +29,7 @@ Fixes #
 - [ ] **API / contract** — new `/api/*` endpoint, new SSE event, or changed shape in `packages/contracts`
 - [ ] **Extension point** — new entry under `skills/`, `design-systems/`, `design-templates/`, or `craft/`, or change to the skills protocol
 - [ ] **i18n keys** — added new translation keys (see `TRANSLATIONS.md` for the locale workflow)
-- [ ] **New top-level dependency** — adding a runtime dep to `package.json`; include a paragraph on what we get vs. what bytes we ship (see `CONTRIBUTING.md` → Code style)
+- [ ] **New top-level dependency** — adding any new entry to `package.json` (`dependencies` or `devDependencies`); include a paragraph on what we get vs. what bytes we ship (see `CONTRIBUTING.md` → Code style)
 - [ ] **Default behavior change** — changes what existing users experience without opting in (default model, default setting, file/SQLite schema, auto-network on startup, auto-install)
 - [ ] **None** — internal refactor, docs, tests, or translation update only
 
