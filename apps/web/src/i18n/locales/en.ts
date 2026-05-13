@@ -404,6 +404,22 @@ export const en: Dict = {
   'newproj.toggleAnimations': 'Include animations',
   'newproj.toggleAnimationsHint':
     'Add motion (entrance, hover, transitions) on top of the template.',
+  'newproj.targetPlatformsLabel': 'Target platforms',
+  'newproj.targetPlatformsHint':
+    'Pick one or more. Responsive web covers browser breakpoints only; add iOS, Android, tablet app, or desktop app for native cross-platform variants.',
+  'newproj.platform.responsive.label': 'Responsive web',
+  'newproj.platform.responsive.hint':
+    'One web experience adapted for desktop, tablet, and mobile browsers',
+  'newproj.platform.webDesktop.label': 'Desktop web',
+  'newproj.platform.webDesktop.hint': 'Browser-first product or landing page',
+  'newproj.platform.mobileIos.label': 'iOS app',
+  'newproj.platform.mobileIos.hint': 'iPhone frames and iOS interaction rules',
+  'newproj.platform.mobileAndroid.label': 'Android app',
+  'newproj.platform.mobileAndroid.hint': 'Pixel frames and Material interaction rules',
+  'newproj.platform.tablet.label': 'Tablet app',
+  'newproj.platform.tablet.hint': 'Native-style tablet experience with split views',
+  'newproj.platform.desktopApp.label': 'Desktop app',
+  'newproj.platform.desktopApp.hint': 'macOS/Windows app chrome',
   'newproj.surfaceOptionsLabel': 'Companion surfaces',
   'newproj.includeLandingPage': 'Include landing page',
   'newproj.includeLandingPageHint':

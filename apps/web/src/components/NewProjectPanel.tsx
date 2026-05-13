@@ -84,38 +84,38 @@ type NewProjectPlatform = Exclude<ProjectPlatform, 'auto'>;
 
 const DESIGN_PLATFORMS: Array<{
   value: NewProjectPlatform;
-  label: string;
-  hint: string;
+  labelKey: keyof Dict;
+  hintKey: keyof Dict;
 }> = [
   {
     value: 'responsive',
-    label: 'Responsive web',
-    hint: 'One web experience adapted for desktop, tablet, and mobile browsers',
+    labelKey: 'newproj.platform.responsive.label',
+    hintKey: 'newproj.platform.responsive.hint',
   },
   {
     value: 'web-desktop',
-    label: 'Desktop web',
-    hint: 'Browser-first product or landing page',
+    labelKey: 'newproj.platform.webDesktop.label',
+    hintKey: 'newproj.platform.webDesktop.hint',
   },
   {
     value: 'mobile-ios',
-    label: 'iOS app',
-    hint: 'iPhone frames and iOS interaction rules',
+    labelKey: 'newproj.platform.mobileIos.label',
+    hintKey: 'newproj.platform.mobileIos.hint',
   },
   {
     value: 'mobile-android',
-    label: 'Android app',
-    hint: 'Pixel frames and Material interaction rules',
+    labelKey: 'newproj.platform.mobileAndroid.label',
+    hintKey: 'newproj.platform.mobileAndroid.hint',
   },
   {
     value: 'tablet',
-    label: 'Tablet app',
-    hint: 'Native-style tablet experience with split views',
+    labelKey: 'newproj.platform.tablet.label',
+    hintKey: 'newproj.platform.tablet.hint',
   },
   {
     value: 'desktop-app',
-    label: 'Desktop app',
-    hint: 'macOS/Windows app chrome',
+    labelKey: 'newproj.platform.desktopApp.label',
+    hintKey: 'newproj.platform.desktopApp.hint',
   },
 ];
 
@@ -892,6 +892,7 @@ function PlatformPicker({
   value: NewProjectPlatform[];
   onChange: (v: NewProjectPlatform[]) => void;
 }) {
+  const t = useT();
   function togglePlatform(next: NewProjectPlatform) {
     const active = value.includes(next);
     const updated = active
@@ -902,25 +903,24 @@ function PlatformPicker({
 
   return (
     <div className="newproj-section">
-      <label className="newproj-label">Target platforms</label>
-      <p className="platform-picker-hint">
-        Pick one or more. Responsive web covers browser breakpoints only; add iOS,
-        Android, tablet app, or desktop app for native cross-platform variants.
-      </p>
+      <label className="newproj-label">{t('newproj.targetPlatformsLabel')}</label>
+      <p className="platform-picker-hint">{t('newproj.targetPlatformsHint')}</p>
       <div className="platform-grid">
         {DESIGN_PLATFORMS.map((option) => {
           const active = value.includes(option.value);
+          const label = t(option.labelKey);
+          const hint = t(option.hintKey);
           return (
             <button
               key={option.value}
               type="button"
               className={`newproj-card platform-card${active ? ' active' : ''}`}
               onClick={() => togglePlatform(option.value)}
-              title={option.hint}
+              title={hint}
               aria-pressed={active}
             >
-              <span className="platform-card-title">{option.label}</span>
-              <span className="platform-card-hint">{option.hint}</span>
+              <span className="platform-card-title">{label}</span>
+              <span className="platform-card-hint">{hint}</span>
             </button>
           );
         })}
