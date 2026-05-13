@@ -309,7 +309,7 @@ function ScheduleEditor({
   );
 }
 
-function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; refreshKey: number; onClose?: () => void }) {
+function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: number }) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
 
   useEffect(() => {
@@ -345,10 +345,9 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
           <button
             type="button"
             className="routines-history-link"
-            onClick={() => {
-              navigate({ kind: 'project', projectId: r.projectId, fileName: null });
-              onClose?.();
-            }}
+            onClick={() =>
+              navigate({ kind: 'project', projectId: r.projectId, fileName: null })
+            }
             title="Open the project this run wrote to"
           >
             Open project
@@ -360,7 +359,7 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
   );
 }
 
-export function RoutinesSection({ onClose }: { onClose?: () => void }) {
+export function RoutinesSection() {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -571,6 +570,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
 
           <fieldset className="routines-fieldset">
             <legend>Project</legend>
+
             <label className="routines-radio">
               <input
                 type="radio"
@@ -582,6 +582,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                 <small>A fresh, isolated workspace per fire.</small>
               </span>
             </label>
+
             <label className="routines-radio">
               <input
                 type="radio"
@@ -593,7 +594,8 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                 <small>Each run lives as a new conversation inside the project.</small>
               </span>
             </label>
-            {form.mode === 'reuse' ? (
+
+            {form.mode === 'reuse' && (
               <select
                 className="routines-project-select"
                 value={form.projectId}
@@ -607,7 +609,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                   </option>
                 ))}
               </select>
-            ) : null}
+            )}
           </fieldset>
 
           <div className="routines-form-actions">
@@ -708,7 +710,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                 </div>
                 {isExpanded ? (
                   <div className="routines-item-history">
-                    <RunHistory routineId={r.id} refreshKey={historyTick} onClose={onClose} />
+                    <RunHistory routineId={r.id} refreshKey={historyTick} />
                   </div>
                 ) : null}
               </li>
