@@ -88,6 +88,7 @@ export function DesignFilesPanel({
   const [collapsedModifiedSections, setCollapsedModifiedSections] = useState<
     Set<ModifiedSection>
   >(new Set());
+  const [collapsedKinds, setCollapsedKinds] = useState<Set<string>>(new Set());
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [dayBoundary, setDayBoundary] = useState(() => Date.now());
 
@@ -331,6 +332,18 @@ export function DesignFilesPanel({
     });
   }
 
+  function toggleKind(kind: string) {
+    setCollapsedKinds((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) {
+        next.delete(kind);
+      } else {
+        next.add(kind);
+      }
+      return next;
+    });
+  }
+
   function renderFileRow(f: ProjectFile) {
     const active = preview === f.name;
     const isHovered = hover === f.name;
@@ -497,6 +510,59 @@ export function DesignFilesPanel({
           </td>
         </tr>,
         ...(collapsed ? [] : sectionFiles.map(renderFileRow)),
+      ];
+    });
+  }
+
+  const kindGroups = useMemo(() => {
+    const groups: Record<string, ProjectFile[]> = {};
+    for (const file of pageFiles) {
+      const kind = file.kind || 'other';
+      if (!groups[kind]) groups[kind] = [];
+      groups[kind].push(file);
+    }
+    return groups;
+  }, [pageFiles]);
+
+  const KIND_LABELS: Record<string, string> = {
+    html: t('designFiles.kindHtml'),
+    image: t('designFiles.kindImage'),
+    video: t('designFiles.kindVideo'),
+    audio: t('designFiles.kindAudio'),
+    sketch: t('designFiles.kindSketch'),
+    text: t('designFiles.kindText'),
+    code: t('designFiles.kindCode'),
+    pdf: t('designFiles.kindPdf'),
+    document: t('designFiles.kindDocument'),
+    presentation: t('designFiles.kindPresentation'),
+    spreadsheet: t('designFiles.kindSpreadsheet'),
+    binary: t('designFiles.kindBinary'),
+    other: t('designFiles.kindOther'),
+  };
+
+  function renderKindSections() {
+    const kinds = Object.keys(kindGroups).sort();
+    return kinds.flatMap((kind) => {
+      const kindFiles = kindGroups[kind];
+      const collapsed = collapsedKinds.has(kind);
+      const label = KIND_LABELS[kind] || kind;
+      return [
+        <tr className="df-section-row" key={`${kind}-label`}>
+          <td colSpan={6}>
+            <button
+              type="button"
+              className="df-section-toggle"
+              aria-expanded={!collapsed}
+              aria-label={`${collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')} ${label}`}
+              onClick={() => toggleKind(kind)}
+            >
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+              <span>{label}</span>
+              <span className="df-section-count">{kindFiles.length}</span>
+            </button>
+          </td>
+        </tr>,
+        ...(collapsed ? [] : kindFiles.map(renderFileRow)),
       ];
     });
   }
@@ -810,7 +876,9 @@ export function DesignFilesPanel({
                     <tbody>
                       {groupMode === 'modified'
                         ? renderModifiedSections()
-                        : pageFiles.map(renderFileRow)}
+                        : groupMode === 'kind'
+                          ? renderKindSections()
+                          : pageFiles.map(renderFileRow)}
                     </tbody>
                   </table>
                   <div className="df-pagination df-pagination-center">
