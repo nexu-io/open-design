@@ -40,8 +40,6 @@ without churning code paths.
   path historically; the actual adapter registry is `runtimes/registry.ts`
   in this repo. Phase 10 routing extensions land here in
   `adapter-degraded.ts` instead.
-<<<<<<< HEAD
-=======
 - **Designer weight is frozen at 0.0 until v2 cast config lands.**
   `config.ts` exposes the panel weights as `CritiqueConfig.weights`
   but every production deployment uses the v1 distribution
@@ -53,7 +51,6 @@ without churning code paths.
   weights as a wire-shape invariant rather than a tuning knob;
   changing them mid-v1 will break the `composite` numbers persisted
   in `critique_runs`.
->>>>>>> origin/main
 
 ## When you change anything here
 
