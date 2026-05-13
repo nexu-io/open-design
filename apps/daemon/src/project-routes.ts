@@ -63,7 +63,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, skillId, designSystemId, pendingPrompt, metadata } =
+      const { id, name, skillId, designSystemId, pendingPrompt, metadata, customInstructions } =
         req.body || {};
       if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -93,6 +93,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
       }
+      if (customInstructions !== undefined
+          && typeof customInstructions !== 'string'
+          && customInstructions !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions must be a string or null');
+      }
+      if (typeof customInstructions === 'string' && customInstructions.length > 5000) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
+      }
       const now = Date.now();
       const project = insertProject(db, {
         id,
@@ -111,6 +119,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                     })()
                   : {}),
               }
+            : null,
+        customInstructions:
+          typeof customInstructions === 'string'
+            ? customInstructions
             : null,
         createdAt: now,
         updatedAt: now,
@@ -239,6 +251,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           existing?.metadata?.fromTrustedPicker === true
             ? patch.metadata.linkedDirs
             : validated.dirs;
+      }
+      if (patch.customInstructions !== undefined
+          && typeof patch.customInstructions !== 'string'
+          && patch.customInstructions !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions must be a string or null');
+      }
+      if (typeof patch.customInstructions === 'string' && patch.customInstructions.length > 5000) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)

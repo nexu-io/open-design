@@ -245,6 +245,7 @@ Beyond that:
 
 - **One concern per PR.** Adding a skill + refactoring the parser + bumping a dep is three PRs.
 - **Title is imperative + scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
+- **Use the PR template.** Fill every section of [`.github/pull_request_template.md`](.github/pull_request_template.md) — Why, What users will see, Surface area, Screenshots (if UI), Bug fix verification (if bug fix), Validation. Empty sections earn a "please fill in" reply.
 - **Body explains the why.** "What does this do" is usually obvious from the diff; "why does this need to exist" rarely is.
 - **Reference an issue** if there is one. If there isn't and the PR is non-trivial, open one first so we can agree the change is wanted before you spend the time.
 - **No squash-during-review.** Push fixups; we'll squash on merge.

@@ -278,6 +278,7 @@ export interface Dict {
   'settings.connectorsSaveKey': string;
   'settings.connectorsSaveKeyTitle': string;
   'settings.connectorsKeySaving': string;
+  'settings.connectorsKeySaved': string;
   'settings.connectorsKeyError': string;
   'settings.connectorsHelpSaved': string;
   'settings.connectorsHelpUnsaved': string;
@@ -352,6 +353,9 @@ export interface Dict {
   // Memory (auto-extracted personalization saved as on-disk markdown)
   'settings.memory': string;
   'settings.memoryHint': string;
+  'settings.customInstructionsTitle': string;
+  'settings.customInstructionsHint': string;
+  'settings.customInstructionsPlaceholder': string;
   'settings.memoryDescription': string;
   'settings.memoryEnabled': string;
   'settings.memoryDisabled': string;
@@ -404,6 +408,7 @@ export interface Dict {
   'settings.memoryExtractionsHint': string;
   'settings.memoryExtractionsEmpty': string;
   'settings.memoryExtractionsRefresh': string;
+  'settings.memoryExtractionsRefreshing': string;
   'settings.memoryExtractionPhaseRunning': string;
   'settings.memoryExtractionPhaseSuccess': string;
   'settings.memoryExtractionPhaseSkipped': string;
@@ -638,6 +643,20 @@ export interface Dict {
   'newproj.toggleSpeakerNotesHint': string;
   'newproj.toggleAnimations': string;
   'newproj.toggleAnimationsHint': string;
+  'newproj.targetPlatformsLabel': string;
+  'newproj.targetPlatformsHint': string;
+  'newproj.platform.responsive.label': string;
+  'newproj.platform.responsive.hint': string;
+  'newproj.platform.webDesktop.label': string;
+  'newproj.platform.webDesktop.hint': string;
+  'newproj.platform.mobileIos.label': string;
+  'newproj.platform.mobileIos.hint': string;
+  'newproj.platform.mobileAndroid.label': string;
+  'newproj.platform.mobileAndroid.hint': string;
+  'newproj.platform.tablet.label': string;
+  'newproj.platform.tablet.hint': string;
+  'newproj.platform.desktopApp.label': string;
+  'newproj.platform.desktopApp.hint': string;
   'newproj.surfaceOptionsLabel': string;
   'newproj.includeLandingPage': string;
   'newproj.includeLandingPageHint': string;
@@ -881,6 +900,8 @@ export interface Dict {
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
+  'project.customInstructions': string;
+  'project.customInstructionsPlaceholder': string;
   'project.resizeChatPanel': string;
   'chat.tabChat': string;
   'chat.tabComments': string;

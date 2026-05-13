@@ -943,7 +943,7 @@ describe('FileViewer SVG artifacts', () => {
   });
 });
 
-describe('FileViewer comment picker and tweaks mode', () => {
+describe('FileViewer tweaks toolbar', () => {
   function htmlPreviewFile(): ProjectFile {
     return baseFile({
       name: 'preview.html',
@@ -961,7 +961,7 @@ describe('FileViewer comment picker and tweaks mode', () => {
     });
   }
 
-  it('turns off tweaks when manual edit is enabled so picker actions disappear', () => {
+  it('renders the toolbar Draw entry and no legacy picker/pod toggle', () => {
     render(
       <FileViewer
         projectId="project-1"
@@ -970,23 +970,24 @@ describe('FileViewer comment picker and tweaks mode', () => {
       />,
     );
 
-    const tweaksToggle = screen.getByTestId('board-mode-toggle');
-    const manualEditToggle = screen.getByTestId('manual-edit-mode-toggle');
-
-    fireEvent.click(tweaksToggle);
-    expect(tweaksToggle.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('comment-mode-toggle')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Pods' })).toBeTruthy();
-
-    fireEvent.click(manualEditToggle);
-
-    expect(manualEditToggle.getAttribute('aria-pressed')).toBe('true');
-    expect(tweaksToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('palette-tweaks-toggle')).toBeTruthy();
+    expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
+    expect(screen.queryByTestId('board-mode-toggle')).toBeNull();
     expect(screen.queryByTestId('comment-mode-toggle')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
+    expect(screen.queryByTestId('inspect-mode-toggle')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Inspect' })).toBeNull();
+
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    expect(screen.getByPlaceholderText('Type anywhere to add a note')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Click' })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
   });
 
-  it('turns off manual edit when tweaks are enabled from edit mode', () => {
+  it('keeps the Draw bar open after queueing an annotation', () => {
     render(
       <FileViewer
         projectId="project-1"
@@ -995,18 +996,58 @@ describe('FileViewer comment picker and tweaks mode', () => {
       />,
     );
 
-    const tweaksToggle = screen.getByTestId('board-mode-toggle');
-    const manualEditToggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    const note = screen.getByPlaceholderText('Type anywhere to add a note');
+    fireEvent.change(note, { target: { value: 'mark this' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
 
-    fireEvent.click(manualEditToggle);
-    expect(manualEditToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByPlaceholderText('Type anywhere to add a note')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Draw' })[1]?.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Click' }).getAttribute('aria-pressed')).toBe('false');
 
-    fireEvent.click(tweaksToggle);
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
+  });
 
-    expect(tweaksToggle.getAttribute('aria-pressed')).toBe('true');
-    expect(manualEditToggle.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('comment-mode-toggle')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Pods' })).toBeTruthy();
+  it('enables element picking while the Draw bar is in click mode', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    await waitFor(() => expect(frame.srcdoc).not.toContain('data-od-selection-bridge'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Click' }));
+
+    await waitFor(() => expect(frame.srcdoc).toContain('data-od-selection-bridge'));
+    expect(frame.srcdoc).toContain('data-od-comment-mode');
+  });
+
+  it('disables Draw direct send while a task is running but keeps queue available', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        streaming
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    fireEvent.change(screen.getByPlaceholderText('Type anywhere to add a note'), {
+      target: { value: 'mark this' },
+    });
+
+    const queue = screen.getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+    expect(queue.disabled).toBe(false);
+    const send = screen.getByRole('button', { name: 'Send (当前正有任务在执行)' }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(send.getAttribute('title')).toBe('当前正有任务在执行');
   });
 });
 

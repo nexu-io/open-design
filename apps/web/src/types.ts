@@ -333,6 +333,7 @@ export interface AppConfig {
   // Langfuse-backed telemetry endpoint. All three default to off until the
   // user makes an explicit choice.
   telemetry?: TelemetryConfig;
+  customInstructions?: string;
 }
 
 export interface TelemetryConfig {
