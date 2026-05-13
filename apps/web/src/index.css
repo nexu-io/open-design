@@ -18431,6 +18431,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ---------------- Routines (Settings → Routines) ---------------- */
 
 .routines-section .section-head { align-items: flex-start; }
+.routines-section .section-head > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 
 .routines-card {
   background: var(--bg-panel);
@@ -18467,10 +18471,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .routines-field input[type="time"],
 .routines-field input[type="number"],
 .routines-field input:not([type]),
-.routines-field textarea,
-.routines-field select,
-.routines-project-select {
-  appearance: none;
+.routines-field textarea {
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -18481,25 +18482,21 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-/* Restore custom dropdown chevron for select elements in routines form.
-   The appearance:none above removes the native chevron, so we paint our own
-   via background-image (matching the global select styling). */
-.routines-field select {
-  padding-right: 32px;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+.routines-field select,
+.routines-project-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--bg-panel);
   background-repeat: no-repeat;
-  background-position: right 10px center;
+  background-position: right 12px center;
   background-size: 12px 12px;
-}
-
-[data-theme='dark'] .routines-field select {
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
-}
-
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .routines-field select {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
-  }
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 9px 32px 9px 12px;
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .routines-field input:focus,
 .routines-field textarea:focus,
