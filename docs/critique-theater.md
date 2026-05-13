@@ -34,35 +34,6 @@ second process, no second transport). All five panelists are turns in the
 same conversation, which keeps the model context coherent and prevents the
 "panelist disagrees with itself across processes" failure mode.
 
-### Why an in-CLI panel and not a third-party design lint
-
-People reading this section before they touch the feature often ask
-"why not Figma's design lint plugin, or Adobe's accessibility checker,
-or a Material You conformance tool?". Three differences matter:
-
-- **Lint bots check what they were told to look for.** They are rule
-  engines: a finite set of "rectangle missing alt text", "contrast
-  below 4.5:1", "spacing off a 4 px grid". Design Jury panelists are
-  generative: each lens (Critic, Brand, Accessibility, Copy) reads
-  the artifact in context and writes a per-dimension narrative with
-  must-fix entries the next round responds to. The output is closer
-  to a structured PR review than to a lint report.
-- **Lint bots fire after design exists.** Design Jury fires *inside*
-  the generation loop, so the next round can act on the critique
-  before a human sees the artifact at all. The user gets the
-  composited score; they do not have to triage 50 individual rule
-  failures.
-- **Lint bots are external services.** Design Jury runs as turns in
-  the same CLI session the agent is already using, so it inherits
-  the project's auth, the brand's design tokens, and the skill's
-  brief without a separate API integration. The conformance harness
-  (`apps/daemon/src/critique/conformance.ts`) is what keeps panelist
-  output protocol-clean; no third party is in the loop.
-
-Where a Figma lint or accessibility checker is the right tool, plug it
-in alongside Design Jury (the design system's `DESIGN.md` is where
-that integration lives). The two are complementary, not redundant.
-
 ## 2. How it works
 
 ### The five panelists
@@ -80,29 +51,8 @@ The cast is fixed in v1. Per-skill cast configuration is reserved for v2
 
 ### Auto-converging rounds
 
-The orchestrator runs **up to 3 rounds** by default. A run stops when
-the first of these conditions is met:
-
-1. **Threshold reached.** Composite ≥ `threshold` (8.0 / 10 in v1) at
-   the end of any round. The run ships immediately with that round's
-   artifact.
-2. **Round budget exhausted.** Three rounds completed without crossing
-   the threshold. The run takes the `fallbackPolicy` path (default
-   `ship_best`: re-ship whichever round's artifact had the highest
-   composite).
-3. **Per-round timeout.** A single round exceeded `perRoundTimeoutMs`
-   (60 s default). The run flips to `failed` with
-   `cause: 'per_round_timeout'`.
-4. **Total timeout.** The full run exceeded `totalTimeoutMs` (180 s
-   default). The run flips to `failed` with `cause: 'total_timeout'`.
-5. **User interrupt.** The user pressed Esc or clicked Interrupt
-   mid-run. The run flips to `interrupted` with the best round so far.
-
-A run that hits #2 emits the score badge as `Below threshold` (not
-`Shipped`) so the user can tell convergence failed.
-
-After each round the composite is computed from the per-panelist
-weights:
+The orchestrator runs up to **3 rounds** by default. After each round the
+composite is computed from the per-panelist weights:
 
 ```
 composite = designer × 0.0
@@ -112,17 +62,10 @@ composite = designer × 0.0
           + copy × 0.2
 ```
 
-**Why these weights:** Critic carries the highest weight (0.4) because
-it directly gates whether the artifact meets the brief: a beautiful
-poster that does not say what it was supposed to say is the failure
-mode this lens is built to catch. Brand, Accessibility, and Copy are
-weighted equally (0.2 each) as secondary quality dimensions that no
-production artifact is allowed to drop. Designer is weighted at 0.0 in
-v1 because their dimensions are aesthetic preferences rather than ship
-gates; the slot stays in the schema so Designer's qualitative notes
-still travel into the transcript and a future config release can bump
-the weight without a wire-shape change. The roadmap targets per-skill
-cast configuration in v2 (see [`apps/daemon/src/critique/AGENTS.md`](../apps/daemon/src/critique/AGENTS.md) and [`apps/web/src/components/Theater/AGENTS.md`](../apps/web/src/components/Theater/AGENTS.md) for the cross-package work that lands the change).
+(Designer is weighted at zero in v1 because their dimensions are aesthetic
+preferences rather than ship gates. The slot exists so the Designer's
+qualitative notes still travel into the transcript, and a future config
+release can bump the weight without changing the schema.)
 
 If the composite meets the **threshold (8.0 / 10)** the run ships. Otherwise
 the orchestrator emits the round summary, the agent revises, and the next
@@ -142,10 +85,31 @@ contract identical to a normal generation: same auth, same env, same logs.
 
 ### Enable / disable
 
-The feature is gated behind the `OD_CRITIQUE_ENABLED` env var and, after
-Phase 15 lands, the **Settings → Critique Theater (beta)** toggle. The web
-toggle persists into the daemon's settings store; both surfaces flip the
-same flag.
+The feature is gated by a four-tier resolver on the daemon side:
+
+1. **Per-skill `od.critique.policy`** (highest priority). A skill that
+   sets `policy: required` forces the panel on for every generation
+   that uses it; `policy: opt-out` forces it off; `policy: opt-in`
+   lets the panel run only at M2 and above.
+2. **Per-project override.** The web's `setCritiqueTheaterEnabled`
+   setter (Phase 15.2) writes the toggle to `localStorage` for the
+   in-session UI and, when called with a `projectId`, also
+   round-trips the value through the existing
+   `PATCH /api/projects/:id` settings endpoint as
+   `metadata.critiqueTheaterEnabled`. The daemon reads that field on
+   the next spawn. A dedicated Settings panel control that wires the
+   `projectId`-aware call lands in a follow-up PR; integrators
+   embedding the Theater can already call the setter directly today.
+3. **`OD_CRITIQUE_ENABLED` env override.** Power-user lane / CI
+   fixtures.
+4. **Rollout phase default** (lowest priority). M0 / M1 = `false`,
+   M2 = true for `policy: opt-in` skills, M3 = `true` everywhere.
+
+The web hook (`useCritiqueTheaterEnabled`) reads localStorage and
+governs whether the Theater UI renders for the active session; the
+daemon-side resolver makes the actual routing decision per
+generation. The two layers share the same toggle but answer
+different questions.
 
 Defaults: **disabled** during M0 dark-launch and M1 settings-toggle phases.
 Enabled by default per skill during M2, then globally during M3 after
@@ -216,9 +180,9 @@ The orchestrator emits a `degraded` event when one of these happens:
 
 | Reason | Cause | Remediation |
 |---|---|---|
-| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Re-run the conformance harness locally (`pnpm --filter @open-design/daemon vitest run tests/critique-conformance.test.ts`) to confirm the adapter's transcript shape; once Phase 12 lands the dashboard surfaces this status as a series, but until then the harness is the authoritative source. |
+| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Re-run the conformance harness locally (`pnpm --filter @open-design/daemon vitest run tests/critique-conformance.test.ts`) to confirm the adapter's transcript shape. The Phase 12 dashboard surfaces this status as a Prometheus series once that PR lands; until then the harness is the authoritative source. |
 | `oversize_block` | The block exceeded `parserMaxBlockBytes`. | Usually a runaway model; retry once or raise the budget. |
-| `adapter_unsupported` | The adapter is marked `critique:degraded` for the 24h TTL window. | Wait for the TTL or run `od adapters clear-degraded <id>`. |
+| `adapter_unsupported` | The adapter is marked `critique:degraded` for the 24h TTL window. | Wait for the TTL to elapse. The adapter-degraded registry exposes `clearDegraded(adapterId)` from `apps/daemon/src/critique/adapter-degraded.ts` for programmatic resets; a `od adapters clear-degraded <id>` CLI wrapper is planned in a follow-up. |
 | `protocol_version_mismatch` | The adapter is on an older protocol. | Update the adapter or pin protocol negotiation. |
 | `missing_artifact` | The run finished but no `<artifact>` body landed. | Almost always a prompt bug; check the skill template. |
 

@@ -63,96 +63,81 @@ function headingLevel(line: string): number {
   return m?.[1]?.length ?? 0;
 }
 
-type TableAlign = 'left' | 'center' | 'right';
+type TableAlign = 'left' | 'right' | 'center' | null;
 
-function splitTableRow(line: string): string[] {
-  let trimmed = line.trim();
-  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
-  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
-
+function splitCells(line: string): string[] {
+  // Walk char-by-char so we can respect three GFM cell-content rules without
+  // any placeholder substitution:
+  //   - `\|` resolves to a literal `|` inside the current cell.
+  //   - A `|` inside a backtick code span is cell content, not a column
+  //     boundary (handles cells like `` | status | `a | b` | ``).
+  //   - A single optional leading `|` and unescaped trailing `|` are row
+  //     terminators, not empty cells.
+  // Placeholder-based escaping was rejected in review for two reasons: a
+  // string sentinel can collide with real cell text, and an earlier draft
+  // used NUL bytes which made the file render as binary on GitHub.
   const cells: string[] = [];
-  let current = '';
-  let inCodeSpan = false;
-  for (let i = 0; i < trimmed.length; i += 1) {
-    const ch = trimmed[i] ?? '';
-    const next = trimmed[i + 1] ?? '';
+  let cur = '';
+  let inCode = false;
+  let i = 0;
+  while (i < line.length && line[i] === ' ') i++;
+  if (line[i] === '|') i++;
+  for (; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === '\' && line[i + 1] === '|') {
+      cur += '|';
+      i++;
+      continue;
+    }
     if (ch === '`') {
-      inCodeSpan = !inCodeSpan;
-      current += ch;
+      inCode = !inCode;
+      cur += ch;
       continue;
     }
-    if (ch === '\\' && next === '|') {
-      current += '|';
-      i += 1;
+    if (ch === '|' && !inCode) {
+      cells.push(cur.trim());
+      cur = '';
       continue;
     }
-    if (ch === '|' && !inCodeSpan) {
-      cells.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += ch;
+    cur += ch;
   }
-  cells.push(current.trim());
+  const tail = cur.trim();
+  if (cells.length === 0 || tail !== '') cells.push(tail);
   return cells;
 }
 
-function parseTableAlign(cell: string): TableAlign | null {
-  const trimmed = cell.trim();
-  if (!/^:?-{3,}:?$/.test(trimmed)) return null;
-  const left = trimmed.startsWith(':');
-  const right = trimmed.endsWith(':');
-  if (left && right) return 'center';
-  if (left) return 'left';
-  if (right) return 'right';
-  return 'left';
-}
-
-function isTableSeparatorLine(line: string): boolean {
-  const cells = splitTableRow(line);
-  return cells.length > 0 && cells.every((cell) => parseTableAlign(cell) !== null);
-}
-
-function isTableStart(line: string, nextLine: string | undefined): boolean {
-  return line.includes('|') && nextLine !== undefined && isTableSeparatorLine(nextLine);
-}
-
-function renderTableHtml(headerLine: string, separatorLine: string, bodyLines: string[]): string | null {
-  const headers = splitTableRow(headerLine);
-  const aligns = splitTableRow(separatorLine).map((cell) => parseTableAlign(cell));
-  if (headers.length < 1 || aligns.length < 1) return null;
-
-  const rows = bodyLines.map((line) => splitTableRow(line));
-  const columnCount = Math.max(headers.length, aligns.length, ...rows.map((row) => row.length));
-
-  let html = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
-  for (let col = 0; col < columnCount; col += 1) {
-    const align = aligns[col] ?? null;
-    const style = align ? ` style="text-align:${align}"` : '';
-    html += `<th${style}>${formatInline(headers[col] ?? '')}</th>`;
+function parseTableAlignRow(line: string): TableAlign[] | null {
+  if (!line.includes('|')) return null;
+  const cells = splitCells(line);
+  if (cells.length === 0) return null;
+  const aligns: TableAlign[] = [];
+  for (const cell of cells) {
+    if (!/^:?-{1,}:?$/.test(cell)) return null;
+    const left = cell.startsWith(':');
+    const right = cell.endsWith(':');
+    aligns.push(left && right ? 'center' : right ? 'right' : left ? 'left' : null);
   }
-  html += '</tr></thead><tbody>';
+  return aligns;
+}
 
-  for (const row of rows) {
-    html += '<tr>';
-    for (let col = 0; col < columnCount; col += 1) {
-      const align = aligns[col] ?? null;
-      const style = align ? ` style="text-align:${align}"` : '';
-      html += `<td${style}>${formatInline(row[col] ?? '')}</td>`;
-    }
-    html += '</tr>';
-  }
+function isTableStartAt(lines: string[], i: number): boolean {
+  const header = lines[i];
+  const sep = lines[i + 1];
+  if (header === undefined || sep === undefined) return false;
+  if (!header.includes('|')) return false;
+  return parseTableAlignRow(sep) !== null;
+}
 
-  html += '</tbody></table></div>';
-  return html;
+function alignAttr(align: TableAlign): string {
+  return align === null ? '' : ` style="text-align:${align}"`;
 }
 
 export function renderMarkdownToSafeHtml(markdown: string): string {
   // Intentionally small markdown subset for conservative preview rendering.
   // Supported: headings, paragraphs, blockquotes, ul/ol lists, fenced code,
-  // tables, inline code, bold/italic, and links.
+  // GFM pipe tables, inline code, bold/italic, and links.
   // Not supported on purpose: full CommonMark edge cases (nested lists,
-  // raw HTML blocks, etc.).
+  // escaped markdown syntax, raw HTML blocks, etc.).
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];
   let i = 0;
@@ -176,36 +161,40 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
         i += 1;
       }
       if (i < lines.length) i += 1;
-      out.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+      out.push(`<pre><code>${escapeHtml(code.join('
+'))}</code></pre>`);
       continue;
     }
 
-    if (isTableStart(line, lines[i + 1])) {
-      const bodyLines: string[] = [];
-      let j = i + 2;
-      while (j < lines.length) {
-        const rowLine = lines[j];
-        if (rowLine === undefined || /^\s*$/.test(rowLine)) break;
-        if (
-          /^```/.test(rowLine) ||
-          headingLevel(rowLine) > 0 ||
-          /^>\s?/.test(rowLine) ||
-          /^\s*[-*]\s+/.test(rowLine) ||
-          /^\s*\d+\.\s+/.test(rowLine) ||
-          !/\|/.test(rowLine)
-        ) {
-          break;
+    if (isTableStartAt(lines, i)) {
+      const header = lines[i] as string;
+      const sep = lines[i + 1] as string;
+      const aligns = parseTableAlignRow(sep) as TableAlign[];
+      const headers = splitCells(header);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length) {
+        const row = lines[i];
+        if (row === undefined || row.trim() === '' || !row.includes('|')) break;
+        rows.push(splitCells(row));
+        i++;
+      }
+      const columnCount = Math.max(headers.length, aligns.length, ...rows.map((row) => row.length));
+      let tableHtml = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
+      for (let col = 0; col < columnCount; col++) {
+        tableHtml += `<th${alignAttr(aligns[col] ?? null)}>${formatInline(headers[col] ?? '')}</th>`;
+      }
+      tableHtml += '</tr></thead><tbody>';
+      for (const row of rows) {
+        tableHtml += '<tr>';
+        for (let col = 0; col < columnCount; col++) {
+          tableHtml += `<td${alignAttr(aligns[col] ?? null)}>${formatInline(row[col] ?? '')}</td>`;
         }
-        bodyLines.push(rowLine);
-        j += 1;
+        tableHtml += '</tr>';
       }
-
-      const tableHtml = renderTableHtml(line, lines[i + 1] ?? '', bodyLines);
-      if (tableHtml) {
-        out.push(tableHtml);
-        i = j;
-        continue;
-      }
+      tableHtml += '</tbody></table></div>';
+      out.push(tableHtml);
+      continue;
     }
 
     const h = headingLevel(line);
@@ -227,13 +216,11 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
       continue;
     }
 
-    if (/^\s*[-*]\s+/.test(line)) {
+    if (/^\s*[-*+]\s+/.test(line)) {
       const items: string[] = [];
-      while (i < lines.length) {
-        const itemLine = lines[i];
-        if (itemLine === undefined || !/^\s*[-*]\s+/.test(itemLine)) break;
-        items.push(`<li>${formatInline(itemLine.replace(/^\s*[-*]\s+/, ''))}</li>`);
-        i += 1;
+      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i] ?? '')) {
+        items.push((lines[i] ?? '').replace(/^\s*[-*+]\s+/, ''));
+        i++;
       }
       out.push(`<ul>${items.join('')}</ul>`);
       continue;
@@ -241,35 +228,30 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
 
     if (/^\s*\d+\.\s+/.test(line)) {
       const items: string[] = [];
-      while (i < lines.length) {
-        const itemLine = lines[i];
-        if (itemLine === undefined || !/^\s*\d+\.\s+/.test(itemLine)) break;
-        items.push(`<li>${formatInline(itemLine.replace(/^\s*\d+\.\s+/, ''))}</li>`);
-        i += 1;
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i] ?? '')) {
+        items.push((lines[i] ?? '').replace(/^\s*\d+\.\s+/, ''));
+        i++;
       }
       out.push(`<ol>${items.join('')}</ol>`);
       continue;
     }
 
-    const para: string[] = [];
+    const buf: string[] = [line];
+    i++;
     while (i < lines.length) {
-      const paraLine = lines[i];
-      if (paraLine === undefined || /^\s*$/.test(paraLine)) break;
-      if (
-        /^```/.test(paraLine) ||
-        headingLevel(paraLine) > 0 ||
-        /^>\s?/.test(paraLine) ||
-        /^\s*[-*]\s+/.test(paraLine) ||
-        /^\s*\d+\.\s+/.test(paraLine) ||
-        isTableStart(paraLine, lines[i + 1])
-      ) {
-        break;
-      }
-      para.push(paraLine);
-      i += 1;
+      const next = lines[i] ?? '';
+      if (next.trim() === '') break;
+      if (/^```/.test(next)) break;
+      if (/^#{1,6}\s+/.test(next)) break;
+      if (/^\s*[-*+]\s+/.test(next)) break;
+      if (/^\s*\d+\.\s+/.test(next)) break;
+      if (isTableStartAt(lines, i)) break;
+      buf.push(next);
+      i++;
     }
-    out.push(`<p>${formatInline(para.join(' '))}</p>`);
+    out.push(`<p>${formatInline(buf.join(' '))}</p>`);
   }
 
-  return out.join('\n');
+  return out.join('
+');
 }

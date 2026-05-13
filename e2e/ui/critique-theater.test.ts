@@ -121,12 +121,21 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
   });
 }
 
-// Parked behind test.describe.fixme until the follow-up that lands the
-// PNG baselines + the goto('/projects/:id') fixture (the current bootstrap
-// lands on '/' where ProjectView is not mounted, so CritiqueTheaterMount
-// never renders and every assertion times out). Removed from
-// test:ui:extended in the same merge per PerishCode P1 on PR #1338.
-test.describe.fixme('Critique Theater e2e (Phase 11)', () => {
+/**
+ * Parked behind `test.describe.fixme` until the next follow-up PR
+ * (PerishCode P1 on PR #1338). The suite as written assumes the route
+ * at `/` mounts `<ProjectView>` and therefore renders
+ * `<CritiqueTheaterMount>`, but the home route shows the entry gallery;
+ * the mount only renders inside `/projects/:id`. The follow-up commit
+ * replaces the `await page.goto('/')` calls with seeded-project
+ * navigation (similar to `app-design-files.test.ts`), splits the SSE
+ * fixture into a live prefix and a terminal suffix (Codex P2 on PR
+ * #1320), and commits the first PNG baselines. Until that lands, the
+ * suite would time out on every assertion; `fixme` skips at run time
+ * while keeping the spec visible to the contributor who finishes the
+ * wireup.
+ */
+test.describe.fixme('Critique Theater e2e (Phase 11) [awaiting full mount-route follow-up, see file header]', () => {
   test.beforeEach(async ({ page }) => {
     await bootAppWithCritiqueEnabled(page);
   });

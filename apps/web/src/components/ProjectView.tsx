@@ -96,6 +96,10 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import {
+  CritiqueTheaterMount,
+  useCritiqueTheaterEnabled,
+} from './Theater';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
@@ -2396,8 +2400,26 @@ export function ProjectView({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [designMdState.exists, handleContinueInCli]);
 
+  // Wire the Critique Theater drop-in mount into the project workspace.
+  // The hook reads the M1 Settings toggle out of the existing
+  // `open-design:config` localStorage blob and stays in sync with the
+  // platform `storage` event (cross-tab) plus the same-tab
+  // `open-design:critique-theater-toggle` CustomEvent. The mount itself
+  // returns `null` until the daemon emits a `critique.run_started` for
+  // the active project, so the visual surface is unchanged for users
+  // who have not opted in. The daemon-side gate
+  // (`isCritiqueEnabled(...)` in `apps/daemon/src/server.ts`) is the
+  // authority for whether a run is actually wired through the critique
+  // pipeline; this hook only governs whether the web layer renders the
+  // resulting SSE stream.
+  const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
+
   return (
     <div className="app">
+      <CritiqueTheaterMount
+        projectId={project.id}
+        enabled={critiqueTheaterEnabled}
+      />
       <AppChromeHeader
         onBack={onBack}
         backLabel={t('project.backToProjects')}

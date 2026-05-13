@@ -1,0 +1,196 @@
+{
+  "annotations": { "list": [] },
+  "description": "Critique Theater observability dashboard. Imports the 9 open_design_critique_* series the daemon exposes on /api/metrics and renders the three default views the spec calls out: fleet quality, adapter health, and brief throughput. Tune buckets and queries after the first 1000 runs; this file is the starting point, not the prescribed final shape.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Fleet quality",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Composite score by adapter (p50 / p90 / p99)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 0, "y": 1, "w": 16, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(open_design_critique_composite_score_bucket[5m])) by (le, adapter))",
+          "legendFormat": "{{adapter}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(open_design_critique_composite_score_bucket[5m])) by (le, adapter))",
+          "legendFormat": "{{adapter}} p90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(open_design_critique_composite_score_bucket[5m])) by (le, adapter))",
+          "legendFormat": "{{adapter}} p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "min": 0, "max": 10, "unit": "short" },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 3,
+      "type": "heatmap",
+      "title": "Composite distribution by adapter",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 16, "y": 1, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(open_design_critique_composite_score_bucket[5m])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "yAxis": { "decimals": 0, "min": 0, "max": 10 }
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Adapter health",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Degraded marks per 5m by adapter and reason",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(open_design_critique_degraded_total[5m])) by (adapter, reason)",
+          "legendFormat": "{{adapter}} / {{reason}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "stacking": "normal", "showValue": "auto" }
+    },
+    {
+      "id": 12,
+      "type": "barchart",
+      "title": "Parser errors per 5m by adapter and kind",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(open_design_critique_parser_errors_total[5m])) by (adapter, kind)",
+          "legendFormat": "{{adapter}} / {{kind}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "stacking": "normal", "showValue": "auto" }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Brief throughput",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Runs per hour by terminal status",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 0, "y": 19, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(open_design_critique_runs_total[1h])) by (status) * 3600",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Avg rounds per run by adapter",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 12, "y": 19, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(open_design_critique_rounds_total[1h])) by (adapter) / clamp_min(sum(rate(open_design_critique_runs_total[1h])) by (adapter), 1)",
+          "legendFormat": "{{adapter}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" } }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Round duration ms (p50 / p90 / p99)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "x": 18, "y": 19, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(open_design_critique_round_duration_ms_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(open_design_critique_round_duration_ms_bucket[5m])) by (le))",
+          "legendFormat": "p90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(open_design_critique_round_duration_ms_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["critique-theater", "open-design"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": false, "text": "Prometheus", "value": "prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "options": [],
+        "refresh": 1,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Critique Theater",
+  "uid": "open-design-critique-theater",
+  "version": 1,
+  "weekStart": ""
+}

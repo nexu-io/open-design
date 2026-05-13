@@ -1,10 +1,12 @@
 import type {
   ChatCommentAttachment,
+  ChatCommentSelectionKind,
   ChatMessage,
   PreviewCommentMember,
   PreviewComment,
   PreviewCommentSelectionKind,
   PreviewCommentTarget,
+  PreviewVisualMarkKind,
 } from './types';
 
 export interface PreviewCommentSnapshot {
@@ -25,6 +27,26 @@ export interface CommentOverlayBounds {
   top: number;
   width: number;
   height: number;
+}
+
+export interface VisualAnnotationTarget {
+  filePath: string;
+  elementId?: string;
+  selector?: string;
+  label?: string;
+  text?: string;
+  position?: { x: number; y: number; width: number; height: number };
+  htmlHint?: string;
+}
+
+export interface VisualAnnotationAttachmentInput {
+  order: number;
+  idSeed?: string;
+  screenshotPath: string;
+  markKind: PreviewVisualMarkKind;
+  note: string;
+  bounds: { x: number; y: number; width: number; height: number };
+  target?: VisualAnnotationTarget | null;
 }
 
 export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCommentTarget {
@@ -154,6 +176,37 @@ export function buildBoardCommentAttachments(input: {
     }));
 }
 
+export function buildVisualAnnotationAttachment(input: VisualAnnotationAttachmentInput): ChatCommentAttachment {
+  const target = input.target ?? null;
+  const intent = visualAnnotationIntent(input.markKind);
+  const visualId = sanitizeVisualAttachmentId(input.idSeed || input.screenshotPath || String(input.order));
+  const elementId = target?.elementId?.trim() || `visual-mark-${visualId}`;
+  const label = target?.label?.trim() || 'Marked screenshot region';
+  const comment = input.note.trim() || intent;
+  return {
+    id: `${elementId}-visual-${visualId}`,
+    order: input.order,
+    filePath: target?.filePath?.trim() || input.screenshotPath,
+    elementId,
+    selector: target?.selector?.trim() || '',
+    label,
+    comment,
+    currentText: trimContextText(target?.text || ''),
+    pagePosition: normalizePosition(target?.position ?? input.bounds),
+    htmlHint: trimHtmlHint(target?.htmlHint || ''),
+    selectionKind: 'visual',
+    screenshotPath: input.screenshotPath,
+    markKind: input.markKind,
+    intent,
+    source: 'board-batch',
+  };
+}
+
+function sanitizeVisualAttachmentId(value: string): string {
+  const id = value.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return id || 'mark';
+}
+
 export function messageContentWithCommentAttachments(
   content: string,
   commentAttachments: ChatCommentAttachment[],
@@ -199,9 +252,10 @@ export function simplePositionLabel(position: PreviewComment['position']): strin
 }
 
 export function selectionKindLabel(
-  selectionKind: PreviewCommentSelectionKind | undefined,
+  selectionKind: ChatCommentSelectionKind | undefined,
   memberCount?: number,
 ): string {
+  if (selectionKind === 'visual') return 'Visual mark';
   if (selectionKind === 'pod') {
     return memberCount && memberCount > 0 ? `Pod · ${memberCount} items` : 'Pod';
   }
@@ -223,23 +277,33 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: apply the user request to the attached preview target by default. Preserve unrelated elements.',
+    'Scope: apply the user request to the attached preview target by default. For visual marks, inspect the screenshot and modify the marked region first. Preserve unrelated elements.',
   ];
   commentAttachments.forEach((item) => {
     const position = normalizePosition(item.pagePosition);
-    const selectionKind = item.selectionKind === 'pod' ? 'pod' : 'element';
+    const selectionKind =
+      item.selectionKind === 'visual' ? 'visual' : item.selectionKind === 'pod' ? 'pod' : 'element';
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
       `targetKind: ${selectionKind}`,
       `file: ${item.filePath}`,
-      `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
       `position: x${position.x} y${position.y} ${position.width}x${position.height}`,
       `currentText: ${trimContextText(item.currentText || '') || '(empty)'}`,
       `htmlHint: ${trimHtmlHint(item.htmlHint || '') || '(none)'}`,
       `comment: ${item.comment}`,
     );
+    if (selectionKind === 'visual') {
+      lines.push(
+        `screenshot: ${item.screenshotPath || '(missing)'}`,
+        `markKind: ${item.markKind || 'stroke'}`,
+        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
+      );
+      if (item.selector) lines.push(`selector: ${item.selector}`);
+    } else {
+      lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
+    }
     if (selectionKind === 'pod') {
       lines.push(`memberCount: ${item.memberCount || item.podMembers?.length || 0}`);
       (item.podMembers ?? []).slice(0, 8).forEach((member, memberIndex) => {
@@ -251,6 +315,16 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
   });
   lines.push('</attached-preview-comments>');
   return lines.join('\n');
+}
+
+function visualAnnotationIntent(markKind: PreviewVisualMarkKind): string {
+  if (markKind === 'click') {
+    return 'The screenshot has a blue focus box around the picked element; modify that picked part first.';
+  }
+  if (markKind === 'click+stroke') {
+    return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
+  }
+  return 'The screenshot has red strokes that identify the visual region the user wants changed.';
 }
 
 function normalizePosition(input: PreviewComment['position']): PreviewComment['position'] {

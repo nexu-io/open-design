@@ -96,6 +96,8 @@ export const ru: Dict = {
   'settings.agentInstall.stepSelect': 'Выберите карточку агента, когда он появится как установленный.',
   'settings.noAgentsDetected':
     'Агенты ещё не обнаружены. Установите один из следующих инструментов: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen или GitHub Copilot CLI, затем нажмите «Пересканировать».',
+  'settings.agentAuthRequired': 'Требуется аутентификация',
+  'settings.agentAuthUnknown': 'Статус аутентификации неизвестен',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'Быстро заполнить провайдера',
   'settings.customProvider': 'Пользовательский провайдер',

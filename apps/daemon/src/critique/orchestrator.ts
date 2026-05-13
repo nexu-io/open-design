@@ -28,6 +28,20 @@ import {
   OversizeBlockError,
   MissingArtifactError,
 } from './errors.js';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
+import {
+  critiqueCompositeScore,
+  critiqueInterruptedTotal,
+  critiqueMustFixTotal,
+  critiqueParserErrorsTotal,
+  critiqueProtocolVersion,
+  critiqueRoundDurationMs,
+  critiqueRoundsTotal,
+  critiqueRunsTotal,
+} from '../metrics/index.js';
+import { logCritique } from '../logging/critique.js';
+
+const tracer = trace.getTracer('@open-design/daemon/critique');
 
 /**
  * Tolerance used when comparing the agent-supplied composite attribute on
@@ -53,6 +67,13 @@ export interface OrchestratorParams {
   artifactId: string;
   artifactDir: string;
   adapter: string;
+  /**
+   * SKILL.md id for the run, used as a Prometheus label so the dashboard
+   * can break adapter performance down by skill. Optional because not
+   * every spawn site has threaded it yet (Phase 12 follow-up). Defaults
+   * to 'unknown' so the series shape stays stable.
+   */
+  skill?: string;
   cfg: CritiqueConfig;
   db: Database.Database;
   bus: CritiqueSseBus;
@@ -103,6 +124,46 @@ export async function runOrchestrator(
   params: OrchestratorParams,
 ): Promise<OrchestratorResult> {
   const { runId, projectId, conversationId, artifactDir, adapter, cfg, db, bus, stdout } = params;
+  const skill = params.skill ?? 'unknown';
+  // Phase 12 round-duration histogram needs the wall-clock time the first
+  // panelist_open landed for each round, so we can subtract at round_end.
+  const roundStartMs = new Map<number, number>();
+
+  // Phase 12 outer trace span. No-op without an exporter wired; operators
+  // who attach OTLP / Tempo / Honeycomb / Jaeger pick the span up
+  // automatically through the existing `trace.getTracer` registry. Inner
+  // per-round / per-chunk spans are a follow-up; the outer span alone
+  // gives the trace a duration + final status + adapter/skill attributes,
+  // which is what 80% of dashboards correlate runs by.
+  const span = tracer.startSpan('critique.run', {
+    attributes: {
+      'critique.run_id': runId,
+      'critique.adapter': adapter,
+      'critique.skill': skill,
+    },
+  });
+
+  // Phase 12 parser-warning helper. Three orchestrator-side checks emit
+  // composite_mismatch / duplicate_ship as parser warnings; routing each
+  // through this helper guarantees the metric bump, the log line, and
+  // the SSE fan-out stay in lockstep. Parser-yielded warnings (from
+  // `parseCritiqueStream` directly) hit the matching switch case below.
+  const emitParserWarning = (
+    kind: Extract<PanelEvent, { type: 'parser_warning' }>['kind'],
+    position: number,
+    collected: PanelEvent[],
+  ): void => {
+    const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
+      type: 'parser_warning',
+      runId,
+      kind,
+      position,
+    };
+    collected.push(warning);
+    bus.emit(panelEventToSse(warning));
+    critiqueParserErrorsTotal.inc({ kind, adapter });
+    logCritique({ event: 'parser_recover', runId, kind, position });
+  };
   const signal = params.signal;
   const child = params.child;
   const childExitPromise = params.childExitPromise;
@@ -225,6 +286,17 @@ export async function runOrchestrator(
 
       switch (event.type) {
         case 'run_started': {
+          logCritique({
+            event: 'run_started',
+            runId,
+            adapter,
+            skill,
+            protocolVersion: event.protocolVersion,
+          });
+          critiqueProtocolVersion.set(
+            { version: String(event.protocolVersion) },
+            event.protocolVersion,
+          );
           break;
         }
 
@@ -240,6 +312,12 @@ export async function runOrchestrator(
           if (event.round !== currentRoundN) {
             currentRoundN = event.round;
             roundDeadline = Date.now() + cfg.perRoundTimeoutMs;
+          }
+          // Track first panelist_open wall-clock per round for the
+          // round_duration_ms histogram. Subsequent panelist_open events
+          // in the same round leave the start time untouched.
+          if (!roundStartMs.has(event.round)) {
+            roundStartMs.set(event.round, Date.now());
           }
           break;
         }
@@ -258,6 +336,17 @@ export async function runOrchestrator(
           if (rs !== undefined) {
             rs.mustFix += 1;
           }
+          // The wire-level panelist_must_fix event carries `text` but no
+          // dim name. Bump with `dim: 'unspecified'` so the dashboard
+          // panel stays stable: when a future parser revision adds a
+          // `dim` field, the label flips to the real value without a
+          // breaking metric rename.
+          critiqueMustFixTotal.inc({
+            panelist: event.role,
+            dim: 'unspecified',
+            adapter,
+            skill,
+          });
           break;
         }
 
@@ -273,18 +362,38 @@ export async function runOrchestrator(
             // events.
             if (Math.abs(event.composite - rs.composite) > COMPOSITE_TOLERANCE
               || event.mustFix !== rs.mustFix) {
-              const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
-                type: 'parser_warning',
-                runId,
-                kind: 'composite_mismatch',
-                position: 0,
-              };
-              collectedEvents.push(warning);
-              bus.emit(panelEventToSse(warning));
+              emitParserWarning('composite_mismatch', 0, collectedEvents);
             }
             completedRounds.push({ ...rs });
           }
           roundDeadline = null;
+          // Siri-Ray P2 on PR #1485: observe / log the daemon-authoritative
+          // round values (rs.composite, rs.mustFix), not the agent's
+          // <ROUND_END composite=...> attribute. If they disagree the
+          // composite_mismatch warning above already flagged it; persistence
+          // and ship decisions use rs, so dashboards must too. Skip the
+          // bumps entirely when rs is missing (degenerate round_end with no
+          // matching panelist_open): a metric series labeled with an
+          // untrusted composite is worse than one missing sample.
+          if (rs !== undefined) {
+            critiqueRoundsTotal.inc({ adapter, skill });
+            critiqueCompositeScore.observe({ adapter, skill }, rs.composite);
+            const startedAtMs = roundStartMs.get(event.round);
+            if (startedAtMs !== undefined) {
+              critiqueRoundDurationMs.observe(
+                { adapter, skill, round: String(event.round) },
+                Date.now() - startedAtMs,
+              );
+            }
+            logCritique({
+              event: 'round_closed',
+              runId,
+              round: event.round,
+              composite: rs.composite,
+              mustFix: rs.mustFix,
+              decision: event.decision,
+            });
+          }
           break;
         }
 
@@ -297,6 +406,20 @@ export async function runOrchestrator(
           // Extract designer round-1 ARTIFACT reference from dimNote is not
           // our job here; artifact path comes from the ship event's artifactRef
           // or from a panelist block. We store the artifactId from the ship event below.
+          break;
+        }
+
+        case 'parser_warning': {
+          // Parser-yielded warnings (score_clamped, unknown_role, etc.).
+          // Orchestrator-side warnings go through `emitParserWarning`
+          // and never re-enter this loop.
+          critiqueParserErrorsTotal.inc({ kind: event.kind, adapter });
+          logCritique({
+            event: 'parser_recover',
+            runId,
+            kind: event.kind,
+            position: event.position,
+          });
           break;
         }
 
@@ -319,14 +442,7 @@ export async function runOrchestrator(
         // daemon. Trusting it would re-open the scoring-integrity hole this
         // patch is meant to close, so we drop the agent ship, emit a
         // parser_warning, and fall through to the no-SHIP fallback policy.
-        const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
-          type: 'parser_warning',
-          runId,
-          kind: 'duplicate_ship',
-          position: 0,
-        };
-        collectedEvents.push(warning);
-        bus.emit(panelEventToSse(warning));
+        emitParserWarning('duplicate_ship', 0, collectedEvents);
         resolvedShip = null;
       }
     }
@@ -339,14 +455,7 @@ export async function runOrchestrator(
       const ship = resolvedShip;
       const shippedRound = completedRounds.find((r) => r.n === ship.round)!;
       if (Math.abs(ship.composite - shippedRound.composite) > COMPOSITE_TOLERANCE) {
-        const warning: Extract<PanelEvent, { type: 'parser_warning' }> = {
-          type: 'parser_warning',
-          runId,
-          kind: 'composite_mismatch',
-          position: 0,
-        };
-        collectedEvents.push(warning);
-        bus.emit(panelEventToSse(warning));
+        emitParserWarning('composite_mismatch', 0, collectedEvents);
       }
       const decision = decideRound(shippedRound.composite, shippedRound.mustFix, cfg);
       finalStatus = decision === 'ship' ? 'shipped' : 'below_threshold';
@@ -619,6 +728,53 @@ export async function runOrchestrator(
     decision: decideRound(r.composite, r.mustFix, cfg) as 'continue' | 'ship',
   }));
 
+  // Phase 12 terminal-status observability. Bumps runs_total once per
+  // run with the resolved status; runs that took the interrupt path
+  // also bump interrupted_total so the dashboard's user-interrupt
+  // panel reads off a labeled counter rather than a status filter.
+  // Logs the matching structured event so an ingest pipeline can key
+  // on namespace=critique + event=run_shipped/run_failed/degraded.
+  critiqueRunsTotal.inc({ status: finalStatus, adapter, skill });
+  switch (finalStatus) {
+    case 'shipped':
+    case 'below_threshold': {
+      logCritique({
+        event: 'run_shipped',
+        runId,
+        round: completedRounds.length > 0
+          ? (completedRounds[completedRounds.length - 1]?.n ?? 0)
+          : 0,
+        composite: finalComposite ?? 0,
+        status: finalStatus,
+      });
+      break;
+    }
+    case 'interrupted': {
+      critiqueInterruptedTotal.inc({ adapter });
+      logCritique({ event: 'run_failed', runId, cause: 'interrupted' });
+      break;
+    }
+    case 'timed_out': {
+      logCritique({ event: 'run_failed', runId, cause: 'timed_out' });
+      break;
+    }
+    case 'failed': {
+      logCritique({ event: 'run_failed', runId, cause: 'orchestrator_internal' });
+      break;
+    }
+    case 'degraded': {
+      logCritique({
+        event: 'degraded',
+        runId,
+        reason: 'orchestrator_classified',
+        adapter,
+      });
+      break;
+    }
+    default:
+      break;
+  }
+
   // Persist final state.
   updateCritiqueRun(db, runId, {
     status: finalStatus,
@@ -627,6 +783,20 @@ export async function runOrchestrator(
     transcriptPath,
     artifactPath,
   });
+
+  // Stamp the OTel span with the resolved terminal status before ending
+  // it, so a downstream tracing UI can filter by status without joining
+  // back to the Prometheus runs_total counter.
+  span.setAttribute('critique.final_status', finalStatus);
+  if (finalComposite !== null) {
+    span.setAttribute('critique.final_composite', finalComposite);
+  }
+  if (finalStatus === 'failed' || finalStatus === 'timed_out') {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: finalStatus });
+  } else {
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
+  span.end();
 
   return {
     status: finalStatus,

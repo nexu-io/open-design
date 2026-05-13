@@ -4,9 +4,9 @@
  * We deliberately avoid a full parser library — chat output rarely uses
  * the long tail of markdown features and a hand-rolled walker keeps the
  * bundle slim. Block-level: ATX headings (# … ###), fenced code (```),
- * tables, ordered (1.) and unordered (- / *) lists, paragraphs, blank-line
- * separation. Inline: backtick code spans, **bold**, *italic* / _italic_,
- * and bare links (autolinked URLs).
+ * ordered (1.) and unordered (- / *) lists, GFM pipe tables, paragraphs,
+ * blank-line separation. Inline: backtick code spans, **bold**,
+ * *italic* / _italic_, and bare links (autolinked URLs).
  *
  * Output is a React fragment of typed elements — no dangerouslySetInnerHTML,
  * so untrusted text can't smuggle markup through.
@@ -22,67 +22,78 @@ export function renderMarkdown(input: string): ReactNode {
   );
 }
 
+type TableAlign = 'left' | 'right' | 'center' | null;
+
 type Block =
   | { kind: 'p'; text: string }
   | { kind: 'h'; level: 1 | 2 | 3 | 4; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
-  | { kind: 'table'; headers: string[]; aligns: TableAlign[]; rows: string[][] }
+  | { kind: 'table'; aligns: TableAlign[]; headers: string[]; rows: string[][] }
   | { kind: 'code'; lang: string | null; body: string }
   | { kind: 'hr' };
 
-type TableAlign = 'left' | 'center' | 'right';
-
-function splitTableRow(line: string): string[] {
-  let trimmed = line.trim();
-  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
-  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
-
+function splitTableCells(line: string): string[] {
+  // Walk char-by-char so we can respect three GFM cell-content rules without
+  // any placeholder substitution:
+  //   - `\|` resolves to a literal `|` inside the current cell.
+  //   - A `|` inside a backtick code span is cell content, not a column
+  //     boundary (handles cells like `` | status | `a | b` | ``).
+  //   - A single optional leading `|` and unescaped trailing `|` are row
+  //     terminators, not empty cells.
+  // Placeholder-based escaping was rejected in review for two reasons: a
+  // string sentinel can collide with real cell text, and an earlier draft
+  // used NUL bytes which made the file render as binary on GitHub.
   const cells: string[] = [];
-  let current = '';
-  let inCodeSpan = false;
-  for (let i = 0; i < trimmed.length; i += 1) {
-    const ch = trimmed[i] ?? '';
-    const next = trimmed[i + 1] ?? '';
+  let cur = '';
+  let inCode = false;
+  let i = 0;
+  while (i < line.length && line[i] === ' ') i++;
+  if (line[i] === '|') i++;
+  for (; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === '\' && line[i + 1] === '|') {
+      cur += '|';
+      i++;
+      continue;
+    }
     if (ch === '`') {
-      inCodeSpan = !inCodeSpan;
-      current += ch;
+      inCode = !inCode;
+      cur += ch;
       continue;
     }
-    if (ch === '\\' && next === '|') {
-      current += '|';
-      i += 1;
+    if (ch === '|' && !inCode) {
+      cells.push(cur.trim());
+      cur = '';
       continue;
     }
-    if (ch === '|' && !inCodeSpan) {
-      cells.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += ch;
+    cur += ch;
   }
-  cells.push(current.trim());
+  const tail = cur.trim();
+  if (cells.length === 0 || tail !== '') cells.push(tail);
   return cells;
 }
 
-function parseTableAlign(cell: string): TableAlign | null {
-  const trimmed = cell.trim();
-  if (!/^:?-{3,}:?$/.test(trimmed)) return null;
-  const left = trimmed.startsWith(':');
-  const right = trimmed.endsWith(':');
-  if (left && right) return 'center';
-  if (left) return 'left';
-  if (right) return 'right';
-  return 'left';
+function parseTableAlignRow(line: string): TableAlign[] | null {
+  if (!line.includes('|')) return null;
+  const cells = splitTableCells(line);
+  if (cells.length === 0) return null;
+  const aligns: TableAlign[] = [];
+  for (const cell of cells) {
+    if (!/^:?-{1,}:?$/.test(cell)) return null;
+    const left = cell.startsWith(':');
+    const right = cell.endsWith(':');
+    aligns.push(left && right ? 'center' : right ? 'right' : left ? 'left' : null);
+  }
+  return aligns;
 }
 
-function isTableSeparatorLine(line: string): boolean {
-  const cells = splitTableRow(line);
-  return cells.length > 0 && cells.every((cell) => parseTableAlign(cell) !== null);
-}
-
-function isTableStart(line: string, nextLine: string | undefined): boolean {
-  return line.includes('|') && nextLine !== undefined && isTableSeparatorLine(nextLine);
+function isTableStartAt(lines: string[], i: number): boolean {
+  const header = lines[i];
+  const sep = lines[i + 1];
+  if (header === undefined || sep === undefined) return false;
+  if (!header.includes('|')) return false;
+  return parseTableAlignRow(sep) !== null;
 }
 
 function parseBlocks(input: string): Block[] {
@@ -107,36 +118,26 @@ function parseBlocks(input: string): Block[] {
       }
       // Skip the closing fence (if present).
       if (i < lines.length) i++;
-      out.push({ kind: 'code', lang, body: buf.join('\n') });
+      out.push({ kind: 'code', lang, body: buf.join('
+') });
       continue;
     }
     // Table.
-    if (isTableStart(line, lines[i + 1])) {
-      const headers = splitTableRow(line);
-      const aligns = splitTableRow(lines[i + 1] ?? '').map((cell) => parseTableAlign(cell) ?? 'left');
-      if (headers.length >= 1 && aligns.length >= 1) {
-        const rows: string[][] = [];
-        i += 2;
-        while (i < lines.length) {
-          const rowLine = lines[i] ?? '';
-          if (rowLine.trim() === '') break;
-          if (
-            /^```/.test(rowLine) ||
-            /^(#{1,4})\s+/.test(rowLine) ||
-            /^\s*[-*+]\s+/.test(rowLine) ||
-            /^\s*\d+\.\s+/.test(rowLine) ||
-            /^\s*(-{3,}|_{3,}|\*{3,})\s*$/.test(rowLine) ||
-            /^>\s?/.test(rowLine) ||
-            !rowLine.includes('|')
-          ) {
-            break;
-          }
-          rows.push(splitTableRow(rowLine));
-          i++;
-        }
-        out.push({ kind: 'table', headers, aligns, rows });
-        continue;
+    if (isTableStartAt(lines, i)) {
+      const header = lines[i] as string;
+      const sep = lines[i + 1] as string;
+      const aligns = parseTableAlignRow(sep) as TableAlign[];
+      const headers = splitTableCells(header);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length) {
+        const row = lines[i];
+        if (row === undefined || row.trim() === '' || !row.includes('|')) break;
+        rows.push(splitTableCells(row));
+        i++;
       }
+      out.push({ kind: 'table', aligns, headers, rows });
+      continue;
     }
     // ATX heading.
     const heading = /^(#{1,4})\s+(.*\S)\s*$/.exec(line);
@@ -179,14 +180,14 @@ function parseBlocks(input: string): Block[] {
       const next = lines[i] ?? '';
       if (next.trim() === '') break;
       if (/^```/.test(next)) break;
-      if (/^#{1,4}\s+/.test(next)) break;
+      if (/^(#{1,4})\s+/.test(next)) break;
       if (/^\s*[-*+]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
-      if (isTableStart(next, lines[i + 1])) break;
+      if (isTableStartAt(lines, i)) break;
       buf.push(next);
       i++;
     }
-    out.push({ kind: 'p', text: buf.join('\n') });
+    out.push({ kind: 'p', text: buf.join(' ') });
   }
   return out;
 }
@@ -265,16 +266,9 @@ function renderBlock(block: Block, key: number): ReactNode {
 // span (which itself still gets autolink scanning).
 function renderInline(text: string): ReactNode {
   const out: ReactNode[] = [];
-  // Order matters:
-  //  1. inline code first so its contents are not re-tokenized as bold/italic.
-  //  2. explicit `[text](url)` markdown links before bare URL autolink so the
-  //     autolink does not greedily swallow the closing paren.
-  //  3. bare http(s) URL autolink BEFORE italic markers — chat output often
-  //     contains OAuth-style links with `_type=` / `_id=` query params, and
-  //     leaving italic to win turns the URL into an italic-fragmented mess.
-  //  4. bold (**a** / __a__) before italic (*a* / _a_).
-  const re =
-    /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
+  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*
+]+\*)|(_[^_
+]+_)/g;
   let lastIndex = 0;
   let m: RegExpExecArray | null;
   let key = 0;
@@ -301,8 +295,6 @@ function renderInline(text: string): ReactNode {
         </a>,
       );
     } else if (m[4]) {
-      // Bare URL — autolink with the URL as both href and visible text,
-      // matching the Markdown `<https://…>` autolink convention.
       out.push(
         <a
           key={key++}
@@ -331,10 +323,6 @@ function renderInline(text: string): ReactNode {
   return <Fragment>{out}</Fragment>;
 }
 
-// Walk a plain text run, autolinking bare URLs and preserving the rest as
-// text nodes. Newlines inside a paragraph become explicit <br />s — the
-// upstream parser has already left them in place because chat output
-// often relies on hard line breaks rather than blank-line separation.
 function pushText(out: ReactNode[], text: string, baseKey: number): void {
   if (!text) return;
   const urlRe = /(https?:\/\/[^\s)]+)/g;
@@ -366,7 +354,8 @@ function pushText(out: ReactNode[], text: string, baseKey: number): void {
 }
 
 function withBreaks(text: string, baseKey: string): ReactNode[] {
-  const parts = text.split('\n');
+  const parts = text.split('
+');
   const out: ReactNode[] = [];
   parts.forEach((part, i) => {
     if (i > 0) out.push(<br key={`${baseKey}-br-${i}`} />);

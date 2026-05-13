@@ -16,26 +16,34 @@
  */
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import url from 'node:url';
 
-const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * Resolve the fixture relative to *this module's URL* rather than `cwd`.
+ * `new URL(relative, import.meta.url)` is the module-anchored equivalent
+ * of `path.join(__dirname, relative)` and is the form
+ * lefarcen P2 on PR #1317 asked for: a directory move of either this
+ * file or the fixture would surface as a clear ENOENT pointing at this
+ * exact line rather than a stale `path.join('..', 'v1', ...)` that
+ * silently resolves to the wrong place.
+ */
+export const SYNTHETIC_GOOD_FIXTURE_URL = new URL(
+  '../v1/happy-3-rounds.txt',
+  import.meta.url,
+);
 
-/** Path of the bundled fixture so test harnesses can `readFile` it directly. */
-export const SYNTHETIC_GOOD_FIXTURE_PATH = path.join(
-  __dirname,
-  '..',
-  'v1',
-  'happy-3-rounds.txt',
+/** String form of the fixture path so tests and tooling can still `path.join` against it. */
+export const SYNTHETIC_GOOD_FIXTURE_PATH = url.fileURLToPath(
+  SYNTHETIC_GOOD_FIXTURE_URL,
 );
 
 /**
  * Read the canonical happy-path transcript synchronously. The file ships
- * with the daemon source so the call cannot fail in a packaged build.
+ * with the daemon source so the call cannot fail in a packaged build;
+ * `readFileSync` accepts URL objects directly.
  */
 export function syntheticGoodTranscript(): string {
-  return readFileSync(SYNTHETIC_GOOD_FIXTURE_PATH, 'utf8');
+  return readFileSync(SYNTHETIC_GOOD_FIXTURE_URL, 'utf8');
 }
 
 /**

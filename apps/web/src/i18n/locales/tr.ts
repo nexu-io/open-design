@@ -96,6 +96,8 @@ export const tr: Dict = {
   'settings.agentInstall.stepSelect': 'Ajan yüklü olarak göründüğünde kartını seç.',
   'settings.noAgentsDetected':
     'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
+  'settings.agentAuthRequired': 'Kimlik doğrulama gerekli',
+  'settings.agentAuthUnknown': 'Kimlik doğrulama durumu bilinmiyor',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'Sağlayıcıyı hızlı doldur',
   'settings.customProvider': 'Özel sağlayıcı',
