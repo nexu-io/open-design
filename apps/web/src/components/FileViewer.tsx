@@ -4996,7 +4996,7 @@ function HtmlViewer({
               {t('fileViewer.source')}
             </button>
           </div>
-          {effectiveDeck ? (
+          {mode === 'preview' && effectiveDeck ? (
             <span
               className="deck-nav"
               role="group"
@@ -5034,6 +5034,7 @@ function HtmlViewer({
           ) : null}
         </div>
         <div className="viewer-toolbar-actions">
+          {mode === 'preview' ? (
           <div className="palette-tweaks-anchor">
             <button
               type="button"
@@ -5069,6 +5070,7 @@ function HtmlViewer({
               onClose={() => setPalettePopoverOpen(false)}
             />
           </div>
+          ) : null}
           <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
@@ -5092,6 +5094,7 @@ function HtmlViewer({
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
           </button>
+          {mode === 'preview' ? (
           <button
             className={`viewer-action${drawOverlayOpen ? ' active' : ''}`}
             type="button"
@@ -5131,6 +5134,7 @@ function HtmlViewer({
             t={t}
           />
           <span className="viewer-divider" aria-hidden />
+          ) : null}
           <button
             type="button"
             className="icon-only"
