@@ -96,6 +96,8 @@ export const ar: Dict = {
   'settings.agentInstall.stepSelect': 'اختر بطاقة الوكيل عندما يظهر كأنه مثبت.',
   'settings.noAgentsDetected':
     'لم يتم اكتشاف أي وكلاء بعد. قم بتثبيت Claude Code أو Codex أو Devin أو Gemini CLI أو OpenCode أو Cursor Agent أو Qwen أو GitHub Copilot CLI، ثم اضغط على إعادة المسح.',
+  'settings.agentAuthRequired': 'المصادقة مطلوبة',
+  'settings.agentAuthUnknown': 'حالة المصادقة غير معروفة',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'ملء المزوّد سريعًا',
   'settings.customProvider': 'مزوّد مخصص',

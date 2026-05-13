@@ -96,6 +96,8 @@ export const ptBR: Dict = {
   'settings.agentInstall.stepSelect': 'Selecione o cartão do agente quando ele aparecer como instalado.',
   'settings.noAgentsDetected':
     'Nenhum agente detectado ainda. Instale Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI e clique em Reescanear.',
+  'settings.agentAuthRequired': 'Autenticação necessária',
+  'settings.agentAuthUnknown': 'Status de autenticação desconhecido',
   'settings.apiSection': 'API da Anthropic',
   'settings.quickFillProvider': 'Preencher provedor',
   'settings.customProvider': 'Provedor personalizado',

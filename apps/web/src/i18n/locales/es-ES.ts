@@ -96,6 +96,8 @@ export const esES: Dict = {
   'settings.agentInstall.stepSelect': 'Selecciona la tarjeta del agente cuando aparezca como instalado.',
   'settings.noAgentsDetected':
     'Aún no se ha detectado ningún agente. Instala Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI y pulsa Reescanear.',
+  'settings.agentAuthRequired': 'Autenticación requerida',
+  'settings.agentAuthUnknown': 'Estado de autenticación desconocido',
   'settings.apiSection': 'API de Anthropic',
   'settings.quickFillProvider': 'Rellenar proveedor',
   'settings.customProvider': 'Proveedor personalizado',
