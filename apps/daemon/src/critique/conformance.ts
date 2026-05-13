@@ -27,17 +27,23 @@
  *   2. The adapter source threw any other error → failed
  *      (`unexpected_error`).
  *   3. The parser yielded a `parser_warning` event anywhere in the
- *      stream → degraded (`parser_warning`). The parser tolerated a
- *      soft violation (weak debate, unknown role, clamped score,
- *      composite mismatch, duplicate ship) but the conformance gate
- *      treats any of those as a "this adapter is not protocol-clean"
- *      signal (lefarcen P2 on PR #1316).
+ *      stream (before OR after `ship`) → degraded (`parser_warning`).
+ *      The parser tolerated a soft violation (weak debate, unknown
+ *      role, clamped score, composite mismatch, duplicate ship) but
+ *      the conformance gate treats any of those as a "this adapter
+ *      is not protocol-clean" signal (lefarcen P2 on PR #1316,
+ *      tightened to post-ship warnings in lefarcen P2 on PR #1316
+ *      follow-up: the parser emits `duplicate_ship` AFTER the first
+ *      ship event yields, so the harness must drain the rest of the
+ *      stream before classifying instead of returning at first ship).
  *   4. The parser yielded a `ship` event but the cast declared by
- *      `run_started` did not all emit `panelist_close` → degraded
- *      (`incomplete_panel`). The parser only enforces the round-1
- *      designer-artifact invariant; the harness is what catches a
- *      ship that skipped panelists or never scored them (codex P2 on
- *      PR #1316).
+ *      `run_started` did not all emit `panelist_close` IN THE
+ *      SHIPPING ROUND → degraded (`incomplete_panel`). The parser
+ *      only enforces the round-1 designer-artifact invariant; the
+ *      harness is what catches a ship that skipped panelists or
+ *      reused earlier-round closes to fake a complete cast (codex
+ *      P2 on PR #1316; per-round bucketing added in lefarcen P2 on
+ *      PR #1316 follow-up).
  *   5. The parser yielded a `ship` event with a complete panel and no
  *      parser warnings → shipped.
  *   6. The stream ended without a `ship` event → failed (`no_ship`).
@@ -131,7 +137,19 @@ export async function runAdapterConformance(
   let shipPayload: ShipArtifactPayload | null = null;
   let parserWarningSeen = false;
   let castRoles: PanelistRole[] | null = null;
-  const closedRoles = new Set<string>();
+  // Per-round closed-roles map keyed by `round`. Built incrementally
+  // as panelist_close events arrive and consulted at SHIP time so the
+  // shipping round must independently satisfy the full cast. A round
+  // that closes only some panelists cannot piggy-back on an earlier
+  // round's closes (lefarcen P2 on PR #1316 follow-up).
+  const closedRolesByRound = new Map<number, Set<string>>();
+  // Captured SHIP event details. Set on the first SHIP the parser
+  // yields. The loop continues draining the stream so any
+  // `parser_warning` that arrives AFTER the ship (notably the
+  // `duplicate_ship` kind, which the parser emits when it sees a
+  // second `<SHIP>` block) still flips the run to degraded
+  // (lefarcen P2 on PR #1316 follow-up).
+  let shipEvent: Extract<PanelEvent, { type: 'ship' }> | null = null;
 
   try {
     for await (const event of parseCritiqueStream(params.source, {
@@ -148,28 +166,19 @@ export async function runAdapterConformance(
       if (event.type === 'run_started') {
         castRoles = event.cast;
       } else if (event.type === 'panelist_close') {
-        closedRoles.add(event.role);
+        let bucket = closedRolesByRound.get(event.round);
+        if (!bucket) {
+          bucket = new Set<string>();
+          closedRolesByRound.set(event.round, bucket);
+        }
+        bucket.add(event.role);
       } else if (event.type === 'parser_warning') {
         parserWarningSeen = true;
-      } else if (event.type === 'ship') {
-        // Tightening over "ship event seen = shipped": any earlier
-        // parser_warning makes the stream non-clean (lefarcen P2);
-        // an incomplete cast makes the ship premature (codex P2).
-        if (parserWarningSeen) {
-          return mark(params.adapterId, 'parser_warning', events);
-        }
-        const expected = castRoles ?? ['designer', 'critic', 'brand', 'a11y', 'copy'];
-        const missing = expected.filter((r) => !closedRoles.has(r));
-        if (missing.length > 0) {
-          return mark(params.adapterId, 'incomplete_panel', events);
-        }
-        return {
-          kind: 'shipped',
-          round: event.round,
-          composite: event.composite,
-          events,
-          artifact: shipPayload,
-        };
+      } else if (event.type === 'ship' && shipEvent === null) {
+        // Capture the first ship but keep iterating so a later
+        // `parser_warning` (e.g. duplicate_ship) still tightens the
+        // classification to degraded.
+        shipEvent = event;
       }
     }
   } catch (err) {
@@ -189,7 +198,29 @@ export async function runAdapterConformance(
     };
   }
 
-  return { kind: 'failed', cause: 'no_ship', events };
+  if (shipEvent === null) {
+    return { kind: 'failed', cause: 'no_ship', events };
+  }
+
+  if (parserWarningSeen) {
+    return mark(params.adapterId, 'parser_warning', events);
+  }
+
+  const expected = castRoles ?? ['designer', 'critic', 'brand', 'a11y', 'copy'];
+  const shippingRoundClosed
+    = closedRolesByRound.get(shipEvent.round) ?? new Set<string>();
+  const missing = expected.filter((r) => !shippingRoundClosed.has(r));
+  if (missing.length > 0) {
+    return mark(params.adapterId, 'incomplete_panel', events);
+  }
+
+  return {
+    kind: 'shipped',
+    round: shipEvent.round,
+    composite: shipEvent.composite,
+    events,
+    artifact: shipPayload,
+  };
 }
 
 function mark(

@@ -1250,6 +1250,16 @@ code {
   margin: 0 8px;
 }
 
+.preview-draw-note-input::placeholder {
+  color: rgba(255, 225, 210, 0.86);
+}
+
+.preview-draw-note-input:focus {
+  background: rgba(218, 97, 56, 0.26) !important;
+  border-color: rgba(255, 184, 140, 0.95) !important;
+  box-shadow: 0 0 0 3px rgba(218, 97, 56, 0.34), 0 0 18px rgba(218, 97, 56, 0.24) !important;
+}
+
 /* -------- Staged attachments -------------------------------------- */
 .staged-row {
   display: flex;
@@ -1274,6 +1284,34 @@ code {
   height: 28px;
   border-radius: 6px;
   object-fit: cover;
+}
+.staged-preview-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.staged-preview-trigger:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.staged-preview-trigger img {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+}
+.staged-preview-trigger .staged-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .staged-preview-modal {
   position: fixed;
