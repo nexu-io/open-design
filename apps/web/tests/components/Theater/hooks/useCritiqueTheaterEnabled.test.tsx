@@ -8,7 +8,7 @@
  */
 
 import { act, cleanup, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   setCritiqueTheaterEnabled,
@@ -241,5 +241,169 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     } finally {
       restore();
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Project-settings round-trip (lefarcen P2 on PR #1338). The setter writes
+  // the override to localStorage AND, when a projectId is provided, PATCHes
+  // /api/projects/:id with metadata.critiqueTheaterEnabled so the daemon's
+  // spawn-time resolver picks up the same value on the next generation.
+  // ---------------------------------------------------------------------------
+
+  it('GETs the project then PATCHes with merged metadata when a projectId is supplied', async () => {
+    // PerishCode P2 on PR #1338: the daemon's `updateProject` does a
+    // shallow `{ ...existing, ...patch }`, so `patch.metadata` REPLACES
+    // the row's metadata. Sending only `{ critiqueTheaterEnabled }` in
+    // the patch would wipe `kind`, `templateId`, `linkedDirs`, and
+    // every other field the rest of the app reads. The setter has to
+    // read the current metadata first and overlay the toggle on top.
+    const fetchCalls: Array<{ url: string; method: string; body: string | null }> = [];
+    const fetchProjectSettings = (url: string, init: RequestInit) => {
+      const method = init.method ?? 'GET';
+      const body = init.body ? String(init.body) : null;
+      fetchCalls.push({ url, method, body });
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              project: {
+                id: 'proj-abc',
+                name: 'p',
+                metadata: {
+                  kind: 'template',
+                  templateId: 'modern-blog',
+                  linkedDirs: ['/Users/me/work'],
+                },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 200 }));
+    };
+    await act(async () => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-abc',
+        fetchProjectSettings,
+      });
+      // Let the GET + PATCH microtasks settle.
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[0]).toMatchObject({
+      url: '/api/projects/proj-abc',
+      method: 'GET',
+    });
+    expect(fetchCalls[1]).toMatchObject({
+      url: '/api/projects/proj-abc',
+      method: 'PATCH',
+    });
+    const body = JSON.parse(fetchCalls[1]!.body ?? '{}');
+    expect(body).toEqual({
+      metadata: {
+        kind: 'template',
+        templateId: 'modern-blog',
+        linkedDirs: ['/Users/me/work'],
+        critiqueTheaterEnabled: true,
+      },
+    });
+  });
+
+  it('PATCHes with just the toggle when the project has no prior metadata', async () => {
+    const fetchCalls: Array<{ url: string; method: string; body: string | null }> = [];
+    const fetchProjectSettings = (url: string, init: RequestInit) => {
+      const method = init.method ?? 'GET';
+      const body = init.body ? String(init.body) : null;
+      fetchCalls.push({ url, method, body });
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ project: { id: 'proj-bare', name: 'p' } }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 200 }));
+    };
+    await act(async () => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-bare',
+        fetchProjectSettings,
+      });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetchCalls).toHaveLength(2);
+    const body = JSON.parse(fetchCalls[1]!.body ?? '{}');
+    expect(body).toEqual({ metadata: { critiqueTheaterEnabled: true } });
+  });
+
+  it('skips the daemon PATCH when no projectId is supplied (bare integrator surface)', () => {
+    const fetchProjectSettings = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
+    act(() => {
+      setCritiqueTheaterEnabled(true, { fetchProjectSettings });
+    });
+    expect(fetchProjectSettings).not.toHaveBeenCalled();
+  });
+
+  it('skips the PATCH (does not stomp metadata) when the prefetch GET fails', async () => {
+    // If the GET fails we cannot construct a safe merged patch, and a
+    // bare `{ metadata: { critiqueTheaterEnabled } }` would wipe the
+    // project's other metadata fields server-side. Swallow the failure
+    // and rely on the in-session CustomEvent for UI consistency; the
+    // next save retries the round-trip.
+    const fetchCalls: Array<{ url: string; method: string }> = [];
+    const fetchProjectSettings = (url: string, init: RequestInit) => {
+      fetchCalls.push({ url, method: init.method ?? 'GET' });
+      if ((init.method ?? 'GET') === 'GET') {
+        return Promise.reject(new Error('network down'));
+      }
+      return Promise.resolve(new Response(null, { status: 200 }));
+    };
+    const sink: { enabled?: boolean } = {};
+    render(<Probe sink={sink} />);
+    await act(async () => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-abc',
+        fetchProjectSettings,
+      });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // Only the GET fired; the PATCH was skipped because we could not
+    // build a safe merged body.
+    expect(fetchCalls.map((c) => c.method)).toEqual(['GET']);
+    // In-session UI still flips via the CustomEvent.
+    expect(sink.enabled).toBe(true);
+  });
+
+  it('swallows a rejected PATCH after a successful prefetch so the in-session UI still flips', async () => {
+    const fetchProjectSettings = (url: string, init: RequestInit) => {
+      if ((init.method ?? 'GET') === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ project: { id: 'p', metadata: {} } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.reject(new Error('boom'));
+    };
+    const sink: { enabled?: boolean } = {};
+    render(<Probe sink={sink} />);
+    expect(sink.enabled).toBe(false);
+    await act(async () => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-abc',
+        fetchProjectSettings,
+      });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The localStorage write + the CustomEvent dispatch fire before
+    // the network round-trip, so the in-session UI flips regardless of
+    // the network outcome. A transient PATCH failure does not unwind
+    // the flip; the next save retries.
+    expect(sink.enabled).toBe(true);
   });
 });
