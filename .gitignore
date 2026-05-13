@@ -51,10 +51,14 @@ tsconfig.tsbuildinfo
 task.md
 specs/change/active
 .ralph/
+docs/superpowers/
 
 # Nix and direnv
 .direnv/
 .envrc
+# Local secrets (PostHog keys, BYOK creds for local testing, etc.)
+.env.local
+.env.*.local
 # Local design assistant context
 .impeccable.md
 

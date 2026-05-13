@@ -1186,6 +1186,7 @@ export const th: Dict = {
   'settings.connectorsSaveKey': 'อัดลงบันทึกชุดคีย์เลย',
   'settings.connectorsSaveKeyTitle': 'ดึงโอนความของคีย์ที่ได้รับกลับมาให้ที่ส่วนระบบเครื่องส่วน Local Daemon ต่อเลย',
   'settings.connectorsKeySaving': 'เก็บรักษาที่ส่วนข้อมูล…',
+  'settings.connectorsKeySaved': "บันทึกแล้ว ✓",
   'settings.connectorsKeyError': 'ไม่สามารถบันทึกได้ ลองตรวจสอบตัว Daemon ให้ดี',
   'settings.connectorsHelpSaved': 'รหัสเก็บอยู่ในเครื่องเรียบร้อย นำรหัสใหม่ใส่ได้ตลอด หรือเอาออกด้วยปุ่มล้างข้อมูล',
   'settings.connectorsHelpUnsaved': 'ผลต่างของการแก้ที่คงไม่ทันบันทึก — กดที่คำบันทึกคีย์มาทำให้เป็นบันทึกเข้าเอาในของระบบไว้เพื่อให้เปิดตรงข้อมูลหน้าได้ดูความพร้อมในแถบเครื่องมือ',
@@ -1261,4 +1262,6 @@ export const th: Dict = {
   'notify.failureTitle': 'ข้อมูลการงานล้มเหลว',
   'notify.successBody': 'แชทตอบบทสนทนาเรียบร้อย',
   'notify.failureBody': 'หน้าที่ทำผิดพลาด',
+  'settings.memoryExtractionsRefresh': 'รีเฟรช',
+  'settings.memoryExtractionsRefreshing': 'กำลังรีเฟรช…',
 };

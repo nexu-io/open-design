@@ -26,6 +26,12 @@ concurrency:
 
 env:
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  # PostHog product-analytics ingest. Defined as repository secret + var
+  # so official builds ship with analytics enabled; PR builds and forks
+  # without these run the daemon in no-op analytics mode (events never
+  # leave the user's machine, /api/analytics/config returns enabled=false).
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
 
 jobs:
   metadata:

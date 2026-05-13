@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Open Design">
-  <title>Open Design</title>
-  <rect width="32" height="32" rx="6" fill="#14110b"/>
-  <ellipse cx="16" cy="16" rx="6.4" ry="8" fill="none" stroke="#efe7d2" stroke-width="2.4" transform="rotate(-12 16 16)"/>
-  <line x1="9.5" y1="22.5" x2="22.5" y2="9.5" stroke="#ed6f5c" stroke-width="2.4" stroke-linecap="round"/>
-</svg>

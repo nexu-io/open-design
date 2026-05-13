@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectorDetail, ConnectorStatusResponse, ImportFolderResponse } from '@open-design/contracts';
+import { topTabToTracking } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackHomeViewAssetPanel,
+  trackHomeViewPage,
+} from '../analytics/events';
 import { useT } from '../i18n';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -33,6 +39,7 @@ import { PetRail } from './pet/PetRail';
 import { PromptTemplatePreviewModal } from './PromptTemplatePreviewModal';
 import { PromptTemplatesTab } from './PromptTemplatesTab';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { AppChromeHeader, SettingsIconButton } from './AppChromeHeader';
 
 type TopTab = 'designs' | 'templates' | 'design-systems' | 'image-templates' | 'video-templates';
 
@@ -251,7 +258,80 @@ export function EntryView({
   onTogglePet,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [topTab, setTopTab] = useState<TopTab>('designs');
+
+  // home_view (page) — fire once per EntryView mount with a snapshot of the
+  // CLI / BYOK availability so the new-user activation funnel can read
+  // execution_availability without needing a server-side join. Gated on
+  // agents loading so has_available_cli isn't transiently false.
+  const homeViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (homeViewFiredRef.current) return;
+    if (skillsLoading) return;
+    homeViewFiredRef.current = true;
+    const hasCli = agents.some((a) => a.available);
+    const hasByok = Boolean(config.apiKey?.trim());
+    const configuredProviderType: 'local_cli' | 'byok' | 'both' | 'none' | 'unknown' = hasCli && hasByok
+      ? 'both'
+      : hasCli
+        ? 'local_cli'
+        : hasByok
+          ? 'byok'
+          : 'none';
+    trackHomeViewPage(analytics.track, {
+      page: 'home',
+      has_available_cli: hasCli,
+      has_available_byok: hasByok,
+      configured_provider_type: configuredProviderType,
+      execution_availability: hasCli || hasByok ? 'available' : 'unavailable',
+    });
+  }, [skillsLoading, agents, config.apiKey, analytics.track]);
+
+  // home_view (asset_panel) — fires on tab change (and on initial render
+  // once the tab's underlying resource has loaded) so the funnel can
+  // attribute downstream clicks to the correct surface.
+  const assetTabFiredRef = useRef<TopTab | null>(null);
+  useEffect(() => {
+    if (assetTabFiredRef.current === topTab) return;
+    // Gate per-tab on its source resource so result_count isn't reported as
+    // 0 just because the fetch hasn't landed yet.
+    const tabLoading: Record<TopTab, boolean | undefined> = {
+      designs: projectsLoading,
+      templates: promptTemplatesLoading,
+      'design-systems': designSystemsLoading,
+      'image-templates': promptTemplatesLoading,
+      'video-templates': promptTemplatesLoading,
+    };
+    if (tabLoading[topTab]) return;
+    assetTabFiredRef.current = topTab;
+    const counts: Record<TopTab, number> = {
+      designs: projects.length,
+      templates: promptTemplates.length,
+      'design-systems': designSystems.length,
+      'image-templates': promptTemplates.filter((p) => p.surface === 'image').length,
+      'video-templates': promptTemplates.filter((p) => p.surface === 'video').length,
+    };
+    const count = counts[topTab] ?? 0;
+    trackHomeViewAssetPanel(analytics.track, {
+      page: 'home',
+      area: 'asset_panel',
+      element: 'tab_content',
+      view_type: 'tab_content',
+      target_id: topTabToTracking(topTab),
+      result_count: count,
+      is_empty: count === 0,
+    });
+  }, [
+    topTab,
+    analytics.track,
+    projects.length,
+    promptTemplates,
+    designSystems.length,
+    projectsLoading,
+    designSystemsLoading,
+    promptTemplatesLoading,
+  ]);
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [previewPromptTemplate, setPreviewPromptTemplate] =
     useState<PromptTemplateSummary | null>(null);
@@ -396,6 +476,15 @@ export function EntryView({
 
   return (
     <div className="entry-shell">
+      <AppChromeHeader
+        actions={(
+          <SettingsIconButton
+            onClick={() => onOpenSettings()}
+            title={t('settings.title')}
+            ariaLabel={t('settings.title')}
+          />
+        )}
+      />
       <div
         className={`entry${petRailHidden ? '' : ' has-pet-rail'}`}
         style={{
@@ -405,16 +494,6 @@ export function EntryView({
         }}
       >
       <aside className="entry-side" style={{ width: sidebarWidth }}>
-        <div className="entry-brand">
-          <span className="entry-brand-mark" aria-hidden>
-            <img src="/app-icon.svg" alt="" className="brand-mark-img" draggable={false} />
-          </span>
-          <div className="entry-brand-text">
-            <div className="entry-brand-title-row">
-              <span className="entry-brand-title">{t('app.brand')}</span>
-            </div>
-          </div>
-        </div>
         <NewProjectPanel
           skills={skills}
           designSystems={designSystems}
@@ -447,7 +526,7 @@ export function EntryView({
                 : apiProtocolLabel(config.apiProtocol)}
             </span>
             <span style={{ color: 'var(--text-faint)' }}>·</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 142 }}>
               {envMetaLine}
             </span>
           </button>
@@ -476,7 +555,6 @@ export function EntryView({
                     ? t('pet.changePet')
                     : t('pet.adoptCallout')}
                 </span>
-                {!config.pet?.adopted ? <span className="pet-pill-dot" aria-hidden /> : null}
               </button>
               <span className="pet-pill-divider" aria-hidden />
               <button

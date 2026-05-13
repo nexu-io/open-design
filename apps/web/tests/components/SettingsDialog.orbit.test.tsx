@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorDetail } from '@open-design/contracts';
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
-import { fetchConnectors, fetchSkills } from '../../src/providers/registry';
-import type { AppConfig, SkillSummary } from '../../src/types';
+import { fetchConnectors, fetchDesignTemplates, fetchSkills } from '../../src/providers/registry';
+import type { AppConfig } from '../../src/types';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -16,6 +16,7 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     fetchConnectors: vi.fn(),
+    fetchDesignTemplates: vi.fn(),
     fetchSkills: vi.fn(),
   };
 });
@@ -87,41 +88,6 @@ const orbitTemplates = [
 
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'clipboard');
 
-const orbitSkills: SkillSummary[] = [
-  {
-    id: 'orbit-general',
-    name: 'orbit-general',
-    description: 'General daily digest',
-    triggers: [],
-    mode: 'prototype',
-    scenario: 'orbit',
-    previewType: 'HTML',
-    designSystemRequired: false,
-    defaultFor: [],
-    upstream: null,
-    featured: 10,
-    hasBody: true,
-    examplePrompt: 'Summarize connector activity.',
-    aggregatesExamples: false,
-  },
-  {
-    id: 'orbit-github',
-    name: 'orbit-github',
-    description: 'GitHub-focused digest',
-    triggers: [],
-    mode: 'prototype',
-    scenario: 'orbit',
-    previewType: 'HTML',
-    designSystemRequired: false,
-    defaultFor: [],
-    upstream: null,
-    featured: 5,
-    hasBody: true,
-    examplePrompt: 'Summarize GitHub activity.',
-    aggregatesExamples: false,
-  },
-];
-
 function renderOrbitSettings(
   initial: Partial<AppConfig> = {},
   options: {
@@ -168,6 +134,7 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
     }
     vi.restoreAllMocks();
     vi.mocked(fetchConnectors).mockReset();
+    vi.mocked(fetchDesignTemplates).mockReset();
     vi.mocked(fetchSkills).mockReset();
   });
 
@@ -175,6 +142,7 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
     vi.mocked(fetchConnectors)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([connectedConnector]);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue([]);
     vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -213,6 +181,7 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('enables Run it now after connector load in StrictMode', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue([]);
     vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -251,7 +220,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('locks Orbit controls until a connector is connected and routes the gate CTA to Connectors', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitSkills);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -280,7 +250,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('autosaves Orbit schedule and prompt template edits after connectors are available', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitSkills);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -314,7 +285,7 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
       target: { value: '01:30' },
     });
     fireEvent.change(screen.getByLabelText('Orbit prompt template'), {
-      target: { value: 'orbit-github' },
+      target: { value: 'orbit-editorial' },
     });
 
     await waitFor(() => {
@@ -323,7 +294,7 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
           orbit: {
             enabled: true,
             time: '01:30',
-            templateSkillId: 'orbit-github',
+            templateSkillId: 'orbit-editorial',
           },
         }),
         expect.any(Object),
@@ -333,7 +304,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('updates the Last run panel when the selected Orbit template changes', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -411,7 +383,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
   it('preserves legacy unscoped Last run only for the initially selected template', async () => {
     vi.useFakeTimers();
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     let statusRequestCount = 0;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -471,7 +444,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
       value: { writeText },
     });
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitSkills);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -525,7 +499,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('renders the Open artifact link only when Orbit last run includes a live artifact target', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -606,7 +581,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('renders the live artifact link as a new-tab external link', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -665,7 +641,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('keeps the markdown copy action but hides Open artifact for legacy last runs without a live artifact target', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -722,7 +699,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('falls back from the live artifact strip to the legacy markdown strip when switching templates', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {
@@ -800,7 +778,8 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
 
   it('restores the live artifact strip when switching back from a legacy markdown template', async () => {
     vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
-    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchDesignTemplates).mockResolvedValue(orbitTemplates);
+    vi.mocked(fetchSkills).mockResolvedValue([]);
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/orbit/status') {

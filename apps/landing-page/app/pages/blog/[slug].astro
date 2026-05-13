@@ -1,0 +1,42 @@
+---
+import { getCollection, render } from 'astro:content';
+import BlogLayout from '../../_components/blog-layout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog');
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const title = `${post.data.title} · Open Design Blog`;
+const description = post.data.summary;
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const formatDate = new Intl.DateTimeFormat('en', { dateStyle: 'long' });
+---
+
+<BlogLayout title={title} description={description} canonical={canonical}>
+  <article class="container blog-article">
+    <p class="blog-eyebrow">
+      <a class="blog-link" href="/blog/">Blog</a> / {post.data.category}
+    </p>
+    <h1 class="blog-title">{post.data.title}</h1>
+    <p class="blog-summary">{post.data.summary}</p>
+    <div class="blog-meta blog-meta-block">
+      <span>{formatDate.format(post.data.date)}</span>
+      <span>{post.data.readingTime}</span>
+    </div>
+
+    <div class="blog-prose">
+      <Content />
+    </div>
+
+    <footer class="blog-footer">
+      <a class="blog-link" href="/blog/">← More posts</a>
+      <a class="blog-link" href="/">Home</a>
+    </footer>
+  </article>
+</BlogLayout>
