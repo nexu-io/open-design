@@ -19,6 +19,7 @@ import {
   injectDeployHookScript,
   isVercelProtectedResponse,
   normalizeDeployHookScriptUrl,
+  readVercelConfig,
   resolveReferencedPath,
   rewriteEntryHtmlReferences,
   waitForReachableDeploymentUrl,
@@ -728,5 +729,108 @@ describe("deployToVercel — BUG-2 auto-disable SSO (spec-101 durable fix)", () 
       (c) => c.init?.method === "PATCH" && c.url.includes("/v9/projects/"),
     );
     expect(patchCall).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v7 — readVercelConfig env fallback.
+//
+// When ~/.open-design/vercel.json is missing OR fields are empty, the daemon
+// must fall back to VERCEL_API_TOKEN / VERCEL_TOKEN / VERCEL_TEAM_ID /
+// VERCEL_TEAM_SLUG env vars. This lets the container survive without a
+// persistent `~/.open-design/` volume — operators set env on the host and
+// Lumina-managed deploys work without `PUT /api/deploy/config`.
+// ---------------------------------------------------------------------------
+
+describe('readVercelConfig env fallback (v7)', () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env.VERCEL_API_TOKEN;
+    delete process.env.VERCEL_TOKEN;
+    delete process.env.VERCEL_TEAM_ID;
+    delete process.env.VERCEL_TEAM_SLUG;
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it('falls back to env vars when ~/.open-design/vercel.json is missing (ENOENT)', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'od-config-missing-'));
+    process.env.OD_USER_STATE_DIR = tmp;
+    process.env.VERCEL_API_TOKEN = 'env-token-abc';
+    process.env.VERCEL_TEAM_ID = 'team_env_id';
+    process.env.VERCEL_TEAM_SLUG = 'ceremonia-env-slug';
+
+    const cfg = await readVercelConfig();
+    expect(cfg.token).toBe('env-token-abc');
+    expect(cfg.teamId).toBe('team_env_id');
+    expect(cfg.teamSlug).toBe('ceremonia-env-slug');
+  });
+
+  it('prefers VERCEL_TOKEN when VERCEL_API_TOKEN absent', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'od-config-vtok-'));
+    process.env.OD_USER_STATE_DIR = tmp;
+    process.env.VERCEL_TOKEN = 'vercel-token-fallback';
+
+    const cfg = await readVercelConfig();
+    expect(cfg.token).toBe('vercel-token-fallback');
+  });
+
+  it('VERCEL_API_TOKEN wins over VERCEL_TOKEN when both set', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'od-config-both-'));
+    process.env.OD_USER_STATE_DIR = tmp;
+    process.env.VERCEL_API_TOKEN = 'api-token-wins';
+    process.env.VERCEL_TOKEN = 'plain-token-loses';
+
+    const cfg = await readVercelConfig();
+    expect(cfg.token).toBe('api-token-wins');
+  });
+
+  it('falls back to env vars when vercel.json fields are empty strings', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'od-config-empty-'));
+    process.env.OD_USER_STATE_DIR = tmp;
+    await writeFile(
+      path.join(tmp, 'vercel.json'),
+      JSON.stringify({ token: '', teamId: '', teamSlug: '' }),
+    );
+    process.env.VERCEL_API_TOKEN = 'env-replaces-empty';
+    process.env.VERCEL_TEAM_SLUG = 'ceremonia-env';
+
+    const cfg = await readVercelConfig();
+    expect(cfg.token).toBe('env-replaces-empty');
+    expect(cfg.teamId).toBe('');
+    expect(cfg.teamSlug).toBe('ceremonia-env');
+  });
+
+  it('prefers file value over env when both set (file is operator override)', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'od-config-pref-'));
+    process.env.OD_USER_STATE_DIR = tmp;
+    await writeFile(
+      path.join(tmp, 'vercel.json'),
+      JSON.stringify({
+        token: 'file-token-wins',
+        teamId: 'file-team',
+        teamSlug: 'file-slug',
+      }),
+    );
+    process.env.VERCEL_API_TOKEN = 'env-token-loses';
+    process.env.VERCEL_TEAM_ID = 'env-team-loses';
+    process.env.VERCEL_TEAM_SLUG = 'env-slug-loses';
+
+    const cfg = await readVercelConfig();
+    expect(cfg.token).toBe('file-token-wins');
+    expect(cfg.teamId).toBe('file-team');
+    expect(cfg.teamSlug).toBe('file-slug');
+  });
+
+  it('returns all-empty when neither file nor env set', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'od-config-bare-'));
+    process.env.OD_USER_STATE_DIR = tmp;
+    const cfg = await readVercelConfig();
+    expect(cfg.token).toBe('');
+    expect(cfg.teamId).toBe('');
+    expect(cfg.teamSlug).toBe('');
   });
 });

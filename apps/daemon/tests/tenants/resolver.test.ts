@@ -28,6 +28,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  readSessionCookie,
   tenantResolverMiddleware,
 } from '../../src/tenants/resolver.js';
 import type { RegistryIndex, TenantConfig } from '../../src/tenants/registry-loader.js';
@@ -582,5 +583,64 @@ describe('tenantResolverMiddleware', () => {
       expect(r.headers['content-type']).toBe(reference.headers['content-type']);
       expect(r.headers['content-length']).toBe(reference.headers['content-length']);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 10 — readSessionCookie skips empty `__session` cookie values.
+//
+// Browsers can send multiple `__session=` attributes when a host-only cookie
+// (Clerk satellite SDK residue or pre-v7 daemon Set-Cookie) sits in front of
+// the daemon's real domain cookie. Cookies travel in attribute order, so the
+// host-only (empty) one is sent first. The pre-v7 reader returned `null` on
+// the empty match and triggered an infinite handshake redirect loop.
+// ---------------------------------------------------------------------------
+
+function makeCookieReq(cookieHeader: string | undefined): IncomingMessage {
+  const req = {
+    headers: cookieHeader === undefined ? {} : { cookie: cookieHeader },
+  } as unknown as IncomingMessage;
+  return req;
+}
+
+describe('readSessionCookie (Bug 10 — empty cookie shadow)', () => {
+  test('returns null when no cookie header present', () => {
+    expect(readSessionCookie(makeCookieReq(undefined))).toBeNull();
+  });
+
+  test('returns null when cookie header is empty string', () => {
+    expect(readSessionCookie(makeCookieReq(''))).toBeNull();
+  });
+
+  test('returns the value when a single non-empty __session is present', () => {
+    expect(readSessionCookie(makeCookieReq('__session=abc.def.ghi'))).toBe(
+      'abc.def.ghi',
+    );
+  });
+
+  test('Bug 10: empty __session first, valid __session second → returns valid (skips empty shadow)', () => {
+    const cookie = '__session=; __session=real.jwt.payload';
+    expect(readSessionCookie(makeCookieReq(cookie))).toBe('real.jwt.payload');
+  });
+
+  test('Bug 10: valid __session first, empty __session second → returns valid (no overwrite)', () => {
+    const cookie = '__session=real.jwt.payload; __session=';
+    expect(readSessionCookie(makeCookieReq(cookie))).toBe('real.jwt.payload');
+  });
+
+  test('Bug 10: all __session entries empty → returns null', () => {
+    const cookie = '__session=; __session=; __session=';
+    expect(readSessionCookie(makeCookieReq(cookie))).toBeNull();
+  });
+
+  test('ignores unrelated cookies, picks up __session in the middle', () => {
+    const cookie =
+      'tracker_id=abc; __clerk_db_jwt=xyz; __session=middle.jwt.value; other=1';
+    expect(readSessionCookie(makeCookieReq(cookie))).toBe('middle.jwt.value');
+  });
+
+  test('Bug 10: empty + other cookie + valid __session → returns valid', () => {
+    const cookie = '__session=; __clerk_db_jwt=xyz; __session=actual.jwt';
+    expect(readSessionCookie(makeCookieReq(cookie))).toBe('actual.jwt');
   });
 });

@@ -543,7 +543,23 @@ function stripHandshakeParam(url: string): string {
   return `${path}?${kept.join('&')}`;
 }
 
-function readSessionCookie(req: IncomingMessage): string | null {
+/**
+ * Read the __session cookie value from a request header.
+ *
+ * Bug 10 fix: browsers may carry MULTIPLE `__session` cookie attributes
+ * (a host-only Set-Cookie residue from Clerk satellite SDK or pre-v7 daemon
+ * sits in front of the daemon's domain cookie). The host-only one is empty
+ * and shadows the real one because cookies are sent in attribute order.
+ *
+ * Previously this function returned `null` the moment it hit an empty
+ * `__session=`, which caused every request to be treated as anonymous and
+ * triggered an infinite handshake redirect loop. Now we skip empty values
+ * and keep iterating, only returning `null` when no non-empty `__session`
+ * is found.
+ *
+ * Exported for unit testing.
+ */
+export function readSessionCookie(req: IncomingMessage): string | null {
   const cookie = req.headers['cookie'];
   if (typeof cookie !== 'string' || cookie.length === 0) return null;
   // Naive parse — split on `; ` then `=`. No need for full RFC 6265 here:
@@ -555,7 +571,7 @@ function readSessionCookie(req: IncomingMessage): string | null {
     const name = part.slice(0, eq).trim();
     if (name !== '__session') continue;
     const value = part.slice(eq + 1).trim();
-    if (value.length === 0) return null;
+    if (value.length === 0) continue; // Bug 10: skip empty shadow, keep iterating
     return value;
   }
   return null;

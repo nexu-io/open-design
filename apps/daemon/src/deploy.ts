@@ -54,17 +54,43 @@ export function deployConfigPath() {
   return path.join(base, 'vercel.json');
 }
 
+/**
+ * Read Vercel config for the deploy provider.
+ *
+ * v7 fix: falls back to env vars (VERCEL_API_TOKEN / VERCEL_TOKEN /
+ * VERCEL_TEAM_ID / VERCEL_TEAM_SLUG) when ~/.open-design/vercel.json is
+ * missing OR when a given field is empty in the JSON file. This makes the
+ * daemon container survive without a persistent `~/.open-design/` volume —
+ * operators set env on the host and Lumina-managed deploys just work.
+ */
+function envVercelToken() {
+  return process.env.VERCEL_API_TOKEN || process.env.VERCEL_TOKEN || '';
+}
+
 export async function readVercelConfig() {
   try {
     const raw = await readFile(deployConfigPath(), 'utf8');
     const parsed = JSON.parse(raw);
     return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
-      teamId: typeof parsed.teamId === 'string' ? parsed.teamId : '',
-      teamSlug: typeof parsed.teamSlug === 'string' ? parsed.teamSlug : '',
+      token:
+        (typeof parsed.token === 'string' && parsed.token) || envVercelToken(),
+      teamId:
+        (typeof parsed.teamId === 'string' && parsed.teamId) ||
+        process.env.VERCEL_TEAM_ID ||
+        '',
+      teamSlug:
+        (typeof parsed.teamSlug === 'string' && parsed.teamSlug) ||
+        process.env.VERCEL_TEAM_SLUG ||
+        '',
     };
   } catch (err) {
-    if (err && err.code === 'ENOENT') return { token: '', teamId: '', teamSlug: '' };
+    if (err && err.code === 'ENOENT') {
+      return {
+        token: envVercelToken(),
+        teamId: process.env.VERCEL_TEAM_ID || '',
+        teamSlug: process.env.VERCEL_TEAM_SLUG || '',
+      };
+    }
     throw err;
   }
 }

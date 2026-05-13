@@ -2310,21 +2310,42 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     const proxyBody = req.body || {};
     let { baseUrl, apiKey, model, systemPrompt, messages } = proxyBody;
 
-    // ---- Lumina gateway override (spec 100) ---------------------------------
-    // When LUMINA_GATEWAY_URL + LUMINA_GATEWAY_TOKEN are set, the daemon proxy
-    // routes 100% of AI calls through the Lumina gateway, ignoring any user-
-    // supplied apiKey/baseUrl. This is the production posture for forked
-    // open-design — BYOK UI is hidden client-side via VITE_LUMINA_PROXY_MODE.
-    // See: README.lumina.md + spec 100 plan.md UC4 (minimal-surface variant).
-    const luminaGatewayUrl = process.env.LUMINA_GATEWAY_URL;
-    const luminaGatewayToken = process.env.LUMINA_GATEWAY_TOKEN;
-    if (luminaGatewayUrl && luminaGatewayToken) {
-      baseUrl = luminaGatewayUrl;
-      apiKey = luminaGatewayToken;
-      console.log('[proxy] Lumina gateway override active');
-    } else if (luminaGatewayUrl || luminaGatewayToken) {
-      // Half-configured — explicit fail so we don't silently leak to user creds.
-      return sendApiError(res, 502, 'CONFIG_ERROR', 'LUMINA_GATEWAY_URL and LUMINA_GATEWAY_TOKEN must both be set or both unset');
+    // ---- Lumina-managed direct-Anthropic swap (v7) --------------------------
+    // The browser ships sentinel values apiKey='lumina-managed' +
+    // baseUrl='https://lumina-gateway-managed' so the operator never sees a
+    // real Anthropic key client-side. Server resolves to ANTHROPIC_API_KEY env
+    // and points at api.anthropic.com directly, BYPASSING the openclaw gateway
+    // plugin pipeline that would otherwise overwrite messages[0] (system
+    // prompt) and break the <artifact> emission contract — see
+    // packages/contracts/src/prompts/system.ts:65 (composeSystemPrompt).
+    //
+    // This MUST run before the LUMINA_GATEWAY_URL override below: the LUMINA
+    // gateway is for plugin-routed tenant traffic (chat skills, etc.), the
+    // direct-Anthropic path is for open-design's designer LLM contract.
+    if (apiKey === 'lumina-managed' && baseUrl === 'https://lumina-gateway-managed') {
+      const luminaAnthropicKey = process.env.ANTHROPIC_API_KEY;
+      if (!luminaAnthropicKey) {
+        return sendApiError(res, 502, 'CONFIG_ERROR', 'ANTHROPIC_API_KEY not configured on daemon');
+      }
+      baseUrl = 'https://api.anthropic.com';
+      apiKey = luminaAnthropicKey;
+      // Model passes through as user-supplied (default: claude-sonnet-4-5).
+      console.log('[proxy] Lumina-managed direct-anthropic swap active');
+    } else {
+      // ---- Lumina gateway override (spec 100) -------------------------------
+      // When LUMINA_GATEWAY_URL + LUMINA_GATEWAY_TOKEN are set, the daemon
+      // proxy routes 100% of AI calls through the Lumina gateway, ignoring any
+      // user-supplied apiKey/baseUrl. Used for plugin-pipeline traffic.
+      const luminaGatewayUrl = process.env.LUMINA_GATEWAY_URL;
+      const luminaGatewayToken = process.env.LUMINA_GATEWAY_TOKEN;
+      if (luminaGatewayUrl && luminaGatewayToken) {
+        baseUrl = luminaGatewayUrl;
+        apiKey = luminaGatewayToken;
+        console.log('[proxy] Lumina gateway override active');
+      } else if (luminaGatewayUrl || luminaGatewayToken) {
+        // Half-configured — explicit fail so we don't silently leak to user creds.
+        return sendApiError(res, 502, 'CONFIG_ERROR', 'LUMINA_GATEWAY_URL and LUMINA_GATEWAY_TOKEN must both be set or both unset');
+      }
     }
 
     if (!baseUrl || !apiKey || !model) {
