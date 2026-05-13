@@ -1111,7 +1111,7 @@ function emitLiveArtifactEvent(grant, action, artifact) {
     title: artifact.title ?? artifact.id,
     refreshStatus: artifact.refreshStatus,
   };
-  let emitted = emitProjectLiveArtifactEvent(payload.projectId, payload);
+  let emitted = emitProjectEvent(payload.projectId, payload);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
   return emitted;
 }
@@ -1123,12 +1123,16 @@ function emitLiveArtifactRefreshEvent(grant, payload) {
     projectId: grant.projectId,
     ...payload,
   };
-  let emitted = emitProjectLiveArtifactEvent(grant.projectId, event);
+  let emitted = emitProjectEvent(grant.projectId, event);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
   return emitted;
 }
 
-function emitProjectLiveArtifactEvent(projectId, payload) {
+// Broadcast an event to every SSE subscriber currently watching the given
+// project's `/api/projects/:id/events` stream. The payload's `type` field
+// becomes the SSE event name (see project-routes.ts). Used for live-artifact
+// events and `conversation-created` events emitted by routine runs (#1361).
+function emitProjectEvent(projectId, payload) {
   const sinks = activeProjectEventSinks.get(projectId);
   if (!sinks || sinks.size === 0) return false;
   for (const sink of Array.from(sinks)) {
@@ -4445,6 +4449,21 @@ export async function startServer({
       title: conversationTitle,
       createdAt: now,
       updatedAt: now,
+    });
+
+    // Notify any open `ProjectView` watching this project so its
+    // conversation list picks up the new routine conversation without
+    // requiring the user to leave and re-enter the project (#1361).
+    // For reuse-an-existing-project mode this is the only path the
+    // open view has to learn the conversation exists; for new-project
+    // mode this is harmless (no subscribers for a project that was
+    // just created milliseconds ago).
+    emitProjectEvent(projectId, {
+      type: 'conversation-created',
+      projectId,
+      conversationId,
+      title: conversationTitle,
+      createdAt: now,
     });
 
     const assistantMessageId = `routine-assistant-${randomUUID()}`;

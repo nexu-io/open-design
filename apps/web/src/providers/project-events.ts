@@ -6,9 +6,28 @@ export interface ProjectFileChangeEvent {
   kind: 'add' | 'change' | 'unlink';
 }
 
+// Emitted by the daemon when a new conversation is inserted into a project
+// from a path the open project view can't observe through its own state
+// (currently: Routines "Run now" in reuse-an-existing-project mode). The
+// open `ProjectView` listens for these so its conversation list stays
+// aligned with the database without requiring the user to leave and re-enter
+// the project. The active conversation is intentionally NOT changed here —
+// the user keeps their current context; auto-switch is a separate UX
+// decision tracked in #1361.
+export interface ProjectConversationCreatedEvent {
+  type: 'conversation-created';
+  projectId: string;
+  conversationId: string;
+  title: string | null;
+  createdAt: number;
+}
+
 export type ProjectLiveArtifactEvent = LiveArtifactSsePayload | LiveArtifactRefreshSsePayload;
 
-export type ProjectEvent = ProjectFileChangeEvent | ProjectLiveArtifactEvent;
+export type ProjectEvent =
+  | ProjectFileChangeEvent
+  | ProjectConversationCreatedEvent
+  | ProjectLiveArtifactEvent;
 
 export interface ProjectEventsConnectionOptions {
   /** Test seam: substitute a mock EventSource constructor. */
@@ -100,6 +119,22 @@ export function createProjectEventsConnection(
     };
     es.addEventListener('live_artifact', handleLiveArtifactEvent);
     es.addEventListener('live_artifact_refresh', handleLiveArtifactEvent);
+    es.addEventListener('conversation-created', (evt) => {
+      try {
+        const data = JSON.parse(
+          (evt as MessageEvent).data,
+        ) as ProjectConversationCreatedEvent;
+        onChange(data);
+      } catch (err) {
+        if (
+          typeof process !== 'undefined' &&
+          process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[project-events] malformed conversation-created payload', err);
+        }
+      }
+    });
     es.addEventListener('error', () => {
       if (cancelled) return;
       es.close();

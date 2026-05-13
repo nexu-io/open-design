@@ -220,6 +220,7 @@ export function projectSplitClassName(workspaceFocused: boolean): string {
 
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
+  if (evt.type === 'conversation-created') return null;
   if (evt.type === 'live_artifact') {
     return {
       kind: 'live_artifact',
@@ -750,6 +751,28 @@ export function ProjectView({
       setDesignMdRefreshKey((n) => n + 1);
       return;
     }
+    if (evt.type === 'conversation-created') {
+      // A new conversation was inserted into this project by a path the
+      // open project view can't observe through its own state (currently:
+      // Routines "Run now" in reuse-an-existing-project mode, #1361).
+      // Refetch the conversation list so the new entry becomes visible
+      // without requiring the user to leave and re-enter the project.
+      // Deliberately do NOT change the active conversation here — the
+      // user keeps their current context. Auto-switch is a separate UX
+      // decision tracked in #1361.
+      if (evt.projectId !== project.id) return;
+      void (async () => {
+        try {
+          const list = await listConversations(project.id);
+          setConversations(list);
+        } catch {
+          // Defensive: refresh failed (network blip, daemon gone). The
+          // next project mount or another conversation-created event
+          // will retry; no need to surface an error here.
+        }
+      })();
+      return;
+    }
     const agentEvent = projectEventToAgentEvent(evt);
     if (!agentEvent) return;
     setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
@@ -758,7 +781,7 @@ export function ProjectView({
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
-  }, [onProjectsRefresh, refreshLiveArtifacts]);
+  }, [onProjectsRefresh, refreshLiveArtifacts, project.id]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
   // When the URL points at a specific file, fire an open request so the
