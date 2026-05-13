@@ -111,6 +111,18 @@ import { effectiveMaxTokens } from '../state/maxTokens';
 interface Props {
   project: Project;
   routeFileName: string | null;
+  /**
+   * Routed conversation id. When set (the URL is
+   * `/projects/:id/conversations/:cid[/...]`), the project view picks
+   * this conversation as active instead of defaulting to `list[0]`.
+   * Falls through to the default picker if the conversation does not
+   * exist (e.g. the run was deleted between the route landing and the
+   * conversation list loading). Issue #1505. Optional so existing
+   * test harnesses that mount ProjectView with a stub props bag do
+   * not have to be updated; production callers in `App.tsx` always
+   * pass the value from `useRoute()`.
+   */
+  routeConversationId?: string | null;
   config: AppConfig;
   agents: AgentInfo[];
   // Mentionable functional skills — already filtered by config.disabledSkills
@@ -295,6 +307,7 @@ function projectFeatureChips(project: Project): ProjectFeatureChip[] {
 export function ProjectView({
   project,
   routeFileName,
+  routeConversationId = null,
   config,
   agents,
   skills,
@@ -474,7 +487,15 @@ export function ProjectView({
           }
         } else {
           setConversations(list);
-          setActiveConversationId(list[0]!.id);
+          // Issue #1505: when the URL deep-links to a specific
+          // conversation, prefer that one. Falls through to list[0]
+          // when the routed id is null or no longer present (the
+          // routine row may have been deleted between the route
+          // landing and the conversation list loading).
+          const routedMatch = routeConversationId
+            ? list.find((c) => c.id === routeConversationId) ?? null
+            : null;
+          setActiveConversationId(routedMatch ? routedMatch.id : list[0]!.id);
         }
       } catch (err) {
         if (cancelled) return;
@@ -489,6 +510,22 @@ export function ProjectView({
       cancelled = true;
     };
   }, [project.id]);
+
+  // Issue #1505: when the URL changes the routed conversation id while
+  // we are already inside the project (e.g. the user clicks "Open
+  // project" on a different routine history row in the same project),
+  // switch the active conversation without re-fetching the list.
+  // Guards: only acts when the routed id is non-null AND present in
+  // the already-loaded list, and only when it differs from the current
+  // active id. Falls through to a no-op for stale / missing routes so
+  // the default picker above keeps its result.
+  useEffect(() => {
+    if (!routeConversationId) return;
+    if (conversations.length === 0) return;
+    if (routeConversationId === activeConversationId) return;
+    const match = conversations.find((c) => c.id === routeConversationId);
+    if (match) setActiveConversationId(match.id);
+  }, [routeConversationId, conversations, activeConversationId]);
 
   useEffect(() => {
     setWorkspaceFocused(false);

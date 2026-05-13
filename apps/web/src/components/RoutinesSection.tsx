@@ -346,7 +346,18 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
             type="button"
             className="routines-history-link"
             onClick={() => {
-              navigate({ kind: 'project', projectId: r.projectId, fileName: null });
+              // Issue #1505: deep-link to this run's specific
+              // conversation, not just the project root. Without the
+              // conversation id, parallel runs that share a project
+              // (reuse mode) all resolve to the same default
+              // conversation in the project view, which made earlier
+              // runs look "absorbed" by the latest one.
+              navigate({
+                kind: 'project',
+                projectId: r.projectId,
+                conversationId: r.conversationId ?? null,
+                fileName: null,
+              });
               onClose?.();
             }}
             title="Open the project this run wrote to"
