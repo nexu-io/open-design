@@ -96,6 +96,8 @@ export const de: Dict = {
   'settings.agentInstall.stepSelect': 'Waehlen Sie die Agent-Karte aus, sobald sie als installiert angezeigt wird.',
   'settings.noAgentsDetected':
     'Noch keine Agents erkannt. Installieren Sie Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen oder GitHub Copilot CLI und klicken Sie dann auf Neu scannen.',
+  'settings.agentAuthRequired': 'Authentifizierung erforderlich',
+  'settings.agentAuthUnknown': 'Authentifizierungsstatus unbekannt',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'Anbieter schnell ausfüllen',
   'settings.customProvider': 'Benutzerdefinierter Anbieter',

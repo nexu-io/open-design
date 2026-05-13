@@ -96,6 +96,8 @@ export const fa: Dict = {
   'settings.agentInstall.stepSelect': 'وقتی عامل به‌صورت نصب‌شده نمایش داده شد، کارت آن را انتخاب کنید.',
   'settings.noAgentsDetected':
     'هنوز هیچ عاملی شناسایی نشده. یکی از Claude Code، Codex، Gemini CLI، OpenCode، Cursor Agent، Qwen یا GitHub Copilot CLI را نصب کنید، سپس روی اسکن مجدد کلیک کنید.',
+  'settings.agentAuthRequired': 'احراز هویت لازم است',
+  'settings.agentAuthUnknown': 'وضعیت احراز هویت نامشخص است',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'پر کردن سریع ارائه‌دهنده',
   'settings.customProvider': 'ارائه‌دهنده سفارشی',

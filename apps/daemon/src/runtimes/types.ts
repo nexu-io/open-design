@@ -81,6 +81,8 @@ export type DetectedAgent = Omit<
 > & {
   models: RuntimeModelOption[];
   available: boolean;
+  authStatus?: 'ok' | 'missing' | 'unknown';
+  authMessage?: string;
   path?: string;
   version?: string | null;
 };

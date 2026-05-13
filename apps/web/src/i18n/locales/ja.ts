@@ -96,6 +96,8 @@ export const ja: Dict = {
   'settings.agentInstall.stepSelect': 'インストール済みとして表示されたらエージェントカードを選択します。',
   'settings.noAgentsDetected':
     'エージェントが検出されませんでした。Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen、または GitHub Copilot CLI のいずれかをインストールして、再スキャンをクリックしてください。',
+  'settings.agentAuthRequired': '認証が必要です',
+  'settings.agentAuthUnknown': '認証状態は不明です',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'プロバイダーをクイック入力',
   'settings.customProvider': 'カスタムプロバイダー',

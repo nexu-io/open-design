@@ -46,79 +46,27 @@ export function critiqueEventsUrl(projectId: string): string {
  *      `critique.run_started` channel into a `ship` action shape.
  *
  *   2. The result has to pass `isPanelEvent` before it leaves this
- *      function. That predicate is the contract-level source of truth for
- *      "this is a recognised event with a non-empty runId"; if the cast
- *      fails (missing runId, unknown type), we drop the frame and the
- *      reducer never sees it.
+ *      function. `isPanelEvent` is the contract-level strict guard: it
+ *      validates header fields, every variant's required fields, closed-
+ *      enum membership against PANELIST_ROLES / SHIP_STATUSES /
+ *      DEGRADED_REASONS / FAILED_CAUSES / PARSER_WARNING_KINDS /
+ *      ROUND_DECISIONS, and rejects non-finite numerics. A frame missing
+ *      `runId`, carrying an unknown `status`, or holding a NaN composite
+ *      is dropped here so the reducer never sees it.
+ *
+ * No wire-layer shadow guard sits on top of `isPanelEvent`: an earlier
+ * revision of this file kept a `hasValidVariantShape` second pass with
+ * docstring claims that have since drifted (PerishCode follow-up on
+ * PR #1315). The shadow was strictly weaker than `isPanelEvent` and so
+ * could never reject a frame the contract guard already let through.
+ * `sse.test.ts` keeps a small set of regression cases here so a future
+ * accidental weakening of either layer fails loudly.
  */
-/** Per-variant required-fields validator. `isPanelEvent` from contracts only
- *  checks `type` is known and `runId` is non-empty, so a frame like
- *  `{ type: 'ship', runId: 'r' }` would slip through to the reducer with every
- *  other field undefined and crash downstream code that calls
- *  `final.composite.toFixed(1)`. This second-pass filter enforces the shape
- *  of each variant before the action is dispatched (lefarcen + Siri-Ray +
- *  codex P2 on PR #1314). */
-function hasValidVariantShape(event: PanelEvent): boolean {
-  switch (event.type) {
-    case 'run_started':
-      return typeof event.protocolVersion === 'number'
-        && Array.isArray(event.cast) && event.cast.length > 0
-        && event.cast.every((r) => typeof r === 'string')
-        && typeof event.maxRounds === 'number'
-        && typeof event.threshold === 'number'
-        && typeof event.scale === 'number';
-    case 'panelist_open':
-      return typeof event.round === 'number' && typeof event.role === 'string';
-    case 'panelist_dim':
-      return typeof event.round === 'number'
-        && typeof event.role === 'string'
-        && typeof event.dimName === 'string'
-        && typeof event.dimScore === 'number'
-        && typeof event.dimNote === 'string';
-    case 'panelist_must_fix':
-      return typeof event.round === 'number'
-        && typeof event.role === 'string'
-        && typeof event.text === 'string';
-    case 'panelist_close':
-      return typeof event.round === 'number'
-        && typeof event.role === 'string'
-        && typeof event.score === 'number';
-    case 'round_end':
-      return typeof event.round === 'number'
-        && typeof event.composite === 'number'
-        && typeof event.mustFix === 'number'
-        && (event.decision === 'continue' || event.decision === 'ship')
-        && typeof event.reason === 'string';
-    case 'ship':
-      return typeof event.round === 'number'
-        && typeof event.composite === 'number'
-        && typeof event.status === 'string'
-        && event.artifactRef !== null
-        && typeof event.artifactRef === 'object'
-        && typeof (event.artifactRef as { projectId?: unknown }).projectId === 'string'
-        && typeof (event.artifactRef as { artifactId?: unknown }).artifactId === 'string'
-        && typeof event.summary === 'string';
-    case 'degraded':
-      return typeof event.reason === 'string' && typeof event.adapter === 'string';
-    case 'interrupted':
-      return typeof event.bestRound === 'number' && typeof event.composite === 'number';
-    case 'failed':
-      return typeof event.cause === 'string';
-    case 'parser_warning':
-      return typeof event.kind === 'string' && typeof event.position === 'number';
-  }
-}
-
 export function sseToPanelEvent(eventName: CritiqueSseEventName, data: unknown): PanelEvent | null {
   if (data === null || typeof data !== 'object') return null;
   const type = eventName.slice('critique.'.length);
   const candidate = { ...(data as Record<string, unknown>), type };
-  if (!isPanelEvent(candidate)) return null;
-  // Variant-level guard: a frame that passes the cheap predicate but
-  // is missing variant-specific fields would otherwise reach the
-  // reducer and crash the UI on `undefined.toFixed()` / `undefined.cast`
-  // (lefarcen + Siri-Ray + codex P2 on PR #1314).
-  return hasValidVariantShape(candidate) ? candidate : null;
+  return isPanelEvent(candidate) ? candidate : null;
 }
 
 /**

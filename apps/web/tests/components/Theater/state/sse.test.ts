@@ -388,4 +388,45 @@ describe('sseToPanelEvent (Phase 7.2)', () => {
       }),
     ).toBeNull();
   });
+
+  // Three small wire-layer regressions (PerishCode follow-up on PR #1315)
+  // so a future weakening of either `sseToPanelEvent` or the contract-
+  // level `isPanelEvent` is caught at the boundary the reducer actually
+  // sees, not just one layer up.
+  it('drops a critique.ship frame with an unknown status (closed-enum guard)', () => {
+    expect(
+      sseToPanelEvent('critique.ship' as CritiqueSseEventName, {
+        runId: 'r',
+        round: 1,
+        composite: 8.5,
+        status: 'wat',
+        artifactRef: { projectId: 'p', artifactId: 'a' },
+        summary: 'looks good',
+      }),
+    ).toBeNull();
+  });
+
+  it('drops a critique.panelist_close frame with an unknown role (closed-enum guard)', () => {
+    expect(
+      sseToPanelEvent('critique.panelist_close' as CritiqueSseEventName, {
+        runId: 'r',
+        round: 1,
+        role: 'overlord',
+        score: 8.2,
+      }),
+    ).toBeNull();
+  });
+
+  it('drops a critique.round_end frame with a NaN composite (finite-numeric guard)', () => {
+    expect(
+      sseToPanelEvent('critique.round_end' as CritiqueSseEventName, {
+        runId: 'r',
+        round: 1,
+        composite: Number.NaN,
+        mustFix: 0,
+        decision: 'ship',
+        reason: 'threshold met',
+      }),
+    ).toBeNull();
+  });
 });
