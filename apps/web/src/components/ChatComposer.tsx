@@ -8,6 +8,11 @@ import {
 } from "react";
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackStudioClickChatComposer,
+  trackStudioViewChatPanel,
+} from '../analytics/events';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
@@ -134,7 +139,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ref
   ) {
     const t = useT();
+    const analytics = useAnalytics();
     const [draft, setDraft] = useState(initialDraft ?? "");
+
+    // studio_view chat_panel — fire once per ChatComposer mount per project.
+    // The composer is the dominant chat surface; firing here keeps the
+    // event close to where the user actually sees the panel rather than at
+    // the higher-level ProjectView layer which mounts before the composer.
+    const studioViewFiredRef = useRef<string | null>(null);
+    useEffect(() => {
+      if (studioViewFiredRef.current === projectId) return;
+      studioViewFiredRef.current = projectId;
+      trackStudioViewChatPanel(analytics.track, {
+        page: 'studio',
+        area: 'chat_panel',
+        element: 'chat_tab',
+        view_type: 'panel',
+        source: 'open_project',
+        conversation_id: null,
+      });
+    }, [projectId, analytics.track]);
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
     // Skills the user has @-mentioned for this turn. We dedupe on id and
     // strip the chip when the user removes the corresponding `@<skill>`
@@ -854,6 +878,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <textarea
               ref={textareaRef}
               data-testid="chat-composer-input"
+              // ph-no-capture: prompt content is the most sensitive
+              // surface in the product. PostHog autocapture skips this
+              // element + subtree entirely.
+              className="ph-no-capture"
               value={draft}
               placeholder={t('chat.composerPlaceholder')}
               onChange={handleChange}
@@ -1062,7 +1090,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <button
               className="icon-btn"
               data-testid="chat-attach"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                trackStudioClickChatComposer(analytics.track, {
+                  page: 'studio',
+                  area: 'chat_composer',
+                  element: 'attachment_button',
+                  action: 'click_composer_control',
+                  user_query_tokens: Math.ceil(draft.length / 4),
+                  has_attachment: staged.length > 0 || commentAttachments.length > 0,
+                });
+                fileInputRef.current?.click();
+              }}
               title={t('chat.attachTitle')}
               disabled={uploading}
               aria-label={t('chat.attachAria')}
@@ -1088,7 +1126,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 type="button"
                 className="composer-send"
                 data-testid="chat-send"
-                onClick={() => void submit()}
+                onClick={() => {
+                  trackStudioClickChatComposer(analytics.track, {
+                    page: 'studio',
+                    area: 'chat_composer',
+                    element: 'send_button',
+                    action: 'click_composer_control',
+                    user_query_tokens: Math.ceil(draft.length / 4),
+                    has_attachment:
+                      staged.length > 0 || commentAttachments.length > 0,
+                  });
+                  void submit();
+                }}
                 disabled={sendDisabled || (!draft.trim() && commentAttachments.length === 0)}
               >
                 <Icon name="send" size={13} />

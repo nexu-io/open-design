@@ -90,7 +90,7 @@ describe('FileViewer JSON artifacts', () => {
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       expect(container.querySelector('.lines')?.textContent).toBe(
@@ -115,7 +115,7 @@ describe('FileViewer JSON artifacts', () => {
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       const displayedText = container.querySelector('.lines')?.textContent ?? '';
@@ -141,7 +141,7 @@ describe('FileViewer JSON artifacts', () => {
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       const displayedText = container.querySelector('.lines')?.textContent ?? '';
@@ -167,7 +167,7 @@ describe('FileViewer JSON artifacts', () => {
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       const displayedText = container.querySelector('.lines')?.textContent ?? '';
@@ -193,7 +193,7 @@ describe('FileViewer JSON artifacts', () => {
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       const displayedText = container.querySelector('.lines')?.textContent ?? '';
@@ -220,7 +220,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    const markup = renderToStaticMarkup(<FileViewer projectId="project-1" file={file} />);
+    const markup = renderToStaticMarkup(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     expect(markup).toContain('class="viewer svg-viewer"');
     expect(markup).not.toContain('class="viewer image-viewer"');
@@ -232,7 +232,7 @@ describe('FileViewer SVG artifacts', () => {
   it('keeps normal image artifacts on the existing image viewer path', () => {
     const file = baseFile({ name: 'photo.png', path: 'photo.png' });
 
-    const markup = renderToStaticMarkup(<FileViewer projectId="project-1" file={file} />);
+    const markup = renderToStaticMarkup(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     expect(markup).toContain('class="viewer image-viewer"');
     expect(markup).not.toContain('class="viewer svg-viewer"');
@@ -265,7 +265,7 @@ describe('FileViewer SVG artifacts', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeTruthy();
@@ -300,7 +300,7 @@ describe('FileViewer SVG artifacts', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container } = render(<FileViewer projectId="project-1" file={file} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
       const svg = container.querySelector<SVGSVGElement>('[data-testid="sketch-preview-svg"] svg');
@@ -351,7 +351,7 @@ describe('FileViewer SVG artifacts', () => {
     });
 
     const markup = renderToStaticMarkup(
-      <FileViewer projectId="project-1" file={file} liveHtml="<html><body>hi</body></html>" />,
+      <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
     );
 
     expect(markup).toContain('data-testid="artifact-preview-frame"');
@@ -377,9 +377,7 @@ describe('FileViewer SVG artifacts', () => {
     });
 
     const markup = renderToStaticMarkup(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         isDeck
         liveHtml={'<html><body><section class="slide">one</section></body></html>'}
       />,
@@ -407,15 +405,56 @@ describe('FileViewer SVG artifacts', () => {
     });
 
     const markup = renderToStaticMarkup(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
       />,
     );
 
     expect(markup).toContain('data-od-render-mode="srcdoc"');
     expect(markup).not.toContain('data-od-render-mode="url-load"');
+  });
+
+  it('hides preview-only toolbar controls when switching an HTML deck to source view', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    expect(container.querySelector('.deck-nav')).toBeTruthy();
+    expect(container.querySelector('.palette-tweaks-anchor')).toBeTruthy();
+    expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^source$/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.deck-nav')).toBeNull();
+      expect(container.querySelector('.palette-tweaks-anchor')).toBeNull();
+      expect(container.querySelector('.viewer-viewport-switcher')).toBeNull();
+      expect(screen.getByTestId('manual-edit-mode-toggle')).toBeTruthy();
+      expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
+      expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
+      expect(screen.getByRole('button', { name: /zoom out/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /zoom in/i })).toBeTruthy();
+    });
   });
 
   it('shows Cloudflare Pages as a deploy action without requiring a project name input', async () => {
@@ -435,9 +474,7 @@ describe('FileViewer SVG artifacts', () => {
     });
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -517,9 +554,7 @@ describe('FileViewer SVG artifacts', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -581,9 +616,7 @@ describe('FileViewer SVG artifacts', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -709,9 +742,7 @@ describe('FileViewer SVG artifacts', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -802,9 +833,7 @@ describe('FileViewer SVG artifacts', () => {
     });
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -851,9 +880,7 @@ describe('FileViewer SVG artifacts', () => {
     }), { status: 200 })));
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -915,9 +942,7 @@ describe('FileViewer SVG artifacts', () => {
     });
 
     render(
-      <FileViewer
-        projectId="project-1"
-        file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
@@ -963,9 +988,7 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('renders the toolbar Draw entry and no legacy picker/pod toggle', () => {
     render(
-      <FileViewer
-        projectId="project-1"
-        file={htmlPreviewFile()}
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
@@ -989,9 +1012,7 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('keeps the Draw bar open after queueing an annotation', () => {
     render(
-      <FileViewer
-        projectId="project-1"
-        file={htmlPreviewFile()}
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
@@ -1011,9 +1032,7 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('enables element picking while the Draw bar is in click mode', async () => {
     render(
-      <FileViewer
-        projectId="project-1"
-        file={htmlPreviewFile()}
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
@@ -1030,9 +1049,7 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('disables Draw direct send while a task is running but keeps queue available', () => {
     render(
-      <FileViewer
-        projectId="project-1"
-        file={htmlPreviewFile()}
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
         streaming
       />,
