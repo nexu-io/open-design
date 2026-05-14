@@ -2155,8 +2155,23 @@ export function ProjectView({
     setConversationLoadError(null);
     messagesConversationIdRef.current = null;
     setActiveConversationId(id);
+    // Push the new conversation id into the URL synchronously so the
+    // route-sync effect at L512 sees a matching `routeConversationId`
+    // before it can find the previous conversation in the list and
+    // revert `activeConversationId` to it. Without this, the same
+    // effect that fights handleNewConversation also fights chat
+    // switching, ping-ponging until React's nested-update guard fires.
+    navigate(
+      {
+        kind: 'project',
+        projectId: project.id,
+        conversationId: id,
+        fileName: openTabsState.active ?? null,
+      },
+      { replace: true },
+    );
     setMessageLoadRetryNonce((nonce) => nonce + 1);
-  }, [activeConversationId, failedMessagesConversationId]);
+  }, [activeConversationId, failedMessagesConversationId, project.id, openTabsState.active]);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {

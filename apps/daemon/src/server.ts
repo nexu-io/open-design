@@ -4399,10 +4399,21 @@ export async function startServer({
             } else if (
               ev &&
               typeof ev === 'object' &&
-              ((ev.type === 'turn_end' && ev.stopReason !== 'tool_use') ||
+              ((ev.type === 'turn_end' &&
+                // `stop_reason: tool_use` means the model paused to wait
+                // for tool execution (claude-code is about to run an
+                // internal tool, or we owe a host tool_result). Either
+                // way the conversation is still in flight — do not close.
+                ev.stopReason !== 'tool_use') ||
                 ev.type === 'usage') &&
               (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
             ) {
+              // Per-turn `turn_end` (synthesized from
+              // `assistant.message.stop_reason` in `claude-stream`) is the
+              // primary close signal; `usage` is the session-level result
+              // that fires at EOF in single-shot mode. Either is a valid
+              // "this turn is done" cue, but only when there's no host
+              // answer outstanding AND the model isn't paused mid-tool.
               if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
                 try { run.child.stdin.end(); } catch {}
               }
