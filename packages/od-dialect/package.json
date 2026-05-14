@@ -1,0 +1,28 @@
+{
+  "name": "@open-design/od-dialect",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ODML (Open Design Markup Language) AST types, parser, and validator. Single source of truth for the dialect — both the Layer 1 skill validator and Layer 3 SwiftUI translator import from here.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./ast": {
+      "types": "./dist/ast.d.ts",
+      "default": "./dist/ast.mjs"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

@@ -62,6 +62,12 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // ODML preview shim — registers <od-*> Web Components inside the skill's
+  // iframe preview. Must be served as a vanilla JS module to a no-build
+  // browser context; consumed by skills/chala-ai-mobile/assets/template.html
+  // via <script type="module" src="./od-elements.js">. Throwaway preview
+  // code; the SwiftUI translator does not read it.
+  "skills/chala-ai-mobile/assets/od-elements.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
