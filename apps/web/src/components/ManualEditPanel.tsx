@@ -25,6 +25,7 @@ export function ManualEditPanel({
   selectedTarget,
   draft,
   error,
+  canUndo,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
@@ -58,8 +59,13 @@ export function ManualEditPanel({
   const t = useT();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
+  useEffect(() => {
+    selectedTargetRef.current = selectedTarget;
+  }, [selectedTarget]);
+
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
     onDraftChange({ ...draft, styles: nextStyles });
@@ -127,8 +133,9 @@ export function ManualEditPanel({
                   try {
                     const src = await onPickImage(file);
                     if (src) {
+                      const activeTargetId = selectedTargetRef.current?.id ?? targetForInspector.id;
                       onApplyPatch(
-                        { id: targetForInspector.id, kind: 'set-image', src, alt: draft.alt },
+                        { id: activeTargetId, kind: 'set-image', src, alt: draft.alt },
                         t('manualEdit.uploadImage'),
                       );
                     } else {
@@ -148,7 +155,7 @@ export function ManualEditPanel({
             <div className="cc-section-body">
               {confirmDelete ? (
                 <>
-                  <p className="cc-delete-confirm">{t('manualEdit.deleteElementConfirm')}</p>
+                  <p className="cc-delete-confirm">{canUndo ? t('manualEdit.deleteElementConfirm') : t('manualEdit.deleteElement')}</p>
                   <button
                     type="button"
                     className="cc-action-btn cc-action-danger"
@@ -167,7 +174,7 @@ export function ManualEditPanel({
                     className="cc-action-btn"
                     onClick={() => setConfirmDelete(false)}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 </>
               ) : (

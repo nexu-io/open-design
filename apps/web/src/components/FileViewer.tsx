@@ -5429,12 +5429,7 @@ function HtmlViewer({
                     return null;
                   }
                   setManualEditError(null);
-                  const entryDir = baseDirFor(file.name);
-                  const uploadedPath = uploaded.path;
-                  if (entryDir && uploadedPath.startsWith(entryDir)) {
-                    return './' + uploadedPath.slice(entryDir.length);
-                  }
-                  return uploadedPath;
+                  return toOwnerRelativePath(file.name, uploaded.path);
                 }}
               />
             ) : null}
@@ -6025,6 +6020,28 @@ function HtmlViewer({
 function baseDirFor(fileName: string): string {
   const idx = fileName.lastIndexOf('/');
   return idx >= 0 ? fileName.slice(0, idx + 1) : '';
+}
+
+function toOwnerRelativePath(ownerFileName: string, targetPath: string): string {
+  const normalize = (value: string) => decodeURIComponent(value).replace(/^\/+/, '');
+  const ownerDirPath = normalize(baseDirFor(ownerFileName));
+  const targetFilePath = normalize(targetPath);
+  const ownerParts = ownerDirPath.split('/').filter(Boolean);
+  const targetParts = targetFilePath.split('/').filter(Boolean);
+
+  let common = 0;
+  while (
+    common < ownerParts.length &&
+    common < targetParts.length &&
+    ownerParts[common] === targetParts[common]
+  ) {
+    common += 1;
+  }
+
+  const up = new Array(ownerParts.length - common).fill('..');
+  const down = targetParts.slice(common);
+  const rel = [...up, ...down].join('/');
+  return rel || './';
 }
 
 function hasRelativeAssetRefs(html: string): boolean {
