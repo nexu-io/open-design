@@ -576,6 +576,7 @@ interface Props {
   projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
+  filesRefreshKey?: number;
   isDeck?: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
@@ -591,6 +592,7 @@ export function FileViewer({
   projectKind,
   file,
   liveHtml,
+  filesRefreshKey = 0,
   isDeck,
   onExportAsPptx,
   streaming,
@@ -637,6 +639,7 @@ export function FileViewer({
         projectKind={projectKind}
         file={file}
         liveHtml={liveHtml}
+        filesRefreshKey={filesRefreshKey}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
@@ -3464,6 +3467,7 @@ function HtmlViewer({
   projectKind,
   file,
   liveHtml,
+  filesRefreshKey = 0,
   isDeck,
   onExportAsPptx,
   streaming,
@@ -3477,6 +3481,7 @@ function HtmlViewer({
   projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
+  filesRefreshKey?: number;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
@@ -3607,6 +3612,30 @@ function HtmlViewer({
   const [manualEditMode, setManualEditModeRaw] = useState(false);
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
+  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const previewScrollRestoreRef = useRef<{
+    hostLeft: number;
+    hostTop: number;
+    frameLeft: number;
+    frameTop: number;
+    canvasLeft: number;
+    canvasTop: number;
+    expiresAt: number;
+  } | null>(null);
+  const previewScrollPositionRef = useRef({
+    frameLeft: 0,
+    frameTop: 0,
+    canvasLeft: 0,
+    canvasTop: 0,
+  });
+  const previewScrollRequestAtRef = useRef(0);
+  const dcViewportRef = useRef({
+    x: 0,
+    y: 0,
+    scale: 1,
+  });
+  const dcViewportRestoreAtRef = useRef(0);
   const setManualEditMode = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
     setManualEditModeRaw((prev) => {
       const value = typeof next === 'function' ? (next as (p: boolean) => boolean)(prev) : next;
@@ -3615,6 +3644,73 @@ function HtmlViewer({
         setManualEditViewportWidth(null);
       }
       return value;
+    });
+  }, []);
+  const capturePreviewScrollPosition = useCallback(() => {
+    const host = previewBodyRef.current;
+    let frameLeft = 0;
+    let frameTop = 0;
+    let canvasLeft = 0;
+    let canvasTop = 0;
+    try {
+      const frameDocument = iframeRef.current?.contentWindow?.document;
+      const frameScroll = frameDocument?.scrollingElement;
+      const canvasScroll = frameDocument?.querySelector<HTMLElement>('.design-canvas');
+      frameLeft = frameScroll?.scrollLeft ?? 0;
+      frameTop = frameScroll?.scrollTop ?? 0;
+      canvasLeft = canvasScroll?.scrollLeft ?? 0;
+      canvasTop = canvasScroll?.scrollTop ?? 0;
+    } catch {
+      frameLeft = 0;
+      frameTop = 0;
+      canvasLeft = 0;
+      canvasTop = 0;
+    }
+    previewScrollRestoreRef.current = {
+      hostLeft: host?.scrollLeft ?? 0,
+      hostTop: host?.scrollTop ?? 0,
+      frameLeft: frameLeft || previewScrollPositionRef.current.frameLeft,
+      frameTop: frameTop || previewScrollPositionRef.current.frameTop,
+      canvasLeft: canvasLeft || previewScrollPositionRef.current.canvasLeft,
+      canvasTop: canvasTop || previewScrollPositionRef.current.canvasTop,
+      expiresAt: Date.now() + 5000,
+    };
+  }, []);
+  const restorePreviewScrollPosition = useCallback(() => {
+    const snapshot = previewScrollRestoreRef.current;
+    if (!snapshot) return;
+    if (Date.now() > snapshot.expiresAt) {
+      previewScrollRestoreRef.current = null;
+      return;
+    }
+    const apply = () => {
+      const previewBody = previewBodyRef.current;
+      if (typeof previewBody?.scrollTo === 'function') {
+        previewBody.scrollTo(snapshot.hostLeft, snapshot.hostTop);
+      }
+      try {
+        const frameDocument = iframeRef.current?.contentWindow?.document;
+        frameDocument?.scrollingElement?.scrollTo(snapshot.frameLeft, snapshot.frameTop);
+        frameDocument?.querySelector<HTMLElement>('.design-canvas')?.scrollTo(snapshot.canvasLeft, snapshot.canvasTop);
+        iframeRef.current?.contentWindow?.postMessage({
+          type: 'od:preview-scroll-restore',
+          frameLeft: snapshot.frameLeft,
+          frameTop: snapshot.frameTop,
+          canvasLeft: snapshot.canvasLeft,
+          canvasTop: snapshot.canvasTop,
+        }, '*');
+      } catch {}
+    };
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        apply();
+        window.setTimeout(apply, 80);
+        window.setTimeout(() => {
+          if (previewScrollRestoreRef.current === snapshot) {
+            apply();
+          }
+        }, 260);
+      });
     });
   }, []);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
@@ -3796,9 +3892,7 @@ function HtmlViewer({
   const [slideState, setSlideState] = useState<SlideState | null>(
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
-  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const overlayPreviewScale = effectivePreviewScale(previewViewport, previewScale, previewBodySize);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -3834,7 +3928,7 @@ function HtmlViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, liveHtml, reloadKey]);
+  }, [projectId, file.name, file.mtime, liveHtml, reloadKey, filesRefreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3879,22 +3973,43 @@ function HtmlViewer({
     : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const drawClickSelectionMode = drawOverlayOpen && drawOverlayMode === 'click' && !manualEditMode;
+  const urlModeBridge = typeof source === 'string' && /\bod-direct-edit\.js\b/.test(source);
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
-    commentMode: boardMode || manualEditMode,
+    commentMode: boardMode || drawClickSelectionMode,
+    editMode: manualEditMode,
+    urlModeBridge,
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
     forceInline,
   });
-  const previewSrcUrl = useMemo(
+  const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
     [projectId, file.name, file.mtime, reloadKey],
   );
+  const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
+  useEffect(() => {
+    setPreviewSrcUrl(basePreviewSrcUrl);
+  }, [basePreviewSrcUrl]);
+
+  useEffect(() => {
+    if (!useUrlLoadPreview) return;
+    if (filesRefreshKey === 0) return;
+    const nextSrc = `${basePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    const timeout = window.setTimeout(() => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.location.replace(nextSrc);
+      } else {
+        setPreviewSrcUrl(nextSrc);
+      }
+    }, 180);
+    return () => window.clearTimeout(timeout);
+  }, [basePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview]);
 
   useEffect(() => {
     setInlinedSource(null);
@@ -3922,6 +4037,96 @@ function HtmlViewer({
     }) : ''),
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode, drawClickSelectionMode, inspectMode, selectedPalette],
   );
+  useEffect(() => {
+    restorePreviewScrollPosition();
+  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as {
+        type?: string;
+        frameLeft?: number;
+        frameTop?: number;
+        canvasLeft?: number;
+        canvasTop?: number;
+      } | null;
+      if (!data || data.type !== 'od:preview-scroll') return;
+      if (previewScrollRestoreRef.current && Number(data.canvasLeft || 0) === 0 && Number(data.canvasTop || 0) === 0) return;
+      if (
+        previewScrollPositionRef.current.canvasLeft !== 0 ||
+        previewScrollPositionRef.current.canvasTop !== 0
+      ) {
+        const isInitialZeroReport = Number(data.canvasLeft || 0) === 0 && Number(data.canvasTop || 0) === 0;
+        if (isInitialZeroReport && Date.now() - previewScrollRequestAtRef.current < 1200) return;
+      }
+      previewScrollPositionRef.current = {
+        frameLeft: Number(data.frameLeft || 0),
+        frameTop: Number(data.frameTop || 0),
+        canvasLeft: Number(data.canvasLeft || 0),
+        canvasTop: Number(data.canvasTop || 0),
+      };
+    }
+    function onRestoreRequest(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:preview-scroll-request') return;
+      previewScrollRequestAtRef.current = Date.now();
+      const snapshot = previewScrollRestoreRef.current;
+      const scroll = snapshot ?? {
+        frameLeft: previewScrollPositionRef.current.frameLeft,
+        frameTop: previewScrollPositionRef.current.frameTop,
+        canvasLeft: previewScrollPositionRef.current.canvasLeft,
+        canvasTop: previewScrollPositionRef.current.canvasTop,
+      };
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'od:preview-scroll-restore',
+        frameLeft: scroll.frameLeft,
+        frameTop: scroll.frameTop,
+        canvasLeft: scroll.canvasLeft,
+        canvasTop: scroll.canvasTop,
+      }, '*');
+    }
+    function onDcViewportMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as {
+        type?: string;
+        x?: number;
+        y?: number;
+        scale?: number;
+      } | null;
+      if (!data || !data.type) return;
+      if (data.type === '__dc_viewport') {
+        const x = Number(data.x || 0);
+        const y = Number(data.y || 0);
+        const scale = Number(data.scale || 1);
+        const hasExistingPosition = dcViewportRef.current.x !== 0 || dcViewportRef.current.y !== 0;
+        const isInitialZeroReport = x === 0 && y === 0 && scale === 1;
+        if (hasExistingPosition && isInitialZeroReport && Date.now() - dcViewportRestoreAtRef.current < 1500) return;
+        dcViewportRef.current = {
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : 0,
+          scale: Number.isFinite(scale) && scale > 0 ? scale : 1,
+        };
+        return;
+      }
+      if (data.type === '__dc_viewport_request') {
+        dcViewportRestoreAtRef.current = Date.now();
+        iframeRef.current?.contentWindow?.postMessage({
+          type: '__dc_set_viewport',
+          ...dcViewportRef.current,
+        }, '*');
+      }
+    }
+    window.addEventListener('message', onMessage);
+    window.addEventListener('message', onRestoreRequest);
+    window.addEventListener('message', onDcViewportMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('message', onRestoreRequest);
+      window.removeEventListener('message', onDcViewportMessage);
+    };
+  }, []);
 
   useEffect(() => {
     if (!effectiveDeck) {
@@ -5269,12 +5474,45 @@ function HtmlViewer({
             </>
           ) : null}
           <button
+            className={`viewer-action${boardMode ? ' active' : ''}`}
+            type="button"
+            data-testid="comment-mode-toggle"
+            title={t('fileViewer.comment')}
+            aria-pressed={boardMode}
+            onClick={() => {
+              capturePreviewScrollPosition();
+              if (boardMode) {
+                setBoardMode(false);
+                clearBoardComposer();
+                return;
+              }
+              const activateComment = () => {
+                clearBoardComposer();
+                setInspectMode(false);
+                setDrawOverlayOpen(false);
+                setMode('preview');
+                activateBoard('inspect');
+              };
+              if (manualEditMode) {
+                void exitManualEditModeAfterFlush().then((ok) => {
+                  if (ok) activateComment();
+                });
+                return;
+              }
+              activateComment();
+            }}
+          >
+            <Icon name="comment" size={13} />
+            <span>{t('fileViewer.comment')}</span>
+          </button>
+          <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
             data-testid="manual-edit-mode-toggle"
             title={t('fileViewer.edit')}
             aria-pressed={manualEditMode}
             onClick={() => {
+              capturePreviewScrollPosition();
               if (!manualEditMode) {
                 setBoardMode(false);
                 clearBoardComposer();
@@ -5618,7 +5856,15 @@ function HtmlViewer({
                       title={file.name}
                       sandbox="allow-scripts"
                       src={previewSrcUrl}
-                      onLoad={syncBridgeModes}
+                      onLoad={() => {
+                        dcViewportRestoreAtRef.current = Date.now();
+                        iframeRef.current?.contentWindow?.postMessage({
+                          type: '__dc_set_viewport',
+                          ...dcViewportRef.current,
+                        }, '*');
+                        syncBridgeModes();
+                        restorePreviewScrollPosition();
+                      }}
                       style={{ width: '100%', height: '100%', border: 0 }}
                     />
                   ) : (
@@ -5630,8 +5876,14 @@ function HtmlViewer({
                       sandbox="allow-scripts"
                       srcDoc={srcDoc}
                       onLoad={() => {
+                        dcViewportRestoreAtRef.current = Date.now();
+                        iframeRef.current?.contentWindow?.postMessage({
+                          type: '__dc_set_viewport',
+                          ...dcViewportRef.current,
+                        }, '*');
                         replayInspectOverridesToIframe();
                         syncBridgeModes();
+                        restorePreviewScrollPosition();
                       }}
                       style={{ width: '100%', height: '100%', border: 0 }}
                     />
