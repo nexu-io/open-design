@@ -354,10 +354,14 @@ describe('FileViewer SVG artifacts', () => {
       <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
     );
 
-    expect(markup).toContain('data-testid="artifact-preview-frame"');
-    expect(markup).toContain('data-od-render-mode="url-load"');
+    // Both iframes are always mounted now (CSS visibility swaps between
+    // them to avoid the iframe-reload flash); the `data-testid` follows the
+    // active iframe so test queries still match exactly one. We assert that
+    // the active iframe is the URL-load one by checking that the testid
+    // sits on the same element as `data-od-render-mode="url-load"`.
+    expect(markup).toMatch(/data-testid="artifact-preview-frame"[^>]*data-od-render-mode="url-load"/);
+    expect(markup).not.toMatch(/data-testid="artifact-preview-frame"[^>]*data-od-render-mode="srcdoc"/);
     expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
-    expect(markup).not.toContain('data-od-render-mode="srcdoc"');
   });
 
   it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
@@ -383,9 +387,8 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    expect(markup).toContain('data-testid="artifact-preview-frame"');
-    expect(markup).toContain('data-od-render-mode="srcdoc"');
-    expect(markup).not.toContain('data-od-render-mode="url-load"');
+    expect(markup).toMatch(/data-testid="artifact-preview-frame"[^>]*data-od-render-mode="srcdoc"/);
+    expect(markup).not.toMatch(/data-testid="artifact-preview-frame"[^>]*data-od-render-mode="url-load"/);
   });
 
   it('falls back to srcDoc when the HTML body looks deck-shaped even without an isDeck hint', () => {
@@ -410,8 +413,8 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    expect(markup).toContain('data-od-render-mode="srcdoc"');
-    expect(markup).not.toContain('data-od-render-mode="url-load"');
+    expect(markup).toMatch(/data-testid="artifact-preview-frame"[^>]*data-od-render-mode="srcdoc"/);
+    expect(markup).not.toMatch(/data-testid="artifact-preview-frame"[^>]*data-od-render-mode="url-load"/);
   });
 
   it('hides preview-only toolbar controls when switching an HTML deck to source view', async () => {
@@ -1038,14 +1041,17 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    // Both iframes (URL-load + srcDoc) are mounted; the `data-testid` follows
+    // whichever is currently active, so re-query after each mode change
+    // rather than caching a reference to a single iframe.
+    const getFrame = () => screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
-    await waitFor(() => expect(frame.srcdoc).not.toContain('data-od-selection-bridge'));
+    await waitFor(() => expect(getFrame().srcdoc).not.toContain('data-od-selection-bridge'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Click' }));
 
-    await waitFor(() => expect(frame.srcdoc).toContain('data-od-selection-bridge'));
-    expect(frame.srcdoc).toContain('data-od-comment-mode');
+    await waitFor(() => expect(getFrame().srcdoc).toContain('data-od-selection-bridge'));
+    expect(getFrame().srcdoc).toContain('data-od-comment-mode');
   });
 
   it('disables Draw direct send while a task is running but keeps queue available', () => {
