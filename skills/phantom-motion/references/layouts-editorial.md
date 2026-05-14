@@ -1,4 +1,4 @@
-# 归藏级杂志布局库 (Editorial Layouts for Phantom Deck)
+# 杂志布局库 (Editorial Layouts for Phantom Deck)
 
 本库收录了汲取自《Monocle》杂志美学的 10 种顶级 HTML Slide 布局骨架。生成代码时，**必须**优先采用这些网格系统。
 
