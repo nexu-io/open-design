@@ -59,7 +59,7 @@ import {
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
+import { hasTweaksTemplate, parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
@@ -3886,6 +3886,10 @@ function HtmlViewer({
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
+  // Detect the class based tweaks template so we keep the srcDoc path on
+  // first load: the bridge that emits `od:tweaks-available` is only injected
+  // by buildSrcdoc, never on the URL load iframe.
+  const tweaksBridgeRequired = hasTweaksTemplate(source);
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
@@ -3893,6 +3897,7 @@ function HtmlViewer({
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
+    tweaksBridge: tweaksBridgeRequired,
     forceInline,
   });
   const previewSrcUrl = useMemo(
