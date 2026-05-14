@@ -992,19 +992,39 @@ export function ProjectView({
     onProjectsRefresh,
   ]);
 
-  const handleSend = useCallback(
-    async (
-      prompt: string,
-      attachments: ChatAttachment[],
-      commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
-      meta?: { research?: ResearchOptions },
-    ) => {
-      if (!activeConversationId) return;
-      if (streaming) return;
+  function resolveRetryTarget(
+  messages: ChatMessage[],
+  failedAssistantId: string,
+): { userMsg: ChatMessage; priorMessages: ChatMessage[] } | null {
+  const idx = messages.findIndex((m) => m.id === failedAssistantId);
+  if (idx <= 0) return null;
+  const userMsg = messages[idx - 1];
+  if (!userMsg || userMsg.role !== 'user') return null;
+  return { userMsg, priorMessages: messages.slice(0, idx - 1) };
+}
+
+const handleSend = useCallback(
+  async (
+    prompt: string,
+    attachments: ChatAttachment[],
+    commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
+    meta?: { research?: ResearchOptions; retryOfAssistantId?: string },
+  ) => {
+    if (!activeConversationId) return;
+    if (streaming) return;
+
+    // Retry path: reuse previous user message without duplicating
+    let userMsg: ChatMessage;
+    let nextHistory: ChatMessage[];
+    if (meta?.retryOfAssistantId) {
+      const target = resolveRetryTarget(messages, meta.retryOfAssistantId);
+      if (!target) return;
+      userMsg = target.userMsg;
+      nextHistory = [...target.priorMessages, userMsg];
+    } else {
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
-      setError(null);
       const startedAt = Date.now();
-      const userMsg: ChatMessage = {
+      userMsg = {
         id: randomUUID(),
         role: 'user',
         content: prompt,
@@ -1012,64 +1032,64 @@ export function ProjectView({
         attachments: attachments.length > 0 ? attachments : undefined,
         commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
       };
-      const selectedAgent =
-        config.mode === 'daemon' && config.agentId
-          ? agentsById.get(config.agentId)
-          : null;
-      const selectedAgentChoice =
-        config.mode === 'daemon' && config.agentId
-          ? config.agentModels?.[config.agentId]
-          : undefined;
-      const assistantAgentId =
-        config.mode === 'daemon'
-          ? config.agentId ?? undefined
-          : apiProtocolAgentId(config.apiProtocol);
-      const assistantAgentName =
-        config.mode === 'daemon'
-          ? agentModelDisplayName(
-              config.agentId,
-              selectedAgent?.name,
-              selectedAgentChoice?.model,
-            )
-          : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const assistantId = randomUUID();
-      const assistantMsg: ChatMessage = {
-        id: assistantId,
-        role: 'assistant',
-        content: '',
-        agentId: assistantAgentId,
-        agentName: assistantAgentName,
-        events: [],
-        createdAt: startedAt,
-        runStatus: config.mode === 'daemon' ? 'running' : undefined,
-        startedAt,
-      };
-      const nextHistory = [...messages, userMsg];
-      setMessages([...nextHistory, assistantMsg]);
-      setStreaming(true);
-      setArtifact(null);
-      savedArtifactRef.current = null;
-      onTouchProject();
-      persistMessage(userMsg);
-      persistMessage(assistantMsg);
-      if (commentAttachments.length > 0) {
-        void patchAttachedStatuses(commentAttachments, 'applying');
-        setAttachedComments([]);
+      nextHistory = [...messages, userMsg];
+    }
+
+    setError(null);
+    const selectedAgent =
+      config.mode === 'daemon' && config.agentId
+        ? agentsById.get(config.agentId)
+        : null;
+    const selectedAgentChoice =
+      config.mode === 'daemon' && config.agentId
+        ? config.agentModels?.[config.agentId]
+        : undefined;
+    const assistantAgentId =
+      config.mode === 'daemon'
+        ? config.agentId ?? undefined
+        : apiProtocolAgentId(config.apiProtocol);
+    const assistantAgentName =
+      config.mode === 'daemon'
+        ? agentModelDisplayName(
+            config.agentId,
+            selectedAgent?.name,
+            selectedAgentChoice?.model,
+          )
+        : apiProtocolModelLabel(config.apiProtocol, config.model);
+    const assistantId = randomUUID();
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      agentId: assistantAgentId,
+      agentName: assistantAgentName,
+      events: [],
+      createdAt: userMsg.createdAt ?? Date.now(),
+      runStatus: config.mode === 'daemon' ? 'running' : undefined,
+      startedAt: userMsg.createdAt ?? Date.now(),
+    };
+    setMessages([...nextHistory, assistantMsg]);
+    setStreaming(true);
+    setArtifact(null);
+    savedArtifactRef.current = null;
+    onTouchProject();
+    persistMessage(userMsg);
+    persistMessage(assistantMsg);
+    if (commentAttachments.length > 0) {
+      void patchAttachedStatuses(commentAttachments, 'applying');
+      setAttachedComments([]);
+    }
+    if (messages.length === 0) {
+      const title = prompt.slice(0, 60).trim();
+      if (title) {
+        setConversations((curr) =>
+          curr.map((c) =>
+            c.id === activeConversationId ? { ...c, title } : c,
+          ),
+        );
+        void patchConversation(project.id, activeConversationId, { title });
       }
-      // If this is the first turn, derive a working title from the prompt
-      // so the conversation is identifiable in the dropdown without a
-      // round-trip through the agent.
-      if (messages.length === 0) {
-        const title = prompt.slice(0, 60).trim();
-        if (title) {
-          setConversations((curr) =>
-            curr.map((c) =>
-              c.id === activeConversationId ? { ...c, title } : c,
-            ),
-          );
-          void patchConversation(project.id, activeConversationId, { title });
-        }
-      }
+    }
 
       // Snapshot the file list at turn-start so we can diff after the
       // agent finishes and surface anything new (e.g. a generated .pptx)
@@ -1163,10 +1183,10 @@ export function ProjectView({
               prev
                 ? { ...prev, html: liveHtml }
                 : {
-                    identifier: ev.identifier,
-                    title: '',
-                    html: liveHtml,
-                  },
+                  identifier: ev.identifier,
+                  title: '',
+                  html: liveHtml,
+                },
             );
           } else if (ev.type === 'artifact:end') {
             setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
@@ -1381,21 +1401,21 @@ export function ProjectView({
       const manifest =
         ext === '.html'
           ? createHtmlArtifactManifest({
-              entry: fileName,
-              title,
+            entry: fileName,
+            title,
+            sourceSkillId: project.skillId ?? undefined,
+            designSystemId: project.designSystemId,
+            metadata,
+          })
+          : inferLegacyManifest({
+            entry: fileName,
+            title,
+            metadata: {
+              ...metadata,
               sourceSkillId: project.skillId ?? undefined,
               designSystemId: project.designSystemId,
-              metadata,
-            })
-          : inferLegacyManifest({
-              entry: fileName,
-              title,
-              metadata: {
-                ...metadata,
-                sourceSkillId: project.skillId ?? undefined,
-                designSystemId: project.designSystemId,
-              },
-            });
+            },
+          });
       const file = await writeProjectTextFile(project.id, fileName, art.html, {
         artifactManifest: manifest ?? undefined,
       });
@@ -1809,24 +1829,24 @@ export function ProjectView({
         )}
       >
         <div className="app-project-title">
-            <span
-              className="title editable"
-              data-testid="project-title"
-              tabIndex={0}
-              role="textbox"
-              suppressContentEditableWarning
-              contentEditable
-              onBlur={(e) => handleProjectRename(e.currentTarget.textContent ?? '')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  (e.currentTarget as HTMLElement).blur();
-                }
-              }}
-            >
-              {project.name}
-            </span>
-            <span className="meta" data-testid="project-meta">{projectMeta}</span>
+          <span
+            className="title editable"
+            data-testid="project-title"
+            tabIndex={0}
+            role="textbox"
+            suppressContentEditableWarning
+            contentEditable
+            onBlur={(e) => handleProjectRename(e.currentTarget.textContent ?? '')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).blur();
+              }
+            }}
+          >
+            {project.name}
+          </span>
+          <span className="meta" data-testid="project-meta">{projectMeta}</span>
         </div>
       </AppChromeHeader>
       <div
@@ -1838,9 +1858,9 @@ export function ProjectView({
         style={workspaceFocused
           ? undefined
           : {
-              gridTemplateColumns:
-                `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
-            }}
+            gridTemplateColumns:
+              `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
+          }}
       >
         <div className="split-chat-slot" hidden={workspaceFocused}>
           {activeConversationId || conversationLoadError ? (
@@ -1862,6 +1882,7 @@ export function ProjectView({
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
               onSend={handleSend}
               onStop={handleStop}
+              onRetry={handleRetry}
               onRequestOpenFile={requestOpenFile}
               initialDraft={initialDraft}
               onSubmitForm={(text) => {

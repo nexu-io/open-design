@@ -27,25 +27,25 @@ const EXAMPLE_PROMPT_KEYS: Array<{
   tagKey: keyof Dict;
   promptKey: keyof Dict;
 }> = [
-  {
-    icon: '▤',
-    titleKey: 'chat.example1Title',
-    tagKey: 'chat.example1Tag',
-    promptKey: 'chat.example1Prompt',
-  },
-  {
-    icon: '▦',
-    titleKey: 'chat.example2Title',
-    tagKey: 'chat.example2Tag',
-    promptKey: 'chat.example2Prompt',
-  },
-  {
-    icon: '◈',
-    titleKey: 'chat.example3Title',
-    tagKey: 'chat.example3Tag',
-    promptKey: 'chat.example3Prompt',
-  },
-];
+    {
+      icon: '▤',
+      titleKey: 'chat.example1Title',
+      tagKey: 'chat.example1Tag',
+      promptKey: 'chat.example1Prompt',
+    },
+    {
+      icon: '▦',
+      titleKey: 'chat.example2Title',
+      tagKey: 'chat.example2Tag',
+      promptKey: 'chat.example2Prompt',
+    },
+    {
+      icon: '◈',
+      titleKey: 'chat.example3Title',
+      tagKey: 'chat.example3Tag',
+      promptKey: 'chat.example3Prompt',
+    },
+  ];
 
 interface Props {
   messages: ChatMessage[];
@@ -64,6 +64,7 @@ interface Props {
   onDeleteComment?: (commentId: string) => void;
   onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[], meta?: ChatSendMeta) => void;
   onStop: () => void;
+  onRetry?: (failedAssistantId: string) => void; //new
   // Click-to-open chain: passes a basename up to ProjectView, which sets
   // FileWorkspace's openRequest. Tool cards, attachment chips, and
   // produced-file chips all call this.
@@ -118,6 +119,7 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onStop,
+  onRetry,//new
   onRequestOpenFile,
   initialDraft,
   onSubmitForm,
@@ -562,7 +564,20 @@ export function ChatPane({
                   </Fragment>
                 );
               })}
-              {error ? <div className="msg error">{error}</div> : null}
+              {error ? (
+                <div className="msg error">
+                  {error}
+                  {onRetry && lastAssistantId ? (
+                    <button
+                      type="button"
+                      className="retry-btn"
+                      onClick={() => onRetry(lastAssistantId)}
+                    >
+                      {t('chat.retry')}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             {scrolledFromBottom ? (
               <button
