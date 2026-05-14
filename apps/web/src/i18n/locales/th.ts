@@ -805,6 +805,8 @@ export const th: Dict = {
   'fileViewer.exportZip': 'สูบทั้งหมดมาในรูป .zip',
   'fileViewer.exportHtml': 'เอาไปแค่รูปไฟล์ HTML',
   'fileViewer.exportMd': 'แปลงข้อความแบบฉบับเป็น Markdown',
+  'fileViewer.exportImage': 'ส่งออกเป็นรูปภาพ',
+  'fileViewer.exportImageFailed': 'การจับภาพล้มเหลว กรุณาลองอีกครั้งหรือใช้เครื่องมือจับภาพหน้าจอของเบราว์เซอร์',
   'fileViewer.exportJsx': 'นำโค้ดในรูปแบบ React JSX ออก',
   'fileViewer.exportReactHtml': 'แยกโหลดมาแค่โครง HTML เท่านั้น',
   'fileViewer.saveAsTemplate': 'จัดเก็บในหมวดเทมเพลต…',

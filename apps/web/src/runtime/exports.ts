@@ -15,6 +15,7 @@
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
+import { randomUUID } from '../utils/uuid';
 
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
@@ -317,6 +318,82 @@ export function exportAsMd(source: string, title: string): void {
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.md`);
 }
 
+// ---------------------------------------------------------------------------
+// Image screenshot export
+// ---------------------------------------------------------------------------
+
+/**
+ * Request a PNG screenshot of the current viewport from the snapshot bridge
+ * injected into a srcdoc preview iframe. Returns null if the bridge is not
+ * present (e.g. URL-load mode) or the capture times out.
+ */
+export function requestPreviewSnapshot(
+  iframe: HTMLIFrameElement,
+  timeout = 2500,
+): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  const win = iframe.contentWindow;
+  if (!win) return Promise.resolve(null);
+  const id = `snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return new Promise((resolve) => {
+    let done = false;
+    function onMsg(ev: MessageEvent) {
+      if (ev.source !== win) return;
+      const d = ev.data as {
+        type?: string;
+        id?: string;
+        dataUrl?: string;
+        w?: number;
+        h?: number;
+        error?: string;
+      } | null;
+      if (!d || d.type !== 'od:snapshot:result' || d.id !== id) return;
+      if (done) return;
+      done = true;
+      window.removeEventListener('message', onMsg);
+      if (d.dataUrl && d.w && d.h) resolve({ dataUrl: d.dataUrl, w: d.w, h: d.h });
+      else resolve(null);
+    }
+    window.addEventListener('message', onMsg);
+    try {
+      win.postMessage({ type: 'od:snapshot', id }, '*');
+    } catch {
+      /* sandboxed */
+    }
+    setTimeout(() => {
+      if (!done) {
+        done = true;
+        window.removeEventListener('message', onMsg);
+        resolve(null);
+      }
+    }, timeout);
+  });
+}
+
+/** Convert a data-URL to a Blob without re-encoding through canvas. */
+function dataUrlToBlob(dataUrl: string): Blob {
+  if (!dataUrl.startsWith('data:')) {
+    throw new Error('Invalid data URL');
+  }
+  const [header, base64] = dataUrl.split(',');
+  const mime = header?.match(/:(.*?);/)?.[1] ?? 'image/png';
+  const bytes = atob(base64 ?? '');
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+/** Download a snapshot data-URL as a PNG file. */
+export function exportAsImage(dataUrl: string, title: string): void {
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    triggerDownload(blob, `${safeFilename(title, 'artifact')}.png`);
+  } catch (err) {
+    console.warn('[exportAsImage] failed to convert snapshot:', err);
+    // Re-throw the error to allow the caller to handle UI feedback
+    throw err;
+  }
+}
+
 export type ProjectPdfExportResult = 'desktop' | 'fallback';
 
 export async function exportProjectAsPdf(opts: {
@@ -524,7 +601,7 @@ export async function exportAsPdf(
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   // Generate a per-export nonce so the print-ready handshake is resistant to
   // spoofing by untrusted scripts inside the exported artifact.
-  const nonce = crypto.randomUUID();
+  const nonce = randomUUID();
   let doc = buildSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);

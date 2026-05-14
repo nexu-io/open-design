@@ -1,27 +1,39 @@
 /**
  * Critique Theater end-to-end coverage (Phase 11).
  *
- * The plan splits this into four tasks:
- *   11.1 happy path (live debate -> shipped)
- *   11.2 interrupt path (Esc mid-run -> interrupted)
- *   11.3 visual regression at 375 / 768 / 1280
- *   11.4 a11y self-test (every state passes WCAG AA via the
- *        Playwright role-tree snapshot)
+ * Activation history. The earlier revision of this file was parked behind
+ * `test.describe.fixme` because the route at `/` did not mount the
+ * Theater (`<CritiqueTheaterMount>` only renders inside `<ProjectView>`,
+ * i.e. on `/projects/:id`) and because the single-shot SSE fixture
+ * streamed `run_started` through `ship` in one body, which collapses the
+ * UI to the shipped surface before any assertion can observe the live
+ * stage (Codex P2 on PR #1320).
  *
- * Strategy: production critique runs originate inside a CLI session
- * (the orchestrator) and surface as `critique.*` SSE channels on the
- * project-events endpoint. Standing up the full pipeline inside the
- * e2e harness would mean a real daemon + a real model session, which
- * defeats the determinism we need for visual baselines. Instead, we
- * mock the project-events SSE stream and replay a deterministic
- * transcript pulled from the v1 fixture set so every CI run sees
- * the same Theater layout for the same screenshot baseline.
+ * This revision activates the suite in three moves:
  *
- * Each test boots the app under `OD_CRITIQUE_ENABLED=true` via
- * localStorage so the `<CritiqueTheaterMount>` actually renders.
- * The fake daemon endpoint streams a deterministic critique
- * transcript and the assertions are about what the UI presents,
- * which is exactly the lens an e2e gate should apply.
+ *   1. Setup creates a real project through the daemon `POST /api/projects`
+ *      and navigates to `/projects/:id`, so the mount actually renders.
+ *      Pattern mirrors `app-design-files.test.ts`; agents are stubbed at
+ *      `**\/api/agents` so the project-create lane does not depend on
+ *      whatever agents the host machine has installed.
+ *
+ *   2. The SSE fixture is split. `LIVE_PREFIX` streams only enough frames
+ *      to leave the reducer in `running`; `FULL_TRANSCRIPT` continues to
+ *      `shipped`. Live-stage and interrupt assertions consume the prefix
+ *      only; shipped-state assertions consume the full transcript and do
+ *      not also claim the live stage was visible (the two phases are
+ *      mutually exclusive surfaces).
+ *
+ *   3. The visual-regression cases stay parked at the per-test level via
+ *      `test.fixme`, because their PNG baselines are not yet committed.
+ *      The follow-up that lands the baselines flips those four lines to
+ *      `test` and runs Playwright with `--update-snapshots` on first run.
+ *      Suite-level activation does not block on that follow-up.
+ *
+ * Determinism boundary: the daemon owns project state (creation, metadata,
+ * conversation persistence). The e2e harness owns the SSE event delivery
+ * via `page.route('**\/api/projects/*\/events')` so every CI run sees the
+ * same critique frames for the same screenshot baseline.
  */
 
 import { expect, test } from '@playwright/test';
@@ -34,8 +46,7 @@ interface CritiqueFrame {
   data: Record<string, unknown>;
 }
 
-/** Deterministic transcript: open, one panelist closes round 1, ship. */
-const TRANSCRIPT: CritiqueFrame[] = [
+const LIVE_PREFIX: CritiqueFrame[] = [
   {
     event: 'critique.run_started',
     data: {
@@ -58,6 +69,9 @@ const TRANSCRIPT: CritiqueFrame[] = [
       dimName: 'hierarchy', dimScore: 8.2, dimNote: 'clear',
     },
   },
+];
+
+const TERMINAL_SUFFIX: CritiqueFrame[] = [
   {
     event: 'critique.panelist_close',
     data: { runId: 'e2e-run-1', round: 1, role: 'critic', score: 8.2 },
@@ -78,6 +92,8 @@ const TRANSCRIPT: CritiqueFrame[] = [
     },
   },
 ];
+
+const FULL_TRANSCRIPT = [...LIVE_PREFIX, ...TERMINAL_SUFFIX];
 
 function sseBody(frames: CritiqueFrame[]): string {
   let out = 'event: ready\ndata: {}\n\n';
@@ -107,6 +123,25 @@ async function bootAppWithCritiqueEnabled(page: Page): Promise<void> {
   }, STORAGE_KEY);
 }
 
+async function stubAgents(page: Page): Promise<void> {
+  await page.route('**/api/agents', async (route: Route) => {
+    await route.fulfill({
+      json: {
+        agents: [
+          {
+            id: 'mock',
+            name: 'Mock Agent',
+            bin: 'mock-agent',
+            available: true,
+            version: 'test',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    });
+  });
+}
+
 async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<void> {
   await page.route('**/api/projects/*/events', async (route: Route) => {
     await route.fulfill({
@@ -122,49 +157,89 @@ async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<v
 }
 
 /**
- * Parked behind `test.describe.fixme` until the next follow-up PR
- * (PerishCode P1 on PR #1338). The suite as written assumes the route
- * at `/` mounts `<ProjectView>` and therefore renders
- * `<CritiqueTheaterMount>`, but the home route shows the entry gallery;
- * the mount only renders inside `/projects/:id`. The follow-up commit
- * replaces the `await page.goto('/')` calls with seeded-project
- * navigation (similar to `app-design-files.test.ts`), splits the SSE
- * fixture into a live prefix and a terminal suffix (Codex P2 on PR
- * #1320), and commits the first PNG baselines. Until that lands, the
- * suite would time out on every assertion; `fixme` skips at run time
- * while keeping the spec visible to the contributor who finishes the
- * wireup.
+ * Stub the daemon interrupt endpoint with a 204 ack.
+ *
+ * Why this exists (Codex P1 + lefarcen P1 on PR #1483): the e2e suite
+ * drives the Theater through a synthetic SSE fixture, but
+ * `runOrchestrator` never actually registers `runId: 'e2e-run-1'` with
+ * the daemon. When the user clicks Interrupt, the mount's
+ * wait-for-daemon-ack pattern hits `POST /api/projects/:id/critique/
+ * :runId/interrupt`, the real daemon answers 404 (unknown run), the
+ * mount clears `interruptPending`, and the assertion times out.
+ *
+ * Stubbing the route with a 2xx mirrors the production happy path for
+ * a known run without standing up a real critique session. Idempotent;
+ * applied in beforeEach so every test sees a deterministic ack even if
+ * only the interrupt test actually drives the click.
  */
-test.describe.fixme('Critique Theater e2e (Phase 11) [awaiting full mount-route follow-up, see file header]', () => {
+async function stubInterruptEndpoint(page: Page): Promise<void> {
+  await page.route('**/api/projects/*/critique/*/interrupt', async (route: Route) => {
+    await route.fulfill({ status: 204, body: '' });
+  });
+}
+
+/**
+ * Create a project through the real daemon and return to the caller a
+ * URL the page can navigate to. The daemon owns the project row;
+ * `stubProjectEvents` overrides only the SSE channel. Project ids are
+ * scoped per test so concurrent Playwright workers do not collide.
+ */
+async function seedProject(page: Page, slug: string): Promise<string> {
+  const projectId = `e2e-critique-${slug}-${Date.now()}`;
+  const response = await page.request.post('/api/projects', {
+    data: {
+      id: projectId,
+      name: `e2e critique ${slug}`,
+    },
+  });
+  if (!response.ok()) {
+    const body = await response.text();
+    throw new Error(`seedProject failed: ${response.status()} ${body}`);
+  }
+  return projectId;
+}
+
+test.describe('Critique Theater e2e (Phase 11)', () => {
   test.beforeEach(async ({ page }) => {
     await bootAppWithCritiqueEnabled(page);
+    await stubAgents(page);
+    await stubInterruptEndpoint(page);
   });
 
-  // Task 11.1: happy path
-  test('renders the live stage, all five lanes, and the shipped badge', async ({ page }) => {
-    await stubProjectEvents(page, TRANSCRIPT);
-    await page.goto('/');
-    // The Theater stage exposes role="region" with aria-label="Design Jury".
+  test('mounts the live stage with five panelist lanes mid-run', async ({ page }) => {
+    // LIVE_PREFIX leaves the reducer in `running` so the Theater stage
+    // is the rendered surface. No terminal frame arrives, so the
+    // collapsed surface never replaces it during the assertions.
+    await stubProjectEvents(page, LIVE_PREFIX);
+    const projectId = await seedProject(page, 'live-stage');
+    await page.goto(`/projects/${projectId}`);
     await expect(page.getByRole('region', { name: 'Design Jury' })).toBeVisible({
       timeout: 5_000,
     });
-    // Every panelist lane mounts a role="group" with the localized label.
     for (const role of ['Designer', 'Critic', 'Brand', 'Accessibility', 'Copy']) {
       await expect(page.getByRole('group', { name: role })).toBeVisible();
     }
-    // The ship event flips us to the collapsed surface with the badge.
+  });
+
+  test('renders the shipped badge after the run terminates', async ({ page }) => {
+    // FULL_TRANSCRIPT runs through `ship`, so the reducer settles on
+    // `shipped` and `<TheaterCollapsed>` mounts. We do NOT assert the
+    // live stage was visible here; the two surfaces are mutually
+    // exclusive and racing them in one test was the source of the
+    // earlier flake (Codex P2 on PR #1320).
+    await stubProjectEvents(page, FULL_TRANSCRIPT);
+    const projectId = await seedProject(page, 'shipped');
+    await page.goto(`/projects/${projectId}`);
     await expect(page.getByText('Shipped')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText(/Shipped at round 1/)).toBeVisible();
     await expect(page.getByText(/composite 8\.6/)).toBeVisible();
   });
 
-  // Task 11.2: interrupt path
   test('Esc mid-run transitions to interrupted with the best-composite summary', async ({ page }) => {
-    // Stream only the first three frames so the run stays mid-flight.
-    await stubProjectEvents(page, TRANSCRIPT.slice(0, 3));
-    await page.goto('/');
+    await stubProjectEvents(page, LIVE_PREFIX);
+    const projectId = await seedProject(page, 'interrupt');
+    await page.goto(`/projects/${projectId}`);
     await expect(page.getByRole('region', { name: 'Design Jury' })).toBeVisible();
-    // The Interrupt button is the focus surface for the Esc keybind.
     const interruptBtn = page.getByRole('button', { name: 'Interrupt' });
     await expect(interruptBtn).toBeVisible();
     await interruptBtn.focus();
@@ -173,16 +248,32 @@ test.describe.fixme('Critique Theater e2e (Phase 11) [awaiting full mount-route 
     await expect(page.getByText(/Interrupted at round/)).toBeVisible();
   });
 
-  // Task 11.3: visual regression at 3 viewports
+  test('Theater states expose a valid role tree (region + 5 panelist groups)', async ({ page }) => {
+    await stubProjectEvents(page, LIVE_PREFIX);
+    const projectId = await seedProject(page, 'a11y');
+    await page.goto(`/projects/${projectId}`);
+    const stage = page.getByRole('region', { name: 'Design Jury' });
+    await expect(stage).toBeVisible();
+    for (const role of ['Designer', 'Critic', 'Brand', 'Accessibility', 'Copy']) {
+      await expect(stage.getByRole('group', { name: role })).toBeVisible();
+    }
+    await expect(stage.getByRole('button', { name: 'Interrupt' })).toBeVisible();
+  });
+
+  // Visual regression at three viewports. Parked per-test until the
+  // baseline-seeding follow-up commits the first PNGs via
+  // `playwright test --update-snapshots`. The four cases stay visible
+  // to `--list` so the suite count does not flap when they activate.
   for (const vp of [
     { width: 375, height: 720, label: 'mobile' },
     { width: 768, height: 1024, label: 'tablet' },
     { width: 1280, height: 800, label: 'desktop' },
   ]) {
-    test(`visual regression - shipped state @ ${vp.label}`, async ({ page }) => {
+    test.fixme(`visual regression - shipped state @ ${vp.label}`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
-      await stubProjectEvents(page, TRANSCRIPT);
-      await page.goto('/');
+      await stubProjectEvents(page, FULL_TRANSCRIPT);
+      const projectId = await seedProject(page, `visual-${vp.label}`);
+      await page.goto(`/projects/${projectId}`);
       await expect(page.getByText('Shipped')).toBeVisible({ timeout: 5_000 });
       await expect(page.locator('.theater-collapsed')).toHaveScreenshot(
         `theater-shipped-${vp.label}.png`,
@@ -190,20 +281,4 @@ test.describe.fixme('Critique Theater e2e (Phase 11) [awaiting full mount-route 
       );
     });
   }
-
-  // Task 11.4: a11y self-test (Playwright's `getByRole` consults the
-  // accessibility tree under the hood, so each `toBeVisible` here is
-  // effectively a "this role + name reaches assistive tech" assertion.)
-  test('Theater states expose a valid role tree (region + 5 panelist groups)', async ({ page }) => {
-    await stubProjectEvents(page, TRANSCRIPT.slice(0, 3));
-    await page.goto('/');
-    const stage = page.getByRole('region', { name: 'Design Jury' });
-    await expect(stage).toBeVisible();
-    for (const role of ['Designer', 'Critic', 'Brand', 'Accessibility', 'Copy']) {
-      await expect(stage.getByRole('group', { name: role })).toBeVisible();
-    }
-    // The Interrupt button is reachable via its accessible name (no
-    // image-only buttons).
-    await expect(stage.getByRole('button', { name: 'Interrupt' })).toBeVisible();
-  });
 });

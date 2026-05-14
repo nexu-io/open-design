@@ -1,0 +1,21 @@
+name: release-preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: open-design-release-preview
+  cancel-in-progress: false
+
+jobs:
+  placeholder:
+    name: Preview release placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain placeholder
+        run: |
+          echo "release-preview is reserved for the preview release channel."
+          echo "The full build and publish implementation will land in a follow-up change."

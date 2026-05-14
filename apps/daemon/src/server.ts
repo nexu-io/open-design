@@ -38,7 +38,11 @@ import { installFromTarget, uninstallById, sanitizeRepoName } from './library-in
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
-import { listDesignSystems, readDesignSystem, readDesignSystemAssets } from './design-systems.js';
+import {
+  listDesignSystems,
+  readDesignSystem,
+  resolveDesignSystemAssets,
+} from './design-systems.js';
 import {
   composeMemoryBody,
   deleteMemoryEntry,
@@ -70,6 +74,8 @@ import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
 import { getCritiqueMetrics, register } from './metrics/index.js';
+import { readConformanceHistory } from './critique/conformance-history.js';
+import { evaluateRollout } from './critique/ratchet.js';
 import {
   isCritiqueEnabled,
   parseEnvEnabled,
@@ -2357,6 +2363,47 @@ export async function startServer({
     });
   }
 
+  // Phase 16 ratchet endpoint. Returns the rolling conformance window
+  // and the ratchet's current recommendation. Operator-driven by
+  // design: the recommendation does not flip OD_CRITIQUE_ROLLOUT_PHASE
+  // automatically, it surfaces so a deploy-pipeline follow-up can
+  // consume it. Tunables come from query string; defaults are the
+  // spec values (14 days, 0.90 shipped, 0.95 clean-parse).
+  // Codex + lefarcen P1 on PR #1499: clamp query inputs before the
+  // evaluator sees them so a request like `?windowDays=0` falls back to
+  // the spec default rather than producing a zero-evidence promotion.
+  // The evaluator also defends at its own entry; both are intentional
+  // (belt + suspenders) so a future caller that bypasses this route
+  // cannot reach an unguarded code path either.
+  const parsePositiveInt = (raw: unknown, fallback: number): number => {
+    if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  };
+  const parseRate = (raw: unknown, fallback: number): number => {
+    if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+  };
+  app.get('/api/critique/conformance', async (req, res) => {
+    try {
+      const windowDays = parsePositiveInt(req.query.windowDays, 14);
+      const shippedThreshold = parseRate(req.query.shippedThreshold, 0.90);
+      const cleanParseThreshold = parseRate(req.query.cleanParseThreshold, 0.95);
+      const history = await readConformanceHistory(RUNTIME_DATA_DIR, windowDays);
+      const decision = evaluateRollout({
+        current: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+        history,
+        windowDays,
+        shippedThreshold,
+        cleanParseThreshold,
+      });
+      res.json({ window: { days: windowDays, history }, decision });
+    } catch (err) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', err instanceof Error ? err.message : String(err));
+    }
+  });
+
   registerConnectorRoutes(app, {
     sendApiError,
     authorizeToolRequest,
@@ -3146,12 +3193,17 @@ export async function startServer({
     let designSystemBody;
     let designSystemTitle;
     // Compiled (tokens.css + components.html) form of the active brand.
-    // Gated by `OD_DESIGN_TOKEN_CHANNEL` while the experiment is in the
-    // smoke-test phase: flag-off keeps the daemon byte-equivalent to the
-    // pre-PR-C path; flag-on appends the tokens contract + reference
-    // fixture to the system prompt for any brand that ships those files
-    // (today: `default` and `kami`; every other brand falls through
-    // silently because the files are absent).
+    // Default-on as of PR-D — every chat that picks a brand with
+    // `tokens.css` + `components.html` siblings (today: `default` and
+    // `kami`; every other brand falls through silently because the
+    // files are absent) gets the structured token contract appended to
+    // the system prompt automatically.
+    //
+    // `OD_DESIGN_TOKEN_CHANNEL=0` is the kill switch: it forces the
+    // daemon back to the pre-PR-C DESIGN.md-only path for every brand,
+    // including the structured ones. Any other value (unset, `1`,
+    // `true`, etc.) keeps the new default. Drift on prose-only brands
+    // is pinned by `scripts/check-design-system-flag-parity.ts`.
     let designSystemTokensCss;
     let designSystemFixtureHtml;
     if (effectiveDesignSystemId) {
@@ -3162,23 +3214,17 @@ export async function startServer({
         (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         undefined;
-      if (process.env.OD_DESIGN_TOKEN_CHANNEL === '1') {
-        // Try built-in dir first, then user-installed dir, mirroring the
-        // DESIGN.md fallback chain above. Any individual file may be
-        // missing (e.g. tokens.css present, components.html absent); the
-        // composer gates each block independently.
-        const builtIn = await readDesignSystemAssets(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId);
-        const installed = builtIn.tokensCss && builtIn.fixtureHtml
-          ? builtIn
-          : {
-              tokensCss: builtIn.tokensCss
-                ?? (await readDesignSystemAssets(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)).tokensCss,
-              fixtureHtml: builtIn.fixtureHtml
-                ?? (await readDesignSystemAssets(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)).fixtureHtml,
-            };
-        designSystemTokensCss = installed.tokensCss;
-        designSystemFixtureHtml = installed.fixtureHtml;
-      }
+      // Single seam: env gate + built-in→user-installed fallback chain
+      // live together inside `resolveDesignSystemAssets` so the whole
+      // server-side asset-resolution path can be tested end-to-end
+      // from real disk fixtures (see `tests/design-system-assets.test.ts`).
+      const assets = await resolveDesignSystemAssets(
+        effectiveDesignSystemId,
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+      );
+      designSystemTokensCss = assets.tokensCss;
+      designSystemFixtureHtml = assets.fixtureHtml;
     }
 
     const template =

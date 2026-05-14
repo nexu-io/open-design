@@ -844,6 +844,8 @@ export const ko: Dict = {
   'fileViewer.exportZip': '.zip으로 다운로드',
   'fileViewer.exportHtml': '독립 실행형 HTML로 내보내기',
   'fileViewer.exportMd': 'Markdown으로 내보내기',
+  'fileViewer.exportImage': '이미지로 내보내기',
+  'fileViewer.exportImageFailed': '이미지 캡처에 실패했습니다. 다시 시도하거나 브라우저의 스크린샷 도구를 사용하세요.',
   'fileViewer.exportJsx': 'JSX로 내보내기',
   'fileViewer.exportReactHtml': '미리보기를 HTML로 내보내기',
   'fileViewer.saveAsTemplate': '템플릿으로 저장…',

@@ -867,6 +867,8 @@ export const ptBR: Dict = {
   'fileViewer.exportZip': 'Baixar como .zip',
   'fileViewer.exportHtml': 'Exportar como HTML independente',
   'fileViewer.exportMd': 'Exportar como Markdown',
+  'fileViewer.exportImage': 'Exportar como imagem',
+  'fileViewer.exportImageFailed': 'Falha ao capturar a imagem. Tente novamente ou use a ferramenta de captura de tela do seu navegador.',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar prévia como HTML',
   'fileViewer.saveAsTemplate': 'Salvar como template…',

@@ -844,6 +844,8 @@ export const hu: Dict = {
   'fileViewer.exportZip': 'Letöltés .zip-ként',
   'fileViewer.exportHtml': 'Exportálás önálló HTML-ként',
   'fileViewer.exportMd': 'Exportálás Markdown-ként',
+  'fileViewer.exportImage': 'Exportálás képként',
+  'fileViewer.exportImageFailed': 'A képrögzítés sikertelen. Kérjük, próbálja újra, vagy használja a böngészője képernyőkép eszközét.',
   'fileViewer.exportJsx': 'Exportálás JSX-ként',
   'fileViewer.exportReactHtml': 'Előnézet exportálása HTML-ként',
   'fileViewer.saveAsTemplate': 'Mentés sablonként…',

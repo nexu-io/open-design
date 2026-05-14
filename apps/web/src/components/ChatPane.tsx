@@ -659,9 +659,11 @@ export function ChatPane({
               ) : null}
               {messages.map((m, i) => {
                 const showDaySeparator = shouldShowDaySeparator(messages[i - 1], m);
-                const messageStreaming =
-                  m.role === 'assistant' &&
-                  ((streaming && m.id === lastAssistantId) || isActiveRunStatus(m.runStatus));
+                const messageStreaming = isAssistantMessageStreaming(
+                  m,
+                  streaming,
+                  lastAssistantId,
+                );
                 return (
                   <Fragment key={m.id}>
                     {showDaySeparator ? <DaySeparator ts={messageTime(m)} /> : null}
@@ -866,6 +868,24 @@ function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
 }
 
+function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'canceled';
+}
+
+export function isAssistantMessageStreaming(
+  message: ChatMessage,
+  paneStreaming: boolean,
+  lastAssistantId: string | null | undefined,
+): boolean {
+  if (message.role !== 'assistant') return false;
+  if (isActiveRunStatus(message.runStatus)) return true;
+  if (message.id !== lastAssistantId) return false;
+  if (!paneStreaming) return false;
+  if (message.endedAt !== undefined) return false;
+  if (isTerminalRunStatus(message.runStatus)) return false;
+  return true;
+}
+
 function ConversationRow({
   conversation,
   active,
@@ -926,7 +946,7 @@ function ConversationRow({
           {displayTitle}
         </button>
       )}
-      <span className="chat-conv-item-meta">{relTime(conversation.updatedAt, t)}</span>
+      <span className="chat-conv-item-meta">{conversationMetaLabel(conversation, t)}</span>
       <button
         type="button"
         className="chat-conv-item-del"
@@ -1052,4 +1072,30 @@ function relTime(ts: number, t: TranslateFn): string {
   if (diff < day) return t('common.hoursShort', { n: Math.floor(diff / hr) });
   if (diff < 7 * day) return t('common.daysShort', { n: Math.floor(diff / day) });
   return new Date(ts).toLocaleDateString();
+}
+
+export function conversationMetaLabel(
+  conversation: Conversation,
+  t: TranslateFn,
+): string {
+  const latestRun = conversation.latestRun;
+  if (
+    latestRun &&
+    (latestRun.status === 'succeeded' ||
+      latestRun.status === 'failed' ||
+      latestRun.status === 'canceled') &&
+    typeof latestRun.durationMs === 'number' &&
+    Number.isFinite(latestRun.durationMs)
+  ) {
+    return formatDurationShort(latestRun.durationMs);
+  }
+  return relTime(conversation.updatedAt, t);
+}
+
+function formatDurationShort(ms: number): string {
+  const s = Math.max(0, ms) / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.floor(s - m * 60);
+  return `${m}m ${rem.toString().padStart(2, '0')}s`;
 }

@@ -927,6 +927,8 @@ export const zhCN: Dict = {
   'fileViewer.exportZip': '下载为 .zip',
   'fileViewer.exportHtml': '导出为独立 HTML',
   'fileViewer.exportMd': '导出为 Markdown',
+  'fileViewer.exportImage': '导出为图片',
+  'fileViewer.exportImageFailed': '图片捕获失败，请重试或使用浏览器的截图工具。',
   'fileViewer.exportJsx': '导出为 JSX',
   'fileViewer.exportReactHtml': '导出预览 HTML',
   'fileViewer.saveAsTemplate': '保存为模板…',

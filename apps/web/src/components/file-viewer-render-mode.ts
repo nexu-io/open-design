@@ -63,6 +63,11 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   return true;
 }
 
+export function hasUrlModeBridge(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return /<script\b[^>]*\bsrc\s*=\s*["'][^"']*\bod-direct-edit\.js\b[^"']*["'][^>]*>/i.test(source);
+}
+
 /**
  * Read the `forceInline` opt-out from a URL search string or an existing
  * URLSearchParams. Accepts `1`, `true`, `yes`, `on` (case-insensitive).

@@ -918,6 +918,8 @@ export const zhTW: Dict = {
   'fileViewer.exportZip': '下載為 .zip',
   'fileViewer.exportHtml': '匯出為獨立 HTML',
   'fileViewer.exportMd': '匯出為 Markdown',
+  'fileViewer.exportImage': '匯出為圖片',
+  'fileViewer.exportImageFailed': '圖片擷取失敗，請重試或使用瀏覽器的截圖工具。',
   'fileViewer.exportJsx': '匯出為 JSX',
   'fileViewer.exportReactHtml': '匯出預覽 HTML',
   'fileViewer.saveAsTemplate': '儲存為範本…',

@@ -136,9 +136,11 @@ async function openLocalCliSettings(
   });
 
   await page.goto('/');
-  await page
-    .getByRole('button', { name: /Configure execution mode|配置执行模式/i })
-    .click();
+  const settingsButton = page.locator(
+    'button[aria-label="Configure execution mode"], button[aria-label="配置执行模式"], button[title="Configure execution mode"], button[title="配置执行模式"]',
+  ).first();
+  await expect(settingsButton).toBeVisible();
+  await settingsButton.click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();

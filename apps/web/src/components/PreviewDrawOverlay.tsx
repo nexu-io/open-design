@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 
 import { Icon } from './Icon';
 import type { PreviewVisualMarkKind } from '../types';
+import { requestPreviewSnapshot } from '../runtime/exports';
 
 export type PreviewDrawMode = 'click' | 'draw';
 
@@ -205,25 +206,9 @@ export function PreviewDrawOverlay({
   }
 
   async function requestSnapshot(): Promise<{ dataUrl: string; w: number; h: number } | null> {
-    const iframe = wrapRef.current?.querySelector('iframe');
-    const win = iframe?.contentWindow;
-    if (!iframe || !win) return null;
-    const id = `snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise((resolve) => {
-      let done = false;
-      function onMsg(ev: MessageEvent) {
-        const d = ev.data as { type?: string; id?: string; dataUrl?: string; w?: number; h?: number; error?: string } | null;
-        if (!d || d.type !== 'od:snapshot:result' || d.id !== id) return;
-        if (done) return;
-        done = true;
-        window.removeEventListener('message', onMsg);
-        if (d.dataUrl && d.w && d.h) resolve({ dataUrl: d.dataUrl, w: d.w, h: d.h });
-        else resolve(null);
-      }
-      window.addEventListener('message', onMsg);
-      try { win.postMessage({ type: 'od:snapshot', id }, '*'); } catch { /* sandboxed */ }
-      setTimeout(() => { if (!done) { done = true; window.removeEventListener('message', onMsg); resolve(null); } }, 2500);
-    });
+    const iframe = wrapRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe) return null;
+    return requestPreviewSnapshot(iframe);
   }
 
   function drawCaptureTarget(

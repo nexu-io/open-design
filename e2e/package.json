@@ -6,7 +6,7 @@
   "scripts": {
     "test": "vitest run -c vitest.config.ts",
     "test:ui:critical": "playwright test -c playwright.config.ts ui/entry-chrome-flows.test.ts ui/entry-configuration-flows.test.ts ui/project-management-flows.test.ts",
-    "test:ui:extended": "OD_PLAYWRIGHT_TIMEOUT=10000 playwright test -c playwright.config.ts ui/app.test.ts ui/api-empty-response.test.ts ui/app-restoration.test.ts ui/app-manual-edit.test.ts ui/app-design-files.test.ts ui/settings-connectors-auth-happy-path.test.ts ui/settings-connectors-auth-recovery.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/settings-memory-routines.test.ts ui/workspace-keyboard-flows.test.ts ui/examples-preview-core.test.ts ui/examples-preview-share.test.ts ui/real-daemon-run.test.ts",
+    "test:ui:extended": "OD_PLAYWRIGHT_TIMEOUT=10000 playwright test -c playwright.config.ts ui/app.test.ts ui/api-empty-response.test.ts ui/app-restoration.test.ts ui/app-manual-edit.test.ts ui/app-design-files.test.ts ui/settings-connectors-auth-happy-path.test.ts ui/settings-connectors-auth-recovery.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/settings-memory-routines.test.ts ui/workspace-keyboard-flows.test.ts ui/examples-preview-core.test.ts ui/examples-preview-share.test.ts ui/real-daemon-run.test.ts ui/critique-theater.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
