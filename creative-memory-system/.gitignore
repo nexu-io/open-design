@@ -1,0 +1,12 @@
+# Simulation scratch storage roots created by self-test runs
+.test-memory/
+.test-retrieval/
+.test-advanced/
+.test-longrun/
+.test-adapter/
+
+# Default storage root (when MEMORY_STORAGE_ROOT is unset)
+memory/
+
+# Local node_modules (subsystem has no deps; this is a guard)
+node_modules/
