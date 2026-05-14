@@ -132,6 +132,33 @@ type AudioVoiceOption = {
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
+// Injected into non-media projects so the agent knows how to dispatch
+// media generation if the user asks for it mid-session (e.g. "generate an
+// image with fal"). Without this, agents in prototype/deck projects try to
+// call provider REST APIs directly and ask the user for keys that the daemon
+// already holds in .od/media-config.json.
+const MEDIA_DISPATCH_HINT = `
+
+---
+
+## Media generation (if asked)
+
+If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher rather than calling the provider API directly:
+
+\`\`\`bash
+"$OD_NODE_BIN" "$OD_BIN" media generate \\
+  --project "$OD_PROJECT_ID" \\
+  --surface image \\
+  --model flux-pro-ultra \\
+  --prompt "..." \\
+  --aspect 16:9
+\`\`\`
+
+**Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell environment. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
+
+For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Omit \`--surface\` flags you don't need; the dispatcher infers surface from the model when unambiguous.`;
+
+
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
@@ -389,6 +416,11 @@ export function composeSystemPrompt({
     metadata?.kind === 'audio';
   if (isMediaSurface) {
     parts.push(MEDIA_GENERATION_CONTRACT);
+  } else {
+    // Non-media projects (prototype, deck, etc.): inject a lightweight hint
+    // so the agent uses `od media generate` if the user asks for an image/video
+    // mid-session, rather than hunting for provider API keys in the environment.
+    parts.push(MEDIA_DISPATCH_HINT);
   }
 
   if (includeCodexImagegenOverride) {
