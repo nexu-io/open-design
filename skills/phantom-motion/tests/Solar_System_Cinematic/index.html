@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>星际史诗 — 太阳系全量巡演</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@900&family=Noto+Sans+SC:wght@100;300;400;700&family=IBM+Plex+Mono:wght@400;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+:root{--accent:#00f0ff;--serif:'Playfair Display','Noto Serif SC',serif;--sans:'Noto Sans SC',sans-serif;--mono:'IBM Plex Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body,html{width:100vw;height:100vh;background:#000;color:#fff;overflow:hidden;font-family:var(--sans)}
+canvas#bg{position:fixed;inset:0;width:100%;height:100%;z-index:1}
+.nav-ov{position:fixed;inset:0;z-index:5000;pointer-events:none;display:flex;justify-content:space-between}
+.nav-s{width:14%;height:100%;pointer-events:auto;cursor:pointer;transition:.4s;display:flex;align-items:center;justify-content:center}
+.nav-s:hover{background:rgba(0,240,255,.04)}
+.nav-a{font-family:var(--mono);font-size:1.1rem;color:var(--accent);opacity:0;transition:.3s;font-weight:700;letter-spacing:4px}
+.nav-s:hover .nav-a{opacity:.7;text-shadow:0 0 20px var(--accent)}
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:center;padding:5vw 10vw}
+/* SVG Hero - 不裁切 */
+.hero-c{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:center;align-items:center;opacity:0;transition:opacity .8s}
+.hero-c.vis{opacity:1}
+.hero-c svg{width:90vw;height:auto;max-height:50vh;overflow:visible}
+.hero-sub{font-family:var(--mono);font-size:.85rem;letter-spacing:12px;color:var(--accent);margin-top:3vh;opacity:0}
+.hero-label{font-family:var(--mono);font-size:.65rem;letter-spacing:6px;color:#666;margin-top:1.5vh;opacity:0}
+.glass{background:rgba(5,5,12,.6);backdrop-filter:blur(40px) saturate(180%);border-left:3px solid var(--accent);padding:2.5rem 3.5rem;max-width:540px;pointer-events:auto;opacity:0;transform:translateX(-40px);transition:.8s}
+.glass.vis{opacity:1;transform:translateX(0)}
+.kicker{font-family:var(--mono);font-size:.7rem;letter-spacing:6px;text-transform:uppercase;color:var(--accent);margin-bottom:.8rem;font-weight:700}
+.p-name{font-family:var(--serif);font-size:clamp(2.2rem,4.5vw,3.8rem);font-weight:900;line-height:1;text-shadow:0 0 30px rgba(0,0,0,.8);margin-bottom:1rem}
+.lead{font-size:.95rem;font-weight:200;line-height:2;color:#b0bec5;text-align:justify}
+.data-row{display:flex;gap:1.8rem;margin-top:1.2rem;font-family:var(--mono);font-size:.7rem;color:var(--accent);opacity:.7;flex-wrap:wrap}
+#dots{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);z-index:6000;display:flex;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.2);cursor:pointer;transition:.3s}
+.dot.act{background:var(--accent);box-shadow:0 0 10px var(--accent)}
+#loader{position:fixed;inset:0;background:#000;z-index:100000;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:var(--mono);color:var(--accent);letter-spacing:10px;transition:opacity 1.5s}
+.pbar{width:280px;height:1px;background:#222;margin-top:25px}.pfill{height:100%;background:var(--accent);width:0%;transition:width .3s}
+@keyframes svgDraw{to{stroke-dashoffset:0}}
+@keyframes svgGlow{0%,100%{filter:drop-shadow(0 0 8px rgba(0,240,255,.3))}50%{filter:drop-shadow(0 0 25px rgba(0,240,255,.6))}}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="loader"><div style="font-weight:900">GRAVITY LOCK ON</div><div class="pbar"><div class="pfill" id="prog"></div></div><div id="status" style="margin-top:18px;font-size:.45rem;opacity:.3;letter-spacing:2px">Mapping planetary orbits...</div></div>
+<canvas id="bg"></canvas>
+<div class="nav-ov"><div class="nav-s" id="bp"><span class="nav-a">◀ PREV</span></div><div class="nav-s" id="bn"><span class="nav-a">NEXT ▶</span></div></div>
+
+<!-- SVG 巨幕动画标题 -->
+<div class="hero-c" id="hero">
+  <div class="kicker" style="margin-bottom:2vh;opacity:0" id="hero-kicker">SOLAR SYSTEM // 2026</div>
+  <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+    <defs>
+      <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#fff"/>
+        <stop offset="60%" stop-color="#aab"/>
+        <stop offset="100%" stop-color="#445"/>
+      </linearGradient>
+      <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="bevel">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+        <feSpecularLighting in="blur" surfaceScale="5" specularConstant="0.8" specularExponent="20" result="spec"><fePointLight x="400" y="-100" z="300"/></feSpecularLighting>
+        <feComposite in="spec" in2="SourceAlpha" operator="in" result="specOut"/>
+        <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="specOut"/></feMerge>
+      </filter>
+    </defs>
+    <!-- 描边动画层 -->
+    <text x="400" y="120" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="150" font-weight="900" fill="none" stroke="url(#tg)" stroke-width="1.5" id="svg-stroke" style="stroke-dasharray:2000;stroke-dashoffset:2000">星际史诗</text>
+    <!-- 填充层(带立体滤镜) -->
+    <text x="400" y="120" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="150" font-weight="900" fill="url(#tg)" filter="url(#bevel)" id="svg-fill" opacity="0">星际史诗</text>
+    <!-- 发光层 -->
+    <text x="400" y="120" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="150" font-weight="900" fill="none" stroke="rgba(0,240,255,0.15)" stroke-width="3" filter="url(#glow)" id="svg-glow" opacity="0">星际史诗</text>
+    <!-- 英文副标题 -->
+    <text x="400" y="190" text-anchor="middle" font-family="'Playfair Display',serif" font-size="28" font-weight="700" fill="none" stroke="#556" stroke-width="0.5" id="svg-sub" style="stroke-dasharray:800;stroke-dashoffset:800;letter-spacing:18px">INTERSTELLAR EPIC</text>
+  </svg>
+  <div class="hero-sub" id="hero-sub">太阳系全量路演 · PHANTOM DECK</div>
+  <div class="hero-label" id="hero-label">SCROLL OR PRESS → TO BEGIN</div>
+</div>
+
+<div id="ui-wrap" style="position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:center;padding:5vw 10vw">
+  <div class="glass" id="card"><div class="kicker" id="ck"></div><h2 class="p-name" id="ct"></h2><p class="lead" id="cd"></p><div class="data-row" id="dr"></div></div>
+</div>
+<div id="dots"></div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
