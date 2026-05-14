@@ -6024,10 +6024,22 @@ function baseDirFor(fileName: string): string {
 
 function toOwnerRelativePath(ownerFileName: string, targetPath: string): string {
   const normalize = (value: string) => decodeURIComponent(value).replace(/^\/+/, '');
+  const squash = (parts: string[]) => {
+    const out: string[] = [];
+    for (const part of parts) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        if (out.length > 0) out.pop();
+        continue;
+      }
+      out.push(part);
+    }
+    return out;
+  };
   const ownerDirPath = normalize(baseDirFor(ownerFileName));
   const targetFilePath = normalize(targetPath);
-  const ownerParts = ownerDirPath.split('/').filter(Boolean);
-  const targetParts = targetFilePath.split('/').filter(Boolean);
+  const ownerParts = squash(ownerDirPath.split('/'));
+  const targetParts = squash(targetFilePath.split('/'));
 
   let common = 0;
   while (
@@ -6041,7 +6053,7 @@ function toOwnerRelativePath(ownerFileName: string, targetPath: string): string 
   const up = new Array(ownerParts.length - common).fill('..');
   const down = targetParts.slice(common);
   const rel = [...up, ...down].join('/');
-  return rel || './';
+  return rel || '.';
 }
 
 function hasRelativeAssetRefs(html: string): boolean {

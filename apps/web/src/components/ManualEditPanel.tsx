@@ -108,7 +108,7 @@ export function ManualEditPanel({
           />
         ) : null}
 
-          {targetForInspector && onPickImage ? (
+          {targetForInspector?.kind === 'image' && onPickImage ? (
           <div className="cc-section">
             <header className="cc-section-head">IMAGE</header>
             <div className="cc-section-body">
