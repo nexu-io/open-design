@@ -140,7 +140,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'openrouter/auto',
       'anthropic/claude-sonnet-4.5',
       'google/gemini-3-flash-preview',
-      'x-ai/grok-4.1-fast',
+      'x-ai/grok-4',
     ],
   },
   {

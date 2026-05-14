@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reattachDaemonRun, streamViaDaemon } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
+import { KNOWN_PROVIDERS } from '../../src/state/config';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -548,6 +549,47 @@ describe('streamMessageOpenAI', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/proxy/openai/stream', expect.any(Object));
     expect(handlers.onDelta).toHaveBeenCalledWith('hi');
     expect(handlers.onDone).toHaveBeenCalledWith('hi');
+  });
+
+  it('sends the OpenRouter preset through the OpenAI proxy with its token default', async () => {
+    const openRouter = KNOWN_PROVIDERS.find((provider) => provider.label === 'OpenRouter');
+    if (!openRouter) throw new Error('OpenRouter provider preset missing');
+    const handlers = createStreamHandlers();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      sseResponse('event: end\ndata: {}\n\n'),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamMessageOpenAI(
+      {
+        mode: 'api',
+        apiKey: 'test-key',
+        apiProtocol: 'openai',
+        apiProviderBaseUrl: openRouter.baseUrl,
+        baseUrl: openRouter.baseUrl,
+        model: openRouter.model,
+        agentId: null,
+        skillId: null,
+        designSystemId: null,
+      },
+      '',
+      [{ id: '1', role: 'user', content: 'hello' }],
+      new AbortController().signal,
+      handlers,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/proxy/openai/stream', expect.objectContaining({
+      body: expect.any(String),
+      method: 'POST',
+    }));
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body).toMatchObject({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openai/gpt-5.2',
+      maxTokens: 128000,
+    });
+    expect(handlers.onError).not.toHaveBeenCalled();
   });
 });
 

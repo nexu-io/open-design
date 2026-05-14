@@ -6,6 +6,7 @@ import {
   updateAgentCliEnvValue,
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
+import { KNOWN_PROVIDERS } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
 const baseConfig: AppConfig = {
@@ -94,6 +95,17 @@ describe('SettingsDialog API protocol switching', () => {
   });
 
   it('keeps OpenRouter as a selectable OpenAI-compatible provider preset', () => {
+    expect(KNOWN_PROVIDERS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'OpenRouter',
+          protocol: 'openai',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          model: 'openai/gpt-5.2',
+        }),
+      ]),
+    );
+
     const openai = switchApiProtocolConfig(baseConfig, 'openai');
     const next = updateCurrentApiProtocolConfig(openai, {
       baseUrl: 'https://openrouter.ai/api/v1',

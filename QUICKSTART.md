@@ -141,7 +141,7 @@ Both modes feed the **same** `<artifact>` parser and the **same** sandboxed ifra
 
 ### OpenRouter API mode
 
-OpenRouter uses the OpenAI-compatible API path. In **Settings -> Execution -> API mode**, choose **OpenAI**, pick **OpenRouter** from quick-fill providers, paste an OpenRouter API key, and select a model such as `openai/gpt-5.2` or `openrouter/auto`.
+OpenRouter uses the OpenAI-compatible API path. Create an API key from [OpenRouter Keys](https://openrouter.ai/settings/keys), then in **Settings -> Execution -> API mode**, choose **OpenAI**, pick **OpenRouter** from quick-fill providers, paste the key, and select a model such as `openai/gpt-5.2` or `openrouter/auto`.
 
 The preset fills:
 
@@ -149,6 +149,8 @@ The preset fills:
 Base URL: https://openrouter.ai/api/v1
 Model: openai/gpt-5.2
 ```
+
+If you configure OpenRouter manually instead of using the preset, make sure the protocol tab is **OpenAI** before pasting `https://openrouter.ai/api/v1`; the Anthropic and Gemini protocol tabs use different upstream request shapes. OpenRouter 401, 402, or 429 responses usually mean the API key, account credits, free-model availability, or rate limits need attention on the OpenRouter side rather than in Open Design.
 
 ## Prompt composition
 

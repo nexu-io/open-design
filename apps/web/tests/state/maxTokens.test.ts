@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import litellmData from '../../src/state/litellm-models.json';
+import { KNOWN_PROVIDERS } from '../../src/state/config';
 import {
   effectiveMaxTokens,
   FALLBACK_MAX_TOKENS,
@@ -28,6 +29,16 @@ describe('modelMaxTokensDefault', () => {
   it('returns FALLBACK_MAX_TOKENS for unknown ids', () => {
     expect(modelMaxTokensDefault('definitely-not-a-real-model-x9z')).toBe(FALLBACK_MAX_TOKENS);
     expect(FALLBACK_MAX_TOKENS).toBe(8192);
+  });
+
+  it('normalizes OpenRouter provider model ids to LiteLLM OpenRouter aliases', () => {
+    const openRouter = KNOWN_PROVIDERS.find((provider) => provider.label === 'OpenRouter');
+    expect(openRouter?.models?.length).toBeGreaterThan(0);
+
+    for (const model of openRouter?.models ?? []) {
+      expect((litellmData.models as Record<string, number>)[model]).toBeUndefined();
+      expect(modelMaxTokensDefault(model)).not.toBe(FALLBACK_MAX_TOKENS);
+    }
   });
 });
 

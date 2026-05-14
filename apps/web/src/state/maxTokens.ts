@@ -28,8 +28,12 @@ const OVERRIDES: Record<string, number> = {
   'mimo-v2.5-pro': 32768,
 };
 
+function litellmMaxTokens(model: string): number | undefined {
+  return LITELLM_MODELS[model] ?? LITELLM_MODELS[`openrouter/${model}`];
+}
+
 export function modelMaxTokensDefault(model: string): number {
-  return OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
+  return OVERRIDES[model] ?? litellmMaxTokens(model) ?? FALLBACK_MAX_TOKENS;
 }
 
 function isValidOverride(value: number | undefined): value is number {
