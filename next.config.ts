@@ -18,6 +18,8 @@ const isProd = process.env.NODE_ENV !== 'development';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Allow dev access from the VM's network interface
+  allowedDevOrigins: ['192.168.64.237'],
   // Keep the bundle output predictable so the daemon's STATIC_DIR can point
   // at it without any glob trickery.
   distDir: isProd ? 'out' : '.next',
