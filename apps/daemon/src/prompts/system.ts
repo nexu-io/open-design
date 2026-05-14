@@ -145,21 +145,38 @@ const MEDIA_DISPATCH_HINT = `
 
 If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
 
-The daemon injects these env vars into your shell (POSIX bash — not PowerShell):
+The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
 
-- \`OD_NODE_BIN\` — absolute path to the Node runtime
-- \`OD_BIN\`      — absolute path to the OD CLI script
+- \`OD_NODE_BIN\`   — absolute path to the Node runtime
+- \`OD_BIN\`        — absolute path to the OD CLI script
 - \`OD_PROJECT_ID\` — the active project id
 
-Run exactly this form — POSIX \`$VAR\` syntax, **not** PowerShell \`$env:VAR\`:
+**Always use the generate→wait loop below.** \`media generate\` polls for ~25s then exits 2 with a \`{taskId}\` if the render isn't done yet (normal for slow models like flux-pro-ultra, ~60–180s). Exit 2 means "keep polling", not an error.
+
+Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, \`&\` operator). Uses \`python3\` for JSON parsing (do NOT use \`jq\`):
 
 \`\`\`bash
-"$OD_NODE_BIN" "$OD_BIN" media generate \\
+# POSIX bash — do NOT convert to PowerShell
+out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface image \\
   --model flux-pro-ultra \\
   --prompt "..." \\
-  --aspect 16:9
+  --aspect 16:9)
+ec=\$?
+if [ "\$ec" -ne 0 ] && [ "\$ec" -ne 2 ]; then echo "\$out" >&2; exit "\$ec"; fi
+last=\$(printf '%s\\n' "\$out" | tail -1)
+task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
+since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
+since="\${since:-0}"
+while [ "\$ec" -eq 2 ] && [ -n "\$task_id" ]; do
+  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  ec=\$?
+  last=\$(printf '%s\\n' "\$out" | tail -1)
+  since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
+  since="\${since:-0}"
+done
+printf '%s\\n' "\$last"
 \`\`\`
 
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
