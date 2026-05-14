@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildBoardCommentAttachments,
+  buildPodAggregateFields,
   buildVisualAnnotationAttachment,
   commentsToAttachments,
   historyWithCommentAttachmentContext,
@@ -111,6 +112,40 @@ describe('preview comment attachment helpers', () => {
     expect(messageContentWithCommentAttachments('', [attachment])).toContain('screenshot: uploads/drawing.png');
     expect(messageContentWithCommentAttachments('', [attachment])).toContain('markKind: stroke');
     expect(messageContentWithCommentAttachments('', [attachment])).not.toContain('selector: ');
+  });
+
+  it('rebuilds pod aggregate fields from the remaining members only', () => {
+    const members = [
+      {
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'section.hero',
+        text: 'Hero title',
+        position: { x: 10, y: 20, width: 200, height: 100 },
+        htmlHint: '<section data-od-id="hero">',
+      },
+      {
+        elementId: 'chart',
+        selector: '[data-od-id="chart"]',
+        label: 'section.chart',
+        text: 'Chart value',
+        position: { x: 120, y: 80, width: 190, height: 120 },
+        htmlHint: '<section data-od-id="chart">',
+      },
+    ];
+
+    const aggregate = buildPodAggregateFields({
+      members: members.filter((member) => member.elementId !== 'hero'),
+    });
+
+    expect(aggregate).toEqual({
+      selector: '[data-od-id="chart"]',
+      label: 'section.chart · Chart value',
+      text: 'Chart value',
+      position: { x: 120, y: 80, width: 190, height: 120 },
+      htmlHint: '<section data-od-id="chart">',
+    });
+    expect(JSON.stringify(aggregate)).not.toContain('hero');
   });
 
   it('keeps large queued board-note batches ordered in one send payload', () => {

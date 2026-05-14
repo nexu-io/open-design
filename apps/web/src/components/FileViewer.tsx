@@ -76,6 +76,7 @@ import { PreviewDrawOverlay, type PreviewDrawMode } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
   commentsToAttachments,
+  buildPodAggregateFields,
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
   selectionKindLabel,
@@ -3023,23 +3024,6 @@ function buildPodSnapshot(input: {
   const refined = pruneContainerSelections(intersected);
   const selected = refined.length > 0 ? refined : intersected;
   if (selected.length === 0) return null;
-  const bounds = selected.reduce(
-    (acc, snapshot) => {
-      const rect = snapshot.position;
-      return {
-        left: Math.min(acc.left, rect.x),
-        top: Math.min(acc.top, rect.y),
-        right: Math.max(acc.right, rect.x + rect.width),
-        bottom: Math.max(acc.bottom, rect.y + rect.height),
-      };
-    },
-    {
-      left: Number.POSITIVE_INFINITY,
-      top: Number.POSITIVE_INFINITY,
-      right: Number.NEGATIVE_INFINITY,
-      bottom: Number.NEGATIVE_INFINITY,
-    },
-  );
   const podMembers: PreviewCommentMember[] = selected.map((snapshot) => ({
     elementId: snapshot.elementId,
     selector: snapshot.selector,
@@ -3048,37 +3032,16 @@ function buildPodSnapshot(input: {
     position: snapshot.position,
     htmlHint: snapshot.htmlHint,
   }));
-  const summary = selected
-    .slice(0, 3)
-    .map((snapshot) => summarizeSnapshot(snapshot))
-    .join(' · ');
-  const htmlHint = selected
-    .slice(0, 4)
-    .map((snapshot) => snapshot.htmlHint)
-    .filter(Boolean)
-    .join(' ');
-  const combinedSelector = selected
-    .slice(0, 8)
-    .map((snapshot) => snapshot.selector)
-    .filter(Boolean)
-    .join(', ');
+  const aggregate = buildPodAggregateFields({
+    members: selected,
+    fallbackLabelCount: intersected.length,
+    textMembers: intersected,
+  });
+  if (!aggregate) return null;
   return {
     filePath: input.filePath,
     elementId: `pod-${Date.now()}`,
-    selector: combinedSelector || 'body *',
-    label: summary || `Pod of ${intersected.length} items`,
-    text: intersected
-      .slice(0, 4)
-      .map((snapshot) => snapshot.text)
-      .filter(Boolean)
-      .join(' · '),
-    position: {
-      x: Math.round(bounds.left),
-      y: Math.round(bounds.top),
-      width: Math.max(1, Math.round(bounds.right - bounds.left)),
-      height: Math.max(1, Math.round(bounds.bottom - bounds.top)),
-    },
-    htmlHint: htmlHint.slice(0, 180),
+    ...aggregate,
     selectionKind: 'pod',
     memberCount: selected.length,
     podMembers,
@@ -5847,46 +5810,16 @@ function HtmlViewer({
                   if (nextMembers.length === 0) {
                     clearBoardComposer();
                   } else {
-                    const minX = Math.min(...nextMembers.map((m) => m.position.x));
-                    const minY = Math.min(...nextMembers.map((m) => m.position.y));
-                    const maxX = Math.max(...nextMembers.map((m) => m.position.x + m.position.width));
-                    const maxY = Math.max(...nextMembers.map((m) => m.position.y + m.position.height));
-                    const combinedSelector = nextMembers
-                      .slice(0, 8)
-                      .map((m) => m.selector)
-                      .filter(Boolean)
-                      .join(', ');
-                    const summary = nextMembers
-                      .slice(0, 3)
-                      .map((m) => {
-                        const text = m.text.trim();
-                        if (text) {
-                          const trimmed = text.length > 28 ? `${text.slice(0, 25)}...` : text;
-                          return `${m.label || m.elementId} · ${trimmed}`;
-                        }
-                        return m.label || m.elementId;
-                      })
-                      .join(' · ');
-                    const combinedText = nextMembers
-                      .slice(0, 4)
-                      .map((m) => m.text)
-                      .filter(Boolean)
-                      .join(' · ');
-                    const combinedHtmlHint = nextMembers
-                      .slice(0, 4)
-                      .map((m) => m.htmlHint)
-                      .filter(Boolean)
-                      .join(' ')
-                      .slice(0, 180);
+                    const aggregate = buildPodAggregateFields({ members: nextMembers });
+                    if (!aggregate) {
+                      clearBoardComposer();
+                      return;
+                    }
                     setActiveCommentTarget({
                       ...current,
+                      ...aggregate,
                       podMembers: nextMembers,
                       memberCount: nextMembers.length,
-                      selector: combinedSelector || 'body *',
-                      label: summary || `Pod of ${nextMembers.length} items`,
-                      position: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
-                      text: combinedText,
-                      htmlHint: combinedHtmlHint,
                     });
                   }
                 }}

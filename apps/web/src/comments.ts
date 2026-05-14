@@ -29,6 +29,72 @@ export interface CommentOverlayBounds {
   height: number;
 }
 
+export type PodAggregateMember = Pick<
+  PreviewCommentMember,
+  'elementId' | 'selector' | 'label' | 'text' | 'position' | 'htmlHint'
+>;
+
+export function buildPodAggregateFields(input: {
+  members: readonly PodAggregateMember[];
+  // Pod creation keeps label/bounds tied to the pruned member list, while
+  // preserving text/fallback count from the original hit set.
+  fallbackLabelCount?: number;
+  textMembers?: readonly PodAggregateMember[];
+}): Pick<PreviewCommentSnapshot, 'selector' | 'label' | 'text' | 'position' | 'htmlHint'> | null {
+  if (input.members.length === 0) return null;
+  const bounds = input.members.reduce(
+    (acc, member) => {
+      const rect = member.position;
+      return {
+        left: Math.min(acc.left, rect.x),
+        top: Math.min(acc.top, rect.y),
+        right: Math.max(acc.right, rect.x + rect.width),
+        bottom: Math.max(acc.bottom, rect.y + rect.height),
+      };
+    },
+    {
+      left: Number.POSITIVE_INFINITY,
+      top: Number.POSITIVE_INFINITY,
+      right: Number.NEGATIVE_INFINITY,
+      bottom: Number.NEGATIVE_INFINITY,
+    },
+  );
+  const combinedSelector = input.members
+    .slice(0, 8)
+    .map((member) => member.selector)
+    .filter(Boolean)
+    .join(', ');
+  const summary = input.members
+    .slice(0, 3)
+    .map((member) => summarizePodAggregateMember(member))
+    .join(' · ');
+  const textMembers = input.textMembers ?? input.members;
+  const combinedText = textMembers
+    .slice(0, 4)
+    .map((member) => member.text)
+    .filter(Boolean)
+    .join(' · ');
+  const combinedHtmlHint = input.members
+    .slice(0, 4)
+    .map((member) => member.htmlHint)
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 180);
+  const fallbackCount = input.fallbackLabelCount ?? input.members.length;
+  return {
+    selector: combinedSelector || 'body *',
+    label: summary || `Pod of ${fallbackCount} items`,
+    text: combinedText,
+    position: {
+      x: Math.round(bounds.left),
+      y: Math.round(bounds.top),
+      width: Math.max(1, Math.round(bounds.right - bounds.left)),
+      height: Math.max(1, Math.round(bounds.bottom - bounds.top)),
+    },
+    htmlHint: combinedHtmlHint,
+  };
+}
+
 export interface VisualAnnotationTarget {
   filePath: string;
   elementId?: string;
@@ -270,6 +336,15 @@ export function trimContextText(value: string): string {
 export function trimHtmlHint(value: string): string {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > 180 ? `${text.slice(0, 177)}...` : text;
+}
+
+function summarizePodAggregateMember(member: PodAggregateMember): string {
+  const text = String(member.text || '').trim();
+  if (text) {
+    const trimmed = text.length > 28 ? `${text.slice(0, 25)}...` : text;
+    return `${member.label || member.elementId} · ${trimmed}`;
+  }
+  return member.label || member.elementId;
 }
 
 function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachment[]): string {
