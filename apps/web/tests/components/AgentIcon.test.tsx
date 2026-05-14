@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -12,6 +14,16 @@ describe('AgentIcon', () => {
     expect(markup).toContain('src="/agent-icons/qoder.svg"');
     expect(markup).toContain('class="agent-icon"');
     expect(markup).toContain('aria-hidden="true"');
+  });
+
+  it('keeps the Kimi SVG legible on light surfaces', () => {
+    const kimiSvg = readFileSync(
+      new URL('../../public/agent-icons/kimi.svg', import.meta.url),
+      'utf8',
+    );
+
+    expect(kimiSvg).toContain('fill="#1c1b1a"');
+    expect(kimiSvg).not.toContain('fill="#fff"');
   });
 
   it('renders Devin as a PNG (Cognition does not publish an SVG mark)', () => {
