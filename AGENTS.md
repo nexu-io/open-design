@@ -126,6 +126,25 @@ The following is a working playbook for routine bug follow-ups, distilled from r
 
 For a worked example of one full loop (red e2e spec → fix → green), see `e2e/tests/dialog/stop-reconciles-message.test.ts` (issue #135).
 
+
+## Superpowers workflow skills
+
+The [superpowers plugin](https://github.com/obra/superpowers) is catalogued under `skills/` and available to any agent running in this repo. These skills govern the development workflow — invoke them at the right moment rather than proceeding by instinct:
+
+| When | Invoke |
+|---|---|
+| Before any new feature, component, or behaviour change | `brainstorming` |
+| Before touching code on a multi-step task | `writing-plans` |
+| Before writing any implementation code | `test-driven-development` |
+| When facing 2+ independent tasks that can run in parallel | `dispatching-parallel-agents` |
+| When encountering any bug, failure, or unexpected behaviour | `systematic-debugging` |
+| Before requesting review or opening a PR | `requesting-code-review` |
+| Before applying incoming code review suggestions | `receiving-code-review` |
+| Before claiming any work is complete or committing | `verification-before-completion` |
+| When implementation is done and tests pass | `finishing-a-development-branch` |
+
+Install the full upstream bundle into your agent's skills directory (`~/.claude/skills/superpowers` for Claude Code, or the equivalent path for your runtime) to run these with their original assets and references. Each `skills/<name>/SKILL.md` in this repo is a catalogue stub — it advertises the skill in the OD picker and tells the agent it exists, but the operative workflow lives upstream at [github.com/obra/superpowers](https://github.com/obra/superpowers).
+
 # Common commands
 
 ```bash
