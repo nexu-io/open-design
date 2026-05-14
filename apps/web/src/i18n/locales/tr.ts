@@ -575,6 +575,8 @@ export const tr: Dict = {
   'chat.scrollToLatest': 'En son mesaja kaydır',
   'chat.you': 'Sen',
   'chat.openFile': '{name}’ı aç',
+  'chat.copyPrompt': 'Promptu kopyala',
+  'chat.copyDone': 'Kopyalandı!',
   'chat.composerPlaceholder':
     'İstediğiniz tasarımı açıklayın — görsel yapıştırın veya sürükleyin, veya @ ile bir dosya ya da skill seçin…',
   'chat.composerHint':
@@ -831,6 +833,8 @@ export const tr: Dict = {
   'fileViewer.exportZip': 'ZIP olarak indir',
   'fileViewer.exportHtml': 'Tekil HTML olarak dışa aktar',
   'fileViewer.exportMd': 'Markdown olarak dışa aktar',
+  'fileViewer.exportImage': 'Görsel olarak dışa aktar',
+  'fileViewer.exportImageFailed': 'Görsel yakalama başarısız oldu. Lütfen tekrar deneyin veya tarayıcınızın ekran görüntüsü aracını kullanın.',
   'fileViewer.exportJsx': 'JSX olarak dışa aktar',
   'fileViewer.exportReactHtml': 'Önizlemeyi HTML olarak dışa aktar',
   'fileViewer.saveAsTemplate': 'Şablon olarak kaydet…',

@@ -175,11 +175,11 @@ async function openConnectorsSettings(
   });
 
   await page.goto('/');
-  await page.getByTitle('Configure execution mode').click();
+  await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: /^Connectors\b/ }).click();
+  await dialog.getByRole('button', { name: /Connectors|连接器/i }).click();
   await expect(dialog.getByTestId('connector-grid-wrap')).toBeVisible();
   await expect(connectorCard(dialog, 'github')).toBeVisible();
   return dialog;

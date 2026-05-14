@@ -46,6 +46,7 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   exportAsHtml,
+  exportAsImage,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
@@ -54,6 +55,7 @@ import {
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
   openSandboxedPreviewInNewTab,
+  requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
@@ -1959,7 +1961,7 @@ function BoardComposerPopover({
             disabled={pendingCount === 0 || sending}
             onClick={() => void onSendBatch()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? 'Sending…' : 'Send to chat'}
           </button>
         </div>
       </div>
@@ -1991,9 +1993,11 @@ function commentAvatarInitial(comment: PreviewComment): string {
   return seed.charAt(0).toUpperCase();
 }
 
-function CommentSidePanel({
+export function CommentSidePanel({
   comments,
   selectedIds,
+  collapsed,
+  onCollapsedChange,
   onToggleSelect,
   onClearSelection,
   onReply,
@@ -2003,6 +2007,8 @@ function CommentSidePanel({
 }: {
   comments: PreviewComment[];
   selectedIds: Set<string>;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   onToggleSelect: (commentId: string) => void;
   onClearSelection: () => void;
   onReply: (comment: PreviewComment) => void;
@@ -2013,8 +2019,41 @@ function CommentSidePanel({
   const sorted = [...comments].sort((a, b) => b.createdAt - a.createdAt);
   const visibleSelectedIds = new Set(comments.filter((comment) => selectedIds.has(comment.id)).map((comment) => comment.id));
   const selectedCount = visibleSelectedIds.size;
+  const commentsLabel = t('chat.tabComments');
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        className="comment-side-rail"
+        data-testid="comment-side-collapsed-rail"
+        aria-label={t('preview.showSidebar', { label: commentsLabel })}
+        title={t('preview.showSidebar', { label: commentsLabel })}
+        onClick={() => onCollapsedChange(false)}
+      >
+        <Icon name="comment" size={14} />
+        <span>{commentsLabel}</span>
+        {comments.length > 0 ? <strong>{comments.length}</strong> : null}
+      </button>
+    );
+  }
+
   return (
-    <aside className="comment-side-panel" data-testid="comment-side-panel" aria-label={t('chat.tabComments')}>
+    <aside className="comment-side-panel" data-testid="comment-side-panel" aria-label={commentsLabel}>
+      <div className="comment-side-header">
+        <div className="comment-side-title">
+          <Icon name="comment" size={14} />
+          <span>{commentsLabel}</span>
+        </div>
+        <button
+          type="button"
+          className="comment-side-collapse"
+          aria-label={t('preview.hideSidebar', { label: commentsLabel })}
+          title={t('preview.hideSidebar', { label: commentsLabel })}
+          onClick={() => onCollapsedChange(true)}
+        >
+          <Icon name="chevron-right" size={14} />
+        </button>
+      </div>
       <div className="comment-side-list">
         {sorted.length === 0 ? (
           <div className="comment-side-empty">
@@ -2072,7 +2111,7 @@ function CommentSidePanel({
             disabled={sending}
             onClick={() => void onSendSelected()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? 'Sending…' : 'Send to chat'}
           </button>
         </div>
       ) : null}
@@ -3669,7 +3708,9 @@ function HtmlViewer({
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
+  const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
+  const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
@@ -4780,6 +4821,8 @@ function HtmlViewer({
       setTemplateName('');
       setTemplateDescription('');
       setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
+      // Show success toast
+      setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
     } finally {
       setSavingTemplate(false);
       if (savedName) {
@@ -4967,18 +5010,18 @@ function HtmlViewer({
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
   }
 
+  function activateBoard(nextTool?: BoardTool) {
+    setMode('preview');
+    setBoardMode(true);
+    if (nextTool) setBoardTool(nextTool);
+  }
+
   function clearBoardComposer() {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setCommentDraft('');
     setQueuedBoardNotes([]);
     setStrokePoints([]);
-  }
-
-  function activateBoard(tool: BoardTool) {
-    setBoardTool(tool);
-    setDrawOverlayOpen(false);
-    setBoardMode(true);
   }
 
   function queueCurrentDraft() {
@@ -5269,6 +5312,78 @@ function HtmlViewer({
             </>
           ) : null}
           <button
+            type="button"
+            className={`viewer-action viewer-comment-toggle${boardMode ? ' active' : ''}`}
+            data-testid="board-mode-toggle"
+            title={t('fileViewer.comment')}
+            aria-pressed={boardMode}
+            onClick={() => {
+              if (boardMode) {
+                setBoardMode(false);
+                clearBoardComposer();
+                return;
+              }
+              setManualEditMode(false);
+              setInspectMode(false);
+              setDrawOverlayOpen(false);
+              activateBoard(boardTool);
+            }}
+          >
+            <Icon name="comment" size={13} />
+            <span>{t('fileViewer.comment')}</span>
+          </button>
+          {boardMode ? (
+            <>
+              <button
+                className={`viewer-action${boardTool === 'inspect' ? ' active' : ''}`}
+                type="button"
+                data-testid="comment-mode-toggle"
+                title="Pick one element"
+                aria-label="Picker"
+                aria-pressed={boardTool === 'inspect'}
+                onClick={() => activateBoard('inspect')}
+              >
+                <Icon name="edit" size={13} />
+                <span>Picker</span>
+              </button>
+              <button
+                className={`viewer-action${boardTool === 'pod' ? ' active' : ''}`}
+                type="button"
+                title="Draw a pod selection"
+                aria-label="Pods"
+                aria-pressed={boardTool === 'pod'}
+                onClick={() => activateBoard('pod')}
+              >
+                <Icon name="draw" size={13} />
+                <span>Pods</span>
+              </button>
+            </>
+          ) : null}
+          <button
+            className={`viewer-action${inspectMode ? ' active' : ''}`}
+            type="button"
+            data-testid="inspect-mode-toggle"
+            title="Inspect"
+            aria-pressed={inspectMode}
+            onClick={() => {
+              setInspectMode((v) => {
+                const next = !v;
+                if (next) {
+                  setBoardMode(false);
+                  clearBoardComposer();
+                  setManualEditMode(false);
+                  setDrawOverlayOpen(false);
+                  setOpenHintBox(true);
+                  setMode('preview');
+                }
+                return next;
+              });
+            }}
+          >
+            <Icon name="tweaks" size={13} />
+            <span>Inspect</span>
+          </button>
+          <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
             type="button"
             data-testid="manual-edit-mode-toggle"
@@ -5485,6 +5600,33 @@ function HtmlViewer({
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
                     <span>{t('fileViewer.exportMd')}</span>
                   </button>
+                  {!useUrlLoadPreview ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={async () => {
+                        setShareMenuOpen(false);
+                        const iframe = iframeRef.current;
+                        if (!iframe) return;
+                        const snap = await requestPreviewSnapshot(iframe);
+                        try {
+                          if (snap) {
+                            exportAsImage(snap.dataUrl, exportTitle);
+                          } else {
+                            console.warn('[exportAsImage] snapshot capture returned null');
+                            alert(t('fileViewer.exportImageFailed'));
+                          }
+                        } catch (err) {
+                          console.warn('[exportAsImage] failed to convert snapshot:', err);
+                          alert(t('fileViewer.exportImageFailed'));
+                        }
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="image" size={14} /></span>
+                      <span>{t('fileViewer.exportImage')}</span>
+                    </button>
+                  ) : null}
                   <div className="share-menu-divider" />
                   <button
                     type="button"
@@ -5665,6 +5807,15 @@ function HtmlViewer({
                 />
               </div>
             ) : null}
+            {templateSavedToast ? (
+              <div className="comment-toast-anchor">
+                <Toast
+                  message={templateSavedToast}
+                  ttlMs={2200}
+                  onDismiss={() => setTemplateSavedToast(null)}
+                />
+              </div>
+            ) : null}
             {boardMode && activeCommentTarget ? (
               <BoardComposerPopover
                 target={activeCommentTarget}
@@ -5692,6 +5843,8 @@ function HtmlViewer({
               <CommentSidePanel
                 comments={visibleSideComments}
                 selectedIds={selectedSideCommentIds}
+                collapsed={commentSidePanelCollapsed}
+                onCollapsedChange={setCommentSidePanelCollapsed}
                 onToggleSelect={(commentId) => {
                   setSelectedSideCommentIds((current) => {
                     const next = new Set(current);

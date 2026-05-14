@@ -179,6 +179,39 @@ describe('routine routes', () => {
     }
   });
 
+  it('rejects patching to a missing reuse-mode target project', async () => {
+    const { app } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const createRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Daily digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+      const created = await createRes.json() as { routine: { id: string } };
+
+      const patchRes = await fetch(`http://127.0.0.1:${port}/api/routines/${created.routine.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          target: { mode: 'reuse', projectId: 'missing-project' },
+        }),
+      });
+
+      expect(patchRes.status).toBe(400);
+      const json = await patchRes.json() as { error: string };
+      expect(json.error).toContain('target project missing-project not found');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('runs a routine now and exposes its run history', async () => {
     const { app, runNow } = buildApp();
     const { server, port } = await listen(app);
@@ -222,6 +255,100 @@ describe('routine routes', () => {
     }
   });
 
+  it('maps the latest persisted run into the routine contract', async () => {
+    const { app, db } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const createRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Daily digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+      const created = await createRes.json() as { routine: { id: string } };
+
+      insertRoutineRun(db, {
+        id: 'run-failed-1',
+        routineId: created.routine.id,
+        trigger: 'manual',
+        status: 'failed',
+        projectId: 'proj-failed',
+        conversationId: 'conv-failed',
+        agentRunId: 'agent-run-failed',
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+        summary: 'Connector auth failed',
+        error: 'provider rejected credentials',
+      });
+
+      const getRes = await fetch(`http://127.0.0.1:${port}/api/routines/${created.routine.id}`);
+      expect(getRes.status).toBe(200);
+      const json = await getRes.json() as {
+        routine: {
+          lastRun: {
+            runId: string;
+            status: string;
+            trigger: string;
+            projectId: string;
+            conversationId: string;
+            agentRunId: string;
+            summary: string;
+            completedAt: number;
+          } | null;
+        };
+      };
+      expect(json.routine.lastRun).toMatchObject({
+        runId: 'run-failed-1',
+        status: 'failed',
+        trigger: 'manual',
+        projectId: 'proj-failed',
+        conversationId: 'conv-failed',
+        agentRunId: 'agent-run-failed',
+        summary: 'Connector auth failed',
+      });
+      expect(json.routine.lastRun?.completedAt).toBeTypeOf('number');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('returns 500 when running a routine now throws', async () => {
+    const { app, runNow } = buildApp();
+    runNow.mockImplementationOnce(async () => {
+      throw new Error('agent unavailable');
+    });
+
+    const { server, port } = await listen(app);
+    try {
+      const createRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Daily digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+      const created = await createRes.json() as { routine: { id: string } };
+
+      const runRes = await fetch(`http://127.0.0.1:${port}/api/routines/${created.routine.id}/run`, {
+        method: 'POST',
+      });
+      expect(runRes.status).toBe(500);
+      const json = await runRes.json() as { error: string };
+      expect(json.error).toContain('agent unavailable');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('rejects reuse-mode creation when the target project does not exist', async () => {
     const { app } = buildApp();
     const { server, port } = await listen(app);
@@ -246,6 +373,30 @@ describe('routine routes', () => {
       expect(res.status).toBe(400);
       const json = await res.json() as { error: string };
       expect(json.error).toContain('target project missing-project not found');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects unsupported target modes during creation', async () => {
+    const { app } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Weird target digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'teleport' },
+          enabled: true,
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json() as { error: string };
+      expect(json.error).toContain('Unsupported routine target mode');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -313,6 +464,92 @@ describe('routine routes', () => {
       expect(res.status).toBe(400);
       const json = await res.json() as { error: string };
       expect(json.error).toContain('minute');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects invalid timezone values during creation', async () => {
+    const { app } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Bad timezone digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'Mars/Olympus' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json() as { error: string };
+      expect(json.error).toContain('Invalid timezone');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects invalid weekly weekday values during creation', async () => {
+    const { app } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Bad weekday digest',
+          prompt: 'Summarize activity.',
+          schedule: {
+            kind: 'weekly',
+            weekday: 8,
+            time: '09:00',
+            timezone: 'UTC',
+          },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json() as { error: string };
+      expect(json.error).toContain('weekly.weekday');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects invalid schedule input during routine patch updates', async () => {
+    const { app } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const createRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Daily digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+      const created = await createRes.json() as { routine: { id: string } };
+
+      const patchRes = await fetch(`http://127.0.0.1:${port}/api/routines/${created.routine.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schedule: { kind: 'daily', time: '25:99', timezone: 'UTC' },
+        }),
+      });
+
+      expect(patchRes.status).toBe(400);
+      const json = await patchRes.json() as { error: string };
+      expect(json.error).toContain('Invalid time');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

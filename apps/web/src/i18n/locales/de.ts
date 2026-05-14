@@ -474,6 +474,8 @@ export const de: Dict = {
   'chat.scrollToLatest': 'Zur neuesten scrollen',
   'chat.you': 'Sie',
   'chat.openFile': '{name} öffnen',
+  'chat.copyPrompt': 'Prompt kopieren',
+  'chat.copyDone': 'Kopiert!',
   'chat.composerPlaceholder':
     'Beschreiben Sie das gewünschte Design — Bilder einfügen/ablegen oder mit @ eine Datei oder einen Skill referenzieren…',
   'chat.composerHint':
@@ -732,6 +734,8 @@ export const de: Dict = {
   'fileViewer.exportZip': 'Als .zip herunterladen',
   'fileViewer.exportHtml': 'Als eigenständiges HTML exportieren',
   'fileViewer.exportMd': 'Als Markdown exportieren',
+  'fileViewer.exportImage': 'Als Bild exportieren',
+  'fileViewer.exportImageFailed': 'Bildaufnahme fehlgeschlagen. Bitte versuchen Sie es erneut oder verwenden Sie das Screenshot-Tool Ihres Browsers.',
   'fileViewer.exportJsx': 'Als JSX exportieren',
   'fileViewer.exportReactHtml': 'Vorschau als HTML exportieren',
   'fileViewer.saveAsTemplate': 'Als Template speichern…',

@@ -607,6 +607,8 @@ export const ptBR: Dict = {
   'chat.scrollToLatest': 'Rolar para a mais recente',
   'chat.you': 'Você',
   'chat.openFile': 'Abrir {name}',
+  'chat.copyPrompt': 'Copiar prompt',
+  'chat.copyDone': 'Copiado!',
   'chat.composerPlaceholder':
     'Descreva o design que você quer — cole ou arraste imagens, ou use @ para referenciar um arquivo ou skill…',
   'chat.composerHint':
@@ -867,6 +869,8 @@ export const ptBR: Dict = {
   'fileViewer.exportZip': 'Baixar como .zip',
   'fileViewer.exportHtml': 'Exportar como HTML independente',
   'fileViewer.exportMd': 'Exportar como Markdown',
+  'fileViewer.exportImage': 'Exportar como imagem',
+  'fileViewer.exportImageFailed': 'Falha ao capturar a imagem. Tente novamente ou use a ferramenta de captura de tela do seu navegador.',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar prévia como HTML',
   'fileViewer.saveAsTemplate': 'Salvar como template…',
