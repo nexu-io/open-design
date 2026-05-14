@@ -218,7 +218,7 @@ const shell = {
   autoLaunch: {
     get: (): Promise<boolean> =>
       ipcRenderer.invoke('auto-launch:get'),
-    set: (enabled: boolean): Promise<void> =>
+    set: (enabled: boolean): Promise<boolean> =>
       ipcRenderer.invoke('auto-launch:set', enabled),
   },
 };
