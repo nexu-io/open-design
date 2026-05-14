@@ -222,8 +222,9 @@ function AskUserQuestionCard({
   // useState resets, so the card would render its locked summary with no
   // chips highlighted. The persisted answer lives on `result.content`
   // (the tool_result the daemon wrote back into the run); parse it so the
-  // user's pick stays visible across reloads. Multi-select answers were
-  // joined with `, ` at submit time so we split them back here.
+  // user's pick stays visible across reloads. Multi-select answers are
+  // serialized as a `- ` bullet list (one option per line) so labels
+  // containing commas round-trip exactly.
   const answeredSelections = (() => {
     if (!result || result.isError || !result.content) return null;
     const out: Record<string, string | string[]> = {};
@@ -237,7 +238,7 @@ function AskUserQuestionCard({
       const question = questions.find((qq) => qq.question === q);
       if (!question) continue;
       out[q] = question.multiSelect
-        ? a.split(',').map((s) => s.trim()).filter(Boolean)
+        ? a.split('\n').map((s) => s.replace(/^- /, '').trim()).filter(Boolean)
         : a;
     }
     return out;
@@ -276,7 +277,7 @@ function AskUserQuestionCard({
     if (locked || !ready) return;
     const lines = questions.map((q) => {
       const v = selections[q.question];
-      const answer = Array.isArray(v) ? v.join(', ') : (v ?? '');
+      const answer = Array.isArray(v) ? v.map((s) => `- ${s}`).join('\n') : (v ?? '');
       return `${q.question}\n${answer}`;
     });
     const formatted = lines.join('\n\n');
