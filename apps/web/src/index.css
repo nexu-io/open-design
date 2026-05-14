@@ -8371,10 +8371,10 @@ button.connector-action.is-loading {
 }
 .df-pagination select {
   font-size: 12px;
-  padding: 2px 6px;
+  padding: 2px 24px 2px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg);
+  background-color: var(--bg-panel);
   color: var(--text);
   cursor: pointer;
 }
