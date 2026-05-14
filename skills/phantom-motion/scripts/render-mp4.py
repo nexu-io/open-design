@@ -142,10 +142,10 @@ module.paths.push('SKILL_DIR/node_modules');
             "-i", str(temp_dir / "frame_%05d.png"),
             "-i", str(tts_path),
             "-i", str(bgm_path),
-            "-filter_complex", "[1:a]adelay=3000|3000[v1]; [2:a]volume=0.4[v2]; [v1][v2]amix=inputs=2:duration=longest[a]",
+            "-filter_complex", f"[1:a]adelay=3000|3000,apad[v1]; [2:a]volume=0.4[v2]; [v1][v2]amix=inputs=2:duration=longest,atrim=duration={duration}[a]",
             "-map", "0:v", "-map", "[a]",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
-            "-shortest",
+            "-t", str(duration),
             output_path
         ]
         subprocess.run(ffmpeg_cmd, check=True)
