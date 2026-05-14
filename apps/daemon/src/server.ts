@@ -259,6 +259,7 @@ import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFi
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './handoff-routes.js';
 import { synthesizeHandoffPrompt } from './handoff-design.js';
+import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
@@ -2974,6 +2975,7 @@ export async function startServer({
   const handoffDeps = {
     synthesizeHandoffPrompt,
     FinalizeUpstreamError,
+    TranscriptExportLockedError,
     redactSecrets,
   };
   const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl };

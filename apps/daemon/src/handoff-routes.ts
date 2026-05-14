@@ -21,7 +21,12 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
-  const { synthesizeHandoffPrompt, FinalizeUpstreamError, redactSecrets } = ctx.handoff;
+  const {
+    synthesizeHandoffPrompt,
+    FinalizeUpstreamError,
+    TranscriptExportLockedError,
+    redactSecrets,
+  } = ctx.handoff;
 
   app.post('/api/projects/:id/handoff', async (req, res) => {
     const { apiKey, baseUrl, model, maxTokens } = req.body || {};
@@ -89,6 +94,17 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
       }
       res.json(result);
     } catch (err: any) {
+      // Concurrent handoff (or a handoff that overlaps a finalize / other
+      // transcript-export consumer) loses the race on `.transcript.lock`
+      // and surfaces as `TranscriptExportLockedError` from
+      // `exportProjectTranscript`. Map it to the same `409 CONFLICT` code
+      // finalize uses for its own lockfile contention
+      // (`import-export-routes.ts:603-605`) so callers see an intentional
+      // retryable response instead of an opaque 500.
+      if (err instanceof TranscriptExportLockedError) {
+        return sendApiError(res, 409, 'CONFLICT', err.message);
+      }
+
       if (err instanceof FinalizeUpstreamError) {
         const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
         const init = safeDetails ? { details: safeDetails } : {};

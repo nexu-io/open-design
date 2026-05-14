@@ -6,6 +6,7 @@
 // upstream Anthropic call so we can drive happy-path and upstream
 // error-mapping responses without going to the network.
 
+import fs from 'node:fs';
 import * as http from 'node:http';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -222,6 +223,38 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     expect(res.status).toBe(502);
     const body = await res.json();
     expect(body.error.code).toBe('UPSTREAM_UNAVAILABLE');
+  });
+
+  it('409 CONFLICT when .transcript.lock is already held (concurrent handoff or overlapping transcript consumer)', async () => {
+    // The transcript-export primitive (apps/daemon/src/transcript-export.ts:131-163)
+    // acquires <projectDir>/.transcript.lock via fs.openSync('wx') and throws
+    // TranscriptExportLockedError on EEXIST. A second concurrent handoff
+    // request — or a handoff that races /finalize/anthropic — should not
+    // fall through to the generic 500 INTERNAL_ERROR path. Pre-acquire the
+    // lockfile on disk to simulate the contention without spawning a second
+    // request (which would be race-flaky), then assert the route returns
+    // 409 CONFLICT with the shared ApiErrorCode value.
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const lockPath = path.join(dataDir, 'projects', PROJECT_ID, '.transcript.lock');
+
+    let lockFd: number | null = null;
+    try {
+      lockFd = fs.openSync(lockPath, 'wx');
+
+      const res = await postHandoff(PROJECT_ID, {
+        apiKey: 'sk-test',
+        model: 'claude-opus-4-7',
+      });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe('CONFLICT');
+    } finally {
+      if (lockFd !== null) {
+        try { fs.closeSync(lockFd); } catch { /* ignore */ }
+      }
+      try { fs.unlinkSync(lockPath); } catch { /* lock may already be gone */ }
+    }
   });
 
   it('redacts the api key when an upstream error echoes inbound credentials', async () => {

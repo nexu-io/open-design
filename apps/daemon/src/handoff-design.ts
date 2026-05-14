@@ -3,9 +3,13 @@
 // resulting Markdown body is meant to seed a fresh conversation so the
 // user can continue the work without replaying the prior chat.
 //
-// Unlike `finalize-design.ts`, handoff is read-only:
-//   - no lockfile (concurrent handoff calls are safe — each one synthesises
-//     against the same transcript snapshot and returns its own body),
+// Unlike `finalize-design.ts`, handoff is read-only at the route level:
+//   - no `.handoff.lock` of its own (handoff adds no exclusive resource
+//     for callers to contend on); concurrent handoff requests do still
+//     contend on the per-project `.transcript.lock` acquired transitively
+//     via `exportProjectTranscript`, so the route handler maps
+//     `TranscriptExportLockedError` to `409 CONFLICT` for the caller
+//     (mirrors finalize's own lockfile handling),
 //   - no on-disk write of the synthesised body (the caller seeds the
 //     composer with it — disk storage is the next conversation's
 //     responsibility),
