@@ -4,7 +4,6 @@
 
 A **Skill** is the atomic unit of design capability in OD. We adopt Claude Code's `SKILL.md` convention verbatim as the base format, then add optional fields for design-specific features (preview type, input schema, slider parameters). A skill written for plain Claude Code runs in OD. An OD skill that doesn't use our extensions runs in plain Claude Code.
 
-> **Compatibility promise:** A skill like [`guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) works in OD **without modification**. It just drops into `~/.claude/skills/` and OD discovers it.
 
 ---
 
@@ -38,7 +37,6 @@ triggers:
 ---
 ```
 
-Body is free-form Markdown that describes the workflow the agent should follow — typically a numbered step list plus principles. This is what [guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) does.
 
 **OD reads all of this as-is.** No changes required.
 
@@ -165,7 +163,6 @@ Each mode expects a slightly different skill shape. The required outputs and exp
 - **Primary output:** `index.html`.
 - **Secondary output:** `slides.json` (for PPTX export).
 - **Typical workflow:** clarify topic + slide count → pick theme → populate slides from layout catalog → self-check against quality rubric.
-- **Reference implementation:** [guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) — fork this for v1.
 
 ### 4.3 `template-skill`
 
@@ -212,7 +209,6 @@ Full schema and examples: [`schemas/design-system.md`](schemas/design-system.md)
 ## 6. Skill installation
 
 ```sh
-od skill add https://github.com/op7418/guizang-ppt-skill
 # → clones into ~/.open-design/skills/magazine-web-ppt
 # → symlinks into ~/.claude/skills/ (and any other active agent dirs)
 # → re-indexes registry
@@ -227,11 +223,9 @@ od skill remove <name>
 # → unlinks; does not delete the source
 ```
 
-## 7. Worked example — running `guizang-ppt-skill` under OD
 
 The skill is unchanged. Here's the full path:
 
-1. User: `od skill add https://github.com/op7418/guizang-ppt-skill`
 2. Registry indexes it. No `od:` block in front-matter → defaults applied:
    - `mode`: inferred from body mentioning "PPT" → `deck`.
    - `preview.type`: sniffed from `assets/template.html` → `html`.

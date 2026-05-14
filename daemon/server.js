@@ -600,7 +600,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
   // skill looks like. Lets users browse skills without running an agent.
   //
   // The skill's `id` (from SKILL.md frontmatter `name`) can differ from its
-  // on-disk folder name (e.g. id `magazine-web-ppt` lives in `skills/guizang-ppt/`),
+  // on-disk folder name (e.g. id `magazine-web-ppt` lives in `skills/simple-deck-ppt/`),
   // so we resolve the actual directory via listSkills() rather than guessing.
   //
   // Resolution order:

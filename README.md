@@ -31,7 +31,6 @@ That's not "AI tries to design something". That's an AI that has been trained, b
 OD stands on four open-source shoulders:
 
 - [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — the design-philosophy compass. Junior-Designer workflow, the 5-step brand-asset protocol, the anti-AI-slop checklist, the 5-dimensional self-critique, and the "5 schools × 20 design philosophies" idea behind our direction picker — all distilled into [`src/prompts/discovery.ts`](src/prompts/discovery.ts).
-- [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — the deck mode. Bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved; magazine-style layouts, WebGL hero, P0/P1/P2 checklists.
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — the UX north star and our closest peer. The first open-source Claude-Design alternative. We borrow its streaming-artifact loop, its sandboxed-iframe preview pattern (vendored React 18 + Babel), its live agent panel (todos + tool calls + interruptible generation), and its five-format export list (HTML / PDF / PPTX / ZIP / Markdown). We deliberately diverge on form factor — they are a desktop Electron app bundling [`pi-ai`][piai]; we are a web app + local daemon that delegates to your existing CLI.
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — the daemon-and-runtime architecture. PATH-scan agent detection, the local daemon as the only privileged process, the agent-as-teammate worldview.
 
@@ -86,7 +85,6 @@ OD stands on four open-source shoulders:
 <tr>
 <td width="50%">
 <img src="docs/screenshots/07-magazine-deck.png" alt="07 · Magazine deck" /><br/>
-<sub><b>Deck mode (guizang-ppt)</b> — the bundled <a href="https://github.com/op7418/guizang-ppt-skill"><code>guizang-ppt-skill</code></a> drops in unchanged. Magazine layouts, WebGL hero backgrounds, single-file HTML output, PDF export.</sub>
 </td>
 <td width="50%">
 <img src="docs/screenshots/08-mobile-app.png" alt="08 · Mobile prototype" /><br/>
@@ -158,7 +156,6 @@ The visually distinctive skills you'll most likely run first. Each ships a real 
 | [`blog-post`](skills/blog-post/) | prototype | desktop | Editorial long-form |
 | [`mobile-app`](skills/mobile-app/) | prototype | mobile | iPhone 15 Pro / Pixel framed app screen(s) |
 | [`simple-deck`](skills/simple-deck/) | deck | desktop | Minimal horizontal-swipe deck |
-| [`guizang-ppt`](skills/guizang-ppt/) | deck | **default** for deck | Magazine-style web PPT — bundled from [op7418/guizang-ppt-skill][guizang] |
 
 ### Document / work-product surfaces
 
@@ -184,7 +181,6 @@ The daemon scans your `PATH` for [`claude`](https://docs.anthropic.com/en/docs/c
 
 ### 2 · Skills are files, not plugins.
 
-Following Claude Code's [`SKILL.md` convention](https://docs.anthropic.com/en/docs/claude-code/skills), each skill is `SKILL.md` + `assets/` + `references/`. Drop a folder into [`skills/`](skills/), restart the daemon, it appears in the picker. The bundled `magazine-web-ppt` is [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) committed verbatim — original license preserved, attribution preserved.
 
 ### 3 · Design Systems are portable Markdown, not theme JSON.
 
@@ -354,7 +350,6 @@ open-design/
 │   ├── blog-post/                 ← editorial long-form
 │   ├── mobile-app/                ← phone-frame screen(s)
 │   ├── simple-deck/               ← horizontal-swipe minimal
-│   ├── guizang-ppt/               ← bundled magazine-web-ppt (default for deck)
 │   │   ├── SKILL.md
 │   │   ├── assets/template.html   ← seed
 │   │   └── references/{themes,layouts,components,checklist}.md
@@ -486,14 +481,12 @@ The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf
 | Filesystem-grade workspace | ❌ | partial (Electron sandbox) | **✅ Real cwd, real tools, persisted SQLite** |
 | 5-dim self-critique | ❌ | ❌ | **✅ Pre-emit gate** |
 | Export formats | Limited | HTML / PDF / PPTX / ZIP / Markdown | **HTML / PDF / PPTX / ZIP / Markdown** |
-| PPT skill reuse | N/A | Built-in | **[`guizang-ppt-skill`][guizang] drops in** |
 | Minimum billing | Pro / Max / Team | BYOK | **BYOK** |
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [piai]: https://github.com/mariozechner/pi-ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
-[guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 
 ## Supported coding agents
@@ -521,7 +514,6 @@ Every external project this repo borrows from. Each link goes to the source so y
 |---|---|
 | [`Claude Design`][cd] | The closed-source product this repo is the open-source alternative to. |
 | [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | The design-philosophy core. Junior-Designer workflow, the 5-step brand-asset protocol, anti-AI-slop checklist, 5-dimensional self-critique, and the "5 schools × 20 design philosophies" library behind our direction picker — all distilled into [`src/prompts/discovery.ts`](src/prompts/discovery.ts) and [`src/prompts/directions.ts`](src/prompts/directions.ts). |
-| [**`op7418/guizang-ppt-skill`**][guizang] | Magazine-web-PPT skill bundled verbatim under [`skills/guizang-ppt/`](skills/guizang-ppt/) with original LICENSE preserved. Default for deck mode. P0/P1/P2 checklist culture borrowed for every other skill. |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | The daemon + adapter architecture. PATH-scan agent detection, local daemon as the only privileged process, agent-as-teammate worldview. We adopt the model; we do not vendor the code. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | The first open-source Claude-Design alternative and our closest peer. UX patterns adopted: streaming-artifact loop, sandboxed-iframe preview (vendored React 18 + Babel), live agent panel (todos + tool calls + interruptible), five-format export list (HTML/PDF/PPTX/ZIP/Markdown), local-first storage hub, `SKILL.md` taste-injection. UX patterns on our roadmap: comment-mode surgical edits, AI-emitted tweaks panel. **We deliberately do not vendor [`pi-ai`][piai]** — open-codesign bundles it as the agent runtime; we delegate to whichever CLI the user already has. |
 | [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | Source of the 9-section `DESIGN.md` schema and 69 product systems imported via [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs). |
@@ -568,4 +560,3 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 
 ## License
 
-Apache-2.0. The bundled `skills/guizang-ppt/` retains its original [LICENSE](skills/guizang-ppt/LICENSE) (MIT) and authorship attribution to [op7418](https://github.com/op7418).

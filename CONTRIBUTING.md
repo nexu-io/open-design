@@ -101,7 +101,6 @@ We're picky about skills because they're the user-facing surface. A new skill mu
 1. **Ship a real `example.html`.** Hand-built, opens straight from disk, looks like something a designer would actually deliver. No lorem ipsum, no `<svg><rect/></svg>` placeholder hero. If you can't build the example yourself, the skill probably isn't ready.
 2. **Pass the anti-AI-slop checklist** in the body. No purple gradients, no generic emoji icons, no rounded card with a left-border accent, no Inter as a *display* face, no invented stats. Read the **Anti-AI-slop machinery** section of the README for the full list.
 3. **Honest placeholders.** When the agent doesn't have a real number, write `—` or a labelled grey block, not "10× faster".
-4. **Have a `references/checklist.md`** with at least P0 gates (the stuff the agent has to pass before emitting `<artifact>`). Lift the format from [`skills/guizang-ppt/references/checklist.md`](skills/guizang-ppt/) or [`skills/dating-web/references/checklist.md`](skills/dating-web/).
 5. **Add a screenshot** at `docs/screenshots/skills/<skill>.png` if the skill is featured. PNG, ~1024×640 retina, captured from the real `example.html` at zoomed-out browser scale.
 6. **Be a single self-contained folder.** No CDN imports beyond what other skills already use; no fonts you didn't license; no images larger than ~250 KB.
 
@@ -112,7 +111,6 @@ If you fork an existing skill (e.g. start from `dating-web` and remix into a `re
 - Visual showcase, single-screen prototype: [`skills/dating-web/`](skills/dating-web/), [`skills/digital-eguide/`](skills/digital-eguide/)
 - Multi-frame mobile flow: [`skills/mobile-onboarding/`](skills/mobile-onboarding/), [`skills/gamified-app/`](skills/gamified-app/)
 - Document / template (no design system required): [`skills/pm-spec/`](skills/pm-spec/), [`skills/weekly-update/`](skills/weekly-update/)
-- Deck mode: [`skills/guizang-ppt/`](skills/guizang-ppt/) (bundled verbatim from [op7418/guizang-ppt-skill][guizang]) and [`skills/simple-deck/`](skills/simple-deck/)
 
 ---
 
@@ -258,9 +256,7 @@ If you're not sure whether your idea fits, open a discussion before writing the 
 
 ## License
 
-By contributing, you agree your contribution is licensed under the [Apache-2.0 License](LICENSE) of this repository, with the exception of files inside [`skills/guizang-ppt/`](skills/guizang-ppt/), which retain their original MIT license and authorship attribution to [op7418](https://github.com/op7418).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
-[guizang]: https://github.com/op7418/guizang-ppt-skill
 [acd2]: https://github.com/VoltAgent/awesome-design-md
 [ocod]: https://github.com/OpenCoworkAI/open-codesign

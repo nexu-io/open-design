@@ -47,7 +47,6 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
   - **`api-fallback`** — direct Anthropic Messages API, minimal tool loop (Read/Write/Edit only)
 - Skills shipped in repo
   - `saas-landing` (Prototype)
-  - `magazine-web-ppt` (Deck, fork of guizang-ppt-skill)
 - Modes available
   - **Prototype** (fully working)
   - **Deck** (fully working)
@@ -78,14 +77,12 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 | 4 | API-fallback adapter | Anthropic Messages streaming; minimal tool loop (Read/Write/Edit rooted to artifact cwd); integration with skill prompt injection |
 | 5 | Web UI — chat + artifact tree | Zustand session store; WS client; chat pane; artifact tree reflects filesystem; skill picker |
 | 6 | Web UI — preview + export | sandboxed iframe with hot reload; JSX → vendored React/Babel runtime; export ZIP; export self-contained HTML (inline CSS) |
-| 7 | Default skills | port `guizang-ppt-skill` (no modifications; add `od:` extension block); write `saas-landing` skill; write 1–2 DESIGN.md examples; docs for skill authors |
 | 8 | Polish + dogfood | end-to-end dogfooding; performance pass (daemon <500ms cold start, first generation overhead <50ms); bug-fixing; first publishable alpha |
 
 ### MVP exit criteria
 
 1. `pnpm install && pnpm dev` works on clean macOS and Linux.
 2. With Claude Code installed: prototype + deck generation works end-to-end.
-3. Without Claude Code installed: API-fallback produces prototypes (not decks — guizang-ppt-skill needs native skill loading).
 4. A user can drop a DESIGN.md into the project root and subsequent generations respect it.
 5. A third party can publish a skill repo; `od skill add <url>` installs it and it works.
 6. Artifacts are plain files; `git add ./.od/artifacts/` and `git log` tell a sensible story.
@@ -173,7 +170,6 @@ v2 isn't promised. It's the direction if v1 lands.
 | Third-party agent CLIs don't expose enough to stream tool calls | UX degrades silently | capability flags + feature gates; document per-adapter limitations in-product |
 | `@mariozechner/pi-ai` or similar abstractions get popular and contributors ask us to support them | scope creep | defer; if demand is real, add as yet-another-adapter next to `api-fallback` |
 | Vercel deploy (Topology B) flaky because of tunnel setup | users can't try the cloud path | ship Topology C (direct API) as the always-works path; document Topology B as advanced |
-| `guizang-ppt-skill` or similar upstream skill changes format | default deck skill breaks | pin git SHA in our default install; monitor upstream |
 | DESIGN.md format evolves in awesome-claude-design | incompatibility | track upstream; adopt changes; our resolver is tolerant of missing sections |
 | Anthropic ships an open-source Claude Design | differentiation collapses | our moat is the "uses user's existing agent" angle; Anthropic is unlikely to ship that |
 | Skill security (malicious skill via `od skill add`) | user machine compromise | install-time warning; rely on agent's own permission model; document best practices |

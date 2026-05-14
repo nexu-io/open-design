@@ -5,7 +5,6 @@
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
-[guizang]: https://github.com/op7418/guizang-ppt-skill
 [multica]: https://github.com/multica-ai/multica
 [ccsw]: https://github.com/farion1231/cc-switch
 [acd]: https://github.com/VoltAgent/awesome-claude-design
@@ -50,7 +49,6 @@ The differentiation is not "yet another design generator." It is **an integratio
 User opens the web app, types *"Airbnb-style search page, use our internal design system"*, OD picks the `prototype-skill`, resolves the user's `DESIGN.md`, dispatches to Claude Code with both files plus the brief, streams tool calls into the UI, and renders the resulting HTML in an iframe preview. User clicks an element, drops a comment, the agent rewrites just that region.
 
 ### S2 — "Make me a deck"
-User says *"8-slide magazine-style pitch deck for my seed round"*. OD routes to `deck-skill` (a fork of [`guizang-ppt-skill`][guizang]). Output is a single-file HTML deck; preview is the deck itself with arrow-key navigation; export is PDF/PPTX.
 
 ### S3 — "Start from a template"
 User picks "SaaS landing — Stripe-ish" from a gallery. Template is a pre-filled artifact bundle plus a `DESIGN.md` reference. Agent only fills content; structure is already there. This is the fastest mode — useful for users who don't want to prompt at all.
@@ -108,7 +106,6 @@ We seriously considered it. The concrete blockers:
 
 1. **It's Electron.** Porting to a web architecture requires ripping out ~40% of the code and rewriting the renderer/main IPC layer. At that point it's a rewrite.
 2. **It owns the agent loop.** [`pi-ai`][piai] is a perfectly fine provider abstraction, but it means every skill is written against `pi-ai`'s tool-use format — not against whatever Claude Code, Codex, or Cursor Agent natively speak. We can't reuse existing skills, and existing skills can't reuse us.
-3. **Skill format is proprietary.** Its 12 skills are TypeScript modules compiled into the app. A user cannot drop [`guizang-ppt-skill`][guizang] in and have it work; there's no `SKILL.md` loader.
 4. **No design system abstraction.** Design tokens live in prompts, not in a versioned file that can be shared across projects.
 
 We keep the good parts: comment mode, slider-emitted parameters, multi-frame preview, single-file HTML export, sandboxed iframe rendering. These are all UI ideas that are orthogonal to the agent layer and we'll absolutely borrow them. See [`references.md`](references.md) for the explicit borrow list.

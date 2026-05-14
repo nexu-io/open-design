@@ -80,14 +80,10 @@ Every external project this spec leans on. Three questions per entry: what is it
   - Their curated list itself — we don't fork their 68 files; we reference upstream.
   - Their Discord / community layer — not our product.
 
-### [guizang-ppt-skill][guizang] (op7418)
-- **Repo:** [github.com/op7418/guizang-ppt-skill][guizang]
 
-[guizang]: https://github.com/op7418/guizang-ppt-skill
 - **What it is:** A Claude Code skill producing magazine-style, horizontal-swipe web decks. Structure: `SKILL.md` + `assets/template.html` + `references/{components,layouts,themes,checklist}.md`. 6-step workflow. Single-file HTML output with embedded CSS/WebGL. Keyboard/scroll/touch navigation.
 - **Why it matters:** Reference implementation of a high-quality Claude skill, and our default deck skill.
 - **What we borrow:**
-  - **The whole skill, unmodified.** It's our default v1 `deck-skill`. A user runs `od skill add https://github.com/op7418/guizang-ppt-skill` and it works.
   - Skill directory convention (`assets/` + `references/` + `SKILL.md`) as the pattern we document for skill authors.
   - The "6-step workflow + quality-checklist rubric" pattern for authoring new skills.
 - **What we don't:** Nothing — this is pure reuse. We add an `od:` block to its front-matter only if we want to expose theme sliders; the skill works without it.

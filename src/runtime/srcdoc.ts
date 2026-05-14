@@ -98,7 +98,7 @@ function injectSandboxShim(doc: string): string {
 
 // The deck bridge supports three deck conventions found across our skills
 // and freeform-generated artifacts:
-//   1. Horizontal scroll decks (simple-deck, guizang-ppt) — slides laid out
+//   1. Horizontal scroll decks (simple-deck, simple-deck) — slides laid out
 //      side-by-side, navigation = scrollTo({ left }).
 //   2. Class-toggle decks (deck-framework, freeform pitches) — one slide
 //      carries `.active` or `.is-active`; siblings are display:none. Their

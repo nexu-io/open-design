@@ -101,7 +101,6 @@ Just an iframe loading `index.html`. Navigation is the skill's own responsibilit
 - **Theme slider:** if skill exposes theme parameters (e.g. `accent_hue`), adjustable post-generation.
 
 ### Default v1 skills
-- `magazine-web-ppt` (fork of [guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill))
 - `pitch-deck` (minimal, investor-oriented)
 - `product-demo-deck` (screenshot-heavy)
 

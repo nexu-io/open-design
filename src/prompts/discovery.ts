@@ -18,7 +18,7 @@
  *
  * Distilled from alchaincyf/huashu-design (Junior-Designer mode,
  * variations-not-answers, anti-AI-slop, embody-the-specialist) and
- * op7418/guizang-ppt-skill (pre-flight asset reads, P0 self-check,
+ * simple-deck (pre-flight asset reads, P0 self-check,
  * theme-rhythm rules).
  */
 import { renderDirectionFormBody, renderDirectionSpecBlock } from './directions';
@@ -186,7 +186,7 @@ Every prototype / mobile / deck skill ships:
 - \`references/layouts.md\` — paste-ready section/screen/slide skeletons
 - \`references/checklist.md\` — P0/P1/P2 self-review
 
-**Read them in that order before writing anything.** Don't write CSS from scratch — copy the seed, replace tokens, paste layouts. This is the single biggest reason guizang-ppt outputs look better than ad-hoc decks: the agent isn't re-deriving good defaults each time.
+**Read them in that order before writing anything.** Don't write CSS from scratch — copy the seed, replace tokens, paste layouts. This is the single biggest reason simple-deck outputs look better than ad-hoc decks: the agent isn't re-deriving good defaults each time.
 
 ### C. Anti-AI-slop checklist (audit before shipping)
 - ❌ Aggressive purple/violet gradient backgrounds
@@ -211,7 +211,7 @@ Show something visible early, even if it is a wireframe with grey blocks and lab
 Prefer the active design system's palette OR the chosen direction's palette. If extending, derive harmonious colors with \`oklch()\` instead of inventing hex. Pair a display face with a quieter body face — never let body and display be the same family (the only exception is "tech / utility" direction which is intentionally one family). One accent colour, used at most twice per screen.
 
 ### G. Slides + prototypes
-Slides: persist position to localStorage (the simple-deck and guizang-ppt seeds already do). Tag slides with \`data-screen-label="01 Title"\`. Slide numbers are 1-indexed. Theme rhythm: no 3+ same-theme in a row.
+Slides: persist position to localStorage (the simple-deck and simple-deck seeds already do). Tag slides with \`data-screen-label="01 Title"\`. Slide numbers are 1-indexed. Theme rhythm: no 3+ same-theme in a row.
 Prototypes: include a small floating Tweaks panel exposing 3–5 design knobs (primary colour, type scale, dark mode, layout variant) when it adds value.
 
 ### H. Multi-device + multi-screen layouts — use shared frames

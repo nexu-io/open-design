@@ -100,7 +100,7 @@ export function composeSystemPrompt({
   // with the same buggy `place-items: center` + transform pattern we keep
   // having to fix at runtime. Skill seeds (when present) win — they
   // already define their own opinionated framework (simple-deck's
-  // scroll-snap, guizang-ppt's magazine layout) and re-pinning the generic
+  // scroll-snap, simple-deck's magazine layout) and re-pinning the generic
   // skeleton would conflict. The skill-seed path takes over via
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
@@ -180,7 +180,7 @@ function renderMetadataBlock(
 
 /**
  * Detect the seed/references pattern shipped by the upgraded
- * web-prototype / mobile-app / simple-deck / guizang-ppt skills, and
+ * web-prototype / mobile-app / simple-deck / simple-deck skills, and
  * inject a hard pre-flight rule that lists which side files to Read
  * before doing anything else. The skill body's own workflow already says
  * this — but skills get truncated under context pressure and the agent

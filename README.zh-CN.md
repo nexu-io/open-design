@@ -31,7 +31,6 @@ Anthropic 的 [Claude Design][cd]（2026-04-17 发布，基于 Opus 4.7）让大
 OD 站在四个开源项目的肩膀上：
 
 - [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) —— 设计哲学的指南针。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」思路 —— 全部蒸馏进 [`src/prompts/discovery.ts`](src/prompts/discovery.ts)。
-- [**`op7418/guizang-ppt-skill`**（歸藏的杂志风 PPT skill）](https://github.com/op7418/guizang-ppt-skill) —— Deck 模式。原样捆绑在 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下，原 LICENSE 保留；杂志版式、WebGL hero、P0/P1/P2 checklist。
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) —— UX 北极星，也是我们最接近的同类。第一个开源的 Claude-Design 替代品。我们借鉴了它的流式 artifact 循环、沙盒 iframe 预览模式（自带 React 18 + Babel）、实时 agent 面板（todos + tool calls + 可中断生成）、5 种导出格式列表（HTML / PDF / PPTX / ZIP / Markdown）。我们刻意在形态上分流 —— 它是桌面 Electron 应用，把 [`pi-ai`][piai] 打包进去做 agent；我们是 Web 应用 + 本地 daemon，把 agent 运行时**委托**给你已经装好的 CLI。
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) —— Daemon 与运行时架构。PATH 扫描式 agent 检测，本地 daemon 作为唯一的特权进程，agent-as-teammate 的世界观。
 
@@ -86,7 +85,6 @@ OD 站在四个开源项目的肩膀上：
 <tr>
 <td width="50%">
 <img src="docs/screenshots/07-magazine-deck.png" alt="07 · 杂志风 deck" /><br/>
-<sub><b>Deck 模式（guizang-ppt）</b> —— 内置的 <a href="https://github.com/op7418/guizang-ppt-skill"><code>guizang-ppt-skill</code></a> 原样接入。杂志版式、WebGL hero 背景、单文件 HTML 输出、可导 PDF。</sub>
 </td>
 <td width="50%">
 <img src="docs/screenshots/08-mobile-app.png" alt="08 · 移动端原型" /><br/>
@@ -158,7 +156,6 @@ OD 站在四个开源项目的肩膀上：
 | [`blog-post`](skills/blog-post/) | prototype | 桌面 | 长文 editorial |
 | [`mobile-app`](skills/mobile-app/) | prototype | 移动 | 带 iPhone 15 Pro / Pixel 外壳的 app 屏 |
 | [`simple-deck`](skills/simple-deck/) | deck | 桌面 | 极简横滑 deck |
-| [`guizang-ppt`](skills/guizang-ppt/) | deck | **deck 默认** | 杂志风网页 PPT —— 来自 [op7418/guizang-ppt-skill][guizang] |
 
 ### 文档与办公产物类
 
@@ -184,7 +181,6 @@ Daemon 启动时扫 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/c
 
 ### 2 · Skill 是文件，不是插件
 
-遵循 Claude Code [`SKILL.md` 规范](https://docs.anthropic.com/en/docs/claude-code/skills)，每个 skill = `SKILL.md` + `assets/` + `references/`。把一个文件夹丢进 [`skills/`](skills/)，重启 daemon，picker 里就能看到。内置的 `magazine-web-ppt` 就是 [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) **原样**捆绑 —— 原 LICENSE 保留、原作者归属保留。
 
 ### 3 · Design System 是可移植的 Markdown，不是 theme JSON
 
@@ -354,7 +350,6 @@ open-design/
 │   ├── blog-post/                 ← 长文 editorial
 │   ├── mobile-app/                ← 带手机外壳的 app 屏
 │   ├── simple-deck/               ← 极简横滑 deck
-│   ├── guizang-ppt/               ← 内置 magazine-web-ppt（deck 默认）
 │   │   ├── SKILL.md
 │   │   ├── assets/template.html   ← seed
 │   │   └── references/{themes,layouts,components,checklist}.md
@@ -486,14 +481,12 @@ open-design/
 | 文件系统级工作区 | ❌ | 部分（Electron 沙盒） | **✅ 真 cwd、真工具、SQLite 持久化** |
 | 五维自评审 | ❌ | ❌ | **✅ Emit 前必跑** |
 | 导出格式 | 受限 | HTML / PDF / PPTX / ZIP / Markdown | **HTML / PDF / PPTX / ZIP / Markdown** |
-| PPT skill 复用 | N/A | 内置 | **[`guizang-ppt-skill`][guizang] 直接接入** |
 | 计费门槛 | Pro / Max / Team | BYOK | **BYOK** |
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [piai]: https://github.com/mariozechner/pi-ai
 [acd]: https://github.com/VoltAgent/awesome-claude-design
-[guizang]: https://github.com/op7418/guizang-ppt-skill
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 
 ## 支持的 Coding Agent
@@ -521,7 +514,6 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 |---|---|
 | [`Claude Design`][cd] | 本仓库为之提供开源替代的闭源产品。 |
 | [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) | 设计哲学的核心。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」库 —— 全部蒸馏进 [`src/prompts/discovery.ts`](src/prompts/discovery.ts) 与 [`src/prompts/directions.ts`](src/prompts/directions.ts)。 |
-| [**`op7418/guizang-ppt-skill`**（歸藏）][guizang] | Magazine-web-PPT skill 原样捆绑在 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下，原 LICENSE 保留。Deck 模式默认。P0/P1/P2 checklist 文化也被借给了所有其他 skill。 |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + adapter 架构。PATH 扫描式 agent 检测、本地 daemon 作为唯一特权进程、agent-as-teammate 世界观。我们采纳模型，不 vendor 代码。 |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 第一个开源的 Claude-Design 替代品，也是我们最接近的同类。已采纳的 UX 模式：流式 artifact 循环、沙盒 iframe 预览（自带 React 18 + Babel）、实时 agent 面板（todos + tool calls + 可中断）、5 种导出格式列表（HTML/PDF/PPTX/ZIP/Markdown）、本地优先的 designs hub、`SKILL.md` 品味注入。路线图上的 UX 模式：评论模式手术刀编辑、AI 自吐 tweaks 面板。**我们刻意不 vendor [`pi-ai`][piai]** —— open-codesign 把它打包成 agent 运行时；我们则委托给用户已经装好的 CLI。 |
 | [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | 9 段式 `DESIGN.md` schema 的来源，69 套产品系统通过 [`scripts/sync-design-systems.mjs`](scripts/sync-design-systems.mjs) 导入。 |
@@ -568,4 +560,3 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。
 
 ## License
 
-Apache-2.0。内置的 [`skills/guizang-ppt/`](skills/guizang-ppt/) 保留它原始的 [LICENSE](skills/guizang-ppt/LICENSE)（MIT）和原作者 [op7418](https://github.com/op7418) 的归属。

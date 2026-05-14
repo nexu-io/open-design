@@ -100,7 +100,6 @@ Skill 是用户直接看到的面，所以我们对它挑剔。一个新 skill �
 1. **附一份真实的 `example.html`。** 手搓的、本地直接打开就能看、像设计师真的会交付的东西。不要 lorem ipsum，不要 `<svg><rect/></svg>` 占位 hero。如果你自己都不能搓出 example，这个 skill 大概率还没准备好。
 2. **过 anti-AI-slop checklist**（写在 body 里）。不准紫色渐变、不准通用 emoji 图标、不准左 border 圆角卡片、不准把 Inter 当 *display* 字体、不准自编数据。完整黑名单看 README 的「Anti-AI-slop machinery」一节。
 3. **诚实占位。** Agent 没真数字时写 `—` 或一个标注的灰块，绝不写「快 10 倍」。
-4. **附 `references/checklist.md`**，至少要有 P0 关卡（agent emit `<artifact>` 之前必须过的硬线）。格式照搬 [`skills/guizang-ppt/references/checklist.md`](skills/guizang-ppt/) 或 [`skills/dating-web/references/checklist.md`](skills/dating-web/)。
 5. **如果是 featured skill，加一张截图** 到 `docs/screenshots/skills/<skill>.png`。PNG 格式，约 1024×640 retina，从真实 `example.html` 上以缩小后的浏览器倍率截。
 6. **是一个自包含文件夹。** CDN 引入不能超过其他 skill 已经引入的；不准用没授权的字体；图片不要超过约 250 KB。
 
@@ -111,7 +110,6 @@ Skill 是用户直接看到的面，所以我们对它挑剔。一个新 skill �
 - 视觉 showcase、单屏原型：[`skills/dating-web/`](skills/dating-web/)、[`skills/digital-eguide/`](skills/digital-eguide/)
 - 多屏移动流程：[`skills/mobile-onboarding/`](skills/mobile-onboarding/)、[`skills/gamified-app/`](skills/gamified-app/)
 - 文档 / 模板（不需要 design system）：[`skills/pm-spec/`](skills/pm-spec/)、[`skills/weekly-update/`](skills/weekly-update/)
-- Deck 模式：[`skills/guizang-ppt/`](skills/guizang-ppt/)（来自 [op7418/guizang-ppt-skill][guizang]，原样捆绑）和 [`skills/simple-deck/`](skills/simple-deck/)
 
 ---
 
@@ -257,9 +255,7 @@ design-systems/your-brand/
 
 ## License
 
-提交贡献即代表你同意你的贡献按本仓库的 [Apache-2.0 License](LICENSE) 授权。例外是 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下的所有文件，保留它们原始的 MIT license 和原作者 [op7418](https://github.com/op7418) 的归属。
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
-[guizang]: https://github.com/op7418/guizang-ppt-skill
 [acd2]: https://github.com/VoltAgent/awesome-design-md
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
