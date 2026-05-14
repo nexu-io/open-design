@@ -724,10 +724,22 @@ function injectSelectionBridge(
     }
     return true;
   }
+  function meaningfulDomFallbackTarget(el){
+    if (!visibleTarget(el)) return false;
+    var tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (/^(a|button|input|textarea|select|label|img|video|canvas|svg|h1|h2|h3|h4|h5|h6|p|li|td|th)$/.test(tag)) return true;
+    if (el.getAttribute && (el.getAttribute('role') || el.getAttribute('aria-label') || el.getAttribute('title'))) return true;
+    var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text) return false;
+    for (var child = el.firstElementChild; child; child = child.nextElementSibling) {
+      if ((child.textContent || '').replace(/\s+/g, ' ').trim()) return false;
+    }
+    return true;
+  }
   function targetFrom(el, allowDomFallback){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     var selector = annotatedSelectorFor(el);
-    if (!id && allowDomFallback && visibleTarget(el)) {
+    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -797,7 +809,7 @@ function injectSelectionBridge(
     var allowDomFallback = mode === 'picker' && canUseDomFallback();
     while (el && el !== document.documentElement) {
       if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
-      if (!fallback && allowDomFallback && visibleTarget(el)) fallback = el;
+      if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
       el = el.parentElement;
     }
     return fallback;
