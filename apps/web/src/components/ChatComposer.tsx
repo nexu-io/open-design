@@ -21,18 +21,10 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 
 interface SlashCommand {
   id: string;
-  // Visible label, e.g. `/hatch`. Shown in the popover row.
   label: string;
-  // Text inserted into the draft when the user picks the entry. The
-  // cursor is positioned at the end of `insert`, so a trailing space
-  // is the difference between a "ready for argument" command and a
-  // "submit immediately" one.
   insert: string;
-  // i18n key of the short description shown next to the label.
   descKey: keyof Dict;
-  // Optional argument hint shown after the description.
   argHint?: string;
-  // Icon glyph from the project Icon set.
   icon: 'sparkles' | 'eye' | 'sliders';
 }
 
@@ -41,25 +33,13 @@ interface Props {
   projectFiles: ProjectFile[];
   streaming: boolean;
   initialDraft?: string;
-  // Lazy ensure — the composer calls this before its first upload, so the
-  // project folder exists on disk before files land in it. Returns the
-  // project id when ready.
   onEnsureProject: () => Promise<string | null>;
   commentAttachments?: ChatCommentAttachment[];
   onRemoveCommentAttachment?: (id: string) => void;
   onSend: (prompt: string, attachments: ChatAttachment[], commentAttachments: ChatCommentAttachment[], meta?: ChatSendMeta) => void;
   onStop: () => void;
-  // Opens the global settings dialog (CLI / model / agent picker). The
-  // composer's leading gear icon routes here so users can switch models
-  // without leaving the chat.
   onOpenSettings?: () => void;
-  // Opens settings on the External MCP tab. Wired from ChatPane → App.
-  // The composer's `/mcp` slash command and the MCP picker button route here.
   onOpenMcpSettings?: () => void;
-  // Optional pet wiring — when present, the composer renders a small
-  // 🐾 button + popover so users can adopt / wake / tuck a pet without
-  // leaving chat. Typing `/pet` (or `/pet wake|tuck|<id>`) is parsed
-  // out of the draft and routed to the same handlers.
   petConfig?: AppConfig['pet'];
   onAdoptPet?: (petId: string) => void;
   onTogglePet?: () => void;
@@ -69,8 +49,6 @@ interface Props {
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
 }
 
-// Imperative handle so ancestors (e.g. example chips in ChatPane) can
-// push text into the composer without owning its draft state.
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
   focus: () => void;
@@ -80,15 +58,6 @@ export interface ChatSendMeta {
   research?: ResearchOptions;
 }
 
-/**
- * The chat composer: textarea + paste/drop/attach buttons + @-mention
- * picker. Attachments are uploaded into the active project's folder so
- * the agent can reference them by relative path on its next turn.
- *
- * `@` typed at a word boundary opens a popover listing project files.
- * Selecting one inserts `@<path>` into the prompt and stages it as an
- * attachment so the daemon also includes it explicitly.
- */
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   function ChatComposer(
     {
@@ -121,10 +90,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       q: string;
       cursor: number;
     } | null>(null);
-    // Slash-command popover state — when the draft starts with `/` and
-    // the cursor is still inside that token (no space committed yet),
-    // we show a small palette of supported commands. The query is the
-    // text after `/` so the user can type-to-filter.
     const [slash, setSlash] = useState<{
       q: string;
       cursor: number;
@@ -132,14 +97,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [slashIndex, setSlashIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
-    // External MCP servers configured by the user. Fetched lazily on mount;
-    // shown in the slash-command palette so `/mcp <id>` inserts a hint into
-    // the prompt that nudges the model to use that server's tools.
     const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
-    // Consolidated "tools" popover — a single dropdown anchored to the
-    // leading sliders icon that hosts MCP / Import / Pet quick actions and
-    // a shortcut to open the full Settings dialog. Replaces the previous
-    // row of three standalone buttons (which overflowed in narrow chats).
     const [toolsOpen, setToolsOpen] = useState(false);
     type ToolsTab = 'mcp' | 'import' | 'pet';
     const [toolsTab, setToolsTab] = useState<ToolsTab>('mcp');
@@ -149,13 +107,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
-    // initialDraft is only honored on the first non-empty value the parent
-    // hands us. After we seed once, the composer is fully under user control
-    // — re-renders that pass the same prompt back must not reseed. If the
-    // initial useState above already consumed a non-empty initialDraft we
-    // mark it seeded immediately, so an early clear by the user (typing or
-    // backspace before the parent stops passing initialDraft) does not get
-    // overwritten by the effect.
     const seededRef = useRef(Boolean(initialDraft));
 
     useEffect(() => {
@@ -187,13 +138,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }, [toolsOpen]);
 
-    // Lazy-fetch the user's external MCP servers list once on mount so the
-    // `/mcp …` slash palette and the composer's MCP button popover have
-    // something to render. We deliberately do not reactively re-fetch when
-    // the user toggles servers from Settings — the dialog refreshes itself,
-    // and the chat composer rehydrates next time the user re-opens it. A
-    // background poll would be cheap but unnecessary for the typical
-    // edit-once-then-chat workflow.
     useEffect(() => {
       let cancelled = false;
       void (async () => {
@@ -206,10 +150,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }, []);
 
-    // Resolve which tabs to surface in the consolidated tools popover.
-    // We intentionally always render at least the Import tab, since it has
-    // unconditional folder linking. MCP and Pet tabs only show when their
-    // respective wiring was provided by the parent (App).
     const availableTabs = useMemo<ToolsTab[]>(() => {
       const tabs: ToolsTab[] = [];
       if (onOpenMcpSettings) tabs.push('mcp');
@@ -218,9 +158,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return tabs;
     }, [onOpenMcpSettings, petEnabled]);
 
-    // When the popover opens, snap the active tab to the first available one
-    // so the user never lands on an empty / hidden tab if their config
-    // changes mid-session.
     useEffect(() => {
       if (!toolsOpen) return;
       if (!availableTabs.includes(toolsTab)) {
@@ -229,17 +166,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }, [toolsOpen, availableTabs, toolsTab]);
 
-    // Catalog of supported slash commands. Each entry shows up in the
-    // popover when the user types `/` in the composer. The `insert`
-    // value is what we drop into the draft when the user picks the
-    // entry — usually the canonical command form with a trailing space
-    // ready for an argument.
     const slashCommands = useMemo<SlashCommand[]>(() => {
       const list: SlashCommand[] = [];
-      // External MCP servers — `/mcp` opens settings, `/mcp <id>` inserts a
-      // prompt-side hint nudging the model to use that server's tools. The
-      // hint flows through to the agent verbatim; the daemon already wired
-      // the MCP config into the agent's launch so the tools are callable.
       if (onOpenMcpSettings) {
         list.push({
           id: 'mcp',
@@ -319,8 +247,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!ta || !slash) return;
       const before = draft.slice(0, slash.cursor);
       const after = draft.slice(slash.cursor);
-      // Replace the in-flight `/<query>` token with the picked
-      // command's canonical insertion text.
       const replaced = before.replace(/\/[^\s/]*$/, cmd.insert);
       const next = replaced + after;
       setDraft(next);
@@ -332,10 +258,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       });
     }
 
-    // Expand a `/hatch <concept>` draft into the canonical hatch-pet
-    // skill prompt before sending. Returns null when the draft is not a
-    // hatch command so the caller can fall through to the regular
-    // submit path.
     function expandHatchCommand(input: string): string | null {
       const m = /^\/hatch(?:\s+([\s\S]*))?$/i.exec(input.trim());
       if (!m) return null;
@@ -357,11 +279,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       ].join('\n');
     }
 
-    // `/mcp` (no arg) opens settings on the External MCP tab — pure UX hook,
-    // never sent to the agent. `/mcp <id>` is intentionally NOT intercepted
-    // here: the slash palette already replaces it with a natural-language
-    // hint sentence ("Use the `<id>` MCP server tools."), and the user is
-    // expected to keep typing the rest of the prompt before sending.
     function tryHandleMcpSlash(): boolean {
       if (!onOpenMcpSettings) return false;
       const trimmed = draft.trim();
@@ -400,11 +317,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }
 
-    // Parse a `/pet [arg]` slash command out of the draft. Recognized
-    // forms: `/pet` (toggle wake/tuck), `/pet wake`, `/pet tuck`,
-    // `/pet adopt` (open settings), or `/pet <id>` to adopt a built-in
-    // by id. The slash is stripped from the draft on a successful match
-    // so the user does not accidentally send the command to the agent.
     function tryHandlePetSlash(): boolean {
       if (!petEnabled) return false;
       const trimmed = draft.trim();
@@ -468,7 +380,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function ensureProject(): Promise<string | null> {
       if (projectId) return projectId;
-      return onEnsureProject();
+      const id = await onEnsureProject();
+      if (!id) {
+        setUploadError('No conversation started yet. Send a message first.');
+      }
+      return id;
     }
 
     async function uploadFiles(files: File[]) {
@@ -545,16 +461,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const value = e.target.value;
       const cursor = e.target.selectionStart;
       setDraft(value);
-      // Detect a fresh @ at start or after whitespace; capture the typed
-      // query up to the cursor.
       const before = value.slice(0, cursor);
       const m = /(^|\s)@([^\s@]*)$/.exec(before);
       if (m) setMention({ q: m[2] ?? "", cursor });
       else setMention(null);
-      // Slash-command popover — open as soon as the draft starts with
-      // `/` (and the cursor is still inside the bare command token, no
-      // space yet). Closes once the user commits a space or moves past
-      // the prefix.
       const slashMatch = /^\/([^\s/]*)$/.exec(before);
       if (slashMatch) {
         setSlash({ q: slashMatch[1] ?? '', cursor });
@@ -598,14 +508,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function submit() {
       const prompt = draft.trim();
-      // Intercept `/pet …` and `/mcp` before sending so the slash command
-      // never hits the agent — these are local UX hooks, not model prompts.
       if (tryHandlePetSlash()) return;
       if (tryHandleMcpSlash()) return;
-      // `/hatch <concept>` expands into the canonical hatch-pet skill
-      // prompt and *is* sent to the agent — the agent runs the skill,
-      // packages a Codex pet under `~/.codex/pets/`, and the user
-      // adopts it from "Recently hatched" in pet settings afterwards.
       const hatched = expandHatchCommand(prompt);
       if (hatched) {
         if (streaming) return;
@@ -627,10 +531,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       reset();
     }
 
-    // The @-picker treats the project listing as path-shaped (path + size).
-    // ProjectFile.path is optional, so fall back to .name for the legacy
-    // flat shape — both ChatComposer and the old code paths see the same
-    // entries.
     const filteredFiles = mention
       ? projectFiles
           .filter((f) => f.type === undefined || f.type === "file")
@@ -751,6 +651,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               data-testid="chat-file-input"
               type="file"
               multiple
+              webkitdirectory=""
               style={{ display: 'none' }}
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
@@ -1207,9 +1108,6 @@ function SlashPopover({
             aria-selected={active}
             className={`slash-item${active ? ' active' : ''}`}
             onMouseDown={(e) => {
-              // Prevent the textarea from losing focus before the click
-              // handler fires — otherwise selectionStart resets and the
-              // pick replacement targets the wrong substring.
               e.preventDefault();
             }}
             onMouseEnter={() => onHover(idx)}
