@@ -4613,7 +4613,7 @@ export async function startServer({
       design.runs.finish(run, status, code, signal);
     });
     if (writePromptToChildStdin && child.stdin) {
-      const promptInputFormat = runtimeAdapter.promptInputFormat();
+      const promptInputFormat = def.promptInputFormat ?? 'text';
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
         // JSONL line. Do NOT close stdin: claude-code keeps reading further
@@ -4683,13 +4683,14 @@ export async function startServer({
     } catch (err) {
       return { ok: false, reason: 'write_failed', error: err && err.message };
     }
-    // Clear this id from the pending set. If the assistant's response
-    // already finished (a `usage`/result event arrived before the user
-    // submitted), close stdin now so the child can exit. Otherwise the
-    // `usage` event handler in `emitAgentEvent` will close it on the
-    // next turn end.
     if (run.pendingHostAnswers) {
       run.pendingHostAnswers.delete(toolUseId);
+      if (run.pendingHostAnswers.size === 0 && run.stdinOpen) {
+        if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
+          try { run.child.stdin.end(); } catch {}
+        }
+        run.stdinOpen = false;
+      }
     }
     return { ok: true };
   };
