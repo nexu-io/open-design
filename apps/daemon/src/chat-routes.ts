@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
+import { buildOpenAIChatTokenParam } from './openai-chat-token-params.js';
 import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
@@ -756,8 +757,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const payload: any = {
       model,
       messages: payloadMessages,
-      max_tokens:
+      ...buildOpenAIChatTokenParam(
+        model,
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      ),
       stream: true,
     };
 
@@ -869,8 +872,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const payload = {
       ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
-      max_tokens:
+      ...buildOpenAIChatTokenParam(
+        model,
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      ),
       stream: true,
     };
 

@@ -972,6 +972,155 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('uses max_completion_tokens for GPT-5 Azure connection tests', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'gpt-5.4',
+        apiVersion: '2024-10-21',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_completion_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty('max_tokens');
+  });
+
+  it('keeps max_tokens for legacy OpenAI connection tests', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-good',
+        model: 'gpt-4o',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'gpt-4o',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for DeepSeek-style OpenAI-compatible connection tests', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.deepseek.com/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'deepseek-chat', object: 'model' }],
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'deepseek-key',
+        model: 'deepseek-chat',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => String(input) === 'https://api.deepseek.com/v1/chat/completions',
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deepseek-chat',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for Azure gpt-4o connection tests on the default deployment path', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'gpt-4o',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
   it('keeps the default Azure api-version in connection tests when the field is blank', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
