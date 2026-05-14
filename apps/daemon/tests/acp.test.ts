@@ -409,6 +409,42 @@ test('attachAcpSession honors caller-supplied stageTimeoutMs override', async ()
   }
 });
 
+test('attachAcpSession treats stageTimeoutMs <= 0 as a watchdog disable, not an immediate-failure schedule', async () => {
+  vi.useFakeTimers();
+  try {
+    const child = new FakeAcpChild();
+    const events: Array<{ event: string; payload: unknown }> = [];
+
+    attachAcpSession({
+      child: child as never,
+      prompt: 'hello',
+      cwd: '/tmp/od-project',
+      model: null,
+      mcpServers: [],
+      send: (event, payload) => events.push({ event, payload }),
+      // OD_ACP_STAGE_TIMEOUT_MS=0 escape hatch: operator wants to disable the
+      // inner stage watchdog entirely (e.g. when relying solely on the outer
+      // chat inactivity watchdog). Must NOT schedule a 0ms setTimeout that
+      // would fail every ACP session on the next tick.
+      stageTimeoutMs: 0,
+    });
+
+    // Drive past where the next-tick failure would have fired, plus a long
+    // silent period that would trip any positive default watchdog.
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+    const errors = events.filter((e) => e.event === 'error');
+    assert.equal(
+      errors.length,
+      0,
+      `expected stageTimeoutMs=0 to disable the watchdog, got: ${JSON.stringify(errors)}`,
+    );
+    assert.equal(child.killed, false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 class FakeAcpChild extends EventEmitter {
   stdin = new PassThrough();
   stdout = new PassThrough();
