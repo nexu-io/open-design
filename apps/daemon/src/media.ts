@@ -472,6 +472,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'audio') {
+      const result = await renderSenseAudioTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fishaudio' && surface === 'audio') {
       const result = await renderFishAudioTTS(ctx, credentials);
       bytes = result.bytes;
@@ -1654,6 +1659,108 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
   return {
     bytes,
     providerNote: `minimax/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: SenseAudio — senseaudio-tts-1.5 text-to-speech (synchronous).
+//
+// Docs: https://docs.senseaudio.cn — POST /v1/t2a_v2 with a JSON body
+// shaped like MiniMax's (voice_setting / audio_setting). The response is
+// JSON with hex-encoded audio under `data.audio` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, again
+// mirroring MiniMax. The catalogue id we surface as `senseaudio-tts`
+// resolves to `senseaudio-tts-1.5-260319` on the wire — SenseAudio's
+// recommended flagship model (情绪 / 多音字 / 公式朗读 / 克隆 / 文生音色 支持)。
+// Default voice is `female_0033_b` per the official example; the agent
+// can override via the model registry's `voice` slot with any system,
+// cloned, or text-generated voice id from the customer's catalogue.
+// Audio shape is hard-coded to mp3 / 32kHz / 128kbps / stereo for parity
+// with the other TTS providers; SenseAudio supports wav/pcm/flac and
+// other sample rates but we don't expose them through MediaContext yet.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_DEFAULT_BASE_URL = 'https://api.senseaudio.cn';
+const SENSEAUDIO_DEFAULT_VOICE_ID = 'female_0033_b';
+
+const SENSEAUDIO_TTS_MODEL_MAP = {
+  'senseaudio-tts': 'senseaudio-tts-1.5-260319',
+} as Record<string, string>;
+
+async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = SENSEAUDIO_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voiceId = (ctx.voice && ctx.voice.trim()) || SENSEAUDIO_DEFAULT_VOICE_ID;
+
+  const body = {
+    model: wireModel,
+    text,
+    stream: false,
+    voice_setting: {
+      voice_id: voiceId,
+      speed: 1,
+      vol: 1,
+      pitch: 0,
+    },
+    audio_setting: {
+      format: 'mp3',
+      sample_rate: 32000,
+      bitrate: 128000,
+      channel: 2,
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/v1/t2a_v2`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`senseaudio tts ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`senseaudio tts non-JSON: ${truncate(respText, 200)}`);
+  }
+  // SenseAudio mirrors MiniMax's base_resp envelope: HTTP 200 can still
+  // be a logical failure (auth, quota, voice not on this account, …).
+  // Surface the upstream status_code/status_msg so users see the real
+  // cause instead of a downstream "missing data.audio" red herring.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `senseaudio tts api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const hex = data?.data?.audio;
+  if (typeof hex !== 'string' || !hex) {
+    throw new Error('senseaudio tts response missing data.audio');
+  }
+  const bytes = Buffer.from(hex, 'hex');
+  if (bytes.length === 0) {
+    throw new Error('senseaudio tts decoded zero bytes');
+  }
+  const xi = data?.extra_info || {};
+  const seconds = xi.audio_length ? Math.round(xi.audio_length / 100) / 10 : '?';
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
   };
 }
