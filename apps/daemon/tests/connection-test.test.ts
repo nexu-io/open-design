@@ -972,7 +972,7 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
-  it('uses max_completion_tokens for GPT-5 Azure connection tests', async () => {
+  it('uses max_completion_tokens for GPT-5 Azure OpenAI-compatible v1 connection tests', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
         choices: [{ message: { role: 'assistant', content: 'ok' } }],
@@ -986,10 +986,10 @@ describe('POST /api/test/connection provider mode', () => {
       body: JSON.stringify({
         mode: 'provider',
         protocol: 'azure',
-        baseUrl: 'https://my-azure.openai.azure.com',
+        baseUrl: 'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1',
         apiKey: 'azure-key',
         model: 'gpt-5.4',
-        apiVersion: '2024-10-21',
+        apiVersion: '',
       }),
     });
     const body = (await res.json()) as Record<string, unknown>;
@@ -1005,6 +1005,51 @@ describe('POST /api/test/connection provider mode', () => {
       stream: false,
     });
     expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure deployment-mode connection tests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({ max_tokens: 100, stream: false });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({ max_completion_tokens: 100, stream: false });
+    expect(secondBody).not.toHaveProperty('max_tokens');
   });
 
   it('keeps max_tokens for legacy OpenAI connection tests', async () => {

@@ -308,7 +308,7 @@ describe('API proxy routes', () => {
     expect(upstreamInit?.redirect).toBe('error');
   });
 
-  it('uses max_completion_tokens for GPT-5 Azure chat-completions payloads', async () => {
+  it('uses max_completion_tokens for GPT-5 Azure OpenAI-compatible v1 payloads', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
       if (url.startsWith(baseUrl)) return realFetch(input, init);
@@ -320,10 +320,10 @@ describe('API proxy routes', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        baseUrl: 'https://resource.openai.azure.com',
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
         apiKey: 'azure-key',
         model: 'gpt-5.4',
-        apiVersion: '2024-10-21',
+        apiVersion: '',
         maxTokens: 1234,
         messages: [{ role: 'user', content: 'hello' }],
       }),
@@ -336,6 +336,54 @@ describe('API proxy routes', () => {
       stream: true,
     });
     expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure deployment-mode requests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+        ));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+        maxTokens: 1234,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body));
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]![1]?.body));
+    expect(firstBody).toMatchObject({ max_tokens: 1234, stream: true });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({ max_completion_tokens: 1234, stream: true });
+    expect(secondBody).not.toHaveProperty('max_tokens');
   });
 
   it('keeps max_tokens for legacy OpenAI-compatible chat-completions payloads', async () => {

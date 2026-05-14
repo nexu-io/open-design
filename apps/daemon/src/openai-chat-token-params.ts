@@ -20,3 +20,24 @@ export function buildOpenAIChatTokenParam(
   }
   return { max_tokens: maxTokens };
 }
+
+export function buildLegacyMaxTokensParam(
+  maxTokens: number,
+): { max_tokens: number } {
+  return { max_tokens: maxTokens };
+}
+
+export function buildMaxCompletionTokensParam(
+  maxTokens: number,
+): { max_completion_tokens: number } {
+  return { max_completion_tokens: maxTokens };
+}
+
+export function isUnsupportedMaxTokensError(detail: string): boolean {
+  const normalized = detail.toLowerCase();
+  return (
+    normalized.includes('unsupported parameter') &&
+    normalized.includes('max_tokens') &&
+    normalized.includes('max_completion_tokens')
+  );
+}

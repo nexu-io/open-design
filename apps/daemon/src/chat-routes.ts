@@ -1,7 +1,12 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
-import { buildOpenAIChatTokenParam } from './openai-chat-token-params.js';
+import {
+  buildLegacyMaxTokensParam,
+  buildMaxCompletionTokensParam,
+  buildOpenAIChatTokenParam,
+  isUnsupportedMaxTokensError,
+} from './openai-chat-token-params.js';
 import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
@@ -869,40 +874,67 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
+    const effectiveMaxTokens =
+      typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
     const payload = {
       ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
-      ...buildOpenAIChatTokenParam(
-        model,
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      ),
+      ...buildLegacyMaxTokensParam(effectiveMaxTokens),
+      stream: true,
+    };
+    const retryPayload = {
+      ...(usesVersionedOpenAIPath ? { model } : {}),
+      messages: payloadMessages,
+      ...buildMaxCompletionTokensParam(effectiveMaxTokens),
       stream: true,
     };
 
     const sse = createSseResponse(res);
     sse.send('start', { model });
     try {
-      const response = await fetch(url, {
+      const requestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'api-key': apiKey,
         },
+        redirect: 'error' as const,
+      };
+      let response = await fetch(url, {
+        ...requestInit,
         body: JSON.stringify(payload),
-        redirect: 'error',
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
+        let errorText = await response.text();
+        if (
+          response.status === 400 &&
+          isUnsupportedMaxTokensError(errorText)
+        ) {
+          console.warn(
+            `[proxy:azure] retrying request with max_completion_tokens deployment=${model}`,
+          );
+          response = await fetch(url, {
+            ...requestInit,
+            body: JSON.stringify(retryPayload),
+          });
+          if (response.ok) {
+            errorText = '';
+          } else {
+            errorText = await response.text();
+          }
+        }
+        if (!response.ok) {
+          console.error(
+            `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
+        }
       }
 
       let ended = false;
