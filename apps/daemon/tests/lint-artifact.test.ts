@@ -8,6 +8,26 @@ function requiredFinding(findings: LintFinding[], id: string): LintFinding {
   return hit;
 }
 
+describe('reserved-project-path', () => {
+  it('flags artifacts that iframe live artifact storage directly', () => {
+    const html = `<iframe src=".live-artifacts/demo/index.html"></iframe>`;
+    const findings = lintArtifact(html);
+    const hit = requiredFinding(findings, 'reserved-project-path');
+    expect(hit.severity).toBe('P0');
+  });
+
+  it('flags other reserved internal project path references', () => {
+    const findings = lintArtifact(`<a href="assets/.tmp/render.html">Preview</a>`);
+    expect(findings.find((f) => f.id === 'reserved-project-path')).toBeDefined();
+  });
+
+  it('allows supported live artifact preview routes', () => {
+    const html = `<iframe src="/api/live-artifacts/demo/preview"></iframe>`;
+    const findings = lintArtifact(html);
+    expect(findings.find((f) => f.id === 'reserved-project-path')).toBeUndefined();
+  });
+});
+
 describe('ai-default-indigo', () => {
   it('flags solid #6366f1 used as accent', () => {
     const html = `

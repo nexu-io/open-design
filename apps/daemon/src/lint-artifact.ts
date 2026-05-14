@@ -127,6 +127,17 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   const html = rawHtml.replace(/<!--[\s\S]*?-->/g, '');
   const lower = html.toLowerCase();
 
+  const reservedPath = detectReservedProjectPathReference(html);
+  if (reservedPath) {
+    out.push({
+      severity: 'P0',
+      id: 'reserved-project-path',
+      message: `Artifact references reserved internal project path "${reservedPath.segment}".`,
+      fix: 'Use a public preview/embed route instead of linking to internal project storage paths such as .live-artifacts, .od, or .tmp.',
+      snippet: clip(reservedPath.snippet),
+    });
+  }
+
   // ── P0-1: purple gradient backgrounds ─────────────────────────────
   for (const hex of PURPLE_HEXES) {
     const re = new RegExp(
@@ -544,6 +555,35 @@ function clip(s: string): string {
   if (!s) return '';
   const trimmed = s.replace(/\s+/g, ' ').trim();
   return trimmed.length > 200 ? trimmed.slice(0, 197) + '…' : trimmed;
+}
+
+const RESERVED_PROJECT_PATH_SEGMENTS = ['.live-artifacts', '.od', '.tmp'];
+
+function detectReservedProjectPathReference(html: string): { segment: string; snippet: string } | undefined {
+  const attrRe = /\b(?:src|href)\s*=\s*([\"'])(.*?)\1/gi;
+  let match: RegExpExecArray | null;
+  while ((match = attrRe.exec(html)) !== null) {
+    const value = match[2] || '';
+    for (const segment of RESERVED_PROJECT_PATH_SEGMENTS) {
+      if (referencesReservedProjectPath(value, segment)) {
+        return { segment, snippet: match[0] };
+      }
+    }
+  }
+  return undefined;
+}
+
+function referencesReservedProjectPath(value: string, segment: string): boolean {
+  const decoded = safeDecodeURIComponent(value);
+  return decoded === segment || decoded.startsWith(`${segment}/`) || decoded.includes(`/${segment}/`);
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function escapeRe(s: string): string {
