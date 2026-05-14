@@ -30,6 +30,7 @@ import {
   getAnonymousId,
   getSessionId,
 } from './identity';
+import { randomUUID } from '../utils/uuid';
 
 interface AnalyticsContextValue {
   // The track helper accepts any event/props pair; per-event safety is
@@ -202,7 +203,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
 
   const track = useCallback<AnalyticsContextValue['track']>(
     (event, properties, options) => {
-      const insertId = options?.insertId ?? crypto.randomUUID();
+      const insertId = options?.insertId ?? randomUUID();
       const requestId = options?.requestId ?? null;
       // Attach request_id to the in-flight fetch wrapper too, so the daemon
       // can stitch click→result pairs without the caller threading it.
@@ -283,7 +284,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
       },
       anonymousId: identity.anonymousId,
       sessionId: identity.sessionId,
-      newRequestId: () => crypto.randomUUID(),
+      newRequestId: () => randomUUID(),
     }),
     [track, identity, locale, appVersion],
   );
@@ -303,7 +304,7 @@ export function useAnalytics(): AnalyticsContextValue {
       setIdentity: () => undefined,
       anonymousId: 'unmounted',
       sessionId: 'unmounted',
-      newRequestId: () => crypto.randomUUID(),
+      newRequestId: () => randomUUID(),
     };
   }
   return value;
