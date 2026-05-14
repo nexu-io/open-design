@@ -16,6 +16,17 @@
 
 const writeLocks = new Map<string, Promise<unknown>>();
 
+/**
+ * Test-only accessor: exposes the active lock count so a unit test can
+ * assert the cleanup branch fires (the leak fixed in this module was
+ * exactly the kind of bug that's invisible in production but trivially
+ * detectable with `size === 0` after a settle). Do not consume from
+ * production code paths.
+ */
+export function __writeLocksSize(): number {
+  return writeLocks.size;
+}
+
 export async function withWriteLock<T>(
   key: string,
   fn: () => Promise<T>,
@@ -24,18 +35,21 @@ export async function withWriteLock<T>(
   const next = prev.then(fn, fn);
   // Stored as a settled promise so a rejected `next` doesn't block the
   // queue — the next caller chains off the settled state and runs.
-  writeLocks.set(
-    key,
-    next.then(
-      () => undefined,
-      () => undefined,
-    ),
+  // Capture the sentinel by reference: `next.then(...)` returns a NEW
+  // promise instance distinct from `next`, so comparing the map entry
+  // against `next` itself in the finally below was structurally always
+  // false and the cleanup branch never fired. Reusing this binding
+  // closes that leak.
+  const sentinel: Promise<void> = next.then(
+    () => undefined,
+    () => undefined,
   );
+  writeLocks.set(key, sentinel);
   try {
     return await next;
   } finally {
     // Best-effort cleanup: if no one chained on top of us, drop the
     // entry so the map doesn't grow unbounded over a long-lived daemon.
-    if (writeLocks.get(key) === next) writeLocks.delete(key);
+    if (writeLocks.get(key) === sentinel) writeLocks.delete(key);
   }
 }
