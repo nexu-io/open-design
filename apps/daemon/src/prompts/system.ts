@@ -143,7 +143,15 @@ const MEDIA_DISPATCH_HINT = `
 
 ## Media generation (if asked)
 
-If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher rather than calling the provider API directly:
+If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
+
+The daemon injects these env vars into your shell (POSIX bash — not PowerShell):
+
+- \`OD_NODE_BIN\` — absolute path to the Node runtime
+- \`OD_BIN\`      — absolute path to the OD CLI script
+- \`OD_PROJECT_ID\` — the active project id
+
+Run exactly this form — POSIX \`$VAR\` syntax, **not** PowerShell \`$env:VAR\`:
 
 \`\`\`bash
 "$OD_NODE_BIN" "$OD_BIN" media generate \\
@@ -154,9 +162,9 @@ If the user asks you to generate an image, video, or audio file — regardless o
   --aspect 16:9
 \`\`\`
 
-**Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell environment. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
+**Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
-For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Omit \`--surface\` flags you don't need; the dispatcher infers surface from the model when unambiguous.`;
+For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. The dispatcher infers \`--surface\` from the model when unambiguous.`;
 
 
 export interface ComposeInput {
