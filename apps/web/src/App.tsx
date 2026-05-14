@@ -7,6 +7,7 @@ import {
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
 import { EntryView } from './components/EntryView';
+import { AppDialogProvider } from './components/AppDialog';
 import type { CreateInput } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { PetOverlay } from './components/pet/PetOverlay';
@@ -977,7 +978,7 @@ export function App() {
   );
 
   return (
-    <>
+    <AppDialogProvider>
       {activeProject ? (
         <ProjectView
           key={activeProject.id}
@@ -1111,7 +1112,7 @@ export function App() {
           }}
         />
       ) : null}
-    </>
+    </AppDialogProvider>
   );
 }
 

@@ -69,6 +69,7 @@ import type {
   LiveArtifactWorkspaceEntry,
   ProjectFile,
 } from '../types';
+import { useAppAlert } from './AppDialog';
 import { Icon } from './Icon';
 import { Toast } from './Toast';
 import { PaletteTweaks, type PaletteId } from './PaletteTweaks';
@@ -3526,6 +3527,7 @@ function HtmlViewer({
   onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
+  const alertDialog = useAppAlert();
   const analytics = useAnalytics();
   // Shared helper for the share menu: emit studio_click share_option on
   // entry and artifact_export_result on resolution. Sync exports report
@@ -5615,11 +5617,17 @@ function HtmlViewer({
                             exportAsImage(snap.dataUrl, exportTitle);
                           } else {
                             console.warn('[exportAsImage] snapshot capture returned null');
-                            alert(t('fileViewer.exportImageFailed'));
+                            await alertDialog({
+                              title: 'Open Design',
+                              message: t('fileViewer.exportImageFailed'),
+                            });
                           }
                         } catch (err) {
                           console.warn('[exportAsImage] failed to convert snapshot:', err);
-                          alert(t('fileViewer.exportImageFailed'));
+                          await alertDialog({
+                            title: 'Open Design',
+                            message: t('fileViewer.exportImageFailed'),
+                          });
                         }
                       }}
                     >

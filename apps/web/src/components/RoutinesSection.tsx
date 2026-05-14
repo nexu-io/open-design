@@ -10,6 +10,7 @@ import type {
 } from '@open-design/contracts';
 
 import { Icon } from './Icon';
+import { useAppConfirm } from './AppDialog';
 import { navigate } from '../router';
 
 type ProjectSummary = { id: string; name: string };
@@ -376,6 +377,7 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
 }
 
 export function RoutinesSection({ onClose }: RoutinesSectionProps) {
+  const confirmDialog = useAppConfirm();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -509,8 +511,13 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm('Delete this routine? Past runs and their projects are kept.'))
-      return;
+    if (!(await confirmDialog({
+      title: 'Delete routine',
+      message: 'Delete this routine? Past runs and their projects are kept.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      danger: true,
+    }))) return;
     setBusyId(id);
     try {
       const res = await fetch(`/api/routines/${id}`, { method: 'DELETE' });

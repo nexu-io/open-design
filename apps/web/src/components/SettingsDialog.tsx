@@ -20,6 +20,7 @@ import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
+import { useAppConfirm } from './AppDialog';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -3964,6 +3965,7 @@ function MediaProvidersSection({
   onChange: () => void;
 }) {
   const { t } = useI18n();
+  const confirmDialog = useAppConfirm();
   const [reloadRunning, setReloadRunning] = useState(false);
   const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
@@ -4148,21 +4150,21 @@ function MediaProvidersSection({
                   type="button"
                   className="ghost"
                   disabled={!clearable}
-                  onClick={() => {
+                  onClick={async () => {
                     // Match the existing window.confirm guard the rest of
                     // the app uses for destructive actions (conversation
                     // delete, design delete, file delete in FileWorkspace).
                     // Without this a stray click on the row's Clear button
                     // wipes the saved key with no recovery. Issue #737.
-                    if (
-                      !confirm(
-                        t('settings.mediaProviderClearConfirm', {
-                          name: provider.label,
-                        }),
-                      )
-                    ) {
-                      return;
-                    }
+                    if (!(await confirmDialog({
+                      title: t('settings.mediaProviders'),
+                      message: t('settings.mediaProviderClearConfirm', {
+                        name: provider.label,
+                      }),
+                      confirmLabel: t('settings.mediaProviderClear'),
+                      cancelLabel: t('common.cancel'),
+                      danger: true,
+                    }))) return;
                     updateProvider(provider, {
                       apiKey: '',
                       baseUrl: '',

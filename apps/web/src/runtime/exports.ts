@@ -16,6 +16,7 @@ import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
+import { showAppAlert } from '../utils/app-dialog';
 
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
@@ -625,9 +626,7 @@ export async function exportAsPdf(
     try {
       await desktopApi.printPdf(doc, nonce);
     } catch {
-      if (typeof alert !== 'undefined') {
-        alert('Print failed. Please try Export PDF again or use the browser version.');
-      }
+      await showAppAlert('Print failed. Please try Export PDF again or use the browser version.');
     }
     return;
   }
@@ -650,9 +649,7 @@ export async function exportAsPdf(
   const win = window.open('', '_blank');
 
   if (!win) {
-    if (typeof alert !== 'undefined') {
-      alert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
-    }
+    await showAppAlert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     URL.revokeObjectURL(url);
     return;
   }

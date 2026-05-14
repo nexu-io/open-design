@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { conversationMetaLabel } from './ChatPane';
 import type { Conversation } from '../types';
+import { useAppConfirm } from './AppDialog';
 
 interface Props {
   conversations: Conversation[];
@@ -115,6 +116,7 @@ function ConversationsDropdown({
   onRename: (id: string, title: string) => void;
 }) {
   const t = useT();
+  const confirmDialog = useAppConfirm();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -196,15 +198,17 @@ function ConversationsDropdown({
               <button
                 className="conv-item-del"
                 title={t('conv.delete')}
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if (
-                    confirm(
-                      t('conv.deleteConfirm', {
-                        title: c.title || t('conv.untitled'),
-                      }),
-                    )
-                  ) {
+                  if (await confirmDialog({
+                    title: t('conv.delete'),
+                    message: t('conv.deleteConfirm', {
+                      title: c.title || t('conv.untitled'),
+                    }),
+                    confirmLabel: t('common.delete'),
+                    cancelLabel: t('common.cancel'),
+                    danger: true,
+                  })) {
                     onDelete(c.id);
                   }
                 }}

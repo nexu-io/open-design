@@ -3,6 +3,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import { useAppAlert } from './AppDialog';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
@@ -71,6 +72,7 @@ export function DesignFilesPanel({
   onClearUploadError,
 }: Props) {
   const t = useT();
+  const alertDialog = useAppAlert();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
@@ -298,7 +300,10 @@ export function DesignFilesPanel({
       });
       setRenaming(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      await alertDialog({
+        title: 'Open Design',
+        message: err instanceof Error ? err.message : String(err),
+      });
       setRenaming({ name, draft, saving: false });
     }
   }
