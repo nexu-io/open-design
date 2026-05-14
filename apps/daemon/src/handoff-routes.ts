@@ -1,0 +1,115 @@
+import type { Express } from 'express';
+import type { RouteDeps } from './server-context.js';
+
+export interface RegisterHandoffRoutesDeps
+  extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'validation' | 'handoff'> {}
+
+/**
+ * `POST /api/projects/:id/handoff` — synthesise a "first user message"
+ * prompt the next conversation can send so a fresh chat can resume the
+ * work without replaying the full transcript.
+ *
+ * The validation block and error-mapping shape mirror
+ * `import-export-routes.ts::registerFinalizeRoutes` since the BYOK
+ * payload, upstream call, and `FinalizeUpstreamError` mapping are
+ * shared. Handoff has no lockfile (synthesis is read-only — concurrent
+ * calls are safe), so the 409 CONFLICT branch is omitted here.
+ */
+export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDeps) {
+  const { db } = ctx;
+  const { sendApiError } = ctx.http;
+  const { PROJECTS_DIR } = ctx.paths;
+  const { getProject } = ctx.projectStore;
+  const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
+  const { synthesizeHandoffPrompt, FinalizeUpstreamError, redactSecrets } = ctx.handoff;
+
+  app.post('/api/projects/:id/handoff', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+    try {
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+
+      if (typeof apiKey !== 'string' || !apiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      }
+      if (baseUrl !== undefined) {
+        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'baseUrl must be a non-empty string when provided',
+          );
+        }
+        const validated = validateExternalApiBaseUrl(baseUrl);
+        if (validated.error) {
+          return sendApiError(
+            res,
+            validated.forbidden ? 403 : 400,
+            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+            validated.error,
+          );
+        }
+      }
+      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'maxTokens must be a positive number when provided',
+        );
+      }
+
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      const handoffAbort = new AbortController();
+      const abortFromRequest = (): void => {
+        if (!handoffAbort.signal.aborted) handoffAbort.abort();
+      };
+      res.on('close', abortFromRequest);
+
+      let result;
+      try {
+        result = await synthesizeHandoffPrompt(db, PROJECTS_DIR, req.params.id, {
+          apiKey,
+          baseUrl,
+          model,
+          maxTokens,
+          signal: handoffAbort.signal,
+        });
+      } finally {
+        res.off('close', abortFromRequest);
+      }
+      res.json(result);
+    } catch (err: any) {
+      if (err instanceof FinalizeUpstreamError) {
+        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const init = safeDetails ? { details: safeDetails } : {};
+        if (err.status === 401) {
+          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
+        }
+        if (err.status === 429) {
+          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+        }
+        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
+      }
+
+      const errName =
+        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
+      if (errName === 'AbortError') {
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'handoff timed out');
+      }
+
+      console.error('[handoff]', err);
+      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
+    }
+  });
+}

@@ -257,6 +257,8 @@ import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-ro
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
+import { registerHandoffRoutes } from './handoff-routes.js';
+import { synthesizeHandoffPrompt } from './handoff-design.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
@@ -2969,6 +2971,11 @@ export async function startServer({
     FinalizeUpstreamError,
     redactSecrets,
   };
+  const handoffDeps = {
+    synthesizeHandoffPrompt,
+    FinalizeUpstreamError,
+    redactSecrets,
+  };
   const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl };
   const agentDeps = {
     listProviderModels,
@@ -3069,6 +3076,14 @@ export async function startServer({
     projectStore: projectStoreDeps,
     validation: validationDeps,
     finalize: finalizeDeps,
+  });
+  registerHandoffRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    validation: validationDeps,
+    handoff: handoffDeps,
   });
   registerDeploymentCheckRoutes(app, { db, http: httpDeps, deploy: deployDeps });
   app.use('/frames', express.static(FRAMES_DIR));
