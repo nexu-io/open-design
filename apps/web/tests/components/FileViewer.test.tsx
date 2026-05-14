@@ -29,6 +29,7 @@ import {
   SvgViewer,
   applyInspectOverridesToSource,
   effectivePreviewScale,
+  handlePreviewWheelZoomGesture,
   parseInspectOverridesFromSource,
   serializeInspectOverrides,
   updateInspectOverride,
@@ -74,6 +75,46 @@ describe('FileViewer preview scale', () => {
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
     expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
     expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  });
+});
+
+describe('FileViewer preview wheel gestures', () => {
+  it('guards ctrl-wheel trackpad gestures from becoming browser zoom', () => {
+    const preventDefault = vi.fn();
+    const scrollTarget = { scrollLeft: 4, scrollTop: 10 } as HTMLElement;
+
+    const handled = handlePreviewWheelZoomGesture({
+      ctrlKey: true,
+      metaKey: false,
+      deltaMode: 0,
+      deltaX: 3,
+      deltaY: 42,
+      preventDefault,
+    }, scrollTarget);
+
+    expect(handled).toBe(true);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(scrollTarget.scrollLeft).toBe(7);
+    expect(scrollTarget.scrollTop).toBe(52);
+  });
+
+  it('leaves ordinary two-finger scroll gestures native', () => {
+    const preventDefault = vi.fn();
+    const scrollTarget = { scrollLeft: 4, scrollTop: 10 } as HTMLElement;
+
+    const handled = handlePreviewWheelZoomGesture({
+      ctrlKey: false,
+      metaKey: false,
+      deltaMode: 0,
+      deltaX: 3,
+      deltaY: 42,
+      preventDefault,
+    }, scrollTarget);
+
+    expect(handled).toBe(false);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(scrollTarget.scrollLeft).toBe(4);
+    expect(scrollTarget.scrollTop).toBe(10);
   });
 });
 

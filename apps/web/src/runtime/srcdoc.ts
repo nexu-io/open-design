@@ -433,6 +433,30 @@ function injectSandboxShim(doc: string): string {
   }
   tryShim('localStorage');
   tryShim('sessionStorage');
+  function wheelDeltaToPixels(delta, mode){
+    if (mode === 1) return delta * 16;
+    if (mode === 2) return delta * 160;
+    return delta;
+  }
+  function isScrollable(el){
+    return !!el && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth);
+  }
+  function wheelScrollTarget(event){
+    var node = event.target && event.target.nodeType === 1 ? event.target : null;
+    while (node && node !== document.documentElement) {
+      if (isScrollable(node)) return node;
+      node = node.parentElement;
+    }
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  document.addEventListener('wheel', function(event){
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    var target = wheelScrollTarget(event);
+    if (!target) return;
+    target.scrollLeft += wheelDeltaToPixels(event.deltaX || 0, event.deltaMode || 0);
+    target.scrollTop += wheelDeltaToPixels(event.deltaY || 0, event.deltaMode || 0);
+  }, { capture: true, passive: false });
   document.addEventListener('click', (e) => {
     if (!e.target || !(e.target instanceof Element)) return;
     var link = e.target.closest('a[href]');
