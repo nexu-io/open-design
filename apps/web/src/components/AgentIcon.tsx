@@ -46,6 +46,7 @@ const MONO_ICONS = new Set([
   'mimo',
   'pi',
   'kilo',
+  'kimi',
 ]);
 
 export function AgentIcon({ id, size = 36, className }: Props) {

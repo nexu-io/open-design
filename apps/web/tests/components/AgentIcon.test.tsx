@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -16,14 +14,16 @@ describe('AgentIcon', () => {
     expect(markup).toContain('aria-hidden="true"');
   });
 
-  it('keeps the Kimi SVG legible on light surfaces', () => {
-    const kimiSvg = readFileSync(
-      new URL('../../public/agent-icons/kimi.svg', import.meta.url),
-      'utf8',
-    );
+  it('renders the Kimi SVG as theme-aware via CSS mask so it adapts to light/dark surfaces', () => {
+    // kimi is in MONO_ICONS, so it renders through the mask path and uses
+    // `background-color: currentColor` to adapt to surrounding text color.
+    // In light theme, currentColor = dark text; in dark theme, currentColor = light text.
+    const markup = renderToStaticMarkup(<AgentIcon id="kimi" size={24} />);
 
-    expect(kimiSvg).toContain('fill="#1c1b1a"');
-    expect(kimiSvg).not.toContain('fill="#fff"');
+    expect(markup).toContain('class="agent-icon agent-icon-mono"');
+    expect(markup).toContain('mask-image:url(&quot;/agent-icons/kimi.svg&quot;)');
+    // Crucially NOT an <img> — the CSS mask makes it theme-aware.
+    expect(markup).not.toContain('<img src="/agent-icons/kimi.svg"');
   });
 
   it('renders Devin as a PNG (Cognition does not publish an SVG mark)', () => {
