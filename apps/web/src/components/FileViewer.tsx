@@ -4134,6 +4134,16 @@ function HtmlViewer({
       const data = ev.data as { type?: string; available?: boolean; visible?: boolean } | null;
       if (!data?.type) return;
       if (data.type === 'od:tweaks-available') {
+        // Scope this to the active iframe only. The hidden srcDoc iframe's
+        // tweaks bridge always evaluates `document.querySelector('.tw-panel')`
+        // and posts `available: false` for agent-protocol (`.twk-panel`)
+        // artifacts that ship no class based panel. Without this guard that
+        // `false` would land after `__edit_mode_available` had already set
+        // `tweaksAvailable = true` and silently disable the toolbar button.
+        // `__edit_mode_*` below stays accepted from either iframe — those
+        // signals carry real artifact intent and must survive render mode
+        // flips.
+        if (ev.source !== iframeRef.current?.contentWindow) return;
         setTweaksAvailable(!!data.available);
       } else if (data.type === 'od:tweaks-panel-state') {
         setTweaksMode(!!data.visible);
