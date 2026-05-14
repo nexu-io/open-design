@@ -58,7 +58,7 @@ const DEFAULT_MAX_TOKENS = 16000;
 const INPUT_BODY_CAP_BYTES = 384 * 1024;
 const LOCK_FILENAME = '.finalize.lock';
 const OUTPUT_FILENAME = 'DESIGN.md';
-const DEFAULT_TIMEOUT_MS = 120_000;
+export const DEFAULT_TIMEOUT_MS = 120_000;
 
 export interface FinalizeOptions {
   apiKey: string;
