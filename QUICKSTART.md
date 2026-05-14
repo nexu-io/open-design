@@ -266,6 +266,17 @@ location /api/ {
 
 Both modes feed the **same** `<artifact>` parser and the **same** sandboxed iframe. The only thing that differs is the transport and the system-prompt delivery (local CLIs have no separate system channel, so the composed prompt is folded into the user message).
 
+### OpenRouter API mode
+
+OpenRouter uses the OpenAI-compatible API path. In **Settings -> Execution -> API mode**, choose **OpenAI**, pick **OpenRouter** from quick-fill providers, paste an OpenRouter API key, and select a model such as `openai/gpt-5.2` or `openrouter/auto`.
+
+The preset fills:
+
+```text
+Base URL: https://openrouter.ai/api/v1
+Model: openai/gpt-5.2
+```
+
 ## Prompt composition
 
 For every send, the app builds a system prompt from three layers and sends it to the provider:

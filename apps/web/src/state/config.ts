@@ -148,6 +148,19 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
   },
   {
+    label: 'OpenRouter',
+    protocol: 'openai',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'openai/gpt-5.2',
+    models: [
+      'openai/gpt-5.2',
+      'openrouter/auto',
+      'anthropic/claude-sonnet-4.5',
+      'google/gemini-3-flash-preview',
+      'x-ai/grok-4.1-fast',
+    ],
+  },
+  {
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',

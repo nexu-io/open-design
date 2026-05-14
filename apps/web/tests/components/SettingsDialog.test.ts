@@ -112,6 +112,22 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps OpenRouter as a selectable OpenAI-compatible provider preset', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const next = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openai/gpt-5.2',
+      apiProviderBaseUrl: 'https://openrouter.ai/api/v1',
+    });
+
+    expect(next).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openai/gpt-5.2',
+      apiProviderBaseUrl: 'https://openrouter.ai/api/v1',
+    });
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',
