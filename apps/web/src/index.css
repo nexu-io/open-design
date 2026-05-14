@@ -6211,6 +6211,64 @@ button.connector-action.is-loading {
   font-size: 12px;
   line-height: 1.4;
 }
+.connector-panel-alerts {
+  display: grid;
+  gap: 6px;
+}
+.connector-panel-alert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--red) 8%, var(--bg-panel));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.connector-panel-alert-copy {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+.connector-panel-alert-copy strong {
+  min-width: 0;
+  max-width: min(160px, 34vw);
+  overflow: hidden;
+  color: var(--red);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connector-panel-alert-copy span {
+  display: -webkit-box;
+  max-height: calc(12px * 1.35 * 2);
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.connector-panel-alert-action {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 22%, var(--border));
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+}
+.connector-panel-alert-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--red) 42%, var(--border));
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
 
 /* Connector gate — masks the grid when the Composio API key is missing. */
 .connector-grid-wrap {

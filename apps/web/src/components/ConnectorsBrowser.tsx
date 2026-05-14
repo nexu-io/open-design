@@ -682,6 +682,24 @@ export function ConnectorsBrowser({
 
   const hasQuery = filter.trim().length > 0;
   const hasNoResults = hasQuery && filteredConnectors.length === 0;
+  const connectorPanelAlerts = useMemo(() => {
+    const alerts: Array<{ connectorId: string; connectorName: string; message: string }> = [];
+    for (const connector of connectors) {
+      if (connector.id === detailConnectorId) continue;
+      const message = connectorAuthorizationError[connector.id];
+      if (message) {
+        alerts.push({ connectorId: connector.id, connectorName: connector.name, message });
+      }
+      if (connectorAuthorizationCancelFailed[connector.id]) {
+        alerts.push({
+          connectorId: connector.id,
+          connectorName: connector.name,
+          message: AUTHORIZATION_CANCEL_FAILED_MESSAGE,
+        });
+      }
+    }
+    return alerts;
+  }, [connectorAuthorizationCancelFailed, connectorAuthorizationError, connectors, detailConnectorId]);
 
   function updateConnector(next: ConnectorDetail | null) {
     if (!next) return;
@@ -883,6 +901,31 @@ export function ConnectorsBrowser({
           </div>
         </div>
       </div>
+      {connectorPanelAlerts.length > 0 ? (
+        <div className="connector-panel-alerts">
+          {connectorPanelAlerts.map((alert) => (
+            <div
+              key={`${alert.connectorId}:${alert.message}`}
+              className="connector-panel-alert"
+              title={`${alert.connectorName}: ${alert.message}`}
+            >
+              <p className="connector-panel-alert-copy" role="status">
+                <strong title={alert.connectorName}>{alert.connectorName}</strong>
+                <span title={alert.message}>{alert.message}</span>
+              </p>
+              <button
+                type="button"
+                className="icon-only connector-panel-alert-action"
+                aria-label={t('connectors.openDetailsAria', { name: alert.connectorName })}
+                title={t('connectors.openDetailsAria', { name: alert.connectorName })}
+                onClick={() => setDetailConnectorId(alert.connectorId)}
+              >
+                <Icon name="external-link" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {loading ? (
         <CenteredLoader label={t('common.loading')} />
       ) : (
@@ -928,8 +971,6 @@ export function ConnectorsBrowser({
                       : null
                   }
                   authorizationPending={connectorAuthorizationPending[connector.id]}
-                  authorizationCancelFailed={connectorAuthorizationCancelFailed[connector.id] === true}
-                  authorizationError={connectorAuthorizationError[connector.id] ?? null}
                   toolsLoading={toolsLoading}
                   toolsLoaded={toolsLoaded}
                   logoTheme={logoTheme}
@@ -995,8 +1036,6 @@ function ConnectorCard({
   disabled = false,
   pendingAction,
   authorizationPending,
-  authorizationCancelFailed,
-  authorizationError,
   toolsLoading: _toolsLoading,
   toolsLoaded,
   logoTheme,
@@ -1009,8 +1048,6 @@ function ConnectorCard({
   disabled?: boolean;
   pendingAction: 'connect' | 'disconnect' | null;
   authorizationPending?: ConnectorAuthorizationPending;
-  authorizationCancelFailed: boolean;
-  authorizationError: string | null;
   toolsLoading: boolean;
   toolsLoaded: boolean;
   logoTheme: 'light' | 'dark';
@@ -1173,16 +1210,6 @@ function ConnectorCard({
           ) : null}
         </div>
       </div>
-      {authorizationError ? (
-        <p className="connector-authorization-hint connector-authorization-error" role="alert">
-          {authorizationError}
-        </p>
-      ) : null}
-      {authorizationCancelFailed ? (
-        <p className="connector-authorization-hint connector-authorization-error" role="alert">
-          {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
-        </p>
-      ) : null}
     </article>
   );
 }
