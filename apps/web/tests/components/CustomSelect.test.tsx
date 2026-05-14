@@ -38,14 +38,9 @@ describe('CustomSelect', () => {
         ariaLabel="Provider"
         value="openai"
         options={[
-          {
-            label: 'Configured',
-            options: [
-              { value: 'openai', label: 'OpenAI' },
-              { value: 'custom', label: 'Custom' },
-            ],
-          },
+          { value: 'openai', label: 'OpenAI' },
           { value: 'disabled', label: 'Disabled', disabled: true },
+          { value: 'custom', label: 'Custom' },
         ]}
         onChange={onChange}
       />,
@@ -54,9 +49,54 @@ describe('CustomSelect', () => {
     const trigger = screen.getByRole('combobox', { name: 'Provider: OpenAI' });
     fireEvent.keyDown(trigger, { key: 'ArrowDown' });
     fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    expect(trigger.getAttribute('aria-activedescendant')).toBe(
+      screen.getByRole('option', { name: /Custom/ }).id,
+    );
+    expect(trigger.getAttribute('aria-activedescendant')).not.toBe(
+      screen.getByRole('option', { name: /Disabled/ }).id,
+    );
+
     fireEvent.keyDown(trigger, { key: 'Enter' });
 
     expect(onChange).toHaveBeenCalledWith('custom');
     expect(onChange).not.toHaveBeenCalledWith('disabled');
+  });
+
+  it('keeps keyboard navigation active state across parent rerenders with fresh options', () => {
+    const onChange = vi.fn();
+    const options = () => [
+      { value: 'first', label: 'First' },
+      { value: 'second', label: 'Second' },
+      { value: 'third', label: 'Third' },
+    ];
+    const { rerender } = render(
+      <CustomSelect
+        ariaLabel="Template"
+        value="first"
+        options={options()}
+        onChange={onChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Template: First' });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    expect(trigger.getAttribute('aria-activedescendant')).toBe(
+      screen.getByRole('option', { name: /Second/ }).id,
+    );
+
+    rerender(
+      <CustomSelect
+        ariaLabel="Template"
+        value="first"
+        options={options()}
+        onChange={onChange}
+      />,
+    );
+
+    const rerenderedTrigger = screen.getByRole('combobox', { name: 'Template: First' });
+    expect(rerenderedTrigger.getAttribute('aria-activedescendant')).toBe(
+      screen.getByRole('option', { name: /Second/ }).id,
+    );
   });
 });

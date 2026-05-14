@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
@@ -74,6 +74,8 @@ export function CustomSelect({
   const idBase = reactId.replace(/:/g, '');
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const activeSourceValueRef = useRef(value);
   const [open, setOpen] = useState(false);
   const [activeValue, setActiveValue] = useState(value);
   const [position, setPosition] = useState<MenuPosition | null>(null);
@@ -85,8 +87,17 @@ export function CustomSelect({
     () => flatOptions.filter((option) => !option.disabled),
     [flatOptions],
   );
+  const flatOptionsRef = useRef(flatOptions);
+  const enabledOptionsRef = useRef(enabledOptions);
+  flatOptionsRef.current = flatOptions;
+  enabledOptionsRef.current = enabledOptions;
+  const optionIdByValue = useMemo(
+    () => new Map(flatOptions.map((option, index) => [option.value, `${idBase}-option-${index}`])),
+    [flatOptions, idBase],
+  );
+  const activeOptionId = open && activeValue ? optionIdByValue.get(activeValue) : undefined;
 
-  const updatePosition = () => {
+  const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const gap = 4;
@@ -104,7 +115,7 @@ export function CustomSelect({
       width: rect.width,
       maxHeight,
     });
-  };
+  }, []);
 
   useEffect(() => {
     if (!portal) return;
@@ -113,13 +124,20 @@ export function CustomSelect({
       return;
     }
     updatePosition();
-  }, [open, portal, value, options]);
+  }, [open, portal, updatePosition]);
 
   useEffect(() => {
-    if (!open) return;
-    const selectedOption = flatOptions.find((option) => option.value === value && !option.disabled);
-    setActiveValue(selectedOption?.value ?? enabledOptions[0]?.value ?? '');
-  }, [enabledOptions, flatOptions, open, value]);
+    if (!open) {
+      wasOpenRef.current = false;
+      activeSourceValueRef.current = value;
+      return;
+    }
+    if (wasOpenRef.current && activeSourceValueRef.current === value) return;
+    const selectedOption = flatOptionsRef.current.find((option) => option.value === value && !option.disabled);
+    setActiveValue(selectedOption?.value ?? enabledOptionsRef.current[0]?.value ?? '');
+    wasOpenRef.current = true;
+    activeSourceValueRef.current = value;
+  }, [open, value]);
 
   useEffect(() => {
     if (!open) return;
@@ -218,6 +236,7 @@ export function CustomSelect({
                   option={option}
                   selected={option.value === value}
                   active={option.value === activeValue}
+                  id={optionIdByValue.get(option.value)}
                   onChoose={choose}
                   onActive={setActiveValue}
                 />
@@ -231,6 +250,7 @@ export function CustomSelect({
             option={item}
             selected={item.value === value}
             active={item.value === activeValue}
+            id={optionIdByValue.get(item.value)}
             onChoose={choose}
             onActive={setActiveValue}
           />
@@ -241,21 +261,6 @@ export function CustomSelect({
 
   return (
     <div className={['od-select', className].filter(Boolean).join(' ')}>
-      <select
-        aria-label={ariaLabel}
-        aria-hidden="true"
-        className="od-select-native-proxy"
-        tabIndex={-1}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      >
-        {flatOptions.map((option) => (
-          <option key={option.value} value={option.value} disabled={option.disabled}>
-            {option.label}
-          </option>
-        ))}
-      </select>
       <button
         ref={buttonRef}
         type="button"
@@ -265,6 +270,7 @@ export function CustomSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${idBase}-menu`}
+        aria-activedescendant={activeOptionId}
         aria-describedby={labelledBy}
         aria-label={`${ariaLabel}: ${selectedLabel}`}
         disabled={disabled}
@@ -287,17 +293,20 @@ function SelectOptionButton({
   option,
   selected,
   active,
+  id,
   onChoose,
   onActive,
 }: {
   option: CustomSelectOption;
   selected: boolean;
   active: boolean;
+  id?: string;
   onChoose: (value: string) => void;
   onActive: (value: string) => void;
 }) {
   return (
     <button
+      id={id}
       type="button"
       className={[
         'od-select-option',
@@ -306,6 +315,7 @@ function SelectOptionButton({
       ].filter(Boolean).join(' ')}
       role="option"
       aria-selected={selected}
+      tabIndex={-1}
       disabled={option.disabled}
       onMouseEnter={() => onActive(option.value)}
       onClick={() => onChoose(option.value)}

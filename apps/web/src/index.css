@@ -300,16 +300,6 @@ textarea { resize: vertical; font-family: inherit; }
   width: 100%;
   min-width: 0;
 }
-.od-select-native-proxy {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  min-width: 0;
-  padding: 0;
-  margin: 0;
-  opacity: 0;
-  pointer-events: none;
-}
 .od-select-trigger {
   width: 100%;
   min-width: 0;
