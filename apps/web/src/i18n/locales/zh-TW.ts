@@ -846,6 +846,7 @@ export const zhTW: Dict = {
   'fileViewer.preview': '預覽',
   'fileViewer.source': '原始碼',
   'fileViewer.tweaks': '調整',
+  'fileViewer.tweaksUnavailable': '此作品中沒有調整面板',
   'fileViewer.comment': '評論',
   'fileViewer.edit': '編輯',
   'fileViewer.draw': '繪製',

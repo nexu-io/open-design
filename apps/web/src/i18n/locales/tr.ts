@@ -758,6 +758,7 @@ export const tr: Dict = {
   'fileViewer.preview': 'Önizle',
   'fileViewer.source': 'Kaynak',
   'fileViewer.tweaks': 'Düzenlemeler',
+  'fileViewer.tweaksUnavailable': 'Bu artefaktta düzenleme paneli yok',
   'fileViewer.comment': 'Yorum',
   'fileViewer.edit': 'Düzenle',
   'fileViewer.draw': 'Çiz',

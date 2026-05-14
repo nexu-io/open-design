@@ -867,6 +867,7 @@ export const en: Dict = {
   'fileViewer.preview': 'Preview',
   'fileViewer.source': 'Source',
   'fileViewer.tweaks': 'Tweaks',
+  'fileViewer.tweaksUnavailable': 'No tweaks panel in this artifact',
   'fileViewer.comment': 'Comment',
   'fileViewer.edit': 'Edit',
   'fileViewer.draw': 'Draw',

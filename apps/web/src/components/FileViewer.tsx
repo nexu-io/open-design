@@ -3673,6 +3673,8 @@ function HtmlViewer({
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
+  const [tweaksMode, setTweaksMode] = useState(false);
+  const [tweaksAvailable, setTweaksAvailable] = useState(false);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
 
@@ -3986,6 +3988,11 @@ function HtmlViewer({
     }, '*');
     win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
     postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null);
+    // Push only the bridge dialect; the postMessage-native artifact protocol
+    // is left to the artifact itself, which announces via `__edit_mode_available`
+    // on mount. That announcement syncs `tweaksMode` to whatever default the
+    // artifact ships with (typically `open=true`) without us fighting it here.
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
   }
 
   useEffect(() => {
@@ -4054,6 +4061,48 @@ function HtmlViewer({
   }, [inspectMode, boardMode, drawClickSelectionMode, file.name]);
 
   useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    // Send all known dialects so the artifact can pick up whichever it speaks:
+    //  - `od:tweaks-panel-visible` is the bridge protocol used by class-based
+    //    panels emitted from the tweaks skill template (`.tw-panel`).
+    //  - `__activate_edit_mode` / `__deactivate_edit_mode` is the protocol
+    //    agent-generated artifacts use for their own React-mounted `.twk-panel`.
+    // Deps intentionally exclude `srcDoc`: on iframe remount, sync happens via
+    // `syncBridgeModes` (bridge) and the artifact's own
+    // `__edit_mode_available` announcement (postMessage panels).
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
+    win.postMessage({ type: tweaksMode ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
+  }, [tweaksMode]);
+
+  // Receive tweaks-side state from the iframe. Supports both bridge messages
+  // (`od:tweaks-*` for skill-template artifacts) and the artifact-native
+  // edit-mode protocol (`__edit_mode_*` for agent-generated artifacts). Either
+  // surface controls toolbar availability and mirrors local close into the
+  // toolbar toggle state.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string; available?: boolean; visible?: boolean } | null;
+      if (!data?.type) return;
+      if (data.type === 'od:tweaks-available') {
+        setTweaksAvailable(!!data.available);
+      } else if (data.type === 'od:tweaks-panel-state') {
+        setTweaksMode(!!data.visible);
+      } else if (data.type === '__edit_mode_available') {
+        // Agent-generated artifacts mount their panel open by default and
+        // announce themselves on mount. Mirror that into the toolbar.
+        setTweaksAvailable(true);
+        setTweaksMode(true);
+      } else if (data.type === '__edit_mode_dismissed') {
+        setTweaksMode(false);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
@@ -4075,6 +4124,10 @@ function HtmlViewer({
     setManualEditError(null);
     manualEditPendingStyleRef.current = null;
     clearManualEditStyleTimer();
+    // Stale tweaks state can carry across files (especially toolbar "on" with
+    // no panel underneath). Reset both and let the iframe bridge re-announce.
+    setTweaksMode(false);
+    setTweaksAvailable(false);
   }, [file.name]);
 
   // Selecting a new file or turning inspect off resets the panel target.
@@ -5191,6 +5244,19 @@ function HtmlViewer({
               </button>
             </span>
           ) : null}
+          <button
+            type="button"
+            className={`viewer-toggle${tweaksMode ? ' on' : ''}`}
+            title={tweaksAvailable ? t('fileViewer.tweaks') : t('fileViewer.tweaksUnavailable')}
+            aria-pressed={tweaksMode}
+            disabled={!tweaksAvailable}
+            data-coming-soon={!tweaksAvailable ? 'true' : undefined}
+            onClick={() => setTweaksMode((v) => !v)}
+          >
+            <Icon name="tweaks" size={13} />
+            <span>{t('fileViewer.tweaks')}</span>
+            <span className="switch" aria-hidden />
+          </button>
         </div>
         <div className="viewer-toolbar-actions">
           {showPreviewToolbarControls ? (
