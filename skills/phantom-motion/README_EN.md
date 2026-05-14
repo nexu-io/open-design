@@ -98,6 +98,22 @@ Phantom Motion is designed as an extremely elegant CLI agent Skill. It can be mo
 
 ---
 
+
+## ⚙️ Environment Configuration
+
+Because the engine deeply integrates AI speech and music generation capabilities, please ensure the following API keys are configured in your system environment variables (or `.env` file) before rendering:
+
+```bash
+# Gemini 3.1 Flash TTS Generation (Required)
+export GEMINI_API_KEY="your_gemini_api_key_here"
+
+# MiniMax Music Generation API (Optional, for advanced dynamic BGM)
+export MINIMAX_API_KEY="your_minimax_api_key_here"
+export MINIMAX_GROUP_ID="your_minimax_group_id_here"
+```
+
+> ⚠️ **Security Warning**: Absolutely NEVER sync code or logs containing your personal API keys or real name to public repositories like GitHub! Please ensure desensitization before submitting a PR!
+
 ## 🎬 Showcase: Masterpiece Prompts
 
 If you want to experience the extreme power of the V10.0 engine, directly copy the following 5 **"God-level Director Prompts"** to your agent:

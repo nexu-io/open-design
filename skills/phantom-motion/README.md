@@ -99,6 +99,22 @@ Phantom Motion 被设计为一个极其优雅的 CLI 智能体 Skill。它可以
 
 ---
 
+
+## ⚙️ 环境配置 (Environment Variables)
+
+由于引擎深度集成了 AI 语音与音乐生成能力，在开始渲染或组装前，请确保在系统环境变量中（或 `.env` 文件）配置以下 API 密钥：
+
+```bash
+# Gemini 3.1 Flash TTS 语音生成 (必需)
+export GEMINI_API_KEY="your_gemini_api_key_here"
+
+# MiniMax 音乐生成 API (可选，用于高级动态 BGM)
+export MINIMAX_API_KEY="your_minimax_api_key_here"
+export MINIMAX_GROUP_ID="your_minimax_group_id_here"
+```
+
+> ⚠️ **安全警告**：请绝对不要将包含你个人 API Key 或真实姓名的代码、日志同步到 GitHub 等公开仓库中！提交 PR 前请务必进行脱敏处理！
+
 ## 🎬 Showcase: 终极性能阅兵剧本库 (Masterpiece Prompts)
 
 如果你想体验 V10.0 引擎的极致威力，请直接将以下 5 个 **“导演级提示词”** 复制给你的智能体：
