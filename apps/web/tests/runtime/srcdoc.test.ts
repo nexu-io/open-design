@@ -37,15 +37,6 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
-  it('guards sandboxed previews from ctrl-wheel browser zoom gestures', () => {
-    const srcdoc = buildSrcdoc('<main style="height:200vh">Hero</main>');
-
-    expect(srcdoc).toContain("document.addEventListener('wheel'");
-    expect(srcdoc).toContain('if (!event.ctrlKey && !event.metaKey) return;');
-    expect(srcdoc).toContain('event.preventDefault();');
-    expect(srcdoc).toContain("document.querySelector('.design-canvas')");
-  });
-
   it('only uses directly mutable slide conventions for setActive support', () => {
     const srcdoc = buildSrcdoc(
       '<section class="slide">One</section><section class="slide">Two</section>',

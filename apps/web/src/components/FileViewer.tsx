@@ -478,56 +478,6 @@ export function effectivePreviewScale(
   return Math.min(previewScale, fitScale);
 }
 
-function previewWheelDeltaToPixels(delta: number, deltaMode: number): number {
-  const WHEEL_DELTA_LINE = 1;
-  const WHEEL_DELTA_PAGE = 2;
-
-  if (deltaMode === WHEEL_DELTA_LINE) return delta * 16;
-  if (deltaMode === WHEEL_DELTA_PAGE) return delta * 160;
-  return delta;
-}
-
-export function handlePreviewWheelZoomGesture(
-  event: Pick<globalThis.WheelEvent, 'ctrlKey' | 'metaKey' | 'deltaMode' | 'deltaX' | 'deltaY' | 'preventDefault'>,
-  scrollTarget?: Pick<HTMLElement, 'scrollLeft' | 'scrollTop'> | null,
-) {
-  if (!event.ctrlKey && !event.metaKey) return false;
-
-  event.preventDefault();
-  if (scrollTarget) {
-    scrollTarget.scrollLeft += previewWheelDeltaToPixels(event.deltaX, event.deltaMode);
-    scrollTarget.scrollTop += previewWheelDeltaToPixels(event.deltaY, event.deltaMode);
-  }
-  return true;
-}
-
-function isScrollablePreviewElement(value: HTMLElement): boolean {
-  return value.scrollHeight > value.clientHeight || value.scrollWidth > value.clientWidth;
-}
-
-function previewWheelScrollTarget(event: globalThis.WheelEvent, fallback: HTMLElement | null): HTMLElement | null {
-  let node = event.target instanceof HTMLElement ? event.target : null;
-  while (node) {
-    if (isScrollablePreviewElement(node)) return node;
-    node = node.parentElement;
-  }
-  return fallback;
-}
-
-function installPreviewWheelZoomGuard(
-  target: EventTarget | null | undefined,
-  scrollTargetForEvent: (event: globalThis.WheelEvent) => HTMLElement | null,
-) {
-  if (!target) return () => {};
-  const onWheel = (event: Event) => {
-    if (event instanceof WheelEvent) {
-      handlePreviewWheelZoomGesture(event, scrollTargetForEvent(event));
-    }
-  };
-  target.addEventListener('wheel', onWheel, { capture: true, passive: false });
-  return () => target.removeEventListener('wheel', onWheel, { capture: true });
-}
-
 function previewScaleShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
@@ -762,7 +712,6 @@ export function LiveArtifactViewer({
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const iframeWheelZoomGuardCleanupRef = useRef<(() => void) | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshSuccess, setRefreshSuccess] = useState<string | null>(null);
@@ -775,29 +724,6 @@ export function LiveArtifactViewer({
   useEffect(() => {
     if (typeof document === 'undefined') return;
     setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
-  }, []);
-  useEffect(() => {
-    const host = previewBodyRef.current;
-    return installPreviewWheelZoomGuard(host, (event) => previewWheelScrollTarget(event, host));
-  }, []);
-  const installIframeWheelZoomGuard = useCallback(() => {
-    iframeWheelZoomGuardCleanupRef.current?.();
-    iframeWheelZoomGuardCleanupRef.current = null;
-    try {
-      const frameDocument = iframeRef.current?.contentWindow?.document;
-      if (!frameDocument) return;
-      const fallback =
-        frameDocument.querySelector<HTMLElement>('.design-canvas') ??
-        (frameDocument.scrollingElement instanceof HTMLElement ? frameDocument.scrollingElement : null);
-      iframeWheelZoomGuardCleanupRef.current = installPreviewWheelZoomGuard(
-        frameDocument,
-        (event) => previewWheelScrollTarget(event, fallback),
-      );
-    } catch {}
-  }, []);
-  useEffect(() => () => {
-    iframeWheelZoomGuardCleanupRef.current?.();
-    iframeWheelZoomGuardCleanupRef.current = null;
   }, []);
   useEffect(() => {
     if (!presentMenuOpen) return;
@@ -1185,7 +1111,6 @@ export function LiveArtifactViewer({
                     title={liveArtifact.title}
                     sandbox="allow-scripts allow-popups"
                     src={previewUrl}
-                    onLoad={installIframeWheelZoomGuard}
                   />
                 </PreviewDrawOverlay>
               </div>
@@ -3728,7 +3653,6 @@ function HtmlViewer({
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const iframeWheelZoomGuardCleanupRef = useRef<(() => void) | null>(null);
   const previewScrollRestoreRef = useRef<{
     hostLeft: number;
     hostTop: number;
@@ -3760,29 +3684,6 @@ function HtmlViewer({
       }
       return value;
     });
-  }, []);
-  useEffect(() => {
-    const host = previewBodyRef.current;
-    return installPreviewWheelZoomGuard(host, (event) => previewWheelScrollTarget(event, host));
-  }, []);
-  const installIframeWheelZoomGuard = useCallback(() => {
-    iframeWheelZoomGuardCleanupRef.current?.();
-    iframeWheelZoomGuardCleanupRef.current = null;
-    try {
-      const frameDocument = iframeRef.current?.contentWindow?.document;
-      if (!frameDocument) return;
-      const fallback =
-        frameDocument.querySelector<HTMLElement>('.design-canvas') ??
-        (frameDocument.scrollingElement instanceof HTMLElement ? frameDocument.scrollingElement : null);
-      iframeWheelZoomGuardCleanupRef.current = installPreviewWheelZoomGuard(
-        frameDocument,
-        (event) => previewWheelScrollTarget(event, fallback),
-      );
-    } catch {}
-  }, []);
-  useEffect(() => () => {
-    iframeWheelZoomGuardCleanupRef.current?.();
-    iframeWheelZoomGuardCleanupRef.current = null;
   }, []);
   const capturePreviewScrollPosition = useCallback(() => {
     const host = previewBodyRef.current;
@@ -6074,7 +5975,6 @@ function HtmlViewer({
                       sandbox="allow-scripts"
                       src={previewSrcUrl}
                       onLoad={() => {
-                        installIframeWheelZoomGuard();
                         dcViewportRestoreAtRef.current = Date.now();
                         iframeRef.current?.contentWindow?.postMessage({
                           type: '__dc_set_viewport',
@@ -6094,7 +5994,6 @@ function HtmlViewer({
                       sandbox="allow-scripts"
                       srcDoc={srcDoc}
                       onLoad={() => {
-                        installIframeWheelZoomGuard();
                         dcViewportRestoreAtRef.current = Date.now();
                         iframeRef.current?.contentWindow?.postMessage({
                           type: '__dc_set_viewport',
