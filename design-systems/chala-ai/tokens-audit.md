@@ -1,19 +1,63 @@
-# Chala.AI tokens.json — Reconciliation Audit
+# Chala.AI design-system — Reconciliation Audit
 
-> Date: 2026-05-14
+> Date: 2026-05-14 (revised same day to add tokens.css)
 > Author: Hand-authored seed v1 (per plan `calm-floating-fern` §5a step 1–3)
 > Reconciled against: `design-systems/chala-ai/DESIGN.md` and `projects/Gym.AI/Chala.AI/apps/ios/ChalaAI/ChalaAI/Views/Components/Theme.swift` (read at this date)
 
-This file records the one-time reconciliation between the three sources of
-chala-ai design values that existed before `tokens.json` was authored:
+This file records the one-time reconciliation between the multiple sources
+of chala-ai design values:
 
-1. **DESIGN.md** — the human-readable rationale doc.
-2. **Theme.swift** — the iOS app's hand-authored constants.
-3. **chala-ai-mobile/assets/template.html** (legacy) — the skill's preview shim
-   had its own CSS variables.
+1. **DESIGN.md** — human-readable rationale.
+2. **Theme.swift** — iOS app hand-authored constants.
+3. **chala-ai-mobile/assets/template.html** (legacy) — skill preview shim with
+   its own CSS variables (now superseded by `od-elements.js`).
 
-`tokens.json` is now the source of truth. Future updates flow via
-`tools/tokens-build/extract.ts` (LLM extraction) and PR review.
+## Provenance model (revised after reading upstream's loader)
+
+Initial seed treated `tokens.json` as the source of truth. Reading
+`apps/daemon/src/prompts/system.ts` and `apps/daemon/src/design-systems.ts`
+revealed that **upstream already ships its own structured token convention
+(`tokens.css`)** and consumes it for picker / lint / system-prompt
+injection. To avoid fighting upstream's contract, chala-ai now ships
+three coexisting machine-readable forms with distinct consumers:
+
+| File | Consumer | Naming idiom |
+|---|---|---|
+| `DESIGN.md` | Humans (rationale). Daemon also injects it as prose into system prompt. | Free prose |
+| `tokens.css` | Upstream OD daemon: design-system loader (`design-systems.ts`), picker UI (`NewProjectPanel.tsx`), system-prompt injection (`prompts/system.ts:321`), artifact lint (`lint-artifact.ts`) | Standard schema (`--bg`, `--surface`, `--fg`, `--muted`, `--meta`, `--border`, `--accent`, `--accent-on`, `--warn`, `--danger`, `--font-display`, …) per `craft/color.md` |
+| `tokens.json` | ODML side: skill validator (forthcoming), per-platform translators (SwiftUI, future React/RN). Skill prompt references these names directly via `<od-* color="fg-muted">` attributes. | ODML idiom (`bg`, `fg-muted`, `accent-fg`, `bg-elevated`, `bg-overlay`, …) per the SKILL.md token tables |
+
+**Source of intent:** `DESIGN.md` — when changing a token value, the prose
+gets updated first, then the two structured files mirror it. `tokens.css`
+and `tokens.json` are both DERIVED forms; neither is privileged over the
+other. They serve parallel contracts (upstream HTML pipeline vs ODML
+multi-platform pipeline) and MUST stay in sync on value (the hex codes
+must match across the two files; only the name keys differ).
+
+A future automation could derive both from a single source (e.g.
+`tools/tokens-build/extract.ts` per plan §5a) but until that exists, the
+human PR author updates all three files together when changing any value.
+
+## ODML ↔ standard-schema name cross-walk
+
+For audit: every name in `tokens.json` (ODML idiom) maps to a name in
+`tokens.css` (standard schema). Values are identical; names differ.
+
+| ODML name (tokens.json) | Standard-schema name (tokens.css) | Shared value |
+|---|---|---|
+| `bg` | `--bg` | `#050505` |
+| `bg-elevated` | `--surface` | `#0B0B0B` |
+| `bg-overlay` | (no direct standard-schema slot) | `rgba(255,255,255,0.06)` — exposed only on ODML side; HTML artifacts use `--surface-warm` which aliases to `--surface` |
+| `fg` | `--fg` | `#FFFFFF` |
+| `fg-muted` | `--muted` | `rgba(255,255,255,0.55)` |
+| `fg-subtle` | `--meta` | `rgba(255,255,255,0.32)` |
+| `accent` | `--accent` | `#E0E0E0` (mapped to DESIGN.md `--primary-fill`; the prose "system is monochrome; accent is pure white" describes intent, but the FILL token lands here per DESIGN.md §2.Interactive) |
+| `accent-fg` | `--accent-on` | `#0B0B0B` |
+| `success` | `--success` | `#34C759` |
+| `warning` | `--warn` | `#FF9500` (note: schema uses `--warn`, ODML uses `warning`) |
+| `danger` | `--danger` | `#FF3B30` |
+| `border` | `--border` | `rgba(255,255,255,0.08)` |
+| `border-strong` | (exposed via `--elev-ring`) | `rgba(255,255,255,0.16)` — `border-strong` in ODML maps to elevation-ring on the HTML side, not a separate border tier |
 
 ---
 

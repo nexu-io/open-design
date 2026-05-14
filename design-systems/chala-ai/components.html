@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chala.AI — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/chala-ai. Every visible
+        value comes from tokens.css; if the agent paste-replaces the
+        :root block and reuses the component selectors below verbatim,
+        the artifact passes lint without further audit."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* :root paste — sourced verbatim from
+         design-systems/chala-ai/tokens.css. Keep this block in sync
+         when tokens.css changes. The agent prompt instructs the
+         Designer panelist to paste this block as the FIRST thing in
+         their <style>, then reference everything below via var(...). */
+      :root {
+        --bg: #050505;
+        --surface: #0b0b0b;
+        --surface-warm: var(--surface);
+
+        --fg: #ffffff;
+        --fg-2: var(--fg);
+        --muted: rgba(255, 255, 255, 0.55);
+        --meta: rgba(255, 255, 255, 0.32);
+
+        --border: rgba(255, 255, 255, 0.08);
+        --border-soft: var(--border);
+
+        --accent: #e0e0e0;
+        --accent-on: #0b0b0b;
+        --accent-hover: #ffffff;
+        --accent-active: rgba(255, 255, 255, 0.92);
+
+        --success: #34c759;
+        --warn: #ff9500;
+        --danger: #ff3b30;
+
+        --font-display: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        --font-body: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        --font-mono: 'GeistMono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+        --text-xs: 10px;
+        --text-sm: 13px;
+        --text-base: 15px;
+        --text-lg: 22px;
+        --text-xl: 28px;
+        --text-2xl: 36px;
+        --text-3xl: 42px;
+        --text-4xl: 56px;
+
+        --leading-body: 1.4;
+        --leading-tight: 1.15;
+        --tracking-display: -0.02em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+
+        --radius-sm: 2px;
+        --radius-md: 8px;
+        --radius-lg: 15px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px rgba(255, 255, 255, 0.16);
+        --elev-raised: 0 0 16px rgba(255, 255, 255, 0.08);
+
+        --focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.32);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset (minimal) ───────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section {
+        padding-block: var(--section-y-desktop);
+      }
+      section + section {
+        border-top: 1px solid var(--border);
+      }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ────────────────────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--text-3xl);
+        font-weight: 500;
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-2xl);
+        font-weight: 500;
+        letter-spacing: var(--tracking-display);
+      }
+      h3 {
+        font-size: var(--text-lg);
+        font-weight: 500;
+        letter-spacing: var(--tracking-display);
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--muted);
+        max-width: 48ch;
+      }
+      .body-muted { color: var(--muted); }
+      .body-meta { color: var(--meta); }
+      .body-sm { font-size: var(--text-sm); }
+      /* `.eyebrow` is chala's signature label form — uppercase mono
+         at +0.18em tracking. Used for section labels, timestamps,
+         stats captions. Per craft/typography.md, letter-spacing
+         must be ≥ 0.06em on uppercase rules; chala lands at 0.18. */
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--meta);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        font-weight: 400;
+      }
+      .stat {
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--fg);
+        letter-spacing: var(--tracking-display);
+      }
+      .stack-2 > * + * { margin-block-start: var(--space-2); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+      .stack-8 > * + * { margin-block-start: var(--space-8); }
+
+      /* ─── Buttons ───────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px 18px;
+        border-radius: var(--radius-sm);
+        font-family: inherit;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-secondary {
+        background: transparent;
+        color: var(--fg);
+        border-color: rgba(255, 255, 255, 0.16);
+      }
+      .btn-secondary:hover { border-color: rgba(255, 255, 255, 0.32); }
+      .btn-ghost {
+        background: transparent;
+        color: var(--muted);
+      }
+      .btn-ghost:hover { color: var(--fg); }
+
+      /* ─── Cards ─────────────────────────────────────────────── */
+      .card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+      }
+      .card.elevated {
+        border-color: rgba(255, 255, 255, 0.16);
+      }
+      .features-grid {
+        display: grid;
+        gap: var(--space-4);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      @media (max-width: 1023px) {
+        .features-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 639px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+
+      /* ─── Hero numerics — chala's signature display use ────── */
+      .stat-display {
+        font-size: var(--text-3xl);
+      }
+      .stat-headline {
+        font-size: var(--text-xl);
+      }
+      .stat-row {
+        display: grid;
+        gap: var(--space-6);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        padding-block: var(--space-8);
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+      .stat-cell {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      /* ─── Form ──────────────────────────────────────────────── */
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        max-width: 28rem;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .field label {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--meta);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+      }
+      .field input {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 12px 14px;
+        font-family: inherit;
+        font-size: var(--text-base);
+        line-height: 1.2;
+      }
+      .field input::placeholder {
+        color: var(--meta);
+      }
+      .field input:focus-visible {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.32);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help {
+        font-size: var(--text-sm);
+        color: var(--muted);
+      }
+      .form-actions {
+        display: flex;
+        gap: var(--space-2);
+        margin-block-start: var(--space-2);
+      }
+      .form-row {
+        display: grid;
+        gap: var(--space-12);
+        grid-template-columns: 1fr 1fr;
+      }
+      @media (max-width: 1023px) {
+        .form-row { grid-template-columns: 1fr; }
+      }
+
+      /* ─── Hero ──────────────────────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        gap: var(--space-12);
+        grid-template-columns: 1.4fr 1fr;
+        align-items: end;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; }
+      }
+      .hero-headline {
+        font-size: var(--text-3xl);
+        max-width: 18ch;
+      }
+      .hero-aside {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      /* ─── Status pill — uses --success for "system live" ───── */
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.10);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--fg);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+      }
+      .status-pill::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- ════════════════════════════════════════════════════════════
+           HERO — exercises: .eyebrow, h1, .lead, .stat-row,
+           .stat (display + headline), .status-pill, .btn-primary,
+           .btn-secondary. The hero is the most opinionated screen
+           in chala's vocabulary: hero numerics on display, white
+           tracked-tight headline, uppercase mono labels, single CTA.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="hero">
+        <div class="hero-grid stack-8">
+          <div class="stack-6">
+            <span class="status-pill">System live</span>
+            <p class="eyebrow">Reference fixture · 2026</p>
+            <h1 class="hero-headline">
+              A matte instrument for personal training.
+            </h1>
+            <p class="lead">
+              Every value on this page derives from
+              <code>tokens.css</code>. Paste the <code>:root</code> block
+              into your artifact, then reference tokens by name and the
+              brand reads correctly without further audit.
+            </p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary">Start session</button>
+              <button type="button" class="btn btn-secondary">Inspect tokens</button>
+            </div>
+          </div>
+
+          <div class="hero-aside">
+            <p class="eyebrow">Today</p>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <p class="eyebrow">Sessions</p>
+                <p class="stat stat-display">4</p>
+              </div>
+              <div class="stat-cell">
+                <p class="eyebrow">Volume</p>
+                <p class="stat stat-display">8.4<span style="font-size: var(--text-lg); color: var(--meta); letter-spacing: 0.18em; font-family: var(--font-mono);">t</span></p>
+              </div>
+              <div class="stat-cell">
+                <p class="eyebrow">PR</p>
+                <p class="stat stat-display">+2</p>
+              </div>
+            </div>
+            <p class="body-sm body-muted">
+              Display numerics use <code>GeistMono</code> with tabular
+              digits; <code>--tracking-display</code> keeps the rhythm.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FEATURES — exercises: h2, h3, .card, .body-muted, link,
+           .features-grid. Each card describes a real property of this
+           fixture (no "feature one/two/three" filler).
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 28ch">
+            Every component below uses only var(--*) — no raw hex, no
+            off-token type.
+          </h2>
+        </div>
+
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card stack-3">
+            <h3>Opacity-only depth</h3>
+            <p class="body-muted body-sm">
+              No shadows, no gradients (except a single glow on the
+              Landing CTA per <code>--elev-raised</code>). Lift comes
+              from 1px hairlines at <code>--border</code> (8%) and
+              <code>--elev-ring</code> (16%).
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect tokens →</a>
+          </article>
+
+          <article class="card stack-3">
+            <h3>Sharp interactive radii</h3>
+            <p class="body-muted body-sm">
+              <code>--radius-sm: 2px</code> on buttons / chips — chala's
+              hard rule for interactive elements. Cards step to
+              <code>--radius-md: 8px</code> for visual lift. Inputs use
+              <code>--radius-lg: 15px</code> for softness on text fields.
+            </p>
+            <a href="./DESIGN.md" class="body-sm">Read the rule →</a>
+          </article>
+
+          <article class="card stack-3">
+            <h3>Uppercase mono chrome</h3>
+            <p class="body-muted body-sm">
+              Every label, eyebrow, timestamp, and stat caption is
+              <code>GeistMono</code> at <code>--text-xs</code> with
+              <code>+0.18em</code> tracking and
+              <code>text-transform: uppercase</code>. The body face
+              (<code>Geist</code>) is reserved for sentences.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect typography →</a>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FORM — exercises: .field, input :focus-visible,
+           .btn-primary (reused), .btn-secondary, .field-help.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs read like instruments, not web forms.</h2>
+            <p class="body-muted" style="max-width: 48ch">
+              Field labels are uppercase mono at <code>--meta</code>;
+              the input itself sits on a 5% white fill with a 15px
+              radius. Focus binds to <code>--focus-ring</code> — a 32%
+              white halo, never the chromatic accent.
+            </p>
+          </div>
+
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@team.dev"
+                autocomplete="email"
+                required
+              />
+              <p class="field-help">
+                We'll send the spec PDF and nothing else.
+              </p>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                Send the spec
+              </button>
+              <button type="button" class="btn btn-ghost">
+                Skip for now
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
