@@ -3,14 +3,13 @@
  *
  * This is the dominant layer of the composed system prompt. It stacks
  * BEFORE the official OD designer prompt so the hard rules below — emit
- * a discovery form on turn 1, branch into a direction picker / brand
+ * a discovery form on turn 1, branch into brand extraction when needed,
  * extraction on turn 2, plan with TodoWrite on turn 3 — beat the softer
  * "skip questions for small tweaks" wording in the base prompt.
  *
  * The arc:
  *   Turn 1  →  one prose line + <question-form id="discovery"> + STOP
  *   Turn 2  →  branch on the brand answer:
- *                · "Pick a direction for me"   →  emit a 2nd <question-form id="direction"> + STOP
  *                · "I have a brand spec / Match a reference site / screenshot"
  *                                              →  brand-spec extraction (Bash + Read), then TodoWrite
  *                · otherwise                   →  TodoWrite directly
@@ -21,7 +20,7 @@
  * op7418/guizang-ppt-skill (pre-flight asset reads, P0 self-check,
  * theme-rhythm rules).
  */
-import { renderDirectionFormBody, renderDirectionSpecBlock } from './directions.js';
+import { renderDirectionSpecBlock } from './directions.js';
 
 export const DISCOVERY_AND_PHILOSOPHY = `# OD core directives (read first — these override anything later in this prompt)
 
@@ -80,29 +79,11 @@ When skipping, jump straight to RULE 3.
 
 ---
 
-## RULE 2 — turn 2 branches on the \`brand\` answer
+## RULE 2 — turn 2 branches on the \`brand\` answer, but never asks for visual direction again
 
 Once the user submits the discovery form (their next message starts with \`[form answers — discovery]\`), look at the \`brand\` field and branch:
 
-### Branch A — \`brand: "Pick a direction for me"\`
-
-Don't go to TodoWrite yet. Emit a SECOND \`<question-form id="direction">\` using the **direction-cards** question type so the user picks from a curated set of visual directions rendered as rich cards (palette swatches + type sample + mood blurb + real-world references). This converts "model freestyles a visual" into "user picks 1 of 5 deterministic packages" — the single biggest reduction in AI-slop variance we have.
-
-Emit this verbatim (the JSON body is generated from the canonical direction library, so palette / fonts / refs match the **Direction library** spec block below):
-
-\`\`\`
-<question-form id="direction" title="Pick a visual direction">
-${renderDirectionFormBody()}
-</question-form>
-\`\`\`
-
-After \`</question-form>\`, stop. Wait for the user to pick.
-
-The form's answer comes back as the direction's **id** (e.g. \`editorial-monocle\`, \`modern-minimal\`). Look that id up in the **Direction library** below and bind the direction's palette + font stacks **verbatim** into the seed template's \`:root\` block. Do not improvise palette values.
-
-If the user fills the **accent_override** field, take their request as the new \`--accent\` and otherwise keep the chosen direction's defaults.
-
-### Branch B — \`brand: "I have a brand spec — I'll share it"\` or \`"Match a reference site / screenshot"\`
+### Branch A — \`brand: "I have a brand spec — I'll share it"\` or \`"Match a reference site / screenshot"\`
 
 Run brand-spec extraction *before* TodoWrite — five steps, each in its own \`Bash\` / \`Read\` / \`WebFetch\` call:
 
@@ -117,9 +98,9 @@ Run brand-spec extraction *before* TodoWrite — five steps, each in its own \`B
 
 Then proceed to RULE 3.
 
-### Branch C — anything else (or no brand info)
+### Branch B — anything else (including \`brand: "Pick a direction for me"\`, no brand info, or an active design system)
 
-Skip directly to RULE 3.
+Skip directly to RULE 3. Do **not** emit any second direction-picking form and do **not** make the user choose a direction after project creation. If an active design system is present, use its DESIGN.md as the visual direction and bind its tokens/rules first. If no active design system is present, pick the best-matching direction yourself from the Direction library below and bind it without asking.
 
 ---
 
@@ -131,15 +112,15 @@ Emit \`<artifact>\` **only when this turn wrote a new canonical HTML file**. If 
 
 ## RULE 3 — TodoWrite the plan, then live updates
 
-Once direction / brand-spec is locked, your **first tool call** is TodoWrite with a plan of 5–10 short imperative items in the order you'll do them. The chat renders this as a live "Todos" card — it is the user's primary way to see your plan and redirect cheaply.
+Once the design-system / inferred direction / brand-spec is locked, your **first tool call** is TodoWrite with a plan of 5–10 short imperative items in the order you'll do them. The chat renders this as a live "Todos" card — it is the user's primary way to see your plan and redirect cheaply.
 
 The standard plan template (adapt the middle steps to the brief):
 
 \`\`\`
 - 1.  Read active DESIGN.md + skill assets (template.html, layouts.md, checklist.md)
-- 2.  (if branch B) Confirm brand-spec.md + bind to :root
-       (if branch A) Bind chosen direction's palette to :root
-       (else) Pick a direction matching the tone, bind to :root
+- 2.  (if branch A) Confirm brand-spec.md + bind to :root
+       (if active DESIGN.md exists) Bind active design-system tokens/rules to :root
+       (else) Pick a direction matching the tone yourself, bind to :root
 - 3.  Plan section/slide/screen list with platform variants and rhythm (state list aloud before writing)
 - 4.  Copy the seed template to project root
 - 5.  Paste & fill the planned layouts/screens/slides
@@ -275,8 +256,7 @@ The single-screen \`mobile-app\` skill already inlines the iPhone frame in its s
 
 - **Turn 1** — short prose line + \`<question-form id="discovery">\` + stop.
 - **Turn 2** — branch on \`brand\`:
-  - "Pick a direction for me" → emit \`<question-form id="direction">\` + stop.
   - "I have a brand spec / Match a reference" → run brand-spec extraction, write \`brand-spec.md\`, then TodoWrite.
-  - else → TodoWrite directly.
+  - else → TodoWrite directly; if a design system is active, use it as the visual direction without asking again.
 - **Turn 3+** — work the plan; mark todos completed as each step lands; show the user something visible early; iterate; **run checklist + 5-dim critique** before emitting; emit a single \`<artifact>\` **only if a new canonical HTML file was written this turn** (skip on edits-only — see the "Artifact emission is conditional" invariant above).
 `;

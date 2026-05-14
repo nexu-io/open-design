@@ -26,10 +26,14 @@ concurrency:
 
 jobs:
   packaged_changes:
-    name: Detect packaged smoke changes
+    name: Detect PR change scopes
     runs-on: ubuntu-latest
     outputs:
       required: ${{ steps.detect.outputs.required }}
+      daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
+      web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
+      tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
+      tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
 
     steps:
       - name: Checkout
@@ -37,12 +41,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect desktop/sidecar/packaging changes
+      - name: Detect desktop, packaging, and app test scopes
         id: detect
         shell: bash
         run: |
           set -euo pipefail
           required=false
+          daemon_tests_required=false
+          web_tests_required=false
+          tools_dev_tests_required=false
+          tools_pack_tests_required=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/changed-files.txt"
             patterns=(
@@ -62,20 +70,53 @@ jobs:
                   required=true
                 fi
               done
+              if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                daemon_tests_required=true
+              fi
+              if [[ "$file" == "apps/web/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                web_tests_required=true
+              fi
+              if [[ "$file" == "scripts/"* || "$file" == "assets/"* || "$file" == "skills/"* || "$file" == "prompt-templates/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* ]]; then
+                daemon_tests_required=true
+                web_tests_required=true
+              fi
+              if [[ "$file" == "tools/dev/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                tools_dev_tests_required=true
+              fi
+              if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                tools_pack_tests_required=true
+              fi
               if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" ]]; then
                 required=true
+                daemon_tests_required=true
+                web_tests_required=true
+                tools_dev_tests_required=true
+                tools_pack_tests_required=true
               fi
-              if [ "$required" = "true" ]; then
+              if [ "$required" = "true" ] \
+                && [ "$daemon_tests_required" = "true" ] \
+                && [ "$web_tests_required" = "true" ] \
+                && [ "$tools_dev_tests_required" = "true" ] \
+                && [ "$tools_pack_tests_required" = "true" ]; then
                 break
               fi
             done < "$RUNNER_TEMP/changed-files.txt"
           else
             required=true
+            daemon_tests_required=true
+            web_tests_required=true
+            tools_dev_tests_required=true
+            tools_pack_tests_required=true
           fi
           echo "required=$required" >> "$GITHUB_OUTPUT"
+          echo "daemon_tests_required=$daemon_tests_required" >> "$GITHUB_OUTPUT"
+          echo "web_tests_required=$web_tests_required" >> "$GITHUB_OUTPUT"
+          echo "tools_dev_tests_required=$tools_dev_tests_required" >> "$GITHUB_OUTPUT"
+          echo "tools_pack_tests_required=$tools_pack_tests_required" >> "$GITHUB_OUTPUT"
 
   validate:
     name: Validate workspace
+    needs: [packaged_changes]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -137,12 +178,25 @@ jobs:
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
 
-      - name: App workspace tests
+      - name: App workspace smoke tests
+        if: ${{ needs.packaged_changes.outputs.tools_dev_tests_required == 'true' || needs.packaged_changes.outputs.tools_pack_tests_required == 'true' }}
+        run: |
+          if [ "${{ needs.packaged_changes.outputs.tools_dev_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/tools-dev test
+          fi
+          if [ "${{ needs.packaged_changes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/tools-pack test
+          fi
+
+      - name: App workspace daemon tests
+        if: ${{ needs.packaged_changes.outputs.daemon_tests_required == 'true' }}
         run: |
           pnpm --filter @open-design/daemon test
+
+      - name: App workspace web tests
+        if: ${{ needs.packaged_changes.outputs.web_tests_required == 'true' }}
+        run: |
           pnpm --filter @open-design/web test
-          pnpm --filter @open-design/tools-dev test
-          pnpm --filter @open-design/tools-pack test
 
       - name: E2E vitest
         run: pnpm --filter @open-design/e2e test
@@ -247,8 +301,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Compute Windows tools-pack cache key
         id: win_tools_pack_cache_key

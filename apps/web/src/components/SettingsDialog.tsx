@@ -3339,6 +3339,7 @@ function OrbitSection({
         navigateRoute({
           kind: 'project',
           projectId: payload.projectId,
+          conversationId: null,
           fileName: null,
         });
       } catch {

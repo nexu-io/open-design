@@ -687,22 +687,45 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
-  return (db
+  return rows(db
     .prepare(
-      `SELECT id, project_id AS projectId, title,
-              created_at AS createdAt, updated_at AS updatedAt
-         FROM conversations
-        WHERE project_id = ?
-        ORDER BY updated_at DESC`,
+      `WITH project_conversations AS (
+          SELECT id, project_id AS projectId, title,
+                 created_at AS createdAt, updated_at AS updatedAt
+            FROM conversations
+           WHERE project_id = ?
+        ),
+        latest_runs AS (
+          SELECT conversation_id AS conversationId,
+                 run_status AS latestRunStatus,
+                 started_at AS latestRunStartedAt,
+                 ended_at AS latestRunEndedAt,
+                 events_json AS latestRunEventsJson
+            FROM (
+              SELECT m.conversation_id,
+                     m.run_status,
+                     m.started_at,
+                     m.ended_at,
+                     m.events_json,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY m.conversation_id
+                       ORDER BY m.position DESC
+                     ) AS rn
+                FROM messages m
+                JOIN project_conversations c ON c.id = m.conversation_id
+               WHERE m.role = 'assistant'
+                 AND m.run_status IS NOT NULL
+            )
+           WHERE rn = 1
+        )
+        SELECT c.id, c.projectId, c.title, c.createdAt, c.updatedAt,
+               lr.latestRunStatus, lr.latestRunStartedAt,
+               lr.latestRunEndedAt, lr.latestRunEventsJson
+          FROM project_conversations c
+          LEFT JOIN latest_runs lr ON lr.conversationId = c.id
+         ORDER BY c.updatedAt DESC`,
     )
-    .all(projectId) as DbRow[])
-    .map((r: DbRow) => ({
-      id: r.id,
-      projectId: r.projectId,
-      title: r.title ?? null,
-      createdAt: Number(r.createdAt),
-      updatedAt: Number(r.updatedAt),
-    }));
+    .all(projectId)).map(normalizeConversation);
 }
 
 export function getConversation(db: SqliteDb, id: string) {
@@ -715,12 +738,86 @@ export function getConversation(db: SqliteDb, id: string) {
     .get(id) as DbRow | undefined;
   if (!r) return null;
   return {
+    ...normalizeConversation(r),
+    latestRun: latestConversationRunSummary(db, r.id) ?? undefined,
+  };
+}
+
+function normalizeConversation(r: DbRow) {
+  const latestRun = conversationRunSummaryFromRow({
+    runStatus: r.latestRunStatus,
+    startedAt: r.latestRunStartedAt,
+    endedAt: r.latestRunEndedAt,
+    eventsJson: r.latestRunEventsJson,
+  });
+  return {
     id: r.id,
     projectId: r.projectId,
     title: r.title ?? null,
     createdAt: Number(r.createdAt),
     updatedAt: Number(r.updatedAt),
+    latestRun: latestRun ?? undefined,
   };
+}
+
+function latestConversationRunSummary(db: SqliteDb, conversationId: string) {
+  const row = db
+    .prepare(
+      `SELECT run_status AS runStatus,
+              started_at AS startedAt,
+              ended_at AS endedAt,
+              events_json AS eventsJson
+         FROM messages
+        WHERE conversation_id = ?
+          AND role = 'assistant'
+          AND run_status IS NOT NULL
+        ORDER BY position DESC
+        LIMIT 1`,
+    )
+    .get(conversationId) as DbRow | undefined;
+  return conversationRunSummaryFromRow(row);
+}
+
+function conversationRunSummaryFromRow(row: DbRow | undefined) {
+  if (!row || typeof row.runStatus !== 'string') return null;
+  const startedAt = row.startedAt == null ? undefined : Number(row.startedAt);
+  const endedAt = row.endedAt == null ? undefined : Number(row.endedAt);
+  const usageDurationMs = latestUsageDurationMs(row.eventsJson);
+  const durationMs =
+    Number.isFinite(startedAt) && Number.isFinite(endedAt)
+      ? Math.max(0, (endedAt as number) - (startedAt as number))
+      : usageDurationMs;
+  return {
+    status: row.runStatus,
+    ...(Number.isFinite(startedAt) ? { startedAt } : {}),
+    ...(Number.isFinite(endedAt) ? { endedAt } : {}),
+    ...(typeof durationMs === 'number' && Number.isFinite(durationMs)
+      ? { durationMs }
+      : {}),
+  };
+}
+
+function latestUsageDurationMs(eventsJson: unknown): number | undefined {
+  if (typeof eventsJson !== 'string' || eventsJson.length === 0) return undefined;
+  try {
+    const events = JSON.parse(eventsJson);
+    if (!Array.isArray(events)) return undefined;
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i];
+      if (
+        event &&
+        typeof event === 'object' &&
+        event.kind === 'usage' &&
+        typeof event.durationMs === 'number' &&
+        Number.isFinite(event.durationMs)
+      ) {
+        return Math.max(0, event.durationMs);
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 export function insertConversation(db: SqliteDb, c: DbRow) {

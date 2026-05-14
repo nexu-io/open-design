@@ -44,8 +44,19 @@ import { expandHomePrefix } from './home-expansion.js';
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
 type ProviderMap = Record<string, ProviderEntry>;
+type ModelAliasMap = Record<string, string>;
 type JsonRecord = Record<string, unknown>;
 type OAuthCredential = { apiKey: string; source: string };
+
+// Single env var carries the full alias map as JSON so we don't have
+// to dynamically lift `OD_MEDIA_MODEL_ALIAS_<id>=value` into a record
+// with all the env-var-name escaping that entails (Windows cmd.exe in
+// particular rejects hyphens). The shape mirrors the on-disk
+// `aliases` map so users can switch storage layers without rewriting
+// their workflow:
+//
+//   OD_MEDIA_MODEL_ALIASES='{"doubao-seedream-3-0-t2i-250415":"doubao-seedream-5-0"}'
+const ENV_MODEL_ALIASES = 'OD_MEDIA_MODEL_ALIASES';
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object';
@@ -85,6 +96,7 @@ const ENV_KEYS: Record<string, string[]> = {
   udio: ['OD_UDIO_API_KEY'],
   elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
+  senseaudio: ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'],
   tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
 };
 
@@ -128,24 +140,106 @@ function configFile(projectRoot: string): string {
   return path.join(dir, 'media-config.json');
 }
 
-async function readStored(projectRoot: string): Promise<ProviderMap> {
+/**
+ * Normalise an arbitrary unknown into a string-to-string map, dropping
+ * keys that have empty / non-string values. Shared by the env-var
+ * parser and the on-disk reader so both layers reject malformed
+ * entries the same way.
+ */
+function coerceAliasMap(raw: unknown): ModelAliasMap {
+  if (!isRecord(raw)) return {};
+  const out: ModelAliasMap = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof k !== 'string' || !k.trim()) continue;
+    if (typeof v !== 'string' || !v.trim()) continue;
+    out[k.trim()] = v.trim();
+  }
+  return out;
+}
+
+async function readStoredFile(projectRoot: string): Promise<JsonRecord> {
   try {
     const raw = await readFile(configFile(projectRoot), 'utf8');
     const parsed = JSON.parse(raw);
-    if (isRecord(parsed) && isRecord(parsed.providers)) {
-      return parsed.providers as ProviderMap;
-    }
-    return {};
+    return isRecord(parsed) ? parsed : {};
   } catch (err) {
     if (errorCode(err) === 'ENOENT') return {};
     throw err;
   }
 }
 
-async function writeStored(projectRoot: string, providers: ProviderMap): Promise<void> {
+async function readStored(projectRoot: string): Promise<ProviderMap> {
+  const parsed = await readStoredFile(projectRoot);
+  return isRecord(parsed.providers) ? (parsed.providers as ProviderMap) : {};
+}
+
+async function readStoredAliases(projectRoot: string): Promise<ModelAliasMap> {
+  const parsed = await readStoredFile(projectRoot);
+  return coerceAliasMap(parsed.aliases);
+}
+
+async function writeStored(
+  projectRoot: string,
+  providers: ProviderMap,
+  aliases?: ModelAliasMap,
+): Promise<void> {
   const file = configFile(projectRoot);
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify({ providers }, null, 2), 'utf8');
+  // Preserve any existing aliases when the caller doesn't pass them.
+  // The Settings UI writes providers only; without this, every
+  // provider edit would silently wipe the user's model aliases (issue
+  // #1277 introduces aliases but the Settings UI surface for editing
+  // them lands in a follow-up PR).
+  const resolvedAliases = aliases ?? (await readStoredAliases(projectRoot));
+  const body: JsonRecord = { providers };
+  if (Object.keys(resolvedAliases).length > 0) {
+    body.aliases = resolvedAliases;
+  }
+  await writeFile(file, JSON.stringify(body, null, 2), 'utf8');
+}
+
+function readEnvAliases(): ModelAliasMap {
+  const raw = process.env[ENV_MODEL_ALIASES];
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+  try {
+    return coerceAliasMap(JSON.parse(raw));
+  } catch {
+    // Malformed JSON is non-fatal — the user can fix the env var
+    // without restarting the daemon mid-generation, and silent fall-
+    // through to the on-disk map matches the precedent of the rest
+    // of the env / stored config resolution in this module.
+    return {};
+  }
+}
+
+/**
+ * Resolve a registered model id to the wire-name the provider should
+ * actually receive on the network. Env wins over stored, mirroring
+ * the precedence the rest of media-config uses for `apiKey` (issue
+ * #1277). Pass-through when no alias is configured.
+ */
+export async function resolveModelAlias(
+  projectRoot: string,
+  modelId: string,
+): Promise<string> {
+  const envAliases = readEnvAliases();
+  if (envAliases[modelId]) return envAliases[modelId]!;
+  const stored = await readStoredAliases(projectRoot);
+  return stored[modelId] ?? modelId;
+}
+
+/**
+ * Read the merged alias map (env + stored). Exposed for the
+ * `/api/media/config` GET endpoint so the Settings UI can display
+ * which aliases are active and where they came from.
+ */
+export async function readAliasMap(
+  projectRoot: string,
+): Promise<{ effective: ModelAliasMap; env: ModelAliasMap; stored: ModelAliasMap }> {
+  const env = readEnvAliases();
+  const stored = await readStoredAliases(projectRoot);
+  const effective: ModelAliasMap = { ...stored, ...env };
+  return { effective, env, stored };
 }
 
 function readEnvKey(providerId: string): string | null {
@@ -260,9 +354,20 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
  * frontend can show "••••" + a "configured" indicator without leaking
  * the secret back into the DOM.
  */
-export async function readMaskedConfig(projectRoot: string): Promise<{ providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }> }> {
+export interface MaskedConfigResponse {
+  providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }>;
+  /**
+   * Effective alias map plus source attribution. The Settings UI can
+   * show "from env" vs "from media-config.json" badges next to each
+   * entry without needing a second endpoint. Empty maps mean no
+   * aliases are configured (issue #1277).
+   */
+  aliases: { effective: ModelAliasMap; env: ModelAliasMap; stored: ModelAliasMap };
+}
+
+export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfigResponse> {
   const stored = await readStored(projectRoot);
-  const providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }> = {};
+  const providers: MaskedConfigResponse['providers'] = {};
   for (const id of PROVIDER_IDS) {
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
@@ -284,7 +389,8 @@ export async function readMaskedConfig(projectRoot: string): Promise<{ providers
         : {}),
     };
   }
-  return { providers };
+  const aliases = await readAliasMap(projectRoot);
+  return { providers, aliases };
 }
 
 /**
