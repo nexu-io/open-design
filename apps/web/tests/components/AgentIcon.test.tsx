@@ -14,16 +14,15 @@ describe('AgentIcon', () => {
     expect(markup).toContain('aria-hidden="true"');
   });
 
-  it('renders the Kimi SVG as theme-aware via CSS mask so it adapts to light/dark surfaces', () => {
-    // kimi is in MONO_ICONS, so it renders through the mask path and uses
-    // `background-color: currentColor` to adapt to surrounding text color.
-    // In light theme, currentColor = dark text; in dark theme, currentColor = light text.
+  it('renders the Kimi SVG with two-tone branding (blue + mid-tone gray secondary mark)', () => {
+    // kimi stays as a baked two-tone asset: blue accent (#1783ff) for brand identity,
+    // and mid-tone gray (#666666) secondary mark for contrast across light/dark themes.
+    // Rendered through <img>, no mask needed since colors are baked.
     const markup = renderToStaticMarkup(<AgentIcon id="kimi" size={24} />);
 
-    expect(markup).toContain('class="agent-icon agent-icon-mono"');
-    expect(markup).toContain('mask-image:url(&quot;/agent-icons/kimi.svg&quot;)');
-    // Crucially NOT an <img> — the CSS mask makes it theme-aware.
-    expect(markup).not.toContain('<img src="/agent-icons/kimi.svg"');
+    expect(markup).toContain('src="/agent-icons/kimi.svg"');
+    expect(markup).toContain('class="agent-icon"');
+    expect(markup).not.toContain('agent-icon-mono');
   });
 
   it('renders Devin as a PNG (Cognition does not publish an SVG mark)', () => {
