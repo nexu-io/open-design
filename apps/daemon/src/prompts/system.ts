@@ -37,6 +37,50 @@ import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 
+const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
+const ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX = 'ElevenLabs voice list could not be loaded';
+const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
+  '400': 'Bad Request',
+  '401': 'Unauthorized',
+  '403': 'Forbidden',
+  '404': 'Not Found',
+  '429': 'Too Many Requests',
+  '500': 'Internal Server Error',
+  '502': 'Bad Gateway',
+  '503': 'Service Unavailable',
+  '504': 'Gateway Timeout',
+};
+
+function normalizePromptText(value: string): string {
+  return value
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatElevenLabsVoiceOptionsErrorForPrompt(
+  error: string | undefined,
+): string | undefined {
+  const trimmed = normalizePromptText(error ?? '');
+  if (!trimmed) return undefined;
+
+  if (/no ElevenLabs API key/i.test(trimmed)) {
+    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
+  }
+
+  const statusMatch = trimmed.match(
+    /(?:\((\d{3})(?:\s+([^)]+))?\)|\b(\d{3})(?:\s+([A-Za-z][A-Za-z -]{0,40}))?\b)/,
+  );
+  if (statusMatch) {
+    const statusCode = statusMatch[1] ?? statusMatch[3];
+    const statusText = statusCode ? PROMPT_SAFE_HTTP_STATUS_LABELS[statusCode] ?? '' : '';
+    const suffix = statusText ? ` ${statusText}` : '';
+    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} (${statusCode}${suffix}). Tell the user to retry the lookup or paste a voice id manually.`;
+  }
+
+  return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX}. Tell the user to retry the lookup or paste a voice id manually.`;
+}
+
 type ProjectMetadata = {
   kind?: string;
   intent?: string | null;
@@ -79,6 +123,12 @@ type ProjectMetadata = {
   } | null;
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
+type AudioVoiceOption = {
+  name: string;
+  voiceId: string;
+  category?: string | null;
+  labels?: Record<string, string> | null;
+};
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
@@ -137,6 +187,14 @@ export interface ComposeInput {
   // Snapshot of HTML files that the agent should treat as a starting
   // reference rather than a fixed deliverable.
   template?: ProjectTemplate | undefined;
+  // Provider voice choices fetched by the daemon/web before composing the
+  // prompt. Used for ElevenLabs speech discovery so the agent can render
+  // a select question-form instead of asking the user to paste raw ids.
+  audioVoiceOptions?: AudioVoiceOption[] | undefined;
+  // When voice discovery fails, surface the error reason so the agent
+  // can tell the user why the dropdown is unavailable instead of
+  // pretending there were simply no voices.
+  audioVoiceOptionsError?: string | undefined;
   // When present and enabled, the Critique Theater protocol addendum is
   // concatenated to the end of the composed prompt. Omitting this field
   // (or passing cfg.enabled === false) preserves legacy behavior unchanged.
@@ -157,6 +215,13 @@ export interface ComposeInput {
   // confuses the user.
   connectedExternalMcp?: ReadonlyArray<{ id: string; label?: string | undefined }>
     | undefined;
+  // Free-form instructions the user set at the global (user-level)
+  // settings panel. Injected after personal memory and before the
+  // project-level instructions.
+  userInstructions?: string | undefined;
+  // Free-form instructions the user set on this specific project.
+  // Injected after user-level instructions and before the design system.
+  projectInstructions?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -174,11 +239,15 @@ export function composeSystemPrompt({
   memoryBody,
   metadata,
   template,
+  audioVoiceOptions,
+  audioVoiceOptionsError,
   critique,
   critiqueBrand,
   critiqueSkill,
   connectedExternalMcp,
   streamFormat,
+  userInstructions,
+  projectInstructions,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -208,6 +277,18 @@ export function composeSystemPrompt({
   if (memoryBody && memoryBody.trim().length > 0) {
     parts.push(
       `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\n${memoryBody.trim()}`,
+    );
+  }
+
+  if (userInstructions && userInstructions.trim().length > 0) {
+    parts.push(
+      `\n\n## Custom instructions (user-level)\n\nThe user has set the following persistent instructions. Apply them as defaults to every project. When a project-level instruction below contradicts a point here, the project-level version wins.\n\n${userInstructions.trim()}`,
+    );
+  }
+
+  if (projectInstructions && projectInstructions.trim().length > 0) {
+    parts.push(
+      `\n\n## Custom instructions (project-level)\n\nThe user has set the following instructions for this specific project. They take precedence over user-level custom instructions whenever both address the same topic (e.g. if user-level says "use spaces" but project-level says "use tabs", use tabs).\n\n${projectInstructions.trim()}`,
     );
   }
 
@@ -255,7 +336,7 @@ export function composeSystemPrompt({
     );
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template);
+  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -481,6 +562,8 @@ Do not silently fall back.`;
 function renderMetadataBlock(
   metadata: ProjectMetadata | undefined,
   template: ProjectTemplate | undefined,
+  audioVoiceOptions: AudioVoiceOption[] | undefined,
+  audioVoiceOptionsError: string | undefined,
 ): string {
   if (!metadata) return '';
   const lines: string[] = [];
@@ -629,6 +712,33 @@ function renderMetadataBlock(
     } else if (metadata.audioKind === 'speech') {
       lines.push('- **voice**: (unknown — ask: voice id / accent / pacing)');
     }
+    const voiceOptions = shouldRenderElevenLabsVoiceOptions(metadata, audioVoiceOptions)
+      ? audioVoiceOptions ?? []
+      : [];
+    if (voiceOptions.length > 0) {
+      lines.push(
+        '- **ElevenLabs voice options**: Ask the user to choose from a dropdown select. The visible labels are voice descriptions; the selected value must be the exact `voice_id` passed to `--voice`. Do not ask the user to type an id.',
+      );
+      if (voiceOptions.length > ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT) {
+        lines.push(`- **ElevenLabs voice options**: showing the first ${ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT} of ${voiceOptions.length} available voices.`);
+      }
+      lines.push('');
+      lines.push('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
+      lines.push(JSON.stringify(renderElevenLabsVoiceQuestionForm(voiceOptions), null, 2));
+      lines.push('</question-form>');
+    } else {
+      const audioVoiceOptionsPromptError = formatElevenLabsVoiceOptionsErrorForPrompt(audioVoiceOptionsError);
+      if (audioVoiceOptionsPromptError) {
+        lines.push(
+          `- **ElevenLabs voice options**: ${audioVoiceOptionsPromptError}`,
+        );
+      }
+    }
+    if (metadata.audioKind === 'sfx') {
+      lines.push(
+        '- **SFX discovery**: Ask about the sound source/action, materials, intensity, acoustic space, timing/tail, loop/non-loop, and "avoid" constraints. Do not ask for language or voice for SFX.',
+      );
+    }
     lines.push('');
     lines.push(
       'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
@@ -716,6 +826,65 @@ function renderMetadataBlock(
   }
 
   return lines.join('\n');
+}
+
+function shouldRenderElevenLabsVoiceOptions(
+  metadata: ProjectMetadata,
+  audioVoiceOptions: AudioVoiceOption[] | undefined,
+): boolean {
+  return metadata.kind === 'audio'
+    && metadata.audioKind === 'speech'
+    && metadata.audioModel === 'elevenlabs-v3'
+    && !metadata.voice
+    && Array.isArray(audioVoiceOptions)
+    && audioVoiceOptions.length > 0;
+}
+
+function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
+  description: string;
+  questions: Array<{
+    id: string;
+    label: string;
+    type: 'select';
+    required: boolean;
+    placeholder: string;
+    help: string;
+    options: Array<{ label: string; value: string }>;
+  }>;
+  submitLabel: string;
+} {
+  const options = voiceOptions.slice(0, ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT).map((option) => ({
+    label: formatElevenLabsVoiceLabel(option),
+    value: option.voiceId,
+  }));
+  return {
+    description:
+      'Pick a voice by description. The selected answer will be the exact voice_id passed to the renderer.',
+    questions: [
+      {
+        id: 'voice',
+        label: 'Voice',
+        type: 'select',
+        required: true,
+        placeholder: 'Choose a voice',
+        help: 'Select a voice description; the answer submits the matching Voice ID.',
+        options,
+      },
+    ],
+    submitLabel: 'Use voice',
+  };
+}
+
+function formatElevenLabsVoiceLabel(option: AudioVoiceOption): string {
+  const labels = option.labels && typeof option.labels === 'object'
+    ? Object.values(option.labels)
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    : [];
+  const bits = [...labels];
+  if (bits.length > 0) return `${option.name} — ${bits.join(' · ')}`;
+  const category = typeof option.category === 'string' ? option.category.trim() : '';
+  return category ? `${option.name} — ${category}` : option.name;
 }
 
 /**

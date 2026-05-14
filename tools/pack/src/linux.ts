@@ -392,6 +392,8 @@ async function writeAssembledApp(
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
         ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
+        ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
+        ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,

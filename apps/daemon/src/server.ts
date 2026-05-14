@@ -69,14 +69,29 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
+import { getCritiqueMetrics, register } from './metrics/index.js';
+import { readConformanceHistory } from './critique/conformance-history.js';
+import { evaluateRollout } from './critique/ratchet.js';
+import {
+  isCritiqueEnabled,
+  parseEnvEnabled,
+  parseRolloutPhase,
+  type SkillCritiquePolicy,
+} from './critique/rollout.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { classifyAgentAuthFailure, cursorAuthGuidance } from './runtimes/auth.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
+import {
+  createAnalyticsService,
+  readAnalyticsContext,
+  readPublicConfigResponse,
+} from './analytics.js';
 import {
   redactSecrets,
   testAgentConnection,
@@ -97,6 +112,7 @@ import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
+import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import {
@@ -141,6 +157,7 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
   RoutineService,
   validateSchedule as validateRoutineSchedule,
@@ -275,6 +292,7 @@ import {
 /** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
 /** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
 /** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
+/** @typedef {import('@open-design/contracts').ProjectConversationCreatedSsePayload} ProjectConversationCreatedSsePayload */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -682,9 +700,15 @@ export function normalizeCommentAttachments(input) {
       const elementId = cleanString(raw.elementId);
       const selector = cleanString(raw.selector);
       const label = cleanString(raw.label);
-      const comment = cleanString(raw.comment);
-      if (!filePath || !elementId || !selector || !comment) return null;
-      const selectionKind = raw.selectionKind === 'pod' ? 'pod' : 'element';
+      const screenshotPath = cleanString(raw.screenshotPath);
+      const markKind = normalizeVisualMarkKind(raw.markKind);
+      const intent = compactString(raw.intent, 220);
+      const comment = cleanString(raw.comment) || intent;
+      const selectionKind =
+        raw.selectionKind === 'visual' ? 'visual' : raw.selectionKind === 'pod' ? 'pod' : 'element';
+      if (!filePath || !elementId || !comment) return null;
+      if (selectionKind !== 'visual' && !selector) return null;
+      if (selectionKind === 'visual' && !screenshotPath) return null;
       const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
       const memberCount =
         selectionKind === 'pod'
@@ -710,6 +734,11 @@ export function normalizeCommentAttachments(input) {
         selectionKind,
         memberCount,
         podMembers,
+        screenshotPath: selectionKind === 'visual' ? screenshotPath : undefined,
+        markKind: selectionKind === 'visual' ? markKind : undefined,
+        intent: selectionKind === 'visual'
+          ? intent || visualAnnotationIntent(markKind)
+          : undefined,
         source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
       };
     })
@@ -723,22 +752,32 @@ export function renderCommentAttachmentHint(commentAttachments) {
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: treat each attachment as the default refinement target. For single elements, edit the target element first. For pods, coordinate the captured group as one design region and preserve unrelated areas.',
+    'Scope: treat each attachment as the default refinement target. For visual marks, inspect the screenshot and modify the marked region first. Preserve unrelated areas.',
   ];
   for (const item of commentAttachments) {
-    const targetKind = item.selectionKind === 'pod' ? 'pod' : 'element';
+    const targetKind =
+      item.selectionKind === 'visual' ? 'visual' : item.selectionKind === 'pod' ? 'pod' : 'element';
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
       `targetKind: ${targetKind}`,
       `file: ${item.filePath}`,
-      `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
       `position: ${formatAttachmentPosition(item.pagePosition)}`,
       `currentText: ${item.currentText || '(empty)'}`,
       `htmlHint: ${item.htmlHint || '(none)'}`,
       `comment: ${item.comment}`,
     );
+    if (targetKind === 'visual') {
+      lines.push(
+        `screenshot: ${item.screenshotPath}`,
+        `markKind: ${item.markKind || 'stroke'}`,
+        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
+      );
+      if (item.selector) lines.push(`selector: ${item.selector}`);
+    } else {
+      lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
+    }
     if (targetKind === 'pod') {
       lines.push(`memberCount: ${item.memberCount || item.podMembers.length || 0}`);
       item.podMembers.slice(0, 8).forEach((member, memberIndex) => {
@@ -754,6 +793,22 @@ export function renderCommentAttachmentHint(commentAttachments) {
 
 function cleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeVisualMarkKind(value) {
+  return value === 'click' || value === 'click+stroke' || value === 'stroke'
+    ? value
+    : 'stroke';
+}
+
+function visualAnnotationIntent(markKind) {
+  if (markKind === 'click') {
+    return 'The screenshot has a blue focus box around the picked element; modify that picked part first.';
+  }
+  if (markKind === 'click+stroke') {
+    return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
+  }
+  return 'The screenshot has red strokes that identify the visual region the user wants changed.';
 }
 
 function compactString(value, max) {
@@ -1111,7 +1166,7 @@ function emitLiveArtifactEvent(grant, action, artifact) {
     title: artifact.title ?? artifact.id,
     refreshStatus: artifact.refreshStatus,
   };
-  let emitted = emitProjectLiveArtifactEvent(payload.projectId, payload);
+  let emitted = emitProjectEvent(payload.projectId, payload);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
   return emitted;
 }
@@ -1123,12 +1178,16 @@ function emitLiveArtifactRefreshEvent(grant, payload) {
     projectId: grant.projectId,
     ...payload,
   };
-  let emitted = emitProjectLiveArtifactEvent(grant.projectId, event);
+  let emitted = emitProjectEvent(grant.projectId, event);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
   return emitted;
 }
 
-function emitProjectLiveArtifactEvent(projectId, payload) {
+// Broadcast an event to every SSE subscriber currently watching the given
+// project's `/api/projects/:id/events` stream. The payload's `type` field
+// becomes the SSE event name (see project-routes.ts). Used for live-artifact
+// events and `conversation-created` events emitted by routine runs (#1361).
+function emitProjectEvent(projectId, payload) {
   const sinks = activeProjectEventSinks.get(projectId);
   if (!sinks || sinks.size === 0) return false;
   for (const sink of Array.from(sinks)) {
@@ -1277,6 +1336,37 @@ export function shouldReportRunCompletedFromMessage(saved, body = {}) {
 
 export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
+}
+
+export function createFinalizedMessageTelemetryReporter({
+  design,
+  db,
+  dataDir,
+  reportedRuns,
+  getAppVersion = () => null,
+  report = reportRunCompletedFromDaemon,
+}: {
+  design: any;
+  db: unknown;
+  dataDir: string;
+  reportedRuns: Set<string>;
+  getAppVersion?: () => any;
+  report?: typeof reportRunCompletedFromDaemon;
+}) {
+  return (saved, body = {}) => {
+    if (!shouldReportRunCompletedFromMessage(saved, body)) return;
+    const run = design.runs.get(saved.runId);
+    if (!run || reportedRuns.has(run.id)) return;
+    reportedRuns.add(run.id);
+    void report({
+      db,
+      dataDir,
+      run,
+      persistedRunStatus: saved.runStatus,
+      persistedEndedAt: saved.endedAt,
+      appVersion: getAppVersion(),
+    });
+  };
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -2256,6 +2346,60 @@ export async function startServer({
     res.json({ version });
   });
 
+  // Prometheus scrape endpoint (Phase 12). Returns the full exposition
+  // format string. Operators put this behind their existing auth proxy;
+  // there is no built-in authn on the daemon HTTP server. To disable
+  // the endpoint entirely (air-gapped installs, regulatory contexts),
+  // set `OD_METRICS_ENDPOINT=disabled`; the route is registered only
+  // when that env value is not the literal string 'disabled'.
+  if (process.env.OD_METRICS_ENDPOINT !== 'disabled') {
+    app.get('/api/metrics', async (_req, res) => {
+      res.setHeader('Content-Type', register.contentType);
+      res.send(await getCritiqueMetrics());
+    });
+  }
+
+  // Phase 16 ratchet endpoint. Returns the rolling conformance window
+  // and the ratchet's current recommendation. Operator-driven by
+  // design: the recommendation does not flip OD_CRITIQUE_ROLLOUT_PHASE
+  // automatically, it surfaces so a deploy-pipeline follow-up can
+  // consume it. Tunables come from query string; defaults are the
+  // spec values (14 days, 0.90 shipped, 0.95 clean-parse).
+  // Codex + lefarcen P1 on PR #1499: clamp query inputs before the
+  // evaluator sees them so a request like `?windowDays=0` falls back to
+  // the spec default rather than producing a zero-evidence promotion.
+  // The evaluator also defends at its own entry; both are intentional
+  // (belt + suspenders) so a future caller that bypasses this route
+  // cannot reach an unguarded code path either.
+  const parsePositiveInt = (raw: unknown, fallback: number): number => {
+    if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  };
+  const parseRate = (raw: unknown, fallback: number): number => {
+    if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+  };
+  app.get('/api/critique/conformance', async (req, res) => {
+    try {
+      const windowDays = parsePositiveInt(req.query.windowDays, 14);
+      const shippedThreshold = parseRate(req.query.shippedThreshold, 0.90);
+      const cleanParseThreshold = parseRate(req.query.cleanParseThreshold, 0.95);
+      const history = await readConformanceHistory(RUNTIME_DATA_DIR, windowDays);
+      const decision = evaluateRollout({
+        current: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+        history,
+        windowDays,
+        shippedThreshold,
+        cleanParseThreshold,
+      });
+      res.json({ window: { days: windowDays, history }, decision });
+    } catch (err) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', err instanceof Error ? err.message : String(err));
+    }
+  });
+
   registerConnectorRoutes(app, {
     sendApiError,
     authorizeToolRequest,
@@ -2579,9 +2723,43 @@ export async function startServer({
     }
   });
 
+  const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
   const design = {
     runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
+    analytics: analyticsService,
+    getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
+    readAnalyticsContext,
   };
+
+  // PostHog runtime config — gated on BOTH a server-side key (POSTHOG_KEY)
+  // and the user's opt-in metrics consent (Privacy → "Share usage data").
+  // The web bundle short-circuits when enabled=false so opt-out behaviour
+  // is instant after the user toggles metrics off and reloads.
+  app.get('/api/analytics/config', async (_req, res) => {
+    const baseline = readPublicConfigResponse();
+    if (!baseline.enabled) {
+      res.json(baseline);
+      return;
+    }
+    try {
+      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      const consentGranted = appCfg.telemetry?.metrics === true;
+      if (!consentGranted) {
+        res.json({ enabled: false, key: null, host: null });
+        return;
+      }
+      // Echo the installationId so the web client uses the same anonymous
+      // id PostHog already saw on prior runs (and that Langfuse uses too).
+      const installationId =
+        typeof appCfg.installationId === 'string' && appCfg.installationId
+          ? appCfg.installationId
+          : null;
+      res.json({ ...baseline, installationId });
+    } catch {
+      // If the config file is unreadable, fail closed — no events.
+      res.json({ enabled: false, key: null, host: null });
+    }
+  });
 
   // Tracks runs whose completion has already been forwarded to Langfuse so
   // repeated message updates only emit one trace per run.
@@ -2596,6 +2774,14 @@ export async function startServer({
       // Telemetry is best-effort; appVersion is omitted when unavailable.
     }
   })();
+
+  const reportFinalizedMessage = createFinalizedMessageTelemetryReporter({
+    design,
+    db,
+    dataDir: RUNTIME_DATA_DIR,
+    reportedRuns,
+    getAppVersion: () => cachedAppVersion,
+  });
 
   const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrl(baseUrl);
 
@@ -2741,6 +2927,7 @@ export async function startServer({
     getLiveMediaTask: (taskId) => getLiveMediaTask(db, taskId),
     mediaTaskSnapshot,
     listMediaTasksByProject,
+    listElevenLabsVoiceOptions,
   };
   const appConfigDeps = { readAppConfig, writeAppConfig };
   const orbitDeps = { orbitService };
@@ -2818,6 +3005,7 @@ export async function startServer({
     status: projectStatusDeps,
     events: projectEventDeps,
     ids: idDeps,
+    telemetry: { reportFinalizedMessage },
   });
   registerImportRoutes(app, {
     db,
@@ -2941,6 +3129,11 @@ export async function startServer({
     let skillMode;
     let skillCraftRequires = [];
     let activeSkillDir = null;
+    // Per-skill Critique Theater override sourced from
+    // `od.critique.policy` in the resolved skill's SKILL.md frontmatter.
+    // `null` means the skill has no opinion and the lower-priority tiers
+    // (project override, env override, rollout phase default) decide.
+    let skillCritiquePolicy: SkillCritiquePolicy = null;
     if (effectiveSkillId) {
       // Span both functional skills and design templates so a project
       // saved against either surface keeps its system prompt after the
@@ -2954,6 +3147,7 @@ export async function startServer({
         skillName = skill.name;
         skillMode = skill.mode;
         activeSkillDir = skill.dir;
+        skillCritiquePolicy = skill.critiquePolicy;
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
       }
@@ -2979,6 +3173,18 @@ export async function startServer({
     } catch (err) {
       console.warn('[memory] composeMemoryBody failed', err);
     }
+
+    // User-level custom instructions from app-config.json.
+    let userInstructions = '';
+    try {
+      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
+    } catch (err) {
+      console.warn('[custom-instructions] readAppConfig failed', err);
+    }
+
+    // Project-level custom instructions from the projects table.
+    const projectInstructions = project?.customInstructions ?? '';
 
     let designSystemBody;
     let designSystemTitle;
@@ -3022,19 +3228,69 @@ export async function startServer({
       metadata?.kind === 'template' && typeof metadata.templateId === 'string'
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
+    let audioVoiceOptions = [];
+    let audioVoiceOptionsError;
+    if (
+      metadata?.kind === 'audio' &&
+      metadata?.audioKind === 'speech' &&
+      metadata?.audioModel === 'elevenlabs-v3' &&
+      !metadata?.voice
+    ) {
+      try {
+        audioVoiceOptions = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit: 100 });
+      } catch (err) {
+        audioVoiceOptionsError = err && err.message ? err.message : String(err);
+        console.warn('[elevenlabs] voice option lookup failed:', audioVoiceOptionsError);
+      }
+    }
 
     // Thread the critique config plus the active design-system / skill data
     // into the composer when critique is enabled. Without this the spawned
     // child receives the legacy single-pass prompt and the parser waits for
     // <CRITIQUE_RUN> tags the model was never told to emit. The composer
-    // itself ignores these fields when cfg.enabled is false, so the legacy
-    // path stays untouched.
-    const critiqueBrand = critiqueCfg.enabled
+    // itself ignores these fields when the top-line gate is false, so the
+    // legacy path stays untouched.
+    //
+    // Top-line gate (post-Phase-15 wireup): the daemon now routes every
+    // candidate run through the rollout resolver instead of reading the
+    // env-var flag directly. The resolver carries the full priority
+    // matrix: skill `od.critique.policy` veto > project override > env
+    // override > rollout phase default. On a fresh install with M0
+    // dark-launch defaults the resolver returns `false`, so prod traffic
+    // is unchanged until an operator flips the env var or a project
+    // opts in. The skill-policy input is sourced from
+    // `od.critique.policy` in the active skill's SKILL.md frontmatter
+    // (parsed in `skills.ts:normalizeCritiquePolicy`). The project
+    // override input is sourced from the `critiqueTheaterEnabled`
+    // field on the project's metadata blob, which is what the M1
+    // Settings toggle writes through the existing settings endpoint.
+    // Both inputs collapse to `null` when the skill / project has
+    // not expressed an opinion, which is the resolver's "fall through
+    // to env / phase default" signal.
+    // Per-project override: the M1 Settings toggle writes
+    // `critiqueTheaterEnabled` onto the project's metadata blob via
+    // the existing settings round-trip. A boolean wins outright; any
+    // other type (missing key, malformed value) collapses to `null`
+    // so the resolver falls through to the env / phase tiers exactly
+    // the way it did when the toggle had never been touched.
+    const rawProjectOverride =
+      metadata && typeof metadata === 'object'
+        ? (metadata as { critiqueTheaterEnabled?: unknown }).critiqueTheaterEnabled
+        : undefined;
+    const projectCritiqueOverride: boolean | null =
+      typeof rawProjectOverride === 'boolean' ? rawProjectOverride : null;
+    const critiqueEnabledForRun = isCritiqueEnabled({
+      phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+      skillPolicy: skillCritiquePolicy,
+      projectOverride: projectCritiqueOverride,
+      envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
+    });
+    const critiqueBrand = critiqueEnabledForRun
       && typeof designSystemTitle === 'string'
       && typeof designSystemBody === 'string'
       ? { name: designSystemTitle, design_md: designSystemBody }
       : undefined;
-    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+    const critiqueSkill = critiqueEnabledForRun && typeof effectiveSkillId === 'string'
       ? { id: effectiveSkillId }
       : undefined;
     // Single-source-of-truth eligibility check. The composer downstream
@@ -3057,7 +3313,7 @@ export async function startServer({
       metadata?.kind === 'video' ||
       metadata?.kind === 'audio';
     const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueCfg.enabled
+    const critiqueShouldRun = critiqueEnabledForRun
       && critiqueBrand !== undefined
       && critiqueSkill !== undefined
       && !isMediaSurface
@@ -3083,13 +3339,26 @@ export async function startServer({
       memoryBody,
       metadata,
       template,
-      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      audioVoiceOptions,
+      audioVoiceOptionsError,
+      // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
+      // run that the resolver enabled via phase / project / skill (env
+      // unset) would have critiqueShouldRun = true while critiqueCfg.enabled
+      // remains false. Without this override the composer's own gate
+      // (cfg.enabled) drops the panel addendum, the orchestrator still
+      // launches, and the parser waits for <CRITIQUE_RUN> tags the model
+      // was never told to emit (codex P2 on PR #1338). Build a derived
+      // config that pins enabled to the resolver decision so the composer
+      // and the orchestrator agree on every eligibility input.
+      critique: critiqueShouldRun ? { ...critiqueCfg, enabled: true } : undefined,
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       streamFormat,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
+      userInstructions,
+      projectInstructions,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -3838,9 +4107,7 @@ export async function startServer({
     child.stdout.on('data', (chunk) => {
       childStdoutSeen = true;
       noteAgentActivity();
-      if (def.id === 'claude') {
-        agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-1000);
-      }
+      agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
     });
 
     // ---- Memory: assistant-reply buffer for LLM extraction --------------
@@ -3891,12 +4158,13 @@ export async function startServer({
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
     //
-    // Use critiqueShouldRun (computed in the prompt builder) instead of just
-    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
-    // panel addendum. Media surfaces and runs missing brand/skill context
-    // never get the panel prompt, so they must also skip the orchestrator
-    // and fall through to legacy generation; otherwise the parser waits for
-    // <CRITIQUE_RUN> tags the model was never told to emit.
+    // Use critiqueShouldRun (computed in the prompt builder) instead of
+    // just the env var or the rollout resolver so the orchestrator gate
+    // is in lockstep with the panel addendum. Media surfaces and runs
+    // missing brand/skill context never get the panel prompt, so they
+    // must also skip the orchestrator and fall through to legacy
+    // generation; otherwise the parser waits for <CRITIQUE_RUN> tags
+    // the model was never told to emit.
     if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
@@ -3919,7 +4187,45 @@ export async function startServer({
         // than wrapping the frame inside the legacy 'agent' channel. Clients
         // that subscribe to the new event names see them directly with the
         // contract payload as event.data.
-        const critiqueBus = { emit: (e) => send(e.event, e.data) };
+        //
+        // Critique events go to TWO sinks (codex P1 on PR #1338):
+        //
+        //   1. `design.runs.emit(...)` via `send(...)`, which fans out on
+        //      `/api/runs/:runId/events`. Existing transport, unchanged.
+        //   2. The per-project event-sinks map, which fans out on
+        //      `/api/projects/:projectId/events`. This is the transport the
+        //      web `CritiqueTheaterMount` actually subscribes to (the mount
+        //      is project-scoped, not run-scoped, because it lives at the
+        //      project workspace level and follows the user across runs).
+        //      Without this second sink the mount sees no frames in
+        //      production and only the e2e tests' stubbed routes deliver
+        //      anything to the reducer.
+        //
+        // The project-events route emits via `sse.send(payload.type,
+        // payload)`, so we pack the SSE channel name onto `payload.type`
+        // and let the sink push the right channel name. The web's
+        // `sseToPanelEvent` overwrites `type` from the channel name on the
+        // way back into a PanelEvent, so this round-trip stays correct.
+        const critiqueProjectIdForBus =
+          typeof projectId === 'string' && projectId ? projectId : null;
+        const critiqueBus = {
+          emit: (e) => {
+            send(e.event, e.data);
+            if (critiqueProjectIdForBus) {
+              const sinks = activeProjectEventSinks.get(critiqueProjectIdForBus);
+              if (sinks && sinks.size > 0) {
+                const payload = { ...e.data, type: e.event };
+                for (const sink of Array.from(sinks)) {
+                  try {
+                    sink(payload);
+                  } catch {
+                    sinks.delete(sink);
+                  }
+                }
+              }
+            }
+          },
+        };
 
         // Register this run with the in-process registry so the interrupt
         // endpoint can cascade an AbortController to the orchestrator. The
@@ -3963,6 +4269,16 @@ export async function startServer({
             artifactId: critiqueRunId,
             artifactDir: critiqueArtifactDir,
             adapter: typeof agentId === 'string' ? agentId : 'unknown',
+            // Codex P2 on PR #1485: thread the resolved skill id into the
+            // orchestrator so the Phase 12 metrics carry the real label
+            // instead of falling through to 'unknown' for every live run.
+            // `effectiveSkillId` was already computed above (line ~2951) as
+            // the request skillId with a project-row fallback; pass it
+            // through verbatim, and leave the orchestrator's own default
+            // of 'unknown' for runs that genuinely have no skill assigned.
+            skill: typeof effectiveSkillId === 'string' && effectiveSkillId
+              ? effectiveSkillId
+              : undefined,
             cfg: critiqueCfg,
             db,
             bus: critiqueBus,
@@ -4025,6 +4341,23 @@ export async function startServer({
         if (agentStreamError) return;
         agentStreamError = String(ev.message || 'Agent stream error');
         clearInactivityWatchdog();
+        const authFailure = classifyAgentAuthFailure(
+          agentId,
+          [
+            agentStreamError,
+            typeof ev.raw === 'string' ? ev.raw : '',
+            agentStdoutTail,
+            agentStderrTail,
+          ].join('\n'),
+        );
+        if (authFailure?.status === 'missing') {
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            cursorAuthGuidance(),
+            { retryable: true },
+          ));
+          return;
+        }
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
           details: ev.raw ? { raw: ev.raw } : undefined,
           retryable: false,
@@ -4138,9 +4471,7 @@ export async function startServer({
     run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => {
       noteAgentActivity();
-      if (def.id === 'claude') {
-        agentStderrTail = `${agentStderrTail}${chunk}`.slice(-1000);
-      }
+      agentStderrTail = `${agentStderrTail}${chunk}`.slice(-2000);
       send('stderr', { chunk });
     });
 
@@ -4159,6 +4490,18 @@ export async function startServer({
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       if (agentStreamError) {
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
+      if (
+        code !== 0 &&
+        !run.cancelRequested &&
+        classifyAgentAuthFailure(agentId, `${agentStderrTail}\n${agentStdoutTail}`)?.status === 'missing'
+      ) {
+        send('error', createSseErrorPayload(
+          'AGENT_AUTH_REQUIRED',
+          cursorAuthGuidance(),
+          { retryable: true },
+        ));
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       // Empty-output guard: a clean `code === 0` exit on a stream we are
@@ -4358,7 +4701,9 @@ export async function startServer({
         ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
         summary: artifact?.id
           ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
-          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+          : finalStatus.status === 'succeeded'
+            ? buildOrbitNoLiveArtifactSummary(run.events)
+            : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
       };
     })();
 
@@ -4432,6 +4777,25 @@ export async function startServer({
       createdAt: now,
       updatedAt: now,
     });
+
+    // Notify any open `ProjectView` watching this project so its
+    // conversation list picks up the new routine conversation without
+    // requiring the user to leave and re-enter the project (#1361).
+    // For reuse-an-existing-project mode this is the only path the
+    // open view has to learn the conversation exists; for new-project
+    // mode this is harmless (no subscribers for a project that was
+    // just created milliseconds ago). The payload shape is the shared
+    // `ProjectConversationCreatedSsePayload` from `@open-design/contracts`
+    // so the daemon producer and the web consumer cannot drift.
+    /** @type {ProjectConversationCreatedSsePayload} */
+    const conversationCreatedEvent = {
+      type: 'conversation-created',
+      projectId,
+      conversationId,
+      title: conversationTitle,
+      createdAt: now,
+    };
+    emitProjectEvent(projectId, conversationCreatedEvent);
 
     const assistantMessageId = `routine-assistant-${randomUUID()}`;
     const run = design.runs.create({
@@ -4569,6 +4933,7 @@ export async function startServer({
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
+      await design.analytics.shutdown();
     };
     let server;
     try {

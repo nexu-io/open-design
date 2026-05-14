@@ -209,6 +209,37 @@ describe('preview comment agent payload', () => {
     expect(normalized[0]?.memberCount).toBe(2);
     expect(hint).toContain('member.1: hero | section.hero | [data-od-id="hero"]');
   });
+
+  it('normalizes visual annotation attachments without a selector', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'visual-1',
+        elementId: 'visual-mark-1',
+        selector: '',
+        label: 'Marked screenshot region',
+        comment: '',
+        selectionKind: 'visual',
+        screenshotPath: 'uploads/drawing.png',
+        markKind: 'stroke',
+        intent: 'The screenshot has red strokes that identify the visual region the user wants changed.',
+      }),
+    ]);
+
+    const hint = renderCommentAttachmentHint(normalized);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      selectionKind: 'visual',
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      comment: expect.stringContaining('red strokes'),
+    });
+    expect(hint).toContain('targetKind: visual');
+    expect(hint).toContain('screenshot: uploads/drawing.png');
+    expect(hint).toContain('markKind: stroke');
+    expect(hint).toContain('marked region');
+    expect(hint).not.toContain('selector: ');
+  });
 });
 
 function seededDb() {

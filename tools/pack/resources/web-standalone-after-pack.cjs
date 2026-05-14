@@ -110,6 +110,7 @@ async function readHookConfig() {
     pruneCopiedSharp: requireBoolean(raw, "pruneCopiedSharp"),
     pruneRootNext: requireBoolean(raw, "pruneRootNext"),
     pruneRootSharp: requireBoolean(raw, "pruneRootSharp"),
+    requireRootWebPackageAudit: optionalBoolean(raw, "requireRootWebPackageAudit", true),
     resourceName,
     standaloneSourceRoot,
     webPublicSourceRoot,
@@ -841,7 +842,7 @@ async function runWebStandaloneAfterPack(context) {
   const rootBuildResiduePrune = context.electronPlatformName === "win32"
     ? await pruneSourceBuildResidue(appNodeModulesRoot, "root app source/build residue")
     : [];
-  const rootWebPackageAudit = context.electronPlatformName === "win32"
+  const rootWebPackageAudit = context.electronPlatformName === "win32" && config.requireRootWebPackageAudit
     ? await auditRootWebPackage(appNodeModulesRoot)
     : null;
   const rootNextPruneAudit = await auditRootNextPruned(

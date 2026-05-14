@@ -156,7 +156,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                   onChange={(e) => update(q.id, e.target.value)}
                 >
                   <option value="" disabled>
-                    {t('qf.choose')}
+                    {q.placeholder ?? t('qf.choose')}
                   </option>
                   {q.options.map((opt) => (
                     <option key={opt.value} value={opt.value} title={opt.description}>
@@ -307,11 +307,11 @@ function buildInitialState(
   const out: Record<string, string | string[]> = {};
   for (const q of form.questions) {
     if (submitted && submitted[q.id] !== undefined) {
-      out[q.id] = submitted[q.id]!;
+      out[q.id] = canonicalizeQuestionValue(q, submitted[q.id]!);
       continue;
     }
     if (q.defaultValue !== undefined) {
-      out[q.id] = q.defaultValue;
+      out[q.id] = canonicalizeQuestionValue(q, q.defaultValue);
       continue;
     }
     if (q.type === 'checkbox') {
@@ -321,6 +321,16 @@ function buildInitialState(
     }
   }
   return out;
+}
+
+function canonicalizeQuestionValue(
+  q: QuestionForm['questions'][number],
+  value: string | string[],
+): string | string[] {
+  if (Array.isArray(value)) {
+    return value.map((entry) => formOptionValueForLabel(q, entry));
+  }
+  return formOptionValueForLabel(q, value);
 }
 
 /**

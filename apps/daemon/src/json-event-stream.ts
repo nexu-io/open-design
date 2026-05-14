@@ -8,6 +8,8 @@ type ParserState = {
   openCodeToolUses: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
+  codexPreviousEventWasAgentMessage: boolean;
+  codexLastAgentMessageEndedWithNewline: boolean;
 };
 
 type Usage = {
@@ -267,16 +269,23 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
-  if (obj.type === 'error') {
-    if (!state.codexErrorEmitted) {
-      state.codexErrorEmitted = true;
-      onEvent({
-        type: 'error',
-        message: extractErrorMessage(obj.message ?? obj.error, 'Codex error'),
-      });
-    }
+if (obj.type === 'error') {
+  const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
+  // Reconnecting events are recoverable — treat as status warning, not fatal
+  if (
+    typeof message === 'string' &&
+    message.includes('Reconnecting...') &&
+    message.includes('timeout waiting for child process to exit')
+  ) {
+    onEvent({ type: 'status', label: message });
     return true;
   }
+  if (!state.codexErrorEmitted) {
+    state.codexErrorEmitted = true;
+    onEvent({ type: 'error', message });
+  }
+  return true;
+}
 
   if (obj.type === 'turn.failed') {
     if (!state.codexErrorEmitted) {
@@ -295,6 +304,8 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   }
 
   if (obj.type === 'turn.started') {
+    state.codexPreviousEventWasAgentMessage = false;
+    state.codexLastAgentMessageEndedWithNewline = false;
     onEvent({ type: 'status', label: 'running' });
     return true;
   }
@@ -302,6 +313,8 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   if (obj.type === 'item.started' && isRecord(obj.item)) {
     const item = obj.item;
     if (item.type === 'command_execution' && typeof item.id === 'string') {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
       if (!state.codexToolUses.has(item.id)) {
         state.codexToolUses.add(item.id);
         onEvent({
@@ -320,6 +333,8 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   if (obj.type === 'item.completed' && isRecord(obj.item)) {
     const item = obj.item;
     if (item.type === 'command_execution' && typeof item.id === 'string') {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
       if (!state.codexToolUses.has(item.id)) {
         state.codexToolUses.add(item.id);
         onEvent({
@@ -348,7 +363,15 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
     typeof obj.item.text === 'string' &&
     obj.item.text.length > 0
   ) {
-    onEvent({ type: 'text_delta', delta: obj.item.text });
+    const text = obj.item.text;
+    const needsBoundary =
+      state.codexPreviousEventWasAgentMessage &&
+      !state.codexLastAgentMessageEndedWithNewline &&
+      !text.startsWith('\n');
+    const delta = needsBoundary ? `\n${text}` : text;
+    onEvent({ type: 'text_delta', delta });
+    state.codexPreviousEventWasAgentMessage = true;
+    state.codexLastAgentMessageEndedWithNewline = text.endsWith('\n');
     return true;
   }
 
@@ -373,6 +396,8 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     openCodeToolUses: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
+    codexPreviousEventWasAgentMessage: false,
+    codexLastAgentMessageEndedWithNewline: false,
   };
 
   function handleLine(line: string): void {

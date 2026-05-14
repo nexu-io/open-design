@@ -203,6 +203,18 @@ python --version   # or py --version
 Get-ExecutionPolicy -List
 ```
 
+## 7. Optional: quick launcher
+
+If you want a double-click entry point on Windows, create a `launch.bat` file in the repo root with:
+
+```bat
+@echo off
+cd /d %~dp0
+corepack pnpm tools-dev run web
+```
+
+That keeps the launcher on the supported `pnpm tools-dev run web` path while still giving you a one-click start.
+
 ---
 
 ## Optional: OpenCode agent CLI on Windows

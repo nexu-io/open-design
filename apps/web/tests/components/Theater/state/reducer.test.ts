@@ -311,4 +311,62 @@ describe('Critique Theater reducer (Phase 7)', () => {
     });
     expect(s2).toBe(s1);
   });
+
+  it('__reset__ lifts a running state back to idle (PR #1314 review)', () => {
+    // Project / transcript context changes dispatch this synthetic
+    // action so the next mount cannot see a stale prior run.
+    let s: CritiqueState = runningState();
+    s = reduce(s, {
+      type: 'panelist_must_fix', runId: RUN_ID, round: 1, role: 'critic', text: 'low contrast',
+    });
+    expect(s.phase).toBe('running');
+    s = reduce(s, { type: '__reset__' });
+    expect(s.phase).toBe('idle');
+  });
+
+  it('__reset__ lifts a terminal state back to idle too', () => {
+    let s: CritiqueState = runningState();
+    s = reduce(s, {
+      type: 'ship', runId: RUN_ID, round: 1, composite: 8.6, status: 'shipped',
+      artifactRef: { projectId: 'p1', artifactId: 'a1' }, summary: 'ok',
+    });
+    expect(s.phase).toBe('shipped');
+    s = reduce(s, { type: '__reset__' });
+    expect(s.phase).toBe('idle');
+  });
+
+  it('__reset__ on idle state returns the same reference (no allocation churn)', () => {
+    const next = reduce(initialState, { type: '__reset__' });
+    expect(next).toBe(initialState);
+  });
+
+  it('panelist_open materializes the round + empty panelist view (PR #1314 review)', () => {
+    // Before this fix, the reducer set activePanelist/activeRound but
+    // left `rounds = []`, so TheaterStage had no in-progress round
+    // cell to highlight until a later dim/must-fix/close event
+    // arrived. The protocol treats panelist_open as the tag-open
+    // event, so the UI must become visible at that point.
+    let s: CritiqueState = runningState();
+    s = reduce(s, { type: 'panelist_open', runId: RUN_ID, round: 1, role: 'critic' });
+    expect(s.phase).toBe('running');
+    if (s.phase !== 'running') return;
+    expect(s.rounds).toHaveLength(1);
+    expect(s.rounds[0]?.n).toBe(1);
+    expect(s.rounds[0]?.panelists.critic).toEqual({ dims: [], mustFixes: [] });
+    expect(s.activePanelist).toBe('critic');
+    expect(s.activeRound).toBe(1);
+  });
+
+  it('panelist_open does not stomp an existing round with prior panelist data', () => {
+    let s: CritiqueState = runningState();
+    s = reduce(s, {
+      type: 'panelist_dim', runId: RUN_ID, round: 1, role: 'designer',
+      dimName: 'composition', dimScore: 8, dimNote: 'tight',
+    });
+    s = reduce(s, { type: 'panelist_open', runId: RUN_ID, round: 1, role: 'critic' });
+    expect(s.phase).toBe('running');
+    if (s.phase !== 'running') return;
+    expect(s.rounds[0]?.panelists.designer?.dims).toHaveLength(1);
+    expect(s.rounds[0]?.panelists.critic).toEqual({ dims: [], mustFixes: [] });
+  });
 });

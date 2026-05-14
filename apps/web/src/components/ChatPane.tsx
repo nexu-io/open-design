@@ -998,19 +998,19 @@ function UserMessage({
           })}
         </div>
       ) : null}
-      {commentAttachments.length > 0 ? (
+      {commentAttachments.some((attachment) => attachment.selectionKind !== 'visual') ? (
         <div className="user-attachments comment-history-attachments">
-          {commentAttachments.map((a) => (
+          {commentAttachments.filter((attachment) => attachment.selectionKind !== 'visual').map((a) => (
             <span key={a.id} className="user-attachment staged-comment">
               <span className="staged-name" title={`${a.elementId}: ${a.comment}`}>
-                <strong>{a.elementId}</strong>
+                <strong>{a.selectionKind === 'visual' ? 'Visual mark' : a.elementId}</strong>
                 <span>{a.comment}</span>
               </span>
             </span>
           ))}
         </div>
       ) : null}
-      {message.content ? <div className="user-text">{message.content}</div> : null}
+      {message.content ? <div className="user-text user-bubble">{message.content}</div> : null}
     </div>
   );
 }

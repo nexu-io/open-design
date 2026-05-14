@@ -91,6 +91,10 @@ async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promi
   return withFakeAgent('opencode', script, run);
 }
 
+async function withFakeCursorAgent<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('cursor-agent', script, run);
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1497,6 +1501,140 @@ setTimeout(() => process.exit(0), 50);
           agentName: 'OpenCode',
           detail: 'OpenCode auth failed: login required',
         });
+      },
+    );
+  });
+
+  it('reports Cursor Agent status auth failures before running the smoke prompt', async () => {
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('No models available for this account.');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.error("Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.");
+  process.exit(1);
+}
+console.error('smoke prompt should not run when status reports missing auth');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'cursor-agent' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+          agentName: 'Cursor Agent',
+          detail: expect.stringContaining('cursor-agent login'),
+        });
+      },
+    );
+  });
+
+  it('reports Cursor Agent Not logged in status before running the smoke prompt', async () => {
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('No models available for this account.');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.error('Not logged in');
+  process.exit(1);
+}
+console.error('smoke prompt should not run when status reports missing auth');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'cursor-agent' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+          agentName: 'Cursor Agent',
+          detail: expect.stringContaining('cursor-agent login'),
+        });
+      },
+    );
+  });
+
+  it('classifies Cursor Agent runtime auth failures from stderr', async () => {
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.log('Authenticated');
+  process.exit(0);
+}
+console.error("Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.");
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'cursor-agent' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+          agentName: 'Cursor Agent',
+          detail: expect.stringContaining('cursor-agent status'),
+        });
+      },
+    );
+  });
+
+  it('keeps non-auth Cursor Agent runtime failures on the generic spawn path', async () => {
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.log('Authenticated');
+  process.exit(0);
+}
+console.error('workspace path does not exist');
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'cursor-agent' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Cursor Agent',
+        });
+        expect(result.detail).toContain('workspace path does not exist');
       },
     );
   });

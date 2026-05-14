@@ -89,7 +89,9 @@ async function runFixture(options: {
   includeHoistedNext?: boolean;
   includeWebNext: boolean;
   omitMacAdhocBundleSign?: boolean;
+  omitRootWebPackage?: boolean;
   platformName?: "darwin" | "win32";
+  requireRootWebPackageAudit?: boolean;
   useAbsolutePnpmSymlinks?: boolean;
 }): Promise<{
   appOutDir: string;
@@ -114,7 +116,9 @@ async function runFixture(options: {
   const oldConfigEnv = process.env[CONFIG_ENV];
 
   await mkdir(resourcesRoot, { recursive: true });
-  await writeRootWebPackage(resourcesRoot);
+  if (options.omitRootWebPackage !== true) {
+    await writeRootWebPackage(resourcesRoot);
+  }
   await writeFile(
     configPath,
     `${JSON.stringify(
@@ -124,6 +128,9 @@ async function runFixture(options: {
         pruneCopiedSharp: false,
         pruneRootNext: false,
         pruneRootSharp: false,
+        ...(options.requireRootWebPackageAudit == null
+          ? {}
+          : { requireRootWebPackageAudit: options.requireRootWebPackageAudit }),
         resourceName: "open-design-web-standalone",
         standaloneSourceRoot,
         version: 1,
@@ -216,6 +223,24 @@ describe("web standalone afterPack hook", () => {
 
       expect(report.platformName).toBe("win32");
       expect(report.macAdhocBundleSign).toEqual([]);
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  it("allows win32 prebundle mode to omit the root web package audit", async () => {
+    const fixture = await runFixture({
+      includeWebNext: true,
+      omitRootWebPackage: true,
+      requireRootWebPackageAudit: false,
+    });
+
+    try {
+      const report = JSON.parse(await readFile(fixture.auditReportPath, "utf8")) as {
+        rootWebPackageAudit: unknown;
+      };
+
+      expect(report.rootWebPackageAudit).toBeNull();
     } finally {
       await rm(fixture.root, { force: true, recursive: true });
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildBoardCommentAttachments,
+  buildVisualAnnotationAttachment,
   commentsToAttachments,
   historyWithCommentAttachmentContext,
   liveSnapshotForComment,
@@ -83,6 +84,33 @@ describe('preview comment attachment helpers', () => {
       comment: 'Tighten the hierarchy',
     });
     expect(messageContentWithCommentAttachments('', attachments)).toContain('memberCount: 2');
+  });
+
+  it('builds visual annotation payloads without requiring a selector', () => {
+    const attachment = buildVisualAnnotationAttachment({
+      order: 1,
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      note: '',
+      bounds: { x: 12, y: 24, width: 140, height: 80 },
+      target: {
+        filePath: 'index.html',
+        position: { x: 12, y: 24, width: 140, height: 80 },
+      },
+    });
+
+    expect(attachment).toMatchObject({
+      selectionKind: 'visual',
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      selector: '',
+      comment: expect.stringContaining('red strokes'),
+      intent: expect.stringContaining('red strokes'),
+    });
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('targetKind: visual');
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('screenshot: uploads/drawing.png');
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('markKind: stroke');
+    expect(messageContentWithCommentAttachments('', [attachment])).not.toContain('selector: ');
   });
 
   it('keeps large queued board-note batches ordered in one send payload', () => {

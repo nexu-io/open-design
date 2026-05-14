@@ -720,9 +720,6 @@ export function DesignFilesPanel({
                       {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
                     </span>
                     <div className="df-select-bar">
-                      <button type="button" className="df-select-all" onClick={toggleSelectPage}>
-                        {t('designFiles.selectPage')}
-                      </button>
                       {selected.size < sortedFiles.length ? (
                         <button type="button" className="df-select-all" onClick={selectAllFiles}>
                           {t('designFiles.selectAll', { n: sortedFiles.length })}

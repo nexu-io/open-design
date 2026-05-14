@@ -968,6 +968,21 @@ describe('SettingsDialog media providers interactions', () => {
     expect(bflBaseUrl.disabled).toBe(true);
   });
 
+  it('renders ElevenLabs as an integrated media provider with enabled inputs', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'media' },
+    );
+
+    const apiKeyInput = screen.getByLabelText('ElevenLabs API key') as HTMLInputElement;
+    const baseUrlInput = screen.getByLabelText('ElevenLabs Base URL') as HTMLInputElement;
+    const row = apiKeyInput.closest('.media-provider-row') as HTMLElement;
+
+    expect(within(row).getByText('Integrated')).toBeTruthy();
+    expect(apiKeyInput.disabled).toBe(false);
+    expect(baseUrlInput.disabled).toBe(false);
+  });
+
   it('clears an existing provider config and removes it from the persisted payload', async () => {
     const { onPersist } = renderSettingsDialog(
       {
@@ -1656,6 +1671,16 @@ describe('SettingsDialog appearance interactions', () => {
     expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('applies the first accent color as the default appearance color', () => {
+    renderSettingsDialog(
+      { theme: 'system' },
+      { initialSection: 'appearance' },
+    );
+
+    expect(screen.getByRole('radio', { name: 'Default accent color' }).getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
+  });
+
   it('live previews explicit themes and removes the explicit document theme when switching back to System', () => {
     renderSettingsDialog(
       { theme: 'dark' },
@@ -1706,6 +1731,48 @@ describe('SettingsDialog appearance interactions', () => {
       }),
       {},
     );
+  });
+
+  it('switches back to the default accent color and persists it explicitly', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
+      { initialSection: 'appearance' },
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Default accent color' }));
+
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        accentColor: '#c96442',
+      }),
+      {},
+    );
+  });
+
+  it('keeps an autosaved accent color applied after the dialog closes', async () => {
+    const view = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
+      { initialSection: 'appearance' },
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
+
+    await waitForPersist(
+      view.onPersist,
+      expect.objectContaining({
+        accentColor: '#059669',
+      }),
+      {},
+    );
+
+    fireEvent.click(view.container.querySelector('.settings-close') as HTMLElement);
+    expect(view.onClose).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
   });
 
   it('live previews and autosaves preset and custom accent colors', async () => {

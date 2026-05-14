@@ -73,28 +73,42 @@ export function defaultCritiqueConfig(): CritiqueConfig {
   };
 }
 
-export type DegradedReason =
-  | 'malformed_block'
-  | 'oversize_block'
-  | 'adapter_unsupported'
-  | 'protocol_version_mismatch'
-  | 'missing_artifact';
+export const DEGRADED_REASONS = [
+  'malformed_block',
+  'oversize_block',
+  'adapter_unsupported',
+  'protocol_version_mismatch',
+  'missing_artifact',
+] as const;
+export type DegradedReason = typeof DEGRADED_REASONS[number];
 
-export type FailedCause =
-  | 'cli_exit_nonzero'
-  | 'per_round_timeout'
-  | 'total_timeout'
-  | 'orchestrator_internal';
+export const FAILED_CAUSES = [
+  'cli_exit_nonzero',
+  'per_round_timeout',
+  'total_timeout',
+  'orchestrator_internal',
+] as const;
+export type FailedCause = typeof FAILED_CAUSES[number];
 
-export type ParserWarningKind =
-  | 'weak_debate'
-  | 'unknown_role'
-  | 'score_clamped'
-  | 'composite_mismatch'
-  | 'duplicate_ship';
+export const PARSER_WARNING_KINDS = [
+  'weak_debate',
+  'unknown_role',
+  'score_clamped',
+  'composite_mismatch',
+  'duplicate_ship',
+] as const;
+export type ParserWarningKind = typeof PARSER_WARNING_KINDS[number];
 
-export type RoundDecision = 'continue' | 'ship';
-export type ShipStatus = 'shipped' | 'below_threshold' | 'timed_out' | 'interrupted';
+export const ROUND_DECISIONS = ['continue', 'ship'] as const;
+export type RoundDecision = typeof ROUND_DECISIONS[number];
+
+export const SHIP_STATUSES = [
+  'shipped',
+  'below_threshold',
+  'timed_out',
+  'interrupted',
+] as const;
+export type ShipStatus = typeof SHIP_STATUSES[number];
 
 export type PanelEvent =
   | { type: 'run_started'; runId: string; protocolVersion: number; cast: PanelistRole[]; maxRounds: number; threshold: number; scale: number }
@@ -117,12 +131,129 @@ const PANEL_EVENT_TYPE_LIST = [
 
 const PANEL_EVENT_TYPES = new Set<PanelEvent['type']>(PANEL_EVENT_TYPE_LIST);
 
+const PANELIST_ROLE_SET = new Set<string>(PANELIST_ROLES);
+const SHIP_STATUS_SET = new Set<string>(SHIP_STATUSES);
+const DEGRADED_REASON_SET = new Set<string>(DEGRADED_REASONS);
+const FAILED_CAUSE_SET = new Set<string>(FAILED_CAUSES);
+const PARSER_WARNING_KIND_SET = new Set<string>(PARSER_WARNING_KINDS);
+const ROUND_DECISION_SET = new Set<string>(ROUND_DECISIONS);
+
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v);
+/** Non-negative finite (>= 0). Used for composite / score / dimScore. */
+const isNonNegativeFinite = (v: unknown): v is number =>
+  isFiniteNumber(v) && v >= 0;
+/** Non-negative integer (0, 1, 2, ...). Used for mustFix, position, bestRound. */
+const isNonNegativeInt = (v: unknown): v is number =>
+  isFiniteNumber(v) && Number.isInteger(v) && v >= 0;
+/** Positive integer (1, 2, ...). Used for round, maxRounds, protocolVersion, scale. */
+const isPositiveInt = (v: unknown): v is number =>
+  isFiniteNumber(v) && Number.isInteger(v) && v > 0;
+const isString = (v: unknown): v is string => typeof v === 'string';
+const isPanelistRole = (v: unknown): v is PanelistRole =>
+  isString(v) && PANELIST_ROLE_SET.has(v);
+
+/**
+ * Strict runtime guard for the `PanelEvent` union. Validates the union tag
+ * (`type`), the non-empty `runId` header, every variant-specific required
+ * field, the membership of closed-enum fields (`role`, `status`, `reason`,
+ * `cause`, `kind`, `decision`), and the numeric domain of every numeric
+ * field (integer / positive / non-negative / range), not just finiteness.
+ *
+ * This is the single source of truth for wire-side validation. Both the web
+ * SSE path (`sseToPanelEvent`) and the transcript replay parser go through
+ * here, so a malformed frame (missing field, unknown enum value, NaN /
+ * Infinity score, `scale: 0` causing downstream divide-by-zero, threshold
+ * outside `[0, scale]`, fractional or negative round numbers) is rejected
+ * before any reducer or component touches it.
+ *
+ * Numeric domains enforced (lefarcen P2 on PR #1314 round 4):
+ *
+ *   - `protocolVersion`, `maxRounds`, `scale`, `round`: positive integers.
+ *     ScoreTicker divides by `scale` for inline CSS, so a `scale: 0` would
+ *     produce Infinity and ship as broken style; rounds are 1-indexed.
+ *   - `bestRound`, `mustFix`, `position`: non-negative integers. `bestRound:
+ *     0` is the valid "interrupt before any round closed" sentinel.
+ *   - `threshold`: non-negative finite; cross-checked `threshold <= scale`
+ *     inside `run_started`. Threshold is allowed to be fractional (e.g.
+ *     8.5 on a scale of 10).
+ *   - `composite`, `score`, `dimScore`: non-negative finite. The
+ *     `<= scale` bound is per-run state the guard does not see; downstream
+ *     code clamps to scale on render, but a negative score is never valid.
+ *
+ * Earlier review history:
+ *
+ *   - Siri-Ray round-3 P1: the original guard checked `typeof === 'string'`
+ *     for enum fields and accepted unknown values; now validated against
+ *     the closed-set arrays.
+ */
 export function isPanelEvent(value: unknown): value is PanelEvent {
   if (!value || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
-  const t = obj['type'];
+  const o = value as Record<string, unknown>;
+  const t = o['type'];
   if (typeof t !== 'string' || !PANEL_EVENT_TYPES.has(t as PanelEvent['type'])) return false;
-  return typeof obj['runId'] === 'string' && (obj['runId'] as string).length > 0;
+  const runId = o['runId'];
+  if (typeof runId !== 'string' || runId.length === 0) return false;
+  switch (t as PanelEvent['type']) {
+    case 'run_started': {
+      const threshold = o['threshold'];
+      const scale = o['scale'];
+      return isPositiveInt(o['protocolVersion'])
+        && Array.isArray(o['cast']) && o['cast'].length > 0
+        && (o['cast'] as unknown[]).every(isPanelistRole)
+        && isPositiveInt(o['maxRounds'])
+        && isPositiveInt(scale)
+        && isNonNegativeFinite(threshold)
+        // threshold must fit within the configured scale; downstream
+        // panel decisions compare composite against threshold and break
+        // silently if threshold > scale.
+        && (threshold as number) <= (scale as number);
+    }
+    case 'panelist_open':
+      return isPositiveInt(o['round']) && isPanelistRole(o['role']);
+    case 'panelist_dim':
+      return isPositiveInt(o['round'])
+        && isPanelistRole(o['role'])
+        && isString(o['dimName'])
+        && isNonNegativeFinite(o['dimScore'])
+        && isString(o['dimNote']);
+    case 'panelist_must_fix':
+      return isPositiveInt(o['round'])
+        && isPanelistRole(o['role'])
+        && isString(o['text']);
+    case 'panelist_close':
+      return isPositiveInt(o['round'])
+        && isPanelistRole(o['role'])
+        && isNonNegativeFinite(o['score']);
+    case 'round_end':
+      return isPositiveInt(o['round'])
+        && isNonNegativeFinite(o['composite'])
+        && isNonNegativeInt(o['mustFix'])
+        && isString(o['decision']) && ROUND_DECISION_SET.has(o['decision'])
+        && isString(o['reason']);
+    case 'ship': {
+      const ref = o['artifactRef'] as { projectId?: unknown; artifactId?: unknown } | null | undefined;
+      return isPositiveInt(o['round'])
+        && isNonNegativeFinite(o['composite'])
+        && isString(o['status']) && SHIP_STATUS_SET.has(o['status'])
+        && ref !== null && typeof ref === 'object'
+        && typeof ref.projectId === 'string' && ref.projectId.length > 0
+        && typeof ref.artifactId === 'string' && ref.artifactId.length > 0
+        && isString(o['summary']);
+    }
+    case 'degraded':
+      return isString(o['reason']) && DEGRADED_REASON_SET.has(o['reason'])
+        && isString(o['adapter']);
+    case 'interrupted':
+      // `bestRound: 0` is the valid sentinel for "interrupted before any
+      // round closed"; rounds otherwise start at 1.
+      return isNonNegativeInt(o['bestRound']) && isNonNegativeFinite(o['composite']);
+    case 'failed':
+      return isString(o['cause']) && FAILED_CAUSE_SET.has(o['cause']);
+    case 'parser_warning':
+      return isString(o['kind']) && PARSER_WARNING_KIND_SET.has(o['kind'])
+        && isNonNegativeInt(o['position']);
+  }
 }
 
 // ---------------------------------------------------------------------------

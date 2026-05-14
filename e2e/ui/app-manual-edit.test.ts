@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 });
 
-test('manual edit mode applies content, style, attribute, HTML, source, undo, and redo patches', async ({ page }) => {
+test('manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit smoke');
   await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
@@ -34,60 +34,92 @@ test('manual edit mode applies content, style, attribute, HTML, source, undo, an
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+  const responsivePair = frame.locator('[data-od-id="responsive-pair"]');
+  await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
 
   await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
+
+  await expect(page.locator('.manual-edit-modal')).toContainText('PAGE');
+  await expect(page.locator('.manual-edit-tabs')).toHaveCount(0);
+  await expect(page.locator('.manual-edit-layer-row')).toHaveCount(0);
+
+  await inspectorRow(page, 'Background').locator('input').fill('#eef2ff');
+  await inspectorRow(page, 'Font').locator('select').selectOption('Georgia, serif');
+  await inspectorRow(page, 'Base size').locator('input').fill('18');
+  await expect
+    .poll(async () => frame.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor))
+    .toBe('rgb(238, 242, 255)');
+  await expectFileSource(page, projectId, 'manual-edit.html', [
+    'background-color:',
+    'font-family: Georgia, serif',
+    'font-size: 18px',
+    'letter-spacing: 0.01em',
+  ]);
+
   await frame.getByRole('heading', { name: 'Original Hero' }).click();
-  await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(page.locator('.manual-edit-modal')).toContainText('SIZE');
+  await expect(page.locator('.manual-edit-modal')).toContainText('LAYOUT');
+  await expect(page.locator('.manual-edit-modal')).toContainText('BOX');
+  const selectedTitleMarker = frame.locator('[data-od-id="hero-title"][data-od-edit-selected="true"]');
+  await expect(selectedTitleMarker).toHaveCount(1);
+  const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
+  await fontSizeInput.click();
+  await expect(selectedTitleMarker).toHaveCount(1);
+  await expect(fontSizeInput).not.toHaveValue('');
+  await expect(fontSizeInput).not.toHaveValue(/px/i);
+  await page.getByRole('button', { name: 'Show page inspector' }).click();
+  await expect(page.locator('.manual-edit-modal')).toContainText('PAGE');
+  await expect(page.locator('.manual-edit-modal')).not.toContainText('TYPOGRAPHY');
+  await expect(selectedTitleMarker).toHaveCount(0);
+  await frame.getByRole('heading', { name: 'Original Hero' }).click();
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(selectedTitleMarker).toHaveCount(1);
+  await expect(inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input')).toHaveValue(/^#[0-9a-f]{6}$/);
+  const lineInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Line' }).locator('input');
+  await lineInput.click();
+  await lineInput.blur();
+  await expect(page.locator('.manual-edit-error')).toHaveCount(0);
+  await frame.locator('body').evaluate(() => {
+    window.parent.postMessage({ type: 'od-edit-targets', targets: [] }, '*');
+  });
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(page.locator('.manual-edit-modal')).not.toContainText('PAGE');
+  await frame.locator('body').evaluate(() => {
+    (window as Window & typeof globalThis & { __manualEditSmokeMarker?: string }).__manualEditSmokeMarker = 'stable-frame';
+  });
 
-  await page.locator('.manual-edit-modal textarea').first().fill('Edited Hero');
-  await page.getByRole('button', { name: 'Apply Content' }).click();
-  await expect(frame.getByRole('heading', { name: 'Edited Hero' })).toBeVisible();
-  await expectFileSource(page, projectId, 'manual-edit.html', ['Edited Hero']);
+  await fontSizeInput.fill('48');
+  await inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input').fill('#ef4444');
+  await inspectorSection(page, 'BOX').locator('.cc-row').filter({ hasText: 'Fill' }).locator('input').fill('#f97316');
+  const paddingTopInput = inspectorSection(page, 'BOX').locator('.cc-quad').filter({ hasText: 'Padding' }).locator('input').first();
+  await paddingTopInput.fill('12');
+  await inspectorSection(page, 'BOX').locator('.cc-row').filter({ hasText: 'Radius' }).locator('input').fill('8');
+  await expect(fontSizeInput).toHaveValue('48');
+  await expect(paddingTopInput).toHaveValue('12');
 
-  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Style', exact: true }).click();
-  await page.locator('.manual-edit-field').filter({ hasText: 'Font size' }).locator('input').fill('48px');
-  await page.getByRole('button', { name: 'Apply Style' }).click();
-  await expectFileSource(page, projectId, 'manual-edit.html', ['font-size: 48px']);
-
-  await page.locator('.manual-edit-layer-row').filter({ hasText: 'Primary CTA' }).click();
-  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Content', exact: true }).click();
-  const contentFields = page.locator('.manual-edit-tab-body');
-  await contentFields.locator('textarea').fill('Launch now');
-  await contentFields.locator('input').fill('/launch');
-  await page.getByRole('button', { name: 'Apply Content' }).click();
-  await expect(frame.getByRole('link', { name: 'Launch now' })).toHaveAttribute('href', /\/launch$/);
-
-  await page.locator('.manual-edit-layer-row').filter({ hasText: 'Hero image' }).click();
-  await contentFields.locator('input').first().fill('/edited.png');
-  await contentFields.locator('input').nth(1).fill('Edited alt');
-  await page.getByRole('button', { name: 'Apply Content' }).click();
-  await expectFileSource(page, projectId, 'manual-edit.html', ['/edited.png', 'Edited alt']);
-
-  await page.locator('.manual-edit-layer-row').filter({ hasText: 'Hero title' }).click();
-  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Attributes', exact: true }).click();
-  await page.locator('.manual-edit-tab-body textarea').fill('{"aria-label":"Edited headline"}');
-  await page.getByRole('button', { name: 'Apply Attributes' }).click();
-  await expectFileSource(page, projectId, 'manual-edit.html', ['aria-label="Edited headline"', 'font-size: 48px']);
-
-  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Html', exact: true }).click();
-  await page.locator('.manual-edit-tab-body textarea').fill('<h1 class="replacement">HTML Hero</h1>');
-  await page.getByRole('button', { name: 'Apply HTML' }).click();
-  await expectFileSource(page, projectId, 'manual-edit.html', ['data-od-id="hero-title"', 'HTML Hero']);
-
-  await page.locator('.manual-edit-tabs').getByRole('tab', { name: 'Source', exact: true }).click();
-  await page.locator('.manual-edit-tab-body textarea').fill(manualEditHtml().replace('Original Hero', 'Full Source Hero'));
-  await page.getByRole('button', { name: 'Apply Source' }).click();
-  await expect(frame.getByRole('heading', { name: 'Full Source Hero' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(frame.getByRole('heading', { name: 'HTML Hero' })).toBeVisible();
-  await page.getByRole('button', { name: 'Redo' }).click();
-  await expect(frame.getByRole('heading', { name: 'Full Source Hero' })).toBeVisible();
-
-  await page.getByRole('button', { name: /Tweaks/ }).click();
-  await expect(page.getByTestId('comment-mode-toggle')).toBeVisible();
-  await frame.getByRole('heading', { name: 'Full Source Hero' }).click();
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  const title = frame.getByRole('heading', { name: 'Original Hero' });
+  await expect.poll(async () => title.evaluate((el) => getComputedStyle(el).fontSize)).toBe('48px');
+  await expect(title).toHaveCSS('color', 'rgb(239, 68, 68)');
+  await expect(title).toHaveCSS('background-color', 'rgb(249, 115, 22)');
+  await expect(title).toHaveCSS('padding-top', '12px');
+  await expect(title).toHaveCSS('border-radius', '8px');
+  await expectFileSource(page, projectId, 'manual-edit.html', [
+    'font-size: 48px',
+    'color:',
+    'background-color:',
+    'padding-top: 12px',
+    'border-radius: 8px',
+  ]);
+  await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(page.locator('.manual-edit-modal')).not.toContainText('PAGE');
+  await expect(selectedTitleMarker).toHaveCount(1);
+  await expect(page.locator('.manual-edit-error')).toHaveCount(0);
+  await expect.poll(async () => frame.locator('body').evaluate(() => (
+    window as Window & typeof globalThis & { __manualEditSmokeMarker?: string }
+  ).__manualEditSmokeMarker)).toBe('stable-frame');
 
   await page.getByRole('button', { name: /^Share$/ }).click();
   await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
@@ -171,13 +203,46 @@ async function expectFileSource(page: Page, projectId: string, fileName: string,
     .toBe(true);
 }
 
+async function expectFileSourceExcludes(page: Page, projectId: string, fileName: string, snippets: string[]) {
+  await expect
+    .poll(async () => {
+      const resp = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+      if (!resp.ok()) return false;
+      const source = await resp.text();
+      return snippets.every((snippet) => !source.includes(snippet));
+    })
+    .toBe(true);
+}
+
+function inspectorRow(page: Page, label: string) {
+  return page.locator('.manual-edit-modal .cc-row').filter({ hasText: label }).first();
+}
+
+function inspectorSection(page: Page, title: string) {
+  return page.locator('.manual-edit-modal .cc-section').filter({ hasText: title }).first();
+}
+
 function manualEditHtml(): string {
   return `<!doctype html>
 <html>
-  <head><meta charset="utf-8"><title>Manual Edit</title></head>
-  <body>
+  <head>
+    <meta charset="utf-8">
+    <title>Manual Edit</title>
+    <style>
+      .responsive-pair { display: flex; gap: 24px; }
+      .responsive-pair > div { flex: 1 1 0; min-height: 40px; }
+      @media (max-width: 700px) {
+        .responsive-pair { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body style="font-family: Inter, system-ui, sans-serif; font-size: 16px; letter-spacing: 0.01em;">
     <main>
-      <section data-od-id="hero" data-od-label="Hero section">
+      <section data-od-id="responsive-pair" data-od-label="Responsive pair" class="responsive-pair">
+        <div data-od-id="pair-a">Left panel</div>
+        <div data-od-id="pair-b">Right panel</div>
+      </section>
+      <section data-od-id="hero" data-od-label="Hero section" style="display:flex;gap:8px;align-items:center;">
         <h1 data-od-id="hero-title" data-od-label="Hero title">Original Hero</h1>
         <a data-od-id="cta" data-od-label="Primary CTA" href="/start">Start now</a>
         <img data-od-id="hero-image" data-od-label="Hero image" src="/hero.png" alt="Hero" style="width:64px;height:64px;">

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -37,12 +37,15 @@
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
     "better-sqlite3": "^12.9.0",
     "blake3-wasm": "2.1.5",
     "chokidar": "^5.0.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
     "multer": "^2.1.1",
+    "posthog-node": "^4.18.0",
+    "prom-client": "^15.1.0",
     "undici": "^7.16.0"
   },
   "devDependencies": {

@@ -85,6 +85,8 @@ Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
   [--aspect 1:1|16:9|9:16|4:3|3:4] \\
   [--length <seconds>]              # video only
   [--duration <seconds>]            # audio only
+  [--prompt-influence <0-1>]        # audio:sfx only; higher follows the prompt more closely
+  [--loop]                          # audio:sfx only; request a seamless loop
   [--audio-kind music|speech|sfx]   # audio only
   [--voice <provider-voice-id>]     # audio:speech only; omit to use provider default
   [--language <lang>]               # audio:speech only; language boost (e.g. Chinese,Yue for Cantonese)
@@ -263,6 +265,15 @@ substitution. Do not silently fall back.
     (example: \`male-qn-qingse\`). Do not pass natural-language voice
     descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
     flag instead unless you have a real id.
+    For \`elevenlabs-v3\`, \`--voice\` expects a provider-specific ElevenLabs \`voice_id\`; do not pass a natural-language voice description there.
+    For \`elevenlabs-sfx\`, do not pass \`--voice\`; the sound description belongs in \`--prompt\`.
+    Keep ElevenLabs SFX \`--prompt\` under 450 characters; target 180-320 characters so the dispatcher does not waste a generation attempt on provider validation.
+    Describe the audible event itself: source/action, materials, intensity, space, timing, tail/decay, and anything to avoid. Good SFX prompts are literal sound briefs such as "short glass UI confirmation chime, clean attack, soft shimmer tail, no melody, no voice" or "seamless rainy alley ambience loop, distant traffic, wet pavement drips, no voices".
+    For music-like requests on \`elevenlabs-sfx\`, produce a short sound-effects loop or texture, not a full song arrangement. Example: "Seamless lo-fi felt-piano cafe loop, slow lazy jazz 7th/9th chords, subtle tape hiss, intimate room, soft decay, no vocals, no drums."
+    Avoid vague intent-only prompts such as "a nice transition" or "make this section feel premium" unless you translate them into concrete sound sources.
+    Use \`--prompt-influence 0.7\` for user-specified SFX so ElevenLabs follows the prompt more closely; lower it only when the user explicitly wants exploratory/noisier variation.
+    Add \`--loop\` only when the requested SFX must be seamless ambience / background / game loop audio. Mention loop intent in the prompt as well.
+    SFX duration is capped at 30 seconds by the provider.
     \`language\` enables pronunciation boost for specific languages
     (e.g. \`Chinese,Yue\` for Cantonese, \`Chinese\` for Mandarin).
 2. **One discovery turn before generating.** Even with metadata defaults
@@ -298,10 +309,12 @@ substitution. Do not silently fall back.
 
 ### Detecting and surfacing provider errors
 
-Today the dispatcher ships two real provider integrations: \`openai\`
-(image, with Azure OpenAI auto-detected from the configured base URL)
-and \`volcengine\` (Doubao Seedance video / Seedream image). Other
-providers (suno-v5, kling, fishaudio, …) are still stubs.
+Today the dispatcher ships real provider integrations for OpenAI
+(image and speech, with Azure OpenAI auto-detected from the configured
+base URL), Volcengine (Doubao Seedance video / Seedream image), Grok
+image/video, Nano Banana image, HyperFrames video, and the MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations.
+Models whose provider path has no renderer still return a configured
+stub/error signal as described below.
 
 The dispatcher tags every outcome explicitly. Treat the failure
 signals below as hard errors and surface them verbatim to the user —
@@ -337,8 +350,7 @@ do **not** narrate a stub as if it were the final result.
    provider call failed (\`providerError\` non-null) — surface that
    distinction in your reply.
 
-A few surfaces (audio, some long-tail image/video providers) are still
-intentional stubs. In that case you can narrate the placeholder as
-expected, but still mention to the user that the real provider
-integration hasn't landed.
+Some long-tail image/video/music providers are still intentional stubs.
+In that case you can narrate the placeholder as expected, but still
+mention to the user that the real provider integration hasn't landed.
 `;

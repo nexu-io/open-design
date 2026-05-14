@@ -360,6 +360,14 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(getPageInfo(container)).toContain('31–60 of 500');
   });
 
+  it('keeps the bulk toolbar focused on the all-files action instead of duplicating page select', () => {
+    const { container } = renderPanel(generateFiles(3));
+
+    const toolbar = container.querySelector('.df-select-bar');
+    expect(toolbar?.textContent).toContain('Select everything');
+    expect(toolbar?.textContent).not.toContain('Select all on page');
+  });
+
   it('uses non-control table cells as file row click targets', () => {
     const files = generateFiles(1);
     const { container, onOpenFile } = renderPanel(files);

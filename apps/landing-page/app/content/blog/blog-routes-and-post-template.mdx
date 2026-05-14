@@ -1,0 +1,18 @@
+---
+title: Blog routes and a real post template
+date: 2026-05-12
+category: Engineering
+readingTime: 5 min read
+summary: The blog now has /blog/ and /blog/[slug]/ routes backed by Astro content collections and MDX.
+---
+
+This issue wanted something real, not a mocked-up shell. The result is a small content-backed blog that can grow without changing the landing page.
+
+### In practice
+
+- `getCollection('blog')` powers the archive
+- `getStaticPaths()` generates each article page
+- MDX keeps the post body readable in git
+- the list page sorts newest-first
+
+The important part is that the routes are static, the content is typed, and the build still passes.

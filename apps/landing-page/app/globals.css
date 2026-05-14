@@ -239,13 +239,12 @@ body::before {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid var(--ink);
-  border-radius: 50%;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 17px;
-  color: var(--ink);
-  background: transparent;
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 .brand-meta {
   font-family: var(--sans);

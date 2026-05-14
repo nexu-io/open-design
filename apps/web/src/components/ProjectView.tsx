@@ -19,6 +19,7 @@ import {
   reattachDaemonRun,
   streamViaDaemon,
 } from '../providers/daemon';
+import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import {
   deletePreviewComment,
   fetchPreviewComments,
@@ -34,9 +35,11 @@ import {
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import {
   composeSystemPrompt,
+  type AudioVoiceOption,
   type MemorySystemPromptResponse,
   type ResearchOptions,
 } from '@open-design/contracts';
+import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
@@ -79,7 +82,6 @@ import type {
   PreviewComment,
   PreviewCommentTarget,
   ProjectFile,
-  ProjectPlatform,
   ProjectTemplate,
   LiveArtifactEventItem,
   LiveArtifactSummary,
@@ -94,14 +96,21 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import {
+  CritiqueTheaterMount,
+  useCritiqueTheaterEnabled,
+} from './Theater';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
+import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
+import { ProjectActionsToolbar } from './ProjectActionsToolbar';
 import { Toast } from './Toast';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
 import { useProjectDetail } from '../hooks/useProjectDetail';
 import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
+import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
@@ -216,8 +225,17 @@ export function projectSplitClassName(workspaceFocused: boolean): string {
   return workspaceFocused ? 'split split-focus' : 'split';
 }
 
+function shouldFetchElevenLabsVoiceOptions(project: Project): boolean {
+  const metadata = project.metadata;
+  return metadata?.kind === 'audio'
+    && metadata.audioKind === 'speech'
+    && metadata.audioModel === 'elevenlabs-v3'
+    && !metadata.voice;
+}
+
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
+  if (evt.type === 'conversation-created') return null;
   if (evt.type === 'live_artifact') {
     return {
       kind: 'live_artifact',
@@ -238,56 +256,6 @@ function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['eve
     refreshedSourceCount: evt.refreshedSourceCount,
     error: evt.error,
   };
-}
-
-const PLATFORM_LABELS: Record<ProjectPlatform, string> = {
-  auto: 'Auto',
-  responsive: 'Responsive web',
-  'web-desktop': 'Desktop web',
-  'mobile-ios': 'iOS app',
-  'mobile-android': 'Android app',
-  tablet: 'Tablet app',
-  'desktop-app': 'Desktop app',
-};
-
-function labelProjectPlatform(platform: ProjectPlatform | string): string {
-  return PLATFORM_LABELS[platform as ProjectPlatform] ?? platform;
-}
-
-function projectTargetPlatforms(project: Project): string[] {
-  const targets = project.metadata?.platformTargets;
-  if (Array.isArray(targets) && targets.length > 0) {
-    return [...new Set(targets)].map(labelProjectPlatform);
-  }
-  if (project.metadata?.platform) {
-    return [labelProjectPlatform(project.metadata.platform)];
-  }
-  return [];
-}
-
-type ProjectFeatureChip = {
-  label: string;
-  title: string;
-  tone: 'landing' | 'widgets';
-};
-
-function projectFeatureChips(project: Project): ProjectFeatureChip[] {
-  const chips: ProjectFeatureChip[] = [];
-  if (project.metadata?.includeLandingPage) {
-    chips.push({
-      label: 'Landing page',
-      title: 'Landing page companion surface is enabled for this project',
-      tone: 'landing',
-    });
-  }
-  if (project.metadata?.includeOsWidgets) {
-    chips.push({
-      label: 'OS widgets',
-      title: 'Home-screen, lock-screen, or quick-access OS widget surfaces are enabled',
-      tone: 'widgets',
-    });
-  }
-  return chips;
 }
 
 export function ProjectView({
@@ -328,12 +296,21 @@ export function ProjectView({
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioVoiceOptionsError, setAudioVoiceOptionsError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [instructionsDraft, setInstructionsDraft] = useState(project.customInstructions ?? '');
+  const [instructionsSaving, setInstructionsSaving] = useState(false);
+  // Keep the draft in sync with the server value when the editor is closed
+  // (e.g. after an external update or project switch).
+  useEffect(() => {
+    if (!instructionsOpen) setInstructionsDraft(project.customInstructions ?? '');
+  }, [project.customInstructions, instructionsOpen]);
   // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
   // bumps on file-changed SSE events, live_artifact* events, and the
   // chat streaming-completion edge so the staleness chip stays in sync
@@ -408,6 +385,24 @@ export function ProjectView({
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
   const creatingConversationRef = useRef(false);
+  // Live mirror of the currently-viewed project id. Used to bail out of
+  // the conversation-created async refresh (#1361) if the user switches
+  // projects while the refetch is in flight — the existing project-load
+  // effects use the same kind of cancellation guard.
+  const projectIdRef = useRef(project.id);
+  useEffect(() => {
+    projectIdRef.current = project.id;
+  }, [project.id]);
+  // Monotonic token bumped on every `conversation-created` refresh dispatch.
+  // Two rapid events (e.g. concurrent routine runs against the same reused
+  // project, #1502) can start overlapping `listConversations` calls; if the
+  // later request resolves first with N+1 conversations and the earlier
+  // request resolves afterwards with only N, an unconditional
+  // `setConversations(list)` would drop the newest conversation. Each
+  // dispatch captures the token at start; only the dispatch whose token
+  // still equals `conversationsRefreshTokenRef.current` at await-return is
+  // allowed to apply its result.
+  const conversationsRefreshTokenRef = useRef(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
   const currentConversationHasActiveRun = useMemo(
     () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
@@ -446,6 +441,7 @@ export function ProjectView({
     setAttachedComments([]);
     setStreaming(false);
     setError(null);
+    setAudioVoiceOptionsError(null);
     setArtifact(null);
     savedArtifactRef.current = null;
     pendingWritesRef.current.clear();
@@ -720,8 +716,11 @@ export function ProjectView({
   // mount we also do an initial pull so attachments staged before the
   // agent has written anything still see the user's pasted images.
   useEffect(() => {
-    if (!daemonLive) return;
-    void refreshWorkspaceItems();
+    void refreshWorkspaceItems().catch(() => {
+      // The daemon probe can briefly lag behind a just-started local
+      // runtime. Retry when daemonLive flips or the explicit refresh key
+      // changes instead of leaving the project view in its empty shell.
+    });
   }, [daemonLive, refreshWorkspaceItems, filesRefresh]);
 
   // Live-reload: when the daemon's chokidar watcher reports a file change,
@@ -737,6 +736,43 @@ export function ProjectView({
       setDesignMdRefreshKey((n) => n + 1);
       return;
     }
+    if (evt.type === 'conversation-created') {
+      // A new conversation was inserted into this project by a path the
+      // open project view can't observe through its own state (currently:
+      // Routines "Run now" in reuse-an-existing-project mode, #1361).
+      // Refetch the conversation list so the new entry becomes visible
+      // without requiring the user to leave and re-enter the project.
+      // Deliberately do NOT change the active conversation here — the
+      // user keeps their current context. Auto-switch is a separate UX
+      // decision tracked in #1361.
+      if (evt.projectId !== project.id) return;
+      const capturedProjectId = project.id;
+      const myToken = ++conversationsRefreshTokenRef.current;
+      void (async () => {
+        try {
+          const list = await listConversations(capturedProjectId);
+          // Bail if the user switched projects while this request was in
+          // flight (#1361 review, Codex P1). The captured project id is the
+          // one we asked the daemon about; the live ref is the one the
+          // user is looking at right now. If they don't match, applying
+          // the list would overwrite the new project's sidebar with
+          // stale data from the old one.
+          if (projectIdRef.current !== capturedProjectId) return;
+          // Bail if a newer conversation-created event already dispatched
+          // its own refresh after us (#1361 review, lefarcen P2). With two
+          // rapid events the later request may resolve first; if this
+          // earlier request resolves afterwards it would drop the newer
+          // conversation. Only the latest dispatch is allowed to apply.
+          if (conversationsRefreshTokenRef.current !== myToken) return;
+          setConversations(list);
+        } catch {
+          // Defensive: refresh failed (network blip, daemon gone). The
+          // next project mount or another conversation-created event
+          // will retry; no need to surface an error here.
+        }
+      })();
+      return;
+    }
     const agentEvent = projectEventToAgentEvent(evt);
     if (!agentEvent) return;
     setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
@@ -745,7 +781,7 @@ export function ProjectView({
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
-  }, [onProjectsRefresh, refreshLiveArtifacts]);
+  }, [onProjectsRefresh, refreshLiveArtifacts, project.id]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
   // When the URL points at a specific file, fire an open request so the
@@ -762,7 +798,9 @@ export function ProjectView({
   const lastSyncedFileRef = useRef<string | null>(null);
   useEffect(() => {
     const target = openTabsState.active && (
-      projectFileNames.has(openTabsState.active) || isLiveArtifactTabId(openTabsState.active)
+      openTabsState.tabs.includes(openTabsState.active)
+      || projectFileNames.has(openTabsState.active)
+      || isLiveArtifactTabId(openTabsState.active)
     )
       ? openTabsState.active
       : null;
@@ -853,6 +891,22 @@ export function ProjectView({
     } catch {
       // Ignore; memory injection is best-effort.
     }
+    let audioVoiceOptions: AudioVoiceOption[] | undefined;
+    let audioVoiceOptionsLookupError: string | undefined;
+    if (shouldFetchElevenLabsVoiceOptions(project)) {
+      try {
+        audioVoiceOptions = await fetchElevenLabsVoiceOptions();
+        setAudioVoiceOptionsError(null);
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : 'ElevenLabs voice list could not be loaded.';
+        audioVoiceOptionsLookupError = message;
+        setAudioVoiceOptionsError(message);
+      }
+    } else {
+      setAudioVoiceOptionsError(null);
+    }
     return composeSystemPrompt({
       skillBody,
       skillName,
@@ -862,16 +916,22 @@ export function ProjectView({
       memoryBody,
       metadata: project.metadata,
       template,
+      audioVoiceOptions,
+      audioVoiceOptionsError: audioVoiceOptionsLookupError,
       streamFormat: config.mode === 'api' ? 'plain' : undefined,
+      userInstructions: config.customInstructions,
+      projectInstructions: project.customInstructions,
     });
   }, [
     project.skillId,
     project.designSystemId,
     project.metadata,
+    project.customInstructions,
     skills,
     designTemplates,
     designSystems,
     config.mode,
+    config.customInstructions,
   ]);
 
   const persistMessage = useCallback(
@@ -2009,6 +2069,20 @@ export function ProjectView({
     [project, onProjectChange],
   );
 
+  const handleSaveInstructions = useCallback(async () => {
+    const value = instructionsDraft.trim() || undefined;
+    if (value === (project.customInstructions ?? undefined)) {
+      setInstructionsOpen(false);
+      return;
+    }
+    setInstructionsSaving(true);
+    const result = await patchProject(project.id, { customInstructions: value ?? null });
+    setInstructionsSaving(false);
+    if (!result) return;
+    onProjectChange(result);
+    setInstructionsOpen(false);
+  }, [project, onProjectChange, instructionsDraft]);
+
   const projectMeta = useMemo(() => {
     const summary =
       skills.find((s) => s.id === project.skillId) ??
@@ -2017,13 +2091,6 @@ export function ProjectView({
     const ds = designSystems.find((d) => d.id === project.designSystemId)?.title;
     return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
   }, [skills, designTemplates, designSystems, project.skillId, project.designSystemId, t]);
-
-  const targetPlatforms = useMemo(() => projectTargetPlatforms(project), [project]);
-  const targetPlatformsLabel = targetPlatforms.join(', ');
-  const visibleTargetPlatforms = targetPlatforms.slice(0, 5);
-  const hiddenTargetPlatformCount = Math.max(0, targetPlatforms.length - visibleTargetPlatforms.length);
-  const featureChips = useMemo(() => projectFeatureChips(project), [project]);
-  const featureChipsLabel = featureChips.map((chip) => chip.label).join(', ');
 
   const isDeck = useMemo(
     () =>
@@ -2277,22 +2344,7 @@ export function ProjectView({
       return;
     }
     const launched = await terminalLauncher.open(project.id);
-    if (launched.kind === 'electron' && launched.ok) {
-      setProjectActionsToast({
-        message: 'Folder opened. Run `claude` in your terminal here and paste the prompt.',
-        details: null,
-      });
-    } else if (launched.kind === 'electron' && !launched.ok) {
-      setProjectActionsToast({
-        message: `Couldn't open the folder. Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
-        details: null,
-      });
-    } else {
-      setProjectActionsToast({
-        message: `Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
-        details: null,
-      });
-    }
+    setProjectActionsToast(buildContinueInCliToast(projectDir, launched));
   }, [
     project.id,
     project.name,
@@ -2334,8 +2386,26 @@ export function ProjectView({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [designMdState.exists, handleContinueInCli]);
 
+  // Wire the Critique Theater drop-in mount into the project workspace.
+  // The hook reads the M1 Settings toggle out of the existing
+  // `open-design:config` localStorage blob and stays in sync with the
+  // platform `storage` event (cross-tab) plus the same-tab
+  // `open-design:critique-theater-toggle` CustomEvent. The mount itself
+  // returns `null` until the daemon emits a `critique.run_started` for
+  // the active project, so the visual surface is unchanged for users
+  // who have not opted in. The daemon-side gate
+  // (`isCritiqueEnabled(...)` in `apps/daemon/src/server.ts`) is the
+  // authority for whether a run is actually wired through the critique
+  // pipeline; this hook only governs whether the web layer renders the
+  // resulting SSE stream.
+  const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
+
   return (
     <div className="app">
+      <CritiqueTheaterMount
+        projectId={project.id}
+        enabled={critiqueTheaterEnabled}
+      />
       <AppChromeHeader
         onBack={onBack}
         backLabel={t('project.backToProjects')}
@@ -2373,46 +2443,54 @@ export function ProjectView({
               {project.name}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
+            <button
+              type="button"
+              className="project-instructions-toggle"
+              title={t('project.customInstructions')}
+              onClick={() => {
+                if (instructionsOpen) setInstructionsDraft(project.customInstructions ?? '');
+                setInstructionsOpen((v) => !v);
+              }}
+            >
+              <Icon name="edit" size={13} />
+            </button>
           </span>
-          {targetPlatforms.length > 0 ? (
-            <span
-              className="project-target-platforms"
-              data-testid="project-target-platforms"
-              title={`Target platforms: ${targetPlatformsLabel}`}
-            >
-              <span className="project-target-platforms-label">Targets</span>
-              {visibleTargetPlatforms.map((platform) => (
-                <span className="project-target-platform-chip" key={platform}>
-                  {platform}
-                </span>
-              ))}
-              {hiddenTargetPlatformCount > 0 ? (
-                <span className="project-target-platform-chip is-count">
-                  +{hiddenTargetPlatformCount}
-                </span>
-              ) : null}
-            </span>
-          ) : null}
-          {featureChips.length > 0 ? (
-            <span
-              className="project-feature-chips"
-              data-testid="project-feature-chips"
-              title={`Enabled design outputs: ${featureChipsLabel}`}
-            >
-              <span className="project-feature-chips-label">Includes</span>
-              {featureChips.map((chip) => (
-                <span
-                  className={`project-feature-chip is-${chip.tone}`}
-                  key={chip.tone}
-                  title={chip.title}
-                >
-                  {chip.label}
-                </span>
-              ))}
-            </span>
-          ) : null}
         </div>
       </AppChromeHeader>
+      {instructionsOpen && (
+        <div className="project-instructions-bar">
+          <label className="project-instructions-label">{t('project.customInstructions')}</label>
+          <textarea
+            className="project-instructions-input"
+            rows={3}
+            maxLength={5000}
+            placeholder={t('project.customInstructionsPlaceholder')}
+            value={instructionsDraft}
+            onChange={(e) => setInstructionsDraft(e.target.value)}
+            disabled={instructionsSaving}
+            autoFocus
+          />
+          <div className="project-instructions-actions">
+            <button type="button" className="btn-sm" disabled={instructionsSaving} onClick={() => {
+              setInstructionsDraft(project.customInstructions ?? '');
+              setInstructionsOpen(false);
+            }}>
+              {t('common.cancel')}
+            </button>
+            <button type="button" className="btn-sm btn-primary" disabled={instructionsSaving} onClick={handleSaveInstructions}>
+              {t('common.save')}
+            </button>
+          </div>
+        </div>
+      )}
+      <ProjectActionsToolbar
+        designMdState={designMdState}
+        finalizeStatus={finalize.status}
+        onFinalize={handleFinalize}
+        onCancelFinalize={handleCancelFinalize}
+        onContinueInCli={handleContinueInCli}
+        hidden={workspaceFocused}
+      />
       <div
         ref={splitRef}
         className={[
@@ -2435,7 +2513,7 @@ export function ProjectView({
               messages={messages}
               streaming={currentConversationStreaming}
               sendDisabled={currentConversationSendDisabled}
-              error={conversationLoadError ?? error}
+              error={conversationLoadError ?? error ?? audioVoiceOptionsError}
               projectId={project.id}
               projectFiles={projectFiles}
               projectFileNames={projectFileNames}
@@ -2500,6 +2578,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
+          projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
           onRefreshFiles={() => {

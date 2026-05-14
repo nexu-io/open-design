@@ -26,3 +26,5 @@ export * from './sse/chat';
 export * from './sse/proxy';
 export * from './prompts/system';
 export * from './critique';
+export * from './analytics/events';
+export * from './analytics/public-params';

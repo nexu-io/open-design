@@ -528,6 +528,7 @@ function SkillRow({
 }: SkillRowProps) {
   const t = useT();
   const summaryName = skill.name || skill.id;
+  const canDelete = skill.source === 'user';
   return (
     <div
       className={`skills-row${enabled ? '' : ' skills-row-disabled'}${
@@ -576,7 +577,7 @@ function SkillRow({
           </span>
         </button>
         <div className="skills-row-actions">
-          {confirmDelete ? (
+          {canDelete && confirmDelete ? (
             <span className="skills-delete-confirm" role="group">
               <button
                 type="button"
@@ -605,15 +606,17 @@ function SkillRow({
               >
                 <Icon name="edit" size={13} />
               </button>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={onArmDelete}
-                title={t('settings.skillsDelete')}
-                data-testid="skills-delete"
-              >
-                <Icon name="close" size={13} />
-              </button>
+              {canDelete ? (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={onArmDelete}
+                  title={t('settings.skillsDelete')}
+                  data-testid="skills-delete"
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              ) : null}
             </>
           )}
           <label

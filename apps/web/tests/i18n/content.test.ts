@@ -61,6 +61,9 @@ describe('localized resource content', () => {
     );
     expect(localized.category).toBe('Infographie');
     expect(localized.tags).toEqual(['3D', 'unknown-tag']);
+    expect(
+      localizePromptTemplateSummary('fr', { ...translatedTemplate, category: 'Unknown category' }).category,
+    ).toBe('Unknown category');
 
     const englishOnlyTemplate = {
       ...translatedTemplate,

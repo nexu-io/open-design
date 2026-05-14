@@ -227,6 +227,39 @@ describe('MemorySection', () => {
     expect(putBodies).toEqual(['# Memory\n\n- Existing bullet\n- New bullet\n']);
   });
 
+  it('uses the same expandable affordance for extraction history and memory index', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    const extractionSummary = (await screen.findByText('Extraction history'))
+      .closest('summary') as HTMLElement;
+    const indexSummary = screen.getByText('MEMORY.md (index)')
+      .closest('summary') as HTMLElement;
+
+    expect(extractionSummary.className).toContain('memory-details-summary');
+    expect(indexSummary.className).toContain('memory-details-summary');
+  });
+
   it('clears extraction history after clicking Clear', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     const deletedUrls: string[] = [];

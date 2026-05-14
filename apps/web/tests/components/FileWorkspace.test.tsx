@@ -138,6 +138,7 @@ describe('FileWorkspace upload input', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -157,6 +158,7 @@ describe('FileWorkspace upload input', () => {
     render(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[baseFile()]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -214,6 +216,7 @@ describe('FileWorkspace upload input', () => {
     render(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[baseFile({ name: 'uploaded.png', path: 'uploaded.png' })]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -243,6 +246,7 @@ describe('FileWorkspace upload input', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -263,6 +267,7 @@ describe('FileWorkspace upload input', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -287,6 +292,7 @@ describe('FileWorkspace upload input', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -325,6 +331,7 @@ describe('FileWorkspace design file rename', () => {
     const container = renderWorkspace(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[workspaceFile('paste-1.txt'), workspaceFile('index.html')]}
         liveArtifacts={[]}
         onRefreshFiles={onRefreshFiles}
@@ -387,6 +394,7 @@ describe('FileWorkspace design file rename', () => {
     const container = renderWorkspace(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[workspaceFile('paste-1.txt')]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -484,6 +492,7 @@ describe('FileWorkspace sketch round-trip', () => {
     render(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[
           baseFile({
             name: 'diagram.sketch.json',
@@ -577,6 +586,7 @@ describe('FileWorkspace sketch round-trip', () => {
     render(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[
           baseFile({
             name: 'diagram.sketch.json',
@@ -681,6 +691,7 @@ describe('FileWorkspace sketch round-trip', () => {
     render(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[
           baseFile({
             name: 'diagram.sketch.json',
@@ -749,6 +760,7 @@ describe('FileWorkspace tab reordering', () => {
     const container = renderWorkspace(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[
           workspaceFile('analysis.html'),
           workspaceFile('notes.md'),
@@ -788,6 +800,7 @@ describe('FileWorkspace tab reordering', () => {
     const container = renderWorkspace(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[
           workspaceFile('analysis.html'),
           workspaceFile('notes.md'),
@@ -826,6 +839,7 @@ describe('FileWorkspace tab reordering', () => {
     const container = renderWorkspace(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[workspaceFile('analysis.html'), workspaceFile('notes.md')]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
@@ -854,6 +868,7 @@ describe('FileWorkspace tab reordering', () => {
     const container = renderWorkspace(
       <FileWorkspace
         projectId="project-1"
+        projectKind="prototype"
         files={[workspaceFile('analysis.html'), workspaceFile('notes.md')]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}

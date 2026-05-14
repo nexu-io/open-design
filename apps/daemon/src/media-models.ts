@@ -14,6 +14,7 @@ export type MediaProvider = {
   hint: string;
   integrated: boolean;
   defaultBaseUrl?: string;
+  docsUrl?: string;
   credentialsRequired?: boolean;
   settingsVisible?: boolean;
   supportsCustomModel?: boolean;
@@ -43,7 +44,14 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'minimax', label: 'MiniMax', hint: 'TTS / video-01', integrated: true, defaultBaseUrl: 'https://api.minimaxi.chat/v1' },
   { id: 'suno', label: 'Suno', hint: 'Music generation', integrated: false },
   { id: 'udio', label: 'Udio', hint: 'Music generation', integrated: false },
-  { id: 'elevenlabs', label: 'ElevenLabs', hint: 'Voice / SFX', integrated: false },
+  {
+    id: 'elevenlabs',
+    label: 'ElevenLabs',
+    hint: 'Voice / SFX',
+    integrated: true,
+    defaultBaseUrl: 'https://api.elevenlabs.io',
+    docsUrl: 'https://elevenlabs.io/app/settings/api-keys',
+  },
   { id: 'fishaudio', label: 'FishAudio', hint: 'Speech / voice clone', integrated: true, defaultBaseUrl: 'https://api.fish.audio' },
   { id: 'tavily', label: 'Tavily Search', hint: 'Agent-callable web research', integrated: true, defaultBaseUrl: 'https://api.tavily.com' },
   { id: 'stub', label: 'Stub (placeholder)', hint: 'Deterministic local placeholder bytes', integrated: true },

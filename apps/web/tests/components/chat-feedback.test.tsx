@@ -13,9 +13,15 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
 }
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage, ChatMessageFeedbackChange } from '../../src/types';
+
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = vi.fn();
+}
 
 function completedAssistant(
   input: Partial<ChatMessage> = {},
@@ -125,6 +131,15 @@ function renderChatPane({
 
 describe('chat assistant feedback', () => {
   afterEach(() => cleanup());
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+    vi.restoreAllMocks();
+  });
 
   it('collects feedback only after an assistant turn produces an artifact', () => {
     renderChatPane({
@@ -310,6 +325,19 @@ describe('chat assistant feedback', () => {
 
     expect(screen.getByText('Tell us why')).toBeTruthy();
     expect(screen.getByText('😔')).toBeTruthy();
+  });
+
+  it('scrolls the feedback reasons panel into view after selecting a rating', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    renderChatPane({
+      messages: [completedArtifactAssistant()],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
   });
 
   it('does not ask for feedback while the assistant is still running', () => {

@@ -219,6 +219,8 @@ export type PackagedDaemonSpawnEnvOptions = {
   requireDesktopAuth: boolean;
   legacyDataDir?: string | null;
   telemetryRelayUrl?: string | null;
+  posthogKey?: string | null;
+  posthogHost?: string | null;
 };
 
 /**
@@ -260,6 +262,17 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.legacyDataDir == null || options.legacyDataDir.length === 0
       ? {}
       : { OD_LEGACY_DATA_DIR: options.legacyDataDir }),
+    // PostHog analytics ingest key, baked into the bundle at packaging time
+    // by tools/pack. Daemon reads this as POSTHOG_KEY at startup. Absent
+    // for fork builds without the CI secret — the daemon's analytics
+    // module no-ops cleanly in that case, and /api/analytics/config
+    // returns enabled=false regardless of user consent.
+    ...(options.posthogKey == null || options.posthogKey.length === 0
+      ? {}
+      : { POSTHOG_KEY: options.posthogKey }),
+    ...(options.posthogHost == null || options.posthogHost.length === 0
+      ? {}
+      : { POSTHOG_HOST: options.posthogHost }),
   };
 }
 
@@ -339,6 +352,8 @@ export async function startPackagedSidecars(
     daemonSidecarEntry: string | null;
     nodeCommand: string | null;
     telemetryRelayUrl: string | null;
+    posthogKey: string | null;
+    posthogHost: string | null;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
@@ -375,6 +390,8 @@ export async function startPackagedSidecars(
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
+        posthogKey: options.posthogKey,
+        posthogHost: options.posthogHost,
       }),
       nodeCommand: options.nodeCommand,
       paths,

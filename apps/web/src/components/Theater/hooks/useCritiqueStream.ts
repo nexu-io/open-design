@@ -55,6 +55,17 @@ export function useCritiqueStream(
   const factory = options.connectionFactory ?? createCritiqueEventsConnection;
 
   useEffect(() => {
+    // Clear any state from the previous project / enabled session
+    // before we decide whether to open a new connection. Without this,
+    // a workspace that switches from project A (which already streamed
+    // a critique) to project B would keep rendering project A's
+    // Theater state until B's run_started arrived, and a flip from
+    // enabled=true to enabled=false would leave the in-flight run
+    // visible after the connection had been torn down (lefarcen +
+    // Siri-Ray + codex P2 on PR #1314). The reducer's reset handler
+    // is a no-op when state is already idle, so this is cheap on
+    // the common path.
+    dispatchRef.current({ type: '__reset__' });
     if (!enabled || !projectId) return;
     if (typeof window === 'undefined' && !options.EventSourceCtor) return;
     const conn = factory(

@@ -1,0 +1,77 @@
+---
+import { getCollection } from 'astro:content';
+import BlogLayout from '../../_components/blog-layout.astro';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime(),
+);
+const title = 'Open Design Blog';
+const description =
+  'Notes on shipping Open Design, keeping Atelier Zero intact, and building blog pages with Astro content collections.';
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const featured = posts[0];
+const morePosts = posts.slice(1);
+const formatDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
+---
+
+<BlogLayout title={title} description={description} canonical={canonical} ogType="website">
+  <section class="blog-hero container">
+    <p class="blog-eyebrow">Open Design / Blog</p>
+    <div class="blog-hero-grid">
+      <div>
+        <h1 class="blog-title">Shipping the product in public.</h1>
+        <p class="blog-summary">
+          Short notes, release stories, and the bits that make the landing
+          page and the codebase move together.
+        </p>
+      </div>
+      <div class="blog-hero-card">
+        <span class="blog-card-kicker">Collection</span>
+        <strong>{posts.length} posts</strong>
+        <span>Astro content collections · MDX · trailing slash routes</span>
+      </div>
+    </div>
+    <div class="blog-actions">
+      <a class="blog-link" href="/">← Back to landing page</a>
+    </div>
+  </section>
+
+  <section class="container blog-list">
+    {featured ? (
+      <>
+        <article class="blog-featured">
+          <div class="blog-featured-copy">
+            <p class="blog-card-kicker">Latest</p>
+            <h2>
+              <a href={`/blog/${featured.id}/`}>{featured.data.title}</a>
+            </h2>
+            <p>{featured.data.summary}</p>
+            <div class="blog-meta">
+              <span>{formatDate.format(featured.data.date)}</span>
+              <span>{featured.data.category}</span>
+              <span>{featured.data.readingTime}</span>
+            </div>
+          </div>
+        </article>
+
+        <div class="blog-grid">
+          {morePosts.map((post) => (
+            <article class="blog-card">
+              <p class="blog-card-kicker">{post.data.category}</p>
+              <h3>
+                <a href={`/blog/${post.id}/`}>{post.data.title}</a>
+              </h3>
+              <p>{post.data.summary}</p>
+              <div class="blog-meta">
+                <span>{formatDate.format(post.data.date)}</span>
+                <span>{post.data.readingTime}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </>
+    ) : (
+      <p class="blog-empty">No posts yet.</p>
+    )}
+  </section>
+</BlogLayout>

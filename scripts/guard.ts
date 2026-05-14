@@ -9,6 +9,7 @@ import {
   checkDesignSystemTokenFixtureSync,
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
+import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
@@ -60,6 +61,8 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
+  "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
@@ -419,12 +422,278 @@ async function checkToolsLayout(): Promise<boolean> {
   return true;
 }
 
+const stylePolicySkippedDirectories = new Set([
+  ".next",
+  ".od-data",
+  "dist",
+  "node_modules",
+  "out",
+  "reports",
+  "test-results",
+]);
+
+const stylePolicySourcePrefixes = ["apps/web/app/", "apps/web/src/"];
+const stylePolicyHardcodedColorEnforcedPrefixes = ["scripts/guard-style-policy-fixtures/"];
+const stylePolicyCheckedDirectoryPrefixes = [
+  ...new Set([...stylePolicySourcePrefixes, ...stylePolicyHardcodedColorEnforcedPrefixes]),
+];
+const stylePolicyExtensions = new Set([".css", ".ts", ".tsx"]);
+const tailwindDefaultColorNames = [
+  "slate",
+  "gray",
+  "zinc",
+  "neutral",
+  "stone",
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
+  "white",
+  "black",
+].join("|");
+const tailwindDefaultPaletteClassPrefixes = [
+  "bg",
+  "text",
+  "border(?:-(?:x|y|s|e|t|r|b|l))?",
+  "divide",
+  "placeholder",
+  "marker",
+  "from",
+  "via",
+  "to",
+  "ring(?:-offset)?",
+  "outline",
+  "decoration",
+  "(?:inset-|text-|drop-)?shadow",
+  "accent",
+  "caret",
+  "fill",
+  "stroke",
+].join("|");
+const defaultTailwindPaletteClassPattern = new RegExp(
+  `\\b(?:${tailwindDefaultPaletteClassPrefixes})-(?:${tailwindDefaultColorNames})(?:-\\d{2,3})?\\b`,
+  "g",
+);
+
+const hardcodedColorPattern = new RegExp(
+  `#[0-9a-fA-F]{3,8}\\b|rgba?\\([^)]*\\)|hsla?\\([^)]*\\)|(?<quote>['"])\\s*(?<named>${realNamedColors.join("|")}|transparent|currentColor|currentcolor|inherit|initial|unset|revert)\\s*\\k<quote>`,
+  "g",
+);
+
+type StylePolicyAllowlistEntry = {
+  pathPattern: RegExp;
+  valuePattern: RegExp;
+  reason: string;
+};
+
+const hardcodedColorAllowlist: StylePolicyAllowlistEntry[] = [
+  {
+    pathPattern: /^apps\/web\/src\/index\.css$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "global token definitions, shadows, overlays, and retained migration inventory live in the CSS source of truth",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PaletteTweaks|PetSettings|SettingsDialog)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "brand accents, user accent choices, and legacy token fallbacks are classified as Phase 1 migration inventory",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:SketchEditor|SketchPreview|NewProjectPanel)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|['\"](?:none|currentColor|currentcolor|transparent)['\"])$/,
+    reason: "sketch/canvas data and SVG illustrations keep narrow hardcoded color exceptions until their migration slice",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:FileViewer|ManualEditPanel)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "user-authored file, inspect, and editable style colors are handled by the file/viewer migration slice",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:MemorySection|MemoryModelInline|MemoryToast)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "memory UI legacy color fallbacks are classified as Phase 1 migration inventory",
+  },
+  {
+    pathPattern: /^apps\/web\/tests\//,
+    valuePattern: /.*/,
+    reason: "tests and fixtures may assert rejected colors explicitly",
+  },
+];
+
+type StylePolicyViolation = {
+  filePath: string;
+  lineNumber: number;
+  match: string;
+  reason: string;
+};
+
+function lineNumberForIndex(source: string, index: number): number {
+  return source.slice(0, index).split("\n").length;
+}
+
+function isStylePolicySource(repositoryPath: string): boolean {
+  return stylePolicySourcePrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+}
+
+function isHardcodedColorEnforcedPath(repositoryPath: string): boolean {
+  return stylePolicyHardcodedColorEnforcedPrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+}
+
+function isHardcodedColorAllowlisted(repositoryPath: string, match: string): boolean {
+  const normalizedMatch = match.trim();
+  const unquotedMatch = normalizedMatch.replace(/^['"]|['"]$/g, "");
+  if (cssWideAndSpecialColorKeywords.has(unquotedMatch.toLowerCase())) return true;
+
+  return hardcodedColorAllowlist.some(
+    (entry) => entry.pathPattern.test(repositoryPath) && entry.valuePattern.test(normalizedMatch),
+  );
+}
+
+function addStylePolicyViolation(
+  violations: StylePolicyViolation[],
+  repositoryPath: string,
+  source: string,
+  index: number,
+  match: string,
+  reason: string,
+): void {
+  violations.push({
+    filePath: repositoryPath,
+    lineNumber: lineNumberForIndex(source, index),
+    match,
+    reason,
+  });
+}
+
+function collectStylePolicyViolationsFromSource(repositoryPath: string, source: string): StylePolicyViolation[] {
+  const violations: StylePolicyViolation[] = [];
+
+  if (isStylePolicySource(repositoryPath)) {
+    for (const match of source.matchAll(defaultTailwindPaletteClassPattern)) {
+      violations.push({
+        filePath: repositoryPath,
+        lineNumber: lineNumberForIndex(source, match.index ?? 0),
+        match: match[0],
+        reason: "default Tailwind palette classes must use Open Design token utilities instead",
+      });
+    }
+  }
+
+  if (isStylePolicySource(repositoryPath) || isHardcodedColorEnforcedPath(repositoryPath)) {
+    if (repositoryPath.endsWith(".css") && isHardcodedColorEnforcedPath(repositoryPath)) {
+      for (const match of collectCssHardcodedColorMatches(source)) {
+        const value = match.value;
+        if (value === undefined || isHardcodedColorAllowlisted(repositoryPath, value)) continue;
+
+        addStylePolicyViolation(
+          violations,
+          repositoryPath,
+          source,
+          match.index,
+          value,
+          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+        );
+      }
+    } else {
+      for (const match of source.matchAll(hardcodedColorPattern)) {
+        const value = match[0];
+        if (isHardcodedColorAllowlisted(repositoryPath, value)) continue;
+        if (!isHardcodedColorEnforcedPath(repositoryPath)) continue;
+
+        addStylePolicyViolation(
+          violations,
+          repositoryPath,
+          source,
+          match.index ?? 0,
+          value,
+          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+async function collectStylePolicyViolations(directory: string): Promise<StylePolicyViolation[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const violations: StylePolicyViolation[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (stylePolicySkippedDirectories.has(entry.name)) continue;
+      violations.push(...(await collectStylePolicyViolations(fullPath)));
+      continue;
+    }
+
+    if (!entry.isFile() || !stylePolicyExtensions.has(path.extname(entry.name))) continue;
+
+    const repositoryPath = toRepositoryPath(fullPath);
+    if (!isStylePolicySource(repositoryPath) && !isHardcodedColorEnforcedPath(repositoryPath)) continue;
+
+    violations.push(...collectStylePolicyViolationsFromSource(repositoryPath, await readFile(fullPath, "utf8")));
+  }
+
+  return violations;
+}
+
+async function repositoryDirectoryExists(repositoryPath: string): Promise<boolean> {
+  const parentPath = path.join(repoRoot, path.dirname(repositoryPath));
+  const directoryName = path.basename(repositoryPath);
+  const entries = await readdir(parentPath, { withFileTypes: true });
+
+  return entries.some((entry) => entry.name === directoryName && entry.isDirectory());
+}
+
+async function collectStylePolicyViolationsFromCheckedPaths(): Promise<StylePolicyViolation[]> {
+  const violations: StylePolicyViolation[] = [];
+
+  for (const repositoryPrefix of stylePolicyCheckedDirectoryPrefixes) {
+    const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
+    if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
+
+    violations.push(...(await collectStylePolicyViolations(path.join(repoRoot, repositoryDirectory))));
+  }
+
+  return violations;
+}
+
+async function checkStylePolicy(): Promise<boolean> {
+  const violations = await collectStylePolicyViolationsFromCheckedPaths();
+
+  if (violations.length > 0) {
+    console.error("Style policy violations found:");
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.match}\` -> ${violation.reason}`);
+    }
+    console.error("Use Open Design token utilities/CSS variables or add a narrow allowlist entry with a reason.");
+    return false;
+  }
+
+  console.log("Style policy check passed: Tailwind palette classes and enforced hardcoded UI colors stay token-first.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
+  { name: "style policy", run: checkStylePolicy },
   { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
   { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },
   { name: "design system A2 required tokens", run: checkDesignSystemA2RequiredTokens },

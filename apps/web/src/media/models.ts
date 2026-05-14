@@ -184,7 +184,8 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     id: 'elevenlabs',
     label: 'ElevenLabs',
     hint: 'Voice / SFX',
-    integrated: false,
+    integrated: true,
+    defaultBaseUrl: 'https://api.elevenlabs.io',
     docsUrl: 'https://elevenlabs.io/app/settings/api-keys',
   },
   {

@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import {
   assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
+import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
 
 // Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
 // credentials, silently billing API usage. Strip it for the claude
@@ -330,6 +331,111 @@ test('detectAgents applies configured env while probing the CLI', async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('detectAgents marks Cursor Agent auth ok when cursor-agent status succeeds', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-cursor-auth-ok-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'cursor-agent.cmd' : 'cursor-agent');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo 2026.05.07-test& exit /b 0\r\nif "%~1"=="models" echo auto& exit /b 0\r\nif "%~1"=="status" echo Authenticated& exit /b 0\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2026.05.07-test"; exit 0; fi\nif [ "$1" = "models" ]; then echo "auto"; exit 0; fi\nif [ "$1" = "status" ]; then echo "Authenticated"; exit 0; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'cursor-agent');
+
+      assert.equal(detected?.available, true);
+      assert.equal(detected?.authStatus, 'ok');
+      assert.equal(detected?.authMessage, undefined);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents keeps Cursor Agent available when auth is missing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-cursor-auth-missing-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'cursor-agent.cmd' : 'cursor-agent');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo 2026.05.07-test& exit /b 0\r\nif "%~1"=="models" echo No models available for this account.& exit /b 0\r\nif "%~1"=="status" echo Authentication required. Please run agent login first, or set CURSOR_API_KEY environment variable. 1>&2& exit /b 1\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2026.05.07-test"; exit 0; fi\nif [ "$1" = "models" ]; then echo "No models available for this account."; exit 0; fi\nif [ "$1" = "status" ]; then echo "Authentication required. Please run agent login first, or set CURSOR_API_KEY environment variable." >&2; exit 1; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'cursor-agent');
+
+      assert.equal(detected?.available, true);
+      assert.equal(detected?.authStatus, 'missing');
+      assert.match(detected?.authMessage ?? '', /cursor-agent login/);
+      assert.deepEqual(
+        detected?.models.map((model) => model.id),
+        ['default', 'auto', 'sonnet-4', 'sonnet-4-thinking', 'gpt-5'],
+      );
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents treats Cursor Agent Not logged in status as missing auth', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-cursor-not-logged-in-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'cursor-agent.cmd' : 'cursor-agent');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo 2026.05.07-test& exit /b 0\r\nif "%~1"=="models" echo No models available for this account.& exit /b 0\r\nif "%~1"=="status" echo Not logged in 1>&2& exit /b 1\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2026.05.07-test"; exit 0; fi\nif [ "$1" = "models" ]; then echo "No models available for this account."; exit 0; fi\nif [ "$1" = "status" ]; then echo "Not logged in" >&2; exit 1; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'cursor-agent');
+
+      assert.equal(detected?.available, true);
+      assert.equal(detected?.authStatus, 'missing');
+      assert.match(detected?.authMessage ?? '', /cursor-agent login/);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Cursor auth matcher covers current unauthenticated Cursor error records', () => {
+  assert.equal(isCursorAuthFailureText('ConnectError: [unauthenticated]'), true);
+  assert.equal(isCursorAuthFailureText('Error: [unauthenticated] Error'), true);
 });
 
 // Windows env-var names are case-insensitive at the kernel level, but

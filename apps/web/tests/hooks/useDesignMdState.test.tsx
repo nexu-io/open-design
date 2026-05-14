@@ -99,6 +99,52 @@ describe('useDesignMdState', () => {
     expect(result.current.designSystemId).toBe('alphatrace');
   });
 
+  // Issue #1580: the synthesis prompt does not pin field-label syntax,
+  // so Claude emits Provenance with Markdown-bold labels in practice.
+  // This end-to-end test through useDesignMdState pins the parser fix
+  // at the hook layer — a regression that re-introduces the `** ` leak
+  // would surface `transcriptMessageCount === null` and trip the
+  // `unknown-provenance` fail-closed path instead of the fresh path.
+  it('reads bold-labelled Provenance correctly (issue #1580 end-to-end)', async () => {
+    const olderMs = FRESH_GENERATED_MS - 60_000;
+    const boldDesignMd = `# DESIGN.md
+
+## Provenance
+
+- **Project ID:** \`p1\`
+- **Design system:** \`alphatrace\`
+- **Current artifact:** \`deck.html\`
+- **Transcript message count:** 12
+- **Generated UTC timestamp:** 2026-05-08T12:00:00Z
+`;
+    installFetchMock({
+      files: {
+        body: {
+          files: [
+            { name: 'DESIGN.md', size: 100, mtime: FRESH_GENERATED_MS, kind: 'text', mime: 'text/markdown' },
+            { name: 'index.html', size: 10, mtime: olderMs, kind: 'html', mime: 'text/html' },
+          ],
+        },
+      },
+      designMd: { body: boldDesignMd },
+      conversations: { body: { conversations: [] } },
+    });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.exists).toBe(true);
+    // Round 7 (mrcfps @ useDesignMdState.ts:160): a regression that
+    // leaks `** ` would null transcriptMessageCount / generatedAt and
+    // flip this to 'unknown-provenance'.
+    expect(result.current.staleReason).toBeNull();
+    expect(result.current.isStale).toBe(false);
+    expect(result.current.transcriptMessageCount).toBe(12);
+    // Backticks intentionally kept on the value (out of scope per
+    // #1580 spec); the `** ` bold prefix must be stripped.
+    expect(result.current.designSystemId).toBe('`alphatrace`');
+  });
+
   it('marks stale with files-newer when a project file mtime exceeds generatedAt', async () => {
     const newerMs = FRESH_GENERATED_MS + 60_000;
     installFetchMock({

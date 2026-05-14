@@ -95,6 +95,8 @@ export const id: Dict = {
   'settings.agentInstall.stepSelect': 'Pilih kartu agen setelah statusnya terpasang.',
   'settings.noAgentsDetected':
     'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
+  'settings.agentAuthRequired': 'Autentikasi diperlukan',
+  'settings.agentAuthUnknown': 'Status autentikasi tidak diketahui',
   'settings.apiSection': 'Anthropic API',
   'settings.quickFillProvider': 'Provider isi cepat',
   'settings.customProvider': 'Provider kustom',
@@ -214,6 +216,7 @@ export const id: Dict = {
   'settings.connectorsSaveKey': 'Simpan key',
   'settings.connectorsSaveKeyTitle': 'Kirim key ini ke daemon lokal',
   'settings.connectorsKeySaving': 'Menyimpan…',
+  'settings.connectorsKeySaved': "Tersimpan ✓",
   'settings.connectorsKeyError': 'Tidak bisa menyimpan key. Pastikan daemon lokal berjalan lalu coba lagi.',
   'settings.connectorsHelpSaved':
     'Key kamu tersimpan di daemon lokal. Tempel key baru untuk menggantinya, atau Hapus untuk menghapusnya.',
@@ -960,6 +963,8 @@ export const id: Dict = {
   'fileViewer.exportZip': 'Ekspor ZIP',
   'fileViewer.exportHtml': 'Ekspor HTML',
   'fileViewer.exportMd': 'Ekspor Markdown',
+  'fileViewer.exportImage': 'Ekspor gambar',
+  'fileViewer.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
   'fileViewer.exportJsx': 'Ekspor JSX',
   'fileViewer.exportReactHtml': 'Ekspor React HTML',
   'fileViewer.saveAsTemplate': 'Simpan sebagai templat',
@@ -1397,6 +1402,7 @@ export const id: Dict = {
   'settings.memoryExtractionsHint': 'Recent LLM-backed extraction attempts. Heuristic regex extraction always runs first; LLM extraction runs in the background after each turn.',
   'settings.memoryExtractionsEmpty': 'No extractions yet. The next chat turn will populate this list.',
   'settings.memoryExtractionsRefresh': 'Refresh',
+  'settings.memoryExtractionsRefreshing': 'Refreshing…',
   'settings.memoryExtractionPhaseRunning': 'Running…',
   'settings.memoryExtractionPhaseSuccess': 'Success',
   'settings.memoryExtractionPhaseSkipped': 'Skipped',

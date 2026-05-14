@@ -3,6 +3,7 @@ import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
 import { resolveAgentExecutable } from './executables.js';
 import { spawnEnvForAgent } from './env.js';
+import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
 import type {
@@ -161,12 +162,19 @@ async function probe(
     agentCapabilities.set(def.id, caps);
   }
   const models = await fetchModels(def, resolved, probeEnv);
+  const auth = await probeAgentAuthStatus(def.id, resolved, probeEnv);
   return {
     ...stripFns(def),
     models,
     available: true,
     path: resolved,
     version: outcome.version,
+    ...(auth
+      ? {
+          authStatus: auth.status,
+          ...(auth.message ? { authMessage: auth.message } : {}),
+        }
+      : {}),
     ...installMetaForAgent(def.id),
   };
 }

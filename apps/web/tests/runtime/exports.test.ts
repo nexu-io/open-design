@@ -5,10 +5,12 @@ import {
   buildDesignHandoffContent,
   buildDesignManifestContent,
   buildSandboxedPreviewDocument,
+  exportAsImage,
   exportAsMd,
   exportAsPdf,
   exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
+  requestPreviewSnapshot,
 } from '../../src/runtime/exports';
 
 function mockResponse(headers: Record<string, string>): Response {
@@ -522,5 +524,172 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('__odPrintReady');
     // No window.print() since the desktop bridge handles printing natively.
     expect(htmlArg).not.toContain('window.print()');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Image screenshot export
+// ---------------------------------------------------------------------------
+
+describe('requestPreviewSnapshot', () => {
+  let listeners: Map<string, Set<(ev: unknown) => void>>;
+
+  beforeEach(() => {
+    listeners = new Map();
+    vi.stubGlobal('window', {
+      addEventListener: (type: string, fn: (ev: unknown) => void) => {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type)!.add(fn);
+      },
+      removeEventListener: (type: string, fn: (ev: unknown) => void) => {
+        listeners.get(type)?.delete(fn);
+      },
+      dispatchEvent: (ev: { type: string }) => {
+        for (const fn of listeners.get(ev.type) ?? []) fn(ev);
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('returns null when the iframe has no contentWindow', async () => {
+    const iframe = { contentWindow: null } as unknown as HTMLIFrameElement;
+    const result = await requestPreviewSnapshot(iframe);
+    expect(result).toBeNull();
+  });
+
+  it('resolves with snapshot data when the bridge responds', async () => {
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe);
+
+    expect(postMessageMock).toHaveBeenCalledOnce();
+    const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
+
+    // Simulate the bridge responding — source must match iframe.contentWindow
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id, dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
+    );
+
+    const result = await promise;
+    expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 });
+  });
+
+  it('resolves null when the bridge responds with an error', async () => {
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe);
+    const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
+
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id, error: 'snapshot image failed' } } as unknown as Event,
+    );
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it('resolves null on timeout', async () => {
+    vi.useFakeTimers();
+    const iframe = {
+      contentWindow: { postMessage: vi.fn() },
+    } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100);
+    vi.advanceTimersByTime(150);
+
+    const result = await promise;
+    expect(result).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('ignores messages with a mismatched id', async () => {
+    vi.useFakeTimers();
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100);
+
+    // Correct source but wrong id — should be ignored
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id: 'wrong-id', dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
+    );
+
+    vi.advanceTimersByTime(150);
+    const result = await promise;
+    expect(result).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('ignores messages from a different source window', async () => {
+    vi.useFakeTimers();
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100);
+    const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
+
+    // Correct id but wrong source — should be ignored
+    window.dispatchEvent(
+      { type: 'message', source: { other: true }, data: { type: 'od:snapshot:result', id, dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
+    );
+
+    vi.advanceTimersByTime(150);
+    const result = await promise;
+    expect(result).toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe('exportAsImage', () => {
+  let clickMock: ReturnType<typeof vi.fn>;
+  let anchors: Array<{ href: string; download: string; click: ReturnType<typeof vi.fn> }>;
+
+  beforeEach(() => {
+    clickMock = vi.fn();
+    anchors = [];
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:mock-url', revokeObjectURL: vi.fn() });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const el = { href: '', download: '', click: clickMock };
+        anchors.push(el);
+        return el;
+      },
+      body: {
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+      },
+    });
+    // triggerDownload calls setTimeout for deferred revoke
+    vi.stubGlobal('setTimeout', (fn: () => void) => fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('triggers a download with a .png filename', () => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    exportAsImage(dataUrl, 'My Design');
+
+    expect(clickMock).toHaveBeenCalledOnce();
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]!.download).toBe('My-Design.png');
+  });
+
+  it('sanitizes the title into a safe filename', () => {
+    exportAsImage('data:image/png;base64,AA==', 'Hello <World> / Test!');
+
+    expect(anchors[0]!.download).toBe('Hello-World-Test.png');
   });
 });

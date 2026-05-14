@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createFinalizedMessageTelemetryReporter,
   shouldReportRunCompletedFromMessage,
   telemetryPromptFromRunRequest,
 } from '../src/server.js';
@@ -54,5 +55,46 @@ describe('Langfuse message finalization gate', () => {
     expect(telemetryPromptFromRunRequest('legacy prompt', undefined)).toBe(
       'legacy prompt',
     );
+  });
+
+  it('invokes Langfuse reporting once when the final message write is marked', () => {
+    const run = {
+      id: 'run-1',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const report = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: { runs: { get: vi.fn(() => run) } },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    reporter(
+      { ...terminalMessage, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith({
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      run,
+      persistedRunStatus: 'succeeded',
+      persistedEndedAt: 1234,
+      appVersion: { version: '0.7.0', channel: 'beta', packaged: true },
+    });
   });
 });
