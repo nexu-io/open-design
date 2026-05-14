@@ -1672,8 +1672,9 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
 // envelope that distinguishes HTTP-level from API-level failures, again
 // mirroring MiniMax. The catalogue id we surface as `senseaudio-tts`
 // resolves to `senseaudio-tts-1.5-260319` on the wire — SenseAudio's
-// recommended flagship model (情绪 / 多音字 / 公式朗读 / 克隆 / 文生音色 支持)。
-// Default voice is `female_0033_b` per the official example; the agent
+// recommended flagship model (supports emotion control, polyphonic
+// characters, LaTeX formula reading, voice cloning, and text-generated
+// voices). Default voice is `female_0033_b` per the official example; the agent
 // can override via the model registry's `voice` slot with any system,
 // cloned, or text-generated voice id from the customer's catalogue.
 // Audio shape is hard-coded to mp3 / 32kHz / 128kbps / stereo for parity
