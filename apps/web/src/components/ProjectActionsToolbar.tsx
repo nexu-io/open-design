@@ -16,6 +16,7 @@ import type { FinalizeStatus } from '../hooks/useFinalizeProject';
 export interface ProjectActionsToolbarProps {
   designMdState: Pick<DesignMdState, 'exists' | 'isStale' | 'staleReason'>;
   finalizeStatus: FinalizeStatus;
+  canFinalize: boolean;
   onFinalize: () => void;
   onCancelFinalize: () => void;
   onContinueInCli: () => void | Promise<void>;
@@ -25,6 +26,7 @@ export interface ProjectActionsToolbarProps {
 export function ProjectActionsToolbar({
   designMdState,
   finalizeStatus,
+  canFinalize,
   onFinalize,
   onCancelFinalize,
   onContinueInCli,
@@ -40,6 +42,7 @@ export function ProjectActionsToolbar({
       <FinalizeDesignButton
         designMdState={designMdState}
         status={finalizeStatus}
+        disabled={!canFinalize}
         onFinalize={onFinalize}
         onCancel={onCancelFinalize}
       />

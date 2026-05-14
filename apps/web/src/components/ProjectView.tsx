@@ -2294,11 +2294,25 @@ export function ProjectView({
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
+  
+  // Check if finalize is available: requires apiKey and model (#1348)
+  const canFinalize = Boolean(config.apiKey?.trim() && config.model?.trim());
+  
   const handleFinalize = useCallback(() => {
+    // Guard against missing config (should be prevented by disabled state,
+    // but defend in depth in case the button is triggered programmatically)
+    if (!config.apiKey?.trim() || !config.model?.trim()) {
+      setProjectActionsToast({
+        message: 'Cannot finalize: API key and model are required.',
+        details: 'Configure your provider in Settings before finalizing.',
+      });
+      return;
+    }
+    
     void finalize.trigger({
-      apiKey: config.apiKey,
+      apiKey: config.apiKey.trim(),
       baseUrl: config.baseUrl,
-      model: config.model,
+      model: config.model.trim(),
       maxTokens: effectiveMaxTokens(config),
     }).then((result) => {
       if (result) void designMdState.refresh();
@@ -2500,6 +2514,7 @@ export function ProjectView({
       <ProjectActionsToolbar
         designMdState={designMdState}
         finalizeStatus={finalize.status}
+        canFinalize={canFinalize}
         onFinalize={handleFinalize}
         onCancelFinalize={handleCancelFinalize}
         onContinueInCli={handleContinueInCli}

@@ -16,6 +16,7 @@ import type { FinalizeStatus } from '../hooks/useFinalizeProject';
 export interface FinalizeDesignButtonProps {
   designMdState: Pick<DesignMdState, 'exists' | 'isStale'>;
   status: FinalizeStatus;
+  disabled?: boolean;
   onFinalize: () => void;
   onCancel: () => void;
 }
@@ -23,6 +24,7 @@ export interface FinalizeDesignButtonProps {
 export function FinalizeDesignButton({
   designMdState,
   status,
+  disabled = false,
   onFinalize,
   onCancel,
 }: FinalizeDesignButtonProps) {
@@ -61,6 +63,8 @@ export function FinalizeDesignButton({
       type="button"
       className={`project-actions-button ${variantClass}`}
       onClick={onFinalize}
+      disabled={disabled}
+      title={disabled ? 'Configure API key and model in Settings to enable finalization' : undefined}
     >
       {label}
     </button>
