@@ -1859,8 +1859,10 @@ async function falQueueRun(
     onProgress(`fal ${modelLabel || endpoint} task ${requestId.slice(0, 8)} accepted; polling…`);
   }
 
+  let firstPoll = true;
   while (Date.now() - startedAt < maxMs) {
-    await sleep(3000);
+    if (!firstPoll) await sleep(3000);
+    firstPoll = false;
     const statusResp = await fetch(statusUrl, { headers: authHeader });
     const statusText = await statusResp.text();
     if (!statusResp.ok) {

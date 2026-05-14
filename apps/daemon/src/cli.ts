@@ -425,11 +425,10 @@ async function runMediaWait(rawArgs) {
   const since = Number.isFinite(Number(flags.since))
     ? Number(flags.since)
     : 0;
-  await pollUntilDoneOrBudget(daemonUrl, taskId, since);
+  await pollUntilDoneOrBudget(daemonUrl, taskId, since, 120_000);
 }
 
-async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart) {
-  const totalBudgetMs = 25_000;
+async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, totalBudgetMs = 25_000) {
   const perCallTimeoutMs = 4_000;
   const startedAt = Date.now();
   const url = `${daemonUrl.replace(/\/$/, '')}/api/media/tasks/${encodeURIComponent(taskId)}/wait`;

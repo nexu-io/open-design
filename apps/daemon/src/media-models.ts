@@ -85,12 +85,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
 
-  { id: 'flux-pro-ultra', label: 'flux-pro-ultra', hint: 'Fal · FLUX 1.1 Pro Ultra · highest quality', provider: 'fal', caps: ['t2i'] },
-  { id: 'flux-dev-fal', label: 'flux-dev (fal)', hint: 'Fal · FLUX Dev · open weights', provider: 'fal', caps: ['t2i'] },
-  { id: 'flux-schnell-fal', label: 'flux-schnell (fal)', hint: 'Fal · FLUX Schnell · fastest / cheapest', provider: 'fal', caps: ['t2i'] },
-  { id: 'ideogram-v3-fal', label: 'ideogram-v3', hint: 'Fal · Ideogram v3 · typography + design', provider: 'fal', caps: ['t2i'] },
-  { id: 'recraft-v3-fal', label: 'recraft-v3', hint: 'Fal · Recraft v3 · vector + illustration', provider: 'fal', caps: ['t2i'] },
-  { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
+  { id: 'flux-pro-ultra', label: 'flux-pro-ultra', hint: 'Fal · FLUX 1.1 Pro Ultra · highest quality (~60–180s)', provider: 'fal', caps: ['t2i'] },
+  { id: 'flux-dev-fal', label: 'flux-dev (fal)', hint: 'Fal · FLUX Dev · balanced quality/speed (~15–40s)', provider: 'fal', caps: ['t2i'] },
+  { id: 'flux-schnell-fal', label: 'flux-schnell (fal)', hint: 'Fal · FLUX Schnell · fastest (~3–8s)', provider: 'fal', caps: ['t2i'] },
+  { id: 'ideogram-v3-fal', label: 'ideogram-v3', hint: 'Fal · Ideogram v3 · typography + design (~15–30s)', provider: 'fal', caps: ['t2i'] },
+  { id: 'recraft-v3-fal', label: 'recraft-v3', hint: 'Fal · Recraft v3 · vector + illustration (~15–30s)', provider: 'fal', caps: ['t2i'] },
+  { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5 (~20–40s)', provider: 'fal', caps: ['t2i'] },
 
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
 ];

@@ -268,9 +268,27 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  // Skip the HTML-artifact discovery layer for media surfaces (image / video /
+  // audio). DISCOVERY_AND_PHILOSOPHY is ~3 000 tokens of rules about question
+  // forms, brand extraction, direction pickers, and HTML artifact checklist —
+  // none of which apply to media generation. Including it forces the agent to
+  // parse and override all of those rules before it can start, adding tokens
+  // and LLM inference time. The MEDIA_GENERATION_CONTRACT (pushed below) is
+  // the sole workflow authority for these surfaces.
+  const isMediaSurfaceEarly =
+    skillMode === 'image' ||
+    skillMode === 'video' ||
+    skillMode === 'audio' ||
+    metadata?.kind === 'image' ||
+    metadata?.kind === 'video' ||
+    metadata?.kind === 'audio';
+
+  if (!isMediaSurfaceEarly) {
+    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+  }
+
   parts.push(
-    DISCOVERY_AND_PHILOSOPHY,
-    '\n\n---\n\n# Identity and workflow charter (background)\n\n',
+    '# Identity and workflow charter (background)\n\n',
     BASE_SYSTEM_PROMPT,
   );
 
@@ -650,10 +668,10 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'image') {
     lines.push(
-      `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model to use)'}`,
+      `- **imageModel**: ${metadata.imageModel ?? 'gpt-image-2 (default — override if the user asks for a specific model or provider)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
+      `- **aspectRatio**: ${metadata.imageAspect ?? '1:1 (default — use 16:9 for landscape/outdoor scenes, 9:16 for portrait/vertical)'}`,
     );
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
