@@ -9,6 +9,15 @@
  * Tokens are wired via CSS custom properties on :host with names that mirror
  * design-systems/chala-ai/tokens.json. Update tokens.css (generated from
  * tokens.json) if you change the palette; do not edit values here.
+ *
+ * Safety: this file runs inside the daemon's preview iframe which has
+ * sandbox="allow-scripts". Any user-authored ODML attribute or text gets
+ * scriptable powers if interpolated into innerHTML, so every user-supplied
+ * string (od-text content, od-badge text, od-input placeholder, od-toggle
+ * label, od-nav-bar title, od-tab-bar tab names, od-icon name attribute)
+ * is set via textContent / setAttribute / Element.dataset rather than
+ * concatenated into a template literal. Static CSS that has no user
+ * interpolation still uses innerHTML.
  */
 
 const TOKEN_CSS = `
@@ -79,18 +88,38 @@ const BUTTON_SIZE_PADDING = {
   lg: '14px 20px',
 };
 
-function tokenStyle(prefix, name) {
-  return name ? `var(--od-${prefix}-${name})` : null;
-}
+// Full ODColor enum from SKILL.md / packages/od-dialect/src/ast.ts. Every
+// allowed background / color attribute value must round-trip through
+// this set so the preview resolves the same token the prompt permits,
+// instead of silently falling back to a default that hides off-token
+// inputs in review.
+const OD_COLORS = new Set([
+  'bg',
+  'bg-elevated',
+  'bg-overlay',
+  'fg',
+  'fg-muted',
+  'fg-subtle',
+  'accent',
+  'accent-fg',
+  'success',
+  'warning',
+  'danger',
+  'border',
+  'border-strong',
+]);
 
-function makeBase(tagName, content, hostStyle = '') {
-  return class extends HTMLElement {
-    connectedCallback() {
-      if (this.shadowRoot) return;
-      const shadow = this.attachShadow({ mode: 'open' });
-      shadow.innerHTML = `<style>${TOKEN_CSS}${hostStyle}</style>${content(this)}`;
-    }
-  };
+/**
+ * Resolve an ODColor token name to its CSS custom-property reference.
+ * Unknown tokens return null so callers can decide whether to fall back
+ * (od-screen uses `var(--od-bg)`) or omit the declaration (od-card uses
+ * its 4%-white card surface). Never return a constructed `var(--od-X)`
+ * for an off-token name — that would mask invalid ODML in preview.
+ */
+function colorVar(token) {
+  if (!token) return null;
+  if (!OD_COLORS.has(token)) return null;
+  return `var(--od-${token})`;
 }
 
 /* --------------------------- Containers --------------------------- */
@@ -99,6 +128,7 @@ customElements.define('od-screen', class extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) return;
     const bg = this.getAttribute('background');
+    const bgValue = colorVar(bg) || 'var(--od-bg)';
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
       <style>
@@ -108,7 +138,7 @@ customElements.define('od-screen', class extends HTMLElement {
           flex-direction: column;
           width: 100%;
           min-height: 100vh;
-          background: ${tokenStyle('bg', bg === 'bg-elevated' ? 'elevated' : bg === 'bg-overlay' ? 'overlay' : '') || 'var(--od-bg)'};
+          background: ${bgValue};
           padding: 60px 0 80px;
           box-sizing: border-box;
         }
@@ -159,7 +189,7 @@ customElements.define('od-stack', class extends HTMLElement {
 customElements.define('od-grid', class extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) return;
-    const cols = this.getAttribute('columns') || '2';
+    const cols = Math.max(1, Math.min(12, parseInt(this.getAttribute('columns') || '2', 10) || 2));
     const spacing = this.getAttribute('spacing') || 'none';
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
@@ -199,6 +229,13 @@ customElements.define('od-card', class extends HTMLElement {
     const padding = this.getAttribute('padding') || 'md';
     const radius = this.getAttribute('radius') || 'md';
     const bg = this.getAttribute('background');
+    // Default card surface is 4%-white-on-bg (DESIGN.md §2.Card); any
+    // explicit `background="<token>"` from valid ODColor overrides it.
+    // Invalid tokens fall back to the default so off-spec ODML still
+    // renders something, but the preview will visibly differ from the
+    // intended look (the structural issue is the wrong attribute, not
+    // a missing fill).
+    const bgValue = colorVar(bg) || 'rgba(255,255,255,0.04)';
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
       <style>${TOKEN_CSS}
@@ -206,7 +243,7 @@ customElements.define('od-card', class extends HTMLElement {
           display: block;
           padding: var(--od-space-${padding});
           border-radius: var(--od-radius-${radius});
-          background: ${bg ? tokenStyle('bg', bg === 'bg-elevated' ? 'elevated' : bg === 'bg-overlay' ? 'overlay' : '') : 'rgba(255,255,255,0.04)'};
+          background: ${bgValue};
           border: 1px solid var(--od-border);
         }
       </style>
@@ -250,18 +287,24 @@ customElements.define('od-text', class extends HTMLElement {
     const align = this.getAttribute('align') || 'leading';
     const bind = this.getAttribute('bind');
     const text = bind ? `{${bind}}` : this.textContent;
+    const colorValue = colorVar(color) || 'var(--od-fg)';
     const shadow = this.attachShadow({ mode: 'open' });
+    // CSS template (no user data interpolated) goes via innerHTML; the
+    // user-supplied text content is appended via textContent so any
+    // HTML/script payload renders as inert text.
     shadow.innerHTML = `
       <style>${TOKEN_CSS}
         :host {
           display: inline-block;
           ${TEXT_STYLES[style] || TEXT_STYLES.body}
-          color: ${tokenStyle('', color === 'fg-muted' ? 'fg-muted' : color === 'fg-subtle' ? 'fg-subtle' : color)};
+          color: ${colorValue};
           text-align: ${align === 'leading' ? 'left' : align === 'trailing' ? 'right' : 'center'};
         }
       </style>
-      <span>${text}</span>
+      <span></span>
     `;
+    const span = shadow.querySelector('span');
+    if (span) span.textContent = text || '';
   }
 });
 
@@ -272,6 +315,7 @@ customElements.define('od-icon', class extends HTMLElement {
     const size = this.getAttribute('size') || 'md';
     const color = this.getAttribute('color') || 'fg';
     const px = ICON_SIZE[size] || 20;
+    const colorValue = colorVar(color) || 'var(--od-fg)';
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
       <style>${TOKEN_CSS}
@@ -281,14 +325,18 @@ customElements.define('od-icon', class extends HTMLElement {
           justify-content: center;
           width: ${px}px;
           height: ${px}px;
-          color: ${tokenStyle('', color === 'fg-muted' ? 'fg-muted' : color === 'fg-subtle' ? 'fg-subtle' : color)};
+          color: ${colorValue};
           font-family: var(--od-font-mono);
           font-size: ${Math.round(px * 0.5)}px;
           letter-spacing: 0;
         }
       </style>
-      <span title="${name}">${'□'}</span>
+      <span>□</span>
     `;
+    // SF Symbol name is user-supplied; set via setAttribute so quotes /
+    // angle brackets in the value can't escape the tag.
+    const span = shadow.querySelector('span');
+    if (span) span.setAttribute('title', name);
   }
 });
 
@@ -297,7 +345,7 @@ customElements.define('od-image', class extends HTMLElement {
     if (this.shadowRoot) return;
     const aspect = this.getAttribute('aspect') || 'square';
     const radius = this.getAttribute('radius') || 'none';
-    const ratio = { square: '1 / 1', portrait: '3 / 4', landscape: '16 / 9', fill: '1 / 1' }[aspect];
+    const ratio = { square: '1 / 1', portrait: '3 / 4', landscape: '16 / 9', fill: '1 / 1' }[aspect] || '1 / 1';
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
       <style>${TOKEN_CSS}
@@ -344,7 +392,7 @@ customElements.define('od-badge', class extends HTMLElement {
       success: 'var(--od-success)',
       warning: 'var(--od-warning)',
       danger: 'var(--od-danger)',
-    }[variant];
+    }[variant] || 'rgba(255,255,255,0.10)';
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
       <style>${TOKEN_CSS}
@@ -357,15 +405,18 @@ customElements.define('od-badge', class extends HTMLElement {
           border-radius: var(--od-radius-full);
         }
       </style>
-      <span>${text}</span>
+      <span></span>
     `;
+    const span = shadow.querySelector('span');
+    if (span) span.textContent = text;
   }
 });
 
 customElements.define('od-progress', class extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) return;
-    const value = parseFloat(this.getAttribute('value') || '0') || 0;
+    const raw = parseFloat(this.getAttribute('value') || '0');
+    const value = Math.max(0, Math.min(1, Number.isFinite(raw) ? raw : 0));
     const style = this.getAttribute('style-name') || this.getAttribute('progress-style') || this.getAttribute('style') || 'bar';
     const shadow = this.attachShadow({ mode: 'open' });
     if (style === 'ring') {
@@ -384,7 +435,7 @@ customElements.define('od-progress', class extends HTMLElement {
       shadow.innerHTML = `
         <style>${TOKEN_CSS}
           :host { display: block; width: 100%; height: 4px; background: var(--od-border); border-radius: var(--od-radius-full); }
-          .fill { width: ${Math.max(0, Math.min(1, value)) * 100}%; height: 100%; background: var(--od-accent); border-radius: var(--od-radius-full); }
+          .fill { width: ${value * 100}%; height: 100%; background: var(--od-accent); border-radius: var(--od-radius-full); }
         </style>
         <div class="fill"></div>
       `;
@@ -406,13 +457,13 @@ customElements.define('od-button', class extends HTMLElement {
       secondary: 'var(--od-bg-elevated)',
       ghost: 'transparent',
       destructive: 'var(--od-danger)',
-    }[variant];
+    }[variant] || 'var(--od-accent)';
     const fg = {
       primary: 'var(--od-accent-fg)',
       secondary: 'var(--od-fg)',
       ghost: 'var(--od-fg)',
       destructive: 'var(--od-fg)',
-    }[variant];
+    }[variant] || 'var(--od-accent-fg)';
 
     const shadow = this.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
@@ -463,8 +514,13 @@ customElements.define('od-input', class extends HTMLElement {
         }
         input::placeholder { color: var(--od-fg-subtle); }
       </style>
-      <input type="${secure ? 'password' : 'text'}" placeholder="${placeholder}" />
+      <input />
     `;
+    const input = shadow.querySelector('input');
+    if (input) {
+      input.type = secure ? 'password' : 'text';
+      input.setAttribute('placeholder', placeholder);
+    }
   }
 });
 
@@ -480,9 +536,11 @@ customElements.define('od-toggle', class extends HTMLElement {
         .track { width: 44px; height: 26px; background: var(--od-bg-elevated); border: 1px solid var(--od-border); border-radius: 13px; position: relative; }
         .knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: var(--od-fg); border-radius: 50%; }
       </style>
-      <span class="label">${label}</span>
+      <span class="label"></span>
       <span class="track"><span class="knob"></span></span>
     `;
+    const labelEl = shadow.querySelector('.label');
+    if (labelEl) labelEl.textContent = label;
   }
 });
 
@@ -518,8 +576,10 @@ customElements.define('od-nav-bar', class extends HTMLElement {
           color: var(--od-fg);
         }
       </style>
-      <span>${title}</span>
+      <span></span>
     `;
+    const span = shadow.querySelector('span');
+    if (span) span.textContent = title;
   }
 });
 
@@ -543,8 +603,21 @@ customElements.define('od-tab-bar', class extends HTMLElement {
         .tab.active .dot { background: var(--od-fg); }
         .dot { display: block; width: 4px; height: 4px; border-radius: 50%; background: transparent; margin: 4px auto 0; }
       </style>
-      ${tabs.map((t) => `<span class="tab${t === active ? ' active' : ''}">${t}<span class="dot"></span></span>`).join('')}
     `;
+    // Tab labels are user-supplied — build the DOM with createElement
+    // + textContent so quotes / brackets / scripts in tab names stay
+    // inert. Tab class names come from a fixed string set ('tab' or
+    // 'tab active'), so the only attribute interpolation is on the
+    // class, which is static.
+    for (const name of tabs) {
+      const span = document.createElement('span');
+      span.className = name === active ? 'tab active' : 'tab';
+      span.textContent = name;
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      span.appendChild(dot);
+      shadow.appendChild(span);
+    }
   }
 });
 
