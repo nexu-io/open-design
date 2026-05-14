@@ -607,6 +607,8 @@ export const ru: Dict = {
   'chat.scrollToLatest': 'Прокрутить к последнему',
   'chat.you': 'Вы',
   'chat.openFile': 'Открыть {name}',
+  'chat.copyPrompt': 'Скопировать запрос',
+  'chat.copyDone': 'Скопировано!',
   'chat.composerPlaceholder':
     'Опишите дизайн, который вы хотите — вставьте или добавьте изображения, или @ файл либо навык…',
   'chat.composerHint':

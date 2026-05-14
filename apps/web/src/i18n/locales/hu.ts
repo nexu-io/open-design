@@ -586,6 +586,8 @@ export const hu: Dict = {
   'chat.scrollToLatest': 'Görgetés a legutóbbira',
   'chat.you': 'Te',
   'chat.openFile': '{name} megnyitása',
+  'chat.copyPrompt': 'Prompt másolása',
+  'chat.copyDone': 'Másolva!',
   'chat.composerPlaceholder':
     'Írd le a kívánt designt — illessz be vagy húzz képeket, vagy @-tel hivatkozz fájlra vagy skillre…',
   'chat.composerHint':

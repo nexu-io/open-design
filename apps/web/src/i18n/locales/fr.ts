@@ -586,6 +586,8 @@ export const fr: Dict = {
   'chat.scrollToLatest': 'Défiler jusqu\'au plus récent',
   'chat.you': 'Vous',
   'chat.openFile': 'Ouvrir {name}',
+  'chat.copyPrompt': 'Copier le prompt',
+  'chat.copyDone': 'Copié !',
   'chat.composerPlaceholder':
     'Décrivez le design souhaité — collez ou déposez des images, ou @ un fichier ou un skill…',
   'chat.composerHint':

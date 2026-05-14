@@ -701,6 +701,8 @@ export const id: Dict = {
   'chat.scrollToLatest': 'Scroll ke terbaru',
   'chat.you': 'Kamu',
   'chat.openFile': 'Buka {name}',
+  'chat.copyPrompt': 'Salin prompt',
+  'chat.copyDone': 'Disalin!',
   'chat.composerPlaceholder':
     'Jelaskan desain yang kamu inginkan — tempel atau jatuhkan gambar, atau @ file atau skill…',
   'chat.composerHint':

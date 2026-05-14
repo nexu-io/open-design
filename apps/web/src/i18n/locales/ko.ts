@@ -586,6 +586,8 @@ export const ko: Dict = {
   'chat.scrollToLatest': '최신 내용으로 스크롤',
   'chat.you': '나',
   'chat.openFile': '{name} 열기',
+  'chat.copyPrompt': '프롬프트 복사',
+  'chat.copyDone': '복사됨!',
   'chat.composerPlaceholder':
     '원하는 디자인을 설명하세요 — 이미지 붙여넣기/끌어놓기 가능, @로 파일이나 스킬 참조…',
   'chat.composerHint':

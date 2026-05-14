@@ -586,6 +586,8 @@ export const pl: Dict = {
   'chat.scrollToLatest': 'Przewiń do najnowszych',
   'chat.you': 'Ty',
   'chat.openFile': 'Otwórz {name}',
+  'chat.copyPrompt': 'Kopiuj prompt',
+  'chat.copyDone': 'Skopiowano!',
   'chat.composerPlaceholder':
       'Opisz projekt, który chcesz stworzyć — wklej obrazy lub użyj @, aby wskazać plik lub skill…',
   'chat.composerHint':

@@ -586,6 +586,8 @@ export const ar: Dict = {
   'chat.scrollToLatest': 'التمرير للأحدث',
   'chat.you': 'أنت',
   'chat.openFile': 'فتح {name}',
+  'chat.copyPrompt': 'نسخ الأمر',
+  'chat.copyDone': 'تم النسخ!',
   'chat.composerPlaceholder':
     'صف التصميم الذي تريده - الصق أو اسحب الصور، أو @ لملف أو مهارة...',
   'chat.composerHint':

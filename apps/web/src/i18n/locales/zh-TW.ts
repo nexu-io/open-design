@@ -663,6 +663,8 @@ export const zhTW: Dict = {
   'chat.scrollToLatest': '捲動到最新',
   'chat.you': '你',
   'chat.openFile': '開啟 {name}',
+  'chat.copyPrompt': '複製提示詞',
+  'chat.copyDone': '已複製！',
   'chat.composerPlaceholder': '描述你想要的設計 — 可貼上/拖入圖片，或用 @ 引用檔案或技能…',
   'chat.composerHint': '⌘/Ctrl + Enter 傳送 · 可貼上圖片 · @ 引用檔案或技能 · / 叫出指令',
   'chat.cliSettingsTitle': 'CLI 與模型設定',

@@ -1122,6 +1122,49 @@ code {
   line-height: 1.45;
   box-shadow: var(--shadow-xs);
 }
+
+/* Wrapper for user bubble + copy button */
+.msg.user .user-text-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.msg.user .user-text-wrap .user-text {
+  padding-inline-end: 28px;
+}
+
+.msg.user .user-copy-btn {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  padding: 4px;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  z-index: 1;
+}
+.msg.user .user-copy-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.msg.user .user-text-wrap:hover .user-copy-btn,
+.msg.user .user-text-wrap:focus-within .user-copy-btn,
+.msg.user .user-copy-btn:focus-visible {
+  opacity: 1;
+}
+.msg.user .user-copy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+@media (hover: none) {
+  .msg.user .user-copy-btn {
+    opacity: 1;
+  }
+}
 .msg.assistant .prose { margin-top: 4px; }
 .msg .artifact-badge {
   display: inline-block;
@@ -18519,6 +18562,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ---------------- Routines (Settings → Routines) ---------------- */
 
 .routines-section .section-head { align-items: flex-start; }
+.routines-section .section-head > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 
 .routines-card {
   background: var(--bg-panel);

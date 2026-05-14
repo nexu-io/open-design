@@ -1,0 +1,85 @@
+name: 🧪 Preview 0.8.0 feedback
+description: Report a bug, suggest an improvement, or share feedback about the preview/0.8.0 branch (Skills + Automations).
+labels: ["preview/0.8.0"]
+title: "[preview/0.8.0] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying `preview/0.8.0`! This template is for feedback about the **Skills tab in `/integrations`** and the **Automations cards** that are being previewed before they land in `main`.
+
+        For general bugs unrelated to the preview, please open a regular issue instead.
+
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Which feature does this relate to?
+      options:
+        - Skills tab (/integrations)
+        - Automations cards (Routines / Schedules / Live artifacts)
+        - Both / general preview build
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type of feedback
+      options:
+        - Bug / broken behavior
+        - UX or design concern
+        - Suggestion / feature request
+        - Question
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened, or what would you like to see?
+      description: For bugs, include steps to reproduce. For suggestions, describe the use case.
+      placeholder: |
+        1. Open /integrations
+        2. Click the Skills tab
+        3. Expected X, saw Y
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior (skip if not a bug)
+      placeholder: What did you expect to happen?
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Build / version
+      description: From the app's About menu, or run `git rev-parse HEAD` if you built from source.
+      placeholder: e.g. 0.8.0-preview.1 — or commit hash 640a3322
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Plugins installed, design systems in use, anything else relevant.
+    validations:
+      required: false

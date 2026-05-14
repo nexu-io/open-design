@@ -937,6 +937,8 @@ export interface Dict {
   'chat.scrollToLatest': string;
   'chat.you': string;
   'chat.openFile': string;
+  'chat.copyPrompt': string;
+  'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.composerHint': string;
   'chat.cliSettingsTitle': string;

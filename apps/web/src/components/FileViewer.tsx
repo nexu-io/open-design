@@ -1961,7 +1961,7 @@ function BoardComposerPopover({
             disabled={pendingCount === 0 || sending}
             onClick={() => void onSendBatch()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? 'Sending…' : 'Send to chat'}
           </button>
         </div>
       </div>
@@ -2111,7 +2111,7 @@ export function CommentSidePanel({
             disabled={sending}
             onClick={() => void onSendSelected()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? 'Sending…' : 'Send to chat'}
           </button>
         </div>
       ) : null}
@@ -3708,6 +3708,7 @@ function HtmlViewer({
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
+  const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -4820,6 +4821,8 @@ function HtmlViewer({
       setTemplateName('');
       setTemplateDescription('');
       setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
+      // Show success toast
+      setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
     } finally {
       setSavingTemplate(false);
       if (savedName) {
@@ -5801,6 +5804,15 @@ function HtmlViewer({
                   message={commentSavedToast}
                   ttlMs={2200}
                   onDismiss={() => setCommentSavedToast(null)}
+                />
+              </div>
+            ) : null}
+            {templateSavedToast ? (
+              <div className="comment-toast-anchor">
+                <Toast
+                  message={templateSavedToast}
+                  ttlMs={2200}
+                  onDismiss={() => setTemplateSavedToast(null)}
                 />
               </div>
             ) : null}

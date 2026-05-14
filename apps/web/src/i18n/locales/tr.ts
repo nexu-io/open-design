@@ -575,6 +575,8 @@ export const tr: Dict = {
   'chat.scrollToLatest': 'En son mesaja kaydır',
   'chat.you': 'Sen',
   'chat.openFile': '{name}’ı aç',
+  'chat.copyPrompt': 'Promptu kopyala',
+  'chat.copyDone': 'Kopyalandı!',
   'chat.composerPlaceholder':
     'İstediğiniz tasarımı açıklayın — görsel yapıştırın veya sürükleyin, veya @ ile bir dosya ya da skill seçin…',
   'chat.composerHint':

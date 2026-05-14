@@ -608,6 +608,8 @@ export const uk: Dict = {
   'chat.scrollToLatest': 'Прокрутити до останнього',
   'chat.you': 'Ви',
   'chat.openFile': 'Відкрити {name}',
+  'chat.copyPrompt': 'Копіювати запит',
+  'chat.copyDone': 'Скопійовано!',
   'chat.composerPlaceholder':
     'Опишіть дизайн, який ви хочете — вставте або перенесіть зображення, або скористайтеся @ для посилання на файл чи навичку…',
   'chat.composerHint':

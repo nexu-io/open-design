@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
@@ -982,6 +983,27 @@ function UserMessage({
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    if (!message.content) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    const ok = await copyToClipboard(message.content);
+    if (!ok) return;
+    setCopied(true);
+    copyTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = undefined;
+    }, 2000);
+  }
+
   return (
     <div className="msg user">
       <div className="role">
@@ -1030,7 +1052,20 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content ? <div className="user-text user-bubble">{message.content}</div> : null}
+      {message.content ? (
+        <div className="user-text-wrap">
+          <div className="user-text user-bubble">{message.content}</div>
+          <button
+            type="button"
+            className="ghost user-copy-btn"
+            onClick={handleCopy}
+            aria-label={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
+            title={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={12} />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

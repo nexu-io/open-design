@@ -672,6 +672,8 @@ export const zhCN: Dict = {
   'chat.scrollToLatest': '滚动到最新',
   'chat.you': '你',
   'chat.openFile': '打开 {name}',
+  'chat.copyPrompt': '复制提示词',
+  'chat.copyDone': '已复制！',
   'chat.composerPlaceholder': '描述你想要的设计 — 可粘贴/拖入图片，或用 @ 引用文件或技能…',
   'chat.composerHint': '⌘/Ctrl + Enter 发送 · 可粘贴图片 · @ 引用文件或技能 · / 调出命令',
   'chat.cliSettingsTitle': 'CLI 与模型设置',

@@ -607,6 +607,8 @@ export const ptBR: Dict = {
   'chat.scrollToLatest': 'Rolar para a mais recente',
   'chat.you': 'Você',
   'chat.openFile': 'Abrir {name}',
+  'chat.copyPrompt': 'Copiar prompt',
+  'chat.copyDone': 'Copiado!',
   'chat.composerPlaceholder':
     'Descreva o design que você quer — cole ou arraste imagens, ou use @ para referenciar um arquivo ou skill…',
   'chat.composerHint':

@@ -608,6 +608,8 @@ export const fa: Dict = {
   'chat.scrollToLatest': 'اسکرول به آخرین',
   'chat.you': 'شما',
   'chat.openFile': 'باز کردن {name}',
+  'chat.copyPrompt': 'کپی پرامپت',
+  'chat.copyDone': 'کپی شد!',
   'chat.composerPlaceholder':
     'طرح مورد نظر خود را توصیف کنید — تصاویر را بچسبانید یا رها کنید، یا @ برای مرجع فایل یا مهارت…',
   'chat.composerHint':

@@ -473,6 +473,8 @@ export const ja: Dict = {
   'chat.scrollToLatest': '最新にスクロール',
   'chat.you': 'あなた',
   'chat.openFile': '{name} を開く',
+  'chat.copyPrompt': 'プロンプトをコピー',
+  'chat.copyDone': 'コピーしました！',
   'chat.composerPlaceholder':
     '欲しいデザインを説明してください — 画像を貼り付けるかドロップ、または @ でファイルやスキルを参照…',
   'chat.composerHint':
