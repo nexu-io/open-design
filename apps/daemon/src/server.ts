@@ -4374,6 +4374,42 @@ export async function startServer({
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
         send('agent', ev);
+        // Stream-json input mode keeps the child's stdin open across the
+        // turn so we can answer interactive tools like `AskUserQuestion`
+        // with a real `tool_result`. The child has no other way to know
+        // the conversation is over, though — without an EOF it sits idle
+        // until the inactivity watchdog kills it. Bookkeeping here:
+        //   - tool_use(AskUserQuestion): record the id so we know we owe
+        //     the model a tool_result before the turn can end.
+        //   - turn_end (per-turn synthesized from `stop_reason`): fire on
+        //     `end_turn` etc. but NOT on `tool_use` — that stop reason
+        //     means the model paused mid-tool, not "turn complete".
+        //   - usage (session result at EOF in single-shot mode).
+        try {
+          if (run.stdinOpen) {
+            if (
+              ev &&
+              typeof ev === 'object' &&
+              ev.type === 'tool_use' &&
+              (ev.name === 'AskUserQuestion' || ev.name === 'ask_user_question') &&
+              typeof ev.id === 'string'
+            ) {
+              if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
+              run.pendingHostAnswers.add(ev.id);
+            } else if (
+              ev &&
+              typeof ev === 'object' &&
+              ((ev.type === 'turn_end' && ev.stopReason !== 'tool_use') ||
+                ev.type === 'usage') &&
+              (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
+            ) {
+              if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
+                try { run.child.stdin.end(); } catch {}
+              }
+              run.stdinOpen = false;
+            }
+          }
+        } catch {}
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
@@ -4566,8 +4602,85 @@ export async function startServer({
       design.runs.finish(run, status, code, signal);
     });
     if (writePromptToChildStdin && child.stdin) {
-      child.stdin.end(composed, 'utf8');
+      const promptInputFormat = runtimeAdapter.promptInputFormat();
+      if (promptInputFormat === 'stream-json') {
+        // Wrap the prompt as an Anthropic user message and write it as one
+        // JSONL line. Do NOT close stdin: claude-code keeps reading further
+        // messages until EOF, which is what lets us inject a `tool_result`
+        // block later when the user answers an `AskUserQuestion` card. The
+        // stdin is closed implicitly when the child exits (run terminates,
+        // user cancels, or the model finishes without an outstanding tool
+        // call).
+        const userMessage = JSON.stringify({
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text: composed }],
+          },
+        });
+        try {
+          child.stdin.write(`${userMessage}\n`, 'utf8');
+        } catch (err) {
+          // Swallow EPIPE here for the same reason as the listener above —
+          // a fast-exiting child has already routed its failure through
+          // stderr / exit handlers.
+          if (err && err.code !== 'EPIPE') throw err;
+        }
+        run.stdinOpen = true;
+      } else {
+        child.stdin.end(composed, 'utf8');
+      }
     }
+  };
+
+  // Send a `tool_result` content block into a still-running stream-json
+  // child. Used for interactive tools that the host answers (currently:
+  // Claude's `AskUserQuestion`). The run must still be active and its
+  // stdin must still be open — we never re-spawn a closed child.
+  const submitToolResultToRun = (runId, toolUseId, content, isError = false) => {
+    const run = design.runs.get(runId);
+    if (!run) return { ok: false, reason: 'not_found' };
+    if (design.runs.isTerminal(run.status)) {
+      return { ok: false, reason: 'run_terminal' };
+    }
+    if (!run.child || !run.child.stdin || run.child.stdin.destroyed) {
+      return { ok: false, reason: 'stdin_closed' };
+    }
+    if (!run.stdinOpen) {
+      return { ok: false, reason: 'stdin_text_mode' };
+    }
+    if (typeof toolUseId !== 'string' || !toolUseId) {
+      return { ok: false, reason: 'bad_tool_use_id' };
+    }
+    const safeContent = typeof content === 'string' ? content : String(content ?? '');
+    const userMessage = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: safeContent,
+            is_error: !!isError,
+          },
+        ],
+      },
+    });
+    try {
+      run.child.stdin.write(`${userMessage}\n`, 'utf8');
+    } catch (err) {
+      return { ok: false, reason: 'write_failed', error: err && err.message };
+    }
+    // Clear this id from the pending set. If the assistant's response
+    // already finished (a `usage`/result event arrived before the user
+    // submitted), close stdin now so the child can exit. Otherwise the
+    // `usage` event handler in `emitAgentEvent` will close it on the
+    // next turn end.
+    if (run.pendingHostAnswers) {
+      run.pendingHostAnswers.delete(toolUseId);
+    }
+    return { ok: true };
   };
 
   orbitService.setRunHandler(async ({
@@ -4887,7 +5000,7 @@ export async function startServer({
     routines: { routineService },
     validation: validationDeps,
     finalize: finalizeDeps,
-    chat: { startChatRun },
+    chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
@@ -4903,7 +5016,7 @@ export async function startServer({
     db,
     design,
     http: httpDeps,
-    chat: { startChatRun },
+    chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
     validation: validationDeps,
