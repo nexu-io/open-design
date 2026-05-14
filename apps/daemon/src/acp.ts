@@ -4,7 +4,14 @@ import path from 'node:path';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
+// Gap-between-chunks watchdog for an ACP session stage. The timer resets on
+// every line received from the agent, so this bounds *silent* periods, not
+// total runtime. Default kept in line with the outer chat-run inactivity
+// watchdog (10 min) so agents that spend several minutes silently writing
+// large artifacts do not get killed before the outer watchdog can apply.
+// Callers can override via `stageTimeoutMs`; the chat server reads
+// `OD_ACP_STAGE_TIMEOUT_MS` from the environment.
+const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;

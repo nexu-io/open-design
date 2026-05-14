@@ -348,6 +348,67 @@ test('attachAcpSession.completedSuccessfully reflects abort and fatal-error stat
   assert.equal(session.completedSuccessfully(), false);
 });
 
+test('attachAcpSession default stage timeout tolerates >3min of silence between chunks', async () => {
+  vi.useFakeTimers();
+  try {
+    const child = new FakeAcpChild();
+    const events: Array<{ event: string; payload: unknown }> = [];
+
+    attachAcpSession({
+      child: child as never,
+      prompt: 'write a large landing page',
+      cwd: '/tmp/od-project',
+      model: null,
+      mcpServers: [],
+      send: (event, payload) => events.push({ event, payload }),
+    });
+
+    child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+    child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+    // Simulate an agent silently writing a large artifact for ~4 minutes —
+    // longer than the historical 180_000ms default that killed long
+    // generations mid-response.
+    await vi.advanceTimersByTimeAsync(240_000);
+
+    const errors = events.filter((e) => e.event === 'error');
+    assert.equal(errors.length, 0, `expected no stage-timeout error, got: ${JSON.stringify(errors)}`);
+    assert.equal(child.killed, false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('attachAcpSession honors caller-supplied stageTimeoutMs override', async () => {
+  vi.useFakeTimers();
+  try {
+    const child = new FakeAcpChild();
+    const events: Array<{ event: string; payload: unknown }> = [];
+
+    attachAcpSession({
+      child: child as never,
+      prompt: 'hello',
+      cwd: '/tmp/od-project',
+      model: null,
+      mcpServers: [],
+      send: (event, payload) => events.push({ event, payload }),
+      stageTimeoutMs: 1_000,
+    });
+
+    child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+    child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    const error = events.find((e) => e.event === 'error');
+    assert.ok(error, 'expected a stage-timeout error event');
+    const message = (error.payload as { message?: string }).message ?? '';
+    assert.match(message, /1000ms/);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 class FakeAcpChild extends EventEmitter {
   stdin = new PassThrough();
   stdout = new PassThrough();
