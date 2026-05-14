@@ -11,6 +11,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
+import { getCatalogCounts } from '../../_lib/catalog';
 import '../../globals.css';
 
 export async function getStaticPaths() {
@@ -25,8 +26,13 @@ const { post } = Astro.props;
 const { Content } = await render(post);
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 
+const counts = await getCatalogCounts();
 const headerHtml = renderToStaticMarkup(
-  createElement<HeaderProps>(Header, { basePath: '/' }),
+  createElement<HeaderProps>(Header, {
+    counts,
+    brandHref: '/',
+    active: 'blog',
+  }),
 );
 
 const fmtDate = (d: Date) =>
@@ -59,19 +65,13 @@ const fmtDate = (d: Date) =>
         <div class='container'>
           <a class='post-back' href='/blog/'>← Back to Blog</a>
 
-          <p class='label'>
-            {post.data.category}<span class='ix'>· {fmtDate(post.data.date)}</span>
-          </p>
-
           <h1 class='post-title'>{post.data.title}</h1>
 
           <p class='post-summary'>{post.data.summary}</p>
 
           <div class='post-meta'>
             <span>{fmtDate(post.data.date)}</span>
-            <span>·</span>
             <span>{post.data.readingTime} min read</span>
-            <span>·</span>
             <span>{post.data.category}</span>
           </div>
 
@@ -93,7 +93,6 @@ const fmtDate = (d: Date) =>
             >
               View source on GitHub ↗
             </a>
-            <span class='post-foot-mark'>● Open Design · MMXXVI</span>
           </div>
         </div>
       </article>
@@ -108,7 +107,7 @@ const fmtDate = (d: Date) =>
         padding: 88px 0 96px;
       }
       .post .container {
-        max-width: 760px;
+        max-width: 860px;
       }
       .post-back {
         display: inline-block;
@@ -143,12 +142,22 @@ const fmtDate = (d: Date) =>
       }
       .post-meta {
         display: flex;
-        gap: 10px;
+        flex-wrap: wrap;
+        gap: 8px 10px;
         font-family: var(--mono);
         font-size: 11px;
         letter-spacing: 0.06em;
         color: var(--ink-faint);
         margin-bottom: 32px;
+      }
+      .post-meta span + span::before {
+        content: '';
+        display: inline-block;
+        width: 14px;
+        height: 1px;
+        margin-right: 10px;
+        vertical-align: middle;
+        background: var(--line);
       }
       .post-rule {
         border: 0;
@@ -281,13 +290,6 @@ const fmtDate = (d: Date) =>
       .post-github:hover {
         color: var(--coral);
       }
-      .post-foot-mark {
-        font-family: var(--mono);
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        color: var(--ink-faint);
-      }
-
       @media (max-width: 760px) {
         .post {
           padding: 56px 0 72px;
