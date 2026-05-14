@@ -32,7 +32,18 @@ import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 
 const require = createRequire(import.meta.url);
-const PACKAGED_CHILD_ENV_ALLOWLIST = ["HOME", "LANG", "LC_ALL", "LOGNAME", "TMPDIR", "USER", "VP_HOME"] as const;
+const PACKAGED_CHILD_ENV_ALLOWLIST = [
+  "HOME",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "LANG",
+  "LC_ALL",
+  "LOGNAME",
+  "NO_PROXY",
+  "TMPDIR",
+  "USER",
+  "VP_HOME",
+] as const;
 
 function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = false): boolean {
   return (
