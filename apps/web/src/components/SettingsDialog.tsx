@@ -7340,15 +7340,15 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
       </div>
 
       {networkExposed && (
-        <div className="settings-subsection" style={{ background: 'var(--color-warning-bg, #fff3cd)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-          <strong>{t('settings.networkWarning')}</strong>
-          <p className="hint">{t('settings.networkWarningHint')}</p>
+        <div className="settings-subsection" style={{ background: 'var(--accent-tint)', border: '1px solid var(--accent)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+          <strong style={{ color: 'var(--accent)' }}>{t('settings.networkWarning')}</strong>
+          <p className="hint" style={{ color: 'var(--text-muted)' }}>{t('settings.networkWarningHint')}</p>
         </div>
       )}
 
       {error && (
-        <div className="settings-subsection" style={{ background: 'var(--color-error-bg, #f8d7da)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-          <strong>{error}</strong>
+        <div className="settings-subsection" style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+          <strong style={{ color: 'var(--red)' }}>{error}</strong>
         </div>
       )}
 
@@ -7385,8 +7385,8 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
               </ul>
             )}
             {newKey && (
-              <div style={{ background: 'var(--color-success-bg, #d4edda)', padding: '12px', borderRadius: '8px', marginBottom: '12px', wordBreak: 'break-all' }}>
-                <strong>{t('settings.newApiKey')}:</strong>
+              <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green)', padding: '12px', borderRadius: '8px', marginBottom: '12px', wordBreak: 'break-all' }}>
+                <strong style={{ color: 'var(--green)' }}>{t('settings.newApiKey')}:</strong>
                 <code style={{ display: 'block', marginTop: '4px', userSelect: 'all' }}>{newKey}</code>
                 <p className="hint">{t('settings.newApiKeyHint')}</p>
               </div>
