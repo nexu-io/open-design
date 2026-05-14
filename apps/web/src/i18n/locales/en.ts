@@ -940,6 +940,8 @@ export const en: Dict = {
   'fileViewer.exportZip': 'Download as .zip',
   'fileViewer.exportHtml': 'Export as standalone HTML',
   'fileViewer.exportMd': 'Export as Markdown',
+  'fileViewer.exportImage': 'Export as image',
+  'fileViewer.exportImageFailed': 'Image capture failed. Please try again or use your browser\'s screenshot tool.',
   'fileViewer.exportJsx': 'Export as JSX',
   'fileViewer.exportReactHtml': 'Export preview as HTML',
   'fileViewer.saveAsTemplate': 'Save as template…',

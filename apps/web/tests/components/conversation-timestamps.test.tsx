@@ -15,8 +15,8 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatPane } from '../../src/components/ChatPane';
-import type { ChatMessage } from '../../src/types';
+import { ChatPane, conversationMetaLabel, isAssistantMessageStreaming } from '../../src/components/ChatPane';
+import type { ChatMessage, Conversation } from '../../src/types';
 
 function renderChatPane(messages: ChatMessage[]) {
   return render(
@@ -88,5 +88,47 @@ describe('conversation timestamps', () => {
     ]);
 
     expect(screen.getAllByRole('separator')).toHaveLength(2);
+  });
+
+  it('does not treat a completed last assistant message as streaming just because another conversation is running', () => {
+    const message: ChatMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Done',
+      createdAt: 100,
+      startedAt: 100,
+      runStatus: 'succeeded',
+    };
+
+    expect(isAssistantMessageStreaming(message, true, 'assistant-1')).toBe(false);
+    expect(
+      isAssistantMessageStreaming(
+        { ...message, id: 'assistant-2', runStatus: 'running' },
+        false,
+        'assistant-1',
+      ),
+    ).toBe(true);
+  });
+
+  it('shows fixed latest run duration in the conversation menu instead of live relative age', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
+    const t = (key: string, vars?: Record<string, string | number>) =>
+      key === 'common.minutesShort' ? `${vars?.n}m` : key;
+    const conversation: Conversation = {
+      id: 'conv-1',
+      projectId: 'project-1',
+      title: 'Done run',
+      createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      updatedAt: Date.parse('2025-01-15T12:01:00Z'),
+      latestRun: {
+        status: 'succeeded',
+        startedAt: 1_000,
+        endedAt: 16_000,
+        durationMs: 15_000,
+      },
+    };
+
+    expect(conversationMetaLabel(conversation, t as never)).toBe('15s');
   });
 });

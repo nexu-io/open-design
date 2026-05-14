@@ -963,6 +963,8 @@ export const id: Dict = {
   'fileViewer.exportZip': 'Ekspor ZIP',
   'fileViewer.exportHtml': 'Ekspor HTML',
   'fileViewer.exportMd': 'Ekspor Markdown',
+  'fileViewer.exportImage': 'Ekspor gambar',
+  'fileViewer.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
   'fileViewer.exportJsx': 'Ekspor JSX',
   'fileViewer.exportReactHtml': 'Ekspor React HTML',
   'fileViewer.saveAsTemplate': 'Simpan sebagai templat',

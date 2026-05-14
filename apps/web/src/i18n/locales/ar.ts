@@ -844,6 +844,8 @@ export const ar: Dict = {
   'fileViewer.exportZip': 'تحميل كـ zip.',
   'fileViewer.exportHtml': 'تصدير كـ HTML مستقل',
   'fileViewer.exportMd': 'تصدير كـ Markdown',
+  'fileViewer.exportImage': 'تصدير كصورة',
+  'fileViewer.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
   'fileViewer.exportJsx': 'تصدير كـ JSX',
   'fileViewer.exportReactHtml': 'تصدير المعاينة كـ HTML',
   'fileViewer.saveAsTemplate': 'حفظ كقالب...',

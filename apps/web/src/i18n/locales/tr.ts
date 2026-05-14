@@ -831,6 +831,8 @@ export const tr: Dict = {
   'fileViewer.exportZip': 'ZIP olarak indir',
   'fileViewer.exportHtml': 'Tekil HTML olarak dışa aktar',
   'fileViewer.exportMd': 'Markdown olarak dışa aktar',
+  'fileViewer.exportImage': 'Görsel olarak dışa aktar',
+  'fileViewer.exportImageFailed': 'Görsel yakalama başarısız oldu. Lütfen tekrar deneyin veya tarayıcınızın ekran görüntüsü aracını kullanın.',
   'fileViewer.exportJsx': 'JSX olarak dışa aktar',
   'fileViewer.exportReactHtml': 'Önizlemeyi HTML olarak dışa aktar',
   'fileViewer.saveAsTemplate': 'Şablon olarak kaydet…',

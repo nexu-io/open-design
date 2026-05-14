@@ -417,7 +417,12 @@ describe('RoutinesSection', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open project' }));
 
     expect(navigateSpy).toHaveBeenCalledWith(
-      { kind: 'project', projectId: 'proj-run', fileName: null },
+      {
+        kind: 'project',
+        projectId: 'proj-run',
+        conversationId: 'conv-run',
+        fileName: null,
+      },
     );
   });
 

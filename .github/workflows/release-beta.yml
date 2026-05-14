@@ -45,6 +45,7 @@ env:
 jobs:
   metadata:
     name: Prepare beta metadata
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     env:
       OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json

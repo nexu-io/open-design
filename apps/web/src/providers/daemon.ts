@@ -1,6 +1,6 @@
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
- * emit three event streams depending on the agent's streamFormat:
+ * emit three event streams depending on the runtime adapter:
  *   - 'agent'   : typed events emitted by Claude Code's stream-json parser
  *                 (status, text_delta, thinking_delta, tool_use, tool_result,
  *                 usage, raw). We forward these to the UI as AgentEvent items.

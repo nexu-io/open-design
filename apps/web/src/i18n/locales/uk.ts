@@ -886,6 +886,8 @@ export const uk: Dict = {
   'fileViewer.exportZip': 'Завантажити як .zip',
   'fileViewer.exportHtml': 'Експортувати як самостійний HTML',
   'fileViewer.exportMd': 'Експортувати як Markdown',
+  'fileViewer.exportImage': 'Експортувати як зображення',
+  'fileViewer.exportImageFailed': 'Не вдалося захопити зображення. Спробуйте ще раз або скористайтеся інструментом знімків екрана вашого браузера.',
   'fileViewer.exportJsx': 'Експортувати як JSX',
   'fileViewer.exportReactHtml': 'Експортувати попередній перегляд як HTML',
   'fileViewer.saveAsTemplate': 'Зберегти як шаблон…',

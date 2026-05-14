@@ -46,6 +46,7 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   exportAsHtml,
+  exportAsImage,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
@@ -54,6 +55,7 @@ import {
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
   openSandboxedPreviewInNewTab,
+  requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
@@ -1991,9 +1993,11 @@ function commentAvatarInitial(comment: PreviewComment): string {
   return seed.charAt(0).toUpperCase();
 }
 
-function CommentSidePanel({
+export function CommentSidePanel({
   comments,
   selectedIds,
+  collapsed,
+  onCollapsedChange,
   onToggleSelect,
   onClearSelection,
   onReply,
@@ -2003,6 +2007,8 @@ function CommentSidePanel({
 }: {
   comments: PreviewComment[];
   selectedIds: Set<string>;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   onToggleSelect: (commentId: string) => void;
   onClearSelection: () => void;
   onReply: (comment: PreviewComment) => void;
@@ -2013,8 +2019,41 @@ function CommentSidePanel({
   const sorted = [...comments].sort((a, b) => b.createdAt - a.createdAt);
   const visibleSelectedIds = new Set(comments.filter((comment) => selectedIds.has(comment.id)).map((comment) => comment.id));
   const selectedCount = visibleSelectedIds.size;
+  const commentsLabel = t('chat.tabComments');
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        className="comment-side-rail"
+        data-testid="comment-side-collapsed-rail"
+        aria-label={t('preview.showSidebar', { label: commentsLabel })}
+        title={t('preview.showSidebar', { label: commentsLabel })}
+        onClick={() => onCollapsedChange(false)}
+      >
+        <Icon name="comment" size={14} />
+        <span>{commentsLabel}</span>
+        {comments.length > 0 ? <strong>{comments.length}</strong> : null}
+      </button>
+    );
+  }
+
   return (
-    <aside className="comment-side-panel" data-testid="comment-side-panel" aria-label={t('chat.tabComments')}>
+    <aside className="comment-side-panel" data-testid="comment-side-panel" aria-label={commentsLabel}>
+      <div className="comment-side-header">
+        <div className="comment-side-title">
+          <Icon name="comment" size={14} />
+          <span>{commentsLabel}</span>
+        </div>
+        <button
+          type="button"
+          className="comment-side-collapse"
+          aria-label={t('preview.hideSidebar', { label: commentsLabel })}
+          title={t('preview.hideSidebar', { label: commentsLabel })}
+          onClick={() => onCollapsedChange(true)}
+        >
+          <Icon name="chevron-right" size={14} />
+        </button>
+      </div>
       <div className="comment-side-list">
         {sorted.length === 0 ? (
           <div className="comment-side-empty">
@@ -3670,6 +3709,7 @@ function HtmlViewer({
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
+  const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
@@ -5485,6 +5525,33 @@ function HtmlViewer({
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
                     <span>{t('fileViewer.exportMd')}</span>
                   </button>
+                  {!useUrlLoadPreview ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={async () => {
+                        setShareMenuOpen(false);
+                        const iframe = iframeRef.current;
+                        if (!iframe) return;
+                        const snap = await requestPreviewSnapshot(iframe);
+                        try {
+                          if (snap) {
+                            exportAsImage(snap.dataUrl, exportTitle);
+                          } else {
+                            console.warn('[exportAsImage] snapshot capture returned null');
+                            alert(t('fileViewer.exportImageFailed'));
+                          }
+                        } catch (err) {
+                          console.warn('[exportAsImage] failed to convert snapshot:', err);
+                          alert(t('fileViewer.exportImageFailed'));
+                        }
+                      }}
+                    >
+                      <span className="share-menu-icon"><Icon name="image" size={14} /></span>
+                      <span>{t('fileViewer.exportImage')}</span>
+                    </button>
+                  ) : null}
                   <div className="share-menu-divider" />
                   <button
                     type="button"
@@ -5692,6 +5759,8 @@ function HtmlViewer({
               <CommentSidePanel
                 comments={visibleSideComments}
                 selectedIds={selectedSideCommentIds}
+                collapsed={commentSidePanelCollapsed}
+                onCollapsedChange={setCommentSidePanelCollapsed}
                 onToggleSelect={(commentId) => {
                   setSelectedSideCommentIds((current) => {
                     const next = new Set(current);

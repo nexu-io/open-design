@@ -868,6 +868,8 @@ export const fa: Dict = {
   'fileViewer.exportZip': 'دانلود به صورت .zip',
   'fileViewer.exportHtml': 'صادرکردن به HTML مستقل',
   'fileViewer.exportMd': 'صادرکردن به صورت Markdown',
+  'fileViewer.exportImage': 'صادرکردن به صورت تصویر',
+  'fileViewer.exportImageFailed': 'گرفتن تصویر ناموفق بود. لطفاً دوباره تلاش کنید یا از ابزار اسکرین‌شات مرورگرتان استفاده کنید.',
   'fileViewer.exportJsx': 'صادرکردن به JSX',
   'fileViewer.exportReactHtml': 'صادرکردن پیش‌نمایش به HTML',
   'fileViewer.saveAsTemplate': 'ذخیره به عنوان قالب…',

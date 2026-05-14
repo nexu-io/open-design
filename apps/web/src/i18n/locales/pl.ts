@@ -844,6 +844,8 @@ export const pl: Dict = {
   'fileViewer.exportZip': 'Pobierz jako .zip',
   'fileViewer.exportHtml': 'Eksportuj jako samodzielny HTML',
   'fileViewer.exportMd': 'Eksportuj jako Markdown',
+  'fileViewer.exportImage': 'Eksportuj jako obraz',
+  'fileViewer.exportImageFailed': 'Przechwytywanie obrazu nie powiodło się. Spróbuj ponownie lub użyj narzędzia do zrzutów ekranu w przeglądarce.',
   'fileViewer.exportJsx': 'Eksportuj jako JSX',
   'fileViewer.exportReactHtml': 'Eksportuj podgląd jako HTML',
   'fileViewer.saveAsTemplate': 'Zapisz jako szablon…',

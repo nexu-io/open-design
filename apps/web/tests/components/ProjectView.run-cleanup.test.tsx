@@ -2,7 +2,14 @@
 
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ProjectView, resolveSucceededRunStatus } from '../../src/components/ProjectView';
+import {
+  ProjectView,
+  clearStreamingConversationMarker,
+  finalizeActiveAssistantMessagesOnStop,
+  resolveSucceededRunStatus,
+  shouldClearActiveRunRefs,
+} from '../../src/components/ProjectView';
+import type { ChatMessage } from '../../src/types';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -173,6 +180,72 @@ describe('ProjectView daemon cleanup', () => {
     expect(resolveSucceededRunStatus(undefined)).toBe('succeeded');
     expect(resolveSucceededRunStatus('failed')).toBe('failed');
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
+  });
+
+  it('finalizes active and pending API assistant runs when Stop is clicked', () => {
+    const stoppedAt = 2_000;
+    const completedWithoutEndedAt: ChatMessage = {
+      id: 'completed',
+      role: 'assistant',
+      content: 'done',
+      createdAt: 100,
+      startedAt: 100,
+      runStatus: 'succeeded',
+    };
+    const active: ChatMessage = {
+      id: 'active',
+      role: 'assistant',
+      content: 'working',
+      createdAt: 500,
+      startedAt: 500,
+      runStatus: 'running',
+    };
+    const apiPending: ChatMessage = {
+      id: 'api-pending',
+      role: 'assistant',
+      content: 'working through api',
+      createdAt: 700,
+      startedAt: 700,
+      runStatus: undefined,
+    };
+    const historicalWithoutStatus: ChatMessage = {
+      id: 'historical',
+      role: 'assistant',
+      content: 'old imported message',
+      createdAt: 50,
+      runStatus: undefined,
+    };
+
+    const result = finalizeActiveAssistantMessagesOnStop(
+      [completedWithoutEndedAt, active, apiPending, historicalWithoutStatus],
+      stoppedAt,
+    );
+
+    expect(result.messages[0]).toBe(completedWithoutEndedAt);
+    expect(result.messages[1]).toEqual({
+      ...active,
+      runStatus: 'canceled',
+      endedAt: stoppedAt,
+    });
+    expect(result.messages[2]).toEqual({
+      ...apiPending,
+      runStatus: 'canceled',
+      endedAt: stoppedAt,
+    });
+    expect(result.messages[3]).toBe(historicalWithoutStatus);
+    expect(result.finalized).toEqual([result.messages[1], result.messages[2]]);
+  });
+
+  it('keeps the newer conversation streaming when a stale conversation completes', () => {
+    expect(clearStreamingConversationMarker('conv-b', 'conv-a')).toBe('conv-b');
+    expect(clearStreamingConversationMarker('conv-b', 'conv-b')).toBeNull();
+    expect(clearStreamingConversationMarker('conv-b')).toBeNull();
+  });
+
+  it('does not clear active run refs from a stale conversation completion', () => {
+    expect(shouldClearActiveRunRefs('conv-b', 'conv-a')).toBe(false);
+    expect(shouldClearActiveRunRefs('conv-b', 'conv-b')).toBe(true);
+    expect(shouldClearActiveRunRefs(null, 'conv-a')).toBe(false);
   });
 
   it('marks a recoverable daemon run as failed when the run status can no longer be fetched', async () => {
