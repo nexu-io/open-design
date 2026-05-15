@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 
 import { I18nProvider } from '../../src/i18n';
+import { PromptTemplatesTab } from '../../src/components/PromptTemplatesTab';
 import { PromptTemplatePreviewModal } from '../../src/components/PromptTemplatePreviewModal';
 import type { PromptTemplateSummary } from '../../src/types';
 
@@ -25,9 +27,32 @@ function renderModal(summary: PromptTemplateSummary) {
   );
 }
 
+function renderGallery(summary: PromptTemplateSummary) {
+  function Harness() {
+    const [active, setActive] = useState<PromptTemplateSummary | null>(null);
+
+    return (
+      <>
+        <PromptTemplatesTab
+          surface={summary.surface}
+          templates={[summary]}
+          onPreview={setActive}
+        />
+        {active ? <PromptTemplatePreviewModal summary={active} onClose={() => setActive(null)} /> : null}
+      </>
+    );
+  }
+
+  return render(
+    <I18nProvider initial="en">
+      <Harness />
+    </I18nProvider>,
+  );
+}
+
 describe('PromptTemplatePreviewModal', () => {
-  it('renders the Open Design contribute link with the preview feedback template', async () => {
-    renderModal({
+  it('renders the Open Design contribute link from the live gallery flow', async () => {
+    renderGallery({
       id: 'open-design-preview',
       surface: 'image',
       title: 'Open Design Preview',
@@ -40,6 +65,8 @@ describe('PromptTemplatePreviewModal', () => {
         url: 'https://github.com/nexu-io/open-design',
       },
     });
+
+    fireEvent.click(screen.getByText('Open Design Preview'));
 
     const contributeLink = await screen.findByRole('link', { name: 'Contribute' });
     expect(contributeLink.getAttribute('href')).toBe(
