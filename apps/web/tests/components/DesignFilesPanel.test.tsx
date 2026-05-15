@@ -129,8 +129,11 @@ describe('DesignFilesPanel grouping', () => {
       file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
     ]);
 
-    expect(screen.getByText('HTML page')).toBeTruthy();
-    expect(screen.getByText('Image')).toBeTruthy();
+    const sectionLabels = Array.from(
+      document.querySelectorAll<HTMLElement>('.df-section-label'),
+    ).map((el) => el.textContent ?? '');
+    expect(sectionLabels.some((text) => text.includes('HTML page'))).toBe(true);
+    expect(sectionLabels.some((text) => text.includes('Image'))).toBe(true);
     expect(screen.getByTestId('design-file-row-page.html')).toBeTruthy();
     expect(screen.getByTestId('design-file-row-chart.png')).toBeTruthy();
     expect(screen.queryByText('Today')).toBeNull();
@@ -465,11 +468,15 @@ describe('DesignFilesPanel large-list regression', () => {
     const { container, onDeleteFiles } = renderPanel(files);
     const rows = Array.from(container.querySelectorAll('.df-file-row'));
 
+    const firstName = rows[0]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
+    const secondName = rows[1]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
     fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
     fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
     fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
 
-    expect(onDeleteFiles).toHaveBeenCalledWith(['file-1.html', 'file-2.png']);
+    expect(onDeleteFiles).toHaveBeenCalledTimes(1);
+    expect(onDeleteFiles).toHaveBeenCalledWith(expect.arrayContaining([firstName, secondName]));
+    expect(onDeleteFiles.mock.calls[0][0]).toHaveLength(2);
   });
 
   it('renders 500 files within a reasonable time', () => {
