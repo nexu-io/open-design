@@ -4637,6 +4637,10 @@ export async function startServer({
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
       res.setHeader('Referrer-Policy', 'same-origin');
+      next();
+    });
+    // Strict CSP only for the login page — the main web app needs script-src self and connect-src self.
+    app.use(['/login', '/api/auth/login', '/api/auth/reset-keys'], (_req, res, next) => {
       res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; form-action 'self'; frame-ancestors 'none'");
       next();
     });
