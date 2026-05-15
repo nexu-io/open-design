@@ -607,6 +607,8 @@ export const ru: Dict = {
   'chat.scrollToLatest': 'Прокрутить к последнему',
   'chat.you': 'Вы',
   'chat.openFile': 'Открыть {name}',
+  'chat.copyPrompt': 'Скопировать запрос',
+  'chat.copyDone': 'Скопировано!',
   'chat.composerPlaceholder':
     'Опишите дизайн, который вы хотите — вставьте или добавьте изображения, или @ файл либо навык…',
   'chat.composerHint':
@@ -867,6 +869,8 @@ export const ru: Dict = {
   'fileViewer.exportZip': 'Скачать как .zip',
   'fileViewer.exportHtml': 'Экспорт как HTML',
   'fileViewer.exportMd': 'Экспорт в Markdown',
+  'fileViewer.exportImage': 'Экспорт как изображение',
+  'fileViewer.exportImageFailed': 'Не удалось сделать снимок. Попробуйте ещё раз или воспользуйтесь инструментом скриншотов вашего браузера.',
   'fileViewer.exportJsx': 'Экспорт как JSX',
   'fileViewer.exportReactHtml': 'Экспорт предпросмотра как HTML',
   'fileViewer.saveAsTemplate': 'Сохранить как шаблон…',
@@ -1108,6 +1112,7 @@ export const ru: Dict = {
   'pet.fieldGreeting': 'Приветствие',
   'pet.fieldAccent': 'Акцентный цвет',
   'pet.fieldAccentCustom': 'Свой цвет',
+  'pet.fieldAccentDefault': 'Цвет акцента по умолчанию',
   'pet.overlayAria': 'Питомец-компаньон',
   'pet.spriteAria': '{name} — тащите, чтобы переместить, кликните, чтобы пообщаться',
   'pet.spriteTitle': 'Привет от {name}! Кликните, чтобы пообщаться.',

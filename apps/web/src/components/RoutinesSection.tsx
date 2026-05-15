@@ -14,6 +14,10 @@ import { navigate } from '../router';
 
 type ProjectSummary = { id: string; name: string };
 
+type RoutinesSectionProps = {
+  onClose?: () => void;
+};
+
 type ScheduleKind = RoutineSchedule['kind'];
 
 const SCHEDULE_KINDS: { kind: ScheduleKind; label: string }[] = [
@@ -346,7 +350,18 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
             type="button"
             className="routines-history-link"
             onClick={() => {
-              navigate({ kind: 'project', projectId: r.projectId, fileName: null });
+              // Issue #1505: deep-link to this run's specific
+              // conversation, not just the project root. Without the
+              // conversation id, parallel runs that share a project
+              // (reuse mode) all resolve to the same default
+              // conversation in the project view, which made earlier
+              // runs look "absorbed" by the latest one.
+              navigate({
+                kind: 'project',
+                projectId: r.projectId,
+                conversationId: r.conversationId ?? null,
+                fileName: null,
+              });
               onClose?.();
             }}
             title="Open the project this run wrote to"
@@ -360,7 +375,7 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
   );
 }
 
-export function RoutinesSection({ onClose }: { onClose?: () => void }) {
+export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -571,6 +586,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
 
           <fieldset className="routines-fieldset">
             <legend>Project</legend>
+
             <label className="routines-radio">
               <input
                 type="radio"
@@ -582,6 +598,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                 <small>A fresh, isolated workspace per fire.</small>
               </span>
             </label>
+
             <label className="routines-radio">
               <input
                 type="radio"
@@ -593,7 +610,8 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                 <small>Each run lives as a new conversation inside the project.</small>
               </span>
             </label>
-            {form.mode === 'reuse' ? (
+
+            {form.mode === 'reuse' && (
               <select
                 className="routines-project-select"
                 value={form.projectId}
@@ -607,7 +625,7 @@ export function RoutinesSection({ onClose }: { onClose?: () => void }) {
                   </option>
                 ))}
               </select>
-            ) : null}
+            )}
           </fieldset>
 
           <div className="routines-form-actions">

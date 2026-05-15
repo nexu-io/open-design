@@ -125,6 +125,48 @@ test('manual edit inspector previews and persists page and selected element styl
   await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
 });
 
+test('manual edit mode preserves preview actions after style edits', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Manual edit smoke');
+  await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
+  await page.goto(`/projects/${projectId}/files/manual-edit.html`);
+  await openDesignFile(page, 'manual-edit.html');
+
+  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const fontSizeInput = await selectStyleRowInput(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY', 'Size');
+  await fontSizeInput.fill('48');
+  await expectFileSource(page, projectId, 'manual-edit.html', ['font-size: 48px']);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+
+  await page.getByTestId('board-mode-toggle').click();
+  await expect(page.getByTestId('comment-mode-toggle')).toBeVisible();
+  await frame.getByRole('heading', { name: 'Original Hero' }).click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+
+  await page.getByRole('button', { name: /^Share$/ }).click();
+  await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
+});
+
+async function selectStyleRowInput(
+  page: Page,
+  frame: ReturnType<Page['frameLocator']>,
+  selector: string,
+  section: string,
+  label: string,
+) {
+  await frame.locator(selector).click();
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  const row = inspectorSection(page, section).locator('.cc-row').filter({ hasText: label }).locator('input');
+  await expect(row).toBeVisible();
+  return row;
+}
+
 test('manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit deck smoke');

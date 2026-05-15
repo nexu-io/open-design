@@ -63,6 +63,48 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(screen.queryByRole('button', { name: 'Continue remaining tasks' })).toBeNull();
   });
 
+  it('uses persisted usage duration for completed messages that do not have endedAt', () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: 'assistant-duration',
+          role: 'assistant',
+          content: 'Done',
+          startedAt: 1_000,
+          runStatus: 'succeeded',
+          events: [{ kind: 'usage', outputTokens: 1439, durationMs: 32_000 }],
+        }}
+        streaming={false}
+        projectId="project-1"
+        isLast
+      />,
+    );
+
+    expect(screen.getByText(/32s/)).toBeTruthy();
+    expect(screen.getByText(/1439 out/)).toBeTruthy();
+  });
+
+  it('does not synthesize a growing elapsed time for completed messages without endedAt', () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: 'assistant-duration-missing',
+          role: 'assistant',
+          content: 'Done',
+          startedAt: 1_000,
+          runStatus: 'succeeded',
+          events: [{ kind: 'usage', outputTokens: 1439 }],
+        }}
+        streaming={false}
+        projectId="project-1"
+        isLast
+      />,
+    );
+
+    expect(screen.getByText(/1439 out/)).toBeTruthy();
+    expect(screen.queryByText(/\d+m \d{2}s/)).toBeNull();
+  });
+
   it('shows unfinished state and passes unfinished todos to the continue callback', () => {
     const onContinue = vi.fn();
     render(

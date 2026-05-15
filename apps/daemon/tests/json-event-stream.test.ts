@@ -318,6 +318,65 @@ test('codex json stream emits status text and usage events', () => {
   ]);
 });
 
+test('codex json stream preserves line boundaries between assistant message items', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-1', type: 'agent_message', text: 'English: one' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-2', type: 'agent_message', text: 'Chinese: 一' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-3', type: 'agent_message', text: 'English: two' },
+    }) +
+    '\n',
+  );
+
+  const text = events
+    .filter((event) => event.type === 'text_delta')
+    .map((event) => event.delta)
+    .join('');
+
+  assert.equal(text, 'English: one\nChinese: 一\nEnglish: two');
+});
+
+test('codex json stream does not duplicate existing assistant message newlines', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-1', type: 'agent_message', text: 'English: one\n' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-2', type: 'agent_message', text: 'Chinese: 一' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-3', type: 'agent_message', text: '\nEnglish: two' },
+    }) +
+    '\n',
+  );
+
+  const text = events
+    .filter((event) => event.type === 'text_delta')
+    .map((event) => event.delta)
+    .join('');
+
+  assert.equal(text, 'English: one\nChinese: 一\nEnglish: two');
+});
+
 test('codex json stream emits structured errors once', () => {
   const { events, handler } = collectEvents('codex');
 

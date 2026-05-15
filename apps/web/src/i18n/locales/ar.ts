@@ -586,6 +586,8 @@ export const ar: Dict = {
   'chat.scrollToLatest': 'التمرير للأحدث',
   'chat.you': 'أنت',
   'chat.openFile': 'فتح {name}',
+  'chat.copyPrompt': 'نسخ الأمر',
+  'chat.copyDone': 'تم النسخ!',
   'chat.composerPlaceholder':
     'صف التصميم الذي تريده - الصق أو اسحب الصور، أو @ لملف أو مهارة...',
   'chat.composerHint':
@@ -844,6 +846,8 @@ export const ar: Dict = {
   'fileViewer.exportZip': 'تحميل كـ zip.',
   'fileViewer.exportHtml': 'تصدير كـ HTML مستقل',
   'fileViewer.exportMd': 'تصدير كـ Markdown',
+  'fileViewer.exportImage': 'تصدير كصورة',
+  'fileViewer.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
   'fileViewer.exportJsx': 'تصدير كـ JSX',
   'fileViewer.exportReactHtml': 'تصدير المعاينة كـ HTML',
   'fileViewer.saveAsTemplate': 'حفظ كقالب...',
@@ -1067,6 +1071,7 @@ export const ar: Dict = {
   'pet.fieldGreeting': 'التحية',
   'pet.fieldAccent': 'لون التمييز',
   'pet.fieldAccentCustom': 'لون مخصص',
+  'pet.fieldAccentDefault': 'لون التمييز الافتراضي',
   'pet.overlayAria': 'رفيق الحيوان الأليف',
   'pet.spriteAria': '{name} - اسحب للتحريك، اضغط للدردشة',
   'pet.spriteTitle': 'مرحباً من {name}! اضغط للدردشة.',

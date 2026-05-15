@@ -586,6 +586,8 @@ export const ko: Dict = {
   'chat.scrollToLatest': '최신 내용으로 스크롤',
   'chat.you': '나',
   'chat.openFile': '{name} 열기',
+  'chat.copyPrompt': '프롬프트 복사',
+  'chat.copyDone': '복사됨!',
   'chat.composerPlaceholder':
     '원하는 디자인을 설명하세요 — 이미지 붙여넣기/끌어놓기 가능, @로 파일이나 스킬 참조…',
   'chat.composerHint':
@@ -844,6 +846,8 @@ export const ko: Dict = {
   'fileViewer.exportZip': '.zip으로 다운로드',
   'fileViewer.exportHtml': '독립 실행형 HTML로 내보내기',
   'fileViewer.exportMd': 'Markdown으로 내보내기',
+  'fileViewer.exportImage': '이미지로 내보내기',
+  'fileViewer.exportImageFailed': '이미지 캡처에 실패했습니다. 다시 시도하거나 브라우저의 스크린샷 도구를 사용하세요.',
   'fileViewer.exportJsx': 'JSX로 내보내기',
   'fileViewer.exportReactHtml': '미리보기를 HTML로 내보내기',
   'fileViewer.saveAsTemplate': '템플릿으로 저장…',
@@ -1108,6 +1112,7 @@ export const ko: Dict = {
   'pet.fieldGreeting': '인사말',
   'pet.fieldAccent': '강조 색상',
   'pet.fieldAccentCustom': '사용자 색상',
+  'pet.fieldAccentDefault': '기본 강조 색상',
   'pet.overlayAria': '펫 친구',
   'pet.spriteAria': '{name} — 드래그하여 이동, 클릭하여 대화',
   'pet.spriteTitle': '{name}의 인사! 클릭해서 대화하세요.',

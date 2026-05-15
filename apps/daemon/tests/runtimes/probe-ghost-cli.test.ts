@@ -22,38 +22,50 @@
  *     so adapters whose `--version` flag is unsupported are not
  *     regressed.
  *
- * Detection always probes the same path `resolveAgentExecutable`
- * picks for chat/run resolution, so a stale configured override that
- * shadows a working PATH binary is reported as unavailable rather
- * than swapped for the PATH candidate; advertising a different path
- * would break the invariant that Settings and the chat spawn path
- * agree on what the agent runs (PR #1301 review, Siri-Ray).
+ * Detection always probes the same launch path chat/run resolution
+ * picks, so a stale configured override that shadows a working PATH
+ * binary is reported as unavailable rather than swapped for the PATH
+ * candidate; advertising a different path would break the invariant
+ * that Settings and the chat spawn path agree on what the agent runs
+ * (PR #1301 review, Siri-Ray).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const execAgentFileMock = vi.fn();
-const resolveAgentExecutableMock = vi.fn();
+const resolveAgentLaunchMock = vi.fn();
 
 vi.mock('../../src/runtimes/invocation.js', () => ({
   execAgentFile: (...args: unknown[]) =>
     (execAgentFileMock as unknown as (...args: unknown[]) => unknown)(...args),
 }));
 
-vi.mock('../../src/runtimes/executables.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/runtimes/executables.js')>();
+vi.mock('../../src/runtimes/launch.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/runtimes/launch.js')>();
   return {
     ...actual,
-    resolveAgentExecutable: (
-      ...args: Parameters<typeof actual.resolveAgentExecutable>
+    resolveAgentLaunch: (
+      ...args: Parameters<typeof actual.resolveAgentLaunch>
     ) =>
       (
-        resolveAgentExecutableMock as unknown as (
-          ...a: Parameters<typeof actual.resolveAgentExecutable>
-        ) => ReturnType<typeof actual.resolveAgentExecutable>
+        resolveAgentLaunchMock as unknown as (
+          ...a: Parameters<typeof actual.resolveAgentLaunch>
+        ) => ReturnType<typeof actual.resolveAgentLaunch>
       )(...args),
   };
 });
+
+function fakeCodexLaunch() {
+  return {
+    configuredOverridePath: null,
+    pathResolvedPath: '/fake/bin/codex',
+    selectedPath: '/fake/bin/codex',
+    launchPath: '/fake/bin/codex',
+    launchKind: 'selected' as const,
+    childPathPrepend: ['/fake/bin'],
+    diagnostic: null,
+  };
+}
 
 function spawnError(code: 'ENOENT' | 'EACCES' | 'ENOTDIR' | 'ETIMEDOUT'): NodeJS.ErrnoException {
   const error = new Error(`spawn failed (${code})`) as NodeJS.ErrnoException;
@@ -74,10 +86,10 @@ function exitCodeError(code: number): NodeJS.ErrnoException {
 describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () => {
   beforeEach(() => {
     execAgentFileMock.mockReset();
-    resolveAgentExecutableMock.mockReset();
+    resolveAgentLaunchMock.mockReset();
     // Default: pretend every agent definition resolves to a fake bin so
     // we exercise the spawn path uniformly.
-    resolveAgentExecutableMock.mockImplementation(() => '/fake/bin/codex');
+    resolveAgentLaunchMock.mockImplementation(fakeCodexLaunch);
   });
 
   for (const failingCode of ['ENOENT', 'EACCES', 'ENOTDIR'] as const) {
@@ -156,25 +168,29 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
     // to fall back to a PATH candidate when the configured override
     // failed to spawn, but that broke the invariant that detection and
     // chat-run resolution agree on the executable. resolveAgentBin
-    // still resolves via resolveAgentExecutable (configured override
+    // still resolves via resolveAgentLaunch (configured override
     // wins when present and executable), so if detection adopted a
     // different PATH binary, Settings would show "available at
     // /usr/local/bin/codex" while every actual run would spawn the
     // stale /stale/custom/codex and fail. The fix is to keep detection
-    // honest: probe whichever path resolveAgentExecutable picks, and
+    // honest: probe whichever path resolveAgentLaunch picks, and
     // report exactly that path's availability. The Settings repair
     // flow (PR #1205) needs to derive its adopt-or-clear affordance
     // from the resolution diagnostic — not from `available`.
     const {
-      resolveAgentExecutable: realResolveAgentExecutable,
+      resolveAgentLaunch: realResolveAgentLaunch,
+    } = await vi.importActual<typeof import('../../src/runtimes/launch.js')>(
+      '../../src/runtimes/launch.js',
+    );
+    const {
       inspectAgentExecutableResolution,
     } = await vi.importActual<typeof import('../../src/runtimes/executables.js')>(
       '../../src/runtimes/executables.js',
     );
     // Drive the resolver through its real path so a future refactor
     // that diverges resolution from detection trips this assertion.
-    resolveAgentExecutableMock.mockImplementation(
-      (def, env) => realResolveAgentExecutable(def, env),
+    resolveAgentLaunchMock.mockImplementation(
+      (def, env) => realResolveAgentLaunch(def, env),
     );
     // Force a stale configured override + a working PATH candidate.
     execAgentFileMock.mockImplementation((cmd: string) => {
@@ -194,9 +210,9 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
 
     expect(codex).toBeDefined();
     // Detection must report unavailable rather than swap to a hypothetical
-    // PATH candidate, because resolveAgentExecutable (which chat-run
+    // PATH candidate, because resolveAgentLaunch (which chat-run
     // resolution uses) will pick whatever the same call returns.
-    const resolvedForRun = realResolveAgentExecutable(
+    const resolvedForRun = realResolveAgentLaunch(
       // re-run AGENT_DEFS's codex entry through the real resolver to
       // get the executable resolveAgentBin would pick at chat time.
       // The detection side already validated this path.
@@ -204,11 +220,11 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
       { id: 'codex', bin: 'codex' } as any,
       configuredEnv.codex,
     );
-    if (resolvedForRun) {
+    if (resolvedForRun.selectedPath && resolvedForRun.launchPath) {
       // If the resolver found a working PATH binary, detection must
       // have reported available=true with the SAME path.
       expect(codex?.available).toBe(true);
-      expect(codex?.path).toBe(resolvedForRun);
+      expect(codex?.path).toBe(resolvedForRun.selectedPath);
     } else {
       // Otherwise detection must report unavailable rather than invent
       // a different path.

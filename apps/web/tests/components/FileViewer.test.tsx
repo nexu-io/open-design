@@ -2,6 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +22,7 @@ vi.mock('../../src/state/projects', async () => {
 });
 
 import {
+  CommentSidePanel,
   FileViewer,
   LiveArtifactViewer,
   LiveArtifactRefreshHistoryPanel,
@@ -34,6 +36,7 @@ import {
 import type { InspectOverrideMap } from '../../src/components/FileViewer';
 import type { LiveArtifact, LiveArtifactWorkspaceEntry, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
+import type { Dict } from '../../src/i18n/types';
 
 afterEach(() => {
   cleanup();
@@ -357,7 +360,67 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-testid="artifact-preview-frame"');
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
     expect(markup).not.toContain('data-od-render-mode="srcdoc"');
+  });
+
+  it('allows downloads in the in-tab HTML presentation iframe', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+
+    await waitFor(() => {
+      const frame = container.querySelector('.present-overlay iframe');
+      expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+      expect(frame?.getAttribute('data-od-render-mode')).toBe('url-load');
+    });
+  });
+
+  it('allows downloads in React component preview iframes', async () => {
+    const file = baseFile({
+      name: 'Card.jsx',
+      path: 'Card.jsx',
+      mime: 'text/jsx',
+      kind: 'code',
+      artifactManifest: {
+        version: 1,
+        kind: 'react-component',
+        title: 'Card',
+        entry: 'Card.jsx',
+        renderer: 'react-component',
+        exports: ['jsx', 'html', 'zip'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/Card.jsx') {
+        return new Response('export default function Card() { return <button>Download</button>; }');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    const frame = await screen.findByTestId('react-component-preview-frame');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   });
 
   it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
@@ -385,6 +448,7 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(markup).toContain('data-testid="artifact-preview-frame"');
     expect(markup).toContain('data-od-render-mode="srcdoc"');
+    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
     expect(markup).not.toContain('data-od-render-mode="url-load"');
   });
 
@@ -970,6 +1034,17 @@ describe('FileViewer SVG artifacts', () => {
 });
 
 describe('FileViewer tweaks toolbar', () => {
+  const t = (key: keyof Dict) => {
+    const labels: Partial<Record<keyof Dict, string>> = {
+      'chat.tabComments': 'Comments',
+      'chat.comments.emptySaved': 'No saved comments.',
+      'common.close': 'Close',
+      'preview.showSidebar': 'Show Comments',
+      'preview.hideSidebar': 'Hide Comments',
+    };
+    return labels[key] ?? key;
+  };
+
   function htmlPreviewFile(): ProjectFile {
     return baseFile({
       name: 'preview.html',
@@ -987,7 +1062,7 @@ describe('FileViewer tweaks toolbar', () => {
     });
   }
 
-  it('renders the toolbar Draw entry and no legacy picker/pod toggle', () => {
+  it('renders the toolbar Draw entry alongside restored Comment and Inspect entries', () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -995,13 +1070,12 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     expect(screen.getByTestId('palette-tweaks-toggle')).toBeTruthy();
+    expect(screen.getByTestId('board-mode-toggle')).toBeTruthy();
+    expect(screen.getByTestId('inspect-mode-toggle')).toBeTruthy();
     expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
     expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
-    expect(screen.queryByTestId('board-mode-toggle')).toBeNull();
     expect(screen.queryByTestId('comment-mode-toggle')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
-    expect(screen.queryByTestId('inspect-mode-toggle')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Inspect' })).toBeNull();
 
     fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
     expect(screen.getByPlaceholderText('Type anywhere to add a note')).toBeTruthy();
@@ -1065,6 +1139,64 @@ describe('FileViewer tweaks toolbar', () => {
     expect(queue.disabled).toBe(false);
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     expect(screen.queryByText('Queues while working')).toBeNull();
+  });
+
+  it('collapses the comment side panel into a narrow reopen rail', () => {
+    const onCollapseChange = vi.fn();
+
+    function Harness() {
+      const [collapsed, setCollapsed] = useState(false);
+      return (
+        <CommentSidePanel
+          comments={[
+            {
+              id: 'comment-1',
+              projectId: 'project-1',
+              conversationId: 'conversation-1',
+              filePath: 'preview.html',
+              elementId: 'button.sso-btn',
+              selector: '[data-od-id="button.sso-btn"]',
+              label: 'button.sso-btn',
+              text: 'GitHub',
+              htmlHint: '<button>GitHub</button>',
+              position: { x: 16, y: 24, width: 160, height: 48 },
+              note: '不要github，换成微信',
+              status: 'open',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ]}
+          selectedIds={new Set(['comment-1'])}
+          collapsed={collapsed}
+          onCollapsedChange={(next) => {
+            onCollapseChange(next);
+            setCollapsed(next);
+          }}
+          onToggleSelect={() => {}}
+          onClearSelection={() => {}}
+          onReply={() => {}}
+          onSendSelected={() => {}}
+          sending={false}
+          t={t}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.getByText('不要github，换成微信')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(true);
+    expect(screen.queryByText('不要github，换成微信')).toBeNull();
+    expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
+    expect(screen.getByTestId('comment-side-collapsed-rail')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /show comments/i }));
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(false);
   });
 });
 

@@ -54,6 +54,13 @@ labels, ages, assignees) so they read as "today", but you must
 **not** add extra rail entries, extra groups, extra fields in the
 preview pane, or any chrome ornaments not already in `example.html`.
 
+**Identity guard.** Treat every person name or handle in `example.html`
+as mock content only. Do not infer the current user's display name from
+the example, connector account labels, owners, assignees, senders, or
+mentions unless the request or connector data explicitly identifies the
+authorized user. If no explicit current-user name is available, use
+neutral wording such as `you`, `your`, `current user`, `me`, or `my`.
+
 The sections below are a **reference for tokens and visual language** —
 not a license to extend the page.
 

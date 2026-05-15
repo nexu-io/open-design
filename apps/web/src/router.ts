@@ -7,21 +7,64 @@ import { useEffect, useState } from 'react';
 
 export type Route =
   | { kind: 'home' }
-  | { kind: 'project'; projectId: string; fileName: string | null };
+  | {
+      kind: 'project';
+      projectId: string;
+      /**
+       * Deep-link to a specific conversation inside the project. When
+       * present, the project view picks this conversation as the active
+       * one instead of defaulting to `list[0]`. Falls back to the
+       * default picker when the routed conversation no longer exists
+       * (e.g. the conversation was deleted between the route landing
+       * and the conversation list loading).
+       *
+       * Added for issue #1505: the Routines history surfaces one row
+       * per run, and clicking "Open project" on any row should land
+       * the user on that run's own conversation, not on whatever the
+       * project happens to default to. Without this field the latest
+       * conversation always wins and earlier rows look "absorbed".
+       *
+       * Optional (PerishCode + Codex P1 on PR #1508): the existing
+       * project-route call sites in App.tsx, ProjectView.tsx, and the
+       * older tests all construct `{ kind, projectId, fileName }`
+       * without a conversation segment. Treating the field as optional
+       * keeps those literals type-safe while letting the routine
+       * history surface populate it where the deep-link matters. The
+       * `parseRoute` and `buildPath` round-trip normalize undefined to
+       * null at the wire layer.
+       */
+      conversationId?: string | null;
+      fileName: string | null;
+    };
 
 export function parseRoute(pathname: string): Route {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts.length === 0) return { kind: 'home' };
   if (parts[0] === 'projects' && parts[1]) {
     const projectId = decodeURIComponent(parts[1]);
+    // /projects/:id/conversations/:cid[/files/...]
+    if (parts[2] === 'conversations' && parts[3]) {
+      const conversationId = decodeURIComponent(parts[3]);
+      if (parts[4] === 'files' && parts[5]) {
+        return {
+          kind: 'project',
+          projectId,
+          conversationId,
+          fileName: decodeURIComponent(parts.slice(5).join('/')),
+        };
+      }
+      return { kind: 'project', projectId, conversationId, fileName: null };
+    }
+    // /projects/:id/files/...
     if (parts[2] === 'files' && parts[3]) {
       return {
         kind: 'project',
         projectId,
+        conversationId: null,
         fileName: decodeURIComponent(parts.slice(3).join('/')),
       };
     }
-    return { kind: 'project', projectId, fileName: null };
+    return { kind: 'project', projectId, conversationId: null, fileName: null };
   }
   return { kind: 'home' };
 }
@@ -29,14 +72,16 @@ export function parseRoute(pathname: string): Route {
 export function buildPath(route: Route): string {
   if (route.kind === 'home') return '/';
   const id = encodeURIComponent(route.projectId);
-  if (route.fileName) {
-    const file = route.fileName
-      .split('/')
-      .map((s) => encodeURIComponent(s))
-      .join('/');
-    return `/projects/${id}/files/${file}`;
+  const file = route.fileName
+    ? route.fileName.split('/').map((s) => encodeURIComponent(s)).join('/')
+    : null;
+  if (route.conversationId) {
+    const cid = encodeURIComponent(route.conversationId);
+    return file
+      ? `/projects/${id}/conversations/${cid}/files/${file}`
+      : `/projects/${id}/conversations/${cid}`;
   }
-  return `/projects/${id}`;
+  return file ? `/projects/${id}/files/${file}` : `/projects/${id}`;
 }
 
 // Centralized navigation. Components call this instead of mutating

@@ -680,6 +680,8 @@ export const en: Dict = {
   'chat.scrollToLatest': 'Scroll to latest',
   'chat.you': 'You',
   'chat.openFile': 'Open {name}',
+  'chat.copyPrompt': 'Copy prompt',
+  'chat.copyDone': 'Copied!',
   'chat.composerPlaceholder':
     'Describe the design you want — paste or drop images, or @ a file or skill…',
   'chat.composerHint':
@@ -940,6 +942,8 @@ export const en: Dict = {
   'fileViewer.exportZip': 'Download as .zip',
   'fileViewer.exportHtml': 'Export as standalone HTML',
   'fileViewer.exportMd': 'Export as Markdown',
+  'fileViewer.exportImage': 'Export as image',
+  'fileViewer.exportImageFailed': 'Image capture failed. Please try again or use your browser\'s screenshot tool.',
   'fileViewer.exportJsx': 'Export as JSX',
   'fileViewer.exportReactHtml': 'Export preview as HTML',
   'fileViewer.saveAsTemplate': 'Save as template…',
@@ -1280,6 +1284,7 @@ export const en: Dict = {
   'pet.fieldGreeting': 'Greeting',
   'pet.fieldAccent': 'Accent color',
   'pet.fieldAccentCustom': 'Custom color',
+  'pet.fieldAccentDefault': 'Default accent color',
   'pet.overlayAria': 'Pet companion',
   'pet.spriteAria': '{name} — drag to move, click to chat',
   'pet.spriteTitle': 'Hi from {name}! Click to chat.',

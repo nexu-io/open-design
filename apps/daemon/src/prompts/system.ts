@@ -94,6 +94,7 @@ type ProjectMetadata = {
   platform?: string | null;
   platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
+  skipDiscoveryBrief?: boolean | null;
   imageModel?: string | null;
   imageAspect?: string | null;
   imageStyle?: string | null;
@@ -131,6 +132,10 @@ type AudioVoiceOption = {
 };
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
+
+export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
+
+This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
 
 // Injected into non-media projects so the agent knows how to dispatch
 // media generation if the user asks for it mid-session (e.g. "generate an
@@ -203,9 +208,10 @@ export interface ComposeInput {
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,
   // shipped as sibling files to DESIGN.md when available. Both fields are
-  // optional and only injected when the daemon is running with the
-  // `OD_DESIGN_TOKEN_CHANNEL` env flag enabled (today's experimental
-  // gate). When present they are appended AFTER the DESIGN.md block so
+  // optional; the daemon populates them by default for every brand that
+  // ships `tokens.css` / `components.html` (today: `default` and
+  // `kami`). `OD_DESIGN_TOKEN_CHANNEL=0` disables the channel as a kill
+  // switch. When present they are appended AFTER the DESIGN.md block so
   // prose still sets the high-level voice and the structured form
   // disambiguates token names + worked component shapes.
   //
@@ -337,6 +343,11 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+  }
+
+  if (metadata?.skipDiscoveryBrief === true) {
+    parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    parts.push('\n\n---\n\n');
   }
 
   parts.push(

@@ -473,6 +473,8 @@ export const ja: Dict = {
   'chat.scrollToLatest': '最新にスクロール',
   'chat.you': 'あなた',
   'chat.openFile': '{name} を開く',
+  'chat.copyPrompt': 'プロンプトをコピー',
+  'chat.copyDone': 'コピーしました！',
   'chat.composerPlaceholder':
     '欲しいデザインを説明してください — 画像を貼り付けるかドロップ、または @ でファイルやスキルを参照…',
   'chat.composerHint':
@@ -731,6 +733,8 @@ export const ja: Dict = {
   'fileViewer.exportZip': '.zip としてダウンロード',
   'fileViewer.exportHtml': 'スタンドアロン HTML としてエクスポート',
   'fileViewer.exportMd': 'Markdown としてエクスポート',
+  'fileViewer.exportImage': '画像としてエクスポート',
+  'fileViewer.exportImageFailed': '画像のキャプチャに失敗しました。再試行するか、ブラウザのスクリーンショット機能をご利用ください。',
   'fileViewer.exportJsx': 'JSX としてエクスポート',
   'fileViewer.exportReactHtml': 'プレビューを HTML としてエクスポート',
   'fileViewer.saveAsTemplate': 'テンプレートとして保存…',
@@ -995,6 +999,7 @@ export const ja: Dict = {
   'pet.fieldGreeting': 'あいさつ',
   'pet.fieldAccent': 'アクセントカラー',
   'pet.fieldAccentCustom': 'カスタムカラー',
+  'pet.fieldAccentDefault': 'デフォルトのアクセントカラー',
   'pet.overlayAria': 'ペットの相棒',
   'pet.spriteAria': '{name} — ドラッグで移動、クリックで会話',
   'pet.spriteTitle': '{name} からこんにちは！クリックで会話。',

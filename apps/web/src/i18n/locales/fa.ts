@@ -608,6 +608,8 @@ export const fa: Dict = {
   'chat.scrollToLatest': 'اسکرول به آخرین',
   'chat.you': 'شما',
   'chat.openFile': 'باز کردن {name}',
+  'chat.copyPrompt': 'کپی پرامپت',
+  'chat.copyDone': 'کپی شد!',
   'chat.composerPlaceholder':
     'طرح مورد نظر خود را توصیف کنید — تصاویر را بچسبانید یا رها کنید، یا @ برای مرجع فایل یا مهارت…',
   'chat.composerHint':
@@ -868,6 +870,8 @@ export const fa: Dict = {
   'fileViewer.exportZip': 'دانلود به صورت .zip',
   'fileViewer.exportHtml': 'صادرکردن به HTML مستقل',
   'fileViewer.exportMd': 'صادرکردن به صورت Markdown',
+  'fileViewer.exportImage': 'صادرکردن به صورت تصویر',
+  'fileViewer.exportImageFailed': 'گرفتن تصویر ناموفق بود. لطفاً دوباره تلاش کنید یا از ابزار اسکرین‌شات مرورگرتان استفاده کنید.',
   'fileViewer.exportJsx': 'صادرکردن به JSX',
   'fileViewer.exportReactHtml': 'صادرکردن پیش‌نمایش به HTML',
   'fileViewer.saveAsTemplate': 'ذخیره به عنوان قالب…',
@@ -1110,6 +1114,7 @@ export const fa: Dict = {
   'pet.fieldGreeting': 'پیام خوش‌آمد',
   'pet.fieldAccent': 'رنگ تأکید',
   'pet.fieldAccentCustom': 'رنگ سفارشی',
+  'pet.fieldAccentDefault': 'رنگ تأکید پیش‌فرض',
   'pet.overlayAria': 'همراه حیوان خانگی',
   'pet.spriteAria': '{name} — برای جابجایی بکشید، برای گفت‌وگو کلیک کنید',
   'pet.spriteTitle': 'سلام از طرف {name}! برای گفت‌وگو کلیک کنید.',
