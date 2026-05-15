@@ -102,6 +102,10 @@ interface PageProps {
     byMode?: Readonly<Record<string, number>>;
     byPlatform?: Readonly<Record<string, number>>;
   };
+  github: {
+    starsLabel: string;
+    versionLabel: string;
+  };
 }
 
 /**
@@ -120,7 +124,7 @@ function pad2(n: number | undefined): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-export default function Page({ counts }: PageProps) {
+export default function Page({ counts, github }: PageProps) {
   const skills = fmt(counts.skills);
   const systems = fmt(counts.systems);
   const deckCount = pad2(counts.byMode?.deck);
@@ -158,7 +162,7 @@ export default function Page({ counts }: PageProps) {
             <span className='right'>
               <a className='topbar-link' href={REPO_RELEASES} {...ext}>
                 <span className='pulse' />
-                Live · <span data-github-version>v0.3.0</span>
+                Live · <span data-github-version>{github.versionLabel}</span>
               </a>
               <span className='locale-switch'>
                 <b>EN</b>
@@ -181,7 +185,7 @@ export default function Page({ counts }: PageProps) {
 
         {/* ====== NAV ====== */}
         {/* Headroom-style sticky header with live GitHub star count. */}
-        <Header counts={counts} />
+        <Header counts={counts} github={github} />
 
         {/* ====== HERO ====== */}
         <section className='hero' id='top' data-od-id='hero'>
@@ -1051,7 +1055,7 @@ export default function Page({ counts }: PageProps) {
                 <div className='cta-foot'>
                   <span className='stamp'>● Live</span>
                   <span>
-                    <span data-github-version>v0.3.0</span> / Apache-2.0
+                    <span data-github-version>{github.versionLabel}</span> / Apache-2.0
                   </span>
                   <span style={{ marginLeft: 'auto' }}>
                     52.5200° N · 13.4050° E
@@ -1124,7 +1128,7 @@ export default function Page({ counts }: PageProps) {
                 >
                   Download desktop
                   <span className='meta'>
-                    macOS · <span data-github-version>v0.3.0</span>
+                    macOS · <span data-github-version>{github.versionLabel}</span>
                   </span>
                 </a>
               </div>

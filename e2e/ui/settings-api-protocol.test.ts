@@ -19,7 +19,7 @@ async function openExecutionSettings(
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
+  await page.getByTitle('Execution mode').click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
@@ -57,7 +57,7 @@ async function openExecutionSettingsWithAgents(
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
+  await page.getByTitle('Execution mode').click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
@@ -185,7 +185,7 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
     apiProviderBaseUrl: 'https://api.deepseek.com',
   });
 
-  await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
+  await page.getByTitle('Execution mode').click();
   await expect(page.getByRole('dialog')).toBeVisible();
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -351,8 +351,8 @@ test('saving Local CLI updates the entry status pill with the selected agent', a
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const executionPill = page.getByRole('button', { name: /Configure execution mode|配置执行模式/i });
-  await expect(executionPill).toContainText(/Local CLI|本机 CLI/i);
+  const executionPill = page.getByTitle('Execution mode');
+  await expect(executionPill).toContainText('Local CLI');
   await expect(executionPill).toContainText('Codex CLI');
   await expect(executionPill).toContainText('0.80.0');
 });

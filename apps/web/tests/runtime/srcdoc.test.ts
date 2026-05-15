@@ -72,7 +72,9 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('data-od-comment-mode-kind');
     expect(srcdoc).toContain("body * { cursor: crosshair !important; }");
     expect(srcdoc).toContain('MutationObserver(schedulePostTargets)');
-    expect(srcdoc).toContain("document.addEventListener('scroll', schedulePostTargets, true);");
+    expect(srcdoc).toContain('schedulePostPreviewScroll');
+    expect(srcdoc).toContain("type: 'od:preview-scroll'");
+    expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
     expect(srcdoc).toContain('data-od-selection-bridge-style');
   });
 

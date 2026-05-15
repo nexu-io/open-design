@@ -737,13 +737,14 @@ export function App() {
 
   const handleImportFolder = useCallback(async (baseDir: string) => {
     const result = await importFolderProject({ baseDir });
-    if (!result) return;
+    if (!result) return false;
     setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
     navigate({
       kind: 'project',
       projectId: result.project.id,
       fileName: result.entryFile,
     });
+    return true;
   }, []);
 
   // PR #974: on Electron, the desktop main process owns the picker and
