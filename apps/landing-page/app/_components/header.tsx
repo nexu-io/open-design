@@ -1,8 +1,8 @@
 /*
  * Sticky Header — static markup rendered at build time. Headroom-style
  * hide/show and the live GitHub star count are attached by the tiny inline
- * script in `app/pages/index.astro`, so this marketing page ships no React
- * runtime to the browser.
+ * scripts on each Astro page, so this marketing page ships no React runtime
+ * to the browser.
  *
  * The nav links go to internal multi-page routes (`/skills/`, `/systems/`,
  * `/templates/`, `/craft/`) so Google sees a real site hierarchy. Numbers
@@ -34,6 +34,9 @@ export interface HeaderProps {
     templates: number;
     craft: number;
   };
+  github?: {
+    starsLabel: string;
+  };
   /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
   brandHref?: string;
 }
@@ -41,6 +44,7 @@ export interface HeaderProps {
 export function Header({
   active = 'home',
   counts,
+  github,
   brandHref = '#top',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
@@ -109,7 +113,7 @@ export function Header({
             title='Click to star us on GitHub'
             {...ext}
           >
-            Star · <span data-github-stars>0</span>
+            Star · <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
           </a>
           <span className='status-dot' aria-hidden='true' />
         </div>

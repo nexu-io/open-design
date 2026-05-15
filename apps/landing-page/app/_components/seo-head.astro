@@ -52,6 +52,7 @@ const isArticle = props.kind === 'article';
 
 const canonical = new URL(props.pathname, Astro.site).toString();
 const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
+const rssUrl = new URL('/rss.xml', Astro.site).toString();
 
 const fullTitle = isArticle ? `${props.title} — ${SITE_NAME}` : props.title;
 const ogTitle = props.title;
@@ -128,6 +129,7 @@ const blogJsonLd =
 <meta name='description' content={props.description} />
 <meta name='theme-color' content='#efe7d2' />
 <link rel='canonical' href={canonical} />
+<link rel='alternate' type='application/rss+xml' title='Open Design Blog RSS' href={rssUrl} />
 
 {props.googleSiteVerification && (
   <meta name='google-site-verification' content={props.googleSiteVerification} />

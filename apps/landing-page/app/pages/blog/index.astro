@@ -13,10 +13,15 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
+import SiteFooter from '../../_components/site-footer.astro';
+import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
+import { getGithubRepoMeta } from '../../_lib/github';
 import '../../globals.css';
+import '../../sub-pages.css';
 
 const posts = (await getCollection('blog')).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime(),
@@ -26,9 +31,11 @@ const featuredPost = posts.find((post) => post.id === FEATURED_POST_ID) ?? posts
 const cardPosts = posts.filter((post) => post.id !== featuredPost?.id);
 
 const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
   createElement<HeaderProps>(Header, {
     counts,
+    github,
     brandHref: '/',
     active: 'blog',
   }),
@@ -90,9 +97,11 @@ const getPostImage = (id: string) => postImages[id];
     />
   </head>
   <body>
-    <Fragment set:html={headerHtml} />
+    <div class='shell'>
+      <Topbar github={github} />
+      <Fragment set:html={headerHtml} />
 
-    <main class='blog-shell'>
+      <main class='blog-shell'>
       <section class='blog-masthead'>
         <div class='container'>
           <h1 class='blog-title'>Blog</h1>
@@ -223,15 +232,9 @@ const getPostImage = (id: string) => postImages[id];
         </div>
       </section>
 
-      <footer class='blog-foot'>
-        <div class='container'>
-          <a class='blog-foot-back' href='/'>
-            ← Back to Open Design
-          </a>
-          <span class='blog-foot-mark'>● Open Design · Apache-2.0 · MMXXVI</span>
-        </div>
-      </footer>
-    </main>
+      </main>
+      <SiteFooter counts={counts} />
+    </div>
 
     <script is:inline>
       (() => {
@@ -260,11 +263,15 @@ const getPostImage = (id: string) => postImages[id];
         if (empty) empty.hidden = visibleCount !== 0;
       })();
     </script>
+    <HeaderEnhancer />
 
     <style>
       .blog-shell {
         position: relative;
         z-index: 2;
+      }
+      .blog-shell + .sub-footer {
+        margin-top: 0;
       }
       .blog-masthead {
         padding: 24px 0 14px;
@@ -578,34 +585,6 @@ const getPostImage = (id: string) => postImages[id];
       .blog-empty.is-filter-empty {
         border-top: 1px solid var(--line);
       }
-      .blog-foot {
-        padding: 36px 0 64px;
-        border-top: 1px solid var(--line-soft);
-      }
-      .blog-foot .container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-      }
-      .blog-foot-back {
-        font-family: var(--sans);
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--ink);
-        text-decoration: none;
-        transition: color 160ms ease;
-      }
-      .blog-foot-back:hover {
-        color: var(--coral);
-      }
-      .blog-foot-mark {
-        font-family: var(--mono);
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        color: var(--ink-faint);
-      }
-
       @media (max-width: 980px) {
         .blog-feature-card {
           grid-template-columns: 1fr;
@@ -651,10 +630,6 @@ const getPostImage = (id: string) => postImages[id];
         }
         .blog-card-body {
           padding: 22px 20px;
-        }
-        .blog-foot .container {
-          align-items: flex-start;
-          flex-direction: column;
         }
       }
     </style>
