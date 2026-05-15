@@ -1,6 +1,10 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "./ToolCard";
-import { renderMarkdown } from "../runtime/markdown";
+import {
+  renderMarkdown,
+  type MarkdownLinkClickHandler,
+} from "../runtime/markdown";
+import { asInProjectFilePath } from "../runtime/in-project-link";
 import { projectFileUrl } from "../providers/registry";
 import {
   splitOnQuestionForms,
@@ -148,6 +152,7 @@ export function AssistantMessage({
                   });
                   onSubmitForm?.(text);
                 }}
+                onRequestOpenFile={onRequestOpenFile}
               />
             );
           if (b.kind === "thinking")
@@ -772,6 +777,7 @@ function ProseBlock({
   nextUserContent,
   locallySubmitted,
   onSubmitForm,
+  onRequestOpenFile,
 }: {
   text: string;
   isLastAssistant: boolean;
@@ -779,9 +785,25 @@ function ProseBlock({
   nextUserContent?: string;
   locallySubmitted: Set<string>;
   onSubmitForm: (formId: string, text: string) => void;
+  onRequestOpenFile?: (name: string) => void;
 }) {
   const cleaned = useMemo(() => stripArtifact(text), [text]);
   const segments = useMemo(() => splitOnQuestionForms(cleaned), [cleaned]);
+  // Route chat-emitted file links (relative paths like `template.html`
+  // or `subdir/hero.html`) through the workspace tab opener instead of
+  // the default `target="_blank"`. Without this, Electron's window-open
+  // handler creates a new app window whose relative href can't resolve
+  // and the user lands on the home screen — the file they wanted to
+  // preview is never shown.
+  const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
+    if (!onRequestOpenFile) return undefined;
+    return (href, event) => {
+      const path = asInProjectFilePath(href);
+      if (!path) return;
+      event.preventDefault();
+      onRequestOpenFile(path);
+    };
+  }, [onRequestOpenFile]);
   // Each text segment is further split on `<system-reminder>` blocks so
   // those render as their own collapsible chip instead of raw markup.
   const renderable = segments.flatMap(
@@ -813,7 +835,11 @@ function ProseBlock({
           return <SystemReminderBlock key={seg.key} text={seg.text} />;
         }
         if (seg.kind === "text") {
-          return <Fragment key={seg.key}>{renderMarkdown(seg.text)}</Fragment>;
+          return (
+            <Fragment key={seg.key}>
+              {renderMarkdown(seg.text, { onLinkClick })}
+            </Fragment>
+          );
         }
         return (
           <FormBlock

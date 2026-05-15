@@ -11,13 +11,29 @@
  * Output is a React fragment of typed elements — no dangerouslySetInnerHTML,
  * so untrusted text can't smuggle markup through.
  */
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type MouseEvent, type ReactNode } from 'react';
 
-export function renderMarkdown(input: string): ReactNode {
+export type MarkdownLinkClickHandler = (
+  href: string,
+  event: MouseEvent<HTMLAnchorElement>,
+) => void;
+
+export interface RenderMarkdownOptions {
+  /**
+   * Fired on every rendered `<a>` click before the default link behavior.
+   * Callers that want to intercept (e.g. route in-project file links to
+   * a workspace tab opener instead of letting the browser/Electron open
+   * a new window) should call `event.preventDefault()` themselves. When
+   * not provided, links keep their default `target="_blank"` behavior.
+   */
+  onLinkClick?: MarkdownLinkClickHandler;
+}
+
+export function renderMarkdown(input: string, options?: RenderMarkdownOptions): ReactNode {
   const blocks = parseBlocks(input);
   return (
     <>
-      {blocks.map((b, i) => renderBlock(b, i))}
+      {blocks.map((b, i) => renderBlock(b, i, options))}
     </>
   );
 }
@@ -194,19 +210,19 @@ function parseBlocks(input: string): Block[] {
   return out;
 }
 
-function renderBlock(block: Block, key: number): ReactNode {
+function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions): ReactNode {
   if (block.kind === 'p') {
-    return <p key={key} className="md-p">{renderInline(block.text)}</p>;
+    return <p key={key} className="md-p">{renderInline(block.text, options)}</p>;
   }
   if (block.kind === 'h') {
     const Tag = (`h${block.level}` as 'h1' | 'h2' | 'h3' | 'h4');
-    return <Tag key={key} className={`md-h md-h${block.level}`}>{renderInline(block.text)}</Tag>;
+    return <Tag key={key} className={`md-h md-h${block.level}`}>{renderInline(block.text, options)}</Tag>;
   }
   if (block.kind === 'ul') {
     return (
       <ul key={key} className="md-ul">
         {block.items.map((item, i) => (
-          <li key={i}>{renderInline(item)}</li>
+          <li key={i}>{renderInline(item, options)}</li>
         ))}
       </ul>
     );
@@ -215,7 +231,7 @@ function renderBlock(block: Block, key: number): ReactNode {
     return (
       <ol key={key} className="md-ol">
         {block.items.map((item, i) => (
-          <li key={i}>{renderInline(item)}</li>
+          <li key={i}>{renderInline(item, options)}</li>
         ))}
       </ol>
     );
@@ -266,7 +282,7 @@ function renderBlock(block: Block, key: number): ReactNode {
 // and plain text. We walk the string with a regex that matches whichever
 // delimiter shows up next; everything between delimiters becomes a text
 // span (which itself still gets autolink scanning).
-function renderInline(text: string): ReactNode {
+function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode {
   const out: ReactNode[] = [];
   // Order matters:
   //  1. inline code first so its contents are not re-tokenized as bold/italic.
@@ -283,7 +299,7 @@ function renderInline(text: string): ReactNode {
   let key = 0;
   while ((m = re.exec(text))) {
     if (m.index > lastIndex) {
-      pushText(out, text.slice(lastIndex, m.index), key++);
+      pushText(out, text.slice(lastIndex, m.index), key++, options);
     }
     if (m[1]) {
       out.push(
@@ -292,13 +308,15 @@ function renderInline(text: string): ReactNode {
         </code>,
       );
     } else if (m[2] && m[3]) {
+      const href = m[3];
       out.push(
         <a
           key={key++}
           className="md-link"
-          href={m[3]}
+          href={href}
           target="_blank"
           rel="noreferrer noopener"
+          onClick={options?.onLinkClick ? (event) => options.onLinkClick!(href, event) : undefined}
         >
           {m[2]}
         </a>,
@@ -306,15 +324,17 @@ function renderInline(text: string): ReactNode {
     } else if (m[4]) {
       // Bare URL — autolink with the URL as both href and visible text,
       // matching the Markdown `<https://…>` autolink convention.
+      const href = m[4];
       out.push(
         <a
           key={key++}
           className="md-link md-link-bare"
-          href={m[4]}
+          href={href}
           target="_blank"
           rel="noreferrer noopener"
+          onClick={options?.onLinkClick ? (event) => options.onLinkClick!(href, event) : undefined}
         >
-          {m[4]}
+          {href}
         </a>,
       );
     } else if (m[5]) {
@@ -329,7 +349,7 @@ function renderInline(text: string): ReactNode {
     lastIndex = re.lastIndex;
   }
   if (lastIndex < text.length) {
-    pushText(out, text.slice(lastIndex), key++);
+    pushText(out, text.slice(lastIndex), key++, options);
   }
   return <Fragment>{out}</Fragment>;
 }
@@ -338,7 +358,12 @@ function renderInline(text: string): ReactNode {
 // text nodes. Newlines inside a paragraph become explicit <br />s — the
 // upstream parser has already left them in place because chat output
 // often relies on hard line breaks rather than blank-line separation.
-function pushText(out: ReactNode[], text: string, baseKey: number): void {
+function pushText(
+  out: ReactNode[],
+  text: string,
+  baseKey: number,
+  options?: RenderMarkdownOptions,
+): void {
   if (!text) return;
   const urlRe = /(https?:\/\/[^\s)]+)/g;
   const segments: ReactNode[] = [];
@@ -349,15 +374,20 @@ function pushText(out: ReactNode[], text: string, baseKey: number): void {
     if (m.index > lastIndex) {
       segments.push(...withBreaks(text.slice(lastIndex, m.index), `${baseKey}-${k++}`));
     }
+    // m[1] is the URL capture group; if the regex matched at all the
+    // group is populated, so the non-null assertion documents that
+    // invariant without forcing a runtime guard.
+    const href = m[1]!;
     segments.push(
       <a
         key={`${baseKey}-${k++}`}
         className="md-link"
-        href={m[1]}
+        href={href}
         target="_blank"
         rel="noreferrer noopener"
+        onClick={options?.onLinkClick ? (event) => options.onLinkClick!(href, event) : undefined}
       >
-        {m[1]}
+        {href}
       </a>,
     );
     lastIndex = urlRe.lastIndex;
