@@ -101,9 +101,14 @@ async function main(): Promise<void> {
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  // Write the identity marker so `tools-pack linux stop` can find and stop
-  // this process by PID via the same mechanism as the Electron packaged path.
-  const identity = await writePackagedDesktopIdentity({ paths, stamp });
+  // Write a headless-specific identity marker so `tools-pack linux stop --headless`
+  // can find this process without confusing it for a menu-launched
+  // AppImage that owns desktop-root.json in the same namespace.
+  const identity = await writePackagedDesktopIdentity({
+    identityPath: paths.headlessIdentityPath,
+    paths,
+    stamp,
+  });
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
     appVersion: config.appVersion,

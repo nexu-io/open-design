@@ -1,8 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
+import { latestTodoWriteInputFromMessages } from '../runtime/todos';
+import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
@@ -331,6 +334,11 @@ export function ChatPane({
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  // The user can dismiss the pinned task list once everything is complete.
+  // We key the dismissal on the snapshot (serialized TodoWrite input) so
+  // the next time the agent emits a different snapshot the card returns,
+  // but the same snapshot stays hidden across renders / streaming ticks.
+  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(null);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const hasActiveRunMessage = messages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
@@ -504,6 +512,65 @@ export function ChatPane({
     };
   }, [tab]);
 
+  useEffect(() => {
+    if (tab !== 'chat') return;
+    const el = logRef.current;
+    if (!el) return;
+
+    let followFrame: number | null = null;
+    const followLatestIfPinned = () => {
+      if (!pinnedToBottomRef.current || followFrame !== null) return;
+      followFrame = requestAnimationFrame(() => {
+        followFrame = null;
+        const target = logRef.current;
+        if (!target || !pinnedToBottomRef.current) return;
+        target.scrollTop = target.scrollHeight;
+        setScrolledFromBottom(false);
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(followLatestIfPinned)
+        : null;
+    const observedChildren = new Set<Element>();
+    const syncObservedChildren = () => {
+      if (!resizeObserver) return;
+      const currentChildren = new Set(Array.from(el.children));
+      for (const child of currentChildren) {
+        if (observedChildren.has(child)) continue;
+        resizeObserver.observe(child);
+        observedChildren.add(child);
+      }
+      for (const child of observedChildren) {
+        if (currentChildren.has(child)) continue;
+        resizeObserver.unobserve(child);
+        observedChildren.delete(child);
+      }
+    };
+
+    syncObservedChildren();
+
+    const mutationObserver =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(() => {
+            syncObservedChildren();
+            followLatestIfPinned();
+          })
+        : null;
+    mutationObserver?.observe(el, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      if (followFrame !== null) cancelAnimationFrame(followFrame);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [tab]);
+
   // Close the conversation history dropdown on outside click / Escape.
   useEffect(() => {
     if (!showConvList) return;
@@ -674,9 +741,11 @@ export function ChatPane({
               ) : null}
               {messages.map((m, i) => {
                 const showDaySeparator = shouldShowDaySeparator(messages[i - 1], m);
-                const messageStreaming =
-                  m.role === 'assistant' &&
-                  ((streaming && m.id === lastAssistantId) || isActiveRunStatus(m.runStatus));
+                const messageStreaming = isAssistantMessageStreaming(
+                  m,
+                  streaming,
+                  lastAssistantId,
+                );
                 return (
                   <Fragment key={m.id}>
                     {showDaySeparator ? <DaySeparator ts={messageTime(m)} /> : null}
@@ -734,18 +803,28 @@ export function ChatPane({
                 </div>
               ) : null}
             </div>
-            {scrolledFromBottom ? (
-              <button
-                type="button"
-                className="chat-jump-btn"
-                onClick={jumpToBottom}
-                title={t('chat.scrollToLatest')}
-              >
-                <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
-                <span>{t('chat.jumpToLatest')}</span>
-              </button>
-            ) : null}
+            {/* Always mounted so the CSS transition can play in both
+                directions; the `chat-jump-btn-active` class flips the
+                slide + opacity, and `aria-hidden` + `tabIndex={-1}`
+                keep it out of the a11y tree when it's not visible. */}
+            <button
+              type="button"
+              className={`chat-jump-btn${scrolledFromBottom ? ' chat-jump-btn-active' : ''}`}
+              onClick={jumpToBottom}
+              title={t('chat.scrollToLatest')}
+              aria-hidden={!scrolledFromBottom}
+              tabIndex={scrolledFromBottom ? 0 : -1}
+            >
+              <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
+              <span>{t('chat.jumpToLatest')}</span>
+            </button>
           </div>
+          <PinnedTodoSlot
+            messages={messages}
+            streaming={streaming}
+            dismissedKey={dismissedPinnedTodoKey}
+            onDismiss={setDismissedPinnedTodoKey}
+          />
           <ChatComposer
             ref={composerRef}
             projectId={projectId}
@@ -775,6 +854,55 @@ export function ChatPane({
           />
         </>
       ) : null}
+    </div>
+  );
+}
+
+// Pinned task list above the chat composer. The latest TodoWrite snapshot
+// across the entire conversation is the canonical state; AssistantMessage
+// no longer renders these inline so there is exactly one TodoCard on
+// screen. When every task is complete the user can dismiss the card; the
+// dismissal sticks to the current snapshot only, so a fresh TodoWrite
+// from the agent re-shows it.
+function PinnedTodoSlot({
+  messages,
+  streaming,
+  dismissedKey,
+  onDismiss,
+}: {
+  messages: ChatMessage[];
+  streaming: boolean;
+  dismissedKey: string | null;
+  onDismiss: (key: string | null) => void;
+}) {
+  // `exiting` lets the dismiss click play a slide-down transition before
+  // the slot tears down. Without it React would unmount immediately and
+  // the card would pop out without animation.
+  const [exiting, setExiting] = useState(false);
+  const input = latestTodoWriteInputFromMessages(messages);
+  if (input == null) return null;
+  let snapshotKey: string;
+  try {
+    snapshotKey = JSON.stringify(input);
+  } catch {
+    snapshotKey = String(input);
+  }
+  if (snapshotKey === dismissedKey) return null;
+  return (
+    <div className={`chat-pinned-todo${exiting ? ' chat-pinned-todo-exit' : ''}`}>
+      <TodoCard
+        input={input}
+        runStreaming={streaming}
+        runSucceeded={!streaming}
+        onDismiss={() => {
+          if (exiting) return;
+          setExiting(true);
+          // Match the slide-out duration in CSS (220ms) — once the
+          // transition completes the snapshot key is recorded as
+          // dismissed and the slot is unmounted by the early return.
+          window.setTimeout(() => onDismiss(snapshotKey), 220);
+        }}
+      />
     </div>
   );
 }
@@ -896,6 +1024,24 @@ function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
 }
 
+function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'canceled';
+}
+
+export function isAssistantMessageStreaming(
+  message: ChatMessage,
+  paneStreaming: boolean,
+  lastAssistantId: string | null | undefined,
+): boolean {
+  if (message.role !== 'assistant') return false;
+  if (isActiveRunStatus(message.runStatus)) return true;
+  if (message.id !== lastAssistantId) return false;
+  if (!paneStreaming) return false;
+  if (message.endedAt !== undefined) return false;
+  if (isTerminalRunStatus(message.runStatus)) return false;
+  return true;
+}
+
 function ConversationRow({
   conversation,
   active,
@@ -956,7 +1102,7 @@ function ConversationRow({
           {displayTitle}
         </button>
       )}
-      <span className="chat-conv-item-meta">{relTime(conversation.updatedAt, t)}</span>
+      <span className="chat-conv-item-meta">{conversationMetaLabel(conversation, t)}</span>
       <button
         type="button"
         className="chat-conv-item-del"
@@ -992,6 +1138,27 @@ function UserMessage({
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    if (!message.content) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    const ok = await copyToClipboard(message.content);
+    if (!ok) return;
+    setCopied(true);
+    copyTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = undefined;
+    }, 2000);
+  }
+
   return (
     <div className="msg user">
       <div className="role">
@@ -1040,7 +1207,20 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content ? <div className="user-text user-bubble">{message.content}</div> : null}
+      {message.content ? (
+        <div className="user-text-wrap">
+          <div className="user-text user-bubble">{message.content}</div>
+          <button
+            type="button"
+            className="ghost user-copy-btn"
+            onClick={handleCopy}
+            aria-label={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
+            title={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={12} />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1082,4 +1262,30 @@ function relTime(ts: number, t: TranslateFn): string {
   if (diff < day) return t('common.hoursShort', { n: Math.floor(diff / hr) });
   if (diff < 7 * day) return t('common.daysShort', { n: Math.floor(diff / day) });
   return new Date(ts).toLocaleDateString();
+}
+
+export function conversationMetaLabel(
+  conversation: Conversation,
+  t: TranslateFn,
+): string {
+  const latestRun = conversation.latestRun;
+  if (
+    latestRun &&
+    (latestRun.status === 'succeeded' ||
+      latestRun.status === 'failed' ||
+      latestRun.status === 'canceled') &&
+    typeof latestRun.durationMs === 'number' &&
+    Number.isFinite(latestRun.durationMs)
+  ) {
+    return formatDurationShort(latestRun.durationMs);
+  }
+  return relTime(conversation.updatedAt, t);
+}
+
+function formatDurationShort(ms: number): string {
+  const s = Math.max(0, ms) / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.floor(s - m * 60);
+  return `${m}m ${rem.toString().padStart(2, '0')}s`;
 }

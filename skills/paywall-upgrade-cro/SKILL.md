@@ -11,7 +11,7 @@ triggers:
 od:
   mode: design-system
   category: marketing-creative
-  upstream: "https://github.com/coreyhaines31/skills"
+  upstream: "https://github.com/coreyhaines31/marketingskills"
 ---
 
 # paywall-upgrade-cro
@@ -24,7 +24,7 @@ Design and optimize upgrade screens, paywalls, and upsell modals. Useful for Saa
 
 ## Source
 
-- Upstream: https://github.com/coreyhaines31/skills
+- Upstream: https://github.com/coreyhaines31/marketingskills
 - Category: `marketing-creative`
 
 ## How to use
@@ -36,7 +36,7 @@ bundle into your active agent's skills directory:
 
 ```bash
 # Inspect the upstream README for exact paths
-open https://github.com/coreyhaines31/skills
+open https://github.com/coreyhaines31/marketingskills
 ```
 
 Then ask the agent to invoke this skill by name (`paywall-upgrade-cro`) or with

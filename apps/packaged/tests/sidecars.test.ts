@@ -81,6 +81,24 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards standard proxy variables to packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      HTTP_PROXY: 'http://127.0.0.1:7890',
+      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      NO_PROXY: 'localhost,127.0.0.1',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+      HTTP_PROXY: 'http://127.0.0.1:7890',
+      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      NO_PROXY: 'localhost,127.0.0.1',
+    });
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
@@ -140,6 +158,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
+      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
       logsRoot: '/tmp/od-pkg/logs',
       namespaceRoot: '/tmp/od-pkg',
       resourceRoot: '/tmp/od-pkg/resources',

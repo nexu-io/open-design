@@ -106,6 +106,45 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(path.isAbsolute(detail.resolvedDir)).toBe(true);
   });
 
+  it('persists skipDiscoveryBrief for batch-created projects', async () => {
+    const projectId = `proj-skip-discovery-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Batch fixture',
+        skillId: null,
+        designSystemId: 'default',
+        metadata: { kind: 'prototype', platform: 'responsive' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+    const body = (await createResp.json()) as {
+      project: { designSystemId?: string | null; metadata?: { skipDiscoveryBrief?: boolean } };
+    };
+    expect(body.project.designSystemId).toBe('default');
+    expect(body.project.metadata?.skipDiscoveryBrief).toBe(true);
+  });
+
+  it('rejects non-boolean skipDiscoveryBrief on POST /api/projects', async () => {
+    const projectId = `proj-skip-discovery-bad-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Bad batch fixture',
+        skipDiscoveryBrief: 'yes',
+      }),
+    });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/skipDiscoveryBrief/i);
+  });
+
   it('returns 404 with PROJECT_NOT_FOUND for unknown ids', async () => {
     const resp = await fetch(`${baseUrl}/api/projects/does-not-exist-${Date.now()}`);
     expect(resp.status).toBe(404);

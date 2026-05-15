@@ -10,6 +10,7 @@ import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
+import type { SkillCritiquePolicy } from "./critique/rollout.js";
 import { SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 
 // Persisted skill ids on existing projects can outlive a folder rename.
@@ -38,6 +39,7 @@ interface SkillFrontmatter extends JsonRecord {
     craft?: JsonRecord;
     preview?: JsonRecord;
     design_system?: JsonRecord;
+    critique?: JsonRecord;
     category?: unknown;
   };
 }
@@ -75,6 +77,17 @@ export interface SkillInfo {
   animations: boolean | null;
   examplePrompt: string;
   aggregatesExamples: boolean;
+  /**
+   * Per-skill Critique Theater override declared via `od.critique.policy`
+   * in the skill's SKILL.md frontmatter. The daemon's rollout resolver
+   * uses this as the highest-priority signal when deciding whether to
+   * wire the critique pipeline for a generation: `required` forces the
+   * panel on regardless of project / env / phase defaults, `opt-out`
+   * forces it off, `opt-in` lets the panel run only at M2+ rollout
+   * phases, `null` means the skill has no opinion and the lower-priority
+   * tiers (project override, env override, phase default) decide.
+   */
+  critiquePolicy: SkillCritiquePolicy;
   body: string;
   dir: string;
 }
@@ -219,6 +232,7 @@ export async function listSkills(
           animations: normalizeBoolHint(data.od?.animations),
           examplePrompt: derivePrompt(data),
           aggregatesExamples,
+          critiquePolicy: normalizeCritiquePolicy(data.od?.critique?.policy),
           body: parentBody,
           dir,
         });
@@ -258,6 +272,10 @@ export async function listSkills(
             animations: normalizeBoolHint(data.od?.animations),
             examplePrompt: derivePrompt(data),
             aggregatesExamples: false,
+            // Derived cards inherit the parent's critique policy so a
+            // single SKILL.md that opts in (or out) applies the same
+            // gate to every example in its gallery.
+            critiquePolicy: normalizeCritiquePolicy(data.od?.critique?.policy),
             // Inherit the parent's full SKILL.md body so 'Use this prompt'
             // on a derived card seeds the agent with the same workflow
             // the parent describes. Without this, picking a derived card
@@ -480,6 +498,27 @@ function normalizeBoolHint(value: unknown): boolean | null {
     if (v === "true" || v === "yes" || v === "1") return true;
     if (v === "false" || v === "no" || v === "0") return false;
   }
+  return null;
+}
+
+/**
+ * Coerce `od.critique.policy` from SKILL.md frontmatter into the
+ * three-value union the rollout resolver expects. Anything unrecognised
+ * resolves to `null` (no opinion), which falls through to the
+ * project / env / phase default tiers. The frontmatter value is
+ * authored as a YAML scalar:
+ *
+ *   od:
+ *     critique:
+ *       policy: required   # or 'opt-in', 'opt-out'
+ */
+// Exported so the spawn-input glue tests can pin the trim / lowercase /
+// reject-typo behavior in isolation from `listSkills()` filesystem
+// scanning (PerishCode P3 on PR #1338).
+export function normalizeCritiquePolicy(value: unknown): SkillCritiquePolicy {
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase();
+  if (v === "required" || v === "opt-in" || v === "opt-out") return v;
   return null;
 }
 

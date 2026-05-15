@@ -50,6 +50,7 @@
  */
 
 import type { DegradedReason, PanelEvent, PanelistRole } from '@open-design/contracts/critique';
+import { CRITIQUE_PROTOCOL_VERSION } from '@open-design/contracts/critique';
 
 import { parseCritiqueStream, type ShipArtifactPayload } from './parser.js';
 import {
@@ -75,7 +76,8 @@ export type ConformanceDegradedReason =
   | 'oversize_block'
   | 'missing_artifact'
   | 'parser_warning'
-  | 'incomplete_panel';
+  | 'incomplete_panel'
+  | 'protocol_version_mismatch';
 
 export type ConformanceOutcome =
   | {
@@ -164,6 +166,22 @@ export async function runAdapterConformance(
     })) {
       events.push(event);
       if (event.type === 'run_started') {
+        // Codex P2 on PR #1485: a `run_started` carrying a non-current
+        // protocol version cannot be routed safely. The parser does not
+        // know which fields a future protocol revision adds or drops, so
+        // even a valid-looking SHIP would be misinterpreted. Reject the
+        // adapter as degraded with `protocol_version_mismatch` the
+        // moment we see the mismatch; this is the same reason value
+        // the contracts package already lists in DEGRADED_REASONS.
+        if (event.protocolVersion !== CRITIQUE_PROTOCOL_VERSION) {
+          markDegraded(
+            params.adapterId,
+            'protocol_version_mismatch',
+            ADAPTER_DEGRADED_DEFAULT_TTL_MS,
+            'conformance',
+          );
+          return { kind: 'degraded', reason: 'protocol_version_mismatch', events };
+        }
         castRoles = event.cast;
       } else if (event.type === 'panelist_close') {
         let bucket = closedRolesByRound.get(event.round);

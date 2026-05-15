@@ -634,6 +634,33 @@ describe('NewProjectPanel design system defaults', () => {
   });
 });
 
+describe('NewProjectPanel folder import feedback', () => {
+  it('shows an error when manual folder import resolves as failed', async () => {
+    const onImportFolder = vi.fn().mockResolvedValue(false);
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        onImportFolder={onImportFolder}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('/path/to/project'), {
+      target: { value: '/missing/project' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
+
+    expect(onImportFolder).toHaveBeenCalledWith('/missing/project');
+    expect(await screen.findByText('Open folder failed: /missing/project')).toBeTruthy();
+  });
+});
+
 describe('NewProjectPanel template deletion', () => {
   beforeEach(() => {
     globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;

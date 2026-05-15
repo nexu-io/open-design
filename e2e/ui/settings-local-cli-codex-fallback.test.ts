@@ -137,7 +137,7 @@ async function openLocalCliSettings(
 
   await page.goto('/');
   await page
-    .getByRole('button', { name: /Configure execution mode|配置执行模式/i })
+    .getByRole('button', { name: /Execution mode|执行模式/i })
     .click();
 
   const dialog = page.getByRole('dialog');

@@ -67,16 +67,22 @@ const templates = defineCollection({
   schema: z.object({}).passthrough(),
 });
 
+// Blog posts live in `app/content/blog/*.md`. Each post must declare a typed
+// frontmatter block matching the schema below. The list page reads the
+// collection via `getCollection('blog')` and the dynamic route renders each
+// entry via `getEntry('blog', slug)`. Underscore-prefixed files (e.g.
+// `_topics.md` — the topic backlog used by the blog-factory skill) are
+// excluded from the loader so they never get parsed as posts.
 const blog = defineCollection({
   loader: glob({
+    pattern: ['*.md', '!_*.md'],
     base: './app/content/blog',
-    pattern: '*.mdx',
   }),
   schema: z.object({
     title: z.string(),
     date: z.coerce.date(),
-    category: z.string(),
-    readingTime: z.string(),
+    category: z.enum(['Product', 'Guides', 'Use cases', 'Community']),
+    readingTime: z.number().int().positive(),
     summary: z.string(),
   }),
 });

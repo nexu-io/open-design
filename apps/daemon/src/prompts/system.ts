@@ -94,6 +94,7 @@ type ProjectMetadata = {
   platform?: string | null;
   platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
+  skipDiscoveryBrief?: boolean | null;
   imageModel?: string | null;
   imageAspect?: string | null;
   imageStyle?: string | null;
@@ -132,6 +133,10 @@ type AudioVoiceOption = {
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
+export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
+
+This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
@@ -151,9 +156,10 @@ export interface ComposeInput {
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,
   // shipped as sibling files to DESIGN.md when available. Both fields are
-  // optional and only injected when the daemon is running with the
-  // `OD_DESIGN_TOKEN_CHANNEL` env flag enabled (today's experimental
-  // gate). When present they are appended AFTER the DESIGN.md block so
+  // optional; the daemon populates them by default for every brand that
+  // ships `tokens.css` / `components.html` (today: `default` and
+  // `kami`). `OD_DESIGN_TOKEN_CHANNEL=0` disables the channel as a kill
+  // switch. When present they are appended AFTER the DESIGN.md block so
   // prose still sets the high-level voice and the structured form
   // disambiguates token names + worked component shapes.
   //
@@ -265,6 +271,11 @@ export function composeSystemPrompt({
   // behaviour.
   if (streamFormat === 'plain') {
     parts.push(API_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  if (metadata?.skipDiscoveryBrief === true) {
+    parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
   }
 
@@ -400,6 +411,19 @@ export function composeSystemPrompt({
 
   const mcpDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
   if (mcpDirective) parts.push(mcpDirective);
+
+  // Claude only: nudge the model toward the `AskUserQuestion` tool for
+  // mid-conversation clarifications. Without this hint Claude tends to fall
+  // back to a markdown bulleted list of options, which the chat UI cannot
+  // turn into clickable buttons. Discovery (turn 1) is still owned by the
+  // `<question-form>` flow defined in DISCOVERY_AND_PHILOSOPHY; this only
+  // covers follow-ups where the next action depends on a small set of
+  // choices the user can pick quickly.
+  if (agentId === 'claude') {
+    parts.push(
+      "\n\n---\n\n## Clarifying questions\n\nWhen you need a mid-conversation clarification AND the natural answer is one of a small finite set of choices (2-4 options per question), call the `AskUserQuestion` tool instead of writing a bulleted list in markdown. The host chat renders the tool call as inline choice buttons; a markdown list renders as plain text and forces the user to type a reply. Skip the tool when the answer is naturally free-form text, when the answer needs more than ~4 options, or when you only have one yes/no choice to ask. First-turn discovery still uses the `<question-form id=\"discovery\">` workflow described earlier; `AskUserQuestion` is for follow-ups only.\n\n**When you call `AskUserQuestion`, that tool call is the entire response.** Do NOT also write the same questions or options as markdown text alongside it, do NOT add a trailing prose paragraph like \"what sounds right?\", do NOT hedge by listing the options twice. Emit the tool call and stop generating tokens. The host is waiting on the tool's `tool_result` and will resume your turn the moment the user answers. Anything you write before, between, or after the tool call in the same message just duplicates what the card already shows and confuses the user.",
+    );
+  }
 
   return parts.join('');
 }

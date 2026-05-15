@@ -38,7 +38,11 @@ import { installFromTarget, uninstallById, sanitizeRepoName } from './library-in
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
-import { listDesignSystems, readDesignSystem, readDesignSystemAssets } from './design-systems.js';
+import {
+  listDesignSystems,
+  readDesignSystem,
+  resolveDesignSystemAssets,
+} from './design-systems.js';
 import {
   composeMemoryBody,
   deleteMemoryEntry,
@@ -69,6 +73,16 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
+import { getCritiqueMetrics, register } from './metrics/index.js';
+import { readConformanceHistory } from './critique/conformance-history.js';
+import { evaluateRollout } from './critique/ratchet.js';
+import {
+  isCritiqueEnabled,
+  parseEnvEnabled,
+  parseRolloutPhase,
+  type SkillCritiquePolicy,
+} from './critique/rollout.js';
+import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { classifyAgentAuthFailure, cursorAuthGuidance } from './runtimes/auth.js';
@@ -148,6 +162,7 @@ import {
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
+import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
   RoutineService,
   validateSchedule as validateRoutineSchedule,
@@ -2143,6 +2158,17 @@ function resolveChatRunShutdownGraceMs() {
   return Math.max(0, Math.floor(raw));
 }
 
+function resolveAcpStageTimeoutMs(): number | undefined {
+  // Per-stage silence watchdog for ACP chat sessions. Defaults are owned by
+  // `attachAcpSession` in acp.ts; this resolver only applies when an operator
+  // sets `OD_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
+  // outer chat inactivity watchdog so an oversized override doesn't get
+  // clamped to 1ms by Node's signed-32-bit delay limit.
+  const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return undefined;
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
 export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
@@ -2334,6 +2360,60 @@ export async function startServer({
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  // Prometheus scrape endpoint (Phase 12). Returns the full exposition
+  // format string. Operators put this behind their existing auth proxy;
+  // there is no built-in authn on the daemon HTTP server. To disable
+  // the endpoint entirely (air-gapped installs, regulatory contexts),
+  // set `OD_METRICS_ENDPOINT=disabled`; the route is registered only
+  // when that env value is not the literal string 'disabled'.
+  if (process.env.OD_METRICS_ENDPOINT !== 'disabled') {
+    app.get('/api/metrics', async (_req, res) => {
+      res.setHeader('Content-Type', register.contentType);
+      res.send(await getCritiqueMetrics());
+    });
+  }
+
+  // Phase 16 ratchet endpoint. Returns the rolling conformance window
+  // and the ratchet's current recommendation. Operator-driven by
+  // design: the recommendation does not flip OD_CRITIQUE_ROLLOUT_PHASE
+  // automatically, it surfaces so a deploy-pipeline follow-up can
+  // consume it. Tunables come from query string; defaults are the
+  // spec values (14 days, 0.90 shipped, 0.95 clean-parse).
+  // Codex + lefarcen P1 on PR #1499: clamp query inputs before the
+  // evaluator sees them so a request like `?windowDays=0` falls back to
+  // the spec default rather than producing a zero-evidence promotion.
+  // The evaluator also defends at its own entry; both are intentional
+  // (belt + suspenders) so a future caller that bypasses this route
+  // cannot reach an unguarded code path either.
+  const parsePositiveInt = (raw: unknown, fallback: number): number => {
+    if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  };
+  const parseRate = (raw: unknown, fallback: number): number => {
+    if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+  };
+  app.get('/api/critique/conformance', async (req, res) => {
+    try {
+      const windowDays = parsePositiveInt(req.query.windowDays, 14);
+      const shippedThreshold = parseRate(req.query.shippedThreshold, 0.90);
+      const cleanParseThreshold = parseRate(req.query.cleanParseThreshold, 0.95);
+      const history = await readConformanceHistory(RUNTIME_DATA_DIR, windowDays);
+      const decision = evaluateRollout({
+        current: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+        history,
+        windowDays,
+        shippedThreshold,
+        cleanParseThreshold,
+      });
+      res.json({ window: { days: windowDays, history }, decision });
+    } catch (err) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', err instanceof Error ? err.message : String(err));
+    }
   });
 
   registerConnectorRoutes(app, {
@@ -3065,6 +3145,11 @@ export async function startServer({
     let skillMode;
     let skillCraftRequires = [];
     let activeSkillDir = null;
+    // Per-skill Critique Theater override sourced from
+    // `od.critique.policy` in the resolved skill's SKILL.md frontmatter.
+    // `null` means the skill has no opinion and the lower-priority tiers
+    // (project override, env override, rollout phase default) decide.
+    let skillCritiquePolicy: SkillCritiquePolicy = null;
     if (effectiveSkillId) {
       // Span both functional skills and design templates so a project
       // saved against either surface keeps its system prompt after the
@@ -3078,6 +3163,7 @@ export async function startServer({
         skillName = skill.name;
         skillMode = skill.mode;
         activeSkillDir = skill.dir;
+        skillCritiquePolicy = skill.critiquePolicy;
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
       }
@@ -3119,12 +3205,17 @@ export async function startServer({
     let designSystemBody;
     let designSystemTitle;
     // Compiled (tokens.css + components.html) form of the active brand.
-    // Gated by `OD_DESIGN_TOKEN_CHANNEL` while the experiment is in the
-    // smoke-test phase: flag-off keeps the daemon byte-equivalent to the
-    // pre-PR-C path; flag-on appends the tokens contract + reference
-    // fixture to the system prompt for any brand that ships those files
-    // (today: `default` and `kami`; every other brand falls through
-    // silently because the files are absent).
+    // Default-on as of PR-D — every chat that picks a brand with
+    // `tokens.css` + `components.html` siblings (today: `default` and
+    // `kami`; every other brand falls through silently because the
+    // files are absent) gets the structured token contract appended to
+    // the system prompt automatically.
+    //
+    // `OD_DESIGN_TOKEN_CHANNEL=0` is the kill switch: it forces the
+    // daemon back to the pre-PR-C DESIGN.md-only path for every brand,
+    // including the structured ones. Any other value (unset, `1`,
+    // `true`, etc.) keeps the new default. Drift on prose-only brands
+    // is pinned by `scripts/check-design-system-flag-parity.ts`.
     let designSystemTokensCss;
     let designSystemFixtureHtml;
     if (effectiveDesignSystemId) {
@@ -3135,23 +3226,17 @@ export async function startServer({
         (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         undefined;
-      if (process.env.OD_DESIGN_TOKEN_CHANNEL === '1') {
-        // Try built-in dir first, then user-installed dir, mirroring the
-        // DESIGN.md fallback chain above. Any individual file may be
-        // missing (e.g. tokens.css present, components.html absent); the
-        // composer gates each block independently.
-        const builtIn = await readDesignSystemAssets(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId);
-        const installed = builtIn.tokensCss && builtIn.fixtureHtml
-          ? builtIn
-          : {
-              tokensCss: builtIn.tokensCss
-                ?? (await readDesignSystemAssets(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)).tokensCss,
-              fixtureHtml: builtIn.fixtureHtml
-                ?? (await readDesignSystemAssets(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)).fixtureHtml,
-            };
-        designSystemTokensCss = installed.tokensCss;
-        designSystemFixtureHtml = installed.fixtureHtml;
-      }
+      // Single seam: env gate + built-in→user-installed fallback chain
+      // live together inside `resolveDesignSystemAssets` so the whole
+      // server-side asset-resolution path can be tested end-to-end
+      // from real disk fixtures (see `tests/design-system-assets.test.ts`).
+      const assets = await resolveDesignSystemAssets(
+        effectiveDesignSystemId,
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+      );
+      designSystemTokensCss = assets.tokensCss;
+      designSystemFixtureHtml = assets.fixtureHtml;
     }
 
     const template =
@@ -3178,14 +3263,44 @@ export async function startServer({
     // into the composer when critique is enabled. Without this the spawned
     // child receives the legacy single-pass prompt and the parser waits for
     // <CRITIQUE_RUN> tags the model was never told to emit. The composer
-    // itself ignores these fields when cfg.enabled is false, so the legacy
-    // path stays untouched.
-    const critiqueBrand = critiqueCfg.enabled
+    // itself ignores these fields when the top-line gate is false, so the
+    // legacy path stays untouched.
+    //
+    // Top-line gate (post-Phase-15 wireup): the daemon now routes every
+    // candidate run through the rollout resolver instead of reading the
+    // env-var flag directly. The resolver carries the full priority
+    // matrix: skill `od.critique.policy` veto > project override > env
+    // override > rollout phase default. On a fresh install with M0
+    // dark-launch defaults the resolver returns `false`, so prod traffic
+    // is unchanged until an operator flips the env var or a project
+    // opts in. The skill-policy input is sourced from
+    // `od.critique.policy` in the active skill's SKILL.md frontmatter
+    // (parsed in `skills.ts:normalizeCritiquePolicy`). The project
+    // override input is sourced from the `critiqueTheaterEnabled`
+    // field on the project's metadata blob, which is what the M1
+    // Settings toggle writes through the existing settings endpoint.
+    // Both inputs collapse to `null` when the skill / project has
+    // not expressed an opinion, which is the resolver's "fall through
+    // to env / phase default" signal.
+    // Per-project override: the M1 Settings toggle writes
+    // `critiqueTheaterEnabled` onto the project's metadata blob via
+    // the existing settings round-trip. A boolean wins outright; any
+    // other type (missing key, malformed value) collapses to `null`
+    // so the resolver falls through to the env / phase tiers exactly
+    // the way it did when the toggle had never been touched.
+    const projectCritiqueOverride = narrowProjectCritiqueOverride(metadata);
+    const critiqueEnabledForRun = isCritiqueEnabled({
+      phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+      skillPolicy: skillCritiquePolicy,
+      projectOverride: projectCritiqueOverride,
+      envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
+    });
+    const critiqueBrand = critiqueEnabledForRun
       && typeof designSystemTitle === 'string'
       && typeof designSystemBody === 'string'
       ? { name: designSystemTitle, design_md: designSystemBody }
       : undefined;
-    const critiqueSkill = critiqueCfg.enabled && typeof effectiveSkillId === 'string'
+    const critiqueSkill = critiqueEnabledForRun && typeof effectiveSkillId === 'string'
       ? { id: effectiveSkillId }
       : undefined;
     // Single-source-of-truth eligibility check. The composer downstream
@@ -3208,7 +3323,7 @@ export async function startServer({
       metadata?.kind === 'video' ||
       metadata?.kind === 'audio';
     const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueCfg.enabled
+    const critiqueShouldRun = critiqueEnabledForRun
       && critiqueBrand !== undefined
       && critiqueSkill !== undefined
       && !isMediaSurface
@@ -3236,7 +3351,16 @@ export async function startServer({
       template,
       audioVoiceOptions,
       audioVoiceOptionsError,
-      critique: critiqueShouldRun ? critiqueCfg : undefined,
+      // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
+      // run that the resolver enabled via phase / project / skill (env
+      // unset) would have critiqueShouldRun = true while critiqueCfg.enabled
+      // remains false. Without this override the composer's own gate
+      // (cfg.enabled) drops the panel addendum, the orchestrator still
+      // launches, and the parser waits for <CRITIQUE_RUN> tags the model
+      // was never told to emit (codex P2 on PR #1338). Build a derived
+      // config that pins enabled to the resolver decision so the composer
+      // and the orchestrator agree on every eligibility input.
+      critique: critiqueShouldRun ? { ...critiqueCfg, enabled: true } : undefined,
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       streamFormat,
@@ -4044,12 +4168,13 @@ export async function startServer({
     // stderr warning so the parser never sees wrapper bytes. Per-format
     // decoding into the orchestrator is a v2 concern.
     //
-    // Use critiqueShouldRun (computed in the prompt builder) instead of just
-    // critiqueCfg.enabled so the orchestrator gate is in lockstep with the
-    // panel addendum. Media surfaces and runs missing brand/skill context
-    // never get the panel prompt, so they must also skip the orchestrator
-    // and fall through to legacy generation; otherwise the parser waits for
-    // <CRITIQUE_RUN> tags the model was never told to emit.
+    // Use critiqueShouldRun (computed in the prompt builder) instead of
+    // just the env var or the rollout resolver so the orchestrator gate
+    // is in lockstep with the panel addendum. Media surfaces and runs
+    // missing brand/skill context never get the panel prompt, so they
+    // must also skip the orchestrator and fall through to legacy
+    // generation; otherwise the parser waits for <CRITIQUE_RUN> tags
+    // the model was never told to emit.
     if (critiqueShouldRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
@@ -4072,7 +4197,43 @@ export async function startServer({
         // than wrapping the frame inside the legacy 'agent' channel. Clients
         // that subscribe to the new event names see them directly with the
         // contract payload as event.data.
-        const critiqueBus = { emit: (e) => send(e.event, e.data) };
+        //
+        // Critique events go to TWO sinks (codex P1 on PR #1338):
+        //
+        //   1. `design.runs.emit(...)` via `send(...)`, which fans out on
+        //      `/api/runs/:runId/events`. Existing transport, unchanged.
+        //   2. The per-project event-sinks map, which fans out on
+        //      `/api/projects/:projectId/events`. This is the transport the
+        //      web `CritiqueTheaterMount` actually subscribes to (the mount
+        //      is project-scoped, not run-scoped, because it lives at the
+        //      project workspace level and follows the user across runs).
+        //      Without this second sink the mount sees no frames in
+        //      production and only the e2e tests' stubbed routes deliver
+        //      anything to the reducer.
+        //
+        // The project-events route emits via `sse.send(payload.type,
+        // payload)`, so we pack the SSE channel name onto `payload.type`
+        // and let the sink push the right channel name. The web's
+        // `sseToPanelEvent` overwrites `type` from the channel name on the
+        // way back into a PanelEvent, so this round-trip stays correct.
+        const critiqueProjectIdForBus =
+          typeof projectId === 'string' && projectId ? projectId : null;
+        const critiqueBus = {
+          emit: (e) => {
+            // Two transports for every critique event: the run-scoped
+            // SSE send back to the originating chat run, plus the
+            // project-scoped fan-out so the Theater mount (subscribed
+            // to /api/projects/:id/events) sees it too. Route the
+            // project fan-out through emitProjectEvent so empty-sink
+            // cleanup and any future broadcast policy (rate limiting,
+            // schema validation, telemetry) apply uniformly across
+            // every project emitter (PerishCode P3 on PR #1338).
+            send(e.event, e.data);
+            if (critiqueProjectIdForBus) {
+              emitProjectEvent(critiqueProjectIdForBus, { ...e.data, type: e.event });
+            }
+          },
+        };
 
         // Register this run with the in-process registry so the interrupt
         // endpoint can cascade an AbortController to the orchestrator. The
@@ -4116,6 +4277,16 @@ export async function startServer({
             artifactId: critiqueRunId,
             artifactDir: critiqueArtifactDir,
             adapter: typeof agentId === 'string' ? agentId : 'unknown',
+            // Codex P2 on PR #1485: thread the resolved skill id into the
+            // orchestrator so the Phase 12 metrics carry the real label
+            // instead of falling through to 'unknown' for every live run.
+            // `effectiveSkillId` was already computed above (line ~2951) as
+            // the request skillId with a project-row fallback; pass it
+            // through verbatim, and leave the orchestrator's own default
+            // of 'unknown' for runs that genuinely have no skill assigned.
+            skill: typeof effectiveSkillId === 'string' && effectiveSkillId
+              ? effectiveSkillId
+              : undefined,
             cfg: critiqueCfg,
             db,
             bus: critiqueBus,
@@ -4214,6 +4385,53 @@ export async function startServer({
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
         send('agent', ev);
+        // Stream-json input mode keeps the child's stdin open across the
+        // turn so we can answer interactive tools like `AskUserQuestion`
+        // with a real `tool_result`. The child has no other way to know
+        // the conversation is over, though — without an EOF it sits idle
+        // until the inactivity watchdog kills it. Bookkeeping here:
+        //   - tool_use(AskUserQuestion): record the id so we know we owe
+        //     the model a tool_result before the turn can end.
+        //   - turn_end (per-turn synthesized from `stop_reason`): fire on
+        //     `end_turn` etc. but NOT on `tool_use` — that stop reason
+        //     means the model paused mid-tool, not "turn complete".
+        //   - usage (session result at EOF in single-shot mode).
+        try {
+          if (run.stdinOpen) {
+            if (
+              ev &&
+              typeof ev === 'object' &&
+              ev.type === 'tool_use' &&
+              (ev.name === 'AskUserQuestion' || ev.name === 'ask_user_question') &&
+              typeof ev.id === 'string'
+            ) {
+              if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
+              run.pendingHostAnswers.add(ev.id);
+            } else if (
+              ev &&
+              typeof ev === 'object' &&
+              ((ev.type === 'turn_end' &&
+                // `stop_reason: tool_use` means the model paused to wait
+                // for tool execution (claude-code is about to run an
+                // internal tool, or we owe a host tool_result). Either
+                // way the conversation is still in flight — do not close.
+                ev.stopReason !== 'tool_use') ||
+                ev.type === 'usage') &&
+              (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
+            ) {
+              // Per-turn `turn_end` (synthesized from
+              // `assistant.message.stop_reason` in `claude-stream`) is the
+              // primary close signal; `usage` is the session-level result
+              // that fires at EOF in single-shot mode. Either is a valid
+              // "this turn is done" cue, but only when there's no host
+              // answer outstanding AND the model isn't paused mid-tool.
+              if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
+                try { run.child.stdin.end(); } catch {}
+              }
+              run.stdinOpen = false;
+            }
+          }
+        } catch {}
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
@@ -4273,6 +4491,7 @@ export async function startServer({
         uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
+      const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
       acpSession = attachAcpSession({
         child,
         prompt: composed,
@@ -4283,6 +4502,7 @@ export async function startServer({
           noteAgentActivity();
           send(event, data);
         },
+        ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
@@ -4406,8 +4626,86 @@ export async function startServer({
       design.runs.finish(run, status, code, signal);
     });
     if (writePromptToChildStdin && child.stdin) {
-      child.stdin.end(composed, 'utf8');
+      const promptInputFormat = def.promptInputFormat ?? 'text';
+      if (promptInputFormat === 'stream-json') {
+        // Wrap the prompt as an Anthropic user message and write it as one
+        // JSONL line. Do NOT close stdin: claude-code keeps reading further
+        // messages until EOF, which is what lets us inject a `tool_result`
+        // block later when the user answers an `AskUserQuestion` card. The
+        // stdin is closed implicitly when the child exits (run terminates,
+        // user cancels, or the model finishes without an outstanding tool
+        // call).
+        const userMessage = JSON.stringify({
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text: composed }],
+          },
+        });
+        try {
+          child.stdin.write(`${userMessage}\n`, 'utf8');
+        } catch (err) {
+          // Swallow EPIPE here for the same reason as the listener above —
+          // a fast-exiting child has already routed its failure through
+          // stderr / exit handlers.
+          if (err && err.code !== 'EPIPE') throw err;
+        }
+        run.stdinOpen = true;
+      } else {
+        child.stdin.end(composed, 'utf8');
+      }
     }
+  };
+
+  // Send a `tool_result` content block into a still-running stream-json
+  // child. Used for interactive tools that the host answers (currently:
+  // Claude's `AskUserQuestion`). The run must still be active and its
+  // stdin must still be open — we never re-spawn a closed child.
+  const submitToolResultToRun = (runId, toolUseId, content, isError = false) => {
+    const run = design.runs.get(runId);
+    if (!run) return { ok: false, reason: 'not_found' };
+    if (design.runs.isTerminal(run.status)) {
+      return { ok: false, reason: 'run_terminal' };
+    }
+    if (!run.child || !run.child.stdin || run.child.stdin.destroyed) {
+      return { ok: false, reason: 'stdin_closed' };
+    }
+    if (!run.stdinOpen) {
+      return { ok: false, reason: 'stdin_text_mode' };
+    }
+    if (typeof toolUseId !== 'string' || !toolUseId) {
+      return { ok: false, reason: 'bad_tool_use_id' };
+    }
+    const safeContent = typeof content === 'string' ? content : String(content ?? '');
+    const userMessage = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: safeContent,
+            is_error: !!isError,
+          },
+        ],
+      },
+    });
+    try {
+      run.child.stdin.write(`${userMessage}\n`, 'utf8');
+    } catch (err) {
+      return { ok: false, reason: 'write_failed', error: err && err.message };
+    }
+    if (run.pendingHostAnswers) {
+      run.pendingHostAnswers.delete(toolUseId);
+      if (run.pendingHostAnswers.size === 0 && run.stdinOpen) {
+        if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
+          try { run.child.stdin.end(); } catch {}
+        }
+        run.stdinOpen = false;
+      }
+    }
+    return { ok: true };
   };
 
   orbitService.setRunHandler(async ({
@@ -4538,7 +4836,9 @@ export async function startServer({
         ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
         summary: artifact?.id
           ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
-          : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+          : finalStatus.status === 'succeeded'
+            ? buildOrbitNoLiveArtifactSummary(run.events)
+            : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
       };
     })();
 
@@ -4725,7 +5025,7 @@ export async function startServer({
     routines: { routineService },
     validation: validationDeps,
     finalize: finalizeDeps,
-    chat: { startChatRun },
+    chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
@@ -4741,7 +5041,7 @@ export async function startServer({
     db,
     design,
     http: httpDeps,
-    chat: { startChatRun },
+    chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
     validation: validationDeps,

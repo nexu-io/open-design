@@ -59,6 +59,13 @@ sections, modules, badges, callouts, ribbons, banners, decorations or
 chrome that aren't already in `example.html`. If a detail is not in
 the example, it does not belong in your output.
 
+**Identity guard.** Treat every person name or handle in `example.html`
+as mock content only. Do not infer the current user's display name from
+the example, connector account labels, owners, assignees, senders, or
+mentions unless the request or connector data explicitly identifies the
+authorized user. If no explicit current-user name is available, use
+neutral wording such as `you`, `your`, `current user`, `我`, or `你`.
+
 The body sections below are a **reference for the visual language and
 tokens** — they are not a license to add features the example doesn't
 already render.
@@ -107,8 +114,8 @@ Connector icons must be monochrome line SVG (1.5 stroke).
 ## Page sections (top to bottom)
 
 1. **Hero** — single row, ~80px tall.
-   Left: `☀ 你好, Eli` (Cormorant 38px, with `,` in `--orange`).
-   Right of name: `· 2026 年 5 月 6 日 · 星期三` (muted, 18px).
+   Left: `☀ 你好` (Cormorant 38px).
+   Right of greeting: `· 2026 年 5 月 6 日 · 星期三` (muted, 18px).
    Far right: round avatar (40px) + small ⚙ + ✕ icons.
 
 2. **KPI strip** — single row, ~120px tall, 5 columns equal width.

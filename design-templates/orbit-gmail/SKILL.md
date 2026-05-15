@@ -65,6 +65,13 @@ extra UI: no inbox listing, no left rail, no Categories tab strip,
 no extra digest sections, no chrome ornaments. If a detail is not
 already in `example.html`, it does not belong in your output.
 
+**Identity guard.** Treat every person name or handle in `example.html`
+as mock content only. Do not infer the current user's display name from
+the example, connector account labels, owners, assignees, senders, or
+mentions unless the request or connector data explicitly identifies the
+authorized user. If no explicit current-user name is available, use
+neutral wording such as `you`, `your`, `current user`, `我`, or `你`.
+
 The sections below are a **reference for tokens and visual language** —
 not a license to extend the page.
 
@@ -122,7 +129,7 @@ Type stack:
       / spacer / prev / next.
 
    b. **Email subject area** — `<h1 class="email-subject">` with the
-      digest subject (e.g. `☀ Eli, 你昨天的 6 封重要邮件 — Open Orbit
+      digest subject (e.g. `☀ 你昨天的 6 封重要邮件 — Open Orbit
       Daily`) followed by an inline `Orbit` tag.
 
    c. **Sender row** — round avatar `O` + `Open Orbit

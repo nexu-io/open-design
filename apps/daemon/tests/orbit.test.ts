@@ -277,6 +277,43 @@ describe('OrbitService', () => {
     }
   });
 
+  it('persists failed Orbit agent summaries in the last-run receipt markdown', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));
+    try {
+      const service = new OrbitService(dataDir);
+      service.setRunHandler(async () => ({
+        projectId: 'project-1',
+        agentRunId: 'agent-1',
+        completion: Promise.resolve({
+          agentRunId: 'agent-1',
+          status: 'failed',
+          summary:
+            'Agent succeeded but did not register a live artifact for this Orbit run.\n\nGitHub auth failed, so I did not create a daily digest artifact.',
+        }),
+      }));
+
+      await service.start('manual');
+      let status = await service.status();
+      for (let attempt = 0; attempt < 10 && (status.running || !status.lastRun); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        status = await service.status();
+      }
+
+      expect(status.lastRun).not.toBeNull();
+      expect(status.running).toBe(false);
+      expect(status.lastRun?.connectorsSucceeded).toBe(0);
+      expect(status.lastRun?.connectorsFailed).toBe(1);
+      expect(status.lastRun?.markdown).toContain(
+        'Agent succeeded but did not register a live artifact for this Orbit run.',
+      );
+      expect(status.lastRun?.markdown).toContain(
+        'GitHub auth failed, so I did not create a daily digest artifact.',
+      );
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it('tracks the most recent run per template alongside the global last run', async () => {
     vi.useFakeTimers();
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));

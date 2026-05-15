@@ -87,6 +87,7 @@ import type {
   LiveArtifactSummary,
   SkillSummary,
 } from '../types';
+import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import {
   commentsToAttachments,
   historyWithCommentAttachmentContext,
@@ -96,6 +97,10 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import {
+  CritiqueTheaterMount,
+  useCritiqueTheaterEnabled,
+} from './Theater';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
@@ -106,6 +111,7 @@ import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
 import { useProjectDetail } from '../hooks/useProjectDetail';
 import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
+import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
@@ -113,6 +119,18 @@ import { effectiveMaxTokens } from '../state/maxTokens';
 interface Props {
   project: Project;
   routeFileName: string | null;
+  /**
+   * Routed conversation id. When set (the URL is
+   * `/projects/:id/conversations/:cid[/...]`), the project view picks
+   * this conversation as active instead of defaulting to `list[0]`.
+   * Falls through to the default picker if the conversation does not
+   * exist (e.g. the run was deleted between the route landing and the
+   * conversation list loading). Issue #1505. Optional so existing
+   * test harnesses that mount ProjectView with a stub props bag do
+   * not have to be updated; production callers in `App.tsx` always
+   * pass the value from `useRoute()`.
+   */
+  routeConversationId?: string | null;
   config: AppConfig;
   agents: AgentInfo[];
   // Mentionable functional skills — already filtered by config.disabledSkills
@@ -256,6 +274,7 @@ function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['eve
 export function ProjectView({
   project,
   routeFileName,
+  routeConversationId = null,
   config,
   agents,
   skills,
@@ -290,6 +309,7 @@ export function ProjectView({
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioVoiceOptionsError, setAudioVoiceOptionsError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -357,6 +377,7 @@ export function ProjectView({
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
+  const streamingConversationIdRef = useRef<string | null>(null);
   const sendTextBufferRef = useRef<BufferedTextUpdates | null>(null);
   const reattachTextBuffersRef = useRef<Set<BufferedTextUpdates>>(new Set());
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -380,6 +401,10 @@ export function ProjectView({
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
   const creatingConversationRef = useRef(false);
+  // Last conversation id this view pushed into the URL. Lets the
+  // route -> active-conversation sync tell a genuine external navigation
+  // apart from the URL merely lagging a local conversation switch.
+  const lastSyncedConversationIdRef = useRef<string | null>(null);
   // Live mirror of the currently-viewed project id. Used to bail out of
   // the conversation-created async refresh (#1361) if the user switches
   // projects while the refetch is in flight — the existing project-load
@@ -408,7 +433,7 @@ export function ProjectView({
       && messagesConversationId !== activeConversationId
       && failedMessagesConversationId !== activeConversationId,
   );
-  const currentConversationStreaming = streaming;
+  const currentConversationStreaming = streaming && streamingConversationId === activeConversationId;
   const currentConversationBusy = currentConversationLoading
     || currentConversationStreaming
     || currentConversationHasActiveRun;
@@ -435,6 +460,8 @@ export function ProjectView({
     setPreviewComments([]);
     setAttachedComments([]);
     setStreaming(false);
+    streamingConversationIdRef.current = null;
+    setStreamingConversationId(null);
     setError(null);
     setAudioVoiceOptionsError(null);
     setArtifact(null);
@@ -455,7 +482,15 @@ export function ProjectView({
           }
         } else {
           setConversations(list);
-          setActiveConversationId(list[0]!.id);
+          // Issue #1505: when the URL deep-links to a specific
+          // conversation, prefer that one. Falls through to list[0]
+          // when the routed id is null or no longer present (the
+          // routine row may have been deleted between the route
+          // landing and the conversation list loading).
+          const routedMatch = routeConversationId
+            ? list.find((c) => c.id === routeConversationId) ?? null
+            : null;
+          setActiveConversationId(routedMatch ? routedMatch.id : list[0]!.id);
         }
       } catch (err) {
         if (cancelled) return;
@@ -470,6 +505,29 @@ export function ProjectView({
       cancelled = true;
     };
   }, [project.id]);
+
+  // Issue #1505: when the URL changes the routed conversation id while
+  // we are already inside the project (e.g. the user clicks "Open
+  // project" on a different routine history row in the same project),
+  // switch the active conversation without re-fetching the list.
+  // Guards: only acts when the routed id is non-null AND present in
+  // the already-loaded list, and only when it differs from the current
+  // active id. Falls through to a no-op for stale / missing routes so
+  // the default picker above keeps its result.
+  useEffect(() => {
+    if (!routeConversationId) return;
+    if (conversations.length === 0) return;
+    if (routeConversationId === activeConversationId) return;
+    // When the route still points at the conversation this view last
+    // pushed to the URL, the mismatch means a local switch (new
+    // conversation, history pick) moved activeConversationId ahead and
+    // the URL sync below has not caught up yet. Following the stale
+    // route here would fight that sync and remount ChatPane in a loop,
+    // so only react to a genuinely external navigation.
+    if (routeConversationId === lastSyncedConversationIdRef.current) return;
+    const match = conversations.find((c) => c.id === routeConversationId);
+    if (match) setActiveConversationId(match.id);
+  }, [routeConversationId, conversations, activeConversationId]);
 
   useEffect(() => {
     setWorkspaceFocused(false);
@@ -487,6 +545,8 @@ export function ProjectView({
       setFailedMessagesConversationId(null);
       messagesConversationIdRef.current = null;
       setStreaming(false);
+      streamingConversationIdRef.current = null;
+      setStreamingConversationId(null);
       return;
     }
     let cancelled = false;
@@ -497,6 +557,8 @@ export function ProjectView({
     setMessagesConversationId(null);
     setFailedMessagesConversationId(null);
     setStreaming(false);
+    streamingConversationIdRef.current = null;
+    setStreamingConversationId(null);
     savedArtifactRef.current = null;
     pendingWritesRef.current.clear();
     if (messagesConversationIdRef.current !== activeConversationId) {
@@ -790,7 +852,14 @@ export function ProjectView({
   // Sync the URL when the active tab changes, so reload + share-link both
   // land back on the same view. Replace (not push) on tab activation so the
   // history stack doesn't fill with every tab click.
-  const lastSyncedFileRef = useRef<string | null>(null);
+  // Composite sync key: tracks BOTH the active file target AND the active
+  // conversation id, so a conversation-only change (e.g. `listConversations`
+  // resolves after `loadTabs` hydrated the active tab, or the user picks a
+  // different conversation under the same tab) still triggers the navigate
+  // and pushes `/conversations/:cid` into the URL. Keying only on the file
+  // target lost that update because the early-return saw `target` unchanged
+  // and skipped the navigate (lefarcen P1 on PR #1508).
+  const lastSyncedRouteKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const target = openTabsState.active && (
       openTabsState.tabs.includes(openTabsState.active)
@@ -799,13 +868,28 @@ export function ProjectView({
     )
       ? openTabsState.active
       : null;
-    if (target === lastSyncedFileRef.current) return;
-    lastSyncedFileRef.current = target;
+    const nextKey = `${activeConversationId ?? ''}:${target ?? ''}`;
+    if (nextKey === lastSyncedRouteKeyRef.current) return;
+    lastSyncedRouteKeyRef.current = nextKey;
+    lastSyncedConversationIdRef.current = activeConversationId;
+    // PerishCode + Codex P1 on PR #1508: the prior version of this
+    // sync stripped any `/conversations/:cid` segment from the URL as
+    // soon as a tab became active, which regressed the deep-link
+    // behavior the parent commit was meant to add (reload / share
+    // would fall back to `list[0]` instead of the routed run's
+    // conversation). Thread the active conversation id so the URL
+    // always reflects the conversation the project view is actually
+    // showing, matching how `fileName` already tracks the active tab.
     navigate(
-      { kind: 'project', projectId: project.id, fileName: target },
+      {
+        kind: 'project',
+        projectId: project.id,
+        conversationId: activeConversationId,
+        fileName: target,
+      },
       { replace: true },
     );
-  }, [openTabsState.active, projectFileNames, project.id]);
+  }, [openTabsState.active, projectFileNames, project.id, activeConversationId]);
 
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
     return project.id;
@@ -973,6 +1057,35 @@ export function ProjectView({
     [project.id, activeConversationId],
   );
 
+  const markStreamingConversation = useCallback((conversationId: string) => {
+    streamingConversationIdRef.current = conversationId;
+    setStreaming(true);
+    setStreamingConversationId(conversationId);
+  }, []);
+
+  const clearStreamingMarker = useCallback((conversationId?: string | null) => {
+    const next = clearStreamingConversationMarker(
+      streamingConversationIdRef.current,
+      conversationId,
+    );
+    if (next === streamingConversationIdRef.current) return;
+    streamingConversationIdRef.current = next;
+    setStreamingConversationId(next);
+    setStreaming(next !== null);
+  }, []);
+
+  const clearActiveRunRefs = useCallback((
+    conversationId: string,
+    controller: AbortController,
+    cancelController: AbortController,
+  ) => {
+    if (!shouldClearActiveRunRefs(streamingConversationIdRef.current, conversationId)) {
+      return;
+    }
+    if (abortRef.current === controller) abortRef.current = null;
+    if (cancelRef.current === cancelController) cancelRef.current = null;
+  }, []);
+
   const handleAssistantFeedback = useCallback(
     (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => {
       const now = Date.now();
@@ -1090,12 +1203,13 @@ export function ProjectView({
   useEffect(() => {
     if (!daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
+    const reattachConversationId = activeConversationId;
 
     const attachRecoverableRuns = async () => {
       const activeRuns = messages.some(
         (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus) && !m.runId,
       )
-        ? await listActiveChatRuns(project.id, activeConversationId)
+        ? await listActiveChatRuns(project.id, reattachConversationId)
         : [];
       if (cancelled) return;
       const activeByMessage = new Map(
@@ -1146,7 +1260,7 @@ export function ProjectView({
         if (!isTerminalRunStatus(status.status)) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
-          setStreaming(true);
+          markStreamingConversation(reattachConversationId);
         }
 
         let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1198,9 +1312,8 @@ export function ProjectView({
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
-              if (abortRef.current === controller) abortRef.current = null;
-              if (cancelRef.current === cancelController) cancelRef.current = null;
-              setStreaming(false);
+              clearActiveRunRefs(reattachConversationId, controller, cancelController);
+              clearStreamingMarker(reattachConversationId);
               persistNow({ telemetryFinalized: true });
               void refreshProjectFiles();
               onProjectsRefresh();
@@ -1219,9 +1332,8 @@ export function ProjectView({
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
-              if (abortRef.current === controller) abortRef.current = null;
-              if (cancelRef.current === cancelController) cancelRef.current = null;
-              setStreaming(false);
+              clearActiveRunRefs(reattachConversationId, controller, cancelController);
+              clearStreamingMarker(reattachConversationId);
               persistNow({ telemetryFinalized: true });
             },
           },
@@ -1242,9 +1354,8 @@ export function ProjectView({
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
-              if (abortRef.current === controller) abortRef.current = null;
-              if (cancelRef.current === cancelController) cancelRef.current = null;
-              setStreaming(false);
+              clearActiveRunRefs(reattachConversationId, controller, cancelController);
+              clearStreamingMarker(reattachConversationId);
               persistNow({ telemetryFinalized: true });
             }
           },
@@ -1274,8 +1385,7 @@ export function ProjectView({
             if (persistTimer) clearTimeout(persistTimer);
             reattachControllersRef.current.delete(runId);
             reattachCancelControllersRef.current.delete(runId);
-            if (abortRef.current === controller) abortRef.current = null;
-            if (cancelRef.current === cancelController) cancelRef.current = null;
+            clearActiveRunRefs(reattachConversationId, controller, cancelController);
           });
       }
     };
@@ -1292,6 +1402,9 @@ export function ProjectView({
     project.id,
     updateMessageById,
     persistMessageById,
+    markStreamingConversation,
+    clearStreamingMarker,
+    clearActiveRunRefs,
     refreshProjectFiles,
     onProjectsRefresh,
   ]);
@@ -1307,6 +1420,7 @@ export function ProjectView({
       if (messagesConversationIdRef.current !== activeConversationId) return;
       if (currentConversationBusy) return;
       if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
+      const runConversationId = activeConversationId;
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
@@ -1349,10 +1463,36 @@ export function ProjectView({
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
       };
+      const updateConversationLatestRun = (
+        status: NonNullable<ChatMessage['runStatus']>,
+        endedAt?: number,
+      ) => {
+        setConversations((curr) =>
+          curr.map((conversation) =>
+            conversation.id === runConversationId
+              ? {
+                  ...conversation,
+                  updatedAt: endedAt ?? startedAt,
+                  latestRun: {
+                    status,
+                    startedAt,
+                    ...(endedAt === undefined
+                      ? {}
+                      : {
+                          endedAt,
+                          durationMs: Math.max(0, endedAt - startedAt),
+                        }),
+                  },
+                }
+              : conversation,
+          ),
+        );
+      };
       activeCompletionNotificationRunsRef.current.add(assistantId);
       const nextHistory = [...messages, userMsg];
       setMessages([...nextHistory, assistantMsg]);
-      setStreaming(true);
+      markStreamingConversation(runConversationId);
+      updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
       setArtifact(null);
       savedArtifactRef.current = null;
       onTouchProject();
@@ -1377,10 +1517,10 @@ export function ProjectView({
         if (title) {
           setConversations((curr) =>
             curr.map((c) =>
-              c.id === activeConversationId ? { ...c, title } : c,
+              c.id === runConversationId ? { ...c, title } : c,
             ),
           );
-          void patchConversation(project.id, activeConversationId, { title });
+          void patchConversation(project.id, runConversationId, { title });
         }
       }
 
@@ -1524,12 +1664,13 @@ export function ProjectView({
             !streamedText.trim() &&
             !liveHtml.trim();
           if (emptyApiResponse) {
+            const endedAt = Date.now();
             const diagnostic = t('assistant.emptyResponseMessage');
             updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
-                endedAt: Date.now(),
+                endedAt,
                 runStatus: 'failed',
                 events: [
                   ...(prev.events ?? []),
@@ -1543,9 +1684,9 @@ export function ProjectView({
             if (commentAttachments.length > 0) {
               void patchAttachedStatuses(commentAttachments, 'failed');
             }
-            setStreaming(false);
-            abortRef.current = null;
-            cancelRef.current = null;
+            clearActiveRunRefs(runConversationId, controller, cancelController);
+            clearStreamingMarker(runConversationId);
+            updateConversationLatestRun('failed', endedAt);
             void refreshProjectFiles();
             onProjectsRefresh();
             return;
@@ -1557,10 +1698,22 @@ export function ProjectView({
           }));
           if (effectiveCommentAttachments.length > 0) {
             void patchAttachedStatuses(effectiveCommentAttachments, 'needs_review');
+          const endedAt = Date.now();
+          let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
+          updateAssistant((prev) => {
+            finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
+            return {
+              ...prev,
+              endedAt,
+              runStatus: finalRunStatus,
+            };
+          });
+          if (commentAttachments.length > 0) {
+            void patchAttachedStatuses(commentAttachments, 'needs_review');
           }
-          setStreaming(false);
-          abortRef.current = null;
-          cancelRef.current = null;
+          clearActiveRunRefs(runConversationId, controller, cancelController);
+          clearStreamingMarker(runConversationId);
+          updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
           // Persist the finished artifact to the project folder so it shows
           // up as a real tab (not just the synthetic "live" stream).
           setArtifact((prev) => {
@@ -1588,6 +1741,7 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: (err: Error) => {
+          const endedAt = Date.now();
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
@@ -1595,7 +1749,7 @@ export function ProjectView({
           appendAssistantErrorEvent(assistantId, err.message);
           updateAssistant((prev) => ({
             ...prev,
-            endedAt: Date.now(),
+            endedAt,
             runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
               ? 'failed'
               : prev.runStatus,
@@ -1603,9 +1757,9 @@ export function ProjectView({
           if (effectiveCommentAttachments.length > 0) {
             void patchAttachedStatuses(effectiveCommentAttachments, 'failed');
           }
-          setStreaming(false);
-          abortRef.current = null;
-          cancelRef.current = null;
+          clearActiveRunRefs(runConversationId, controller, cancelController);
+          clearStreamingMarker(runConversationId);
+          updateConversationLatestRun('failed', endedAt);
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
             if (finalized) persistMessage(finalized, { telemetryFinalized: true });
@@ -1628,7 +1782,7 @@ export function ProjectView({
           cancelSignal: cancelController.signal,
           handlers,
           projectId: project.id,
-          conversationId: activeConversationId,
+          conversationId: runConversationId,
           assistantMessageId: assistantId,
           clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
@@ -1643,16 +1797,22 @@ export function ProjectView({
             updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }), true);
           },
           onRunStatus: (runStatus) => {
+            const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
                 runStatus,
-                endedAt: isTerminalRunStatus(runStatus) ? prev.endedAt ?? Date.now() : prev.endedAt,
+                endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
               }),
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
+            updateConversationLatestRun(runStatus, endedAt);
+            if (isTerminalRunStatus(runStatus)) {
+              clearActiveRunRefs(runConversationId, controller, cancelController);
+              clearStreamingMarker(runConversationId);
+            }
           },
           onRunEventId: (lastRunEventId) => {
             updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
@@ -1701,7 +1861,7 @@ export function ProjectView({
               body: JSON.stringify({
                 userMessage: userText,
                 projectId: project.id,
-                conversationId: activeConversationId,
+                conversationId: runConversationId,
                 chatProvider: byokChatProvider,
               }),
             });
@@ -1712,7 +1872,12 @@ export function ProjectView({
           }
         }
         const systemPrompt = await composedSystemPrompt();
-        const apiHistory = historyWithCommentAttachmentContext(nextHistory, userMsg.id);
+        const apiHistory = await historyWithApiAttachmentContext(
+          historyWithCommentAttachmentContext(nextHistory, userMsg.id),
+          userMsg.id,
+          project.id,
+          projectFiles,
+        );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         let accumulatedAssistantText = '';
         void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
@@ -1732,7 +1897,7 @@ export function ProjectView({
                 userMessage: userText,
                 assistantMessage: accumulatedAssistantText,
                 projectId: project.id,
-                conversationId: activeConversationId,
+                conversationId: runConversationId,
                 chatProvider: byokChatProvider,
               }),
             }).catch(() => {
@@ -1761,6 +1926,9 @@ export function ProjectView({
       persistMessageById,
       patchAttachedStatuses,
       updateMessageById,
+      markStreamingConversation,
+      clearStreamingMarker,
+      clearActiveRunRefs,
       onProjectsRefresh,
     ],
   );
@@ -1959,22 +2127,10 @@ export function ProjectView({
     }
     reattachControllersRef.current.clear();
     setStreaming(false);
+    streamingConversationIdRef.current = null;
+    setStreamingConversationId(null);
     setMessages((curr) => {
-      const finalized: ChatMessage[] = [];
-      const next = curr.map((m) => {
-        if (m.role !== 'assistant') return m;
-        if (isActiveRunStatus(m.runStatus)) {
-          const updated = { ...m, runStatus: 'canceled' as const, endedAt: m.endedAt ?? stoppedAt };
-          finalized.push(updated);
-          return updated;
-        }
-        if (m.endedAt === undefined) {
-          const updated = { ...m, endedAt: stoppedAt };
-          finalized.push(updated);
-          return updated;
-        }
-        return m;
-      });
+      const { messages: next, finalized } = finalizeActiveAssistantMessagesOnStop(curr, stoppedAt);
       for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
       return next;
     });
@@ -2000,6 +2156,8 @@ export function ProjectView({
       // duplicate empty conversations before the effect resolves.
       setMessages([]);
       setStreaming(false);
+      streamingConversationIdRef.current = null;
+      setStreamingConversationId(null);
       setMessagesConversationId(null);
       messagesConversationIdRef.current = fresh.id;
       setConversations((curr) => [fresh, ...curr]);
@@ -2022,13 +2180,30 @@ export function ProjectView({
     setAttachedComments([]);
     setArtifact(null);
     setStreaming(false);
+    streamingConversationIdRef.current = null;
+    setStreamingConversationId(null);
     setMessagesConversationId(null);
     setFailedMessagesConversationId(null);
     setConversationLoadError(null);
     messagesConversationIdRef.current = null;
     setActiveConversationId(id);
+    // Push the new conversation id into the URL synchronously so the
+    // route-sync effect at L512 sees a matching `routeConversationId`
+    // before it can find the previous conversation in the list and
+    // revert `activeConversationId` to it. Without this, the same
+    // effect that fights handleNewConversation also fights chat
+    // switching, ping-ponging until React's nested-update guard fires.
+    navigate(
+      {
+        kind: 'project',
+        projectId: project.id,
+        conversationId: id,
+        fileName: openTabsState.active ?? null,
+      },
+      { replace: true },
+    );
     setMessageLoadRetryNonce((nonce) => nonce + 1);
-  }, [activeConversationId, failedMessagesConversationId]);
+  }, [activeConversationId, failedMessagesConversationId, project.id, openTabsState.active]);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
@@ -2358,22 +2533,7 @@ export function ProjectView({
       return;
     }
     const launched = await terminalLauncher.open(project.id);
-    if (launched.kind === 'electron' && launched.ok) {
-      setProjectActionsToast({
-        message: 'Folder opened. Run `claude` in your terminal here and paste the prompt.',
-        details: null,
-      });
-    } else if (launched.kind === 'electron' && !launched.ok) {
-      setProjectActionsToast({
-        message: `Couldn't open the folder. Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
-        details: null,
-      });
-    } else {
-      setProjectActionsToast({
-        message: `Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
-        details: null,
-      });
-    }
+    setProjectActionsToast(buildContinueInCliToast(projectDir, launched));
   }, [
     project.id,
     project.name,
@@ -2415,8 +2575,26 @@ export function ProjectView({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [designMdState.exists, handleContinueInCli]);
 
+  // Wire the Critique Theater drop-in mount into the project workspace.
+  // The hook reads the M1 Settings toggle out of the existing
+  // `open-design:config` localStorage blob and stays in sync with the
+  // platform `storage` event (cross-tab) plus the same-tab
+  // `open-design:critique-theater-toggle` CustomEvent. The mount itself
+  // returns `null` until the daemon emits a `critique.run_started` for
+  // the active project, so the visual surface is unchanged for users
+  // who have not opted in. The daemon-side gate
+  // (`isCritiqueEnabled(...)` in `apps/daemon/src/server.ts`) is the
+  // authority for whether a run is actually wired through the critique
+  // pipeline; this hook only governs whether the web layer renders the
+  // resulting SSE stream.
+  const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
+
   return (
     <div className="app">
+      <CritiqueTheaterMount
+        projectId={project.id}
+        enabled={critiqueTheaterEnabled}
+      />
       <AppChromeHeader
         onBack={onBack}
         backLabel={t('project.backToProjects')}
@@ -2592,6 +2770,7 @@ export function ProjectView({
           projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
+          filesRefreshKey={filesRefresh}
           onRefreshFiles={() => {
             void refreshWorkspaceItems();
           }}
@@ -2668,8 +2847,55 @@ function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
 }
 
+function isStoppableAssistantMessage(message: ChatMessage): boolean {
+  if (message.role !== 'assistant') return false;
+  if (isActiveRunStatus(message.runStatus)) return true;
+  return message.runStatus === undefined && message.endedAt === undefined && message.startedAt !== undefined;
+}
+
 export function resolveSucceededRunStatus(status: ChatMessage['runStatus']): ChatMessage['runStatus'] {
   return status === 'failed' || status === 'canceled' ? status : 'succeeded';
+}
+
+export function clearStreamingConversationMarker(
+  currentConversationId: string | null,
+  completedConversationId?: string | null,
+): string | null {
+  if (
+    completedConversationId !== undefined
+    && completedConversationId !== null
+    && currentConversationId !== completedConversationId
+  ) {
+    return currentConversationId;
+  }
+  return null;
+}
+
+export function shouldClearActiveRunRefs(
+  currentConversationId: string | null,
+  completedConversationId: string,
+): boolean {
+  return currentConversationId === completedConversationId;
+}
+
+export function finalizeActiveAssistantMessagesOnStop(
+  messages: ChatMessage[],
+  stoppedAt: number,
+): { messages: ChatMessage[]; finalized: ChatMessage[] } {
+  const finalized: ChatMessage[] = [];
+  const next = messages.map((message) => {
+    if (!isStoppableAssistantMessage(message)) {
+      return message;
+    }
+    const updated = {
+      ...message,
+      runStatus: 'canceled' as const,
+      endedAt: message.endedAt ?? stoppedAt,
+    };
+    finalized.push(updated);
+    return updated;
+  });
+  return { messages: next, finalized };
 }
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;

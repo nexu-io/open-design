@@ -181,7 +181,66 @@ describe('ProjectView tab URL hydration', () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith(
-        { kind: 'project', projectId: project.id, fileName: 'index.html' },
+        // The active conversation id is threaded into the URL alongside
+        // the active tab so a reload / share preserves the conversation
+        // segment of `/projects/:id/conversations/:cid/files/...`
+        // (PerishCode + Codex P1 on PR #1508).
+        {
+          kind: 'project',
+          projectId: project.id,
+          conversationId: 'conv-1',
+          fileName: 'index.html',
+        },
+        { replace: true },
+      );
+    });
+  });
+
+  it('re-pushes /conversations/:cid when activeConversationId hydrates after the active tab has already synced (lefarcen P1 on PR #1508)', async () => {
+    // Race shape: `loadTabs` resolves and sets the active tab BEFORE
+    // `listConversations` resolves and sets `activeConversationId`.
+    // The first navigate fires with `conversationId: null` because
+    // the conversation hasn't loaded yet; the second navigate must
+    // fire with `conversationId: 'conv-1'` even though the active
+    // tab is identical. A ref guard that keys only on the file
+    // target skips the second call and the URL never gains the
+    // `/conversations/:cid` segment. The composite-key guard
+    // (`${activeConversationId}:${target}`) catches it.
+    let resolveConversations: (value: Conversation[]) => void = () => {};
+    const conversationsPromise = new Promise<Conversation[]>((resolve) => {
+      resolveConversations = resolve;
+    });
+    mockedListConversations.mockReturnValue(conversationsPromise);
+    mockedLoadTabs.mockResolvedValue({ tabs: ['index.html'], active: 'index.html' });
+
+    renderProjectView();
+
+    // First navigate: active tab synced, conversation still loading.
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith(
+        {
+          kind: 'project',
+          projectId: project.id,
+          conversationId: null,
+          fileName: 'index.html',
+        },
+        { replace: true },
+      );
+    });
+
+    // Now resolve the conversation list. The active tab is unchanged
+    // but `activeConversationId` flips from `null` to `'conv-1'`, so
+    // a second navigate must fire.
+    resolveConversations([conversation]);
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith(
+        {
+          kind: 'project',
+          projectId: project.id,
+          conversationId: 'conv-1',
+          fileName: 'index.html',
+        },
         { replace: true },
       );
     });

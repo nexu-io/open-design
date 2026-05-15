@@ -18,6 +18,7 @@ permissions:
 jobs:
   metrics:
     name: Generate repository metrics SVG
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub repository metrics
@@ -32,6 +33,7 @@ jobs:
           # as a read/render fallback because many orgs disallow PR creation from it.
           token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
           committer_token: ${{ secrets.METRICS_TOKEN }}
+          committer_message: Update ${filename}
           output_action: pull-request
           output_condition: data-changed
 

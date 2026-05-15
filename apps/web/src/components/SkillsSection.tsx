@@ -335,91 +335,88 @@ export function SkillsSection({ cfg, setCfg }: Props) {
 
   return (
     <section className="settings-section settings-skills">
-      <div className="section-head">
-        <div>
-          <h3>{t('settings.skills')}</h3>
-          <p className="hint">{t('settings.skillsHint')}</p>
-        </div>
-        <button
-          type="button"
-          className="primary skills-add-btn"
-          onClick={startCreate}
-          data-testid="skills-new"
-        >
-          <Icon name="plus" size={13} />
-          <span>{t('settings.skillsNew')}</span>
-        </button>
-      </div>
-
-      <div className="library-toolbar">
-        <input
-          type="search"
-          className="library-search"
-          placeholder={t('settings.librarySearch')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="library-filters">
-          {(['all', 'user', 'built-in'] as const).map((s) => {
-            const count =
-              s === 'all'
-                ? skills.length
-                : skills.filter((skill) => skill.source === s).length;
-            return (
-              <button
-                key={s}
-                type="button"
-                className={`filter-pill${sourceFilter === s ? ' active' : ''}`}
-                onClick={() => setSourceFilter(s)}
-              >
-                {s === 'all' ? t('settings.libraryAll') : s}
-                <span className="filter-pill-count">{count}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="library-filters">
+      <div className="library-toolbar skills-toolbar">
+        {/* Row 1: search + New skill button */}
+        <div className="skills-toolbar-top">
+          <input
+            type="search"
+            className="library-search"
+            placeholder={t('settings.librarySearch')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <button
             type="button"
-            className={`filter-pill${modeFilter === 'all' ? ' active' : ''}`}
-            onClick={() => setModeFilter('all')}
+            className="primary skills-add-btn"
+            onClick={startCreate}
+            data-testid="skills-new"
           >
-            {t('settings.libraryAll')}
+            <Icon name="plus" size={13} />
+            <span>{t('settings.skillsNew')}</span>
           </button>
-          {modeOptions.map(([mode, count]) => (
-            <button
-              key={mode}
-              type="button"
-              className={`filter-pill${modeFilter === mode ? ' active' : ''}`}
-              onClick={() => setModeFilter(mode)}
-            >
-              {mode}
-              <span className="filter-pill-count">{count}</span>
-            </button>
-          ))}
         </div>
-        {categoryOptions.length > 0 ? (
-          <div className="library-filters" data-testid="skills-category-filters">
-            <button
-              type="button"
-              className={`filter-pill${categoryFilter === 'all' ? ' active' : ''}`}
-              onClick={() => setCategoryFilter('all')}
+        {/* Row 2: filter dropdowns */}
+        <div className="library-filter-selects">
+          <label className="library-filter-select">
+            <span className="library-filter-select-label">Source</span>
+            <select
+              value={sourceFilter}
+              data-active={sourceFilter !== 'all' ? 'true' : undefined}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
             >
-              {t('settings.libraryAll')}
-            </button>
-            {categoryOptions.map(([cat, count]) => (
-              <button
-                key={cat}
-                type="button"
-                className={`filter-pill${categoryFilter === cat ? ' active' : ''}`}
-                onClick={() => setCategoryFilter(cat)}
+              <option value="all">
+                {t('settings.libraryAll')} ({skills.length})
+              </option>
+              {(['user', 'built-in'] as const).map((s) => {
+                const count = skills.filter((sk) => sk.source === s).length;
+                return (
+                  <option key={s} value={s}>
+                    {s} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <label className="library-filter-select">
+            <span className="library-filter-select-label">Type</span>
+            <select
+              value={modeFilter}
+              data-active={modeFilter !== 'all' ? 'true' : undefined}
+              onChange={(e) => setModeFilter(e.target.value)}
+            >
+              <option value="all">
+                {t('settings.libraryAll')} ({skills.length})
+              </option>
+              {modeOptions.map(([mode, count]) => (
+                <option key={mode} value={mode}>
+                  {mode} ({count})
+                </option>
+              ))}
+            </select>
+          </label>
+          {categoryOptions.length > 0 ? (
+            <label
+              className="library-filter-select"
+              data-testid="skills-category-filters"
+            >
+              <span className="library-filter-select-label">Category</span>
+              <select
+                value={categoryFilter}
+                data-active={categoryFilter !== 'all' ? 'true' : undefined}
+                onChange={(e) => setCategoryFilter(e.target.value)}
               >
-                {humanizeCategory(cat)}
-                <span className="filter-pill-count">{count}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+                <option value="all">
+                  {t('settings.libraryAll')} ({skills.length})
+                </option>
+                {categoryOptions.map(([cat, count]) => (
+                  <option key={cat} value={cat}>
+                    {humanizeCategory(cat)} ({count})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
       </div>
 
       {creating ? (
@@ -528,6 +525,7 @@ function SkillRow({
 }: SkillRowProps) {
   const t = useT();
   const summaryName = skill.name || skill.id;
+  const canDelete = skill.source === 'user';
   return (
     <div
       className={`skills-row${enabled ? '' : ' skills-row-disabled'}${
@@ -576,7 +574,7 @@ function SkillRow({
           </span>
         </button>
         <div className="skills-row-actions">
-          {confirmDelete ? (
+          {canDelete && confirmDelete ? (
             <span className="skills-delete-confirm" role="group">
               <button
                 type="button"
@@ -605,15 +603,17 @@ function SkillRow({
               >
                 <Icon name="edit" size={13} />
               </button>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={onArmDelete}
-                title={t('settings.skillsDelete')}
-                data-testid="skills-delete"
-              >
-                <Icon name="close" size={13} />
-              </button>
+              {canDelete ? (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={onArmDelete}
+                  title={t('settings.skillsDelete')}
+                  data-testid="skills-delete"
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              ) : null}
             </>
           )}
           <label
