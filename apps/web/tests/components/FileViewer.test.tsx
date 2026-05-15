@@ -34,7 +34,7 @@ import {
   updateInspectOverride,
 } from '../../src/components/FileViewer';
 import type { InspectOverrideMap } from '../../src/components/FileViewer';
-import type { LiveArtifact, LiveArtifactWorkspaceEntry, ProjectFile } from '../../src/types';
+import type { LiveArtifact, LiveArtifactWorkspaceEntry, PreviewComment, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
 
@@ -1078,6 +1078,142 @@ describe('FileViewer tweaks toolbar', () => {
     expect(queue.disabled).toBe(false);
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     expect(screen.queryByText('Queues while working')).toBeNull();
+  });
+
+  it('hides non-open saved comments from preview markers when the side panel is empty', () => {
+    const resolvedComment: PreviewComment = {
+      id: 'comment-applying',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-applying',
+      selector: '[data-od-pin="pin-applying"]',
+      label: 'pin-applying',
+      text: '',
+      htmlHint: '',
+      position: { x: 24, y: 32, width: 18, height: 18 },
+      note: 'Already sent to Claude',
+      status: 'applying',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[resolvedComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.queryByTestId('comment-saved-marker-pin-applying')).toBeNull();
+    expect(screen.queryByText('Already sent to Claude')).toBeNull();
+  });
+
+  it('does not preload non-open element comments into the picker composer', async () => {
+    const applyingElementComment: PreviewComment = {
+      id: 'comment-element-applying',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'Hero',
+      text: 'Hero',
+      htmlHint: '<main data-od-id="hero">Hero</main>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'Do not resurrect this note',
+      status: 'applying',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[applyingElementComment]}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
+    expect(input.value).toBe('');
+    expect(screen.queryByText('Remove')).toBeNull();
+    expect(screen.queryByText('Do not resurrect this note')).toBeNull();
+  });
+
+  it('closes an open saved-comment composer when that comment leaves the open state', async () => {
+    const openComment: PreviewComment = {
+      id: 'comment-status-transition',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-transition',
+      selector: '[data-od-pin="pin-transition"]',
+      label: 'pin-transition',
+      text: '',
+      htmlHint: '',
+      position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Do not recreate this stale comment',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[openComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open comment for pin-transition' }));
+
+    expect((await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement).value)
+      .toBe('Do not recreate this stale comment');
+
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[{ ...openComment, status: 'applying' }]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('comment-popover-input')).toBeNull();
+    });
+    expect(screen.queryByTestId('comment-saved-marker-pin-transition')).toBeNull();
+    expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
   it('collapses the comment side panel into a narrow reopen rail', () => {
