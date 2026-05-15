@@ -53,6 +53,13 @@ no extra event types, no extra badges, no extra chrome ornaments. If
 something is not already present in `example.html`, it does not
 belong in your output.
 
+**Identity guard.** Treat every person name or handle in `example.html`
+as mock content only. Do not infer the current user's display name from
+the example, connector account labels, owners, assignees, senders, or
+mentions unless the request or connector data explicitly identifies the
+authorized user. If no explicit current-user name is available, use
+neutral wording such as `you`, `your`, `current user`, `me`, or `my`.
+
 The sections below are a **reference for tokens and visual language** —
 not a license to extend the page.
 

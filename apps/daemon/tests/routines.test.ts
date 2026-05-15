@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextRunAtForSchedule } from '../src/routines.js';
+import {
+  nextRunAtForSchedule,
+  validateSchedule,
+  validateTarget,
+} from '../src/routines.js';
 
 function partsIn(timezone: string, at: Date): Record<string, string> {
   const dtf = new Intl.DateTimeFormat('en-US', {
@@ -113,5 +117,81 @@ describe('nextRunAtForSchedule DST handling', () => {
     const parts = partsIn('America/New_York', next);
     expect(parts.hour).toBe('02');
     expect(parts.minute).toBe('30');
+  });
+
+  it('returns the next hourly slot strictly after now', () => {
+    const now = new Date('2026-05-13T10:45:30Z');
+    const next = nextRunAtForSchedule({ kind: 'hourly', minute: 15 }, now);
+    expect(next).not.toBeNull();
+    if (!next) return;
+    expect(next.toISOString()).toBe('2026-05-13T11:15:00.000Z');
+  });
+
+  it('returns the next weekday occurrence for weekday schedules', () => {
+    const now = new Date('2026-05-16T00:00:00Z'); // Saturday
+    const next = nextRunAtForSchedule(
+      { kind: 'weekdays', time: '09:00', timezone: 'UTC' },
+      now,
+    );
+    expect(next).not.toBeNull();
+    if (!next) return;
+
+    const parts = partsIn('UTC', next);
+    expect(parts.year).toBe('2026');
+    expect(parts.month).toBe('05');
+    expect(parts.day).toBe('18');
+    expect(parts.hour).toBe('09');
+    expect(parts.minute).toBe('00');
+  });
+
+  it('returns the next requested weekday for weekly schedules', () => {
+    const now = new Date('2026-05-13T10:00:00Z'); // Wednesday
+    const next = nextRunAtForSchedule(
+      { kind: 'weekly', weekday: 5, time: '08:30', timezone: 'UTC' },
+      now,
+    );
+    expect(next).not.toBeNull();
+    if (!next) return;
+
+    const parts = partsIn('UTC', next);
+    expect(parts.year).toBe('2026');
+    expect(parts.month).toBe('05');
+    expect(parts.day).toBe('15');
+    expect(parts.hour).toBe('08');
+    expect(parts.minute).toBe('30');
+  });
+});
+
+describe('routine validation', () => {
+  it('accepts valid schedule and target shapes', () => {
+    expect(() =>
+      validateSchedule({ kind: 'weekly', weekday: 1, time: '09:00', timezone: 'UTC' }),
+    ).not.toThrow();
+    expect(() => validateTarget({ mode: 'create_each_run' })).not.toThrow();
+    expect(() => validateTarget({ mode: 'reuse', projectId: 'proj-1' })).not.toThrow();
+  });
+
+  it('rejects invalid wall times and timezones', () => {
+    expect(() =>
+      validateSchedule({ kind: 'daily', time: '25:00', timezone: 'UTC' }),
+    ).toThrow(/Invalid time/);
+    expect(() =>
+      validateSchedule({ kind: 'daily', time: '09:00', timezone: 'Mars\/Olympus' }),
+    ).toThrow(/Invalid timezone/);
+  });
+
+  it('rejects invalid weekday and unsupported target mode', () => {
+    expect(() =>
+      validateSchedule({ kind: 'weekly', weekday: 9 as 0, time: '09:00', timezone: 'UTC' }),
+    ).toThrow(/weekly\.weekday/);
+    expect(() =>
+      validateTarget({ mode: 'teleport' } as unknown as Parameters<typeof validateTarget>[0]),
+    ).toThrow(/Unsupported routine target mode/);
+  });
+
+  it('rejects reuse targets without a project id', () => {
+    expect(() =>
+      validateTarget({ mode: 'reuse', projectId: '' }),
+    ).toThrow(/projectId/);
   });
 });

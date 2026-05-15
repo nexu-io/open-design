@@ -1,9 +1,12 @@
+import { symlinkSync } from 'node:fs';
 import { test } from 'vitest';
 import { homedir } from 'node:os';
 import {
   assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
+
+const fsTest = process.platform === 'win32' ? test.skip : test;
 
 // Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
 // credentials, silently billing API usage. Strip it for the claude
@@ -196,6 +199,64 @@ test('detectAgents includes sanitized install and docs metadata from split runti
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+fsTest('detectAgents marks Codex available when nvm exposes a node shim but launch resolution upgrades it to the native binary', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-detect-codex-nvm-native-'));
+  try {
+    return await withEnvSnapshot(['HOME', 'PATH', 'OD_AGENT_HOME'], async () => {
+      const wrapperBinDir = join(home, '.nvm', 'versions', 'node', '24.14.1', 'bin');
+      const wrapperPkgDir = join(home, '.nvm', 'versions', 'node', '24.14.1', 'lib', 'node_modules', '@openai', 'codex');
+      const wrapperRealPath = join(wrapperPkgDir, 'bin', 'codex.js');
+      const wrapperLinkPath = join(wrapperBinDir, 'codex');
+      const nativePkgDir = join(
+        wrapperPkgDir,
+        'node_modules',
+        '@openai',
+        `codex-${process.platform}-${process.arch}`,
+      );
+      const nativeTargetTriple = codexNativeTargetTriple();
+      const nativePathDir = join(nativePkgDir, 'vendor', nativeTargetTriple, 'path');
+      const nativeBin = join(nativePkgDir, 'vendor', nativeTargetTriple, 'codex', 'codex');
+
+      mkdirSync(join(wrapperPkgDir, 'bin'), { recursive: true });
+      mkdirSync(wrapperBinDir, { recursive: true });
+      mkdirSync(join(nativePkgDir, 'vendor', nativeTargetTriple, 'codex'), { recursive: true });
+      mkdirSync(nativePathDir, { recursive: true });
+      writeFileSync(
+        wrapperRealPath,
+        '#!/usr/bin/env node\nconsole.log("wrapper should not be probed");\n',
+      );
+      writeFileSync(nativeBin, '#!/bin/sh\necho "codex 9.9.9"\n');
+      chmodSync(wrapperRealPath, 0o755);
+      chmodSync(nativeBin, 0o755);
+      symlinkSync(wrapperRealPath, wrapperLinkPath);
+
+      process.env.HOME = home;
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.OD_AGENT_HOME = home;
+
+      const agents = await detectAgents();
+      const codexAgent = agents.find((agent) => agent.id === 'codex');
+
+      assert.ok(codexAgent);
+      assert.equal(codexAgent.available, true);
+      assert.equal(codexAgent.path, wrapperLinkPath);
+      assert.equal(codexAgent.version, 'codex 9.9.9');
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+function codexNativeTargetTriple(): string {
+  if (process.platform === 'darwin' && process.arch === 'arm64') return 'aarch64-apple-darwin';
+  if (process.platform === 'darwin' && process.arch === 'x64') return 'x86_64-apple-darwin';
+  if (process.platform === 'linux' && process.arch === 'arm64') return 'aarch64-unknown-linux-musl';
+  if (process.platform === 'linux' && process.arch === 'x64') return 'x86_64-unknown-linux-musl';
+  if (process.platform === 'win32' && process.arch === 'arm64') return 'aarch64-pc-windows-msvc';
+  if (process.platform === 'win32' && process.arch === 'x64') return 'x86_64-pc-windows-msvc';
+  return `${process.platform}-${process.arch}`;
+}
 
 test('resolveAgentExecutable ignores relative CODEX_BIN overrides', () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-rel-'));

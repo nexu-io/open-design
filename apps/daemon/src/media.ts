@@ -53,7 +53,7 @@ import {
   findProvider,
   modelsForSurface,
 } from './media-models.js';
-import { resolveProviderConfig } from './media-config.js';
+import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import {
   ensureProject,
   kindFor,
@@ -67,7 +67,29 @@ type ProgressFn = (message: string) => void;
 type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
 type MediaContext = {
   surface: MediaSurface;
+  /**
+   * Registered catalog id (e.g. `dall-e-3`, `gpt-4o-mini-tts`,
+   * `doubao-seedream-3-0-t2i-250415`). Every model-family branch in
+   * the renderers below keys off this field so DALL·E sizing,
+   * gpt-image quality, gpt-4o-mini-tts instructions, and the
+   * MINIMAX/FISHAUDIO TTS lookup tables continue to fire even when
+   * the user has aliased the catalog id to a custom wire-name via
+   * issue #1277's alias layer. lefarcen + codex P2 review on PR
+   * #1309 caught the regression where a single `ctx.model` doubled
+   * for both purposes and accidentally disabled the capability
+   * branches under aliasing.
+   */
   model: string;
+  /**
+   * What the provider's request body should carry as `model` (or
+   * what gets templated into the URL for Azure-style deployment
+   * routing). Equal to `model` when no alias is configured; equal
+   * to the user-supplied alias from `OD_MEDIA_MODEL_ALIASES` /
+   * `media-config.json` otherwise. Renderers must use this field
+   * for `body.model = ...` and for `providerNote` so users see
+   * what was actually sent.
+   */
+  wireModel: string;
   modelDef: MediaModel;
   provider: MediaProvider | null;
   prompt: string;
@@ -352,9 +374,19 @@ export async function generateMedia(args: {
   // and decide how to splice the data URL into their request.
   const imageRef = await resolveProjectImage(image, dir);
 
+  // Resolve any user-configured model alias BEFORE we hand the id to a
+  // dispatcher (issue #1277). Catalog lookup + surface validation above
+  // ran against the original id so we still enforce the registered
+  // catalog; the alias only changes what the provider receives on the
+  // wire. lefarcen + codex P2 on PR #1309: keep BOTH values on ctx so
+  // capability branches (DALL-E sizing, gpt-image quality, gpt-4o-mini-tts
+  // instructions, MINIMAX/FISHAUDIO TTS map) continue to key off the
+  // catalog id while the provider's request body carries the alias.
+  const wireModel = await resolveModelAlias(projectRoot, model);
   const ctx = {
     surface,
     model,
+    wireModel,
     modelDef: def,
     provider: findProvider(def.provider),
     prompt: prompt || '',
@@ -469,6 +501,11 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'minimax' && surface === 'audio') {
       const result = await renderMinimaxTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'audio') {
+      const result = await renderSenseAudioTTS(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -615,12 +652,15 @@ async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig)
   };
   // For non-Azure calls, include `model` in the body. Azure infers it
   // from the deployment in the path so omitting it keeps payloads
-  // compatible across both flavors.
+  // compatible across both flavors. The wire-name (post-alias) goes
+  // on the body so the user's alias from issue #1277 reaches the API.
   if (!azure) {
-    body.model = ctx.model;
+    body.model = ctx.wireModel;
   }
-  // gpt-image-* returns b64_json by default and rejects response_format,
-  // so we only pass it for dall-e-* (where it's required).
+  // Capability branches key off the CATALOG id (not the alias) so a
+  // user who aliased `dall-e-3` to a custom Azure / proxy deployment
+  // still gets the DALL-E-specific quality + response_format flags
+  // (lefarcen + codex P2 on PR #1309).
   if (ctx.model.startsWith('dall-e-')) {
     body.response_format = 'b64_json';
     body.quality = ctx.model === 'dall-e-3' ? 'hd' : 'standard';
@@ -675,7 +715,7 @@ async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig)
   const tag = azure ? 'azure-openai' : 'openai';
   return {
     bytes,
-    providerNote: `${tag}/${ctx.model} · ${ctx.aspect} · ${bytes.length} bytes`,
+    providerNote: `${tag}/${ctx.wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
     suggestedExt: '.png',
   };
 }
@@ -810,7 +850,7 @@ async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig
     response_format: format,
   };
   if (!azure) {
-    body.model = ctx.model;
+    body.model = ctx.wireModel;
   }
   if (instructions && ctx.model === 'gpt-4o-mini-tts') {
     body.instructions = instructions;
@@ -840,7 +880,7 @@ async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig
     throw new Error('openai speech returned zero bytes');
   }
   const tag = azure ? 'azure-openai' : 'openai';
-  const noteBits = [`${tag}/${ctx.model}`, voiceId, `${format}`, `${bytes.length} bytes`];
+  const noteBits = [`${tag}/${ctx.wireModel}`, voiceId, `${format}`, `${bytes.length} bytes`];
   if (instructions) noteBits.splice(2, 0, 'styled');
   return {
     bytes,
@@ -898,7 +938,7 @@ async function renderVolcengineVideo(ctx: MediaContext, credentials: ProviderCon
   }
 
   const taskBody = {
-    model: ctx.model,
+    model: ctx.wireModel,
     content,
   };
 
@@ -988,7 +1028,7 @@ async function renderVolcengineVideo(ctx: MediaContext, credentials: ProviderCon
 
   return {
     bytes,
-    providerNote: `volcengine/${ctx.model} · ${ratio} · ${durationSec}s · ${bytes.length} bytes`,
+    providerNote: `volcengine/${ctx.wireModel} · ${ratio} · ${durationSec}s · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
   };
 }
@@ -1012,9 +1052,12 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
   const baseUrl = (credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 
   const body = {
-    model: ctx.model,
+    model: ctx.wireModel,
     prompt: ctx.prompt || 'A high-quality reference image.',
     response_format: 'b64_json',
+    // openaiSizeFor branches on the catalog id (gpt-image-* vs dall-e-*
+    // accept different size enums), so it must NOT see the post-alias
+    // wire name. lefarcen + codex P2 on PR #1309.
     size: openaiSizeFor(ctx.model, ctx.aspect),
   };
   const resp = await fetch(`${baseUrl}/images/generations`, {
@@ -1049,7 +1092,7 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
   }
   return {
     bytes,
-    providerNote: `volcengine/${ctx.model} · ${ctx.aspect} · ${bytes.length} bytes`,
+    providerNote: `volcengine/${ctx.wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
     suggestedExt: '.png',
   };
 }
@@ -1082,7 +1125,7 @@ async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): 
 
   const aspectRatio = grokAspectFor(ctx.aspect);
   const body = {
-    model: ctx.model,
+    model: ctx.wireModel,
     prompt: ctx.prompt || 'A high-quality reference image.',
     n: 1,
     aspect_ratio: aspectRatio,
@@ -1125,7 +1168,7 @@ async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): 
   // trusts the extension.
   return {
     bytes,
-    providerNote: `grok/${ctx.model} · ${aspectRatio} · ${bytes.length} bytes`,
+    providerNote: `grok/${ctx.wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
@@ -1138,7 +1181,7 @@ async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderCon
   }
 
   const baseUrl = (credentials.baseUrl || NANOBANANA_DEFAULT_BASE_URL).replace(/\/$/, '');
-  const wireModel = (credentials.model || ctx.model || NANOBANANA_DEFAULT_MODEL).trim();
+  const wireModel = (credentials.model || ctx.wireModel || NANOBANANA_DEFAULT_MODEL).trim();
   const body = {
     contents: [{
       parts: [{
@@ -1261,7 +1304,7 @@ async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, o
   const aspectRatio = grokAspectFor(ctx.aspect);
 
   const body: Record<string, unknown> = {
-    model: ctx.model,
+    model: ctx.wireModel,
     prompt: ctx.prompt || 'A short cinematic clip.',
     duration: durationSec,
     aspect_ratio: aspectRatio,
@@ -1375,7 +1418,7 @@ async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, o
 
   return {
     bytes,
-    providerNote: `grok/${ctx.model} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
+    providerNote: `grok/${ctx.wireModel} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
   };
 }
@@ -1583,7 +1626,13 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
     /\/$/,
     '',
   );
-  const wireModel = MINIMAX_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  // Precedence: user alias from #1277 (when set) -> project's known
+  // MINIMAX legacy rename map -> catalog id. The user knows their
+  // deployment name better than our hardcoded table, so an explicit
+  // alias trumps the legacy mapping.
+  const wireModel = ctx.wireModel !== ctx.model
+    ? ctx.wireModel
+    : (MINIMAX_TTS_MODEL_MAP[ctx.model] || ctx.model);
   const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
   // Voice id picks: the agent can pass --voice to choose, otherwise we
   // default to a neutral Mandarin male voice that handles both Chinese
@@ -1659,6 +1708,109 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
 }
 
 // ---------------------------------------------------------------------------
+// Provider: SenseAudio — senseaudio-tts-1.5 text-to-speech (synchronous).
+//
+// Docs: https://docs.senseaudio.cn — POST /v1/t2a_v2 with a JSON body
+// shaped like MiniMax's (voice_setting / audio_setting). The response is
+// JSON with hex-encoded audio under `data.audio` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, again
+// mirroring MiniMax. The catalogue id we surface as `senseaudio-tts`
+// resolves to `senseaudio-tts-1.5-260319` on the wire — SenseAudio's
+// recommended flagship model (supports emotion control, polyphonic
+// characters, LaTeX formula reading, voice cloning, and text-generated
+// voices). Default voice is `female_0033_b` per the official example; the agent
+// can override via the model registry's `voice` slot with any system,
+// cloned, or text-generated voice id from the customer's catalogue.
+// Audio shape is hard-coded to mp3 / 32kHz / 128kbps / stereo for parity
+// with the other TTS providers; SenseAudio supports wav/pcm/flac and
+// other sample rates but we don't expose them through MediaContext yet.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_DEFAULT_BASE_URL = 'https://api.senseaudio.cn';
+const SENSEAUDIO_DEFAULT_VOICE_ID = 'female_0033_b';
+
+const SENSEAUDIO_TTS_MODEL_MAP = {
+  'senseaudio-tts': 'senseaudio-tts-1.5-260319',
+} as Record<string, string>;
+
+async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = SENSEAUDIO_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voiceId = (ctx.voice && ctx.voice.trim()) || SENSEAUDIO_DEFAULT_VOICE_ID;
+
+  const body = {
+    model: wireModel,
+    text,
+    stream: false,
+    voice_setting: {
+      voice_id: voiceId,
+      speed: 1,
+      vol: 1,
+      pitch: 0,
+    },
+    audio_setting: {
+      format: 'mp3',
+      sample_rate: 32000,
+      bitrate: 128000,
+      channel: 2,
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/v1/t2a_v2`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`senseaudio tts ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`senseaudio tts non-JSON: ${truncate(respText, 200)}`);
+  }
+  // SenseAudio mirrors MiniMax's base_resp envelope: HTTP 200 can still
+  // be a logical failure (auth, quota, voice not on this account, …).
+  // Surface the upstream status_code/status_msg so users see the real
+  // cause instead of a downstream "missing data.audio" red herring.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `senseaudio tts api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const hex = data?.data?.audio;
+  if (typeof hex !== 'string' || !hex) {
+    throw new Error('senseaudio tts response missing data.audio');
+  }
+  const bytes = Buffer.from(hex, 'hex');
+  if (bytes.length === 0) {
+    throw new Error('senseaudio tts decoded zero bytes');
+  }
+  const xi = data?.extra_info || {};
+  const seconds = xi.audio_length ? Math.round(xi.audio_length / 100) / 10 : '?';
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Provider: FishAudio — Speech-1.x family text-to-speech (synchronous).
 //
 // Docs: https://docs.fish.audio — POST /v1/tts with a JSON body.
@@ -1686,7 +1838,11 @@ async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig
     /\/$/,
     '',
   );
-  const wireModel = FISHAUDIO_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  // Same precedence as the MINIMAX TTS path: user alias wins, then
+  // the project's hardcoded fishaudio map, then catalog id.
+  const wireModel = ctx.wireModel !== ctx.model
+    ? ctx.wireModel
+    : (FISHAUDIO_TTS_MODEL_MAP[ctx.model] || ctx.model);
   const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
 
   // FishAudio's `reference_id` slot pins which voice the synth uses.

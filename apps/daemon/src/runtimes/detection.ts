@@ -1,7 +1,7 @@
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
-import { resolveAgentExecutable } from './executables.js';
+import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
@@ -118,27 +118,30 @@ async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
-  // Resolution returns whichever path the rest of the daemon will spawn
-  // (configured override wins, PATH fallback otherwise). Detection must
-  // probe THAT path and report `available` accordingly, so the Settings
-  // UI never advertises an executable that `resolveAgentBin` won't pick
-  // at run time. Surfacing a different PATH candidate as `available: true`
-  // while a stale configured override survives in chat/run resolution
-  // breaks the invariant flagged on PR #1301 review and would only swap
-  // the ghost in Settings for a ghost in chat (Siri-Ray, #1301 round 3).
-  const resolved = resolveAgentExecutable(def, configuredEnv);
-  if (!resolved) {
+  // Detection must probe the exact path the runtime will spawn, not just the
+  // PATH-visible shim. This is load-bearing for Codex under nvm/fnm/mise:
+  // the discovered `codex` entry is often a `#!/usr/bin/env node` wrapper
+  // that is not invocable from a GUI-launched app's stripped PATH, while the
+  // launch resolver can still upgrade it to the packaged native Codex binary.
+  // If detection probes the shim but chat/run spawns the native binary, the
+  // UI incorrectly reports "not installed" until the user pins CODEX_BIN by
+  // hand even though the real launch path is healthy.
+  const launch = resolveAgentLaunch(def, configuredEnv);
+  if (!launch.selectedPath || !launch.launchPath) {
     return unavailableAgent(def);
   }
-  const probeEnv = spawnEnvForAgent(
-    def.id,
-    {
-      ...process.env,
-      ...(def.env || {}),
-    },
-    configuredEnv,
+  const probeEnv = applyAgentLaunchEnv(
+    spawnEnvForAgent(
+      def.id,
+      {
+        ...process.env,
+        ...(def.env || {}),
+      },
+      configuredEnv,
+    ),
+    launch,
   );
-  const outcome = await probeVersionAtPath(def, resolved, probeEnv);
+  const outcome = await probeVersionAtPath(def, launch.launchPath, probeEnv);
   if (outcome.kind === 'not-invocable') {
     return unavailableAgent(def);
   }
@@ -147,7 +150,7 @@ async function probe(
   if (def.helpArgs && def.capabilityFlags) {
     const caps: RuntimeCapabilityMap = {};
     try {
-      const { stdout } = await execAgentFile(resolved, def.helpArgs, {
+      const { stdout } = await execAgentFile(launch.launchPath, def.helpArgs, {
         env: probeEnv,
         timeout: 5000,
         maxBuffer: 4 * 1024 * 1024,
@@ -161,13 +164,13 @@ async function probe(
     }
     agentCapabilities.set(def.id, caps);
   }
-  const models = await fetchModels(def, resolved, probeEnv);
-  const auth = await probeAgentAuthStatus(def.id, resolved, probeEnv);
+  const models = await fetchModels(def, launch.launchPath, probeEnv);
+  const auth = await probeAgentAuthStatus(def.id, launch.launchPath, probeEnv);
   return {
     ...stripFns(def),
     models,
     available: true,
-    path: resolved,
+    path: launch.selectedPath,
     version: outcome.version,
     ...(auth
       ? {

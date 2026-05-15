@@ -475,6 +475,8 @@ export const esES: Dict = {
   'chat.scrollToLatest': 'Desplazar al más reciente',
   'chat.you': 'Tú',
   'chat.openFile': 'Abrir {name}',
+  'chat.copyPrompt': 'Copiar prompt',
+  'chat.copyDone': '¡Copiado!',
   'chat.composerPlaceholder':
     'Describe el diseño que quieres: pega o suelta imágenes, o usa @ para referenciar un archivo o skill…',
   'chat.composerHint':
@@ -733,6 +735,8 @@ export const esES: Dict = {
   'fileViewer.exportZip': 'Descargar como .zip',
   'fileViewer.exportHtml': 'Exportar como HTML independiente',
   'fileViewer.exportMd': 'Exportar como Markdown',
+  'fileViewer.exportImage': 'Exportar como imagen',
+  'fileViewer.exportImageFailed': 'Error al capturar la imagen. Inténtalo de nuevo o usa la herramienta de captura de pantalla de tu navegador.',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar vista previa como HTML',
   'fileViewer.saveAsTemplate': 'Guardar como plantilla…',

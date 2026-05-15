@@ -564,6 +564,8 @@ The Provenance section MUST list:
 - Transcript message count
 - Generated UTC timestamp
 
+Render Provenance fields as plain Markdown bullets with no emphasis on the field labels, exactly: "- Field name: value". Do not bold, italicize, or otherwise decorate the labels or the colon. Field values may use inline code formatting (backticks) where appropriate.
+
 Output the Markdown body only. No preamble, no chat-style framing, no
 "Here's your DESIGN.md" prefix. Do not invent facts not supported by the
 inputs; if an input is missing or empty, the corresponding section should

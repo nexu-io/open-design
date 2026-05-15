@@ -893,7 +893,7 @@ code {
   padding: 4px 6px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--bg-panel);
+  background-color: var(--bg-panel);
   color: var(--text);
   cursor: pointer;
 }
@@ -1121,6 +1121,49 @@ code {
   padding: 8px 11px;
   line-height: 1.45;
   box-shadow: var(--shadow-xs);
+}
+
+/* Wrapper for user bubble + copy button */
+.msg.user .user-text-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.msg.user .user-text-wrap .user-text {
+  padding-inline-end: 28px;
+}
+
+.msg.user .user-copy-btn {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  padding: 4px;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  z-index: 1;
+}
+.msg.user .user-copy-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.msg.user .user-text-wrap:hover .user-copy-btn,
+.msg.user .user-text-wrap:focus-within .user-copy-btn,
+.msg.user .user-copy-btn:focus-visible {
+  opacity: 1;
+}
+.msg.user .user-copy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+@media (hover: none) {
+  .msg.user .user-copy-btn {
+    opacity: 1;
+  }
 }
 .msg.assistant .prose { margin-top: 4px; }
 .msg .artifact-badge {
@@ -7046,6 +7089,7 @@ button.connector-action.is-loading {
 .design-card-meta {
   font-size: 11.5px;
   color: var(--text-muted);
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -9712,6 +9756,93 @@ button.connector-action.is-loading {
   flex-direction: column;
   z-index: 30;
   overflow: hidden;
+}
+.comment-side-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel, #fff);
+}
+.comment-side-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.comment-side-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-side-collapse {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.comment-side-collapse:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+}
+.comment-side-rail {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 30;
+  width: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel, #fff);
+  color: var(--text-muted);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+.comment-side-rail:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.comment-side-rail span {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.comment-side-rail strong {
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ff5a3c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 .comment-side-list {
   flex: 1;
@@ -18453,6 +18584,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ---------------- Routines (Settings → Routines) ---------------- */
 
 .routines-section .section-head { align-items: flex-start; }
+.routines-section .section-head > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 
 .routines-card {
   background: var(--bg-panel);
@@ -18506,7 +18641,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* Restore custom dropdown chevron for select elements in routines form.
    The appearance:none above removes the native chevron, so we paint our own
    via background-image (matching the global select styling). */
-.routines-field select {
+.routines-field select,
+.routines-project-select {
   padding-right: 32px;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -18514,12 +18650,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background-size: 12px 12px;
 }
 
-[data-theme='dark'] .routines-field select {
+[data-theme='dark'] .routines-field select,
+[data-theme='dark'] .routines-project-select {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .routines-field select {
+  html:not([data-theme]) .routines-field select,
+  html:not([data-theme]) .routines-project-select {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   }
 }
@@ -18593,28 +18731,74 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   flex-direction: column;
   gap: 8px;
 }
+
 .routines-fieldset legend {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   padding: 0 6px;
 }
-.routines-radio {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: 8px 10px;
-  padding: 10px 8px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background 120ms ease;
-  align-items: flex-start;
-}
-.routines-radio:hover { background: var(--bg-subtle); }
-.routines-radio input { margin-top: 3px; }
-.routines-radio span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.routines-radio strong { font-size: 14px; color: var(--text); font-weight: 600; }
-.routines-radio small { font-size: 12px; color: var(--text-muted); }
 
+.routines-radio {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.routines-radio:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+
+.routines-radio:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.routines-radio input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.routines-radio:has(input[type="radio"]:checked) {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.routines-radio:has(input[type="radio"]:checked) strong {
+  color: var(--accent-strong);
+}
+
+.routines-radio span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.routines-radio strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.routines-radio small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .routines-form-actions {
   display: flex;
   gap: 8px;

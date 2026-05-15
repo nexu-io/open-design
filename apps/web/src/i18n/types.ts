@@ -937,6 +937,8 @@ export interface Dict {
   'chat.scrollToLatest': string;
   'chat.you': string;
   'chat.openFile': string;
+  'chat.copyPrompt': string;
+  'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.composerHint': string;
   'chat.cliSettingsTitle': string;
@@ -1197,6 +1199,8 @@ export interface Dict {
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
   'fileViewer.exportMd': string;
+  'fileViewer.exportImage': string;
+  'fileViewer.exportImageFailed': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;

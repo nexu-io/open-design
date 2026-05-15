@@ -586,6 +586,8 @@ export const hu: Dict = {
   'chat.scrollToLatest': 'Görgetés a legutóbbira',
   'chat.you': 'Te',
   'chat.openFile': '{name} megnyitása',
+  'chat.copyPrompt': 'Prompt másolása',
+  'chat.copyDone': 'Másolva!',
   'chat.composerPlaceholder':
     'Írd le a kívánt designt — illessz be vagy húzz képeket, vagy @-tel hivatkozz fájlra vagy skillre…',
   'chat.composerHint':
@@ -844,6 +846,8 @@ export const hu: Dict = {
   'fileViewer.exportZip': 'Letöltés .zip-ként',
   'fileViewer.exportHtml': 'Exportálás önálló HTML-ként',
   'fileViewer.exportMd': 'Exportálás Markdown-ként',
+  'fileViewer.exportImage': 'Exportálás képként',
+  'fileViewer.exportImageFailed': 'A képrögzítés sikertelen. Kérjük, próbálja újra, vagy használja a böngészője képernyőkép eszközét.',
   'fileViewer.exportJsx': 'Exportálás JSX-ként',
   'fileViewer.exportReactHtml': 'Előnézet exportálása HTML-ként',
   'fileViewer.saveAsTemplate': 'Mentés sablonként…',
