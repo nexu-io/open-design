@@ -824,22 +824,38 @@ export function retrieveForInjection(
       for (const p of prefs) {
         remainingCats[p.preference_type] = (remainingCats[p.preference_type] ?? 0) + 1;
       }
-      const underRepTypes = new Set(
-        Object.entries(remainingCats)
-          .filter(([, c]) => c < MAX_PER_CATEGORY)
-          .map(([t]) => t),
-      );
-
-      // Also consider categories not yet in the set at all
+      // Compute per-type remaining capacity instead of a flat "has room" set.
+      // The old set-membership approach allowed multiple overflow entries from
+      // the same under-represented type to all be re-admitted, which could
+      // re-expand a category past MAX_PER_CATEGORY after backfill.
+      const remainingCapacity: Record<string, number> = {};
+      for (const t of Object.keys(remainingCats)) {
+        remainingCapacity[t] = Math.max(0, MAX_PER_CATEGORY - (remainingCats[t] ?? 0));
+      }
+      // Categories not currently present in `prefs` start with full capacity.
       const allOverflowTypes = new Set(overflowPrefs.map((p) => p.preference_type));
       for (const t of allOverflowTypes) {
-        if (!remainingCats[t]) underRepTypes.add(t);
+        if (!(t in remainingCapacity)) remainingCapacity[t] = MAX_PER_CATEGORY;
       }
 
-      if (overflowPrefs.length > 0 && underRepTypes.size > 0) {
-        const catBackfill = overflowPrefs
-          .filter((p) => underRepTypes.has(p.preference_type))
-          .slice(0, catTrimmed.length);
+      const totalUnderRepCapacity = Object.values(remainingCapacity).reduce(
+        (sum, n) => sum + n,
+        0,
+      );
+
+      if (overflowPrefs.length > 0 && totalUnderRepCapacity > 0) {
+        // Walk overflow in priority order, admitting one record per under-
+        // represented type until that type's capacity is exhausted or until
+        // we've filled the slots freed by `catTrimmed`.
+        const catBackfill: RankedPreference[] = [];
+        const slotBudget = catTrimmed.length;
+        for (const p of overflowPrefs) {
+          if (catBackfill.length >= slotBudget) break;
+          const cap = remainingCapacity[p.preference_type] ?? 0;
+          if (cap <= 0) continue;
+          catBackfill.push(p);
+          remainingCapacity[p.preference_type] = cap - 1;
+        }
         if (catBackfill.length > 0) {
           prefs.push(...catBackfill);
           prefs.sort((a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0));
@@ -901,7 +917,11 @@ export function retrieveForInjection(
     .sort((a, b) => b.signal_strength - a.signal_strength);
 
   const overrides = projectPrefs.filter(
-    (p) => p.signal_strength >= INJECTION_THRESHOLD && p.polarity_status === "stable",
+    (p) =>
+      p.signal_strength >= INJECTION_THRESHOLD &&
+      p.polarity_status === "stable" &&
+      (!preference_types ||
+        preference_types.some((t) => p.preference_type.startsWith(t))),
   );
 
   return { positives, negatives, projectOverrides: overrides, diagnostics };

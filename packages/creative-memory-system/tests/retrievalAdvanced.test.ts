@@ -425,4 +425,61 @@ describe("category diversity quota", () => {
       types.has("diversity_ceiling_applied") || types.has("category_ceiling_applied"),
     ).toBe(true);
   });
+
+  it("ADV-27: category backfill never re-expands a type past MAX_PER_CATEGORY (regression)", () => {
+    // Build an over-represented type that gets trimmed (so backfill runs)
+    // alongside another type that has many overflow records of its own.
+    // The buggy behaviour would re-admit multiple overflow entries of the
+    // same type and push that type back above MAX_PER_CATEGORY.
+    //
+    // Layout: 6 records → trimmed to 3 (3 freed slots)
+    // Motion: 5 records → all in overflow if hard cap pushes them out;
+    //                     otherwise present in the kept set near the cap.
+    //                     Either way, multiple overflow entries of one type
+    //                     must not all be re-admitted by category backfill.
+    for (let i = 0; i < 6; i++) {
+      buildToInjectable({ pattern: `lay_${i}`, preference_type: "layout" });
+    }
+    for (let i = 0; i < 18; i++) {
+      buildToInjectable({ pattern: `mot_${i}`, preference_type: "motion" });
+    }
+
+    const retrieved = store.retrieveForInjection(USER, {});
+
+    // Assert no type ever exceeds MAX_PER_CATEGORY in the final injection set.
+    const counts: Record<string, number> = {};
+    for (const p of retrieved.positives) counts[p.preference_type] = (counts[p.preference_type] ?? 0) + 1;
+    for (const p of retrieved.negatives) counts[p.preference_type] = (counts[p.preference_type] ?? 0) + 1;
+    for (const [type, count] of Object.entries(counts)) {
+      expect(count, `type ${type} exceeded MAX_PER_CATEGORY (${count} > ${store.MAX_PER_CATEGORY})`).toBeLessThanOrEqual(store.MAX_PER_CATEGORY);
+    }
+  });
+
+  it("ADV-28: project override line respects context.preference_types (regression)", () => {
+    // Build a project that overrides two patterns of different types.
+    // When the caller scopes retrieval to one type, the projectOverrides
+    // returned (and the prompt block's "Project override:" line) should
+    // only include that scoped type — not the unrelated category.
+    buildToInjectable({
+      pattern: "layout_pat", preference_type: "layout",
+      scope: "project", project_id: "proj_filter",
+    });
+    buildToInjectable({
+      pattern: "color_pat", preference_type: "color",
+      scope: "project", project_id: "proj_filter",
+    });
+
+    const retrieved = store.retrieveForInjection(USER, {
+      project_id: "proj_filter",
+      preference_types: ["layout"],
+    });
+
+    expect(retrieved.projectOverrides.every((p) => p.preference_type.startsWith("layout"))).toBe(true);
+    expect(retrieved.projectOverrides.some((p) => p.pattern === "layout_pat")).toBe(true);
+    expect(retrieved.projectOverrides.some((p) => p.pattern === "color_pat")).toBe(false);
+
+    const block = store.buildPromptBlock(retrieved, "proj_filter");
+    expect(block.includes("color_pat")).toBe(false);
+    expect(block.includes("layout_pat") || block.length === 0).toBe(true);
+  });
 });

@@ -137,9 +137,21 @@ describe("extractionAdapter", () => {
     expect(out).toEqual(BASE_META.signals);
   });
 
-  it("classifyArtifact handles null/undefined gracefully", () => {
-    expect(adapter.classifyArtifact(null)).toEqual([]);
-    expect(adapter.classifyArtifact(undefined)).toEqual([]);
+  it("classifyArtifact throws on missing or malformed payload (fail-fast)", () => {
+    // Missing payload is treated as a pipeline wiring bug and surfaces an
+    // observable error rather than silently disabling learning for the event.
+    expect(() => adapter.classifyArtifact(null as unknown as adapter.ArtifactMeta)).toThrow(
+      /artifact_meta is required/,
+    );
+    expect(() =>
+      adapter.classifyArtifact(undefined as unknown as adapter.ArtifactMeta),
+    ).toThrow(/artifact_meta is required/);
+    expect(() =>
+      adapter.classifyArtifact({ signals: undefined } as unknown as adapter.ArtifactMeta),
+    ).toThrow(/signals must be an array/);
+    expect(() =>
+      adapter.classifyArtifact({ signals: "not-an-array" } as unknown as adapter.ArtifactMeta),
+    ).toThrow(/signals must be an array/);
   });
 
   it("TAG_POLARITY map is frozen and complete for known tags", () => {

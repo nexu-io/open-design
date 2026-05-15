@@ -71,13 +71,31 @@ export interface RevertAfterEditEvent extends BaseEvent {}
  * Returns an array because one event can produce multiple signals — e.g.
  * accepting a layout also signals typography if both changed.
  *
- * STUB: In production, artifactMeta is populated by the generation pipeline.
- * The classifier here is a pass-through. The actual extraction of (type,
- * pattern) from rendered artifacts is upstream of this module. Doing it here
- * would violate the local-first / no-ML constraint (open question #4).
+ * In production, `artifact_meta` is populated by the generation pipeline
+ * upstream of this module. The classifier here is intentionally a
+ * pass-through: actual extraction of (type, pattern) from rendered artifacts
+ * is upstream concern (open question #4).
+ *
+ * Throws if `artifactMeta` or its `signals` array is missing. A broken
+ * pipeline payload is exactly the wiring bug the adapter should surface;
+ * silently turning it into `[]` would hide failures and disable learning
+ * for that event with no observable signal.
  */
-export function classifyArtifact(artifactMeta: ArtifactMeta | null | undefined): ArtifactSignal[] {
-  if (!artifactMeta || !artifactMeta.signals) return [];
+export function classifyArtifact(artifactMeta: ArtifactMeta): ArtifactSignal[] {
+  if (artifactMeta == null) {
+    throw new Error(
+      "classifyArtifact: artifact_meta is required. " +
+        "A null or undefined payload indicates a pipeline wiring bug; the adapter " +
+        "fails fast rather than silently dropping the signal.",
+    );
+  }
+  if (!Array.isArray(artifactMeta.signals)) {
+    throw new Error(
+      "classifyArtifact: artifact_meta.signals must be an array. " +
+        `Got ${typeof artifactMeta.signals}. ` +
+        "Upstream classification is missing or malformed.",
+    );
+  }
   return artifactMeta.signals;
 }
 
