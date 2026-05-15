@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th';
+export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th' | 'it';
 
-export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th'];
+export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -22,7 +22,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'fr': 'Français',
   'uk': 'Українська',
   'tr': 'Türkçe',
-  'th': 'ภาษาไทย'
+  'th': 'ภาษาไทย',
+  'it': 'Italiano'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -60,6 +61,7 @@ export interface Dict {
   'common.minutesAgo': string;
   'common.hoursAgo': string;
   'common.daysAgo': string;
+  'common.weeksAgo': string;
   'common.now': string;
   'common.minutesShort': string;
   'common.hoursShort': string;
@@ -161,6 +163,7 @@ export interface Dict {
   'settings.themeSystem': string;
   'settings.themeLight': string;
   'settings.themeDark': string;
+  'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
@@ -221,6 +224,8 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+  'settings.installLatest': string;
+  'settings.alreadyLatest': string;
   'settings.skills': string;
   'settings.skillsHint': string;
   'settings.skillsNew': string;
@@ -391,6 +396,7 @@ export interface Dict {
   'settings.memoryFlashSaved': string;
   'settings.memoryFlashDeleted': string;
   'settings.memoryFlashIndexSaved': string;
+  'settings.memoryFlashPathCopied': string;
   'settings.memoryNameLabel': string;
   'settings.memoryTypeLabel': string;
   'settings.memoryDescLabel': string;
@@ -517,6 +523,24 @@ export interface Dict {
   'entry.openSettingsAria': string;
   'entry.resizeAria': string;
   'entry.loadingWorkspace': string;
+  'entry.useEverywhereTitle': string;
+  'entry.useEverywhereAria': string;
+  // Left nav rail (icon-only) — surface labels also serve as tooltips
+  'entry.navNewProject': string;
+  'entry.navHome': string;
+  'entry.navProjects': string;
+  'entry.navDesignSystems': string;
+  // Bottom-of-rail help menu
+  'entry.helpAria': string;
+  'entry.helpMenuAria': string;
+  'entry.helpGetHelp': string;
+  'entry.helpSubmitFeature': string;
+  'entry.helpWhatsNew': string;
+  'entry.helpDownloadDesktop': string;
+  // GitHub star pill in the top bar
+  'entry.githubStarLabel': string;
+  'entry.githubStarTitle': string;
+  'entry.githubStarAria': string;
 
   // Connectors tab
   'connectors.title': string;
@@ -899,6 +923,25 @@ export interface Dict {
   'avatar.reasoningLabel': string;
   'avatar.customSuffix': string;
 
+  // Inline CLI / model switcher (entry topbar)
+  'inlineSwitcher.chipTitle': string;
+  'inlineSwitcher.chipCli': string;
+  'inlineSwitcher.chipByok': string;
+  'inlineSwitcher.modelDefault': string;
+  'inlineSwitcher.noAgent': string;
+  'inlineSwitcher.modeLabel': string;
+  'inlineSwitcher.agentLabel': string;
+  'inlineSwitcher.providerLabel': string;
+  'inlineSwitcher.modelLabel': string;
+  'inlineSwitcher.useCli': string;
+  'inlineSwitcher.useByok': string;
+  'inlineSwitcher.daemonOffline': string;
+  'inlineSwitcher.noAgentsDetected': string;
+  'inlineSwitcher.openSettingsForModel': string;
+  'inlineSwitcher.missingApiKey': string;
+  'inlineSwitcher.openFullSettings': string;
+  'inlineSwitcher.customSuffix': string;
+
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
@@ -920,6 +963,20 @@ export interface Dict {
   'chat.comments.updateSend': string;
   'chat.comments.removeAttachment': string;
   'chat.comments.removeAttachmentAria': string;
+  'chat.comments.comment': string;
+  'chat.comments.sendToChat': string;
+  'chat.comments.sending': string;
+  'chat.comments.edit': string;
+  'chat.comments.select': string;
+  'chat.comments.deselect': string;
+  'chat.comments.nSelected': string;
+  'chat.comments.pin': string;
+  'chat.comments.addNote': string;
+  'chat.comments.savedToast': string;
+  'chat.comments.pinSavedToast': string;
+  'chat.comments.pinAtCoords': string;
+  'chat.comments.capturedItems': string;
+  'chat.comments.clear': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
@@ -1370,6 +1427,14 @@ export interface Dict {
   'tool.openInTab': string;
   'tool.open': string;
   'tool.todos': string;
+  'tool.askQuestion': string;
+  'tool.askQuestionSubmit': string;
+  'tool.askQuestionPending': string;
+  'tool.askQuestionAnswered': string;
+  'tool.todosExpand': string;
+  'tool.todosCollapse': string;
+  'tool.todosDone': string;
+  'tool.todosDismiss': string;
   'tool.write': string;
   'tool.edit': string;
   'tool.read': string;
@@ -1482,19 +1547,10 @@ export interface Dict {
   'pet.fieldGreeting': string;
   'pet.fieldAccent': string;
   'pet.fieldAccentCustom': string;
+  'pet.fieldAccentDefault': string;
   'pet.overlayAria': string;
   'pet.spriteAria': string;
   'pet.spriteTitle': string;
-  // Right-side rail (entry view)
-  'pet.railAria': string;
-  'pet.railTitle': string;
-  'pet.railHint': string;
-  'pet.railExpand': string;
-  'pet.railCollapse': string;
-  'pet.railHide': string;
-  'pet.railShow': string;
-  'pet.railCustomFlavor': string;
-  'pet.railCustomize': string;
   // Composer pet menu
   'pet.composerTitle': string;
   'pet.composerMenuTitle': string;
@@ -1626,4 +1682,10 @@ export interface Dict {
   'critiqueTheater.replaySpeedInstant': string;
   'critiqueTheater.replaySpeedLive': string;
   'critiqueTheater.replaySpeedFast': string;
+  'critiqueTheater.settingsNav': string;
+  'critiqueTheater.settingsNavHint': string;
+  'critiqueTheater.settingsEnabledLabel': string;
+  'critiqueTheater.settingsEnabledDescription': string;
+  'critiqueTheater.settingsEnabledProjectHint': string;
+  'critiqueTheater.settingsEnabledNoProjectHint': string;
 }

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-design-refine",
+  "title": "Design refine",
+  "version": "0.1.0",
+  "description": "Baseline Refine plugin for improving an existing Open Design artifact with a focused critique, small patch, and handoff summary.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-design-refine",
+  "tags": [
+    "scenario",
+    "first-party",
+    "refine",
+    "tune",
+    "review",
+    "critique",
+    "patch-edit"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "tune-collab",
+    "scenario": "design-refine",
+    "mode": "refine",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "direction",
+          "atoms": [
+            "direction-picker"
+          ]
+        },
+        {
+          "id": "patch",
+          "atoms": [
+            "patch-edit"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        },
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Refine the existing artifact: {{refineGoal}}. Make the smallest useful design patch, critique it against the current design system, iterate until the score converges, then hand off the change summary.",
+        "zh-CN": "优化当前产物：{{refineGoal}}。做一个最小但有效的设计改动，按当前设计系统进行 critique，迭代到评分收敛，然后输出改动交接摘要。"
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "refineGoal",
+        "type": "string",
+        "required": false,
+        "label": "Refine goal",
+        "placeholder": "make this landing page feel more premium and focused"
+      },
+      {
+        "name": "direction",
+        "type": "string",
+        "required": false,
+        "label": "Direction",
+        "placeholder": "more editorial / more enterprise / more playful"
+      }
+    ]
+  }
+}

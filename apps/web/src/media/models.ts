@@ -46,6 +46,7 @@ export type MediaProviderId =
   | 'fishaudio'
   | 'senseaudio'
   | 'tavily'
+  | 'leonardo'
   | 'stub';
 
 export interface MediaProvider {
@@ -134,6 +135,16 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     docsUrl: 'https://fal.ai/dashboard/keys',
   },
   {
+    id: 'leonardo',
+    label: 'Leonardo.ai',
+    hint: 'Phoenix / Kino XL / FLUX',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1',
+    docsUrl: 'https://docs.leonardo.ai/docs/create-an-api-key',
+  },
+  {
     id: 'replicate',
     label: 'Replicate',
     hint: 'FLUX / SDXL / Ideogram',
@@ -218,6 +229,11 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     label: 'Stub (placeholder)',
     hint: 'Deterministic local placeholder bytes',
     integrated: true,
+    // Internal fixture provider used by the daemon for deterministic
+    // tests / offline demos. Hidden from Settings the same way
+    // HyperFrames is — end users have nothing to configure here, and
+    // exposing it pollutes the provider list.
+    settingsVisible: false,
   },
 ];
 
@@ -339,6 +355,13 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
+
+  // Leonardo.ai models
+  { id: 'leonardo-phoenix', label: 'Phoenix', hint: 'Leonardo · versatile', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-kino-xl', label: 'Kino XL', hint: 'Leonardo · cinematic', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-dev', label: 'FLUX Dev', hint: 'Leonardo · FLUX', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-schnell', label: 'FLUX Schnell', hint: 'Leonardo · fast', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },

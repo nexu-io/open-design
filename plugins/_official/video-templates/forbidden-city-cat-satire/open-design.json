@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-forbidden-city-cat-satire",
+  "title": "Forbidden City Cat Satire",
+  "version": "0.1.0",
+  "description": "A complex dark comedy prompt for Seedance 2.0 featuring an orange cat official and a hyena emperor in a satirical Qing dynasty setting.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "The Anxious Mind",
+    "url": "https://x.com/drjoetw/status/2048996625654354333"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "STORY FORMAT: 15s / 150 BPM / MULTI-CUT / American dark comedy with exaggerated imperial satire / slapstick timing and punchline ending\nTONE: tense accusation → rising absurdity → chaotic reveal → shameless comedic payoff\nSETTING: Grand hall of the Forbidden City, massive golden throne room, rich red and gold tones, dramatic lighting, echoing atmosphere, ceremonial yet absurd\nCHARACTERS:\nOrange cat official: wearing Qing dynasty court robes and an official hat, a long orange queue braid trailing behind, belly comically round as if hiding something, cautious and visibly nervous\nHyena emperor: dressed in extravagant Qing imperial robes with a golden crown, domineering presence, easily irritated, dramatic temper\nWhite rabbit maids: wearing Qing palace maid outfits, purple eyeshadow, bright red lips, each holding feather fans, fanning the emperor in synchronized rhythm\nGray rabbit guards: standing on both sides of the hall, stern expressions, wearing palace guard uniforms, holding long wooden staffs\nCAMERA STYLE: dramatic push-ins, snap zooms, symmetrical wide shots, rapid reaction cuts, exaggerated sound cues, slight handheld shake for comedic tension\nSCENE\n0–2s\nWide symmetrical shot: The massive throne hall\nThe hyena emperor sits high on the throne, being fanned by rows of white rabbit maids\nA plate of apples rests beside him\nGuards line both sides like statues\nThe orange cat carefully walks in, tiny footsteps echoing loudly\n2–4s\nSudden snap zoom to emperor\nHyena SLAMS armrest\nHyena (furious):\n“Speak! Why did you sneak into the imperial harem?!”\nEcho effect fills the hall\n4–6s\nCut to orange cat\nHe instantly drops to his knees, trembling\nOrange cat (panicked):\n“I heard someone screaming for help!”\n6–7s\nBeat\nCut to emperor’s face slowly twisting in rage\nHyena (shouting):\n“That is an obvious lie!”\n7–8s\nIn one swift motion, he grabs an apple and HURLS it\nSound: WHOOSH\n8–9s\nSlow motion: apple flying through the air\nOrange cat’s eyes widen\nHe suddenly raises one hand\nSNATCHES it cleanly\nPerfect catch\n9–11s\nSilence\nEveryone freezes\nThen\nOrange cat awkwardly smiles\nHe slowly reaches inside his robe\n11–13s\nHe pulls out\nA PARROT\nThe parrot flaps slightly, completely alive\nParrot (loud, repetitive):\n“Help! Help! Help!”\nBeat\n13–15s FINAL PAYOFF\nCut to wide shot\nThe entire hall ERUPTS in laughter\nWhite rabbit maids bend over laughing, fans shaking\nGray guards struggle to stay serious but break\nEven the emperor leans back laughing uncontrollably\nHyena (laughing hard):\n“You smuggled THAT into the harem?!”\nOrange cat turns to camera, dead serious\nOrange cat:\n“I told you… I wasn’t lying.”\nFreeze-frame energy\nBackground laughter echoes as the scene ends",
+        "zh-CN": "使用这个插件完成以下任务：STORY FORMAT: 15s / 150 BPM / MULTI-CUT / American dark comedy with exaggerated imperial satire / slapstick timing and punchline ending\nTONE: tense accusation → rising absurdity → chaotic reveal → shameless comedic payoff\nSETTING: Grand hall of the Forbidden City, massive golden throne room, rich red and gold tones, dramatic lighting, echoing atmosphere, ceremonial yet absurd\nCHARACTERS:\nOrange cat official: wearing Qing dynasty court robes and an official hat, a long orange queue braid trailing behind, belly comically round as if hiding something, cautious and visibly nervous\nHyena emperor: dressed in extravagant Qing imperial robes with a golden crown, domineering presence, easily irritated, dramatic temper\nWhite rabbit maids: wearing Qing palace maid outfits, purple eyeshadow, bright red lips, each holding feather fans, fanning the emperor in synchronized rhythm\nGray rabbit guards: standing on both sides of the hall, stern expressions, wearing palace guard uniforms, holding long wooden staffs\nCAMERA STYLE: dramatic push-ins, snap zooms, symmetrical wide shots, rapid reaction cuts, exaggerated sound cues, slight handheld shake for comedic tension\nSCENE\n0–2s\nWide symmetrical shot: The massive throne hall\nThe hyena emperor sits high on the throne, being fanned by rows of white rabbit maids\nA plate of apples rests beside him\nGuards line both sides like statues\nThe orange cat carefully walks in, tiny footsteps echoing loudly\n2–4s\nSudden snap zoom to emperor\nHyena SLAMS armrest\nHyena (furious):\n“Speak! Why did you sneak into the imperial harem?!”\nEcho effect fills the hall\n4–6s\nCut to orange cat\nHe instantly drops to his knees, trembling\nOrange cat (panicked):\n“I heard someone screaming for help!”\n6–7s\nBeat\nCut to emperor’s face slowly twisting in rage\nHyena (shouting):\n“That is an obvious lie!”\n7–8s\nIn one swift motion, he grabs an apple and HURLS it\nSound: WHOOSH\n8–9s\nSlow motion: apple flying through the air\nOrange cat’s eyes widen\nHe suddenly raises one hand\nSNATCHES it cleanly\nPerfect catch\n9–11s\nSilence\nEveryone freezes\nThen\nOrange cat awkwardly smiles\nHe slowly reaches inside his robe\n11–13s\nHe pulls out\nA PARROT\nThe parrot flaps slightly, completely alive\nParrot (loud, repetitive):\n“Help! Help! Help!”\nBeat\n13–15s FINAL PAYOFF\nCut to wide shot\nThe entire hall ERUPTS in laughter\nWhite rabbit maids bend over laughing, fans shaking\nGray guards struggle to stay serious but break\nEven the emperor leans back laughing uncontrollably\nHyena (laughing hard):\n“You smuggled THAT into the harem?!”\nOrange cat turns to camera, dead serious\nOrange cat:\n“I told you… I wasn’t lying.”\nFreeze-frame energy\nBackground laughter echoes as the scene ends"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

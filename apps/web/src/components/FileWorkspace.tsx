@@ -29,6 +29,7 @@ import {
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import { useAppAlert, useAppConfirm } from './AppDialog';
+import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
@@ -47,6 +48,7 @@ interface Props {
   projectKind: TrackingProjectKind;
   files: ProjectFile[];
   liveArtifacts: LiveArtifactSummary[];
+  filesRefreshKey?: number;
   onRefreshFiles: () => Promise<void> | void;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
@@ -61,6 +63,10 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onPluginFolderAgentAction?: (
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
 }
@@ -84,6 +90,7 @@ export function FileWorkspace({
   projectKind,
   files,
   liveArtifacts,
+  filesRefreshKey = 0,
   onRefreshFiles,
   isDeck,
   onExportAsPptx,
@@ -96,6 +103,7 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onPluginFolderAgentAction,
   focusMode = false,
   onFocusModeChange,
 }: Props) {
@@ -781,6 +789,7 @@ export function FileWorkspace({
             onNewSketch={startNewSketch}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
+            onPluginFolderAgentAction={onPluginFolderAgentAction}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -812,6 +821,7 @@ export function FileWorkspace({
             projectId={projectId}
             projectKind={projectKind}
             file={activeFile}
+            filesRefreshKey={filesRefreshKey}
             isDeck={isDeck}
             onExportAsPptx={onExportAsPptx}
             streaming={streaming}

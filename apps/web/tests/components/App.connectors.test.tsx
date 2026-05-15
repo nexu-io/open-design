@@ -24,7 +24,7 @@ import {
 } from '../../src/providers/registry';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
-const useRouteMock = vi.fn(() => ({ kind: 'home' as const }));
+const useRouteMock = vi.fn(() => ({ kind: 'home' as const, view: 'home' as const }));
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -32,10 +32,48 @@ vi.mock('../../src/router', () => ({
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
-  EntryView: ({ onOpenSettings }: { onOpenSettings: (section?: 'composio') => void }) => (
-    <button type="button" onClick={() => onOpenSettings('composio')}>
-      Open connectors settings
-    </button>
+  EntryView: ({
+    config,
+    onOpenSettings,
+    onPersistComposioKey,
+  }: {
+    config: AppConfig;
+    onOpenSettings: (section?: 'composio') => void;
+    onPersistComposioKey: (composio: AppConfig['composio']) => void;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onOpenSettings('composio')}>
+        Open connectors settings
+      </button>
+      <button type="button" onClick={() => onOpenSettings()}>
+        Open execution settings
+      </button>
+      <div>Composio tail: {config.composio?.apiKeyTail ?? 'none'}</div>
+      <button
+        type="button"
+        onClick={() =>
+          onPersistComposioKey({
+            apiKey: 'cmp_secret_replacement',
+            apiKeyConfigured: true,
+            apiKeyTail: config.composio?.apiKeyTail ?? '',
+          })
+        }
+      >
+        Save connectors key
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onPersistComposioKey({
+            apiKey: '',
+            apiKeyConfigured: false,
+            apiKeyTail: '',
+          })
+        }
+      >
+        Clear connectors key
+      </button>
+    </div>
   ),
 }));
 
@@ -206,7 +244,6 @@ describe('App connectors settings flows', () => {
     });
 
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open connectors settings' }));
 
     await waitFor(() => {
       expect(screen.getByText('Composio tail: uQEg')).toBeTruthy();
@@ -248,7 +285,7 @@ describe('App connectors settings flows', () => {
       expect(container.querySelector('.privacy-consent-banner')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open connectors settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open execution settings' }));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
@@ -267,11 +304,6 @@ describe('App connectors settings flows', () => {
     });
 
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open connectors settings' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
-    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Save connectors key' }));
 
@@ -320,11 +352,6 @@ describe('App connectors settings flows', () => {
     });
 
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open connectors settings' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
-    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear connectors key' }));
 

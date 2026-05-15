@@ -19,7 +19,6 @@ export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
 } as const;
 
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
-  "@open-design/contracts",
   "@open-design/daemon",
   "@open-design/desktop",
   "@open-design/packaged",

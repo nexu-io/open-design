@@ -1,0 +1,28 @@
+# Spec §15.5 — Self-hosted Kubernetes / k3s / k0s override.
+#
+# Persistence:
+#   - The default storageClass (often `local-path` / `longhorn` /
+#     `openebs-hostpath`) is fine. We leave storageClass blank so
+#     Kubernetes picks the cluster default; override per cluster if
+#     needed.
+#
+# Secrets:
+#   - Operators provide secrets directly via --set or a sealed-secrets
+#     workflow. No cloud-provider secret manager is assumed.
+#
+# Ingress:
+#   - Disabled by default; turn it on with --set ingress.enabled=true
+#     and pin the className to whichever ingress controller is
+#     installed (traefik / nginx / k3s default).
+
+persistence:
+  enabled: true
+  data:
+    storageClass: ""
+    size: 20Gi
+  config:
+    storageClass: ""
+    size: 1Gi
+
+ingress:
+  enabled: false

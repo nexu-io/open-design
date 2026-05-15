@@ -1,0 +1,86 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-guizang-ppt",
+  "title": "Guizang Ppt",
+  "version": "0.1.0",
+  "description": "生成\"电子杂志 × 电子墨水\"风格的横向翻页网页 PPT（单 HTML 文件），含 WebGL 流体背景、衬线标题 + 非衬线正文、章节幕封、数据大字报、图片网格等模板。当用户需要制作分享 / 演讲 / 发布会风格的网页 PPT，或提到\"杂志风 PPT\"、\"horizontal swipe deck\"、\"editorial magazine\"、\"e-ink presentation\"时使用。",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/guizang-ppt",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "ppt",
+    "slides",
+    "presentation",
+    "magazine",
+    "untitled",
+    "horizontal-swipe",
+    "horizontal-swipe-deck",
+    "editorial-magazine",
+    "e-ink-presentation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "featured": 0.02,
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a magazine-style PPT about 'One-person companies: organizations folded by AI' for a 25-minute talk aimed at designers and founders. First recommend one direction for me to choose from: Monocle, WIRED, Kinfolk, Domus, or Lab.",
+        "zh-CN": "帮我做一份杂志风的 PPT —— 关于'一人公司 · 被 AI 折叠的组织'，25 分钟分享会，目标受众是设计师 + 创业者。先推荐一个方向（Monocle / WIRED / Kinfolk / Domus / Lab）让我选。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/example-slides.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/components.md",
+        "./references/layouts.md",
+        "./references/styles.md",
+        "./references/themes.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-design.ai/schemas/marketplace.v1.json",
+  "title": "Open Design plugin marketplace index (v1)",
+  "description": "Schema for `open-design-marketplace.json` federated catalog files. See docs/plugins-spec.md §6.",
+  "type": "object",
+  "required": ["specVersion", "name", "version", "plugins"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "specVersion": { "type": "string", "minLength": 1 },
+    "name":    { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "owner": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url":  { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "version":     { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "source", "version"],
+        "properties": {
+          "name":    { "type": "string", "minLength": 1 },
+          "source":  { "type": "string", "minLength": 1 },
+          "version": { "type": "string", "minLength": 1 },
+          "ref":     { "type": "string" },
+          "dist": {
+            "type": "object",
+            "properties": {
+              "type":           { "type": "string" },
+              "archive":        { "type": "string" },
+              "integrity":      { "type": "string" },
+              "manifestDigest": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["version"],
+              "properties": {
+                "version": { "type": "string", "minLength": 1 },
+                "source":  { "type": "string", "minLength": 1 },
+                "ref":     { "type": "string" },
+                "dist": {
+                  "type": "object",
+                  "properties": {
+                    "type":           { "type": "string" },
+                    "archive":        { "type": "string" },
+                    "integrity":      { "type": "string" },
+                    "manifestDigest": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                },
+                "integrity":      { "type": "string" },
+                "manifestDigest": { "type": "string" },
+                "deprecated": {
+                  "oneOf": [
+                    { "type": "boolean" },
+                    { "type": "string" }
+                  ]
+                },
+                "yanked":     { "type": "boolean" },
+                "yankedAt":   { "type": "string" },
+                "yankReason": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "distTags": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "integrity":      { "type": "string" },
+          "manifestDigest": { "type": "string" },
+          "publisher": {
+            "type": "object",
+            "properties": {
+              "id":     { "type": "string" },
+              "github": { "type": "string" },
+              "url":    { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "homepage": { "type": "string" },
+          "license":  { "type": "string" },
+          "capabilitiesSummary": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "deprecated": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string" }
+            ]
+          },
+          "yanked":     { "type": "boolean" },
+          "yankedAt":   { "type": "string" },
+          "yankReason": { "type": "string" },
+          "tags":    { "type": "array", "items": { "type": "string" } },
+          "title":   { "type": "string" },
+          "description": { "type": "string" },
+          "icon":        { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

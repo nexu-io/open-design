@@ -1,6 +1,6 @@
 // Inline "Memory model" picker — sits right next to the chat model
 // dropdown (both in CLI mode and BYOK mode) inside Settings →
-// Configure execution mode.
+// Execution mode.
 //
 // Why one tiny dropdown instead of a separate panel:
 // User feedback was explicit — the memory extractor isn't a parallel

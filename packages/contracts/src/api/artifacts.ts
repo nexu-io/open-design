@@ -26,6 +26,71 @@ export type ArtifactExportKind = 'html' | 'pdf' | 'zip' | 'pptx' | 'jsx' | 'md' 
 
 export type ArtifactStatus = 'streaming' | 'complete' | 'error';
 
+// Plan §3.N3 / spec §11.5.1 — plugin provenance + downstream
+// distribution. Every field is optional for back-compat; readers
+// MUST preserve unknown values.
+
+export type ArtifactProvenanceTaskKind =
+  | 'new-generation'
+  | 'code-migration'
+  | 'figma-migration'
+  | 'tune-collab';
+
+export type ArtifactProvenanceArtifactKind =
+  | 'html-prototype'
+  | 'deck'
+  | 'interactive-video'
+  | 'design-system'
+  | 'code-diff'
+  | 'production-app'
+  | 'asset-pack';
+
+export type ArtifactProvenanceRenderKind =
+  | 'html'
+  | 'jsx'
+  | 'pptx'
+  | 'markdown'
+  | 'video'
+  | 'image'
+  | 'diff'
+  | 'repo';
+
+export type ArtifactProvenanceHandoffKind =
+  | 'design-only'
+  | 'implementation-plan'
+  | 'patch'
+  | 'deployable-app';
+
+export type ArtifactExportSurface =
+  | 'cli'
+  | 'desktop'
+  | 'web'
+  | 'docker'
+  | 'github'
+  | 'figma'
+  | 'code-agent';
+
+export type ArtifactDeployProvider =
+  | 'aws'
+  | 'gcp'
+  | 'azure'
+  | 'aliyun'
+  | 'tencent'
+  | 'huawei'
+  | 'self-hosted';
+
+export interface ArtifactExportTarget {
+  surface:    ArtifactExportSurface;
+  target:     string;
+  exportedAt: number;
+}
+
+export interface ArtifactDeployTarget {
+  provider:    ArtifactDeployProvider;
+  location:    string;
+  deployedAt:  number;
+}
+
 export interface ArtifactManifest {
   version: 1;
   kind: ArtifactKind;
@@ -44,6 +109,23 @@ export interface ArtifactManifest {
   sourceSkillId?: string;
   designSystemId?: string | null;
   metadata?: Record<string, JsonValue | undefined>;
+
+  // Plan §3.N3 / spec §11.5.1 — plugin provenance + downstream
+  // distribution. Optional in v1; unknown readers must preserve.
+  sourcePluginSnapshotId?: string;
+  sourcePluginId?: string;
+  sourcePluginVersion?: string;
+  sourceTaskKind?: ArtifactProvenanceTaskKind;
+  sourceRunId?: string;
+  sourceProjectId?: string;
+  parentArtifactId?: string;
+
+  artifactKind?: ArtifactProvenanceArtifactKind;
+  renderKind?:   ArtifactProvenanceRenderKind;
+  handoffKind?:  ArtifactProvenanceHandoffKind;
+
+  exportTargets?: ArtifactExportTarget[];
+  deployTargets?: ArtifactDeployTarget[];
 }
 
 export interface SaveArtifactRequest {

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-open-design-landing",
+  "title": "Open Design Landing",
+  "version": "0.1.0",
+  "description": "Produce a world-class single-page editorial landing site in the Atelier Zero visual language (Monocle / Apartamento / Études editorial collage) — the same aesthetic Open Design uses for its own marketing surface. The agent fills a typed `inputs.json` from a brand brief, optionally generates 16 collage assets via gpt-image-2, then runs a pure-function composer that emits a self-contained HTML file; a separate path can mirror the Astro marketing site in `apps/landing-page/`. Drop-in scroll-reveal motion and a Headroom-style sticky nav are wired automatically.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/open-design-landing",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "landing-page",
+    "untitled",
+    "editorial-site",
+    "magazine-layout",
+    "hero-collage",
+    "atelier-zero",
+    "open-design-landing"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Produce a world-class single-page editorial landing site in the Atelier Zero visual language (Monocle / Apartamento / Études editorial collage) — the same aesthetic Open Design uses for its own marketing surface. The agent fills a typed `inputs.json` from a brand brief, optionally generates 16 collage assets via gpt-im",
+        "zh-CN": "使用这个插件完成以下任务：Produce a world-class single-page editorial landing site in the Atelier Zero visual language (Monocle / Apartamento / Études editorial collage) — the same aesthetic Open Design uses for its own marketing surface. The agent fills a typed `inputs.json` from a brand brief, optionally generates 16 collage assets via gpt-im"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Open Design Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "pixel-discipline",
+        "typographic-rhythm"
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/about.png",
+        "./assets/capabilities.png",
+        "./assets/cta.png",
+        "./assets/hero.png",
+        "./assets/image-manifest.json",
+        "./assets/imagegen-prompts.md",
+        "./assets/lab-1.png",
+        "./assets/lab-2.png",
+        "./assets/lab-3.png",
+        "./assets/lab-4.png",
+        "./assets/lab-5.png",
+        "./assets/method-1.png",
+        "./assets/method-2.png",
+        "./assets/method-3.png",
+        "./assets/method-4.png",
+        "./assets/testimonial.png",
+        "./assets/work-1.png",
+        "./assets/work-2.png"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

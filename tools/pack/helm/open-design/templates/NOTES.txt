@@ -1,0 +1,24 @@
+Open Design has been deployed.
+
+  Image:    {{ .Values.image.repository }}:{{ .Values.image.tag }}
+  Replicas: {{ .Values.replicaCount }}
+  Service:  {{ include "open-design.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
+
+{{- if eq .Values.service.type "ClusterIP" }}
+
+To reach the daemon from your laptop:
+
+  kubectl port-forward svc/{{ include "open-design.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  open http://127.0.0.1:{{ .Values.service.port }}
+{{- end }}
+
+To install a plugin once the pod is up:
+
+  POD=$(kubectl get pod -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }} -o jsonpath="{.items[0].metadata.name}")
+  kubectl exec -n {{ .Release.Namespace }} $POD -- node apps/daemon/dist/cli.js plugin install ./fixtures/sample-plugin
+  kubectl exec -n {{ .Release.Namespace }} $POD -- node apps/daemon/dist/cli.js plugin list
+
+The bound-API-token guard (spec §15.7) is active when secrets.apiToken
+is non-empty. Every /api/* request from outside the cluster must carry
+`Authorization: Bearer <token>`. /api/health, /api/version, and
+/api/daemon/status are exempt so kubelet probes work without secrets.

@@ -69,6 +69,16 @@ export function isPrivateIpv4(hostname: unknown): boolean {
   );
 }
 
+export function isIpLiteralHostname(hostname: unknown): boolean {
+  const host = String(hostname || '').trim();
+  if (!host) return false;
+  if (host.startsWith('[') && host.endsWith(']')) return true;
+  const parts = host.split('.');
+  if (parts.length !== 4) return false;
+  if (!parts.every((part) => /^\d+$/.test(part))) return false;
+  return parts.map(Number).every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
+}
+
 export function isLoopbackOrPrivateLanHost(hostname: unknown): boolean {
   const host = String(hostname || '').toLowerCase();
   return (
@@ -151,8 +161,11 @@ export function isLocalSameOrigin(
   const ports = allowedBrowserPorts(port, env);
   const bindHost = env.OD_BIND_HOST || '127.0.0.1';
   const extraAllowedOrigins = configuredAllowedOrigins(env);
+  const ipOnlyExtraOrigins = extraAllowedOrigins.filter((o) =>
+    isIpLiteralHostname(new URL(o).hostname),
+  );
 
-  const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, []);
+  const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, ipOnlyExtraOrigins);
   if (origin == null || origin === '') return localHostAllowed;
   if (!isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins)) return false;
   return isAllowedBrowserOrigin(origin, host, ports, bindHost, extraAllowedOrigins);

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, writeFileSync,
+  AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 
 test('AGENT_DEFS ids are unique', () => {
@@ -12,52 +12,90 @@ test('AGENT_DEFS ids are unique', () => {
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
   process.env.OD_CODEX_DISABLE_PLUGINS = '1';
 
-  const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  withPlatform('darwin', () => {
+    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-  assert.deepEqual(args.slice(0, 9), [
-    'exec',
-    '--json',
-    '--skip-git-repo-check',
-    '--sandbox',
-    'workspace-write',
-    '-c',
-    'sandbox_workspace_write.network_access=true',
-    '--disable',
-    'plugins',
-  ]);
+    assert.deepEqual(args.slice(0, 9), [
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--sandbox',
+      'workspace-write',
+      '-c',
+      'sandbox_workspace_write.network_access=true',
+      '--disable',
+      'plugins',
+    ]);
+  });
 });
 
-test('codex args use workspace-write sandbox instead of deprecated full-auto', () => {
+test('codex args use workspace-write sandbox on macOS and Linux', () => {
   delete process.env.OD_CODEX_DISABLE_PLUGINS;
 
-  const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  for (const platform of ['darwin', 'linux'] as const) {
+    withPlatform(platform, () => {
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+      assert.equal(args.includes('--full-auto'), false);
+      assert.deepEqual(args.slice(0, 5), [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'workspace-write',
+      ]);
+    });
+  }
+});
 
-  assert.equal(args.includes('--full-auto'), false);
-  assert.deepEqual(args.slice(0, 5), [
-    'exec',
-    '--json',
-    '--skip-git-repo-check',
-    '--sandbox',
-    'workspace-write',
-  ]);
+test('codex args use danger-full-access sandbox on Windows because workspace-write blocks PowerShell', () => {
+  // Codex CLI's workspace-write sandbox mode on Windows lacks a working
+  // OS-level sandbox and falls back to a policy that rejects shell
+  // invocations such as powershell.exe with "blocked by policy".
+  // The agent cannot list files or run any shell-backed tool under that
+  // policy. danger-full-access is Codex CLI's documented Windows-compatible
+  // mode (issue #1721).
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  withPlatform('win32', () => {
+    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+
+    assert.deepEqual(args.slice(0, 5), [
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--sandbox',
+      'danger-full-access',
+    ]);
+    // The workspace-write-scoped network override is meaningless under
+    // danger-full-access and must not appear on Windows.
+    assert.equal(args.includes('workspace-write'), false);
+    assert.equal(
+      args.includes('sandbox_workspace_write.network_access=true'),
+      false,
+    );
+  });
 });
 
 test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', () => {
   delete process.env.OD_CODEX_DISABLE_PLUGINS;
 
-  const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  withPlatform('darwin', () => {
+    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-  assert.equal(args.includes('--disable'), false);
-  assert.equal(args.includes('plugins'), false);
+    assert.equal(args.includes('--disable'), false);
+    assert.equal(args.includes('plugins'), false);
+  });
 });
 
 test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', () => {
   process.env.OD_CODEX_DISABLE_PLUGINS = 'true';
 
-  const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  withPlatform('darwin', () => {
+    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-  assert.equal(args.includes('--disable'), false);
-  assert.equal(args.includes('plugins'), false);
+    assert.equal(args.includes('--disable'), false);
+    assert.equal(args.includes('plugins'), false);
+  });
 });
 
 test('codex model picker includes current OpenAI choices in priority order', async () => {
@@ -100,22 +138,24 @@ test('codex model picker includes current OpenAI choices in priority order', asy
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {
-    const codexBin = join(dir, 'codex');
-    writeFileSync(
-      codexBin,
-      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
-    );
-    chmodSync(codexBin, 0o755);
-    process.env.OD_AGENT_HOME = dir;
-    process.env.PATH = dir;
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
 
-    const agents = await detectAgents();
-    const detected = agents.find((agent) => agent.id === 'codex');
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
 
-    assert.ok(detected);
-    assert.equal(detected.available, true);
-    assert.equal(detected.version, 'codex 1.0.0');
-    assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.version, 'codex 1.0.0');
+      assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
