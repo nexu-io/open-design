@@ -712,7 +712,6 @@ code {
 .workspace-tabs-popover {
   position: absolute;
   top: calc(100% + 7px);
-  right: 0;
   width: min(380px, calc(100vw - 24px));
   max-height: min(620px, calc(100vh - 72px));
   padding: 8px;
@@ -725,6 +724,12 @@ code {
   gap: 8px;
   z-index: 130;
   -webkit-app-region: no-drag;
+}
+.workspace-tabs-popover--left {
+  left: 0;
+}
+.workspace-tabs-popover--right {
+  right: 0;
 }
 .workspace-tabs-popover,
 .workspace-tabs-popover * {

@@ -250,6 +250,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [maxVisibleTabs, setMaxVisibleTabs] = useState(MAX_VISIBLE_CHROME_TABS);
+  const [popoverAlign, setPopoverAlign] = useState<'left' | 'right'>('right');
   const stripRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -330,6 +331,13 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       searchInputRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
+  }, [tabsMenuOpen]);
+
+  useEffect(() => {
+    if (!tabsMenuOpen || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const viewportMid = window.innerWidth / 2;
+    setPopoverAlign(rect.left < viewportMid ? 'left' : 'right');
   }, [tabsMenuOpen]);
 
   useEffect(() => {
@@ -470,7 +478,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             <Icon name="search" size={15} />
           </button>
           {tabsMenuOpen ? (
-            <div className="workspace-tabs-popover" role="dialog" aria-label="Search tabs">
+            <div className={`workspace-tabs-popover workspace-tabs-popover--${popoverAlign}`} role="dialog" aria-label="Search tabs">
               <div className="workspace-tabs-search">
                 <Icon name="search" size={14} />
                 <input
