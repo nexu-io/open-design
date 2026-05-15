@@ -97,37 +97,50 @@ Node 24 built-ins (`crypto`, `fetch`, `child_process`). RSS uses
 Done once per environment by a maintainer. Repeating this is harmless
 but unnecessary.
 
-### 1. Create a Google Cloud service account
+### 1. Configure Google Search Console auth
+
+Preferred path: OAuth user refresh token. This avoids the Google Search
+Console UI bug where newly-created service account emails sometimes
+fail with `email not found`.
 
 1. Go to <https://console.cloud.google.com/projectcreate> and create a
    project named `open-design-blog-indexing` (or reuse an existing
    project the team owns).
 2. Enable the **Search Console API** under
    <https://console.cloud.google.com/apis/library/searchconsole.googleapis.com>.
-3. Open
-   <https://console.cloud.google.com/iam-admin/serviceaccounts> and
-   create a service account named `gsc-indexing-bot`. No project
-   roles are needed (the permission lives on the GSC property side).
-4. On the service account's "Keys" tab, click **Add key → JSON**.
-   Download the file. Treat it as a credential — never commit.
+3. Create an OAuth client under
+   <https://console.cloud.google.com/apis/credentials>:
+   - Application type: **Desktop app**
+   - Name: `open-design-gsc-local`
+4. In the OAuth consent screen, keep the app in Testing and add every
+   Google account that may grant access under **Audience → Test users**.
+5. Run the local helper:
 
-### 2. Grant the service account access to the GSC property
+   ```bash
+   GSC_OAUTH_CLIENT_ID='<client-id>' \
+   GSC_OAUTH_CLIENT_SECRET='<client-secret>' \
+   pnpm --filter @open-design/landing-page exec tsx \
+     scripts/blog-indexing/authorize-gsc-oauth.ts \
+     --out /tmp/open-design-gsc-refresh-token.txt
+   ```
 
-1. Open <https://search.google.com/search-console> and select the
-   `open-design.ai` Domain property.
-2. Settings → Users and permissions → Add user.
-3. Paste the service account email (the `client_email` field from the
-   JSON, looks like `gsc-indexing-bot@<project>.iam.gserviceaccount.com`).
-4. Permission level: **Owner** (required for both Sitemaps API and
-   URL Inspection API).
+6. Open the printed Google URL and authorize with an account that is an
+   Owner of the `open-design.ai` Search Console property.
 
-### 3. Add the JSON key as a GitHub secret
+Fallback path: service account. Create `gsc-indexing-bot`, download a
+JSON key, then try adding the `client_email` as an Owner in Search
+Console. If Search Console shows `email not found`, use OAuth instead.
+
+### 2. Add auth secrets to GitHub
 
 1. Open <https://github.com/nexu-io/open-design/settings/secrets/actions>.
-2. New repository secret:
-   - Name: `GSC_SERVICE_ACCOUNT_KEY`
-   - Value: the entire JSON file contents (starting with `{`).
-3. Confirm the existing `BOT_APP_ID` and `BOT_APP_PRIVATE_KEY` secrets
+2. Preferred OAuth secrets:
+   - `GSC_OAUTH_CLIENT_ID`
+   - `GSC_OAUTH_CLIENT_SECRET`
+   - `GSC_OAUTH_REFRESH_TOKEN`
+3. Optional service-account fallback:
+   - `GSC_SERVICE_ACCOUNT_KEY`
+4. Confirm the existing `BOT_APP_ID` and `BOT_APP_PRIVATE_KEY` secrets
    already exist — they are reused from the `refresh-contributors-wall`
    automation. The bot needs `contents:write`, `pull-requests:write`,
    and `issues:write` for `nexu-io/open-design` (already configured).
@@ -136,7 +149,7 @@ If these secrets are not present yet, the workflows do not fail the
 main deploy path. They record the missing configuration in the job
 summary and skip the GSC / bot-write steps until the secrets are added.
 
-### 4. Optional platform secrets
+### 3. Optional platform secrets
 
 These are not required for indexing.
 
@@ -151,7 +164,7 @@ These are not required for indexing.
 IndexNow does not need a secret. The public verification key is committed
 at `apps/landing-page/public/96b0928121e24fd7b4ef85ae0f8bf1d8.txt`.
 
-### 5. Smoke test
+### 4. Smoke test
 
 Trigger `blog-indexing-on-deploy.yml` manually with the SHA of any
 recent commit that added a blog post:

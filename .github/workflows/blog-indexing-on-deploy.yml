@@ -78,13 +78,16 @@ jobs:
       - name: Check indexing configuration
         id: config
         env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
           BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
           BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
         run: |
           gsc=false
           bot=false
-          if [ -n "$GSC_SERVICE_ACCOUNT_KEY" ]; then
+          if { [ -n "$GSC_OAUTH_CLIENT_ID" ] && [ -n "$GSC_OAUTH_CLIENT_SECRET" ] && [ -n "$GSC_OAUTH_REFRESH_TOKEN" ]; } || [ -n "$GSC_SERVICE_ACCOUNT_KEY" ]; then
             gsc=true
           fi
           if [ -n "$BOT_APP_ID" ] && [ -n "$BOT_APP_PRIVATE_KEY" ]; then
@@ -94,7 +97,7 @@ jobs:
           echo "bot=$bot" >> "$GITHUB_OUTPUT"
           {
             echo "### Blog indexing configuration"
-            echo "- GSC service account configured: \`$gsc\`"
+            echo "- GSC auth configured: \`$gsc\`"
             echo "- Open Design bot configured: \`$bot\`"
             if [ "$gsc" != "true" ]; then
               echo ""
@@ -148,6 +151,9 @@ jobs:
       - name: Submit sitemap to Search Console
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-sitemap.ts
@@ -155,6 +161,9 @@ jobs:
       - name: Inspect new URLs (baseline)
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
@@ -166,6 +175,9 @@ jobs:
       - name: Query Search Console traffic (baseline)
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
