@@ -143,20 +143,18 @@ If a sim fails after a logic change, fix the logic — do not "stabilize" the te
 ## Running the suites
 
 ```bash
-node creative-memory-system/sims/testHarness.js          # 64 assertions
-node creative-memory-system/sims/retrievalQualitySim.js  # 36 assertions
-node creative-memory-system/sims/retrievalAdvancedSim.js # 91 assertions
-node creative-memory-system/sims/retrievalLongRunSim.js  # 47 assertions
+pnpm --filter @open-design/creative-memory-system test
 ```
 
-Or, from `creative-memory-system/`, use the npm scripts in `creative-memory-system/package.json`:
+Test files map to the original simulation suites as follows:
 
-```bash
-npm run sim          # runs all four suites in sequence
-npm run sim:harness
-npm run sim:quality
-npm run sim:advanced
-npm run sim:longrun
-```
+| Test file | Originally from | Vitest specs |
+|---|---|---|
+| `tests/lifecycle.test.ts` | `sims/testHarness.js` | 18 |
+| `tests/retrievalQuality.test.ts` | `sims/retrievalQualitySim.js` | 12 |
+| `tests/retrievalAdvanced.test.ts` | `sims/retrievalAdvancedSim.js` | 24 |
+| `tests/retrievalLongRun.test.ts` | `sims/retrievalLongRunSim.js` | 15 |
+| `tests/extractionAdapter.test.ts` | `extractionAdapter.js` self-test | 12 |
+| **Total** | — | **81** |
 
-The `extractionAdapter.js` self-test (`node creative-memory-system/extractionAdapter.js`) adds 12 more assertions covering the adapter handlers; it is excluded from the 238-assertion total because it tests the adapter contract, not the engine.
+Each Vitest spec groups multiple `expect(...)` calls; the original sim runners had **238 individual assertions** across the four engine suites and **12 in the adapter self-test**. The Vitest port preserves the same coverage — the same scenarios, the same invariants — at a higher level of granularity.

@@ -52,6 +52,7 @@ const residualAllowedExactPaths = new Set([
   // esbuild config entrypoints are executed directly by Node before package
   // dist output exists.
   "packages/contracts/esbuild.config.mjs",
+  "packages/creative-memory-system/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/sidecar/esbuild.config.mjs",
   "packages/sidecar-proto/esbuild.config.mjs",

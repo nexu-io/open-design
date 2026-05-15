@@ -306,6 +306,21 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)(lightningcss@1.32.0)
 
+  packages/creative-memory-system:
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.27.7
+        version: 0.27.7
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.2)(jsdom@29.1.1)(lightningcss@1.32.0)
+
   packages/platform:
     devDependencies:
       '@types/node':

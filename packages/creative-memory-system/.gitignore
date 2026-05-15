@@ -1,0 +1,6 @@
+# Per-package storage scratch dirs created by tests
+.test-*/
+
+# Default storage root when MEMORY_STORAGE_ROOT is unset and tests
+# accidentally fall through to module-relative storage
+memory/

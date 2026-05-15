@@ -1,32 +1,74 @@
 /**
  * Creative Memory System — Preference Store
- * Phase 1 · JSON Storage Layer
  *
- * Self-contained module. No external dependencies.
- * Node.js fs/path only.
+ * Self-contained module. No external dependencies beyond Node `fs`/`path`.
+ * Local-first, deterministic, JSON-on-disk preference memory.
+ *
+ * See docs/architecture.md for design philosophy and docs/retrieval-pipeline.md
+ * for the eleven-stage retrieval flow.
  */
 
-const fs = require("fs");
-const path = require("path");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import type {
+  Confidence,
+  CreatePreferenceInput,
+  DecayResult,
+  Diagnostic,
+  ListPreferencesOptions,
+  Polarity,
+  Preference,
+  PreferenceStoreFile,
+  RankedPreference,
+  RefinementInput,
+  RefinementLogEntry,
+  ResetMemoryOptions,
+  RetrievalContext,
+  RetrievalResult,
+  Scope,
+  Signal,
+  SignalType,
+} from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const STORAGE_ROOT = process.env.MEMORY_STORAGE_ROOT || path.join(__dirname, "memory");
-const NORMALIZER = 2.0;
-const DECAY_DAYS = 90;
-const ARCHIVE_DAYS = 180;
-const INJECTION_THRESHOLD = 0.40;
-const TOKEN_BUDGET = 200;
-const MAX_INJECTION_COUNT = 20;
-const NEGATIVE_PRIORITY_MULTIPLIER = 1.2;
-const NEGATIVE_BUDGET_RATIO = 0.50;
-const MIN_NEG_FLOOR = 2;
-const MAX_PER_CATEGORY = 3;
-const CHARS_PER_TOKEN = 4;
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
-const SIGNAL_WEIGHTS = {
+/**
+ * Storage root resolved at call time from MEMORY_STORAGE_ROOT, falling back to
+ * `<module dir>/memory`. Resolving lazily lets tests override the env var
+ * after the module is imported (ESM hoists imports above test-file
+ * executable code, so capturing at module-load would freeze the wrong path).
+ */
+function resolveStorageRoot(): string {
+  return process.env.MEMORY_STORAGE_ROOT ?? path.join(moduleDir, "memory");
+}
+
+/** @deprecated Use `getStorageRoot()` for live values. Retained for diagnostics. */
+export const STORAGE_ROOT: string = resolveStorageRoot();
+
+/** Live read of the resolved storage root. */
+export function getStorageRoot(): string {
+  return resolveStorageRoot();
+}
+
+export const NORMALIZER = 2.0;
+export const DECAY_DAYS = 90;
+export const ARCHIVE_DAYS = 180;
+export const INJECTION_THRESHOLD = 0.40;
+export const TOKEN_BUDGET = 200;
+export const MAX_INJECTION_COUNT = 20;
+export const NEGATIVE_PRIORITY_MULTIPLIER = 1.2;
+export const NEGATIVE_BUDGET_RATIO = 0.50;
+export const MIN_NEG_FLOOR = 2;
+export const MAX_PER_CATEGORY = 3;
+export const CHARS_PER_TOKEN = 4;
+
+export const SIGNAL_WEIGHTS: Readonly<Record<SignalType, number>> = Object.freeze({
   explicit_tag: 0.30,
   revert_after_edit: 0.25,
   manual_refinement: 0.20,
@@ -35,44 +77,46 @@ const SIGNAL_WEIGHTS = {
   thumbs_down: -0.10,
   single_rejection: -0.10,
   abandoned_generation: -0.02,
-};
+});
 
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 
-function uid(prefix) {
+function uid(prefix: string): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let s = "";
-  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 6; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
   return `${prefix}_${s}`;
 }
 
-function clamp(val, min, max) {
+function clamp(val: number, min: number, max: number): number {
   return Math.min(Math.max(val, min), max);
 }
 
-function now() {
+function now(): string {
   return new Date().toISOString();
 }
 
-function addDays(isoString, days) {
+function addDays(isoString: string, days: number): string {
   const d = new Date(isoString);
   d.setDate(d.getDate() + days);
   return d.toISOString();
 }
 
-function daysBetween(a, b) {
-  return (new Date(b) - new Date(a)) / (1000 * 60 * 60 * 24);
+function daysBetween(a: string, b: string): number {
+  return (new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24);
 }
 
-function calcConfidence(strength) {
+function calcConfidence(strength: number): Confidence {
   if (strength < 0.35) return "low";
   if (strength <= 0.65) return "medium";
   return "high";
 }
 
-function dropConfidence(current) {
+function dropConfidence(current: Confidence): Confidence {
   if (current === "high") return "medium";
   if (current === "medium") return "low";
   return "low";
@@ -82,24 +126,24 @@ function dropConfidence(current) {
 // File I/O
 // ---------------------------------------------------------------------------
 
-function userFilePath(userId) {
-  return path.join(STORAGE_ROOT, userId, "preferences.json");
+function userFilePath(userId: string): string {
+  return path.join(resolveStorageRoot(), userId, "preferences.json");
 }
 
-function loadFile(userId) {
+function loadFile(userId: string): PreferenceStoreFile | null {
   const fp = userFilePath(userId);
   if (!fs.existsSync(fp)) return null;
-  return JSON.parse(fs.readFileSync(fp, "utf8"));
+  return JSON.parse(fs.readFileSync(fp, "utf8")) as PreferenceStoreFile;
 }
 
-function saveFile(userId, data) {
+function saveFile(userId: string, data: PreferenceStoreFile): void {
   const fp = userFilePath(userId);
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   data.last_updated = now();
   fs.writeFileSync(fp, JSON.stringify(data, null, 2), "utf8");
 }
 
-function initFile(userId) {
+function initFile(userId: string): PreferenceStoreFile {
   return {
     schema_version: "1.0",
     user_id: userId,
@@ -111,7 +155,7 @@ function initFile(userId) {
   };
 }
 
-function ensureFile(userId) {
+function ensureFile(userId: string): PreferenceStoreFile {
   let data = loadFile(userId);
   if (!data) {
     data = initFile(userId);
@@ -124,43 +168,54 @@ function ensureFile(userId) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function getAllPrefs(data) {
-  const all = [...data.global_preferences];
+function getAllPrefs(data: PreferenceStoreFile): Preference[] {
+  const all: Preference[] = [...data.global_preferences];
   for (const prefs of Object.values(data.project_overrides)) all.push(...prefs);
   return all;
 }
 
-function getPrefArray(data, scope, projectId) {
+function getPrefArray(
+  data: PreferenceStoreFile,
+  scope: "global" | "project",
+  projectId: string | null,
+): Preference[] {
   if (scope === "global") return data.global_preferences;
   if (scope === "project" && projectId) {
     if (!data.project_overrides[projectId]) data.project_overrides[projectId] = [];
-    return data.project_overrides[projectId];
+    return data.project_overrides[projectId]!;
   }
   throw new Error(`Invalid scope: ${scope}. Use "global" or "project" with a projectId.`);
 }
 
-function findPrefById(data, prefId) {
+function findPrefById(
+  data: PreferenceStoreFile,
+  prefId: string,
+): { pref: Preference; array: Preference[] } | null {
   for (const pref of data.global_preferences) {
     if (pref.id === prefId) return { pref, array: data.global_preferences };
   }
-  for (const [, arr] of Object.entries(data.project_overrides)) {
+  for (const arr of Object.values(data.project_overrides)) {
     const pref = arr.find((p) => p.id === prefId);
     if (pref) return { pref, array: arr };
   }
   return null;
 }
 
-function findExistingPref(array, pattern, preferenceType, polarity) {
-  return array.find(
-    (p) => p.pattern === pattern && p.preference_type === preferenceType && p.polarity === polarity
-  ) || null;
+function findExistingPref(
+  array: Preference[],
+  pattern: string,
+  preferenceType: string,
+  polarity: Polarity,
+): Preference | null {
+  return (
+    array.find(
+      (p) =>
+        p.pattern === pattern && p.preference_type === preferenceType && p.polarity === polarity,
+    ) ?? null
+  );
 }
 
-function recalcStrength(pref) {
-  // Re-derive signal_strength from raw counts and sources
-  // weighted_sum is tracked implicitly via signal_strength * normalizer
-  // On direct ingestion we mutate signal_strength directly with weights, so
-  // this helper just re-clamps and re-derives confidence.
+function recalcStrength(pref: Preference): Preference {
   pref.signal_strength = clamp(pref.signal_strength, 0.0, 1.0);
   pref.confidence = calcConfidence(pref.signal_strength);
   return pref;
@@ -171,47 +226,46 @@ function recalcStrength(pref) {
 // ---------------------------------------------------------------------------
 
 /**
- * Create a new preference record.
- * @param {string} userId
- * @param {object} record — partial record; id, last_seen, decay_at auto-set
- * @returns {object} created record
+ * Create a new preference record. The id, last_seen, and decay_at fields are
+ * auto-set; everything else passes through from the input.
  */
-function createPreference(userId, record) {
+export function createPreference(userId: string, record: CreatePreferenceInput): Preference {
   const data = ensureFile(userId);
   const t = now();
-  const pref = {
+  const pref: Preference = {
     id: uid("pref"),
     preference_type: record.preference_type,
     pattern: record.pattern,
-    polarity: record.polarity || "positive",
-    signal_strength: clamp(record.signal_strength || 0, 0, 1),
+    polarity: record.polarity ?? "positive",
+    signal_strength: clamp(record.signal_strength ?? 0, 0, 1),
     confidence: "low",
-    sources: record.sources || [],
-    accept_count: record.accept_count || 0,
-    reject_count: record.reject_count || 0,
-    explicit_tags: record.explicit_tags || [],
+    sources: record.sources ?? [],
+    accept_count: record.accept_count ?? 0,
+    reject_count: record.reject_count ?? 0,
+    explicit_tags: record.explicit_tags ?? [],
     last_seen: t,
     decay_at: addDays(t, DECAY_DAYS),
-    scope: record.scope || "global",
+    scope: record.scope ?? "global",
     reversal_signals: 0,
     reversal_first_seen: null,
     polarity_status: "stable",
-    shadow_of: record.shadow_of || null,
+    shadow_of: record.shadow_of ?? null,
   };
   pref.confidence = calcConfidence(pref.signal_strength);
 
-  const projectId = record.project_id || null;
-  const array = getPrefArray(data, pref.scope === "global" ? "global" : "project", projectId);
+  const projectId = record.project_id ?? null;
+  const array = getPrefArray(
+    data,
+    pref.scope === "global" ? "global" : "project",
+    projectId,
+  );
   array.push(pref);
   saveFile(userId, data);
   return pref;
 }
 
-/**
- * Read a single preference by id.
- * @returns {object|null}
- */
-function readPreference(userId, prefId) {
+/** Read a single preference by id. */
+export function readPreference(userId: string, prefId: string): Preference | null {
   const data = loadFile(userId);
   if (!data) return null;
   const result = findPrefById(data, prefId);
@@ -219,11 +273,15 @@ function readPreference(userId, prefId) {
 }
 
 /**
- * Update specific fields on a preference record.
- * Does NOT recalculate signal strength — use ingestSignal for that.
- * @returns {object|null} updated record
+ * Update specific fields on a preference record. Does NOT recalculate signal
+ * strength from scratch — use ingestSignal for that. Used primarily by tests
+ * and "forget this" / "promote this" UI affordances.
  */
-function updatePreference(userId, prefId, fields) {
+export function updatePreference(
+  userId: string,
+  prefId: string,
+  fields: Partial<Preference>,
+): Preference | null {
   const data = ensureFile(userId);
   const result = findPrefById(data, prefId);
   if (!result) return null;
@@ -234,11 +292,8 @@ function updatePreference(userId, prefId, fields) {
   return result.pref;
 }
 
-/**
- * Hard delete a preference record (user "forget this" action).
- * @returns {boolean}
- */
-function deletePreference(userId, prefId) {
+/** Hard delete a preference record. */
+export function deletePreference(userId: string, prefId: string): boolean {
   const data = ensureFile(userId);
   const result = findPrefById(data, prefId);
   if (!result) return false;
@@ -249,34 +304,24 @@ function deletePreference(userId, prefId) {
   return true;
 }
 
-/**
- * List preferences with optional filters.
- * @param {object} options
- * @param {string} [options.scope]       "global" | "project:{id}" | "all" (default "all")
- * @param {string} [options.polarity]    "positive" | "negative" | "all" (default "all")
- * @param {number} [options.minStrength] (default 0)
- * @param {string} [options.status]      "stable" | "under_review" | "archived" | "all" (default "all")
- * @returns {object[]}
- */
-function listPreferences(userId, options = {}) {
+/** List preferences with optional filters. */
+export function listPreferences(
+  userId: string,
+  options: ListPreferencesOptions = {},
+): Preference[] {
   const data = loadFile(userId);
   if (!data) return [];
 
-  const {
-    scope = "all",
-    polarity = "all",
-    minStrength = 0,
-    status = "all",
-  } = options;
+  const { scope = "all", polarity = "all", minStrength = 0, status = "all" } = options;
 
-  let prefs;
+  let prefs: Preference[];
   if (scope === "all") {
     prefs = getAllPrefs(data);
   } else if (scope === "global") {
     prefs = [...data.global_preferences];
   } else if (scope.startsWith("project:")) {
-    const projectId = scope.split(":")[1];
-    prefs = [...(data.project_overrides[projectId] || [])];
+    const projectId = scope.split(":")[1] ?? "";
+    prefs = [...(data.project_overrides[projectId] ?? [])];
   } else {
     prefs = getAllPrefs(data);
   }
@@ -288,12 +333,8 @@ function listPreferences(userId, options = {}) {
     .sort((a, b) => b.signal_strength - a.signal_strength);
 }
 
-/**
- * Reset memory for a user.
- * @param {object} options
- * @param {string} [options.scope] "global" | "project:{id}" | "all" (default "all")
- */
-function resetMemory(userId, options = {}) {
+/** Reset memory for a user. */
+export function resetMemory(userId: string, options: ResetMemoryOptions = {}): void {
   const data = ensureFile(userId);
   const { scope = "all" } = options;
 
@@ -305,7 +346,7 @@ function resetMemory(userId, options = {}) {
     data.refinement_log = [];
     data.memory_enabled = true; // restore on full reset
   } else if (scope.startsWith("project:")) {
-    const projectId = scope.split(":")[1];
+    const projectId = scope.split(":")[1] ?? "";
     data.project_overrides[projectId] = [];
   }
 
@@ -318,29 +359,16 @@ function resetMemory(userId, options = {}) {
 
 /**
  * Ingest a new signal and update or create the relevant preference record.
- *
- * Signal shape:
- * {
- *   signal_type:     string   (key from SIGNAL_WEIGHTS)
- *   pattern:         string
- *   preference_type: string
- *   polarity:        "positive" | "negative"
- *   tag_text:        string|null
- *   scope:           "global" | "project"
- *   project_id:      string|null
- *   artifact_id:     string|null
- *   session_id:      string
- *   timestamp:       ISO string
- * }
- *
- * @returns {object} the updated or created preference record
+ * Returns the updated/created record, or `null` when memory is disabled.
  */
-function ingestSignal(userId, signal) {
+export function ingestSignal(userId: string, signal: Signal): Preference | null {
   const data = ensureFile(userId);
   if (!data.memory_enabled) return null;
 
   const weight = SIGNAL_WEIGHTS[signal.signal_type];
-  if (weight === undefined) throw new Error(`Unknown signal_type: ${signal.signal_type}`);
+  if (weight === undefined) {
+    throw new Error(`Unknown signal_type: ${signal.signal_type}`);
+  }
 
   const array = getPrefArray(data, signal.scope, signal.project_id);
   const t = signal.timestamp || now();
@@ -349,12 +377,12 @@ function ingestSignal(userId, signal) {
   let pref = findExistingPref(array, signal.pattern, signal.preference_type, signal.polarity);
 
   // Look for existing record with OPPOSITE polarity (potential contradiction)
-  const opposite = signal.polarity === "positive" ? "negative" : "positive";
+  const opposite: Polarity = signal.polarity === "positive" ? "negative" : "positive";
   const oppositePref = findExistingPref(array, signal.pattern, signal.preference_type, opposite);
 
   if (oppositePref && oppositePref.polarity_status === "stable") {
     // This signal contradicts an existing stable record — apply reversal logic
-    _applyReversal(data, array, oppositePref, signal, weight, t);
+    applyReversal(data, array, oppositePref, signal, weight, t);
     saveFile(userId, data);
     return oppositePref;
   }
@@ -416,9 +444,9 @@ function ingestSignal(userId, signal) {
  * Apply reversal logic when a contradictory signal arrives for an existing
  * stable preference. The ladder is intentionally graduated:
  *
- *   1 signal:  noise guard  — no change at all
- *   2 signals: strength × 0.80, status remains "stable"
- *   3 signals: strength × 0.60, confidence drops one rung
+ *   1 signal:   noise guard — no change at all
+ *   2 signals:  strength × 0.80, status remains "stable"
+ *   3 signals:  strength × 0.60, confidence drops one rung
  *   4+ signals: strength reduced by weight × multiplier, confidence forced
  *               to "low", status flips to "under_review", and a SHADOW record
  *               of opposite polarity is created (or accumulated on, if one
@@ -435,20 +463,26 @@ function ingestSignal(userId, signal) {
  * the prompt or vanish entirely with no path back if the user changes their
  * mind again.
  */
-function _applyReversal(data, array, pref, signal, weight, t) {
+function applyReversal(
+  data: PreferenceStoreFile,
+  array: Preference[],
+  pref: Preference,
+  signal: Signal,
+  weight: number,
+  t: string,
+): void {
   pref.reversal_signals = (pref.reversal_signals || 0) + 1;
   if (!pref.reversal_first_seen) pref.reversal_first_seen = t;
 
   const rs = pref.reversal_signals;
 
-  // Determine multiplier
+  // Determine multiplier (only used for 4+ signal cases)
   let multiplier = 1.0;
   if (rs === 2) multiplier = 1.5;
   if (rs >= 3) multiplier = 2.0;
 
   const penalty = Math.abs(weight) * multiplier;
 
-  // Apply confidence drop rules
   if (rs === 1) {
     // Noise guard — no change to signal_strength or confidence
   } else if (rs === 2) {
@@ -464,14 +498,14 @@ function _applyReversal(data, array, pref, signal, weight, t) {
     pref.polarity_status = "under_review";
 
     // Create shadow record if not already exists
-    const shadowPolarity = pref.polarity === "positive" ? "negative" : "positive";
+    const shadowPolarity: Polarity = pref.polarity === "positive" ? "negative" : "positive";
     const alreadyHasShadow = array.some(
-      (p) => p.shadow_of === pref.id && p.polarity === shadowPolarity
+      (p) => p.shadow_of === pref.id && p.polarity === shadowPolarity,
     );
 
     if (!alreadyHasShadow) {
       const shadowStrength = Math.abs(weight) / NORMALIZER;
-      const shadow = {
+      const shadow: Preference = {
         id: uid("pref"),
         preference_type: pref.preference_type,
         pattern: pref.pattern,
@@ -497,7 +531,8 @@ function _applyReversal(data, array, pref, signal, weight, t) {
       if (shadow) {
         shadow.signal_strength = clamp(
           shadow.signal_strength + Math.abs(weight) / NORMALIZER,
-          0, 1
+          0,
+          1,
         );
         shadow.confidence = calcConfidence(shadow.signal_strength);
         shadow.last_seen = t;
@@ -513,6 +548,10 @@ function _applyReversal(data, array, pref, signal, weight, t) {
   }
 
   pref.last_seen = t;
+  // `penalty` is intentionally unused for rs in {1, 2, 3} (those branches use
+  // the fixed × 0.80 / × 0.60 reductions). Kept as a single declaration so the
+  // 4+ branch reads cleanly.
+  void penalty;
 }
 
 // ---------------------------------------------------------------------------
@@ -520,10 +559,10 @@ function _applyReversal(data, array, pref, signal, weight, t) {
 // ---------------------------------------------------------------------------
 
 /**
- * Run decay pass for a user. Call on session start or scheduled daily job.
- * @returns {{ decayed: number, archived: number }}
+ * Run decay pass for a user. Call on session start or as a scheduled daily job.
+ * Strength × 0.70 at 90+ days since last signal; archive at 180+ days.
  */
-function runDecay(userId) {
+export function runDecay(userId: string): DecayResult {
   const data = loadFile(userId);
   if (!data) return { decayed: 0, archived: 0 };
 
@@ -531,7 +570,7 @@ function runDecay(userId) {
   let archived = 0;
   const n = now();
 
-  function processArray(arr) {
+  function processArray(arr: Preference[]): void {
     for (const pref of arr) {
       if (pref.polarity_status === "archived") continue;
 
@@ -579,28 +618,25 @@ function runDecay(userId) {
  *   9.  Category diversity ceiling      → diagnostic: category_ceiling_applied
  *   10. Category backfill               → diagnostic: category_backfill
  *   11. Token-budget enforcement        → diagnostic: token_budget_exceeded
- *
- * @param {string} userId
- * @param {object} context
- * @param {string} [context.project_id]
- * @param {string[]} [context.preference_types]  filter by category; omit for all
- * @returns {{ positives: object[], negatives: object[], projectOverrides: object[], diagnostics: object[] }}
  */
-function retrieveForInjection(userId, context = {}) {
+export function retrieveForInjection(
+  userId: string,
+  context: RetrievalContext = {},
+): RetrievalResult {
   const data = loadFile(userId);
   if (!data || !data.memory_enabled) {
     return { positives: [], negatives: [], projectOverrides: [], diagnostics: [] };
   }
 
   const { project_id, preference_types } = context;
-  const diagnostics = [];
+  const diagnostics: Diagnostic[] = [];
 
-  // Merge global + project, project wins on pattern conflicts
-  let prefs = [...data.global_preferences];
-  let projectPrefs = [];
+  // Stage 2 — Project-override merge
+  let prefs: RankedPreference[] = [...data.global_preferences];
+  let projectPrefs: Preference[] = [];
 
   if (project_id && data.project_overrides[project_id]) {
-    projectPrefs = data.project_overrides[project_id];
+    projectPrefs = data.project_overrides[project_id]!;
     const projectPatterns = new Set(projectPrefs.map((p) => p.pattern));
 
     // Conflict diagnostics: record which globals were suppressed
@@ -624,26 +660,27 @@ function retrieveForInjection(userId, context = {}) {
     prefs = [...prefs, ...projectPrefs];
   }
 
-  // Apply filters
+  // Stage 3 — Lifecycle filter
   prefs = prefs
     .filter((p) => p.signal_strength >= INJECTION_THRESHOLD)
     .filter((p) => p.polarity_status === "stable")
     .filter((p) => p.confidence === "medium" || p.confidence === "high")
-    .filter((p) =>
-      !preference_types || preference_types.some((t) => p.preference_type.startsWith(t))
+    .filter(
+      (p) =>
+        !preference_types || preference_types.some((t) => p.preference_type.startsWith(t)),
     );
 
-  // Compute effective priority: negatives get a multiplier
+  // Stage 4 — Effective-priority scoring
   for (const p of prefs) {
-    p._effective_priority = p.signal_strength *
-      (p.polarity === "negative" ? NEGATIVE_PRIORITY_MULTIPLIER : 1.0);
+    p._effective_priority =
+      p.signal_strength * (p.polarity === "negative" ? NEGATIVE_PRIORITY_MULTIPLIER : 1.0);
   }
 
-  // Sort by effective priority descending
-  prefs.sort((a, b) => b._effective_priority - a._effective_priority);
+  // Stage 5 — Ranking
+  prefs.sort((a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0));
 
-  // Hard N cap
-  let overflowPrefs = [];
+  // Stage 6 — Hard-cap enforcement
+  let overflowPrefs: RankedPreference[] = [];
   if (prefs.length > MAX_INJECTION_COUNT) {
     diagnostics.push({
       type: "hard_cap_applied",
@@ -677,15 +714,11 @@ function retrieveForInjection(userId, context = {}) {
   // early users would see entirely empty memory blocks despite having clear
   // negative preferences.
   // ---------------------------------------------------------------------------
-  const currentNegs = prefs.filter(p => p.polarity === "negative");
-  const currentPos = prefs.filter(p => p.polarity === "positive");
-  const positiveOverflow = overflowPrefs.filter(p => p.polarity === "positive");
+  const currentNegs = prefs.filter((p) => p.polarity === "negative");
+  const currentPos = prefs.filter((p) => p.polarity === "positive");
+  const positiveOverflow = overflowPrefs.filter((p) => p.polarity === "positive");
 
   if (currentNegs.length > 0) {
-    // Find the maximum keepNegs that satisfies:
-    //   keepNegs ≤ floor(R / (1-R) * finalPos)
-    // where finalPos = currentPos + min(positiveOverflow, currentNegs - keepNegs)
-    // Start from the minimum of currentNegs and hard-cap-based estimate, decrease until stable.
     const ratio = NEGATIVE_BUDGET_RATIO / (1 - NEGATIVE_BUDGET_RATIO);
     let keepNegs = currentNegs.length;
     for (let n = currentNegs.length; n >= MIN_NEG_FLOOR; n--) {
@@ -698,33 +731,30 @@ function retrieveForInjection(userId, context = {}) {
       }
       keepNegs = n;
     }
-    // Apply MIN_NEG_FLOOR
-    let maxNegSlots = Math.max(MIN_NEG_FLOOR, keepNegs);
+    const maxNegSlots = Math.max(MIN_NEG_FLOOR, keepNegs);
 
     if (currentNegs.length > maxNegSlots) {
       // Sort negatives by effective priority descending (strongest survive)
       const negsSorted = [...currentNegs].sort(
-        (a, b) => b._effective_priority - a._effective_priority
+        (a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0),
       );
       const trimmed = negsSorted.slice(maxNegSlots);
-      const trimmedIds = new Set(trimmed.map(p => p.id));
+      const trimmedIds = new Set(trimmed.map((p) => p.id));
 
       // Remove trimmed negatives from prefs
-      prefs = prefs.filter(p => !trimmedIds.has(p.id));
+      prefs = prefs.filter((p) => !trimmedIds.has(p.id));
 
-      // Backfill freed slots with positive overflow (if any)
-      let backfilledCount = 0;
+      // Stage 8 — Polarity backfill
       if (trimmed.length > 0 && positiveOverflow.length > 0) {
         const backfill = positiveOverflow.slice(0, trimmed.length);
         if (backfill.length > 0) {
           prefs.push(...backfill);
-          backfilledCount = backfill.length;
           // Re-sort after backfill to maintain ranking order
-          prefs.sort((a, b) => b._effective_priority - a._effective_priority);
+          prefs.sort((a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0));
           diagnostics.push({
             type: "diversity_backfill",
             backfilled_count: backfill.length,
-            backfilled_patterns: backfill.map(p => p.pattern),
+            backfilled_patterns: backfill.map((p) => p.pattern),
             trace: `Diversity backfill: ${backfill.length} positive(s) promoted from overflow`,
           });
         }
@@ -737,7 +767,7 @@ function retrieveForInjection(userId, context = {}) {
         negative_count_after: maxNegSlots,
         max_negative_slots: maxNegSlots,
         ratio: NEGATIVE_BUDGET_RATIO,
-        trimmed_patterns: trimmed.map(p => p.pattern),
+        trimmed_patterns: trimmed.map((p) => p.pattern),
         trace: `Diversity ceiling: ${currentNegs.length} negatives capped to ${maxNegSlots} (${(NEGATIVE_BUDGET_RATIO * 100).toFixed(0)}% of ${finalTotal} slots)`,
       });
     }
@@ -761,63 +791,62 @@ function retrieveForInjection(userId, context = {}) {
   // injection sets would skip this stage even when the *user* has multiple
   // active categories.
   // ---------------------------------------------------------------------------
-  const catCounts = {};
+  const catCounts: Record<string, number> = {};
   for (const p of prefs) {
-    catCounts[p.preference_type] = (catCounts[p.preference_type] || 0) + 1;
+    catCounts[p.preference_type] = (catCounts[p.preference_type] ?? 0) + 1;
   }
-  const allCatTypes = new Set(Object.keys(catCounts));
+  const allCatTypes = new Set<string>(Object.keys(catCounts));
   for (const p of overflowPrefs) allCatTypes.add(p.preference_type);
   const totalDistinctCats = allCatTypes.size;
-  const overRepresented = totalDistinctCats >= 2
-    ? Object.entries(catCounts).filter(([, count]) => count > MAX_PER_CATEGORY)
-    : [];
+  const overRepresented =
+    totalDistinctCats >= 2
+      ? Object.entries(catCounts).filter(([, count]) => count > MAX_PER_CATEGORY)
+      : [];
 
   if (overRepresented.length > 0) {
-    const catTrimmed = [];
+    const catTrimmed: RankedPreference[] = [];
 
-    for (const [cat, count] of overRepresented) {
-      // Get all prefs of this category, sorted by effective priority
+    for (const [cat] of overRepresented) {
       const catPrefs = prefs
-        .filter(p => p.preference_type === cat)
-        .sort((a, b) => b._effective_priority - a._effective_priority);
+        .filter((p) => p.preference_type === cat)
+        .sort((a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0));
 
-      // Keep top MAX_PER_CATEGORY, trim the rest
       const excess = catPrefs.slice(MAX_PER_CATEGORY);
       catTrimmed.push(...excess);
     }
 
     if (catTrimmed.length > 0) {
-      const trimmedIds = new Set(catTrimmed.map(p => p.id));
-      prefs = prefs.filter(p => !trimmedIds.has(p.id));
+      const trimmedIds = new Set(catTrimmed.map((p) => p.id));
+      prefs = prefs.filter((p) => !trimmedIds.has(p.id));
 
-      // Backfill from overflow: prefer patterns from under-represented categories
-      const remainingCats = {};
+      // Stage 10 — Category backfill from overflow, preferring under-represented types
+      const remainingCats: Record<string, number> = {};
       for (const p of prefs) {
-        remainingCats[p.preference_type] = (remainingCats[p.preference_type] || 0) + 1;
+        remainingCats[p.preference_type] = (remainingCats[p.preference_type] ?? 0) + 1;
       }
       const underRepTypes = new Set(
         Object.entries(remainingCats)
           .filter(([, c]) => c < MAX_PER_CATEGORY)
-          .map(([t]) => t)
+          .map(([t]) => t),
       );
 
       // Also consider categories not yet in the set at all
-      const allOverflowTypes = new Set(overflowPrefs.map(p => p.preference_type));
+      const allOverflowTypes = new Set(overflowPrefs.map((p) => p.preference_type));
       for (const t of allOverflowTypes) {
         if (!remainingCats[t]) underRepTypes.add(t);
       }
 
       if (overflowPrefs.length > 0 && underRepTypes.size > 0) {
         const catBackfill = overflowPrefs
-          .filter(p => underRepTypes.has(p.preference_type))
+          .filter((p) => underRepTypes.has(p.preference_type))
           .slice(0, catTrimmed.length);
         if (catBackfill.length > 0) {
           prefs.push(...catBackfill);
-          prefs.sort((a, b) => b._effective_priority - a._effective_priority);
+          prefs.sort((a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0));
           diagnostics.push({
             type: "category_backfill",
             backfilled_count: catBackfill.length,
-            backfilled_types: [...new Set(catBackfill.map(p => p.preference_type))],
+            backfilled_types: [...new Set(catBackfill.map((p) => p.preference_type))],
             trace: `Category backfill: ${catBackfill.length} pattern(s) from under-represented types`,
           });
         }
@@ -831,19 +860,19 @@ function retrieveForInjection(userId, context = {}) {
           after: MAX_PER_CATEGORY,
         })),
         total_trimmed: catTrimmed.length,
-        trimmed_patterns: catTrimmed.map(p => p.pattern),
+        trimmed_patterns: catTrimmed.map((p) => p.pattern),
         max_per_category: MAX_PER_CATEGORY,
         trace: `Category ceiling: ${catTrimmed.length} pattern(s) trimmed from ${overRepresented.map(([c]) => c).join(", ")} (max ${MAX_PER_CATEGORY}/type)`,
       });
     }
   }
 
-  // Token-budget ceiling
+  // Stage 11 — Token-budget enforcement
   let tokenCount = 20; // overhead for [MEMORY CONTEXT] header + line prefixes
-  const budgeted = [];
+  const budgeted: RankedPreference[] = [];
   for (const p of prefs) {
     const patternTokens = Math.ceil(p.pattern.length / CHARS_PER_TOKEN);
-    const lineOverhead = 5; // "Prefer (high): " / "Avoid (medium): " prefix tokens
+    const lineOverhead = 5;
     const prefTokens = patternTokens + lineOverhead;
     if (tokenCount + prefTokens > TOKEN_BUDGET) {
       diagnostics.push({
@@ -859,18 +888,20 @@ function retrieveForInjection(userId, context = {}) {
     budgeted.push(p);
   }
 
-  // Clean up internal priority field
+  // Strip internal priority field before returning
   for (const p of budgeted) delete p._effective_priority;
   for (const p of prefs) delete p._effective_priority;
 
-  const positives = budgeted.filter((p) => p.polarity === "positive")
+  const positives = budgeted
+    .filter((p): p is Preference => p.polarity === "positive")
     .sort((a, b) => b.signal_strength - a.signal_strength);
 
-  const negatives = budgeted.filter((p) => p.polarity === "negative")
+  const negatives = budgeted
+    .filter((p): p is Preference => p.polarity === "negative")
     .sort((a, b) => b.signal_strength - a.signal_strength);
 
   const overrides = projectPrefs.filter(
-    (p) => p.signal_strength >= INJECTION_THRESHOLD && p.polarity_status === "stable"
+    (p) => p.signal_strength >= INJECTION_THRESHOLD && p.polarity_status === "stable",
   );
 
   return { positives, negatives, projectOverrides: overrides, diagnostics };
@@ -878,11 +909,9 @@ function retrieveForInjection(userId, context = {}) {
 
 /**
  * Build the [MEMORY CONTEXT] prompt block from retrieved preferences.
- * @param {{ positives, negatives, projectOverrides }} retrieved
- * @param {string} [projectId]
- * @returns {string}
+ * Returns an empty string when nothing is injectable.
  */
-function buildPromptBlock(retrieved, projectId) {
+export function buildPromptBlock(retrieved: RetrievalResult, projectId?: string): string {
   const { positives, negatives, projectOverrides } = retrieved;
   if (!positives.length && !negatives.length) return "";
 
@@ -911,66 +940,19 @@ function buildPromptBlock(retrieved, projectId) {
 // ---------------------------------------------------------------------------
 
 /**
- * Append a refinement diff to the log.
- * Diff shape is provisional — pending dev confirmation (open question #2).
- *
- * @param {string} userId
- * @param {object} entry
- * @param {string} entry.artifact_id
- * @param {string} entry.project_id
- * @param {object} entry.diff  — { from: { key: val }, to: { key: val } }
+ * Append a refinement diff to the log. Diff shape is provisional — pending
+ * pipeline-team confirmation (open question #2).
  */
-function logRefinement(userId, entry) {
+export function logRefinement(userId: string, entry: RefinementInput): RefinementLogEntry {
   const data = ensureFile(userId);
-  const record = {
+  const record: RefinementLogEntry = {
     id: uid("ref"),
-    artifact_id: entry.artifact_id || null,
-    project_id: entry.project_id || null,
+    artifact_id: entry.artifact_id ?? null,
+    project_id: entry.project_id ?? null,
     timestamp: now(),
-    diff: entry.diff || {},
+    diff: entry.diff ?? {},
   };
   data.refinement_log.push(record);
   saveFile(userId, data);
   return record;
 }
-
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
-module.exports = {
-  // CRUD
-  createPreference,
-  readPreference,
-  updatePreference,
-  deletePreference,
-  listPreferences,
-  resetMemory,
-
-  // Signal ingestion
-  ingestSignal,
-
-  // Decay
-  runDecay,
-
-  // Retrieval & prompt building
-  retrieveForInjection,
-  buildPromptBlock,
-
-  // Refinement log
-  logRefinement,
-
-  // Constants (exported for test harness use)
-  SIGNAL_WEIGHTS,
-  NORMALIZER,
-  INJECTION_THRESHOLD,
-  DECAY_DAYS,
-  ARCHIVE_DAYS,
-  TOKEN_BUDGET,
-  MAX_INJECTION_COUNT,
-  NEGATIVE_PRIORITY_MULTIPLIER,
-  NEGATIVE_BUDGET_RATIO,
-  MIN_NEG_FLOOR,
-  MAX_PER_CATEGORY,
-  CHARS_PER_TOKEN,
-};

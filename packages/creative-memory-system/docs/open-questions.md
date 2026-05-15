@@ -123,33 +123,25 @@ This was tuned to feel reasonable in simulation but has not been calibrated agai
 
 ## 8. Memory subsystem placement in the repo
 
-**Status.** Currently at `<repo-root>/creative-memory-system/`. The repo's top-level convention is `apps/`, `packages/`, `tools/`, `e2e/`, plus content directories (`skills/`, `design-templates/`, `design-systems/`, `craft/`).
+**Status.** The subsystem now lives at `packages/creative-memory-system/` as `@open-design/creative-memory-system`, following the workspace convention used by `@open-design/contracts`, `@open-design/platform`, etc.
 
-**The question.** Where does memory belong long-term?
+**The question (resolved for now).** This placement was chosen during the TypeScript port. Earlier iterations placed the validated prototype at `<repo-root>/creative-memory-system/`, which conflicted with `packages/AGENTS.md` boundaries and the `pnpm guard` residual-JS check. Migration into the workspace was the right move; the question to revisit is whether the host that will primarily call it (likely `apps/daemon`) should re-export it through a thin wrapper or import directly.
 
-- **`<repo-root>/creative-memory-system/`** (current) — visible, but unusual for a top-level directory in this repo.
-- **`packages/creative-memory-system`** — fits the workspace convention, would need TypeScript port and a `package.json` integrated with `pnpm-workspace.yaml`.
-- **`apps/daemon/src/creative-memory-system/`** — co-located with the host that will likely call it; would lose the simulation-suite testability boundary.
+**Where the assumption lives.** Directory layout, `packages/creative-memory-system/package.json`, `pnpm-workspace.yaml`.
 
-**Why it matters.** The repo's `AGENTS.md` says new project-owned modules default to TypeScript and that `packages/contracts` is the place for shared TypeScript app contracts. A future-proofed location would also be a TypeScript port.
-
-**Where the assumption lives.** Directory layout, `creative-memory-system/package.json`.
-
-**What to do.** Decide before merge. The current `creative-memory-system/` location is fine for review and validation; production placement can be a follow-up PR that ports to TypeScript and migrates into `packages/`.
+**What to do.** No action; revisit only if a daemon-side wrapper proves useful.
 
 ---
 
 ## 9. CommonJS vs TypeScript
 
-**Status.** `creative-memory-system/package.json` declares `"type": "commonjs"` to override the repo root's `"type": "module"`. The validated code is `require()`-style CommonJS.
+**Status (resolved).** The subsystem is now TypeScript / ESM under `packages/creative-memory-system/src/`, built via esbuild for runtime and `tsc --emitDeclarationOnly` for types. The previous `.js` CommonJS prototype has been removed; it lives in git history at the parent commit if the original baseline ever needs to be diffed.
 
-**The question.** Should the subsystem be ported to TypeScript / ESM as part of integration?
+**What was preserved.** All logic, all constants, all balancing semantics, all diagnostic events, and all 238 simulation-suite invariants. The Vitest port reproduces the same scenarios as the original `sims/*.js` runners.
 
-**Why it matters.** The repo is TypeScript-first. Long-term, the memory subsystem should match. A port now risks introducing bugs that the simulations would not catch (e.g., async/await semantics, named exports vs default).
+**What changed.** Module exports use named ESM exports rather than `module.exports`. Storage-root resolution is now lazy (`getStorageRoot()`) so tests can override `MEMORY_STORAGE_ROOT` after the module has been imported. A small refactor inside `extractionAdapter.ts` collapses repeated per-handler boilerplate into a `dispatchSignals` helper without changing behavior.
 
-**Where the assumption lives.** `creative-memory-system/package.json`, all `.js` files in the subsystem.
-
-**What to do.** Hold the CommonJS shape for the integration milestone. After the pipeline contracts are confirmed and the adapter handlers are wired up, do a TypeScript port as a focused PR with the simulations preserved. The `pnpm guard` allowlist may need to be updated; check before merge.
+**What to do.** No action.
 
 ---
 

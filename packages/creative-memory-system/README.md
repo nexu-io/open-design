@@ -1,8 +1,8 @@
-# Creative Memory System
+# @open-design/creative-memory-system
 
-Local-first, deterministic preference memory for the Open Design generation pipeline. The subsystem learns a user's stylistic preferences from generation events, stores them as inspectable JSON, and injects a bounded `[MEMORY CONTEXT]` block into prompts at generation time.
+Local-first, deterministic preference memory for the Open Design generation pipeline. The subsystem learns a user's stylistic preferences from generation events, stores them as inspectable JSON on disk, and produces a bounded `[MEMORY CONTEXT]` block for prompt injection at generation time.
 
-This directory is the integration-staged subsystem: the validated production-bound prototype, moved into the Open Design repo for review and integration. Logic, balancing, and simulations are unchanged from the validated baseline; only directory layout, paths, and documentation have been added.
+This package is the TypeScript-ported, workspace-integrated form of the validated `creative-memory-system` prototype. Logic, balancing, and behavior are unchanged from the validated baseline; the simulations have been ported to Vitest under `tests/`.
 
 ## Goals
 
@@ -24,7 +24,7 @@ This directory is the integration-staged subsystem: the validated production-bou
 | Conservative | Reversal logic uses a noise guard; one contradictory signal does not flip a preference. |
 | Reversal-aware | Conflicting signals create shadow records that can promote and archive the original. |
 | Decay-aware | Untouched preferences fade and eventually archive on a fixed schedule. |
-| Simulation-driven | Behavior is validated by 238 assertions across four simulation suites. |
+| Simulation-driven | Behavior is validated by 81 Vitest specs across five suites covering 238 invariants in the original sim runners. |
 
 ## Non-goals
 
@@ -38,24 +38,32 @@ The subsystem deliberately does **not**:
 
 These are explicit non-goals; they should not be added without an architecture review.
 
-## Current architecture
+## Layout
 
 ```
-creative-memory-system/
-├── preferenceStore.js      Core engine (CRUD, ingestion, decay, retrieval, prompt build)
-├── extractionAdapter.js    Pipeline event → ingestSignal mapping (stub hookpoints)
-├── package.json            Local CommonJS scope; sim run scripts
-├── sims/
-│   ├── testHarness.js              Lifecycle + storage validation (64 assertions)
-│   ├── retrievalQualitySim.js      Ranking, flicker, threshold gating (36 assertions)
-│   ├── retrievalAdvancedSim.js     Constraints, balancing, backfill (91 assertions)
-│   └── retrievalLongRunSim.js      Multi-session, decay, entropy, stress (47 assertions)
-└── docs/
-    ├── architecture.md             Subsystem purpose and design philosophy
-    ├── retrieval-pipeline.md       The 11 retrieval stages, in order
-    ├── diagnostics.md              Every diagnostic event the engine can emit
-    ├── validation.md               What each simulation suite proves
-    └── open-questions.md           Unresolved integration questions, on purpose
+packages/creative-memory-system/
+├── src/
+│   ├── index.ts              Barrel export — public API
+│   ├── preferenceStore.ts    Core engine (CRUD, ingestion, decay, retrieval, prompt build)
+│   ├── extractionAdapter.ts  Pipeline event → ingestSignal mapping (stub hookpoints)
+│   └── types.ts              Public type definitions
+├── tests/
+│   ├── lifecycle.test.ts          Lifecycle + storage validation
+│   ├── retrievalQuality.test.ts   Ranking, hysteresis, threshold gating
+│   ├── retrievalAdvanced.test.ts  Constraint interaction, balancing, backfill
+│   ├── retrievalLongRun.test.ts   Multi-session, decay, entropy, stress
+│   └── extractionAdapter.test.ts  Adapter handler contracts
+├── docs/
+│   ├── architecture.md       Subsystem purpose and design philosophy
+│   ├── retrieval-pipeline.md The 11 retrieval stages, in order
+│   ├── diagnostics.md        Every diagnostic event the engine can emit
+│   ├── validation.md         What each simulation suite proves
+│   └── open-questions.md     Unresolved integration questions, on purpose
+├── package.json
+├── tsconfig.json
+├── tsconfig.tests.json
+├── vitest.config.ts
+└── esbuild.config.mjs
 ```
 
 ## Retrieval pipeline summary
@@ -78,34 +86,45 @@ Each stage emits diagnostics when it fires. See [`docs/retrieval-pipeline.md`](d
 
 ## Integration surface
 
-The subsystem's external API is intentionally minimal. Host pipeline code should only need:
+The package's external API is intentionally minimal. Host pipeline code should only need:
 
-```js
-const store = require("./creative-memory-system/preferenceStore");
-const adapter = require("./creative-memory-system/extractionAdapter");
+```ts
+import {
+  retrieveForInjection,
+  buildPromptBlock,
+  ingestSignal,
+  runDecay,
+  // adapter handlers for typed pipeline events
+  onGenerationAccepted,
+  onArtifactEditedAndSaved,
+  onExplicitTagApplied,
+  onThumbsRated,
+  onGenerationAbandoned,
+  onRevertAfterEdit,
+} from "@open-design/creative-memory-system";
 
 // At generation time:
-const retrieved = store.retrieveForInjection(userId, { project_id });
-const memoryBlock = store.buildPromptBlock(retrieved, project_id);
+const retrieved = retrieveForInjection(userId, { project_id });
+const memoryBlock = buildPromptBlock(retrieved, project_id);
 // Concatenate memoryBlock into the prompt.
 
-// On pipeline events:
-adapter.onGenerationAccepted(event);
-adapter.onArtifactEditedAndSaved(event);
-adapter.onExplicitTagApplied(event);
-adapter.onThumbsRated(event);
-adapter.onGenerationAbandoned(event);
-adapter.onRevertAfterEdit(event);
+// On pipeline events (handlers wrap ingestSignal with the right signal type):
+onGenerationAccepted(event);
+onArtifactEditedAndSaved(event);
+onExplicitTagApplied(event);
+onThumbsRated(event);
+onGenerationAbandoned(event);
+onRevertAfterEdit(event);
 
-// On session start (or daily):
-store.runDecay(userId);
+// On session start (or as a daily job):
+runDecay(userId);
 ```
 
 Everything else is internal: balancing, ranking, diagnostics, shadow promotion, decay schedule, token estimation. None of it needs to leak.
 
 ## Storage
 
-Default storage root is `<creative-memory-system module dir>/memory/`, overridable via the `MEMORY_STORAGE_ROOT` environment variable. Per user:
+Default storage root is `<package install dir>/memory/`, overridable via the `MEMORY_STORAGE_ROOT` environment variable. The env var is read at call time (not module-load time), so hosts can override it during process startup before issuing a single call. Per user:
 
 ```
 <storage_root>/
@@ -120,45 +139,30 @@ The file is plain JSON, schema-versioned (`schema_version: "1.0"`), and contains
 - `refinement_log[]` — diff history (provisional shape, see open question #2)
 - `memory_enabled` — soft kill switch; when `false`, ingestion no-ops and retrieval returns empty
 
-## How to run the simulations
-
-From the repo root:
+## Commands
 
 ```bash
-node creative-memory-system/sims/testHarness.js
-node creative-memory-system/sims/retrievalQualitySim.js
-node creative-memory-system/sims/retrievalAdvancedSim.js
-node creative-memory-system/sims/retrievalLongRunSim.js
-```
+# Tests (Vitest)
+pnpm --filter @open-design/creative-memory-system test
 
-Or, from `creative-memory-system/`:
+# Type check (src + tests)
+pnpm --filter @open-design/creative-memory-system typecheck
 
-```bash
-node sims/testHarness.js          # 64 assertions
-node sims/retrievalQualitySim.js  # 36 assertions
-node sims/retrievalAdvancedSim.js # 91 assertions
-node sims/retrievalLongRunSim.js  # 47 assertions
-```
-
-Each sim writes to its own scratch directory (`creative-memory-system/.test-*`) and removes it on success. These directories are gitignored.
-
-The `extractionAdapter.js` self-test runs when invoked directly:
-
-```bash
-node creative-memory-system/extractionAdapter.js  # 12 assertions
+# Build dist (esbuild for runtime + tsc emit-decl-only for types)
+pnpm --filter @open-design/creative-memory-system build
 ```
 
 ## Current validation state
 
-- **238 / 238 assertions passing** across the four simulation suites.
-- Simulations cover lifecycle, decay, reversal, shadow promotion, ranking monotonicity, hysteresis stability, flicker detection, prompt pollution, threshold gating, project-override conflict diagnostics, hard cap, polarity ceiling + backfill, category ceiling + backfill, token budget, MIN_NEG_FLOOR, multi-session evolution, decay-under-load, cross-project isolation, polarity entropy, and category dominance.
+- **81 / 81 Vitest specs passing** across five test files covering all 238 simulation-suite invariants from the validated prototype.
+- Coverage spans: lifecycle (CRUD, ingestion accumulation, confidence ladder), reversal logic (noise guard → graduated reduction → under_review + shadow records → shadow promotion), decay (90-day strength × 0.70, 180-day archive), retrieval quality (ranking monotonicity, hysteresis stability, threshold gating, prompt pollution), constraint interaction (token budget, negative priority multiplier, project-override conflict diagnostics, polarity diversity ceiling + backfill, category diversity ceiling + backfill, MIN_NEG_FLOOR), and long-running temporal scenarios (multi-session evolution, 50-pattern stress, cross-project isolation, polarity entropy, category dominance over many sessions).
 - Pressure scenarios run up to 50 distinct patterns and 30 sessions of negative accumulation.
 
 See [`docs/validation.md`](docs/validation.md) for the suite-by-suite breakdown.
 
 ## Current maturity level
 
-**Integration-staged.** The subsystem is heavily simulated and pressure-tested as a standalone module, but the pipeline hookpoints inside `extractionAdapter.js` are stubs awaiting confirmation from the generation pipeline team. The minimum viable integration is to wire one or two adapter handlers behind real pipeline events and observe diagnostics in the logs.
+**Integration-staged.** The subsystem is heavily simulated as a standalone module, but the pipeline hookpoints inside `extractionAdapter.ts` are stubs awaiting confirmation from the generation pipeline team. The minimum viable integration is to wire one or two adapter handlers behind real pipeline events and observe diagnostics in the logs.
 
 The subsystem's design has stabilized; the open work is integration plumbing and a small set of timing/shape questions documented in [`docs/open-questions.md`](docs/open-questions.md).
 
@@ -186,7 +190,3 @@ The current architectural risk is no longer instability — it is **stagnation t
 - prompt homogenization
 
 These are flagged so future maintainers know what to look for; they are not action items now.
-
-## File-extension note for reviewers
-
-The subsystem is `.js` (CommonJS) because that is the form in which it was validated. The repo is otherwise TypeScript-first. A future task may port the module to TypeScript without changing logic; until then, `creative-memory-system/package.json` declares `"type": "commonjs"` so the module ignores the root's `"type": "module"`. This decision is tracked as an explicit open question in [`docs/open-questions.md`](docs/open-questions.md).
