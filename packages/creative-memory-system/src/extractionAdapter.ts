@@ -96,6 +96,25 @@ export function classifyArtifact(artifactMeta: ArtifactMeta): ArtifactSignal[] {
         "Upstream classification is missing or malformed.",
     );
   }
+  // Validate each signal entry: both pattern and preference_type must be
+  // non-empty strings. A payload like { signals: [{}] } would otherwise
+  // forward undefined values into ingestSignal and persist corrupt records.
+  for (let i = 0; i < artifactMeta.signals.length; i++) {
+    const entry = artifactMeta.signals[i];
+    if (
+      !entry ||
+      typeof entry.pattern !== "string" ||
+      entry.pattern.length === 0 ||
+      typeof entry.preference_type !== "string" ||
+      entry.preference_type.length === 0
+    ) {
+      throw new Error(
+        `classifyArtifact: signals[${i}] is malformed. ` +
+          `Each entry must have non-empty string "pattern" and "preference_type". ` +
+          `Got: ${JSON.stringify(entry)}`,
+      );
+    }
+  }
   return artifactMeta.signals;
 }
 

@@ -213,7 +213,7 @@ describe("9. Decay runner", () => {
 
   it("reduces strength after the decay window, archives after archive window", () => {
     const pref = store.ingestSignal(USER, signal({ signal_type: "explicit_tag" }))!;
-    // Manually backdate decay_at by 1 day — sits in the 0..90 day decay band
+    // Manually backdate decay_at by 1 day — sits in the decay band
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     store.updatePreference(USER, pref.id, {
@@ -226,14 +226,68 @@ describe("9. Decay runner", () => {
     expect(result.decayed).toBeGreaterThanOrEqual(1);
     expect(after.signal_strength).toBeLessThan(0.8);
 
-    // Backdate by 91+ days to enter the archive band
-    const past91 = new Date();
-    past91.setDate(past91.getDate() - 91);
-    store.updatePreference(USER, pref.id, { decay_at: past91.toISOString() });
+    // Backdate last_seen by 181+ days to enter the archive band
+    const past181 = new Date();
+    past181.setDate(past181.getDate() - 181);
+    store.updatePreference(USER, pref.id, { last_seen: past181.toISOString() });
     const result2 = store.runDecay(USER);
     const archived = store.readPreference(USER, pref.id)!;
     expect(archived.polarity_status).toBe("archived");
     expect(result2.archived).toBeGreaterThanOrEqual(1);
+  });
+
+  it("archives at 180 days since last_seen even after intermediate decay passes (regression)", () => {
+    // Verifies that the decay branch resetting decay_at does NOT push the
+    // archive deadline forward. Archive is based on last_seen age.
+    const pref = store.ingestSignal(USER, signal({ signal_type: "explicit_tag" }))!;
+    store.updatePreference(USER, pref.id, { signal_strength: 0.8 });
+
+    // Simulate day ~91: decay fires, resets decay_at forward
+    const day91 = new Date();
+    day91.setDate(day91.getDate() - 91);
+    store.updatePreference(USER, pref.id, {
+      last_seen: day91.toISOString(),
+      decay_at: day91.toISOString(),
+    });
+    const r1 = store.runDecay(USER);
+    expect(r1.decayed).toBeGreaterThanOrEqual(1);
+    const afterFirstDecay = store.readPreference(USER, pref.id)!;
+    expect(afterFirstDecay.polarity_status).toBe("stable");
+
+    // Simulate day ~181: last_seen is now 181 days old → should archive
+    const day181 = new Date();
+    day181.setDate(day181.getDate() - 181);
+    store.updatePreference(USER, pref.id, { last_seen: day181.toISOString() });
+    const r2 = store.runDecay(USER);
+    const afterArchive = store.readPreference(USER, pref.id)!;
+    expect(afterArchive.polarity_status).toBe("archived");
+    expect(r2.archived).toBeGreaterThanOrEqual(1);
+  });
+
+  it("archived record is reactivated by new same-polarity signal (regression)", () => {
+    // Build a preference, archive it, then send a new same-polarity signal.
+    // The record should come back to life (stable, injectable) rather than
+    // silently absorbing signals into a permanently-filtered-out record.
+    const pref = store.ingestSignal(USER, signal({ signal_type: "explicit_tag" }))!;
+    for (let i = 0; i < 3; i++) {
+      store.ingestSignal(USER, signal({ signal_type: "explicit_tag" }));
+    }
+    // Force archive
+    const past181 = new Date();
+    past181.setDate(past181.getDate() - 181);
+    store.updatePreference(USER, pref.id, { last_seen: past181.toISOString() });
+    store.runDecay(USER);
+    const archived = store.readPreference(USER, pref.id)!;
+    expect(archived.polarity_status).toBe("archived");
+
+    // New same-polarity signal should reactivate
+    const reactivated = store.ingestSignal(USER, signal({ signal_type: "explicit_tag" }))!;
+    expect(reactivated.id).toBe(pref.id);
+    expect(reactivated.polarity_status).toBe("stable");
+
+    // Should now be injectable again (strength accumulated above threshold)
+    const retrieved = store.retrieveForInjection(USER, {});
+    expect(retrieved.positives.some((p) => p.id === pref.id)).toBe(true);
   });
 });
 

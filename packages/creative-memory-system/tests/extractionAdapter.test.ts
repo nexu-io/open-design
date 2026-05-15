@@ -154,6 +154,27 @@ describe("extractionAdapter", () => {
     ).toThrow(/signals must be an array/);
   });
 
+  it("classifyArtifact throws on malformed signal entries (regression)", () => {
+    // A payload like { signals: [{}] } must not silently forward undefined
+    // pattern/preference_type into ingestSignal and persist corrupt records.
+    expect(() =>
+      adapter.classifyArtifact({ signals: [{}] } as unknown as adapter.ArtifactMeta),
+    ).toThrow(/signals\[0\] is malformed/);
+    expect(() =>
+      adapter.classifyArtifact({
+        signals: [{ preference_type: "layout", pattern: "" }],
+      } as unknown as adapter.ArtifactMeta),
+    ).toThrow(/signals\[0\] is malformed/);
+    expect(() =>
+      adapter.classifyArtifact({
+        signals: [
+          { preference_type: "layout", pattern: "valid" },
+          { preference_type: "", pattern: "also_valid" },
+        ],
+      } as unknown as adapter.ArtifactMeta),
+    ).toThrow(/signals\[1\] is malformed/);
+  });
+
   it("TAG_POLARITY map is frozen and complete for known tags", () => {
     expect(Object.isFrozen(adapter.TAG_POLARITY)).toBe(true);
     expect(adapter.TAG_POLARITY["save this direction"]).toBe("positive");

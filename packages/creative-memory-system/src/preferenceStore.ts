@@ -373,8 +373,19 @@ export function ingestSignal(userId: string, signal: Signal): Preference | null 
   const array = getPrefArray(data, signal.scope, signal.project_id);
   const t = signal.timestamp || now();
 
-  // Look for existing record matching this pattern + polarity
+  // Look for existing record matching this pattern + polarity.
+  // Skip archived records — they should not silently absorb new signals.
   let pref = findExistingPref(array, signal.pattern, signal.preference_type, signal.polarity);
+
+  // If the match is archived, reactivate it: clear the terminal status so the
+  // accumulation path below can bring it back into the injectable set. This
+  // lets a user re-establish a previously archived preference by signaling
+  // again, rather than requiring manual deletion of the old record.
+  if (pref && pref.polarity_status === "archived") {
+    pref.polarity_status = "stable";
+    pref.reversal_signals = 0;
+    pref.reversal_first_seen = null;
+  }
 
   // Look for existing record with OPPOSITE polarity (potential contradiction)
   const opposite: Polarity = signal.polarity === "positive" ? "negative" : "positive";
@@ -560,7 +571,16 @@ function applyReversal(
 
 /**
  * Run decay pass for a user. Call on session start or as a scheduled daily job.
- * Strength × 0.70 at 90+ days since last signal; archive at 180+ days.
+ *
+ * Archival is based on `last_seen` age (days since the user last interacted
+ * with the preference), not `decay_at`. This ensures the archive deadline is
+ * fixed at ARCHIVE_DAYS since last interaction and is not pushed forward by
+ * routine decay passes that reset `decay_at`.
+ *
+ * Decay (strength × 0.70) fires when `decay_at` is in the past (i.e. the
+ * preference has been untouched for at least DECAY_DAYS since its last
+ * signal or last decay pass). The decay branch resets `decay_at` forward so
+ * the next decay fires another DECAY_DAYS later.
  */
 export function runDecay(userId: string): DecayResult {
   const data = loadFile(userId);
@@ -574,14 +594,19 @@ export function runDecay(userId: string): DecayResult {
     for (const pref of arr) {
       if (pref.polarity_status === "archived") continue;
 
-      const daysSinceDecay = daysBetween(pref.decay_at, n);
-
-      if (daysSinceDecay >= DECAY_DAYS) {
-        // 180+ days since last signal — archive
+      // Archive check: based on last_seen, not decay_at.
+      // A preference that has not been interacted with for ARCHIVE_DAYS
+      // is terminal regardless of how many decay passes have run.
+      const daysSinceLastSeen = daysBetween(pref.last_seen, n);
+      if (daysSinceLastSeen >= ARCHIVE_DAYS) {
         pref.polarity_status = "archived";
         archived++;
-      } else if (daysSinceDecay >= 0) {
-        // 90–180 days — apply decay
+        continue;
+      }
+
+      // Decay check: based on decay_at (resets each pass).
+      const daysSinceDecay = daysBetween(pref.decay_at, n);
+      if (daysSinceDecay >= 0) {
         pref.signal_strength = clamp(pref.signal_strength * 0.70, 0, 1);
         pref.confidence = dropConfidence(pref.confidence);
         pref.decay_at = addDays(n, DECAY_DAYS);
