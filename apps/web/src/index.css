@@ -435,12 +435,19 @@ code {
   border-radius: 7px;
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.chrome-action svg {
+  display: block;
+}
+.chrome-action > svg:first-child {
+  transform: translateY(1px);
 }
 .chrome-action:hover:not(:disabled) {
   background: var(--bg-subtle);
