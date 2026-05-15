@@ -6223,7 +6223,26 @@ export async function startServer({
   });
 
   // Streamable HTTP MCP endpoint — remote agents connect here.
+  // Auth middleware already gates this path (not in PUBLIC_PATHS).
+  // Apply same-origin check as defense-in-depth: the endpoint is
+  // meant for programmatic clients with Bearer tokens, not browsers.
   const mcpHttpHandler = createMcpHttpHandler(daemonUrl);
+  app.all('/mcp', (req, _res, next) => {
+    // Browsers send an Origin header on cross-origin POSTs. Programmatic
+    // HTTP clients (curl, agents, MCP SDK) typically do not. Reject
+    // browser cross-origin attempts; allow everything else.
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const url = new URL(origin);
+        if (url.host !== req.headers.host) {
+          _res.status(403).json({ error: 'cross-origin request rejected' });
+          return;
+        }
+      } catch { /* malformed Origin — let it through, auth will catch it */ }
+    }
+    next();
+  });
   app.post('/mcp', mcpHttpHandler);
   app.get('/mcp', mcpHttpHandler);
   // Project workspace

@@ -3140,9 +3140,13 @@ describe('SettingsDialog MCP server interactions', () => {
   let originalClipboard: PropertyDescriptor | undefined;
 
   beforeEach(() => {
-    fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => installInfo,
+    fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/mcp/install-info') {
+        return Promise.resolve({ ok: true, json: async () => installInfo });
+      }
+      // Default: return empty data for other daemon endpoints
+      // (e.g. /api/mcp-keys, /api/network-config)
+      return Promise.resolve({ ok: true, json: async () => ({ keys: [] }) });
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -3236,7 +3240,12 @@ describe('SettingsDialog MCP server interactions', () => {
   });
 
   it('shows a daemon error state when install paths cannot be resolved', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('network down'));
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/api/mcp/install-info') {
+        return Promise.reject(new Error('network down'));
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ keys: [] }) });
+    });
 
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
