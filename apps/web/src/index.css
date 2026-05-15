@@ -21335,6 +21335,32 @@ body.desktop-pet-shell .pet-task-item {
   white-space: nowrap;
 }
 
+.manual-edit-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.manual-edit-tabs button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--text-muted);
+  background: var(--bg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.manual-edit-tabs button.selected {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
 .manual-edit-tab-body {
   display: grid;
   gap: 10px;

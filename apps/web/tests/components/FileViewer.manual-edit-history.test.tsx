@@ -151,6 +151,53 @@ describe('FileViewer manual edit history regressions', () => {
     expect(savedSources[2]).toContain('background-color: rgb(249, 115, 22)');
     expect(savedSources[2]).not.toContain('rgb(239, 68, 68)');
   });
+
+  it('refreshes the manual edit canvas after non-style source patches', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        savedSources.push(payload.content);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(initialSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+    await waitFor(() => expect((document.querySelector('iframe') as HTMLIFrameElement | null)?.srcdoc).toContain('Hero'));
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { id: 'hero', kind: 'set-text', value: 'Updated hero' },
+        'Content: Hero',
+      );
+    });
+
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    await waitFor(() => expect((document.querySelector('iframe') as HTMLIFrameElement | null)?.srcdoc).toContain('Updated hero'));
+  });
 });
 
 function htmlPreviewFile(): ProjectFile {
