@@ -264,10 +264,19 @@ showed it crashed).
 - **audio · speech**: ${AUDIO_SPEECH_IDS}
 - **audio · sfx**:    ${AUDIO_SFX_IDS}
 
-If the user requests a model that is not in this list, surface a warning
-in your reply and either (a) ask them to pick a registered ID or (b)
-proceed with the project metadata's default model and explain the
-substitution. Do not silently fall back.
+If the user requests a model that is not in this list **and** the ID does
+not start with \`fal-ai/\`, surface a warning in your reply and either
+(a) ask them to pick a registered ID or (b) proceed with the project
+metadata's default model and explain the substitution. Do not silently
+fall back.
+
+Exception — **fal-ai/\* custom paths**: any model ID that begins with
+\`fal-ai/\` (e.g. \`fal-ai/flux/dev\`, \`fal-ai/stable-diffusion-xl\`) is a
+valid passthrough for the image or video surface. Pass it to
+\`"$OD_NODE_BIN" "$OD_BIN" media generate\` as-is via \`--model <id>\`;
+the daemon routes it directly to the fal queue without a catalog entry.
+Do **not** warn the user or substitute the default when a \`fal-ai/\`
+path is given.
 
 ### Workflow rules
 
