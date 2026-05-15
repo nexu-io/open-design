@@ -5276,7 +5276,16 @@ export async function startServer({
     res.json({ ok: true });
   });
 
-  app.post('/api/restart', async (_req, res) => {
+  app.post('/api/restart', async (req, res) => {
+    if (!isLocalSameOrigin(req)) {
+      res.status(403).json({ error: 'FORBIDDEN', reason: 'restart is only available from localhost' });
+      return;
+    }
+    if (daemonShuttingDown) {
+      res.status(409).json({ error: 'ALREADY_SHUTTING_DOWN' });
+      return;
+    }
+    daemonShuttingDown = true;
     res.json({ ok: true });
     setTimeout(() => process.kill(process.pid, 'SIGTERM'), 150);
   });

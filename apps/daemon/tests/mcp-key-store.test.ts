@@ -41,10 +41,10 @@ describe('mcp-key-store', () => {
     const keys = await listMcpKeys(dataDir);
 
     expect(keys).toHaveLength(1);
-    expect(keys[0].id).toBe(generated.id);
-    expect(keys[0].keyPrefix).toMatch(/^od_mcp_/);
-    expect(keys[0].label).toBe('list-test');
-    expect(typeof keys[0].createdAt).toBe('number');
+    expect(keys[0]!.id).toBe(generated.id);
+    expect(keys[0]!.keyPrefix).toMatch(/^od_mcp_/);
+    expect(keys[0]!.label).toBe('list-test');
+    expect(typeof keys[0]!.createdAt).toBe('number');
   });
 
   it('reveal key decrypted matches original generated key', async () => {
