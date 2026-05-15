@@ -289,6 +289,22 @@ describe('daemon origin validation middleware', () => {
     }
   });
 
+  it('allows local guarded routes without Origin when Host matches a configured non-loopback IP origin', async () => {
+    const lanHost = `100.86.154.169:${port}`;
+    process.env.OD_ALLOWED_ORIGINS = `http://${lanHost}`;
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        headers: {
+          Host: lanHost,
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
   // --- Origin: null (sandboxed iframe previews) ---
 
   it('allows Origin: null for GET raw-file preview routes', async () => {
