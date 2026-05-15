@@ -1937,38 +1937,39 @@ export function SettingsDialog({
                         <span className="field-label">
                           {t('settings.modelPicker')}
                         </span>
-                        <select
-                          value={selectValue}
-                          onChange={(e) => {
-                            if (e.target.value === CUSTOM_MODEL_SENTINEL) {
-                              // Switching to "Custom…" should clear the
-                              // value so the input below opens empty for
-                              // typing. Keep an explicit edit-mode flag so
-                              // intermediate values like `gpt-5` do not
-                              // collapse the custom input while typing
-                              // `gpt-5.5`.
-                              setAgentCustomModelIds((prev) => {
-                                const next = new Set(prev);
-                                next.add(selected.id);
-                                return next;
-                              });
-                              setChoice({ model: '' });
-                            } else {
-                              setAgentCustomModelIds((prev) => {
-                                if (!prev.has(selected.id)) return prev;
-                                const next = new Set(prev);
-                                next.delete(selected.id);
-                                return next;
-                              });
-                              setChoice({ model: e.target.value });
-                            }
-                          }}
-                        >
-                          {renderModelOptions(selected.models!)}
-                          <option value={CUSTOM_MODEL_SENTINEL}>
-                            {t('settings.modelCustom')}
-                          </option>
-                        </select>
+                        <div className="agent-model-select-wrap">
+                          <select
+                            value={selectValue}
+                            onChange={(e) => {
+                              if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                                setAgentCustomModelIds((prev) => {
+                                  const next = new Set(prev);
+                                  next.add(selected.id);
+                                  return next;
+                                });
+                                setChoice({ model: '' });
+                              } else {
+                                setAgentCustomModelIds((prev) => {
+                                  if (!prev.has(selected.id)) return prev;
+                                  const next = new Set(prev);
+                                  next.delete(selected.id);
+                                  return next;
+                                });
+                                setChoice({ model: e.target.value });
+                              }
+                            }}
+                          >
+                            {renderModelOptions(selected.models!)}
+                            <option value={CUSTOM_MODEL_SENTINEL}>
+                              {t('settings.modelCustom')}
+                            </option>
+                          </select>
+                          <Icon
+                            name="chevron-down"
+                            size={12}
+                            className="agent-model-select-chevron"
+                          />
+                        </div>
                       </label>
                     ) : null}
                     {customActive ? (
@@ -1991,18 +1992,25 @@ export function SettingsDialog({
                         <span className="field-label">
                           {t('settings.reasoningPicker')}
                         </span>
-                        <select
-                          value={reasoningValue}
-                          onChange={(e) =>
-                            setChoice({ reasoning: e.target.value })
-                          }
-                        >
-                          {selected.reasoningOptions!.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="agent-model-select-wrap">
+                          <select
+                            value={reasoningValue}
+                            onChange={(e) =>
+                              setChoice({ reasoning: e.target.value })
+                            }
+                          >
+                            {selected.reasoningOptions!.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
+                          <Icon
+                            name="chevron-down"
+                            size={12}
+                            className="agent-model-select-chevron"
+                          />
+                        </div>
                       </label>
                     ) : null}
                     <MemoryModelInline
