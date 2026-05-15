@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type SyntheticEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
@@ -131,18 +132,29 @@ function AppDialogModal({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         onSettle(request.kind === 'alert');
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [onSettle, request.kind]);
+
+  const stopDialogEvent = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
 
   const modal = (
     <div
       className="modal-backdrop app-dialog-backdrop"
       role="presentation"
-      onMouseDown={(event) => {
+      onPointerDown={stopDialogEvent}
+      onPointerUp={stopDialogEvent}
+      onMouseDown={stopDialogEvent}
+      onMouseUp={stopDialogEvent}
+      onClick={(event) => {
+        event.stopPropagation();
         if (event.target === event.currentTarget) onSettle(request.kind === 'alert');
       }}
     >
@@ -152,6 +164,11 @@ function AppDialogModal({
         aria-modal="true"
         aria-labelledby={`app-dialog-title-${request.id}`}
         aria-describedby={`app-dialog-message-${request.id}`}
+        onPointerDown={stopDialogEvent}
+        onPointerUp={stopDialogEvent}
+        onMouseDown={stopDialogEvent}
+        onMouseUp={stopDialogEvent}
+        onClick={stopDialogEvent}
       >
         <h2 id={`app-dialog-title-${request.id}`}>{title}</h2>
         <p id={`app-dialog-message-${request.id}`} className="modal-confirm-message">

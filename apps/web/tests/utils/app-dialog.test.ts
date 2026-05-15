@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { setActiveAppDialogApi, showAppAlert, showAppConfirm } from '../../src/utils/app-dialog';
+import {
+  formatAppDialogMessage,
+  setActiveAppDialogApi,
+  showAppAlert,
+  showAppConfirm,
+} from '../../src/utils/app-dialog';
 
 describe('app dialog fallback', () => {
   afterEach(() => {
@@ -21,5 +26,11 @@ describe('app dialog fallback', () => {
     await expect(showAppConfirm('Missing provider')).rejects.toThrow(
       'AppDialog API unavailable: no app dialog provider or native confirm() fallback is available.',
     );
+  });
+
+  it('normalizes dialog messages to sentence case with terminal punctuation', () => {
+    expect(formatAppDialogMessage('target file already exists')).toBe('Target file already exists.');
+    expect(formatAppDialogMessage(' API key missing. ')).toBe('API key missing.');
+    expect(formatAppDialogMessage('"quoted warning"')).toBe('"Quoted warning."');
   });
 });
