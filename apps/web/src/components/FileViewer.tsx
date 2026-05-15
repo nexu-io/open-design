@@ -5299,7 +5299,9 @@ function HtmlViewer({
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
   const visibleSideComments = useMemo(
-    () => previewComments.filter((comment) => comment.filePath === file.name && comment.status === 'open'),
+    () => previewComments
+      .filter((comment) => comment.filePath === file.name && comment.status === 'open')
+      .sort((a, b) => b.createdAt - a.createdAt),
     [file.name, previewComments],
   );
   useEffect(() => {
