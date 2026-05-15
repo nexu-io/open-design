@@ -28,9 +28,12 @@ describe('app dialog fallback', () => {
     );
   });
 
-  it('normalizes dialog messages to sentence case with terminal punctuation', () => {
-    expect(formatAppDialogMessage('target file already exists')).toBe('Target file already exists.');
+  it('adds terminal punctuation without rewriting raw message text', () => {
+    expect(formatAppDialogMessage('target file already exists')).toBe('target file already exists.');
     expect(formatAppDialogMessage(' API key missing. ')).toBe('API key missing.');
-    expect(formatAppDialogMessage('"quoted warning"')).toBe('"Quoted warning."');
+    expect(formatAppDialogMessage('"quoted warning"')).toBe('"quoted warning".');
+    expect(formatAppDialogMessage('Could not open "CaseSensitiveFile"')).toBe(
+      'Could not open "CaseSensitiveFile".',
+    );
   });
 });

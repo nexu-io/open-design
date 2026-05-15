@@ -34,7 +34,7 @@ function DialogHarness({
         onClick={() =>
           void alertDialog({
             title: 'Open Design',
-            message: 'target file already exists',
+            message: 'Target file already exists',
           })
         }
       >
@@ -82,7 +82,7 @@ describe('AppDialogProvider', () => {
     }
   });
 
-  it('formats alert message copy as sentence case with punctuation', () => {
+  it('adds missing punctuation to alert message copy', () => {
     render(
       <AppDialogProvider>
         <DialogHarness />
