@@ -1,12 +1,12 @@
-name: 🧪 Preview 0.8.0 feedback
-description: Report a bug, suggest an improvement, or share feedback about the preview/0.8.0 branch (Skills + Automations).
-labels: ["preview/0.8.0"]
-title: "[preview/0.8.0] "
+name: 🧪 Preview v0.8.0 feedback
+description: Report a bug, suggest an improvement, or share feedback about the preview/v0.8.0 branch (Skills + Automations).
+labels: ["preview/v0.8.0"]
+title: "[preview/v0.8.0] "
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for trying `preview/0.8.0`! This template is for feedback about the **Skills tab in `/integrations`** and the **Automations cards** that are being previewed before they land in `main`.
+        Thanks for trying `preview/v0.8.0`! This template is for feedback about the **Skills tab in `/integrations`** and the **Automations cards** that are being previewed before they land in `main`.
 
         For general bugs unrelated to the preview, please open a regular issue instead.
 
@@ -59,7 +59,7 @@ body:
     attributes:
       label: Build / version
       description: From the app's About menu, or run `git rev-parse HEAD` if you built from source.
-      placeholder: e.g. 0.8.0-preview.1 — or commit hash 640a3322
+      placeholder: e.g. 0.8.0-preview.2
     validations:
       required: true
 

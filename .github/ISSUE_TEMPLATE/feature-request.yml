@@ -10,7 +10,7 @@ body:
         Before you submit:
         - Check whether the same idea is already discussed in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+label%3Aenhancement) or [Discussions → Ideas](https://github.com/nexu-io/open-design/discussions/categories/ideas).
         - If you're still exploring an idea and want a conversation first, prefer [Discussions → Ideas](https://github.com/nexu-io/open-design/discussions/new?category=ideas).
-        - If your suggestion relates to the `preview/0.8.0` feature branch, please use the **🧪 Preview 0.8.0 feedback** template instead.
+        - If your suggestion relates to the `preview/v0.8.0` feature branch, please use the **🧪 Preview v0.8.0 feedback** template instead.
 
   - type: textarea
     id: problem

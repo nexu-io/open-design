@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 🧪 Preview 0.8.0 feedback
-    url: https://github.com/nexu-io/open-design/issues/new?template=preview-0.8.0-feedback.yml
-    about: Reporting something specific about the preview/0.8.0 feature branch (Skills, Automations, plugin model). Auto-tagged for the team.
+  - name: 🧪 Preview v0.8.0 feedback
+    url: https://github.com/nexu-io/open-design/issues/new?template=preview-v0.8.0-feedback.yml
+    about: Reporting something specific about the preview/v0.8.0 feature branch (Skills, Automations, plugin model). Auto-tagged for the team.
   - name: 💬 Ask a question
     url: https://github.com/nexu-io/open-design/discussions/categories/q-a
     about: How do I use X? Why does Y behave like that? — Q&A on Discussions gets faster answers and stays searchable for others.

@@ -9,7 +9,7 @@ body:
 
         Before you submit:
         - Check whether the issue is already reported in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue).
-        - If your report is about the `preview/0.8.0` feature branch (Skills tab / Automations), please use the **🧪 Preview 0.8.0 feedback** template instead.
+        - If your report is about the `preview/v0.8.0` feature branch (Skills tab / Automations), please use the **🧪 Preview v0.8.0 feedback** template instead.
 
   - type: textarea
     id: description
