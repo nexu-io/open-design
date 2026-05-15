@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
 
 import { Icon } from './Icon';
 import type { PreviewVisualMarkKind } from '../types';
@@ -157,6 +157,15 @@ export function PreviewDrawOverlay({
     }
     drawingRef.current = null;
     redraw();
+  }
+
+  function onCanvasWheel(e: WheelEvent<HTMLCanvasElement>) {
+    if (mode !== 'draw' || sending) return;
+    const iframe = wrapRef.current?.querySelector('iframe');
+    const win = iframe?.contentWindow;
+    if (!win || typeof win.scrollBy !== 'function') return;
+    e.preventDefault();
+    win.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: 'auto' });
   }
 
   function clearInk() {
@@ -374,6 +383,7 @@ export function PreviewDrawOverlay({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onWheel={onCanvasWheel}
           style={{
             position: 'absolute',
             inset: 0,
