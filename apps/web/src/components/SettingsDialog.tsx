@@ -7598,7 +7598,6 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
       setLoaded(true);
     }).catch(() => {
       setError(t('settings.networkLoadError'));
-      setLoaded(true);
     });
   }, [daemonLive]);
 
