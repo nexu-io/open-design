@@ -19,20 +19,31 @@ describe('resolveDataDir', () => {
   let fakeHome: string;
   let projectRoot: string;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
+  let savedToolsDevPid: string | undefined;
 
   beforeEach(() => {
     fakeHome = mkdtempSync(path.join(os.tmpdir(), 'rdd-home-'));
     projectRoot = mkdtempSync(path.join(os.tmpdir(), 'rdd-project-'));
     homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(fakeHome);
+    savedToolsDevPid = process.env.OD_TOOLS_DEV_PARENT_PID;
   });
 
   afterEach(async () => {
     homedirSpy.mockRestore();
+    if (savedToolsDevPid !== undefined) {
+      process.env.OD_TOOLS_DEV_PARENT_PID = savedToolsDevPid;
+    } else {
+      delete process.env.OD_TOOLS_DEV_PARENT_PID;
+    }
     await rm(fakeHome, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
   });
 
-  it('returns <projectRoot>/.od when OD_DATA_DIR is unset', () => {
+  // Tests that depend on the tools-dev PID env var toggle the env var
+  // explicitly and must not leak state.
+
+  it('returns <projectRoot>/.od when running under tools-dev (OD_TOOLS_DEV_PARENT_PID set)', () => {
+    process.env.OD_TOOLS_DEV_PARENT_PID = String(process.pid);
     expect(resolveDataDir(undefined, projectRoot)).toBe(path.join(projectRoot, '.od'));
     expect(resolveDataDir('', projectRoot)).toBe(path.join(projectRoot, '.od'));
   });
@@ -52,6 +63,12 @@ describe('resolveDataDir', () => {
   it('trims OD_DATA_DIR before resolving the storage root', () => {
     const out = resolveDataDir('  rel-od  ', projectRoot, { requireExplicit: true });
     expect(out).toBe(path.join(projectRoot, 'rel-od'));
+  });
+
+  it('returns $HOME/.od when not under tools-dev (installed daemon / PM2)', () => {
+    delete process.env.OD_TOOLS_DEV_PARENT_PID;
+    expect(resolveDataDir(undefined, projectRoot)).toBe(path.join(fakeHome, '.od'));
+    expect(resolveDataDir('', projectRoot)).toBe(path.join(fakeHome, '.od'));
   });
 
   it('expands a leading ~/ against the user home directory', () => {

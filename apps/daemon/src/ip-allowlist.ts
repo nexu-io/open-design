@@ -24,6 +24,8 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
 
     const allowed = entries.some((entry) => entry.matches(clientIp));
     if (!allowed) {
+      const normalized = clientIp.startsWith("::ffff:") ? clientIp.slice(7) : clientIp;
+      console.warn(`[od] ip-allowlist: blocked ${normalized} (not in [${allowedHosts.join(", ")}])`);
       res.status(403).json({ error: "FORBIDDEN", reason: "IP not in allowlist" });
       return;
     }
@@ -56,10 +58,11 @@ function parseEntry(raw: string): IpMatcher {
       },
     };
   }
+  // Plain IP — treat as /32
   return {
     matches(ip: string) {
       const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
-      return normalized === trimmed;
+      return isInCidr(normalized, trimmed, 32);
     },
   };
 }

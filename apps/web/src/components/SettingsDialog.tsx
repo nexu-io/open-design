@@ -6557,6 +6557,118 @@ function CodexInstallToggle(): JSX.Element | null {
   );
 }
 
+function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; onKeyChanged: () => void }) {
+  const { t } = useI18n();
+  const [keys, setKeys] = useState<Array<{ id: string; keyPrefix: string; label: string; createdAt: number }>>([]);
+  const [revealedKeys, setRevealedKeys] = useState<Map<string, string>>(new Map());
+  const [generating, setGenerating] = useState(false);
+
+  const loadKeys = () => {
+    fetch('/api/mcp-keys')
+      .then((r) => (r.ok ? r.json() : { keys: [] }))
+      .then((data: { keys: Array<{ id: string; keyPrefix: string; label: string; createdAt: number }> }) => setKeys(data.keys))
+      .catch(() => {});
+  };
+
+  useEffect(() => { loadKeys(); }, []);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/mcp-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: '' }),
+      });
+      if (res.ok) {
+        loadKeys();
+        onKeyChanged();
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleReveal = async (id: string) => {
+    try {
+      const res = await fetch(`/api/mcp-keys/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRevealedKeys((prev) => new Map(prev).set(id, data.key));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleRevoke = async (id: string) => {
+    if (!confirm(t('settings.mcpKeysRevokeConfirm'))) return;
+    const res = await fetch(`/api/mcp-keys/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setRevealedKeys((prev) => { const next = new Map(prev); next.delete(id); return next; });
+      loadKeys();
+      onKeyChanged();
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>
+        {t('settings.mcpKeysTitle')}
+      </p>
+      {(info as any)?.networkExposed && keys.length === 0 && !(info?.env?.OD_API_KEY && info.env.OD_API_KEY !== '<your-api-key>') ? (
+        <div style={{
+          margin: '0 0 8px',
+          padding: '8px 10px',
+          fontSize: 12,
+          lineHeight: 1.5,
+          borderRadius: 6,
+          background: 'var(--surface-warn, #3d2e00)',
+          color: 'var(--text-warn, #f0ad4e)',
+          border: '1px solid var(--border-warn, #665200)',
+        }}>
+          {t('settings.mcpKeysNetworkWarning')}
+        </div>
+      ) : null}
+      {keys.length === 0 ? (
+        <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-muted)' }}>
+          {t('settings.mcpKeysEmpty')}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {keys.map((k) => (
+            <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+              <code style={{
+                background: 'var(--surface-2, #11141a)',
+                padding: '2px 6px',
+                borderRadius: 4,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                fontSize: 11,
+              }}>
+                {revealedKeys.get(k.id) || `${k.keyPrefix}...`}
+              </code>
+              {k.label ? <span style={{ color: 'var(--text-muted)' }}>{k.label}</span> : null}
+              <button type="button" className="ghost" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleReveal(k.id)}>
+                {t('settings.mcpKeysReveal')}
+              </button>
+              <button type="button" className="ghost" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger-fg, #f88)' }} onClick={() => handleRevoke(k.id)}>
+                {t('settings.mcpKeysRevoke')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        className="ghost"
+        disabled={generating}
+        onClick={handleGenerate}
+        style={{ marginTop: 8, fontSize: 12 }}
+      >
+        {generating ? '...' : t('settings.mcpKeysGenerate')}
+      </button>
+    </div>
+  );
+}
+
 function IntegrationsSection() {
   const { t } = useI18n();
 
@@ -6683,10 +6795,11 @@ function IntegrationsSection() {
   // Pull the absolute paths to node + cli.js from the running daemon
   // so snippets work even when `od` isn't on PATH (the realistic
   // case for source clones, plus macOS/Linux ship a /usr/bin/od that
-  // shadows any global install). Fetched on mount; if the daemon is
-  // unreachable we surface a clear error instead of a half-built
-  // snippet that would silently fail when pasted.
+  // shadows any global install). Fetched on mount AND when info is
+  // reset to null (MCP key generated/revoked triggers onKeyChanged
+  // → setInfo(null) → this effect re-fetches with the new key).
   useEffect(() => {
+    if (info !== null) return;
     let cancelled = false;
     fetch('/api/mcp/install-info')
       .then(async (res) => {
@@ -6705,7 +6818,7 @@ function IntegrationsSection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [info]);
 
   const client = MCP_CLIENTS.find((c) => c.id === clientId) ?? MCP_CLIENTS[0]!;
   const snippet = info ? client.buildSnippet(info) : '';
@@ -6958,6 +7071,23 @@ function IntegrationsSection() {
 
           <p className="mcp-running-note">
             {t('settings.mcpRunningNote')}
+          </p>
+        </div>
+
+        <McpKeysSection info={info} onKeyChanged={() => setInfo(null)} />
+
+        <div style={{ marginTop: 20, lineHeight: 1.55 }}>
+          <p
+            style={{
+              margin: '0 0 8px',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: 600,
+            }}
+          >
+            {t('settings.mcpCapabilitiesTitle')}
           </p>
         </div>{/* end mcp-setup-card */}
       </div>
@@ -7254,15 +7384,24 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
   useEffect(() => {
     if (!daemonLive) return;
     Promise.all([
-      fetch('/api/network-config').then((r) => r.ok ? r.json() : { bindHost: '127.0.0.1', port: 7456, allowedHosts: '' }),
-      fetch('/api/auth/keys').then((r) => r.ok ? r.json() : { keys: [] }),
+      fetch('/api/network-config').then((r) => {
+        if (!r.ok) throw new Error('Failed to load network config');
+        return r.json();
+      }),
+      fetch('/api/auth/keys').then((r) => {
+        if (!r.ok) throw new Error('Failed to load API keys');
+        return r.json();
+      }),
     ]).then(([nc, ak]) => {
       setBindHost(nc.bindHost ?? '127.0.0.1');
       setPort(nc.port ?? 7456);
       setAllowedHosts(Array.isArray(nc.allowedHosts) ? nc.allowedHosts.join(', ') : '');
       setKeys(ak.keys ?? []);
       setLoaded(true);
-    }).catch(() => setLoaded(true));
+    }).catch(() => {
+      setError(t('settings.networkLoadError'));
+      setLoaded(true);
+    });
   }, [daemonLive]);
 
   const saveConfig = async (patch: Record<string, unknown>) => {

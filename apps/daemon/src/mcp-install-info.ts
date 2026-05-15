@@ -35,6 +35,17 @@ export interface BuildMcpInstallPayloadInputs {
    *  and the chat history for the run. Null when the daemon was
    *  launched without a known web port (CLI-only / headless). */
   webBaseUrl?: string | null;
+  /** First valid daemon API key, when auth is enabled. Included in the
+   *  snippet env as OD_API_KEY so the spawned `od mcp` can authenticate
+   *  to a network-exposed daemon. Omitted when auth is not active. */
+  apiKey?: string;
+  /** When true, the daemon requires an API key but the raw key is not
+   *  available (stored as hash). The snippet env will include a placeholder
+   *  OD_API_KEY that the user must fill in. */
+  authRequired?: boolean;
+  /** True when the daemon is bound to a non-loopback address (0.0.0.0,
+   *  LAN IP, Tailscale IP). The UI uses this to prompt key setup. */
+  networkExposed?: boolean;
 }
 
 export interface McpInstallPayload {
@@ -50,6 +61,7 @@ export interface McpInstallPayload {
   cliExists: boolean;
   nodeExists: boolean;
   buildHint: string | null;
+  networkExposed?: boolean;
 }
 
 export function buildMcpInstallPayload(
@@ -76,6 +88,11 @@ export function buildMcpInstallPayload(
     OD_DATA_DIR: inputs.dataDir,
     ...inputs.sidecarEnv,
   };
+  if (inputs.apiKey) {
+    env.OD_API_KEY = inputs.apiKey;
+  } else if (inputs.authRequired) {
+    env.OD_API_KEY = '<your-api-key>';
+  }
   if (inputs.electronAsNode) {
     env.ELECTRON_RUN_AS_NODE = '1';
   }
@@ -107,5 +124,6 @@ export function buildMcpInstallPayload(
     cliExists: inputs.cliExists,
     nodeExists: inputs.nodeExists,
     buildHint: hints.length ? hints.join(' ') : null,
+    ...(inputs.networkExposed ? { networkExposed: true } : {}),
   };
 }

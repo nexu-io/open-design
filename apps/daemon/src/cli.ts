@@ -2,8 +2,8 @@
 // @ts-nocheck
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { fileURLToPath } from 'node:url';
+import { resolveProjectRoot, resolveDataDir } from './server.js';
 import { generateKey, listKeys, revokeKey } from './auth-store.js';
-import { resolveDataDir } from './server.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
@@ -521,7 +521,7 @@ async function runAuth(args) {
     process.exit(2);
   }
   const keySub = args.find((a, i) => i > 0 && !a.startsWith('-')) || '';
-  const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
+  const PROJECT_ROOT = resolveProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
   const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
 
   if (keySub === 'generate') {

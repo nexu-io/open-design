@@ -27,7 +27,7 @@ od --host 0.0.0.0
 # With IP allowlist
 OD_ALLOWED_HOSTS=192.168.1.0/24,10.0.0.5 od --host 0.0.0.0
 
-# Tailscale: bind to tailnet IP only (no API keys needed)
+# Tailscale: bind to tailnet IP only
 od --host $(tailscale ip -4) --port 7456
 ```
 
@@ -46,30 +46,45 @@ When the daemon is bound to a non-loopback address, two security layers activate
 
 ### 1. IP allowlist (`OD_ALLOWED_HOSTS`)
 
-Comma-separated list of IPs and CIDR ranges. Only these hosts can connect. Loopback (`127.0.0.1`, `::1`) is always allowed.
+Comma-separated list of **client** IPs and CIDR ranges. Only these hosts can connect. Loopback (`127.0.0.1`, `::1`) is always allowed.
+
+> **Important:** Enter the IP addresses of the *connecting devices*, not the server. For example, if the server is `192.168.1.10` and your phone is `192.168.1.42`, add the phone's IP or the whole subnet.
 
 ```bash
-# Only allow one specific IP
-OD_ALLOWED_HOSTS=192.168.1.100 od --host 0.0.0.0
+# Only allow one specific client IP
+OD_ALLOWED_HOSTS=192.168.1.42 od --host 0.0.0.0
 
-# Allow an entire subnet
+# Allow all devices on your LAN (recommended)
 OD_ALLOWED_HOSTS=192.168.1.0/24 od --host 0.0.0.0
 
-# Multiple entries
-OD_ALLOWED_HOSTS=192.168.1.0/24,10.0.0.5 od --host 0.0.0.0
+# Multiple entries: LAN + Tailscale
+OD_ALLOWED_HOSTS=192.168.1.0/24,100.64.0.0/10 od --host 0.0.0.0
 ```
+
+Common CIDR ranges:
+
+| Range | Covers |
+|-------|--------|
+| `192.168.0.0/16` | All private LAN (`192.168.x.x`) |
+| `192.168.1.0/24` | One subnet (`192.168.1.x`) |
+| `10.0.0.0/8` | All `10.x.x.x` private |
+| `100.64.0.0/10` | All Tailscale IPs |
+| `192.168.1.42` | Single IP (auto-treated as `/32`) |
+
+IP allowlist can also be configured from **Settings → Network** in the web UI. Settings are persisted across daemon restarts.
 
 If unset, all network hosts can connect.
 
 ### 2. API key authentication
 
-When bound to a non-loopback address, non-loopback requests must carry a valid API key.
+When bound to a non-loopback address, non-loopback requests must carry a valid API key or MCP key.
 
 ```bash
 # Generate a key
 od auth key generate --label "my-laptop"
 # Output: Generated API key (id: a1b2c3d4):
 #         od_abc123...
+# The raw key is shown ONCE — only a SHA-256 hash is stored on disk.
 
 # Use the key
 curl -H "Authorization: Bearer od_abc123..." http://192.168.1.10:7456/api/health
@@ -77,6 +92,19 @@ curl -H "Authorization: Bearer od_abc123..." http://192.168.1.10:7456/api/health
 # Or via header
 curl -H "X-API-Key: od_abc123..." http://192.168.1.10:7456/api/health
 ```
+
+API keys are stored as SHA-256 hashes in the data directory. The raw key is displayed only at generation time and cannot be recovered from the stored file. If a key is lost, revoke it and generate a new one.
+
+#### Emergency key reset
+
+If all keys are lost, you can reset from **localhost** only:
+
+1. Open `http://127.0.0.1:7456/login` on the server machine
+2. Click **"Lost all keys?"** at the bottom of the login page
+3. Confirm the reset — this deletes all API keys and MCP keys
+4. The daemon returns to an unauthenticated state
+
+This endpoint (`POST /api/auth/reset-keys`) only works from `127.0.0.1` / `::1`. Remote devices cannot trigger a key reset.
 
 Key management:
 
@@ -86,7 +114,36 @@ od auth key revoke <id>       # revoke a key
 od auth key generate          # generate a new key
 ```
 
-Loopback requests (from the same machine) never require a key, so local `tools-dev` and the desktop app continue to work without changes.
+#### MCP keys (UI-retrievable)
+
+MCP keys are a separate key type designed for MCP client authentication. Unlike API keys (SHA-256 hash only), MCP keys are AES-256-GCM encrypted and can be revealed from the UI at any time — this lets the Settings → MCP server panel include the actual key in config snippets.
+
+Both key types use the same authentication mechanism (SHA-256 hash comparison via `timingSafeEqual`). The auth middleware checks against all valid API key hashes and MCP key hashes.
+
+MCP keys are managed from **Settings → MCP server** in the web UI:
+
+- **Generate**: creates a new key with `od_mcp_` prefix
+- **Reveal**: decrypts and displays the full key
+- **Revoke**: deletes the key permanently
+
+When MCP keys exist, the install-info endpoint automatically includes the first key in the config snippet so users can copy-paste without manual key lookup.
+
+### When auth is required
+
+**Bound to `127.0.0.1` (default / desktop app)**: authentication is disabled entirely — all requests are trusted.
+
+**Bound to a non-loopback address with API/MCP keys**: all requests — including those from localhost — require a valid API key or MCP key. This prevents tunnel proxies (Cloudflare Tunnel, ngrok) from bypassing auth when they proxy through localhost.
+
+**Bound to a non-loopback address with NO keys**: only localhost (`127.0.0.1`, `::1`) can access the daemon. All external requests are blocked and redirected to the login page. This is a safe default — the admin can generate keys from localhost at `http://127.0.0.1:<port>/login` or via the CLI:
+
+```bash
+od auth key generate --label "my-laptop"
+# Output: Generated API key (id: a1b2c3d4):
+#         od_abc123...
+# The raw key is shown ONCE — only a SHA-256 hash is stored on disk.
+```
+
+Once at least one API key or MCP key exists, the daemon switches to full authentication mode.
 
 ### What is skipped
 
@@ -100,7 +157,8 @@ When bound to a non-loopback address, the daemon logs warnings on startup:
 ```
 [od] daemon bound to 0.0.0.0 — accessible from the network
 [od] WARNING: no IP allowlist (OD_ALLOWED_HOSTS) configured; all network hosts can connect
-[od] WARNING: no API keys configured; run `od auth key generate` to create one
+[od] WARNING: no API keys configured — only localhost access allowed; run `od auth key generate` to create one
+[od] WARNING: no MCP keys configured; generate one in Settings → MCP server
 ```
 
 ## Nix / Home Manager
@@ -202,12 +260,18 @@ This allows:
 
 ### API keys with Tailscale
 
-When the daemon is bound to a Tailscale IP (`--host 100.64.0.1`), requests from Tailscale addresses (100.64.0.0/10) automatically bypass API key authentication. The Tailscale mesh itself authenticates devices via your identity provider, so API keys are redundant for tailnet traffic.
+Tailscale provides network-level isolation, but the daemon no longer auto-bypasses API key auth for Tailscale addresses. This prevents tunnel proxies from bypassing auth. For tailnet-only setups, you can:
 
-When binding to `0.0.0.0`, Tailscale devices are also auto-detected and skip auth. Non-Tailscale LAN clients will still need a key:
+1. **Bind to the Tailscale IP directly** (`--host 100.64.0.1`) — only tailnet devices can reach it, and you may skip API keys if you trust all tailnet users.
+2. **Bind to `0.0.0.0` with API keys** — all clients (including tailnet) must authenticate. Use `OD_ALLOWED_HOSTS=100.64.0.0/10` to restrict to tailnet devices while still requiring API keys.
 
 ```bash
-od auth key generate --label "lan-laptop"
+# Option 1: Tailscale-only, no API keys needed
+od --host 100.64.0.1 --port 7456
+
+# Option 2: Tailscale + API keys
+od auth key generate --label "tailnet-user"
+OD_ALLOWED_HOSTS=100.64.0.0/10 od --host 0.0.0.0
 ```
 
 ### Tailscale Serve (alternative)
@@ -266,6 +330,69 @@ services.open-design = {
 };
 ```
 
+## Cloudflare Tunnel
+
+Exposes the daemon over HTTPS without opening any firewall port.
+
+```bash
+# Install cloudflared
+brew install cloudflare/cloudflare/cloudflared   # macOS
+# or: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Start a quick tunnel (temporary URL, no account needed)
+cloudflared tunnel --url http://localhost:7456
+```
+
+Cloudflared prints a public `https://*.trycloudflare.com` URL. The tunnel is active as long as the process runs.
+
+For a permanent URL with a custom domain:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create open-design
+cloudflared tunnel route dns open-design od.yourdomain.com
+cloudflared tunnel run open-design
+```
+
+Add `OD_ALLOWED_ORIGINS=https://od.yourdomain.com` and generate an API key when exposing over a public URL.
+
+## ngrok
+
+```bash
+# Install: https://ngrok.com/download
+ngrok http 7456
+```
+
+ngrok prints a public `https://<id>.ngrok-free.app` URL. Free tier tunnels expire after a few hours; use a paid plan or Cloudflare Tunnel for persistent URLs.
+
+## Linux systemd
+
+```bash
+CLI_JS=$(which od | xargs realpath 2>/dev/null || echo "$HOME/.local/share/pnpm/global/5/node_modules/@open-design/daemon/dist/cli.js")
+NODE_BIN=$(dirname "$(which node)")
+
+mkdir -p ~/.config/systemd/user
+
+cat > ~/.config/systemd/user/open-design.service << EOF
+[Unit]
+Description=Open Design daemon
+After=network.target
+
+[Service]
+ExecStart=$(which node) ${CLI_JS} --port 7456 --no-open
+Environment=PATH=${NODE_BIN}:${HOME}/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now open-design
+journalctl --user -u open-design -f
+```
+
 ## Security recommendations
 
 1. **Use Tailscale** for cross-network access. Bind to the Tailscale IP and skip API keys entirely — identity-based auth + WireGuard encryption is stronger than shared secrets on an open LAN.
@@ -282,20 +409,25 @@ services.open-design = {
 │  LAN client  │────▶│  IP allowlist (OD_ALLOWED_HOSTS)      │
 │              │     │  ── 403 if IP not in list              │
 └──────────────┘     ├───────────────────────────────────────┤
-                     │  API key auth (Bearer / X-API-Key)     │
+                     │  API key / MCP key auth                │
 ┌──────────────┐     │  ── 401 if key missing or invalid      │
-│  Tailscale   │────▶│  ── auto-detected: 100.64.0.0/10 skips  │
-│  device      │     │  ── skipped for loopback requests        │
+│  Any client  │────▶│  ── SHA-256 hash comparison             │
+│  (incl.      │     │  ── applies to ALL requests when bound  │
+│   loopback)  │     │    to non-loopback address               │
 └──────────────┘     ├───────────────────────────────────────┤
-                     │  Origin validation (existing)          │
-┌──────────────┐     │  ── CORS + Host header checks          │
-│  Loopback    │────▶│  ── bypasses all layers                 │
+                     │  No keys + network-exposed              │
+┌──────────────┐     │  ── localhost: allowed through          │
+│  Loopback    │────▶│  ── external: blocked, redirect /login  │
 │  (local)     │     ├───────────────────────────────────────┤
-└──────────────┘     │  Route handlers                        │
-                     └───────────────────────────────────────┘
+└──────────────┘     │  Origin validation (existing)          │
+                     │  ── CORS + Host header checks          │
+┌──────────────┐     ├───────────────────────────────────────┤
+│  External    │────▶│  Route handlers                        │
+│  (no keys)   │     └───────────────────────────────────────┘
+└──────────────┘
 ```
 
-Loopback clients (`127.0.0.1`, `::1`) bypass all security layers. When bound to a Tailscale IP (`100.64.x.x`), only authenticated tailnet devices can reach the daemon — no additional auth needed.
+When bound to `127.0.0.1` (default / desktop app), all security layers are disabled — local-only access. When bound to any other address (`0.0.0.0`, Tailscale IP, LAN IP), API key or MCP key authentication is required for all requests including those from localhost. If no keys exist, only localhost is allowed — external devices are blocked and redirected to the login page.
 
 ## References
 

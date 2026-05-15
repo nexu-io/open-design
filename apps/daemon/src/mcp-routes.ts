@@ -1,8 +1,11 @@
 import type { Express } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { allValidHashes } from './auth-store.js';
+import { allMcpKeyHashes, listMcpKeys, revealMcpKey } from './mcp-key-store.js';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
+import { isNetworkExposed } from './network-config.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
@@ -10,20 +13,19 @@ import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
 
+const INSTALL_INFO_TTL_MS = 5000;
+let installInfoCache: { t: number; payload: object } | null = null;
+
+export function bustInstallInfoCache() {
+  installInfoCache = null;
+}
+
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
   const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
-  const { pendingAuth, daemonUrlRef } = ctx.mcp;
+  const { pendingAuth, daemonUrlRef, authEnabled } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
   const getDaemonUrl = () => daemonUrlRef.current;
-  // Surfaces the absolute paths to the daemon's Node-compatible runtime and
-  // CLI entry so the Settings → MCP server panel can render snippets that work
-  // even when `od` isn't on the user's PATH (the common case for source clones
-  // - and macOS/Linux ship a /usr/bin/od octal-dump tool that shadows ours
-  // anyway). Cached for 5s because the panel pings on every open and these
-  // paths cannot change without a daemon restart.
-  const INSTALL_INFO_TTL_MS = 5000;
-  let installInfoCache: { t: number; payload: object } | null = null;
 
   // Resolve the install snippet for the current daemon. Shared by the
   // public GET /api/mcp/install-info endpoint (renders TOML/JSON for
@@ -33,7 +35,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // snippet would). Keeping this in one place is the whole point of
   // the factoring — divergence here would mean Codex behaves
   // differently depending on which install path the user took.
-  function computeInstallPayload(): McpInstallPayload {
+  async function computeInstallPayload(): Promise<McpInstallPayload> {
     const cliPath = OD_BIN;
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
@@ -59,6 +61,24 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
       ? `http://127.0.0.1:${webPortNum}`
       : null;
+    let authRequired = false;
+    let apiKey: string | undefined;
+    // Always include the first MCP key in the snippet when one exists,
+    // regardless of whether auth is currently enabled. The MCP key's
+    // purpose is to be in the config snippet — the user generated it
+    // specifically for this.
+    const mcpKeys = await listMcpKeys(RUNTIME_DATA_DIR);
+    if (mcpKeys.length > 0 && mcpKeys[0]) {
+      const revealed = await revealMcpKey(RUNTIME_DATA_DIR, mcpKeys[0].id);
+      if (revealed) apiKey = revealed.key;
+    }
+    if (!apiKey && authEnabled) {
+      const apiHashes = await allValidHashes(RUNTIME_DATA_DIR);
+      const mcpHashes = await allMcpKeyHashes(RUNTIME_DATA_DIR);
+      if (apiHashes.length > 0 || mcpHashes.length > 0) {
+        authRequired = true;
+      }
+    }
     return buildMcpInstallPayload({
       cliPath,
       cliExists: fs.existsSync(cliPath),
@@ -77,10 +97,13 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       isSidecarMode,
       sidecarEnv,
       webBaseUrl,
+      ...(apiKey ? { apiKey } : {}),
+      authRequired,
+      networkExposed: isNetworkExposed(process.env.OD_BIND_HOST ?? '127.0.0.1'),
     });
   }
 
-  app.get('/api/mcp/install-info', (req, res) => {
+  app.get('/api/mcp/install-info', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
@@ -88,7 +111,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
       return res.json(installInfoCache.payload);
     }
-    const payload = computeInstallPayload();
+    const payload = await computeInstallPayload();
     installInfoCache = { t: now, payload };
     res.json(payload);
   });
@@ -115,7 +138,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
-    const payload = computeInstallPayload();
+    const payload = await computeInstallPayload();
     if (!payload.cliExists || !payload.nodeExists) {
       return sendApiError(res, 500, 'INSTALL_INFO_INCOMPLETE', payload.buildHint ?? 'install payload not ready');
     }

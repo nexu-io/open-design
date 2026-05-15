@@ -1,66 +1,85 @@
-import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 
-/**
- * Creates an API key authentication middleware. When `enabled` is true,
- * non-loopback requests must carry a valid API key via the
- * `Authorization: Bearer <key>` or `X-API-Key: <key>` header.
- *
- * Loopback requests, health checks, and CORS preflights are always allowed
- * so local tools-dev and the desktop app continue to work without keys.
- */
-export function createAuthMiddleware(options: {
+export interface AuthMiddlewareOptions {
   enabled: boolean;
-  resolveKeys: () => Promise<string[]>;
-}) {
-  if (!options.enabled) {
+  networkExposed: boolean;
+  isLocalPeer: (ip: string) => boolean;
+  resolveHashes: () => Promise<string[]>;
+  verifyKey: (candidate: string, hashes: string[]) => boolean;
+  resolveSession: (token: string) => boolean;
+  extractSessionCookie: (cookieHeader: string | undefined) => string | null;
+}
+
+const PUBLIC_PATHS = new Set([
+  "/api/health",
+  "/login",
+  "/app-icon.svg",
+  "/logo.svg",
+]);
+
+function isPublicPath(path: string, method: string): boolean {
+  if (method === "OPTIONS") return true;
+  if (PUBLIC_PATHS.has(path)) return true;
+  if (path === "/api/auth/login" && method === "POST") return true;
+  if (path === "/api/auth/logout" && method === "POST") return true;
+  if (path === "/api/auth/reset-keys" && method === "POST") return true;
+  return false;
+}
+
+/**
+ * Creates an authentication middleware with two modes:
+ *
+ * 1. Keys exist (`enabled` = true): ALL requests must carry a valid API key
+ *    or session cookie, including from localhost. This prevents tunnel proxies
+ *    from bypassing auth.
+ *
+ * 2. No keys but network-exposed (`enabled` = false, `networkExposed` = true):
+ *    localhost is allowed through (so the admin can generate keys from
+ *    Settings). Non-loopback requests are redirected to /login — since no
+ *    keys exist, external devices cannot authenticate and remain locked out.
+ */
+export function createAuthMiddleware(options: AuthMiddlewareOptions) {
+  if (!options.enabled && !options.networkExposed) {
     return (_req: Request, _res: Response, next: NextFunction) => next();
   }
 
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (isLoopback(req.socket.remoteAddress)) return next();
-    if (isTailscale(req.socket.remoteAddress)) return next();
-    if (req.method === "OPTIONS") return next();
-    if (req.path === "/api/health") return next();
+    if (isPublicPath(req.path, req.method)) return next();
 
+    // No keys configured — allow localhost, block everyone else.
+    if (!options.enabled) {
+      const ip = req.socket.remoteAddress ?? "";
+      if (options.isLocalPeer(ip)) return next();
+      return rejectRequest(req, res, "No API keys configured — access from localhost only");
+    }
+
+    // Keys exist — authenticate via header or session cookie.
     const candidate = extractKey(req);
-    if (!candidate) {
-      res.setHeader("WWW-Authenticate", 'Bearer realm="Open Design Daemon"');
-      res.status(401).json({ error: "UNAUTHORIZED", reason: "API key required" });
-      return;
+    if (candidate) {
+      const hashes = await options.resolveHashes();
+      if (options.verifyKey(candidate, hashes)) return next();
+      return rejectRequest(req, res, "Invalid API key");
     }
 
-    const validKeys = await options.resolveKeys();
-    const a = Buffer.from(candidate);
-    const valid = validKeys.some((k) => {
-      const b = Buffer.from(k);
-      return a.length === b.length && crypto.timingSafeEqual(a, b);
-    });
-    if (!valid) {
-      res.setHeader("WWW-Authenticate", 'Bearer realm="Open Design Daemon"');
-      res.status(401).json({ error: "UNAUTHORIZED", reason: "Invalid API key" });
-      return;
+    const cookieToken = options.extractSessionCookie(req.headers.cookie);
+    if (cookieToken && options.resolveSession(cookieToken)) {
+      return next();
     }
 
-    next();
+    return rejectRequest(req, res, "API key required");
   };
 }
 
-function isLoopback(ip: string | undefined): boolean {
-  if (!ip) return false;
-  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-}
-
-function isTailscale(ip: string | undefined): boolean {
-  if (!ip) return false;
-  const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
-  const parts = normalized.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((p) => !Number.isFinite(p))) return false;
-  const num = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
-  // 100.64.0.0/10 — CGNAT range used by Tailscale
-  const mask = (~0 << 22) >>> 0;
-  const network = ((100 << 24) | (64 << 16)) >>> 0;
-  return (num & mask) === network;
+function rejectRequest(req: Request, res: Response, reason: string) {
+  const acceptsHtml = req.headers.accept?.includes("text/html");
+  if (acceptsHtml) {
+    const next = req.originalUrl || req.url;
+    const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    res.redirect(302, `/login?next=${encodeURIComponent(safeNext)}`);
+    return;
+  }
+  res.setHeader("WWW-Authenticate", 'Bearer realm="Open Design Daemon"');
+  res.status(401).json({ error: "UNAUTHORIZED", reason });
 }
 
 function extractKey(req: Request): string | null {

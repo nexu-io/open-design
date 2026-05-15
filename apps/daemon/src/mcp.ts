@@ -1366,8 +1366,13 @@ async function resolveProjectId(baseUrl: string, arg: unknown): Promise<Resolved
   throw new Error(`no project matches "${arg}"`);
 }
 
+function authHeaders(): Record<string, string> {
+  const apiKey = process.env.OD_API_KEY;
+  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+}
+
 async function getJson<T>(url: string): Promise<T> {
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: authHeaders() });
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -1381,7 +1386,7 @@ async function getFile(baseUrl: string, project: string, relPath: string, active
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(project)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: authHeaders() });
   if (!resp.ok) {
     const body = await safeText(resp);
     return errorResult(
@@ -1585,7 +1590,7 @@ async function fetchProjectFile(baseUrl: string, projectId: string, relPath: str
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: authHeaders() });
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
