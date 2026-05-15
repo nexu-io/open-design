@@ -1428,7 +1428,7 @@ export function ProjectView({
               reattachCancelControllersRef.current.delete(runId);
               clearActiveRunRefs(reattachConversationId, controller, cancelController);
               clearStreamingMarker(reattachConversationId);
-              persistNow({ telemetryFinalized: true });
+              const persisted = persistNow({ telemetryFinalized: true });
               void refreshProjectFiles();
               void Promise.allSettled([saved, persisted]).then(() => onProjectsRefresh());
             },
@@ -1448,8 +1448,8 @@ export function ProjectView({
               reattachCancelControllersRef.current.delete(runId);
               clearActiveRunRefs(reattachConversationId, controller, cancelController);
               clearStreamingMarker(reattachConversationId);
-              persistNow({ telemetryFinalized: true });
-              onProjectsRefresh();
+              const persisted = persistNow({ telemetryFinalized: true });
+              void Promise.allSettled([saved, persisted]).then(() => onProjectsRefresh());
             },
           },
           onRunStatus: (runStatus) => {
@@ -1872,11 +1872,9 @@ export function ProjectView({
           clearActiveRunRefs(runConversationId, controller, cancelController);
           clearStreamingMarker(runConversationId);
           updateConversationLatestRun('failed', endedAt);
-          setMessages((curr) => {
-            const finalized = curr.find((m) => m.id === assistantId);
-            if (finalized) persistMessage(finalized, { telemetryFinalized: true });
-            return curr;
-          });
+          let persisted: Promise<void> = Promise.resolve();
+          const finalized = messagesRef.current.find((m) => m.id === assistantId);
+          if (finalized) persisted = persistMessage(finalized, { telemetryFinalized: true });
           void refreshProjectFiles();
           void persisted.then(() => onProjectsRefresh());
         },
@@ -1911,7 +1909,7 @@ export function ProjectView({
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
-            updateMessageById(
+            const saved = updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
@@ -1925,6 +1923,7 @@ export function ProjectView({
             if (isTerminalRunStatus(runStatus)) {
               clearActiveRunRefs(runConversationId, controller, cancelController);
               clearStreamingMarker(runConversationId);
+              void saved.then(() => onProjectsRefresh());
             }
           },
           onRunEventId: (lastRunEventId) => {
