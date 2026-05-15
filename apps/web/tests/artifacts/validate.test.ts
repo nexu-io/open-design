@@ -52,6 +52,13 @@ describe('validateHtmlArtifact', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('rejects an otherwise valid document that points at an internal storage path', () => {
+    const html = '<!doctype html><html><body><a href="/.live-artifacts/artifact-1/preview.html">preview</a><p>Enough content to look like a real document.</p></body></html>';
+    const result = validateHtmlArtifact(html);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/internal storage path/i);
+  });
+
   it('accepts a complete <!doctype html> document', () => {
     const html = '<!doctype html><html><head><title>x</title></head><body><h1>hello</h1></body></html>';
     const result = validateHtmlArtifact(html);

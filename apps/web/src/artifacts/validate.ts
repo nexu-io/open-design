@@ -14,6 +14,8 @@
  * - the *first* non-whitespace token is `<!doctype html>` or `<html`
  *   (anchored at the start; mid-string mentions of these tags do NOT count —
  *   AI prose like "Updated the <html lang> attribute…" must be rejected)
+ * - does not reference internal storage paths such as `.live-artifacts/`,
+ *   `.od/`, or `.tmp/`
  *
  * What this gate is NOT:
  * - It is **not** an HTML linter or validator. Malformed but recognizably
@@ -36,6 +38,7 @@
 
 const MIN_HTML_LENGTH = 64;
 const STARTS_WITH_DOCUMENT_RE = /^(?:<!doctype\s+html\b|<html\b)/i;
+const INTERNAL_STORAGE_PATH_RE = /(?:^|[./"'`(=\s])(?:\.live-artifacts|\.od|\.tmp)(?:[/?#]|$)/i;
 
 export type HtmlArtifactValidationResult =
   | { ok: true }
@@ -51,6 +54,9 @@ export function validateHtmlArtifact(content: string): HtmlArtifactValidationRes
   }
   if (!STARTS_WITH_DOCUMENT_RE.test(trimmed)) {
     return { ok: false, reason: 'content does not start with <!doctype html> or <html — looks like prose, not a complete HTML document' };
+  }
+  if (INTERNAL_STORAGE_PATH_RE.test(trimmed)) {
+    return { ok: false, reason: 'content references an internal storage path such as .live-artifacts, .od, or .tmp' };
   }
   return { ok: true };
 }
