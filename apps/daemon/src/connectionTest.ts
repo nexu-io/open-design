@@ -1333,7 +1333,12 @@ async function testAgentConnectionInternal(
           });
         }
       });
-      child.stdin.end(SMOKE_PROMPT, 'utf8');
+      child.stdin.end(
+  def.streamFormat === 'claude-stream-json'
+    ? JSON.stringify({ type: 'user', message: { role: 'user', content: SMOKE_PROMPT } }) + '\n'
+    : SMOKE_PROMPT,
+  'utf8'
+);
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
       timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
