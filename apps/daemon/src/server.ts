@@ -2475,6 +2475,58 @@ function resolveAcpStageTimeoutMs(): number | undefined {
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
+type ProjectFileSnapshot = Map<string, string>;
+
+const PROJECT_OUTPUT_SNAPSHOT_LIMIT = 500;
+
+function snapshotProjectOutputFiles(cwd: string | null | undefined): ProjectFileSnapshot | null {
+  if (!cwd) return null;
+  try {
+    const root = fs.realpathSync(cwd);
+    const snapshot: ProjectFileSnapshot = new Map();
+    const visit = (dir: string) => {
+      if (snapshot.size >= PROJECT_OUTPUT_SNAPSHOT_LIMIT) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (snapshot.size >= PROJECT_OUTPUT_SNAPSHOT_LIMIT) return;
+        if (
+          entry.name === '.git'
+          || entry.name === 'node_modules'
+          || entry.name === '.od-skills'
+        ) {
+          continue;
+        }
+        const abs = path.join(dir, entry.name);
+        const rel = path.relative(root, abs) || entry.name;
+        if (entry.isDirectory()) {
+          visit(abs);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const stat = fs.statSync(abs);
+        snapshot.set(rel, `${stat.size}:${stat.mtimeMs}`);
+      }
+    };
+    visit(root);
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+function changedProjectOutputFiles(
+  cwd: string | null | undefined,
+  before: ProjectFileSnapshot | null,
+): string[] {
+  if (!cwd || !before) return [];
+  const after = snapshotProjectOutputFiles(cwd);
+  if (!after) return [];
+  const changed: string[] = [];
+  for (const [rel, signature] of after) {
+    if (before.get(rel) !== signature) changed.push(rel);
+  }
+  return changed.sort();
+}
+
 export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
@@ -8309,6 +8361,9 @@ export async function startServer({
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
+    const projectOutputBeforeRun = typeof projectId === 'string' && projectId && cwd
+      ? snapshotProjectOutputFiles(effectiveCwd)
+      : null;
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -8692,6 +8747,11 @@ export async function startServer({
           },
           configuredAgentEnv,
         ),
+        // Keep PWD aligned with the actual spawn cwd. Some CLIs consult
+        // process.env.PWD while resolving their project root; inheriting the
+        // daemon's checkout PWD makes project-scoped runs act like they were
+        // launched from Open Design's source tree instead of the artifact dir.
+        PWD: effectiveCwd,
         ...odMediaEnv,
       }, agentLaunch);
       spawnedAgentEnv = env;
@@ -9211,12 +9271,22 @@ export async function startServer({
         trackingSubstantiveOutput &&
         !agentProducedOutput
       ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code, signal);
+        const changedFiles = changedProjectOutputFiles(cwd, projectOutputBeforeRun);
+        if (changedFiles.length > 0) {
+          const preview = changedFiles.slice(0, 5).join(', ');
+          const suffix = changedFiles.length > 5 ? `, +${changedFiles.length - 5} more` : '';
+          sendAgentEvent({
+            type: 'text_delta',
+            delta: `Updated project files: ${preview}${suffix}`,
+          });
+        } else {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+            { retryable: true },
+          ));
+          return design.runs.finish(run, 'failed', code, signal);
+        }
       }
       // ACP agents that don't shut down on stdin.end() (e.g. Devin for
       // Terminal) are forced to exit via SIGTERM from attachAcpSession after

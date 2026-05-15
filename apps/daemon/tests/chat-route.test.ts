@@ -162,6 +162,111 @@ process.exit(0);
     );
   });
 
+  it('treats file-only OpenCode project runs as successful output', async () => {
+    const projectId = `project-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+const { writeFileSync } = require('node:fs');
+writeFileSync('index.html', '<h1>OpenCode wrote an artifact</h1>\\n');
+process.exit(0);
+`,
+      async () => {
+        const createProject = await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: projectId,
+            name: 'OpenCode file-only run',
+            skipDiscoveryBrief: true,
+          }),
+        });
+        expect(createProject.status).toBe(200);
+
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'write an artifact',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'Updated project files: index.html');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('Updated project files: index.html');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  it('sets PWD to the project cwd for spawned project agents', async () => {
+    const projectId = `project-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({
+  type: 'text',
+  part: {
+    type: 'text',
+    text: JSON.stringify({ cwd: process.cwd(), pwd: process.env.PWD || null }),
+  },
+}));
+process.exit(0);
+`,
+      async () => {
+        const createProject = await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: projectId,
+            name: 'OpenCode cwd env run',
+            skipDiscoveryBrief: true,
+          }),
+        });
+        expect(createProject.status).toBe(200);
+
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'report cwd',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, '"pwd":');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain(`\\"cwd\\":`);
+        expect(eventsBody).toContain(`\\"pwd\\":`);
+        expect(eventsBody).toContain(projectId);
+        expect(eventsBody).not.toContain('\\"pwd\\":null');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
   it('classifies Cursor Agent authentication stderr as a typed run error', async () => {
     await withFakeAgent(
       'cursor-agent',
