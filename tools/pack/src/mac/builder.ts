@@ -13,6 +13,7 @@ import {
   WEB_STANDALONE_RESOURCE_NAME,
 } from "./constants.js";
 import { pathExists } from "./fs.js";
+import { resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
 import { sanitizeNamespace } from "./paths.js";
 import type { ElectronBuilderTarget, MacBuildOutput, MacPaths } from "./types.js";
@@ -80,12 +81,13 @@ export async function runElectronBuilder(
   targets: ElectronBuilderTarget[],
 ): Promise<void> {
   const namespaceToken = sanitizeNamespace(config.namespace);
+  const identity = resolveMacInstallIdentity(config);
   const packagedVersion = await readPackagedVersion(config);
   const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
     ? await writeWebStandaloneHookConfig(config, paths)
     : null;
   const builderConfig = {
-    appId: "io.open-design.desktop",
+    appId: identity.appId,
     artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
     afterPack: webStandaloneHookConfigPath == null ? undefined : macResources.webStandaloneAfterPackHook,
     afterSign: config.signed ? macResources.notarizeHook : undefined,
@@ -98,15 +100,15 @@ export async function runElectronBuilder(
     dmg: {
       icon: macResources.icon,
       iconSize: 96,
-      title: `${PRODUCT_NAME}-${namespaceToken}`,
+      title: `${identity.productName}-${namespaceToken}`,
     },
     electronDist: config.electronDistPath,
     electronVersion: config.electronVersion,
-    executableName: PRODUCT_NAME,
+    executableName: identity.executableName,
     extraMetadata: {
       main: "./main.cjs",
       name: "open-design-packaged-app",
-      productName: PRODUCT_NAME,
+      productName: identity.productName,
       version: packagedVersion,
     },
     extraResources: [
@@ -128,7 +130,7 @@ export async function runElectronBuilder(
     },
     nodeGypRebuild: false,
     npmRebuild: false,
-    productName: PRODUCT_NAME,
+    productName: identity.productName,
     icon: macResources.icon,
     publish: [
       {

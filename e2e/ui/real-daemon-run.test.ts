@@ -156,6 +156,7 @@ test('real daemon run supports fake non-Codex runtime protocols', async ({ page 
 });
 
 async function createProject(page: Page, name: string) {
+  await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(name);
@@ -178,6 +179,7 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
 }
 
 async function expectWorkspaceReady(page: Page) {
+  await waitForLoadingToClear(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -187,14 +189,36 @@ async function expectWorkspaceReady(page: Page) {
 async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
+  await expect(input).toBeVisible({ timeout: 5_000 });
   await input.click();
   await input.fill(prompt);
   await expect(input).toHaveValue(prompt);
   await expect(sendButton).toBeEnabled();
-  const chatResponse = page.waitForResponse(isCreateRunResponse);
-  await sendButton.click();
-  const response = await chatResponse;
+  const response = await Promise.race([
+    page.waitForResponse(isCreateRunResponse, { timeout: 10_000 }),
+    (async () => {
+      await sendButton.click();
+      return page.waitForResponse(isCreateRunResponse, { timeout: 10_000 });
+    })(),
+  ]);
   expect(response.ok()).toBeTruthy();
+}
+
+async function openNewProjectModal(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await expect(privacyDialog).toHaveCount(0);
+  }
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
+async function waitForLoadingToClear(page: Page) {
+  const loading = page.getByText('Loading Open Design…');
+  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {

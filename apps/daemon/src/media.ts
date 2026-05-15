@@ -465,6 +465,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'leonardo' && surface === 'image') {
+      const result = await renderLeonardoImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (
       def.provider === 'elevenlabs'
       && surface === 'audio'
@@ -1287,6 +1292,135 @@ function sniffImageExt(bytes: Buffer): string {
   }
   return '.png';
 }
+
+async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Leonardo.ai API key — configure it in Settings or set LEONARDO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://cloud.leonardo.ai/api/rest/v1').replace(/\/$/, '');
+  
+  // Map model IDs to Leonardo.ai platform model IDs
+  const modelMap: Record<string, string> = {
+    'leonardo-phoenix': '6b645e3a-d64f-4341-a6d8-7a3690fbf042',  // Phoenix
+    'leonardo-kino-xl': 'aa77f04e-3eec-4034-9c07-d0f619684628',  // Kino XL
+    'leonardo-flux-dev': 'b2614463-296c-462a-9586-aafdb8f00e36', // FLUX.1 [dev]
+    'leonardo-flux-schnell': '1dd50843-d653-4516-a8e3-f0238ee453ff', // FLUX.1 [schnell]
+    'leonardo-anime-pastel': '1e60896f-3c26-4296-8ecc-53e2afecc132', // Anime Pastel Dream
+  };
+  
+  const platformModelId = modelMap[ctx.model];
+  if (!platformModelId) {
+    throw new Error(`unsupported leonardo.ai model: ${ctx.model}`);
+  }
+  
+  // Map aspect ratios to Leonardo.ai dimensions
+  const aspectMap: Record<string, { width: number; height: number }> = {
+    '1:1': { width: 1024, height: 1024 },
+    '16:9': { width: 1344, height: 768 },
+    '9:16': { width: 768, height: 1344 },
+    '4:3': { width: 1152, height: 896 },
+    '3:4': { width: 896, height: 1152 },
+  };
+  
+  const size = (ctx.aspect ? aspectMap[ctx.aspect] : undefined) || { width: 1024, height: 1024 };
+  
+  // Submit generation request. Phoenix and the FLUX family require the
+  // `contrast` field per Leonardo's API reference; valid values are
+  // 3 (Low) / 3.5 (Medium) / 4 (High). Default to 3.5 so prompts that
+  // omit a contrast hint fall in the middle of the supported range.
+  const requiresContrast =
+    ctx.model === 'leonardo-phoenix'
+    || ctx.model === 'leonardo-flux-dev'
+    || ctx.model === 'leonardo-flux-schnell';
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    modelId: platformModelId,
+    width: size.width,
+    height: size.height,
+    num_images: 1,
+    ...(requiresContrast ? { contrast: 3.5 } : {}),
+  };
+  
+  const submitResp = await fetch(`${baseUrl}/generations`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`leonardo.ai submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`leonardo.ai non-JSON: ${truncate(submitText, 200)}`);
+  }
+  
+  const generationId = submitData?.sdGenerationJob?.generationId;
+  if (!generationId) {
+    throw new Error('leonardo.ai response missing generationId');
+  }
+  
+  // Poll for completion
+  const maxPollMs = 120000; // 2 minutes
+  const pollIntervalMs = 2000; // 2 seconds
+  const startedAt = Date.now();
+  let imageUrl: string | null = null;
+  
+  while (Date.now() - startedAt < maxPollMs) {
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    
+    const pollResp = await fetch(`${baseUrl}/generations/${generationId}`, {
+      headers: {
+        'authorization': `Bearer ${credentials.apiKey}`,
+      },
+    });
+    
+    if (!pollResp.ok) {
+      throw new Error(`leonardo.ai poll ${pollResp.status}`);
+    }
+    
+    const pollData = (await pollResp.json()) as Record<string, any>;
+    const generation = pollData?.generations_by_pk;
+    
+    if (generation?.status === 'COMPLETE') {
+      const images = generation?.generated_images;
+      if (Array.isArray(images) && images.length > 0) {
+        imageUrl = images[0]?.url;
+        break;
+      }
+    } else if (generation?.status === 'FAILED') {
+      throw new Error('leonardo.ai generation failed');
+    }
+  }
+  
+  if (!imageUrl) {
+    throw new Error('leonardo.ai generation timed out after 2 minutes');
+  }
+  
+  // Fetch the generated image
+  const imgResp = await fetch(imageUrl);
+  if (!imgResp.ok) {
+    throw new Error(`leonardo.ai image fetch ${imgResp.status}`);
+  }
+  
+  const bytes = Buffer.from(await imgResp.arrayBuffer());
+  
+  return {
+    bytes,
+    providerNote: `leonardo.ai/${ctx.model} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
 
 async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {

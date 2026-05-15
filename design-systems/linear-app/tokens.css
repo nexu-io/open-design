@@ -1,0 +1,130 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/linear-app/tokens.css
+ *
+ * Structured token bindings for the "Linear" brand — the dark-mode-native
+ * project management tool's precision engineering voice.
+ *
+ * Brand identity in three sentences:
+ *   1. Darkness as the native medium — near-black canvas (#08090a) where
+ *      information density is managed through luminance steps rather than
+ *      color variation; semi-transparent white borders throughout.
+ *   2. Inter Variable with OpenType "cv01","ss03" at all sizes, signature
+ *      weight 510 (between regular and medium), aggressive negative
+ *      letter-spacing at display sizes (-1.584px at 72px).
+ *   3. Almost entirely achromatic — the single chromatic color is Linear's
+ *      indigo-violet (#5e6ad2 bg / #7170ff interactive), used only for
+ *      CTAs and active states; everything else is grayscale.
+ *
+ * Schema decisions:
+ *   - --bg: #08090a (marketing black); --surface: #191a1b (elevated).
+ *   - --surface-warm aliases --surface (dark system, no warm tier).
+ *   - --fg: #f7f8f8 (near-white — not pure white, prevents eye strain).
+ *   - --fg-2: #d0d6e0 (silver-gray body text).
+ *   - --border: rgba(255,255,255,0.08); --border-soft: rgba(255,255,255,0.05).
+ *   - --accent: #5e6ad2 (brand indigo bg); --accent-hover: #828fff.
+ *   - --tracking-display: -0.022em (-1.584px / 72px normalized).
+ *   - --radius-sm: 6px (buttons/inputs); --radius-md: 8px (cards).
+ *   - --elev-raised: luminance stepping — no opaque shadow on dark.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #08090a;              /* marketing black — hero canvas */
+  --surface:      #191a1b;              /* elevated surface — cards, dropdowns */
+  --surface-warm: var(--surface);       /* no warm tier in dark achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #f7f8f8;                      /* near-white primary text */
+  --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
+  --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
+  --meta:  #62666d;                     /* quaternary — timestamps, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */
+  --border-soft: rgba(255, 255, 255, 0.05);   /* ultra-subtle divider */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #5e6ad2;             /* brand indigo — CTA backgrounds */
+  --accent-on:     #ffffff;
+  --accent-hover:  #828fff;             /* lighter saturated hover */
+  --accent-active: #4752c4;             /* darker pressed state */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #27a644;                   /* Linear green */
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Linear's display range 72px→10px; the 8 schema slots map the
+   * key stops. 64px secondary-hero lives inline in components.html. */
+  --text-xs:   12px;                    /* label / micro */
+  --text-sm:   14px;                    /* caption large / link small */
+  --text-base: 16px;                    /* body — standard reading */
+  --text-lg:   18px;                    /* body large — feature descriptions */
+  --text-xl:   24px;                    /* heading 2 */
+  --text-2xl:  32px;                    /* heading 1 */
+  --text-3xl:  48px;                    /* display — section headlines */
+  --text-4xl:  72px;                    /* display XL — hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: Linear's signature "engineered" compression.
+   * h2 (32px) → 1.13; h3 (24px) → 1.33 per DESIGN.md spec.
+   * --tracking-display: -0.022em = -1.584px / 72px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.00;
+  --tracking-display: -0.022em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Whitespace Philosophy. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px for buttons/inputs (comfortable), 8px cards, 12px panels. */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* On dark surfaces: luminance stepping, not opaque drop shadows.
+     --elev-raised uses semi-transparent border-as-shadow technique. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.4) 0px 2px 4px,
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Multi-layer stack per DESIGN.md §6 + §7: accent ring makes the
+     indicator visible on the near-black #08090a canvas. */
+  --focus-ring:
+    0 0 0 2px color-mix(in oklab, var(--accent), transparent 30%),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-x-research",
+  "title": "X Research",
+  "version": "0.1.0",
+  "description": "X/Twitter public sentiment research for recent market, company, product, or\ncommunity discourse. Use when the brief asks what people are saying on X,\nTwitter sentiment, CT sentiment, public opinion, expert posts, or social\nreaction around a stock, sector, company, product, or market event.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/x-research",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "x-research",
+    "twitter-sentiment",
+    "x-twitter",
+    "what-people-are-saying-on-x",
+    "what-twitter-says",
+    "ct-sentiment",
+    "public-sentiment",
+    "social-sentiment",
+    "untitled",
+    "x"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "markdown",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "X/Twitter public sentiment research for recent market, company, product, or community discourse. Use when the brief asks what people are saying on X, Twitter sentiment, CT sentiment, public opinion, expert posts, or social reaction around a stock, sector, company, product, or market event.",
+        "zh-CN": "使用这个插件完成以下任务：X/Twitter public sentiment research for recent market, company, product, or community discourse. Use when the brief asks what people are saying on X, Twitter sentiment, CT sentiment, public opinion, expert posts, or social reaction around a stock, sector, company, product, or market event."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": []
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

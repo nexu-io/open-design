@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Obsidian × Claude Gradient</title>
+<style>/* html-ppt :: shared webfonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
+
+</style>
+<style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
+/* Default tokens. Themes in assets/themes/*.css override the :root block. */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f2f2f4;
+  --border: rgba(0,0,0,.08);
+  --border-strong: rgba(0,0,0,.16);
+  --text-1: #111216;
+  --text-2: #55596a;
+  --text-3: #8a8f9e;
+  --accent: #3b6cff;
+  --accent-2: #7a5cff;
+  --accent-3: #ff5c8a;
+  --good: #1aaf6c;
+  --warn: #f5a524;
+  --bad:  #e0445a;
+  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
+  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --radius-lg: 26px;
+  --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
+  --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
+  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
+  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --font-display: var(--font-sans);
+  --letter-tight: -.03em;
+  --letter-normal: -.01em;
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
+  font-family:var(--font-sans);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  letter-spacing:var(--letter-normal)}
+img,svg,video{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+/* ================= SLIDE SYSTEM ================= */
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg)}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;
+  box-sizing:border-box;
+  opacity:0;pointer-events:none;
+  transition:opacity .5s var(--ease), transform .5s var(--ease);
+  transform:translateX(30px);
+  overflow:hidden;
+}
+.slide.is-active{opacity:1;pointer-events:auto;transform:translateX(0);z-index:2}
+.slide.is-prev{transform:translateX(-30px)}
+
+/* single-page standalone (used when a layout file is opened directly) */
+body.single .slide{position:relative;width:100vw;height:100vh;opacity:1;transform:none;pointer-events:auto}
+
+/* ================= TYPOGRAPHY ================= */
+.eyebrow{font-size:13px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)}
+.kicker{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--text-1)}
+h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
+h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
+h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
+.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.serif{font-family:var(--font-serif)}
+.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+
+/* ================= LAYOUT PRIMITIVES ================= */
+.stack>*+*{margin-top:14px}
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.fill{flex:1}
+.sp-t{padding-top:24px}.sp-b{padding-bottom:24px}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+.mb-s{margin-bottom:8px}.mb-m{margin-bottom:18px}.mb-l{margin-bottom:32px}
+
+/* ================= CARDS ================= */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface-2);border:1px solid var(--border)}
+.card-outline{background:transparent;border:1.5px solid var(--border-strong);box-shadow:none}
+.card-accent{background:var(--surface);border-top:3px solid var(--accent)}
+.card-hover{transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+.card-hover:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;
+  background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
+.pill-accent{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent)}
+
+/* ================= BARS / DIVIDERS ================= */
+.divider{height:1px;background:var(--border);width:100%}
+.divider-accent{height:3px;width:72px;background:var(--accent);border-radius:2px}
+
+/* ================= CHROME (header/footer/progress) ================= */
+.deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
+.slide-number::before{content:attr(data-current)}
+.slide-number::after{content:" / " attr(data-total)}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:3px;background:transparent;z-index:20}
+.progress-bar > span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
+
+/* ================= PRESENTER / OVERVIEW ================= */
+.notes{display:none!important}
+.notes-overlay{position:fixed;inset:auto 0 0 0;max-height:42vh;background:rgba(20,22,30,.95);color:#e8ebf4;
+  padding:20px 32px;font-size:16px;line-height:1.6;border-top:1px solid rgba(255,255,255,.1);transform:translateY(100%);
+  transition:transform .3s var(--ease);z-index:40;overflow:auto;font-family:var(--font-sans)}
+.notes-overlay.open{transform:translateY(0)}
+.overview{position:fixed;inset:0;background:rgba(10,12,18,.92);backdrop-filter:blur(12px);z-index:50;
+  display:none;padding:40px;overflow:auto}
+.overview.open{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-content:start}
+.overview .thumb{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  aspect-ratio:16/9;overflow:hidden;cursor:pointer;position:relative;color:var(--text-1);padding:16px;
+  font-size:11px;transition:transform .2s var(--ease)}
+.overview .thumb:hover{transform:scale(1.04)}
+.overview .thumb .n{position:absolute;top:8px;left:10px;font-weight:700;font-size:14px;color:var(--text-3)}
+.overview .thumb .t{position:absolute;bottom:10px;left:14px;right:14px;font-weight:600;color:var(--text-1)}
+
+/* ================= PRESENTER VIEW ================= */
+/* Presenter view opens in a separate popup window (S key).
+ * All presenter styles are self-contained in the popup HTML generated by runtime.js.
+ * The audience window (this file) is NOT affected — it stays as normal deck view.
+ * Only the .notes class below is needed to hide speaker notes from audience. */
+
+/* ================= UTILITY ================= */
+.hidden{display:none!important}
+.nowrap{white-space:nowrap}
+.tr{text-align:right}.tc{text-align:center}.tl{text-align:left}
+.uppercase{text-transform:uppercase;letter-spacing:.12em}
+
+/* ================= PRINT ================= */
+@media print{
+  .slide{position:relative;opacity:1!important;transform:none!important;page-break-after:always;height:100vh}
+  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview{display:none!important}
+}
+
+</style>
+<style>/* obsidian-claude-gradient — 紫色暗底 + GitHub-ish 渐变卡 */
+.tpl-obsidian-claude-gradient{
+  --oc-bg:#0d1117;
+  --oc-surface:#161b22;
+  --oc-surface2:#21262d;
+  --oc-border:#30363d;
+  --oc-accent:#7c3aed;
+  --oc-accent2:#a855f7;
+  --oc-accent3:#c084fc;
+  --oc-green:#3fb950;
+  --oc-blue:#58a6ff;
+  --oc-orange:#f97316;
+  --oc-yellow:#fbbf24;
+  --oc-red:#f87171;
+  --oc-text:#e6edf3;
+  --oc-dim:#8b949e;
+  --oc-dimmer:#484f58;
+  background:var(--oc-bg);
+  color:var(--oc-text);
+  font-family:'Inter','Noto Sans SC','PingFang SC',-apple-system,sans-serif;
+}
+.tpl-obsidian-claude-gradient .slide{background:var(--oc-bg);color:var(--oc-text);padding:64px 88px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;overflow:hidden}
+.tpl-obsidian-claude-gradient .oc-cbg{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 28% 38%,rgba(124,58,237,.25) 0%,transparent 60%),radial-gradient(ellipse at 72% 62%,rgba(88,166,255,.18) 0%,transparent 60%)}
+.tpl-obsidian-claude-gradient .oc-cgrid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(48,54,61,.4) 1px,transparent 1px),linear-gradient(90deg,rgba(48,54,61,.4) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse at center,black 35%,transparent 80%)}
+.tpl-obsidian-claude-gradient .slide > *{position:relative;z-index:2}
+.tpl-obsidian-claude-gradient .oc-snum{position:absolute;top:24px;right:36px;color:var(--oc-dimmer);font-size:12px;letter-spacing:.1em;z-index:3}
+.tpl-obsidian-claude-gradient .oc-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--oc-accent3);background:rgba(124,58,237,.14);border:1px solid rgba(168,85,247,.3);padding:5px 16px;border-radius:999px;margin-bottom:22px}
+.tpl-obsidian-claude-gradient .oc-h1{font-size:72px;font-weight:800;line-height:1.08;letter-spacing:-.02em;margin:0 0 10px;color:var(--oc-text)}
+.tpl-obsidian-claude-gradient .oc-h2{font-size:44px;font-weight:700;line-height:1.18;letter-spacing:-.015em;margin:0 0 14px}
+.tpl-obsidian-claude-gradient .oc-sub{font-size:19px;color:var(--oc-dim);line-height:1.65;max-width:720px;margin-top:14px}
+.tpl-obsidian-claude-gradient .oc-g{background:linear-gradient(135deg,#a855f7 0%,#60a5fa 55%,#34d399 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.tpl-obsidian-claude-gradient .oc-card{background:var(--oc-surface);border:1px solid var(--oc-border);border-radius:14px;padding:22px 26px;text-align:left;position:relative;overflow:hidden}
+.tpl-obsidian-claude-gradient .oc-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(168,85,247,.4),transparent)}
+.tpl-obsidian-claude-gradient .oc-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;width:100%;max-width:1000px;margin-top:24px}
+.tpl-obsidian-claude-gradient .oc-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;width:100%;max-width:1080px;margin-top:24px}
+.tpl-obsidian-claude-gradient .oc-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 11px;border-radius:999px;margin-bottom:10px}
+.tpl-obsidian-claude-gradient .oc-bp{background:rgba(168,85,247,.15);color:var(--oc-accent3)}
+.tpl-obsidian-claude-gradient .oc-bb{background:rgba(88,166,255,.15);color:var(--oc-blue)}
+.tpl-obsidian-claude-gradient .oc-bg{background:rgba(63,185,80,.15);color:var(--oc-green)}
+.tpl-obsidian-claude-gradient .oc-bo{background:rgba(249,115,22,.15);color:var(--oc-orange)}
+.tpl-obsidian-claude-gradient .oc-code{background:#010409;border:1px solid var(--oc-border);border-radius:12px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.85;width:100%;max-width:860px;text-align:left;color:#e6edf3}
+.tpl-obsidian-claude-gradient .oc-code .cp{color:var(--oc-green)}
+.tpl-obsidian-claude-gradient .oc-code .cc{color:var(--oc-blue)}
+.tpl-obsidian-claude-gradient .oc-code .ca{color:var(--oc-accent3)}
+.tpl-obsidian-claude-gradient .oc-code .cm{color:var(--oc-dimmer)}
+.tpl-obsidian-claude-gradient .oc-code .cs{color:var(--oc-orange)}
+.tpl-obsidian-claude-gradient .oc-hl{background:rgba(124,58,237,.1);border:1px solid rgba(168,85,247,.3);border-left:4px solid var(--oc-accent2);border-radius:0 12px 12px 0;padding:16px 22px;font-size:16px;line-height:1.7;max-width:860px;text-align:left}
+.tpl-obsidian-claude-gradient .oc-steps{display:flex;flex-direction:column;gap:0;width:100%;max-width:820px;text-align:left}
+.tpl-obsidian-claude-gradient .oc-step{display:flex;gap:20px;align-items:flex-start;padding:18px 0;border-bottom:1px solid var(--oc-border)}
+.tpl-obsidian-claude-gradient .oc-step:last-child{border-bottom:none}
+.tpl-obsidian-claude-gradient .oc-sn{width:36px;height:36px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;background:linear-gradient(135deg,var(--oc-accent),var(--oc-blue));color:#fff}
+.tpl-obsidian-claude-gradient .oc-sc h4{font-size:17px;font-weight:600;margin-bottom:6px;color:var(--oc-text)}
+.tpl-obsidian-claude-gradient .oc-sc p{font-size:14px;color:var(--oc-dim);line-height:1.6}
+.tpl-obsidian-claude-gradient .oc-pill{display:inline-flex;align-items:center;gap:8px;background:var(--oc-surface2);border:1px solid var(--oc-border);border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;color:var(--oc-text);margin:4px 6px 4px 0}
+.tpl-obsidian-claude-gradient .oc-quote{max-width:800px}
+.tpl-obsidian-claude-gradient .oc-quote blockquote{font-size:26px;font-weight:500;line-height:1.6;position:relative;padding:0 36px;margin:0;color:var(--oc-text)}
+.tpl-obsidian-claude-gradient .oc-quote blockquote::before{content:'"';position:absolute;left:-6px;top:-22px;font-size:78px;color:var(--oc-accent);opacity:.4;font-family:Georgia,serif;line-height:1}
+.tpl-obsidian-claude-gradient .oc-quote .attr{margin-top:20px;font-size:13px;color:var(--oc-dim)}
+.tpl-obsidian-claude-gradient .oc-big{font-size:140px;font-weight:900;line-height:.95;letter-spacing:-.04em}
+
+</style>
+<style>
+/* Static-preview fallback (runtime.js is absent — keep every slide visible) */
+.deck{height:auto;min-height:100vh;overflow:visible}
+.slide{position:relative;inset:auto;opacity:1;pointer-events:auto;transform:none;height:100vh;page-break-after:always}
+.deck-header,.deck-footer,.slide-number,.progress-bar,.notes-overlay,.overview{pointer-events:none}
+.notes{display:none!important}
+</style></head>
+<body class="tpl-obsidian-claude-gradient">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">01 / 08</div>
+    <div class="oc-tag">● OBSIDIAN × CLAUDE · 第二大脑</div>
+    <h1 class="oc-h1">把 Obsidian 和 Claude<br>拧成 <span class="oc-g">一条神经</span></h1>
+    <p class="oc-sub">不是又一个 AI 笔记插件 —— 是让 Claude 真正理解你 vault 的结构、链接、双向引用，<br>然后在你想写东西之前就把资料准备好。</p>
+    <div style="margin-top:32px">
+      <span class="oc-pill">🧠 Markdown-native</span>
+      <span class="oc-pill">⚡ MCP-ready</span>
+      <span class="oc-pill">🔗 双链理解</span>
+    </div>
+  </section>
+
+  <!-- 2. SECTION -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">02 / 08</div>
+    <div class="oc-tag">● CHAPTER 01</div>
+    <h1 class="oc-h1" style="font-size:110px">Why <span class="oc-g">not</span> Notion?</h1>
+    <p class="oc-sub">当你的知识多到会互相引用时，<br>「文件夹」就不够了，「数据库」也不是答案。</p>
+  </section>
+
+  <!-- 3. CONTENT — compare cards -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">03 / 08</div>
+    <div class="oc-tag">● COMPARE</div>
+    <h2 class="oc-h2">Notion vs <span class="oc-g">Obsidian</span> · 对 AI 友好度</h2>
+    <div class="oc-grid-2">
+      <div class="oc-card">
+        <span class="oc-badge oc-bb">NOTION</span>
+        <h4 style="font-size:20px;margin-bottom:10px">数据库原生</h4>
+        <p style="color:var(--oc-dim);font-size:14px;line-height:1.65">适合结构化任务、团队协作，但是——<br>• AI 要走 API，拿不到实时全文<br>• 嵌套块结构复杂，token 成本高<br>• 本地化差，没法当长期记忆</p>
+      </div>
+      <div class="oc-card" style="border-color:rgba(168,85,247,.35);background:rgba(124,58,237,.05)">
+        <span class="oc-badge oc-bp">OBSIDIAN</span>
+        <h4 style="font-size:20px;margin-bottom:10px">纯 Markdown + 双链</h4>
+        <p style="color:var(--oc-dim);font-size:14px;line-height:1.65">对 AI 天生友好 ——<br>• 所有东西就是文件，Claude 直接读<br>• 双链 = 天然 graph，抽实体几乎零成本<br>• 离线、可 git、可 diff、可回滚</p>
+      </div>
+    </div>
+    <div class="oc-hl" style="margin-top:26px">💡 <b>关键洞察：</b>AI 不需要「更聪明的数据库」，它需要「能被它自己读懂的文件系统」。</div>
+  </section>
+
+  <!-- 4. STEPS -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">04 / 08</div>
+    <div class="oc-tag">● SETUP · 4 STEPS</div>
+    <h2 class="oc-h2">从 0 到第一次「AI 写笔记」</h2>
+    <div class="oc-steps">
+      <div class="oc-step"><div class="oc-sn">1</div><div class="oc-sc"><h4>装 Obsidian + 开 Local REST API 插件</h4><p>社区插件，一个勾就开。它让外部进程能 read/write 你的 vault。</p></div></div>
+      <div class="oc-step"><div class="oc-sn">2</div><div class="oc-sc"><h4>接 Claude Desktop + obsidian-mcp server</h4><p>MCP 一个配置文件就能接，token 填 vault 的 api key。</p></div></div>
+      <div class="oc-step"><div class="oc-sn">3</div><div class="oc-sc"><h4>装 5 个 obsidian-skills</h4><p>markdown / bases / canvas / cli / defuddle —— 让 Claude 知道怎么正确使用 Obsidian。</p></div></div>
+      <div class="oc-step"><div class="oc-sn">4</div><div class="oc-sc"><h4>让 Claude 自己整理一次</h4><p>「帮我把最近 10 篇笔记里的重复概念合并，生成一张新的 MOC」—— 90 秒出结果。</p></div></div>
+    </div>
+  </section>
+
+  <!-- 5. CODE -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">05 / 08</div>
+    <div class="oc-tag">● MCP CONFIG</div>
+    <h2 class="oc-h2">claude_desktop_config.json</h2>
+    <pre class="oc-code"><span class="cm">// ~/Library/Application Support/Claude/claude_desktop_config.json</span>
+{
+  <span class="cc">"mcpServers"</span>: {
+    <span class="cc">"obsidian"</span>: {
+      <span class="cc">"command"</span>: <span class="cs">"npx"</span>,
+      <span class="cc">"args"</span>: [<span class="cs">"-y"</span>, <span class="cs">"@modelcontextprotocol/server-obsidian"</span>],
+      <span class="cc">"env"</span>: {
+        <span class="cc">"OBSIDIAN_API_KEY"</span>: <span class="cs">"xxxxxxxxxxxxxxxx"</span>,
+        <span class="cc">"OBSIDIAN_HOST"</span>: <span class="cs">"http://127.0.0.1:27123"</span>
+      }
+    }
+  }
+}</pre>
+    <p class="oc-sub" style="margin-top:18px">重启 Claude Desktop，输入 <b style="color:var(--oc-accent3)">/mcp</b>，你会看到 obsidian 已连。</p>
+  </section>
+
+  <!-- 6. STATS -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">06 / 08</div>
+    <div class="oc-tag">● 3 MONTHS IN</div>
+    <h2 class="oc-h2">跑了 90 天，我的 <span class="oc-g">vault 数据</span></h2>
+    <div class="oc-grid-3" style="margin-top:28px">
+      <div class="oc-card" style="text-align:center"><div class="oc-big oc-g" style="font-size:80px">1,842</div><p style="color:var(--oc-dim);margin-top:8px;font-size:13px">notes in vault</p></div>
+      <div class="oc-card" style="text-align:center"><div class="oc-big oc-g" style="font-size:80px">6.3k</div><p style="color:var(--oc-dim);margin-top:8px;font-size:13px">backlinks (由 AI 自动补)</p></div>
+      <div class="oc-card" style="text-align:center"><div class="oc-big oc-g" style="font-size:80px">-74%</div><p style="color:var(--oc-dim);margin-top:8px;font-size:13px">找资料平均耗时</p></div>
+    </div>
+    <div class="oc-hl" style="margin-top:26px">最大收益不是「AI 帮我写」，而是「AI 帮我把旧笔记重新连起来」—— 每周 30 分钟，vault 就会主动生长。</div>
+  </section>
+
+  <!-- 7. QUOTE / CTA -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">07 / 08</div>
+    <div class="oc-tag">● CTA · 今晚可以做</div>
+    <div class="oc-quote">
+      <blockquote>不要再找「AI 笔记应用」了。<br>你要的是一个 <span class="oc-g">文件夹 + 一条神经</span>。</blockquote>
+      <div class="attr">— 我自己，用了 90 天后</div>
+    </div>
+    <div style="margin-top:36px">
+      <span class="oc-pill">⬇ obsidian.md</span>
+      <span class="oc-pill">⬇ Claude Desktop</span>
+      <span class="oc-pill">⬇ obsidian-mcp</span>
+      <span class="oc-pill">⬇ obsidian-skills × 5</span>
+    </div>
+  </section>
+
+  <!-- 8. THANKS -->
+  <section class="slide">
+    <div class="oc-cbg"></div>
+    <div class="oc-cgrid"></div>
+    <div class="oc-snum">08 / 08</div>
+    <div class="oc-big oc-g">Thanks.</div>
+    <p class="oc-sub" style="margin-top:26px">配置模板、skill manifest、我的 vault 结构图都在 <b style="color:var(--oc-accent3)">github.com/lewis/obsidian-claude</b></p>
+  </section>
+
+</div>
+
+</body>
+</html>

@@ -3,7 +3,7 @@
 // share the exact env/argv/buildHint shape; a divergence here is the
 // difference between an MCP snippet that works and one that EPERMs out
 // when pasted into Antigravity / Cursor / VS Code (issue #848), or
-// silently misses a non-default sidecar namespace.
+// silently misses the sidecar transport endpoint.
 //
 // Side effects (the fs.existsSync probes, process.execPath, the
 // ELECTRON_RUN_AS_NODE env read, OD_DATA_DIR resolution, sidecar IPC
@@ -24,7 +24,7 @@ export interface BuildMcpInstallPayloadInputs {
    *  spawned `od mcp` should discover the live URL via the IPC
    *  status socket instead of a baked --daemon-url. */
   isSidecarMode: boolean;
-  /** Already-filtered sidecar env entries (namespace, IPC base) the
+  /** Already-filtered sidecar transport env entries the
    *  caller wants propagated into the snippet. The caller decides
    *  what's worth propagating; this builder just merges. */
   sidecarEnv: Record<string, string>;

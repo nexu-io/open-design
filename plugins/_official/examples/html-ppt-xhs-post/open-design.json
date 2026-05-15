@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-xhs-post",
+  "title": "Html Ppt Xhs Post",
+  "version": "0.1.0",
+  "description": "小红书 / Instagram 风 9 页 3:4 竖版图文（810×1080）— 暖色 pastel、虚线 sticker 卡片、底部页码点点。用于发小红书图文、Instagram carousel、品牌种草内容。",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-xhs-post",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "untitled",
+    "xhs",
+    "xhs-post",
+    "xiaohongshu",
+    "instagram-carousel"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the html-ppt-xhs-post template to create a set of 9 Xiaohongshu-style vertical posts (3:4, 810x1080). First ask me for the topic, then lay out the cover, 7 content pages, and closing CTA. Each page should have one headline, one paragraph, and keyword stickers.",
+        "zh-CN": "帮我用 html-ppt-xhs-post 模板做一组 9 张小红书图文（3:4 竖版，810×1080）。先告诉我主题，然后帮我把封面 + 7 页内容 + 结尾 CTA 排好，每页一句标题 + 一段正文 + 关键词 sticker。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Html Ppt Xhs Post"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

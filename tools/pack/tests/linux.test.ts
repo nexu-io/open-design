@@ -1,17 +1,51 @@
 import { readFileSync } from "node:fs";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
+  SIDECAR_SOURCES,
+} from "@open-design/sidecar-proto";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@open-design/sidecar", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@open-design/sidecar")>();
+  return {
+    ...actual,
+    requestJsonIpc: vi.fn(async () => {
+      throw new Error("requestJsonIpc should not be called for invalid headless inspect options");
+    }),
+  };
+});
 
 import type { ToolPackConfig } from "../src/config.js";
 import {
   buildDockerArgs,
+  cleanupPackedLinuxNamespace,
+  inspectPackedLinuxApp,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  resolveLinuxLifecycleMode,
+  resolveProductionInstallCommand,
+  shouldRejectLinuxHeadlessInspectOptions,
   sanitizeNamespace,
+  stopPackedLinuxHeadless,
 } from "../src/linux.js";
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function makeConfig(): ToolPackConfig {
   return {
@@ -97,25 +131,69 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("OPEN_DESIGN_TELEMETRY_RELAY_URL=https://telemetry.open-design.ai/api/langfuse");
   });
 
-  it("re-invokes pnpm tools-pack linux build inside the container without --containerized", () => {
+  it("runs the built tools-pack CLI through node inside the container without generated package-bin shims", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ install --frozen-lockfile/);
-    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ tools-pack linux build --to all --namespace default/);
+    expect(last).toMatch(/command -v curl >\/dev\/null/);
+    expect(last).toMatch(/case "\$\(uname -m\)" in/);
+    expect(last).toMatch(/x86_64\) PNPM_ASSET=pnpm-linuxstatic-x64; PNPM_SHA256=[a-f0-9]{64}/);
+    expect(last).toMatch(/aarch64\) PNPM_ASSET=pnpm-linuxstatic-arm64; PNPM_SHA256=[a-f0-9]{64}/);
+    expect(last).toMatch(
+      /curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "https:\/\/github\.com\/pnpm\/pnpm\/releases\/download\/v\d+\.\d+\.\d+\/\$PNPM_ASSET" -o \/tmp\/pnpm\.tmp/,
+    );
+    expect(last).toMatch(/echo "\$PNPM_SHA256  \/tmp\/pnpm\.tmp" \| sha256sum -c -/);
+    expect(last).toMatch(/mv \/tmp\/pnpm\.tmp \/tmp\/pnpm/);
+    expect(last).toMatch(/chmod \+x \/tmp\/pnpm/);
+    expect(last).toMatch(/\/tmp\/pnpm env use --global 24\.\d+\.\d+/);
+    expect(last).toMatch(/\/tmp\/pnpm install --frozen-lockfile/);
+    expect(last).toMatch(/node tools\/pack\/bin\/tools-pack\.mjs linux build --to all --namespace default/);
+    expect(last).not.toMatch(/\/tmp\/pnpm tools-pack linux build/);
     expect(last).not.toMatch(/--containerized/);
   });
 
-  it("invokes pnpm via `npx --yes pnpm@<version>` (electronuserland/builder:base strips corepack, and the non-root container can't write Node shim dir)", () => {
+  it("fetches pnpm standalone binary instead of relying on image npm tooling", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
     expect(last).not.toMatch(/corepack/);
-    expect(last).toMatch(/npx --yes pnpm@/);
+    expect(last).not.toMatch(/\bnpx\b/);
+    expect(last).not.toMatch(/(^|[;&|]\s*)npm(\s|$)/);
+    expect(last).toMatch(/pnpm-linuxstatic-x64/);
+    expect(last).toMatch(/pnpm-linuxstatic-arm64/);
+  });
+
+  it("routes container setup and install output to stderr before the JSON-emitting build", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toContain("{ command -v curl");
+    expect(last).toContain("/tmp/pnpm install --frozen-lockfile; } >&2 && node tools/pack/bin/tools-pack.mjs linux build");
+    expect(last.indexOf("/tmp/pnpm install --frozen-lockfile")).toBeLessThan(
+      last.indexOf("} >&2 && node tools/pack/bin/tools-pack.mjs linux build"),
+    );
+  });
+
+  it("picks the pnpm asset by container CPU so amd64 and arm64 hosts both work", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toContain('case "$(uname -m)" in');
+    expect(last).toContain("x86_64) PNPM_ASSET=pnpm-linuxstatic-x64");
+    expect(last).toContain("aarch64) PNPM_ASSET=pnpm-linuxstatic-arm64");
+    expect(last).toMatch(/unsupported container arch/);
+  });
+
+  it("verifies the downloaded standalone pnpm binary before executing it", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toMatch(/PNPM_SHA256=[a-f0-9]{64}/);
+    expect(last).toMatch(/sha256sum -c -/);
+    expect(last).toMatch(/\/tmp\/pnpm\.tmp/);
+    expect(last.indexOf("sha256sum -c -")).toBeLessThan(last.indexOf("mv /tmp/pnpm.tmp /tmp/pnpm"));
+    expect(last.indexOf("mv /tmp/pnpm.tmp /tmp/pnpm")).toBeLessThan(last.indexOf("chmod +x /tmp/pnpm"));
   });
 
   it("hardcoded pnpm version stays in lockstep with root package.json `packageManager`", () => {
     // Guard against silent drift: if someone bumps packageManager in the
     // root package.json but forgets to update PNPM_VERSION in linux.ts,
-    // the Linux container build would silently keep using the old pnpm.
+    // the Linux container build would silently keep downloading the old pnpm.
     const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
     const rootPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf-8")) as {
       packageManager?: string;
@@ -126,7 +204,17 @@ describe("buildDockerArgs", () => {
 
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    expect(last).toContain(`npx --yes pnpm@${expectedVersion}`);
+    expect(last).toContain(`pnpm/releases/download/v${expectedVersion}/$PNPM_ASSET`);
+  });
+
+  it("container Node major stays in lockstep with root .node-version", () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+    const expectedMajor = readFileSync(join(repoRoot, ".node-version"), "utf-8").trim();
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    const match = last.match(/\/tmp\/pnpm env use --global (\d+)\.\d+\.\d+/);
+    expect(match, "expected container bootstrap to install an explicit Node version").not.toBeNull();
+    expect(match?.[1]).toBe(expectedMajor);
   });
 
   it("forwards --dir /tools-pack so inner build output lands under the mounted host dir", () => {
@@ -163,6 +251,252 @@ describe("buildDockerArgs", () => {
     );
     const last = args[args.length - 1];
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
+  });
+
+  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const envFlagIndex = args.findIndex(
+      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
+    );
+    expect(envFlagIndex).toBeGreaterThan(-1);
+  });
+});
+
+describe("stopPackedLinuxHeadless", () => {
+  it("ignores the desktop AppImage identity marker and reads only the headless marker", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-headless-marker-"));
+    const namespace = "marker-split";
+    const namespaceRoot = join(root, "runtime", "linux", "namespaces", namespace);
+    const config: ToolPackConfig = {
+      ...makeConfig(),
+      namespace,
+      roots: {
+        ...makeConfig().roots,
+        runtime: {
+          namespaceBaseRoot: join(root, "runtime", "linux", "namespaces"),
+          namespaceRoot,
+        },
+      },
+    };
+    const markerPath = join(namespaceRoot, "runtime", "desktop-root.json");
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      }),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace,
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+
+    try {
+      await mkdir(dirname(markerPath), { recursive: true });
+      await writeFile(
+        markerPath,
+        `${JSON.stringify({
+          appPath: "/tmp/Open-Design.AppImage",
+          executablePath: "/tmp/.mount_od/AppRun",
+          logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
+          namespaceRoot,
+          pid: Number.MAX_SAFE_INTEGER,
+          ppid: 1,
+          stamp,
+          startedAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+          version: 1,
+        })}\n`,
+        "utf8",
+      );
+
+      const result = await stopPackedLinuxHeadless(config);
+
+      expect(result.status).toBe("not-running");
+      expect(result.fallback?.reason).toBe("marker-not-found");
+      expect(result.fallback?.markerPath).toBe(join(namespaceRoot, "runtime", "headless-root.json"));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("removes stale desktop AppImage markers during headless cleanup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-headless-cleanup-"));
+    const namespace = "cleanup-split";
+    const namespaceRoot = join(root, "runtime", "linux", "namespaces", namespace);
+    const config: ToolPackConfig = {
+      ...makeConfig(),
+      namespace,
+      roots: {
+        ...makeConfig().roots,
+        output: {
+          ...makeConfig().roots.output,
+          namespaceRoot: join(root, "out", "linux", "namespaces", namespace),
+        },
+        runtime: {
+          namespaceBaseRoot: join(root, "runtime", "linux", "namespaces"),
+          namespaceRoot,
+        },
+      },
+    };
+    const markerPath = join(namespaceRoot, "runtime", "desktop-root.json");
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      }),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace,
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+
+    try {
+      await mkdir(dirname(markerPath), { recursive: true });
+      await writeFile(
+        markerPath,
+        `${JSON.stringify({
+          appPath: "/tmp/Open-Design.AppImage",
+          executablePath: "/tmp/.mount_od/AppRun",
+          logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
+          namespaceRoot,
+          pid: Number.MAX_SAFE_INTEGER,
+          ppid: 1,
+          stamp,
+          startedAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+          version: 1,
+        })}\n`,
+        "utf8",
+      );
+      await mkdir(config.roots.output.namespaceRoot, { recursive: true });
+
+      const result = await cleanupPackedLinuxNamespace(config, { headless: true });
+
+      expect(result.skipped).toBe(false);
+      expect(result.removedOutputRoot).toBe(true);
+      expect(result.removedRuntimeNamespaceRoot).toBe(true);
+      expect(await pathExists(markerPath)).toBe(false);
+      expect(await pathExists(namespaceRoot)).toBe(false);
+      expect(await pathExists(config.roots.output.namespaceRoot)).toBe(false);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("skips headless cleanup while the desktop marker PID is live in the snapshot table", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-headless-cleanup-live-"));
+    const namespace = "cleanup-split-live";
+    const namespaceRoot = join(root, "runtime", "linux", "namespaces", namespace);
+    const config: ToolPackConfig = {
+      ...makeConfig(),
+      namespace,
+      roots: {
+        ...makeConfig().roots,
+        output: {
+          ...makeConfig().roots.output,
+          namespaceRoot: join(root, "out", "linux", "namespaces", namespace),
+        },
+        runtime: {
+          namespaceBaseRoot: join(root, "runtime", "linux", "namespaces"),
+          namespaceRoot,
+        },
+      },
+    };
+    const markerPath = join(namespaceRoot, "runtime", "desktop-root.json");
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      }),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace,
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+
+    try {
+      await mkdir(dirname(markerPath), { recursive: true });
+      // Use the test runner's own PID -- guaranteed to be in the live snapshot
+      // table returned by listProcessSnapshots, so validateDesktopAppImageMarker
+      // returns a non-"not-running" status. The cleanup defense skips on any
+      // status other than "not-running", regardless of whether stamp/exe match.
+      await writeFile(
+        markerPath,
+        `${JSON.stringify({
+          appPath: "/tmp/Open-Design.AppImage",
+          executablePath: "/tmp/.mount_od/AppRun",
+          logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
+          namespaceRoot,
+          pid: process.pid,
+          ppid: 1,
+          stamp,
+          startedAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+          version: 1,
+        })}\n`,
+        "utf8",
+      );
+      await mkdir(config.roots.output.namespaceRoot, { recursive: true });
+
+      const result = await cleanupPackedLinuxNamespace(config, { headless: true });
+
+      expect(result.skipped).toBe(true);
+      expect(result.removedOutputRoot).toBe(false);
+      expect(result.removedRuntimeNamespaceRoot).toBe(false);
+      expect(await pathExists(markerPath)).toBe(true);
+      expect(await pathExists(namespaceRoot)).toBe(true);
+      expect(await pathExists(config.roots.output.namespaceRoot)).toBe(true);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("resolveProductionInstallCommand", () => {
+  it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
+    expect(resolveProductionInstallCommand({})).toEqual({
+      command: "npm",
+      args: ["install", "--omit=dev", "--no-package-lock"],
+    });
+  });
+
+  it("treats an empty OD_TOOLS_PACK_PNPM_BIN as unset and keeps the npm host default", () => {
+    expect(resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "" })).toEqual({
+      command: "npm",
+      args: ["install", "--omit=dev", "--no-package-lock"],
+    });
+  });
+
+  it("uses OD_TOOLS_PACK_PNPM_BIN with hoisted-layout pnpm flags when set", () => {
+    // --config.node-linker=hoisted intentionally matches the prior
+    // npm/electron-builder packaging layout so the AppImage pack step keeps
+    // working when the assembled-app install runs through pnpm.
+    expect(
+      resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm" }),
+    ).toEqual({
+      command: "/tmp/pnpm",
+      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+    });
+  });
+
+  it("chains end-to-end with buildDockerArgs: docker exports OD_TOOLS_PACK_PNPM_BIN and the resolver returns the standalone pnpm install for that value", () => {
+    const dockerArgs = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const envFlagIndex = dockerArgs.findIndex(
+      (arg, i) => arg === "-e" && dockerArgs[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
+    );
+    expect(envFlagIndex).toBeGreaterThan(-1);
+    const envValue = dockerArgs[envFlagIndex + 1]?.split("=")[1];
+    expect(envValue).toBe("/tmp/pnpm");
+
+    const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
+    expect(resolved).toEqual({
+      command: "/tmp/pnpm",
+      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+    });
+    expect(resolved.command).not.toBe("npm");
   });
 });
 
@@ -229,6 +563,77 @@ MimeType=x-scheme-handler/od;
 describe("sanitizeNamespace", () => {
   it("replaces non-alphanumeric chars with hyphens", () => {
     expect(sanitizeNamespace("a/b c")).toBe("a-b-c");
+  });
+});
+
+describe("resolveLinuxLifecycleMode", () => {
+  it("uses headless mode for every lifecycle action when --headless is set", () => {
+    expect(resolveLinuxLifecycleMode({ headless: true }, "install")).toBe("headless");
+    expect(resolveLinuxLifecycleMode({ headless: true }, "start")).toBe("headless");
+    expect(resolveLinuxLifecycleMode({ headless: true }, "stop")).toBe("headless");
+    expect(resolveLinuxLifecycleMode({ headless: true }, "uninstall")).toBe("headless");
+    expect(resolveLinuxLifecycleMode({ headless: true }, "cleanup")).toBe("headless");
+  });
+
+  it("uses appimage mode when --headless is omitted", () => {
+    expect(resolveLinuxLifecycleMode({}, "install")).toBe("appimage");
+    expect(resolveLinuxLifecycleMode({}, "start")).toBe("appimage");
+    expect(resolveLinuxLifecycleMode({}, "stop")).toBe("appimage");
+    expect(resolveLinuxLifecycleMode({}, "uninstall")).toBe("appimage");
+    expect(resolveLinuxLifecycleMode({}, "cleanup")).toBe("appimage");
+  });
+});
+
+describe("shouldRejectLinuxHeadlessInspectOptions", () => {
+  it("allows status-only headless inspect", () => {
+    expect(shouldRejectLinuxHeadlessInspectOptions({})).toBe(false);
+  });
+
+  it("rejects headless eval and screenshot requests", () => {
+    expect(shouldRejectLinuxHeadlessInspectOptions({ expr: "document.title" })).toBe(true);
+    expect(shouldRejectLinuxHeadlessInspectOptions({ path: "/tmp/open-design-linux.png" })).toBe(true);
+    expect(
+      shouldRejectLinuxHeadlessInspectOptions({
+        expr: "document.title",
+        path: "/tmp/open-design-linux.png",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("inspectPackedLinuxApp", () => {
+  it("rejects unsupported headless inspect options before opening IPC", async () => {
+    const requestJsonIpcMock = vi.mocked(requestJsonIpc);
+    requestJsonIpcMock.mockClear();
+
+    await expect(
+      inspectPackedLinuxApp(makeConfig(), {
+        expr: "document.title",
+        headless: true,
+      }),
+    ).rejects.toThrow("linux inspect --headless supports status only; omit --expr and --path");
+    expect(requestJsonIpcMock).not.toHaveBeenCalled();
+  });
+
+  it("allows desktop inspect eval and screenshot options when headless is omitted", async () => {
+    const requestJsonIpcMock = vi.mocked(requestJsonIpc);
+    requestJsonIpcMock.mockReset();
+    requestJsonIpcMock
+      .mockResolvedValueOnce({ state: "running", url: "od://app/" })
+      .mockResolvedValueOnce({ ok: true, value: "Open Design" })
+      .mockResolvedValueOnce({ path: "/tmp/open-design-linux.png" });
+
+    const result = await inspectPackedLinuxApp(makeConfig(), {
+      expr: "document.title",
+      path: "/tmp/open-design-linux.png",
+    });
+
+    expect(result).toEqual({
+      eval: { ok: true, value: "Open Design" },
+      screenshot: { path: "/tmp/open-design-linux.png" },
+      status: { state: "running", url: "od://app/" },
+    });
+    expect(requestJsonIpcMock).toHaveBeenCalledTimes(3);
   });
 });
 

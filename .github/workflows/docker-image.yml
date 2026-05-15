@@ -1,0 +1,80 @@
+name: Docker image
+
+# Phase 5 / spec §15.5 — multi-arch image builds.
+#
+# Pushes to ghcr.io on:
+#   - main branch     → ghcr.io/<owner>/od:edge + :sha-<short>
+#   - tag (v*)        → ghcr.io/<owner>/od:<tag> + :latest
+#
+# Pull requests build the image but do not push (smoke test only).
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/od
+          # spec §15.1 tag scheme:
+          #   - main           → :edge + :sha-<short>
+          #   - vX.Y.Z         → :X.Y.Z + :latest
+          #   - any branch     → :branch-<name>
+          tags: |
+            type=ref,event=branch,suffix=-{{date 'YYYYMMDD-HHmmss' tz='UTC'}}
+            type=ref,event=tag
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          # spec §15.1 — multi-arch single manifest
+          platforms: linux/amd64,linux/arm64
+          # PR builds smoke-test the build only; merges to main /
+          # tags publish.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # The in-tree Dockerfile uses node:24-alpine + apk for build
+          # tooling; we keep that default so the workflow doesn't drift
+          # from local builds. Spec §15.1 nominates bookworm-slim as
+          # the canonical base; switching is a follow-up that needs
+          # the Dockerfile's apk lines re-cast for apt.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

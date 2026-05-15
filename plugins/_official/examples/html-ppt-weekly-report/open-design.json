@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-weekly-report",
+  "title": "Html Ppt Weekly Report",
+  "version": "0.1.0",
+  "description": "Team weekly / status-update deck — corporate clarity, 8-cell KPI grid, shipped list, 8-week bar chart, next-week table. Use for 周报, business reviews, team status updates, and exec dashboards.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-weekly-report",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "operations",
+    "web",
+    "weekly-report",
+    "untitled",
+    "status-update",
+    "team-report",
+    "business-review",
+    "wbr"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the html-ppt-weekly-report template to generate a weekly report deck (7 pages). First ask me four things: this week's date range, 3-5 core KPI numbers, shipped/completed items, and next week's plans and risks. Then fill the template with the 8-week bar chart and next-week table.",
+        "zh-CN": "用 html-ppt-weekly-report 模板生成一份周报（7 页）。先问我四件事：本周时间范围、3-5 个核心 KPI 数字、本周已发布 / 已完成的事项、下周计划与风险。然后用模板填好 8 周柱状图和下周表格。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Html Ppt Weekly Report"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

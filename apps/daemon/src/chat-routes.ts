@@ -37,7 +37,7 @@ function reconcileAssistantMessageOnRunEnd(
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { startChatRun } = ctx.chat;
+  const { startChatRun, submitToolResultToRun } = ctx.chat;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
@@ -48,6 +48,25 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   } = ctx.critique;
   const { validateBaseUrl } = ctx.validation;
   const isDaemonShuttingDown = ctx.lifecycle?.isDaemonShuttingDown ?? (() => false);
+  const rejectProxyPluginContext = (body: Record<string, unknown>, res: any) => {
+    if (
+      (typeof body.pluginId === 'string' && body.pluginId.trim().length > 0) ||
+      (
+        typeof body.appliedPluginSnapshotId === 'string' &&
+        body.appliedPluginSnapshotId.trim().length > 0
+      )
+    ) {
+      sendApiError(
+        res,
+        409,
+        'PLUGIN_REQUIRES_DAEMON',
+        'Plugin runs must go through POST /api/runs so the daemon can resolve and pin the applied plugin snapshot.',
+      );
+      return true;
+    }
+    return false;
+  };
+
   app.post('/api/runs', (req, res) => {
     if (isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
@@ -217,6 +236,47 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
     const body = { ok: true };
     res.json(body);
+  });
+
+  // Feed a `tool_result` content block into a running stream-json child.
+  // Currently used to answer Claude's `AskUserQuestion` tool: the host UI
+  // collects the user's choice, the web POSTs the formatted answer here,
+  // and the daemon writes a JSONL line into the still-open stdin. Without
+  // this path Claude auto-errors the tool in headless mode and falls back
+  // to a markdown duplicate of the same options.
+  app.post('/api/runs/:id/tool-result', (req, res) => {
+    if (typeof submitToolResultToRun !== 'function') {
+      return sendApiError(res, 501, 'NOT_IMPLEMENTED', 'tool-result wiring is not available');
+    }
+    const body = (req.body || {}) as {
+      toolUseId?: unknown;
+      content?: unknown;
+      isError?: unknown;
+    };
+    const toolUseId = typeof body.toolUseId === 'string' ? body.toolUseId : '';
+    const content = typeof body.content === 'string' ? body.content : '';
+    const isError = body.isError === true;
+    if (!toolUseId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'toolUseId is required');
+    }
+    const result = submitToolResultToRun(req.params.id, toolUseId, content, isError);
+    if (!result || !result.ok) {
+      const reason = result && result.reason ? result.reason : 'unknown';
+      if (reason === 'not_found') {
+        return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+      }
+      if (reason === 'run_terminal' || reason === 'stdin_closed') {
+        return sendApiError(res, 410, 'GONE', `run is no longer accepting tool results (${reason})`);
+      }
+      if (reason === 'stdin_text_mode') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'run does not support interactive tool results');
+      }
+      if (reason === 'bad_tool_use_id') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'toolUseId is invalid');
+      }
+      return sendApiError(res, 500, 'INTERNAL', `tool result write failed: ${reason}`);
+    }
+    res.json({ ok: true });
   });
 
   app.post('/api/chat', (req, res) => {
@@ -630,6 +690,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -725,6 +786,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/openai/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -820,6 +882,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/azure/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, apiVersion } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -932,6 +995,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/google/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(
@@ -1030,6 +1094,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
   app.post('/api/proxy/ollama/stream', async (req, res) => {
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');

@@ -1,0 +1,17 @@
+# Spec §15.5 — Huawei Cloud override.
+#
+# Persistence:
+#   - sfs-turbo for /data/od.
+#   - csi-disk for /data/config.
+
+persistence:
+  enabled: true
+  data:
+    storageClass: sfs-turbo
+    size: 50Gi
+  config:
+    storageClass: csi-disk
+    size: 1Gi
+
+ingress:
+  enabled: false

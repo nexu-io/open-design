@@ -107,13 +107,6 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
 
   return (
     <section className="settings-section settings-design-systems">
-      <div className="section-head">
-        <div>
-          <h3>{t('settings.designSystems')}</h3>
-          <p className="hint">{t('settings.designSystemsHint')}</p>
-        </div>
-      </div>
-
       <div className="library-toolbar">
         <input
           type="search"

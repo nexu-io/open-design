@@ -1,0 +1,17 @@
+/* ============================================================
+   Home redesign — bundled CSS for the centered-hero entry layout.
+
+   Keeping these styles in a separate folder (and out of the main
+   `src/index.css`) makes it easier to rebase/merge with upstream
+   `index.css` changes — the new layout's footprint stays in one
+   self-contained tree.
+   ============================================================ */
+@import './entry-layout.css';
+@import './home-hero.css';
+@import './recent-projects.css';
+@import './plugins-home.css';
+@import './plugins-view.css';
+@import './new-project-modal.css';
+@import './integrations.css';
+@import './tasks.css';
+@import './use-everywhere.css';

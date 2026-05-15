@@ -70,13 +70,6 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
 
   return (
     <section className="settings-section">
-      <div className="section-head">
-        <div>
-          <h3>{t('settings.privacy')}</h3>
-          <p className="hint">{t('settings.privacyHint')}</p>
-        </div>
-      </div>
-
       {!hasMadeConsentDecision ? (
         <ConsentCard onShare={shareUsage} onDecline={declineUsage} />
       ) : (
@@ -121,9 +114,9 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
               type="button"
               className="ghost"
               onClick={deleteMyData}
-              style={{ alignSelf: 'flex-start' }}
+              style={{ alignSelf: 'flex-start', marginTop: 12 }}
             >
-              <Icon name="refresh" size={13} />
+              <Icon name="trash" size={13} />
               <span style={{ marginLeft: 6 }}>{t('settings.privacyDataDeletion')}</span>
             </button>
           </div>

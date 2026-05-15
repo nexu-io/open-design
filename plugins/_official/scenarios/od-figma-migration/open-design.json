@@ -1,0 +1,115 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-figma-migration",
+  "title": "Figma migration (default scenario)",
+  "version": "0.1.0",
+  "description": "Default reference pipeline for the figma-migration taskKind.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-figma-migration",
+  "tags": [
+    "scenario",
+    "first-party",
+    "figma-migration",
+    "phase-6"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "figma-migration",
+    "scenario": "figma-migration",
+    "mode": "scenario",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "extract",
+          "atoms": [
+            "figma-extract"
+          ]
+        },
+        {
+          "id": "tokens",
+          "atoms": [
+            "token-map"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "connectors": {
+      "required": [
+        {
+          "id": "figma",
+          "tools": [
+            "files.get"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "connector:figma",
+      "network"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Migrate the Figma file at {{figmaUrl}} into a {{targetStack}} component. Extract the design tokens, generate the markup, and self-critique against the design system until the score converges.",
+        "zh-CN": "使用这个插件完成以下任务：Migrate the Figma file at {{figmaUrl}} into a {{targetStack}} component. Extract the design tokens, generate the markup, and self-critique against the design system until the score converges."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/dashboard-card.html",
+          "title": "Dashboard card from Figma"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "figmaUrl",
+        "type": "string",
+        "required": true,
+        "label": "Figma file URL",
+        "placeholder": "https://www.figma.com/file/abc/Dashboard"
+      },
+      {
+        "name": "targetStack",
+        "type": "string",
+        "required": false,
+        "label": "Target stack",
+        "placeholder": "React 18 + Tailwind",
+        "default": "React 18 + Tailwind"
+      },
+      {
+        "name": "frameName",
+        "type": "string",
+        "required": false,
+        "label": "Frame to extract",
+        "placeholder": "Dashboard / Card / Active sessions"
+      }
+    ]
+  }
+}

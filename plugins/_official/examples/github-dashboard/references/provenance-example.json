@@ -1,0 +1,92 @@
+{
+  "sources": [
+    {
+      "type": "github_api",
+      "description": "GitHub REST API v3",
+      "endpoints": [
+        "GET /repos/nexu-io/open-design",
+        "GET /repos/nexu-io/open-design/contributors?per_page=100&page=1",
+        "GET /search/issues?q=repo:nexu-io/open-design+is:issue",
+        "GET /search/issues?q=repo:nexu-io/open-design+is:pr"
+      ],
+      "fetchedAt": "2026-05-06T09:30:00Z"
+    }
+  ],
+  "fields": [
+    {
+      "path": "repository.fullName",
+      "source": "GET /repos/nexu-io/open-design",
+      "field": "full_name"
+    },
+    {
+      "path": "metrics.stars.total",
+      "source": "GET /repos/nexu-io/open-design",
+      "field": "stargazers_count"
+    },
+    {
+      "path": "metrics.forks.total",
+      "source": "GET /repos/nexu-io/open-design",
+      "field": "forks_count"
+    },
+    {
+      "path": "metrics.contributors.total",
+      "source": "GET /repos/nexu-io/open-design/contributors?per_page=100&page=N",
+      "field": "paginated unique contributor count",
+      "note": "Display value may be capped or labelled as an estimate when only page 1 is available."
+    },
+    {
+      "path": "metrics.issues.total",
+      "source": "GET /search/issues?q=repo:nexu-io/open-design+is:issue",
+      "field": "total_count"
+    },
+    {
+      "path": "metrics.pullRequests.total",
+      "source": "GET /search/issues?q=repo:nexu-io/open-design+is:pr",
+      "field": "total_count"
+    },
+    {
+      "path": "charts.starGrowth",
+      "source": "estimated",
+      "note": "GitHub REST does not expose full historical star deltas; heights are display-normalized from available recent growth signals."
+    },
+    {
+      "path": "charts.forkTrend",
+      "source": "synthetic",
+      "note": "Generated as normalized 0-100% chart heights for visual trend preview."
+    }
+  ],
+  "transformations": [
+    {
+      "step": "Data normalization",
+      "description": "Converted GitHub API responses to compact dashboard format",
+      "operations": [
+        "Formatted large numbers with comma separators",
+        "Estimated star and fork growth trends and marked them as non-auditable estimates",
+        "Extracted top 5 contributors by contribution count",
+        "Selected most recent 5 issues and pull requests",
+        "Generated normalized chart-height values for star growth and fork trends"
+      ]
+    },
+    {
+      "step": "Privacy filtering",
+      "description": "Applied safe data practices",
+      "operations": [
+        "Preserved only public GitHub profile information",
+        "Used public avatar URLs",
+        "Excluded sensitive or internal repository metadata"
+      ]
+    }
+  ],
+  "notes": [
+    "Current repository totals are sourced from public GitHub API endpoints; growth series are explicitly estimated or synthetic as documented in fields[].",
+    "No authentication tokens or credentials stored",
+    "Star growth is estimated from available recent growth signals, not directly auditable from GitHub REST alone",
+    "Fork growth is synthetic for preview purposes",
+    "Chart heights are normalized percentages for responsive display"
+  ],
+  "refreshPolicy": {
+    "recommended": "hourly",
+    "minInterval": "15 minutes",
+    "note": "GitHub API has rate limits; recommend caching for production use"
+  }
+}

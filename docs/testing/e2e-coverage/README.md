@@ -7,6 +7,7 @@
 - 优先记录已经存在于 `e2e/` 下的自动化覆盖；当某个用户流主要由 `apps/web` 组件测试保护时，也会一并注明。
 - 以用户视角描述场景，不展开实现细节。
 - 新增测试文件或新增重要场景时，同步更新对应模块文档。
+- 插件系统总验收维护在 [`../plugin-system-test-suite.md`](../plugin-system-test-suite.md)；Registry / CLI / daemon 跨层用例另见 [`../plugin-registry-eval-cases.md`](../plugin-registry-eval-cases.md)。
 
 ## 模块索引
 

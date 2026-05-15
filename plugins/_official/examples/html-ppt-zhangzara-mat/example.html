@@ -1,0 +1,1372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mat Presentation</title>
+
+    <!-- Preconnect to Google Fonts for faster loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Bricolage Grotesque: heavy rounded grotesque — the display workhorse of this template.
+         DM Sans: clean and neutral for body copy.
+         DM Mono: for labels, kickers, and metadata.
+         Noto Sans SC: Chinese fallback for all roles. -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE A · TOKENS                                                     ║
+   ║                                                                      ║
+   ║  Mat theme — inspired by a product landing page with a dark          ║
+   ║  green surface and warm material tones.                              ║
+   ║  Dark forest green as dominant environment.                          ║
+   ║  Warm orange as the accent.                                          ║
+   ║  Cream type floating directly on the field.                          ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+      :root {
+        /* ── Palette — dark green surface with warm material tones ─────── */
+        --c-bg: #232e26; /* dark forest green — the surface       */
+        --c-bg-alt: #2e3d30; /* slightly lighter green surface        */
+        --c-bg-light: #ede6d0; /* warm cream — info card + light slides */
+        --c-bg-light-alt: #e4dac4;
+
+        --c-fg: #f0e8d2; /* warm cream — primary text on dark     */
+        --c-fg-2: rgba(240, 232, 210, 0.58);
+        --c-fg-3: rgba(240, 232, 210, 0.3);
+        --c-fg-light: #1e2820; /* dark green — text on cream slides     */
+        --c-fg-light-2: rgba(30, 40, 32, 0.6);
+        --c-fg-light-3: rgba(30, 40, 32, 0.3);
+
+        --c-accent: #c07030; /* warm orange accent                    */
+        --c-border: rgba(240, 232, 210, 0.12);
+        --c-border-light: rgba(30, 40, 32, 0.14);
+
+        /* Wood warm tone — used for the atmospheric bottom-right glow */
+        --c-wood: #7a4e24;
+
+        /* ── Typography ──────────────────────────────────────────────────── */
+        /* Display/Heading: Bricolage Grotesque — heavy, rounded, mixed case.
+           The defining font of this template. Weight 700–800 at display scale. */
+        --f-display: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+        --f-heading: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+        /* Body: DM Sans — neutral, readable, lets the display type breathe */
+        --f-body: "DM Sans", "Noto Sans SC", system-ui, sans-serif;
+        /* Mono: DM Mono — for kickers, labels, metadata, rotated edge tags */
+        --f-mono: "DM Mono", monospace;
+
+        /* ── Type Scale ──────────────────────────────────────────────────── */
+        /* vw units = responsive to viewport width */
+        --sz-display: 12vw; /* hero cover title — massive, commanding        */
+        --sz-h1: 7vw; /* chapter / end slide headline                  */
+        --sz-h2: 4vw; /* content slide headline                        */
+        --sz-h3: 2.4vw; /* sub-headline, compare panel title             */
+        --sz-lead: 1.5vw; /* lead paragraph — slightly larger than body    */
+        --sz-body: 1.05vw; /* body text, bullets                            */
+        --sz-caption: 0.82vw; /* image captions, footnotes                     */
+        --sz-label: 0.7vw; /* chrome labels, kickers, mono tags             */
+
+        /* ── Spacing ─────────────────────────────────────────────────────── */
+        --pad-x: 5.5vw; /* slide horizontal padding — tighter than skeleton */
+        --pad-y: 5.5vh; /* slide vertical padding                           */
+        --gap-lg: 4.5vh; /* between major content sections                   */
+        --gap-md: 2.8vh; /* between related elements                         */
+        --gap-sm: 1.4vh; /* between tightly related elements                 */
+
+        /* ── Motion: zero — this template is fully static ───────────────── */
+        --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
+        --dur-slide: 0s;
+        --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur-enter: 0s;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE B · ENGINE — DO NOT MODIFY                                     ║
+   ║                                                                      ║
+   ║  Copied from skeleton.html. Deck flex layout, slide base,            ║
+   ║  theme classes, nav dots, slide counter.                             ║
+   ║  Touching this breaks navigation.                                    ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Deck container — all slides sit side by side horizontally */
+      #deck {
+        display: flex;
+        height: 100vh;
+        /* Width = N * 100vw, set dynamically by JS */
+        transition: transform var(--dur-slide) var(--ease-slide);
+        will-change: transform;
+      }
+
+      /* Slide base — each slide is one full viewport */
+      .slide {
+        flex: 0 0 100vw;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        padding: var(--pad-y) var(--pad-x);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      /* Prevent grid children from overflowing their row */
+      .slide-body {
+        min-height: 0;
+      }
+
+      /* Slide themes — overridden by the mat's own dark/light rules below */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+      }
+
+      /* ── Navigation dots ──────────────────────────────────────────────── */
+      #nav-dots {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        z-index: 100;
+      }
+      .nav-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.22);
+        cursor: pointer;
+        transition:
+          background 0.3s,
+          transform 0.3s;
+        padding: 0;
+      }
+      .nav-dot.is-active {
+        background: rgba(255, 255, 255, 0.8);
+        transform: scale(1.4);
+      }
+
+      /* Slide counter — bottom right, subtle */
+      #slide-counter {
+        position: fixed;
+        bottom: 20px;
+        right: 28px;
+        font-family: var(--f-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: rgba(255, 255, 255, 0.25);
+        z-index: 100;
+        user-select: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE C · TYPOGRAPHY                                                 ║
+   ║                                                                      ║
+   ║  All type classes written from scratch for the mat theme.            ║
+   ║  Bricolage Grotesque 700–800 for display and headings.               ║
+   ║  Headings are ALWAYS mixed case — never uppercase.                   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Display: the massive cover title. 12vw, very tight leading. */
+      .display {
+        font-family: var(--f-display);
+        font-size: var(--sz-display);
+        font-weight: 800;
+        line-height: 0.88;
+        letter-spacing: -0.03em;
+      }
+      /* H1: chapter/end slides. Slightly smaller than display, still commanding. */
+      .h1 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h1);
+        font-weight: 800;
+        line-height: 0.92;
+        letter-spacing: -0.025em;
+      }
+      /* H2: the workhorse content slide headline. */
+      .h2 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+      /* H3: sub-headlines and compare panel labels. */
+      .h3 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 600;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+      }
+      /* Lead: intro paragraph, slightly larger than body. */
+      .lead {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 400;
+        line-height: 1.55;
+      }
+      /* Body: general text. */
+      .body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 400;
+        line-height: 1.65;
+      }
+      /* Caption: image captions, footnotes. */
+      .caption {
+        font-family: var(--f-body);
+        font-size: var(--sz-caption);
+        font-weight: 400;
+        line-height: 1.5;
+      }
+      /* Label: mono uppercase tracking — kickers, metadata, chrome. */
+      .label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 400;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      /* Contextual color helpers */
+      .muted {
+        color: var(--c-fg-2);
+      }
+      .accent {
+        color: var(--c-accent);
+      }
+      .light .muted {
+        color: var(--c-fg-light-2);
+      }
+
+      /* Bullet list: dash prefix in warm orange, body font at lead size */
+      .bullet-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: 0;
+      }
+      .bullet-list li {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 400;
+        line-height: 1.5;
+        display: grid;
+        grid-template-columns: 1.4em 1fr;
+        gap: 0.5em;
+      }
+      /* The dash before each bullet — warm orange accent via DM Mono */
+      .bullet-list li::before {
+        content: "—";
+        color: var(--c-accent);
+        font-family: var(--f-mono);
+      }
+      .light .bullet-list li {
+        color: var(--c-fg-light);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  MAT ATMOSPHERIC BACKGROUND                                          ║
+   ║                                                                      ║
+   ║  Every dark slide has a subtle warm wood-brown radial glow           ║
+   ║  from the bottom-right corner, evoking a warm material edge.         ║
+   ║  No photography needed.                                              ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Atmospheric glow lives on ::before so it never competes with content */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+        position: relative;
+        overflow: hidden;
+      }
+      .slide.dark::before {
+        content: "";
+        position: absolute;
+        bottom: -10%;
+        right: -5%;
+        width: 55%;
+        height: 70%;
+        background: radial-gradient(
+          ellipse at 70% 80%,
+          rgba(122, 78, 36, 0.28) 0%,
+          rgba(80, 50, 20, 0.14) 40%,
+          transparent 70%
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+      /* All direct children of dark slides sit above the glow pseudo-element */
+      .slide.dark > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  CHROME + FOOT                                                       ║
+   ║                                                                      ║
+   ║  Header chrome (kicker + slide number) and footer foot               ║
+   ║  (deck name + author). Suppressed on cover, quote, and end slides.   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      .slide-chrome,
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .slide-chrome {
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-md);
+      }
+      .slide-foot {
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        margin-top: var(--gap-md);
+      }
+      .light .slide-chrome,
+      .light .slide-foot {
+        border-color: var(--c-border-light);
+      }
+
+      /* Suppress chrome/foot on chromeless slide types */
+      .slide--cover .slide-chrome,
+      .slide--cover .slide-foot,
+      .slide--quote .slide-chrome,
+      .slide--quote .slide-foot,
+      .slide--end .slide-chrome,
+      .slide--end .slide-foot {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  SHARED COMPONENTS                                                   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Kicker: mono uppercase in warm orange — the eyebrow label */
+      .kicker {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+      }
+
+      /* Rule: a short horizontal accent line */
+      .rule {
+        width: 32px;
+        height: 1px;
+        background: var(--c-accent);
+      }
+
+      /* Image placeholder — used until real photography is available */
+      .img-placeholder {
+        background: rgba(240, 232, 210, 0.06);
+        border: 1px solid var(--c-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        width: 100%;
+        height: 100%;
+        min-height: 30vh;
+      }
+      .light .img-placeholder {
+        background: var(--c-bg-light-alt);
+        color: var(--c-fg-light-3);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  MAT SIGNATURE COMPONENT: INFO CARD                                  ║
+   ║                                                                      ║
+   ║  The cream inset box — the single most distinctive move in this      ║
+   ║  template. Cream background on a dark green field creates immediate  ║
+   ║  material contrast. Used on the cover (bottom-left) and end slide    ║
+   ║  (right column).                                                     ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      .info-card {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+        padding: var(--gap-md) calc(var(--pad-x) * 0.8);
+        max-width: 28vw;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+      }
+      .info-card-heading {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+        color: var(--c-fg-light);
+      }
+      .info-card-body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 400;
+        line-height: 1.6;
+        color: var(--c-fg-light-2);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  MAT SIGNATURE COMPONENT: SIDE LABEL                                 ║
+   ║                                                                      ║
+   ║  Rotated mono label on the right edge of cover and end slides.       ║
+   ║  Adds vertical depth and studio identity.                            ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE E · LAYOUT PATTERNS                                            ║
+   ║                                                                      ║
+   ║  9 slide types for the mat template.                                 ║
+   ║  All layout CSS written from scratch — not inherited from skeleton.  ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* ── 1. COVER: four-quadrant free-float layout ───────────────────── */
+      /*    Top-left: massive display headline.                              */
+      /*    Top-right: lead copy anchored center-right.                     */
+      /*    Bottom-left: info card (cream inset).                           */
+      /*    Bottom-right: attribution label.                                 */
+      .slide--cover {
+        display: grid;
+        grid-template-rows: 1fr auto;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        padding: var(--pad-y) var(--pad-x);
+      }
+      /* Top-left quadrant: kicker + display headline */
+      .cover-headline {
+        grid-column: 1;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding-top: var(--gap-sm);
+        gap: var(--gap-sm);
+      }
+      /* Top-right quadrant: supporting copy, vertically centered */
+      .cover-copy {
+        grid-column: 2;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-left: var(--pad-x);
+        gap: var(--gap-md);
+      }
+      /* Bottom row: info card left, attribution right */
+      .cover-bottom {
+        grid-column: 1 / 3;
+        grid-row: 2;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: var(--gap-lg);
+        padding-top: var(--gap-md);
+      }
+
+      /* ── 2. STATEMENT: asymmetric — headline left, copy right ────────── */
+      /*    Wide left column holds the bold claim.                           */
+      /*    Right column holds context and bullets.                          */
+      .slide--statement {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .slide--statement .slide-body {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: calc(var(--pad-x) * 1.4);
+        align-items: center;
+        min-height: 0;
+      }
+      /* Left side of statement: the headline zone */
+      .stmt-headline {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      /* Right side of statement: context and supporting detail */
+      .stmt-copy {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+
+      /* ── 3. SPLIT: headline left | image center | copy right ─────────── */
+      /*    Three columns of roughly equal weight.                           */
+      /*    Center column is occupied by the visual object.                  */
+      .slide--split {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .slide--split .slide-body {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr 0.9fr;
+        gap: 0;
+        align-items: center;
+        min-height: 0;
+      }
+      .split-left {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-right: var(--pad-x);
+      }
+      /* Center: the product image or placeholder fills full height */
+      .split-center {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 52vh;
+      }
+      .split-right {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-left: var(--pad-x);
+      }
+
+      /* ── 4. STATS: three large numbers with warm accent borders ─────── */
+      /*    Vertical dividers between cells, not horizontal top borders.    */
+      .slide--stats {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .slide--stats .slide-body {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+        align-items: stretch;
+        min-height: 0;
+      }
+      /* Each stat cell: left-padded except the first */
+      .mat-stat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md) var(--pad-x) var(--gap-md) 0;
+        border-right: 1px solid var(--c-border);
+      }
+      /* Last cell: no right border, has left padding */
+      .mat-stat:last-child {
+        border-right: none;
+        padding-right: 0;
+        padding-left: var(--pad-x);
+      }
+      /* Middle cell: symmetrical padding */
+      .mat-stat:nth-child(2) {
+        padding: var(--gap-md) var(--pad-x);
+      }
+      /* The big number — Bricolage Grotesque 800 at display scale */
+      .mat-stat-val {
+        font-family: var(--f-display);
+        font-size: 5.5vw;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.025em;
+        color: var(--c-fg);
+      }
+      /* The <em> inside the number gets warm orange — e.g. "4.7<em>k</em>" */
+      .mat-stat-val em {
+        font-style: normal;
+        color: var(--c-accent);
+      }
+      .mat-stat-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.5;
+      }
+      /* Light slide overrides for stats */
+      .light .mat-stat {
+        border-color: var(--c-border-light);
+      }
+      .light .mat-stat-val {
+        color: var(--c-fg-light);
+      }
+      .light .mat-stat-label {
+        color: var(--c-fg-light-2);
+      }
+
+      /* ── 5. QUOTE: full-slide pull quote, chromeless ─────────────────── */
+      /*    Large quotation mark in warm orange.                             */
+      /*    Quote text in Bricolage Grotesque — not a serif quote style.    */
+      .slide--quote {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: calc(var(--pad-y) * 1.4) calc(var(--pad-x) * 1.1);
+      }
+      /* The decorative opening quote mark */
+      .quote-mark {
+        font-family: var(--f-display);
+        font-size: 8vw;
+        line-height: 0.6;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+        font-weight: 800;
+      }
+      /* The quote text: large, rounded grotesque, mixed case */
+      .quote-text {
+        font-family: var(--f-heading);
+        font-size: 3.4vw;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        max-width: 70%;
+        margin-bottom: var(--gap-lg);
+        color: var(--c-fg);
+      }
+      /* Attribution block: name + role stacked */
+      .quote-attr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+      }
+      .light .quote-text {
+        color: var(--c-fg-light);
+      }
+
+      /* ── 6. LIST: wide left margin headline + right content column ───── */
+      /*    The wide asymmetric left margin creates air even when right     */
+      /*    column has content. Spacious, editorial pacing.                 */
+      .slide--list {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .slide--list .slide-body {
+        display: grid;
+        grid-template-columns: 0.7fr 1.5fr;
+        gap: calc(var(--pad-x) * 1.2);
+        align-items: center;
+        min-height: 0;
+      }
+      /* Left column: headline zone */
+      .list-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      /* Right column: the actual list content */
+      .list-items {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+
+      /* ── 7. COMPARE: Before / After split with a divider line ────────── */
+      /*    Three-column grid: left panel | divider | right panel.          */
+      .slide--compare {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .slide--compare .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1px 1fr;
+        gap: 0;
+        align-items: center;
+        min-height: 0;
+        height: 68vh;
+      }
+      /* Each compare panel */
+      .compare-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: var(--gap-md) var(--pad-x);
+      }
+      .compare-panel.left {
+        padding-left: 0;
+      }
+      .compare-panel.right {
+        padding-right: 0;
+      }
+      /* The thin vertical divider line between panels */
+      .compare-divider-line {
+        background: var(--c-border);
+        height: 100%;
+        width: 1px;
+      }
+      /* Before label: muted mono */
+      .compare-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-fg-3);
+        margin-bottom: var(--gap-sm);
+      }
+      /* After label: warm orange accent */
+      .compare-label.after {
+        color: var(--c-accent);
+      }
+      .light .compare-label {
+        color: var(--c-fg-light-3);
+      }
+      .light .compare-divider-line {
+        background: var(--c-border-light);
+      }
+
+      /* ── 8. CHART: vertical bar chart ─────────────────────────────────── */
+      .slide--chart .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      /* Chart header: title left, unit label right */
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-shrink: 0;
+      }
+      /* Chart wrapper: grows to fill available height, bars aligned to bottom */
+      .chart-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 0;
+      }
+      /* The bar track: horizontal row with bars aligned to bottom */
+      .bar-track {
+        height: 30vh;
+        display: flex;
+        align-items: flex-end;
+        gap: 3vw;
+        border-left: 1px solid var(--c-border);
+        padding-left: 0.5vw;
+      }
+      /* Each individual bar column */
+      .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 1vh;
+        height: 100%;
+      }
+      /* The filled bar rectangle — height set inline as % */
+      .bar-fill {
+        width: 100%;
+        background: var(--c-fg-3);
+      }
+      /* The accent bar: warm orange highlight */
+      .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      /* X-axis label below each bar */
+      .bar-x-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        white-space: nowrap;
+      }
+      /* Value label above the bar */
+      .bar-val {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 500;
+        color: var(--c-fg-2);
+      }
+      /* Highlighted value on the accent bar */
+      .bar-val.hi {
+        color: var(--c-accent);
+        font-weight: 600;
+      }
+      /* Baseline rule below the bars */
+      .chart-baseline {
+        height: 1px;
+        background: var(--c-border);
+        flex-shrink: 0;
+      }
+      /* Source attribution at the bottom */
+      .chart-source {
+        flex-shrink: 0;
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        color: var(--c-fg-3);
+        letter-spacing: 0.06em;
+        margin-top: var(--gap-sm);
+      }
+
+      /* ── 9. END: closing slide, chromeless, mirrors cover energy ─────── */
+      /*    Left column: headline and CTA.                                  */
+      /*    Right column: info card (cream inset — the signature component).*/
+      .slide--end {
+        display: grid;
+        grid-template-rows: 1fr auto;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        padding: var(--pad-y) var(--pad-x);
+      }
+      /* Left main: headline content, bottom-aligned */
+      .end-main {
+        grid-column: 1;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: var(--gap-md);
+      }
+      /* Right side: info card in the right column */
+      .end-side {
+        grid-column: 2;
+        grid-row: 1;
+        display: flex;
+        align-items: flex-end;
+        padding-left: var(--pad-x);
+      }
+      /* Footer: label left and right, above a border */
+      .end-foot {
+        grid-column: 1 / 3;
+        grid-row: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        border-top: 1px solid var(--c-border);
+        padding-top: var(--gap-sm);
+        margin-top: var(--gap-md);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="deck">
+      <!-- ═══ SLIDE 01 · COVER ═══════════════════════════════════════════════ -->
+      <!-- Four-quadrant free-float layout on dark forest green.
+           Top-left: kicker + massive display headline (one word per line).
+           Top-right: lead copy, center-right aligned.
+           Bottom-left: cream info card (the signature material contrast).
+           Bottom-right: attribution label.
+           The side-label on the right edge echoes the product spec callout. -->
+      <section
+        class="slide dark slide--cover"
+        data-slide="1"
+        style="position: relative"
+      >
+        <div class="cover-headline">
+          <span class="kicker">[Studio Name] · 2026</span>
+          <h1 class="display" style="color: var(--c-fg)">Craft<br />Matters</h1>
+        </div>
+        <div class="cover-copy">
+          <p class="lead" style="color: var(--c-fg-2); max-width: 90%">
+            Designed for the hands that build things. [A one-line description of
+            what this product does.]
+          </p>
+          <p class="caption" style="color: var(--c-fg-3)">
+            [Tagline goes here]
+          </p>
+        </div>
+        <div class="cover-bottom">
+          <div class="info-card">
+            <div class="info-card-heading">
+              Designed by [Studio Name],<br />the precision studio tools lab.
+            </div>
+            <div class="info-card-body">
+              [The world's most carefully considered [product category].]
+            </div>
+          </div>
+          <span class="label muted">Product Design · April 2026</span>
+        </div>
+      </section>
+
+      <!-- ═══ SLIDE 02 · STATEMENT ══════════════════════════════════════════ -->
+      <!-- Wide asymmetric grid: bold claim left, context + bullets right.
+           The left column width (1.1fr) gives the headline room to land. -->
+      <section class="slide dark slide--statement" data-slide="2">
+        <header class="slide-chrome">
+          <span class="label muted">The Thesis</span>
+          <span class="label muted">02</span>
+        </header>
+        <div class="slide-body">
+          <div class="stmt-headline">
+            <span class="kicker">Design Principle</span>
+            <h2 class="h1" style="color: var(--c-fg)">
+              Every surface is a decision.
+            </h2>
+          </div>
+          <div class="stmt-copy">
+            <p class="lead muted">
+              The studio environment shapes the work that happens inside it.
+              Materials that perform quietly let the maker stay in flow.
+            </p>
+            <ul class="bullet-list">
+              <li>
+                Surface texture calibrated for blade resistance without drag
+              </li>
+              <li>Grip underside prevents slip on any workbench material</li>
+              <li>
+                Grid lines printed in low-contrast ink — visible without
+                competing
+              </li>
+            </ul>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Studio Name] · Product Brief</span>
+          <span class="label muted">Design Studio</span>
+        </footer>
+      </section>
+
+      <!-- ═══ SLIDE 03 · SPLIT ══════════════════════════════════════════════ -->
+      <!-- Three-column layout: headline left, image center, detail bullets right.
+           The center column is the visual object — the product in its environment. -->
+      <section class="slide dark slide--split" data-slide="3">
+        <header class="slide-chrome">
+          <span class="label muted">The Object</span>
+          <span class="label muted">03</span>
+        </header>
+        <div class="slide-body">
+          <div class="split-left">
+            <span class="kicker">Material Detail</span>
+            <h2 class="h2" style="color: var(--c-fg)">
+              [A one-line description of what this product does.]
+            </h2>
+            <p class="lead muted">
+              A two-layer construction built for the way real studio work
+              actually happens.
+            </p>
+          </div>
+          <!-- Image center: full-height placeholder until photography is ready -->
+          <div class="split-center">
+            <div class="img-placeholder">[Product Image]</div>
+          </div>
+          <div class="split-right">
+            <ul class="bullet-list">
+              <li>4mm recycled rubber base — weighted to stay flat</li>
+              <li>Natural composite surface — self-healing up to 3000 uses</li>
+              <li>Three colorways: Forest, Sand, Charcoal</li>
+            </ul>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Studio Name] · Product Brief</span>
+          <span class="label muted">Design Studio</span>
+        </footer>
+      </section>
+
+      <!-- ═══ SLIDE 04 · STATS ══════════════════════════════════════════════ -->
+      <!-- Three large numbers separated by vertical dividers.
+           The <em> tag inside .mat-stat-val renders in warm orange. -->
+      <section class="slide dark slide--stats" data-slide="4">
+        <header class="slide-chrome">
+          <span class="label muted">By the Numbers</span>
+          <span class="label muted">04</span>
+        </header>
+        <div class="slide-body">
+          <!-- Headline above the three stats -->
+          <h2
+            class="h2"
+            style="color: var(--c-fg); margin-bottom: var(--gap-lg)"
+          >
+            The numbers that define the [product category].
+          </h2>
+          <!-- Three stat cells — vertical borders between them -->
+          <div
+            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0"
+          >
+            <div class="mat-stat">
+              <div class="mat-stat-val">4.7<em>k</em></div>
+              <div class="mat-stat-label">
+                Units sold in the first 90 days of launch, across 12 countries.
+              </div>
+            </div>
+            <div class="mat-stat">
+              <div class="mat-stat-val">3.2<em>×</em></div>
+              <div class="mat-stat-label">
+                Longer lifespan than the leading competitor in independent
+                studio tests.
+              </div>
+            </div>
+            <div class="mat-stat">
+              <div class="mat-stat-val">#<em>1</em></div>
+              <div class="mat-stat-label">
+                Top-rated [product category] by Studio Supply Journal for two
+                consecutive years.
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Studio Name] · Product Brief</span>
+          <span class="label muted">Design Studio</span>
+        </footer>
+      </section>
+
+      <!-- ═══ SLIDE 05 · QUOTE ══════════════════════════════════════════════ -->
+      <!-- Chromeless. Full-slide pull quote with warm orange mark.
+           Bricolage Grotesque at 3.4vw — weighted, not delicate.
+           Attribution stacked below in mono label format. -->
+      <section class="slide dark slide--quote" data-slide="5">
+        <div class="quote-mark">"</div>
+        <div class="quote-text">
+          Good design is as little design as possible.
+        </div>
+        <div class="quote-attr">
+          <span class="label accent">Dieter Rams</span>
+          <span class="label muted">Designer</span>
+        </div>
+      </section>
+
+      <!-- ═══ SLIDE 06 · LIST (light) ═══════════════════════════════════════ -->
+      <!-- Cream background — the warm inversion of the dark slides.
+           Wide left margin holds the headline zone.
+           Right 60% holds the bullet list.
+           This is the one slide in the deck where light background is used. -->
+      <section class="slide light slide--list" data-slide="6">
+        <header class="slide-chrome">
+          <span class="label" style="color: var(--c-fg-light-3)"
+            >Why It Matters</span
+          >
+          <span class="label" style="color: var(--c-fg-light-3)">06</span>
+        </header>
+        <div class="slide-body">
+          <div class="list-head">
+            <span class="kicker">The Case</span>
+            <h2 class="h2" style="color: var(--c-fg-light)">
+              What a studio tool should do for the maker.
+            </h2>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              Four principles that informed every material and dimension
+              decision in the [product category]'s design.
+            </p>
+          </div>
+          <div class="list-items">
+            <ul class="bullet-list">
+              <li>Disappear when in use so the work takes all the attention</li>
+              <li>
+                Improve output quality through surface calibration, not just
+                feel
+              </li>
+              <li>
+                Last long enough to become a trusted part of the studio
+                environment
+              </li>
+              <li>
+                Be honest about what it is — no branding that competes with the
+                work
+              </li>
+            </ul>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-3)"
+            >[Studio Name] · Product Brief</span
+          >
+          <span class="label" style="color: var(--c-fg-light-3)"
+            >Design Studio</span
+          >
+        </footer>
+      </section>
+
+      <!-- ═══ SLIDE 07 · COMPARE ════════════════════════════════════════════ -->
+      <!-- Three-column grid: left panel | 1px divider line | right panel.
+           Before label is muted mono. After label gets warm orange accent.
+           Each panel has a heading, lead context, and 3 bullets. -->
+      <section class="slide dark slide--compare" data-slide="7">
+        <header class="slide-chrome">
+          <span class="label muted">Before / After</span>
+          <span class="label muted">07</span>
+        </header>
+        <div class="slide-body">
+          <div class="compare-panel left">
+            <div class="compare-label">The Old Way</div>
+            <h3 class="h3" style="color: var(--c-fg)">
+              Generic [product category] from a supply catalog.
+            </h3>
+            <p class="lead muted">
+              Works until it does not. Warps in heat, discolors with use, and
+              feels like an afterthought.
+            </p>
+            <ul class="bullet-list" style="--sz-lead: 1.05vw">
+              <li>Slips on polished surfaces without a grip layer</li>
+              <li>Grooves deepen and skew precision over time</li>
+              <li>Replaced every six months on average</li>
+            </ul>
+          </div>
+          <!-- The 1px vertical divider — a CSS column, not a border -->
+          <div class="compare-divider-line"></div>
+          <div class="compare-panel right">
+            <div class="compare-label after">The New Way</div>
+            <h3 class="h3" style="color: var(--c-fg)">
+              [Product Name], purpose-built.
+            </h3>
+            <p class="lead muted">
+              A surface that gets better with use. The material compresses and
+              recovers, keeping edges clean.
+            </p>
+            <ul class="bullet-list" style="--sz-lead: 1.05vw">
+              <li>Self-heals around use lines, keeping the surface flat</li>
+              <li>Grip base holds any workbench without adhesives</li>
+              <li>
+                3000-use tested lifespan — typically 2 to 3 years in daily use
+              </li>
+            </ul>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Studio Name] · Product Brief</span>
+          <span class="label muted">Design Studio</span>
+        </footer>
+      </section>
+
+      <!-- ═══ SLIDE 08 · CHART ══════════════════════════════════════════════ -->
+      <!-- Vertical bar chart. One bar is highlighted in warm orange (.accent).
+           Bar heights set inline as percentages of the 30vh bar-track.
+           Source attribution at the bottom in DM Mono. -->
+      <section class="slide dark slide--chart" data-slide="8">
+        <header class="slide-chrome">
+          <span class="label muted">Performance</span>
+          <span class="label muted">08</span>
+        </header>
+        <div class="slide-body">
+          <div class="chart-header">
+            <h2 class="h2" style="color: var(--c-fg)">
+              Lifespan by material category.
+            </h2>
+            <span class="label muted">Units: months of daily studio use</span>
+          </div>
+          <div class="chart-wrapper">
+            <div class="bar-track">
+              <!-- PVC Generic -->
+              <div class="bar-col">
+                <span class="bar-val">6</span>
+                <div class="bar-fill" style="height: 20%"></div>
+                <span class="bar-x-label">PVC</span>
+              </div>
+              <!-- Rubber Composite -->
+              <div class="bar-col">
+                <span class="bar-val">11</span>
+                <div class="bar-fill" style="height: 37%"></div>
+                <span class="bar-x-label">Rubber</span>
+              </div>
+              <!-- Glass -->
+              <div class="bar-col">
+                <span class="bar-val">18</span>
+                <div class="bar-fill" style="height: 60%"></div>
+                <span class="bar-x-label">Glass</span>
+              </div>
+              <!-- [Product Name] — accent bar, the highlighted data point -->
+              <div class="bar-col">
+                <span class="bar-val hi">30</span>
+                <div class="bar-fill accent" style="height: 100%"></div>
+                <span class="bar-x-label">[Product]</span>
+              </div>
+              <!-- Leather -->
+              <div class="bar-col">
+                <span class="bar-val">22</span>
+                <div class="bar-fill" style="height: 73%"></div>
+                <span class="bar-x-label">Leather</span>
+              </div>
+            </div>
+            <div class="chart-baseline"></div>
+          </div>
+          <div class="chart-source">
+            Source: Independent Material Durability Study · [Studio] Lab 2025
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Studio Name] · Product Brief</span>
+          <span class="label muted">Design Studio</span>
+        </footer>
+      </section>
+
+      <!-- ═══ SLIDE 09 · END ════════════════════════════════════════════════ -->
+      <!-- Chromeless. Mirrors the cover's four-quadrant energy.
+           Left column: kicker + closing headline + lead CTA.
+           Right column: info card (cream inset — signature material contrast).
+           Bottom foot: label pair, separated by a top border.
+           Side label on the right edge echoes Slide 01. -->
+      <section
+        class="slide dark slide--end"
+        data-slide="9"
+        style="position: relative"
+      >
+        <div class="end-main">
+          <span class="kicker">Ready to Build</span>
+          <h2 class="h1" style="color: var(--c-fg)">
+            Start with the right surface.
+          </h2>
+          <p class="lead muted" style="max-width: 85%">
+            Order the [Product Name] at [studio-website.com] or find it at
+            select independent supply stores worldwide.
+          </p>
+        </div>
+        <div class="end-side">
+          <div class="info-card">
+            <div class="info-card-heading">Get in touch.</div>
+            <div class="info-card-body">
+              hello@[studio-website.com]<br />
+              @[studio] on all platforms<br />
+              Available in 40+ countries
+            </div>
+          </div>
+        </div>
+        <div class="end-foot">
+          <span class="label muted">[Studio Name] · 2026</span>
+          <span class="label muted">[studio-website.com]</span>
+        </div>
+      </section>
+    </div>
+    <!-- /#deck -->
+
+    <nav id="nav-dots" aria-label="Slide navigation"></nav>
+    <div id="slide-counter"></div>
+
+    <script>
+      /* ── Navigation engine — copied verbatim from skeleton.html ──────── */
+      (function () {
+        const deck = document.getElementById("deck");
+        const dotsNav = document.getElementById("nav-dots");
+        const counter = document.getElementById("slide-counter");
+        const slides = Array.from(deck.querySelectorAll(".slide"));
+        const total = slides.length;
+        let current = 0;
+
+        /* Size the deck to fit all slides side by side */
+        deck.style.width = "calc(" + total + " * 100vw)";
+
+        /* Build navigation dots — one per slide */
+        slides.forEach(function (_, i) {
+          const dot = document.createElement("button");
+          dot.className = "nav-dot";
+          dot.setAttribute("aria-label", "Slide " + (i + 1));
+          dot.addEventListener("click", function () {
+            goTo(i);
+          });
+          dotsNav.appendChild(dot);
+        });
+
+        /* Zero-pad single-digit numbers for the counter display */
+        function pad(n) {
+          return String(n).padStart(2, "0");
+        }
+
+        /* Move to a specific slide by index */
+        function goTo(index) {
+          if (index < 0 || index >= total) return;
+          if (
+            index === current &&
+            slides[current].classList.contains("is-active")
+          )
+            return;
+
+          slides[current].classList.remove("is-active");
+          current = index;
+          const slide = slides[current];
+
+          slide.classList.add("is-active");
+          deck.style.transform = "translateX(calc(-" + current + " * 100vw))";
+
+          /* Update dots */
+          dotsNav.querySelectorAll(".nav-dot").forEach(function (d, i) {
+            d.classList.toggle("is-active", i === current);
+          });
+
+          /* Update counter — format: "01 / 09" */
+          counter.textContent = pad(current + 1) + " / " + pad(total);
+        }
+
+        /* Keyboard navigation: arrows, space, Home, End */
+        document.addEventListener("keydown", function (e) {
+          if (
+            e.key === "ArrowRight" ||
+            e.key === " " ||
+            e.key === "ArrowDown"
+          ) {
+            e.preventDefault();
+            goTo(current + 1);
+          }
+          if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            goTo(current - 1);
+          }
+          if (e.key === "Home") goTo(0);
+          if (e.key === "End") goTo(total - 1);
+        });
+
+        /* Touch swipe — passive listeners to avoid blocking scroll */
+        var touchStartX = 0;
+        document.addEventListener(
+          "touchstart",
+          function (e) {
+            touchStartX = e.touches[0].clientX;
+          },
+          { passive: true },
+        );
+        document.addEventListener(
+          "touchend",
+          function (e) {
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(dx) > 40) goTo(current + (dx < 0 ? 1 : -1));
+          },
+          { passive: true },
+        );
+
+        /* Mouse wheel — locked for 1000ms to prevent accidental multi-skip */
+        var wheelLocked = false;
+        document.addEventListener(
+          "wheel",
+          function (e) {
+            if (wheelLocked) return;
+            var primary =
+              Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            goTo(current + (primary > 0 ? 1 : -1));
+            wheelLocked = true;
+            setTimeout(function () {
+              wheelLocked = false;
+            }, 1000);
+          },
+          { passive: true },
+        );
+
+        /* Initialize — go to first slide */
+        goTo(0);
+      })();
+    </script>
+  </body>
+</html>

@@ -142,7 +142,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
-  onDeleteTemplate: (id: string) => Promise<boolean>;
+  onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput & { requestId?: string }) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
@@ -150,7 +150,7 @@ interface Props {
   // input and the renderer POSTs `/api/import/folder` itself. Browser
   // builds have no `shell.openPath` surface, so the renderer naming a
   // path here cannot escalate (PR #974 trust model).
-  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<boolean> | boolean;
   // Electron flow: the desktop main process owns the picker dialog and
   // the import call atomically (`pickAndImport` IPC). The renderer
   // never sees the path or the HMAC token; it only receives the
@@ -620,9 +620,19 @@ export function NewProjectPanel({
     if (!onImportFolder) return;
     const trimmed = baseDir.trim();
     if (!trimmed) return;
+    setImportFolderError(null);
     setImportingFolder(true);
     try {
-      await onImportFolder(trimmed);
+      const opened = await onImportFolder(trimmed);
+      if (!opened) {
+        setImportFolderError({
+          message: `Open folder failed: ${trimmed}`,
+        });
+      }
+    } catch (err) {
+      setImportFolderError({
+        message: `Open folder failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      });
     } finally {
       setImportingFolder(false);
     }
@@ -1323,7 +1333,7 @@ function TemplatePicker({
   templates: ProjectTemplate[];
   value: string | null;
   onChange: (id: string | null) => void;
-  onDelete: (id: string) => Promise<boolean>;
+  onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
   return (
@@ -1351,10 +1361,10 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
-                onDelete={async () => {
+                onDelete={onDelete ? async () => {
                   const ok = await onDelete(tpl.id);
                   if (ok && value === tpl.id) onChange(null);
-                }}
+                } : () => {}}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />

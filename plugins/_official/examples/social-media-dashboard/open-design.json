@@ -1,0 +1,87 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-social-media-dashboard",
+  "title": "Social Media Dashboard",
+  "version": "0.1.0",
+  "description": "Creator-facing social media analytics dashboard in a single HTML file.\nA platform switcher (X / LinkedIn / YouTube / Instagram), a row of KPI\ncards (followers, engagement rate, likes, reposts), a follower-growth\nchart, a \"top post this week\" preview, and a trending topics / top\ncomments side panel. Use when the brief mentions a \"social media\ndashboard\", \"creator analytics\", \"social analytics\", or names specific\nplatforms (X, Twitter, LinkedIn, YouTube, Instagram, TikTok) together\nwith metrics like followers, engagement, likes, reposts.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-media-dashboard",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "creator",
+    "web",
+    "desktop",
+    "social-media-dashboard",
+    "social-analytics",
+    "creator-dashboard",
+    "creator-analytics",
+    "social-media-analytics",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "creator",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a social media analytics dashboard using my Design System. Show X, LinkedIn, YouTube, Instagram with follower counts, engagement rate, likes, reposts, trending topics, and top comments.",
+        "zh-CN": "使用这个插件完成以下任务：Create a social media analytics dashboard using my Design System. Show X, LinkedIn, YouTube, Instagram with follower counts, engagement rate, likes, reposts, trending topics, and top comments."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Social Media Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

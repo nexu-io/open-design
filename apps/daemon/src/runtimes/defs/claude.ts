@@ -44,7 +44,14 @@ export const claudeAgentDef = {
     // cursor/qwen entries below.
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const caps = agentCapabilities.get('claude') || {};
-      const args = ['-p', '--output-format', 'stream-json', '--verbose'];
+      // `--input-format stream-json` lets the daemon stream multiple JSONL
+      // messages into stdin instead of closing it after the initial prompt.
+      // This is what lets us answer Claude's `AskUserQuestion` tool calls
+      // with a real `tool_result` block — without it claude-code auto errors
+      // the tool because it cannot prompt the user interactively in headless
+      // mode, and the model falls back to a markdown duplicate of the same
+      // options.
+      const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'];
       // `--include-partial-messages` lands richer streaming events but only
       // exists in newer Claude Code builds. Older installs reject it with
       // "unknown option" and exit 1, killing the chat. Gate on the probe.
@@ -66,5 +73,6 @@ export const claudeAgentDef = {
       return args;
     },
     promptViaStdin: true,
+    promptInputFormat: 'stream-json',
     streamFormat: 'claude-stream-json',
 } satisfies RuntimeAgentDef;
