@@ -94,7 +94,7 @@ describe('ip-allowlist', () => {
     let called = false;
     await middleware(req, res, () => { called = true; });
     expect(called).toBe(false);
-    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.statusCode).toBe(403);
     warnSpy.mockRestore();
   });
 
