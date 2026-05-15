@@ -11814,6 +11814,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: 4px;
   padding: 1px 4px;
   margin: -1px -4px;
+  max-width: min(100%, 420px);
 }
 .topbar-title .title.editable:focus,
 .app-project-title .title.editable:focus {
