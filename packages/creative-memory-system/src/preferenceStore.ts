@@ -143,6 +143,28 @@ function userFilePath(userId: string): string {
   return path.join(resolveStorageRoot(), userId, "preferences.json");
 }
 
+/** Keys that would corrupt plain-object semantics if used as property names. */
+const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Validate a project_id for use as a key on project_overrides (a plain object).
+ * Rejects prototype-polluting keys and non-safe-basename strings.
+ */
+function validateProjectId(projectId: string): void {
+  if (UNSAFE_OBJECT_KEYS.has(projectId)) {
+    throw new Error(
+      `project_id "${projectId}" is not a safe key — it would corrupt object semantics. ` +
+        "Use a normal identifier.",
+    );
+  }
+  if (!/^[A-Za-z0-9_\-]+$/.test(projectId)) {
+    throw new Error(
+      `project_id "${projectId}" is not a safe key. ` +
+        "Only alphanumeric characters, hyphens, and underscores are allowed.",
+    );
+  }
+}
+
 function loadFile(userId: string): PreferenceStoreFile | null {
   const fp = userFilePath(userId);
   if (!fs.existsSync(fp)) return null;
@@ -194,6 +216,7 @@ function getPrefArray(
 ): Preference[] {
   if (scope === "global") return data.global_preferences;
   if (scope === "project" && projectId) {
+    validateProjectId(projectId);
     if (!data.project_overrides[projectId]) data.project_overrides[projectId] = [];
     return data.project_overrides[projectId]!;
   }
@@ -334,6 +357,7 @@ export function listPreferences(
     prefs = [...data.global_preferences];
   } else if (scope.startsWith("project:")) {
     const projectId = scope.split(":")[1] ?? "";
+    validateProjectId(projectId);
     prefs = [...(data.project_overrides[projectId] ?? [])];
   } else {
     prefs = getAllPrefs(data);
@@ -360,6 +384,7 @@ export function resetMemory(userId: string, options: ResetMemoryOptions = {}): v
     data.memory_enabled = true; // restore on full reset
   } else if (scope.startsWith("project:")) {
     const projectId = scope.split(":")[1] ?? "";
+    validateProjectId(projectId);
     data.project_overrides[projectId] = [];
   }
 
@@ -377,6 +402,23 @@ export function resetMemory(userId: string, options: ResetMemoryOptions = {}): v
 export function ingestSignal(userId: string, signal: Signal): Preference | null {
   const data = ensureFile(userId);
   if (!data.memory_enabled) return null;
+
+  // Runtime validation of signal fields that could corrupt stored state.
+  if (signal.polarity !== "positive" && signal.polarity !== "negative") {
+    throw new Error(
+      `ingestSignal: signal.polarity must be "positive" or "negative". Got: ${JSON.stringify(signal.polarity)}`,
+    );
+  }
+  if (typeof signal.pattern !== "string" || signal.pattern.length === 0) {
+    throw new Error(
+      `ingestSignal: signal.pattern must be a non-empty string. Got: ${JSON.stringify(signal.pattern)}`,
+    );
+  }
+  if (typeof signal.preference_type !== "string" || signal.preference_type.length === 0) {
+    throw new Error(
+      `ingestSignal: signal.preference_type must be a non-empty string. Got: ${JSON.stringify(signal.preference_type)}`,
+    );
+  }
 
   const weight = SIGNAL_WEIGHTS[signal.signal_type];
   if (weight === undefined) {
@@ -674,6 +716,8 @@ export function retrieveForInjection(
   let projectPrefs: Preference[] = [];
 
   if (project_id && data.project_overrides[project_id]) {
+    // Validate project_id as a safe key.
+    validateProjectId(project_id);
     projectPrefs = data.project_overrides[project_id]!;
 
     // Key override identity on preference_type + pattern (not pattern alone).

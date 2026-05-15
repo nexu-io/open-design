@@ -203,7 +203,16 @@ export function onArtifactEditedAndSaved(event: ArtifactEditedAndSavedEvent): vo
  */
 export function onExplicitTagApplied(event: ExplicitTagAppliedEvent): void {
   const tagLower = event.tag_text.toLowerCase().trim();
-  const polarity: Polarity = TAG_POLARITY[tagLower] ?? "positive";
+  const polarity: Polarity | undefined = TAG_POLARITY[tagLower];
+  if (polarity === undefined) {
+    throw new Error(
+      `onExplicitTagApplied: unrecognized tag "${event.tag_text}" (normalized: "${tagLower}"). ` +
+        "All explicit tags must be registered in TAG_POLARITY with their intended polarity. " +
+        "An unknown tag cannot safely default to positive because explicit_tag is the " +
+        "strongest signal weight — defaulting would silently invert user intent for " +
+        "negative phrases not yet in the map.",
+    );
+  }
   dispatchSignals(event, "explicit_tag", polarity, event.tag_text);
 }
 
@@ -212,6 +221,13 @@ export function onExplicitTagApplied(event: ExplicitTagAppliedEvent): void {
  * Weaker than explicit tags — captures sentiment without specificity.
  */
 export function onThumbsRated(event: ThumbsRatedEvent): void {
+  if (event.rating !== "up" && event.rating !== "down") {
+    throw new Error(
+      `onThumbsRated: event.rating must be exactly "up" or "down". ` +
+        `Got: ${JSON.stringify(event.rating)}. ` +
+        "A malformed payload would otherwise silently create incorrect memory.",
+    );
+  }
   const signal_type: SignalType = event.rating === "up" ? "thumbs_up" : "thumbs_down";
   const polarity: Polarity = event.rating === "up" ? "positive" : "negative";
   dispatchSignals(event, signal_type, polarity, null);

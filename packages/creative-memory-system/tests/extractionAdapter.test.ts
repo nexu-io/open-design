@@ -88,6 +88,18 @@ describe("extractionAdapter", () => {
     expect(negs.some((p) => p.explicit_tags.includes("Too noisy"))).toBe(true);
   });
 
+  it("onExplicitTagApplied throws on unrecognized tag (regression)", () => {
+    expect(() =>
+      adapter.onExplicitTagApplied({ ...baseEvent(), tag_text: "too busy" }),
+    ).toThrow(/unrecognized tag/);
+    expect(() =>
+      adapter.onExplicitTagApplied({ ...baseEvent(), tag_text: "don't use this" }),
+    ).toThrow(/unrecognized tag/);
+    // Verify no record was created
+    const all = store.listPreferences(USER, { status: "all" });
+    expect(all.length).toBe(0);
+  });
+
   it("onThumbsRated up emits thumbs_up positive", () => {
     adapter.onThumbsRated({ ...baseEvent(), rating: "up" });
     const prefs = store.listPreferences(USER, { polarity: "positive" });
@@ -102,6 +114,35 @@ describe("extractionAdapter", () => {
     });
     const negs = store.listPreferences(USER, { polarity: "negative" });
     expect(negs.some((p) => p.pattern === "heavy_animation")).toBe(true);
+  });
+
+  it("onThumbsRated throws on invalid rating value (regression)", () => {
+    expect(() =>
+      adapter.onThumbsRated({ ...baseEvent(), rating: "UP" } as unknown as adapter.ThumbsRatedEvent),
+    ).toThrow(/must be exactly "up" or "down"/);
+    expect(() =>
+      adapter.onThumbsRated({ ...baseEvent(), rating: null } as unknown as adapter.ThumbsRatedEvent),
+    ).toThrow(/must be exactly "up" or "down"/);
+    expect(() =>
+      adapter.onThumbsRated({ ...baseEvent(), rating: "" } as unknown as adapter.ThumbsRatedEvent),
+    ).toThrow(/must be exactly "up" or "down"/);
+  });
+
+  it("project-scoped event rejects unsafe project_id (regression)", () => {
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        project_id: "__proto__",
+        artifact_meta: { signals: [{ preference_type: "layout", pattern: "test" }] },
+      }),
+    ).toThrow(/not a safe key/);
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        project_id: "constructor",
+        artifact_meta: { signals: [{ preference_type: "layout", pattern: "test" }] },
+      }),
+    ).toThrow(/not a safe key/);
   });
 
   it("onGenerationAbandoned creates weak negative", () => {
