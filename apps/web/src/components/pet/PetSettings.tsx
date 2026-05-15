@@ -460,19 +460,16 @@ export function PetSettings({ cfg, setCfg }: Props) {
         </div>
         <button
           type="button"
-          className={`seg-btn small${isActive ? ' active' : ''}`}
+          className={`seg-btn small pet-codex-adopt-btn${isActive ? ' active' : ''}`}
           onClick={() => void adoptCodexPet(p)}
           disabled={adopting || codexAdopting !== null}
           aria-pressed={isActive}
+          aria-label={isActive ? t('pet.adoptedBadge') : t('pet.codexAdopt')}
         >
           <Icon name={adopting ? 'spinner' : 'check'} size={12} />
-          <span>
-            {adopting
-              ? t('pet.codexAdopting')
-              : isActive
-                ? t('pet.adoptedBadge')
-                : t('pet.codexAdopt')}
-          </span>
+          {!isActive ? (
+            <span>{adopting ? t('pet.codexAdopting') : t('pet.codexAdopt')}</span>
+          ) : null}
         </button>
       </div>
     );
@@ -480,58 +477,53 @@ export function PetSettings({ cfg, setCfg }: Props) {
 
   return (
     <section className="settings-section">
-      <div className="section-head">
-        <div>
-          <h3>{t('pet.title')}</h3>
-          <p className="hint">{t('pet.subtitle')}</p>
-        </div>
-        <div className="pet-wake-controls">
-          <button
-            type="button"
-            className={`seg-btn small${pet.enabled ? ' active' : ''}`}
-            onClick={() => update({ enabled: !pet.enabled, adopted: pet.adopted || pet.petId !== '' })}
-            disabled={!pet.adopted}
-            title={pet.enabled ? t('pet.tuckTitle') : t('pet.wakeTitle')}
-          >
-            <Icon name={pet.enabled ? 'eye' : 'sparkles'} size={14} />
-            <span>{pet.enabled ? t('pet.tuck') : t('pet.wake')}</span>
-          </button>
-        </div>
-      </div>
-
       <div className="pet-tabs">
-        <div
-          className="subtab-pill"
-          role="tablist"
-          aria-label={t('pet.tabsAria')}
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'builtIn'}
-            className={activeTab === 'builtIn' ? 'active' : ''}
-            onClick={() => setActiveTab('builtIn')}
+        <div className="pet-tabs-top-row">
+          <div
+            className="subtab-pill"
+            role="tablist"
+            aria-label={t('pet.tabsAria')}
           >
-            {t('pet.tabBuiltIn')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'custom'}
-            className={activeTab === 'custom' ? 'active' : ''}
-            onClick={() => setActiveTab('custom')}
-          >
-            {t('pet.tabCustom')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'community'}
-            className={activeTab === 'community' ? 'active' : ''}
-            onClick={() => setActiveTab('community')}
-          >
-            {t('pet.tabCommunity')}
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'builtIn'}
+              className={activeTab === 'builtIn' ? 'active' : ''}
+              onClick={() => setActiveTab('builtIn')}
+            >
+              {t('pet.tabBuiltIn')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'custom'}
+              className={activeTab === 'custom' ? 'active' : ''}
+              onClick={() => setActiveTab('custom')}
+            >
+              {t('pet.tabCustom')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'community'}
+              className={activeTab === 'community' ? 'active' : ''}
+              onClick={() => setActiveTab('community')}
+            >
+              {t('pet.tabCommunity')}
+            </button>
+          </div>
+          <div className="pet-wake-controls">
+            <button
+              type="button"
+              className={`seg-btn small${pet.enabled ? ' active' : ''}`}
+              onClick={() => update({ enabled: !pet.enabled, adopted: pet.adopted || pet.petId !== '' })}
+              disabled={!pet.adopted}
+              title={pet.enabled ? t('pet.tuckTitle') : t('pet.wakeTitle')}
+            >
+              <Icon name={pet.enabled ? 'eye' : 'sparkles'} size={14} />
+              <span>{pet.enabled ? t('pet.tuck') : t('pet.wake')}</span>
+            </button>
+          </div>
         </div>
         <p className="hint pet-tabs-hint">
           {activeTab === 'builtIn'

@@ -49,7 +49,7 @@ export const de: Dict = {
   'settings.welcomeSubtitle':
     'Wählen Sie aus, wie Generierungen ausgeführt werden sollen. Sie können dies jederzeit über die Schaltfläche „Einstellungen“ in der oberen Leiste ändern.',
   'settings.kicker': 'Einstellungen',
-  'settings.title': 'Ausführung & Modell',
+  'settings.title': 'Ausführungsmodus',
   'settings.subtitle': 'Wählen Sie zwischen lokaler CLI und BYOK. Ihr API-Schlüssel wird nur in diesem Browser gespeichert.',
   'settings.modeAria': 'Ausführungsmodus',
   'settings.protocolAria': 'API-Protokoll',
@@ -121,7 +121,7 @@ export const de: Dict = {
   'settings.apiHint': 'Anfragen werden über den lokalen Daemon-Proxy an die festgelegte Base URL gesendet. Der Schlüssel wird nur in diesem Browser gespeichert und mit Provider-Anfragen gesendet.',
   'settings.skipForNow': 'Vorerst überspringen',
   'settings.getStarted': 'Loslegen',
-  'settings.envConfigure': 'Ausführungsmodus konfigurieren',
+  'settings.envConfigure': 'Ausführungsmodus',
   'settings.localCli': 'Lokale CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'kein Agent ausgewählt',
@@ -132,6 +132,7 @@ export const de: Dict = {
   'settings.themeSystem': 'System',
   'settings.themeLight': 'Hell',
   'settings.themeDark': 'Dunkel',
+  'settings.agentModelHead': 'Modell für:',
   'settings.modelPicker': 'Modell',
   'settings.reasoningPicker': 'Reasoning-Aufwand',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const de: Dict = {
   'settings.runtimePackaged': 'Paketierte App',
   'settings.runtimeDevelopment': 'Entwicklung',
   'settings.versionUnavailable': 'Versionsdetails sind nicht verfügbar, solange der Daemon offline ist.',
+  'settings.installLatest': 'Neueste Version installieren',
+  'settings.alreadyLatest': 'Sie verwenden die neueste Version',
 
   'entry.tabDesigns': 'Designs',
   'entry.tabTemplates': 'Vorlagen',
@@ -968,6 +971,15 @@ export const de: Dict = {
   'critiqueTheater.replaySpeedInstant': 'Sofort',
   'critiqueTheater.replaySpeedLive': 'Live',
   'critiqueTheater.replaySpeedFast': 'Schnell',
+  'critiqueTheater.settingsNav': 'Design Jury',
+  'critiqueTheater.settingsNavHint': 'Fünf-Panel-Review für deine Agent-Runs',
+  'critiqueTheater.settingsEnabledLabel': 'Design Jury während Agent-Runs anzeigen',
+  'critiqueTheater.settingsEnabledDescription':
+    'Aktiviert, läuft während jeder Agent-Generierung eine Fünf-Panel-Review mit, die das Ergebnis vor der Auslieferung bewertet. Du kannst jederzeit unterbrechen.',
+  'critiqueTheater.settingsEnabledProjectHint':
+    'Für dieses Projekt gespeichert. Neue Runs in diesem Projekt laufen serverseitig durch die Design Jury.',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    'Öffne ein Projekt, damit dies serverseitig persistiert. Bis dahin ändert sich nur die Browser-Voreinstellung.',
 
   'pet.title': 'Haustiere',
   'pet.tabBuiltIn': 'Vorgegeben',
@@ -1000,6 +1012,7 @@ export const de: Dict = {
   'pet.fieldGreeting': 'Begrüßung',
   'pet.fieldAccent': 'Akzentfarbe',
   'pet.fieldAccentCustom': 'Eigene Farbe',
+  'pet.fieldAccentDefault': 'Standard-Akzentfarbe',
   'pet.overlayAria': 'Haustier-Begleiter',
   'pet.spriteAria': '{name} — zum Bewegen ziehen, zum Plaudern klicken',
   'pet.spriteTitle': 'Hallo von {name}! Klick zum Plaudern.',
@@ -1195,6 +1208,7 @@ export const de: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Pfad kopiert',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

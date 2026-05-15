@@ -161,6 +161,7 @@ export interface Dict {
   'settings.themeSystem': string;
   'settings.themeLight': string;
   'settings.themeDark': string;
+  'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
@@ -221,6 +222,8 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+  'settings.installLatest': string;
+  'settings.alreadyLatest': string;
   'settings.skills': string;
   'settings.skillsHint': string;
   'settings.skillsNew': string;
@@ -391,6 +394,7 @@ export interface Dict {
   'settings.memoryFlashSaved': string;
   'settings.memoryFlashDeleted': string;
   'settings.memoryFlashIndexSaved': string;
+  'settings.memoryFlashPathCopied': string;
   'settings.memoryNameLabel': string;
   'settings.memoryTypeLabel': string;
   'settings.memoryDescLabel': string;
@@ -1482,6 +1486,7 @@ export interface Dict {
   'pet.fieldGreeting': string;
   'pet.fieldAccent': string;
   'pet.fieldAccentCustom': string;
+  'pet.fieldAccentDefault': string;
   'pet.overlayAria': string;
   'pet.spriteAria': string;
   'pet.spriteTitle': string;
@@ -1626,4 +1631,10 @@ export interface Dict {
   'critiqueTheater.replaySpeedInstant': string;
   'critiqueTheater.replaySpeedLive': string;
   'critiqueTheater.replaySpeedFast': string;
+  'critiqueTheater.settingsNav': string;
+  'critiqueTheater.settingsNavHint': string;
+  'critiqueTheater.settingsEnabledLabel': string;
+  'critiqueTheater.settingsEnabledDescription': string;
+  'critiqueTheater.settingsEnabledProjectHint': string;
+  'critiqueTheater.settingsEnabledNoProjectHint': string;
 }

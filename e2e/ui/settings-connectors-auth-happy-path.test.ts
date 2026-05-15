@@ -175,7 +175,7 @@ async function openConnectorsSettings(
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
+  await page.getByTitle('Execution mode').click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();

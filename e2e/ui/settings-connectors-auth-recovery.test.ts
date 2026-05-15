@@ -198,7 +198,7 @@ async function openConnectorsSettings(
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
+  await page.getByTitle('Execution mode').click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
@@ -301,7 +301,7 @@ test('clears pending authorization when OAuth launch is blocked after redirect_r
     await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
 
     await page.reload();
-    await page.getByRole('button', { name: /Configure execution mode|配置执行模式/i }).click();
+    await page.getByTitle('Execution mode').click();
 
     const reloadedDialog = page.getByRole('dialog');
     await expect(reloadedDialog).toBeVisible();

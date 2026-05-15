@@ -1,0 +1,166 @@
+---
+/*
+ * SeoHead — single source of truth for per-page metadata.
+ *
+ * Usage in any Astro page's <head>:
+ *
+ *   <SeoHead kind="website" title="..." description="..." pathname={Astro.url.pathname} />
+ *   <SeoHead kind="article" title={post.data.title} description={post.data.summary}
+ *            pathname={Astro.url.pathname} datePublished={post.data.date}
+ *            category={post.data.category} />
+ *
+ * The component does NOT render <meta charset> or <meta viewport> — those
+ * stay in the page so they appear before any module imports. SeoHead handles
+ * everything else: <title>, description, canonical, OpenGraph, Twitter,
+ * theme-color, and (for articles) Article JSON-LD.
+ */
+
+import { ogDefaultImage } from '../image-assets';
+
+export interface SeoHeadProps {
+  /** 'website' for landing/list pages, 'article' for blog posts. */
+  kind: 'website' | 'article';
+  /** For article: raw post title (component appends " — Open Design"). For website: the full title string. */
+  title: string;
+  /** Meta description, 150–160 chars recommended. */
+  description: string;
+  /** Pass `Astro.url.pathname`. */
+  pathname: string;
+  /** Optional override for the OG/Twitter card image (absolute URL). */
+  image?: string;
+  /** Required for kind: 'article'. */
+  datePublished?: Date;
+  dateModified?: Date;
+  /** Required for kind: 'article'. e.g. "Guides". */
+  category?: string;
+  /** Defaults to "Open Design". */
+  author?: string;
+  /**
+   * Optional Google Search Console verification token. When set, renders
+   * `<meta name="google-site-verification" content="...">`. Only needed on
+   * one page (typically `/`) for URL-prefix property verification; the
+   * Domain property type uses DNS TXT instead and doesn't need this.
+   */
+  googleSiteVerification?: string;
+}
+
+const props = Astro.props as SeoHeadProps;
+
+const SITE_NAME = 'Open Design';
+const TAGLINE = 'Design with the agent already on your laptop.';
+const isArticle = props.kind === 'article';
+
+const canonical = new URL(props.pathname, Astro.site).toString();
+const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
+
+const fullTitle = isArticle ? `${props.title} — ${SITE_NAME}` : props.title;
+const ogTitle = props.title;
+
+const author = props.author ?? SITE_NAME;
+const isoPublished =
+  isArticle && props.datePublished ? props.datePublished.toISOString() : null;
+const isoModified =
+  isArticle
+    ? (props.dateModified ?? props.datePublished)?.toISOString() ?? null
+    : null;
+
+const articleJsonLd =
+  isArticle && isoPublished
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: props.title,
+        description: props.description,
+        image: [image],
+        datePublished: isoPublished,
+        dateModified: isoModified,
+        articleSection: props.category,
+        author: {
+          '@type': 'Organization',
+          name: author,
+          url: Astro.site?.toString() ?? 'https://open-design.ai/',
+        },
+        publisher: {
+          '@type': 'Organization',
+          name: SITE_NAME,
+          url: Astro.site?.toString() ?? 'https://open-design.ai/',
+          logo: {
+            '@type': 'ImageObject',
+            url: image,
+          },
+        },
+        mainEntityOfPage: {
+          '@type': 'WebPage',
+          '@id': canonical,
+        },
+      }
+    : null;
+
+const websiteJsonLd =
+  props.kind === 'website' && props.pathname === '/'
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: SITE_NAME,
+        alternateName: TAGLINE,
+        url: Astro.site?.toString() ?? 'https://open-design.ai/',
+      }
+    : null;
+
+const blogJsonLd =
+  props.kind === 'website' && props.pathname === '/blog/'
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'Blog',
+        name: 'Open Design — Blog',
+        description: props.description,
+        url: canonical,
+        publisher: {
+          '@type': 'Organization',
+          name: SITE_NAME,
+          url: Astro.site?.toString() ?? 'https://open-design.ai/',
+        },
+      }
+    : null;
+---
+
+<title>{fullTitle}</title>
+<meta name='description' content={props.description} />
+<meta name='theme-color' content='#efe7d2' />
+<link rel='canonical' href={canonical} />
+
+{props.googleSiteVerification && (
+  <meta name='google-site-verification' content={props.googleSiteVerification} />
+)}
+
+<meta property='og:type' content={props.kind === 'article' ? 'article' : 'website'} />
+<meta property='og:site_name' content={SITE_NAME} />
+<meta property='og:title' content={ogTitle} />
+<meta property='og:description' content={props.description} />
+<meta property='og:url' content={canonical} />
+<meta property='og:image' content={image} />
+<meta property='og:locale' content='en_US' />
+
+{props.kind === 'article' && (
+  <>
+    <meta property='article:published_time' content={isoPublished!} />
+    <meta property='article:modified_time' content={isoModified!} />
+    <meta property='article:section' content={props.category} />
+    <meta property='article:author' content={author} />
+  </>
+)}
+
+<meta name='twitter:card' content='summary_large_image' />
+<meta name='twitter:title' content={ogTitle} />
+<meta name='twitter:description' content={props.description} />
+<meta name='twitter:image' content={image} />
+
+{articleJsonLd && (
+  <script type='application/ld+json' set:html={JSON.stringify(articleJsonLd)} />
+)}
+{websiteJsonLd && (
+  <script type='application/ld+json' set:html={JSON.stringify(websiteJsonLd)} />
+)}
+{blogJsonLd && (
+  <script type='application/ld+json' set:html={JSON.stringify(blogJsonLd)} />
+)}

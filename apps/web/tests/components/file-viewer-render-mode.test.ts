@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseForceInline, shouldUrlLoadHtmlPreview } from '../../src/components/file-viewer-render-mode';
+import {
+  htmlNeedsSandboxShim,
+  parseForceInline,
+  shouldUrlLoadHtmlPreview,
+} from '../../src/components/file-viewer-render-mode';
 
 describe('shouldUrlLoadHtmlPreview', () => {
   const base = { mode: 'preview' as const, isDeck: false, commentMode: false, forceInline: false };
@@ -77,5 +81,71 @@ describe('parseForceInline', () => {
     const params = new URLSearchParams();
     params.set('forceInline', '  1  ');
     expect(parseForceInline(params)).toBe(true);
+  });
+});
+
+describe('htmlNeedsSandboxShim', () => {
+  it('returns false for plain static HTML', () => {
+    expect(htmlNeedsSandboxShim('<!doctype html><h1>hello</h1>')).toBe(false);
+  });
+
+  it('detects <script type="text/babel"> (Babel-standalone React prototypes)', () => {
+    // Real agent-emitted shape with src= and double-quoted attributes.
+    expect(
+      htmlNeedsSandboxShim(
+        '<script type="text/babel" src="components/Icon.jsx"></script>',
+      ),
+    ).toBe(true);
+    // Single quotes.
+    expect(htmlNeedsSandboxShim("<script type='text/babel'>const a = 1;</script>")).toBe(true);
+    // Extra attributes before type=.
+    expect(
+      htmlNeedsSandboxShim('<script defer type="text/babel" src="app.jsx"></script>'),
+    ).toBe(true);
+    // Whitespace around the equals sign.
+    expect(htmlNeedsSandboxShim('<script type = "text/babel"></script>')).toBe(true);
+    // Case-insensitive type value.
+    expect(htmlNeedsSandboxShim('<script type="TEXT/BABEL"></script>')).toBe(true);
+  });
+
+  it('detects unquoted <script type=text/babel> (HTML5 permits unquoted attrs)', () => {
+    // Bare unquoted type value, no other attributes.
+    expect(htmlNeedsSandboxShim('<script type=text/babel></script>')).toBe(true);
+    // Unquoted with an unquoted src= following — terminates on whitespace.
+    expect(
+      htmlNeedsSandboxShim('<script type=text/babel src=app.jsx></script>'),
+    ).toBe(true);
+    // Mixed: unquoted type=, then a quoted src=.
+    expect(
+      htmlNeedsSandboxShim('<script type=text/babel src="components/Icon.jsx"></script>'),
+    ).toBe(true);
+    // Trailing `\b` rejects word continuations: `type=text/babelish` does
+    // not match because `l`→`i` is a word-internal transition. Hyphenated
+    // variants like `type=text/babel-other` still match per the helper
+    // docstring (`l`→`-` is a word boundary) — that's the documented safe
+    // false-positive direction, so it is intentionally not asserted here.
+    expect(htmlNeedsSandboxShim('<script type=text/babelish></script>')).toBe(false);
+  });
+
+  it('does not match plain <script> tags or unrelated MIME types', () => {
+    expect(htmlNeedsSandboxShim('<script src="app.js"></script>')).toBe(false);
+    expect(htmlNeedsSandboxShim('<script type="module" src="app.js"></script>')).toBe(false);
+    expect(htmlNeedsSandboxShim('<script type="application/json">{}</script>')).toBe(false);
+    // Substring-only matches must not trigger (e.g. text/babel-like custom type).
+    expect(htmlNeedsSandboxShim('<script type="text/babelish"></script>')).toBe(false);
+  });
+
+  it('detects direct localStorage / sessionStorage references in the source', () => {
+    expect(htmlNeedsSandboxShim('<script>localStorage.getItem("k")</script>')).toBe(true);
+    expect(htmlNeedsSandboxShim('<script>sessionStorage.setItem("k","v")</script>')).toBe(true);
+    // Inside an external script tag's surrounding markup still trips the
+    // scan when the literal name appears in the document the iframe loads.
+    expect(htmlNeedsSandboxShim('// uses localStorage to persist theme')).toBe(true);
+  });
+
+  it('does not match incidental substrings that are not the storage globals', () => {
+    expect(htmlNeedsSandboxShim('Storage')).toBe(false);
+    expect(htmlNeedsSandboxShim('mylocalStorageWrapper')).toBe(false);
+    expect(htmlNeedsSandboxShim('SuperLocalStorage')).toBe(false);
   });
 });
