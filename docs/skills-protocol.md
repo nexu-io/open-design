@@ -355,3 +355,9 @@ A skill ships with optional test inputs that OD uses for CI:
 - **Skill signing.** Can we verify a skill hasn't been tampered with between publish and install? Simplest answer: `od skill add` records the git commit SHA; reinstall-on-update warns on signature change. Deferred to v1.
 - **Skill composition.** Can a `prototype-skill` call a `deck-skill` for a sub-artifact? Not in v1; skills are leaf-level. Composition would require a meta-skill concept, which is speculative.
 - **Parameter stability.** When sliders change, should the agent re-plan or just re-render? Lean: re-render (fast path), with an "also re-plan" button for larger changes.
+
+### Status (Phase 0, 2026-05-15)
+
+- **Deferred to v1:** Skill signing — needs ecosystem tooling around checksums and publish/install verification.
+- **Deferred to v1+:** Skill composition — requires a meta-skill concept; speculative.
+- **Resolved — 2026-05-15:** Parameter stability — re-render on slider change (fast path); "also re-plan" button for larger changes. Aligns with iterative refinement posture.

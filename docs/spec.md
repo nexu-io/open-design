@@ -139,4 +139,9 @@ In short: Claude Design is a product; OD is a **substrate**.
 - **Comment mode on non-Claude-Code agents.** Claude Code supports surgical edits via its tool loop. Codex and Gemini CLI are less graceful. Do we degrade to "regenerate whole file" for weaker agents? Lean: yes, document clearly in the adapter table.
 - **Skill trust model.** Skills can shell out via the agent. We should at minimum warn on install, and probably sandbox the agent's cwd to the project directory. Claude Code's permission mode handles this for us if we use it; Codex is looser. Needs a per-adapter note.
 
-These go on the roadmap as Phase 0 discovery items.
+### Status (Phase 0, 2026-05-15)
+
+- **Deferred to Phase 1:** Daemon ↔ Vercel bridge — punt for MVP, helper tool planned for v1.
+- **Resolved — 2026-05-15:** Artifact versioning — plain files + `.od/history.jsonl` log. Git is the user's business.
+- **Resolved — 2026-05-15:** Comment mode degradation — regenerate whole file for agents without surgical edit. Documented in `docs/schemas/adapter.md` §2.2 capability table.
+- **Resolved — 2026-05-15:** Skill trust model — per-adapter note; rely on each agent's own permission model. The daemon never grants more authority than the agent had alone.

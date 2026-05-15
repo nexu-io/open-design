@@ -326,3 +326,10 @@ Each adapter is a separate module so community contributions can add new ones wi
   running Gemini CLI (and other plain-text agents) on Windows — resolved by routing the
   composed prompt through stdin instead of as a CLI argument (see §5.5).
 - **Docker-contained agents.** Some users run Claude Code in a container. Adapter needs a "remote" mode — probably same interface but talks over SSH. Phase 2+.
+
+### Status (Phase 0, 2026-05-15)
+
+- **Resolved — 2026-05-15:** Nested agents — v1 policy: surface only top-level events; subagent activity summarized as "sub-task" placeholder.
+- **Deferred to v1:** Billing awareness — MVP does not track cost; v1 adds optional "usage" events.
+- **Resolved — 2026-05-15:** Windows support — v1 targets macOS and Linux; Windows is best-effort. Known `spawn ENAMETOOLONG` issue fixed via stdin routing (see §5.5).
+- **Deferred to Phase 2+:** Docker-contained agents — "remote" mode via SSH on the same interface.

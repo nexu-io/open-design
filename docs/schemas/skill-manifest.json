@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-design.dev/schemas/skill-manifest.json",
+  "title": "Open Design Skill Manifest",
+  "description": "JSON Schema for the `od:` front-matter block in SKILL.md files. Validates only the Open Design extension block; base fields (name, description, triggers) follow the Claude Code SKILL.md spec.",
+
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["prototype", "deck", "template", "design-system", "image", "video", "audio"],
+      "description": "Artifact type the skill produces. Falls back to keyword inference from description + body when absent. Source: normalizeMode() in apps/daemon/src/skills.ts"
+    },
+    "surface": {
+      "type": "string",
+      "enum": ["web", "image", "video", "audio"],
+      "description": "Display surface for UI filter pills. Inferred from mode if absent. Source: normalizeSurface()"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["desktop", "mobile"],
+      "description": "Target device class. Inferred from description keywords (mobile/phone/ios/android) if absent; defaults to 'desktop' for prototype mode, null for non-prototype. Source: normalizePlatform()"
+    },
+    "scenario": {
+      "type": "string",
+      "description": "Business-domain filter pill. Known vocabulary: general, engineering, product, design, marketing, sales, finance, hr, operations, support, legal, education, personal. Unknown values pass through verbatim. Inferred from description keywords if absent. Source: normalizeScenario()"
+    },
+    "category": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "description": "Free-form category slug for UI filter pills. Lowercase alphanumeric + dashes, max 64 chars. Not part of system-prompt composition. Source: normalizeCategory()"
+    },
+    "type": {
+      "type": "string",
+      "description": "Template variant classifier for mode: template skills (e.g. 'hyperframes'). Not formally typed in SkillInfo; consumed by frontend/pipeline code."
+    },
+    "upstream": {
+      "type": "string",
+      "format": "uri",
+      "description": "Source repository URL. Source: upstream field in SkillInfo"
+    },
+    "featured": {
+      "description": "Gallery priority. Lower numbers float to top; true maps to 1; absent/null means no priority (alphabetical order). Source: normalizeFeatured()",
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "number" }
+      ]
+    },
+    "example_prompt": {
+      "type": "string",
+      "description": "Explicit sample prompt for 'Use this prompt' fast-create. Falls back to description's first sentence (max 320 chars). Source: derivePrompt()"
+    },
+    "fidelity": {
+      "type": "string",
+      "enum": ["wireframe", "high-fidelity"],
+      "description": "Visual fidelity hint for prototype skills. Other values collapse to null (form default: high-fidelity). Source: normalizeFidelity()"
+    },
+    "speaker_notes": {
+      "type": "boolean",
+      "description": "Metadata hint for deck skills. Interpreted via normalizeBoolHint() — accepts 'true'/'false'/'yes'/'no'/'1'/'0' strings."
+    },
+    "animations": {
+      "type": "boolean",
+      "description": "Metadata hint. Interpreted via normalizeBoolHint() — accepts string booleans."
+    },
+    "default_for": {
+      "description": "One or more scenario tags for which this skill is the default. Single string or array of strings. Source: normalizeDefaultFor()",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "design_system": {
+      "$ref": "#/$defs/DesignSystemSpec"
+    },
+    "craft": {
+      "$ref": "#/$defs/CraftSpec"
+    },
+    "preview": {
+      "$ref": "#/$defs/PreviewSpec"
+    },
+    "inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/InputDef" },
+      "description": "Typed form fields the user fills before generation."
+    },
+    "parameters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ParameterDef" },
+      "description": "Live-tweakable sliders available during and after generation."
+    },
+    "outputs": {
+      "$ref": "#/$defs/OutputSpec"
+    },
+    "capabilities_required": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Agent capabilities gating — e.g. 'surgical_edit', 'file_write'. Skill won't activate unless the selected agent supports every listed capability."
+    },
+    "critique": {
+      "$ref": "#/$defs/CritiqueSpec"
+    },
+    "aggregates_examples": {
+      "type": "boolean",
+      "description": "Internal flag set by the daemon when a skill ships derived example subdirectories. Not authorable — the daemon computes it from disk."
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "DesignSystemSpec": {
+      "type": "object",
+      "properties": {
+        "requires": {
+          "type": "boolean",
+          "description": "Whether to inject the active DESIGN.md into the system prompt. Default: true. Source: designSystemRequired in SkillInfo"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "visual-theme", "color-palette", "typography",
+              "component-stylings", "layout", "depth-elevation",
+              "dos-and-donts", "responsive", "agent-prompt-guide",
+              "color", "typography", "layout", "components"
+            ]
+          },
+          "description": "Prune DESIGN.md to these named sections before injection. Short names (color, typography, layout, components) are accepted aliases. Source: design_system.sections in SKILL.md frontmatter"
+        },
+        "generates": {
+          "type": "boolean",
+          "description": "This skill PRODUCES a DESIGN.md rather than consuming one. Source: design_system.generates"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "CraftSpec": {
+      "type": "object",
+      "properties": {
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "description": "Craft rule slugs to inject into the system prompt. Resolved to <projectRoot>/craft/<slug>.md. Missing slugs are silently skipped. Source: normalizeCraftRequires()"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "PreviewSpec": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["html", "jsx", "pptx", "markdown", "image"],
+          "description": "Preview renderer hint. Default: 'html' when absent. Source: previewType in SkillInfo"
+        },
+        "entry": {
+          "type": "string",
+          "description": "Relative path to the primary preview file. Default: first match of the sniffed type in the artifact directory."
+        },
+        "reload": {
+          "type": "string",
+          "description": "How the preview refreshes on file change (e.g. 'debounce-100'). Optional."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "InputDef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Field identifier"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "boolean", "enum"],
+          "description": "Field type"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the field must be filled before generation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable label or help text"
+        },
+        "default": {
+          "description": "Default value. Type must match the field type."
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum value (integer fields) or minimum length (string fields)"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum value (integer fields) or maximum length (string fields)"
+        },
+        "values": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed values for type: enum"
+        }
+      },
+      "required": ["name", "type"],
+      "additionalProperties": false
+    },
+
+    "ParameterDef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Parameter identifier"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["hue", "spacing", "font-scale", "opacity"],
+          "description": "Slider type — determines UI rendering and value semantics"
+        },
+        "default": {
+          "type": "number",
+          "description": "Initial slider value"
+        },
+        "range": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[min, max] range for the slider"
+        }
+      },
+      "required": ["name", "type", "default", "range"],
+      "additionalProperties": false
+    },
+
+    "OutputSpec": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "description": "Main output file path (e.g. 'index.html')"
+        },
+        "secondary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional output files (e.g. ['slides.json', 'template.html'])"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "CritiqueSpec": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["required", "opt-in", "opt-out"],
+          "description": "Critique Theater policy for this skill. 'required' forces panel on; 'opt-out' forces it off; 'opt-in' defers to rollout phase. Source: normalizeCritiquePolicy()"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

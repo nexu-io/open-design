@@ -12,13 +12,13 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 
 **Deliverables:**
 - [x] `README.md` + `docs/spec.md` + architecture / protocol / adapter / modes / references docs (this repo, as of now)
-- [ ] `docs/schemas/skill-manifest.json` — JSON Schema for the `od:` front-matter block
-- [ ] `docs/schemas/design-system.md` — formal spec of the 9-section `DESIGN.md`
-- [ ] `docs/schemas/protocol.md` — HTTP/SSE API schemas
-- [ ] `docs/schemas/adapter.md` — adapter interface in TypeScript, printed out
-- [ ] `docs/examples/DESIGN.sample.md` — a working example design system
-- [ ] `docs/examples/saas-landing-skill/` — a working example skill (the one sketched in `skills-protocol.md` §8)
-- [ ] Resolve the four "open questions" at the end of each spec doc
+- [x] `docs/schemas/skill-manifest.json` — JSON Schema for the `od:` front-matter block
+- [x] `docs/schemas/design-system.md` — formal spec of the DESIGN.md format (Google-compatible, 12 sections, v0.1)
+- [x] `docs/schemas/protocol.md` — HTTP/SSE API schemas (domain-grouped, 16 domains, 3 SSE streams)
+- [x] `docs/schemas/adapter.md` — adapter interface reference (TypeScript types + lifecycle)
+- [x] `docs/examples/DESIGN.sample.md` — a working example design system (pre-existing, validated)
+- [x] `docs/examples/saas-landing-skill/` — a working example skill (pre-existing, validated)
+- [x] Resolve the four "open questions" at the end of each spec doc (14 questions: 8 resolved, 6 deferred)
 
 **Exit criteria:** every interface we'll implement has a signed-off schema in this repo. No code yet.
 

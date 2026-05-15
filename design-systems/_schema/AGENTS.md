@@ -177,3 +177,9 @@ The following questions are intentionally not answered here:
 
 These will be addressed in the PR that introduces
 `scripts/derive-tokens-css.ts`.
+
+### Status (Phase 0, 2026-05-15)
+
+- **Deferred to PR-B:** Derive script DESIGN.md parsing strategy — will emerge from the implementation.
+- **Resolved — 2026-05-15:** Contradictory DESIGN.md values — last-wins with a manual override flag. Simplest deterministic resolution; matches CSS cascade semantics.
+- **Deferred to PR-B:** A2 fallback stability on re-derivation — requires bit-for-bit comparison test in the derive PR.
