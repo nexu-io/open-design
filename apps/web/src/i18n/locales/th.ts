@@ -810,6 +810,8 @@ export const th: Dict = {
   'fileViewer.zoomOut': 'หุบมุมมอง',
   'fileViewer.zoomIn': 'ซูมมองชัด',
   'fileViewer.resetZoom': 'ซูมรีเซ็ตหน้าจอ',
+  'fileViewer.zoomLevel': 'Zoom level',
+  'fileViewer.zoomLevelHint': 'Type 25–200, or Ctrl/⌘+scroll over preview',
   'fileViewer.reloadAria': 'กดรีโหลดให้สด',
   'fileViewer.previousSlide': 'เลื่อนสไลด์ก่อนหน้า',
   'fileViewer.nextSlide': 'สไลด์แผ่นหน้า',

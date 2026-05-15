@@ -961,6 +961,8 @@ export const zhCN: Dict = {
   'fileViewer.zoomOut': '缩小',
   'fileViewer.zoomIn': '放大',
   'fileViewer.resetZoom': '重置缩放',
+  'fileViewer.zoomLevel': '缩放比例',
+  'fileViewer.zoomLevelHint': '输入 25–200，或按住 Ctrl/⌘ 在预览区滚动缩放',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

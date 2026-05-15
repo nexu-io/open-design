@@ -874,6 +874,8 @@ export const pl: Dict = {
   'fileViewer.zoomOut': 'Pomniejsz',
   'fileViewer.zoomIn': 'Powiększ',
   'fileViewer.resetZoom': 'Resetuj powiększenie',
+  'fileViewer.zoomLevel': 'Zoom level',
+  'fileViewer.zoomLevelHint': 'Type 25–200, or Ctrl/⌘+scroll over preview',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

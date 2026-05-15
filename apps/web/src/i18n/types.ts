@@ -1239,6 +1239,8 @@ export interface Dict {
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
+  'fileViewer.zoomLevel': string;
+  'fileViewer.zoomLevelHint': string;
   'fileViewer.viewportAria': string;
   'fileViewer.viewportDesktop': string;
   'fileViewer.viewportDesktopTitle': string;

@@ -949,6 +949,8 @@ export const zhTW: Dict = {
   'fileViewer.zoomOut': '縮小',
   'fileViewer.zoomIn': '放大',
   'fileViewer.resetZoom': '重設縮放',
+  'fileViewer.zoomLevel': '縮放比例',
+  'fileViewer.zoomLevelHint': '輸入 25–200，或按住 Ctrl/⌘ 在預覽區滾動縮放',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

@@ -763,6 +763,8 @@ export const esES: Dict = {
   'fileViewer.zoomOut': 'Reducir zoom',
   'fileViewer.zoomIn': 'Aumentar zoom',
   'fileViewer.resetZoom': 'Restablecer zoom',
+  'fileViewer.zoomLevel': 'Nivel de zoom',
+  'fileViewer.zoomLevelHint': 'Escribe 25–200, o Ctrl/⌘ + rueda sobre la vista previa',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

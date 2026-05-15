@@ -897,6 +897,8 @@ export const ptBR: Dict = {
   'fileViewer.zoomOut': 'Diminuir zoom',
   'fileViewer.zoomIn': 'Aumentar zoom',
   'fileViewer.resetZoom': 'Redefinir zoom',
+  'fileViewer.zoomLevel': 'Nível de zoom',
+  'fileViewer.zoomLevelHint': 'Digite 25–200, ou Ctrl/⌘ + rolagem sobre a prévia',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

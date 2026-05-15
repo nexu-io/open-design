@@ -874,6 +874,8 @@ export const ko: Dict = {
   'fileViewer.zoomOut': '축소',
   'fileViewer.zoomIn': '확대',
   'fileViewer.resetZoom': '배율 초기화',
+  'fileViewer.zoomLevel': '배율 수준',
+  'fileViewer.zoomLevelHint': '25–200 입력 또는 미리보기 위에서 Ctrl/⌘ + 스크롤',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

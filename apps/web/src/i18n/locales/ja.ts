@@ -761,6 +761,8 @@ export const ja: Dict = {
   'fileViewer.zoomOut': 'ズームアウト',
   'fileViewer.zoomIn': 'ズームイン',
   'fileViewer.resetZoom': 'ズームをリセット',
+  'fileViewer.zoomLevel': 'ズームレベル',
+  'fileViewer.zoomLevelHint': '25〜200 を入力、または Ctrl/⌘ を押しながらプレビュー上でスクロール',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

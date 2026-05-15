@@ -994,6 +994,8 @@ export const id: Dict = {
   'fileViewer.zoomOut': 'Perkecil',
   'fileViewer.zoomIn': 'Perbesar',
   'fileViewer.resetZoom': 'Atur ulang zoom',
+  'fileViewer.zoomLevel': 'Zoom level',
+  'fileViewer.zoomLevelHint': 'Type 25–200, or Ctrl/⌘+scroll over preview',
   'fileViewer.viewportAria': 'Preview viewport',
   'fileViewer.viewportDesktop': 'Desktop',
   'fileViewer.viewportDesktopTitle': 'Full-width desktop preview',

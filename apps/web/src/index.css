@@ -10280,6 +10280,24 @@ button.connector-action.is-loading {
   min-width: 60px;
   justify-content: center;
 }
+.viewer-zoom-input {
+  width: 64px;
+  text-align: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 6px;
+  cursor: text;
+}
+.viewer-zoom-input:hover { background: var(--bg-subtle); }
+.viewer-zoom-input:focus {
+  outline: none;
+  background: var(--bg);
+  border-color: var(--border);
+}
 .viewer-divider {
   width: 1px;
   height: 18px;

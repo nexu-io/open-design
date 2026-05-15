@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type Dispatch, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import {
@@ -180,6 +180,95 @@ const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
     titleKey: 'fileViewer.viewportMobileTitle',
   },
 ];
+
+// Free-form preview zoom: any integer percent in [ZOOM_MIN, ZOOM_MAX]. The
+// dropdown keeps the canonical presets, +/- step by ZOOM_STEP, Ctrl/Meta-wheel
+// multiplies by ZOOM_WHEEL_FACTOR per tick so big and small zooms feel even.
+const ZOOM_MIN = 25;
+const ZOOM_MAX = 200;
+const ZOOM_STEP = 10;
+const ZOOM_WHEEL_FACTOR = 1.1;
+const ZOOM_PRESETS = [50, 75, 100, 125, 150, 200];
+
+function clampZoom(n: number): number {
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(n)));
+}
+
+function ZoomInput({
+  value,
+  onChange,
+  t,
+  tabIndex,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  t: TranslateFn;
+  tabIndex?: number;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const revertRef = useRef(false);
+  const display = draft ?? `${value}%`;
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className="viewer-zoom-input"
+      value={display}
+      aria-label={t('fileViewer.zoomLevel')}
+      title={t('fileViewer.zoomLevelHint')}
+      tabIndex={tabIndex}
+      onFocus={(e) => {
+        setDraft(String(value));
+        const el = e.currentTarget;
+        // Select after React swaps the controlled value to the digit-only draft.
+        requestAnimationFrame(() => el.select());
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => {
+        if (revertRef.current) {
+          revertRef.current = false;
+          setDraft(null);
+          return;
+        }
+        const parsed = parseInt(e.target.value, 10);
+        setDraft(null);
+        if (Number.isFinite(parsed)) onChange(clampZoom(parsed));
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === 'Escape') {
+          revertRef.current = true;
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      onDoubleClick={() => {
+        setDraft(null);
+        onChange(100);
+      }}
+    />
+  );
+}
+
+function usePreviewWheelZoom(
+  ref: RefObject<HTMLElement | null>,
+  setZoom: Dispatch<SetStateAction<number>>,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+      setZoom((z) => clampZoom(z * factor));
+    };
+    // React 18 synthetic wheel is passive; native listener is required so
+    // preventDefault stops Ctrl-scroll browser zoom and macOS trackpad pinch.
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, [ref, setZoom]);
+}
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
 // purpose — open-slide's design tokens panel only edits global tokens, so
@@ -865,9 +954,10 @@ export function LiveArtifactViewer({
     [projectId, liveArtifact.artifactId, reloadKey],
   );
   const previewScale = zoom / 100;
+  usePreviewWheelZoom(previewBodyRef, setZoom);
 
   function bumpZoom(delta: number) {
-    setZoom((z) => Math.max(25, Math.min(200, z + delta)));
+    setZoom((z) => clampZoom(z + delta));
   }
 
   async function handleRefresh() {
@@ -1019,26 +1109,23 @@ export function LiveArtifactViewer({
             <button
               type="button"
               className="icon-only"
-              onClick={() => bumpZoom(-25)}
+              onClick={() => bumpZoom(-ZOOM_STEP)}
               title={t('fileViewer.zoomOut')}
               aria-label={t('fileViewer.zoomOut')}
               tabIndex={mode === 'preview' ? 0 : -1}
             >
               <Icon name="minus" size={14} />
             </button>
-            <button
-              type="button"
-              className="viewer-action viewer-zoom-level"
-              onClick={() => setZoom(100)}
-              title={t('fileViewer.resetZoom')}
+            <ZoomInput
+              value={zoom}
+              onChange={setZoom}
+              t={t}
               tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-            </button>
+            />
             <button
               type="button"
               className="icon-only"
-              onClick={() => bumpZoom(25)}
+              onClick={() => bumpZoom(ZOOM_STEP)}
               title={t('fileViewer.zoomIn')}
               aria-label={t('fileViewer.zoomIn')}
               tabIndex={mode === 'preview' ? 0 : -1}
@@ -3499,6 +3586,7 @@ function HtmlViewer({
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  usePreviewWheelZoom(previewBodyRef, setZoom);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -5136,7 +5224,7 @@ function HtmlViewer({
   }
 
   function bumpZoom(delta: number) {
-    setZoom((z) => Math.max(25, Math.min(200, z + delta)));
+    setZoom((z) => clampZoom(z + delta));
   }
 
   function activateBoard(nextTool?: BoardTool) {
@@ -5560,27 +5648,27 @@ function HtmlViewer({
           <button
             type="button"
             className="icon-only"
-            onClick={() => bumpZoom(-25)}
+            onClick={() => bumpZoom(-ZOOM_STEP)}
             title={t('fileViewer.zoomOut')}
             aria-label={t('fileViewer.zoomOut')}
           >
             <Icon name="minus" size={14} />
           </button>
           <div className="zoom-menu" ref={zoomMenuRef}>
+            <ZoomInput value={zoom} onChange={setZoom} t={t} />
             <button
               type="button"
-              className="viewer-action zoom-trigger"
+              className="icon-only zoom-trigger"
               aria-haspopup="menu"
               aria-expanded={zoomMenuOpen}
+              aria-label={t('fileViewer.zoomLevel')}
               onClick={() => setZoomMenuOpen((v) => !v)}
-              style={{ minWidth: 64 }}
             >
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
               <Icon name="chevron-down" size={11} />
             </button>
             {zoomMenuOpen ? (
               <div className="zoom-menu-popover" role="menu">
-                {[50, 75, 100, 125, 150, 200].map((level) => (
+                {ZOOM_PRESETS.map((level) => (
                   <button
                     key={level}
                     type="button"
@@ -5603,7 +5691,7 @@ function HtmlViewer({
           <button
             type="button"
             className="icon-only"
-            onClick={() => bumpZoom(25)}
+            onClick={() => bumpZoom(ZOOM_STEP)}
             title={t('fileViewer.zoomIn')}
             aria-label={t('fileViewer.zoomIn')}
           >
