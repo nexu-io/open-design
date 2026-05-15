@@ -1176,6 +1176,30 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Already sent to Claude')).toBeNull();
   });
 
+  it('keeps the picker hint clear of the open comment side panel', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.getByTestId('inspect-empty-hint-container').className).toContain(
+      'comment-side-panel-open',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+
+    expect(screen.getByTestId('inspect-empty-hint-container').className).not.toContain(
+      'comment-side-panel-open',
+    );
+  });
+
   it('does not preload non-open element comments into the picker composer', async () => {
     const applyingElementComment: PreviewComment = {
       id: 'comment-element-applying',

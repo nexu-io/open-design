@@ -10714,6 +10714,20 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   pointer-events: none;
 }
 
+.inspect-empty-hint-container.comment-side-panel-open {
+  right: 340px;
+  max-width: min(480px, calc(100% - 368px));
+}
+
+@media (max-width: 760px) {
+  .inspect-empty-hint-container.comment-side-panel-open {
+    left: 14px;
+    right: 14px;
+    top: 54px;
+    max-width: none;
+  }
+}
+
 .inspect-empty-hint-container button,
 .inspect-empty-hint-container .close-button {
   pointer-events: auto;

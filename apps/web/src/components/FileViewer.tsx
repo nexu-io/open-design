@@ -6214,7 +6214,12 @@ function HtmlViewer({
               && openHintBox
               && !activeInspectTarget
               && !activeCommentTarget ? (
-              <div className="inspect-empty-hint-container">
+              <div
+                className={`inspect-empty-hint-container${
+                  boardMode && !commentSidePanelCollapsed ? ' comment-side-panel-open' : ''
+                }`}
+                data-testid="inspect-empty-hint-container"
+              >
                 {liveCommentTargets.size === 0 ? (
                   <div
                     className="inspect-empty-hint"
