@@ -456,10 +456,6 @@ describe("category diversity quota", () => {
   });
 
   it("ADV-28: project override line respects context.preference_types (regression)", () => {
-    // Build a project that overrides two patterns of different types.
-    // When the caller scopes retrieval to one type, the projectOverrides
-    // returned (and the prompt block's "Project override:" line) should
-    // only include that scoped type — not the unrelated category.
     buildToInjectable({
       pattern: "layout_pat", preference_type: "layout",
       scope: "project", project_id: "proj_filter",
@@ -481,5 +477,60 @@ describe("category diversity quota", () => {
     const block = store.buildPromptBlock(retrieved, "proj_filter");
     expect(block.includes("color_pat")).toBe(false);
     expect(block.includes("layout_pat") || block.length === 0).toBe(true);
+  });
+
+  it("ADV-29: userId path traversal is rejected (regression)", () => {
+    expect(() => store.resetMemory("../escape", { scope: "all" })).toThrow(
+      /not a safe basename/,
+    );
+    expect(() => store.ingestSignal("../../etc", signal())).toThrow(
+      /not a safe basename/,
+    );
+    expect(() => store.listPreferences("foo/bar")).toThrow(
+      /not a safe basename/,
+    );
+  });
+
+  it("ADV-30: project override keyed on preference_type + pattern, not pattern alone (regression)", () => {
+    // Global: layout_density/shared (positive)
+    buildToInjectable({ pattern: "shared", preference_type: "layout_density" });
+    // Project override: color/shared (negative) — different category, same pattern text
+    buildToInjectable({
+      pattern: "shared", preference_type: "color", polarity: "negative",
+      scope: "project", project_id: "proj_key",
+    });
+
+    const retrieved = store.retrieveForInjection(USER, { project_id: "proj_key" });
+    const all = [...retrieved.positives, ...retrieved.negatives];
+
+    // The global layout_density/shared should NOT be suppressed by the
+    // project color/shared override — they are different preferences.
+    expect(all.some((p) => p.preference_type === "layout_density" && p.pattern === "shared")).toBe(true);
+    expect(all.some((p) => p.preference_type === "color" && p.pattern === "shared")).toBe(true);
+  });
+
+  it("ADV-31: no duplicate IDs when polarity backfill and category backfill both fire (regression)", () => {
+    // 11 negatives (will trigger polarity ceiling), 4 type-A positives,
+    // 4 type-B positives, 2 type-C positives — total 21, hard cap fires,
+    // then polarity ceiling trims negatives and backfills positives from
+    // overflow, then category ceiling may trim and backfill from overflow.
+    // The same overflow entry must not appear twice in the final set.
+    for (let i = 0; i < 11; i++) {
+      buildToInjectable({ pattern: `dn_${i}`, preference_type: `neg_t_${i}`, polarity: "negative" });
+    }
+    for (let i = 0; i < 4; i++) {
+      buildToInjectable({ pattern: `a_${i}`, preference_type: "type_a" });
+    }
+    for (let i = 0; i < 4; i++) {
+      buildToInjectable({ pattern: `b_${i}`, preference_type: "type_b" });
+    }
+    for (let i = 0; i < 2; i++) {
+      buildToInjectable({ pattern: `c_${i}`, preference_type: "type_c" });
+    }
+
+    const retrieved = store.retrieveForInjection(USER, {});
+    const allIds = [...retrieved.positives, ...retrieved.negatives].map((p) => p.id);
+    const uniqueIds = new Set(allIds);
+    expect(allIds.length).toBe(uniqueIds.size);
   });
 });

@@ -126,7 +126,20 @@ function dropConfidence(current: Confidence): Confidence {
 // File I/O
 // ---------------------------------------------------------------------------
 
+/**
+ * Validate and resolve the on-disk path for a user's preferences file.
+ * Rejects user IDs that would escape the storage root via path traversal.
+ */
 function userFilePath(userId: string): string {
+  // Reject IDs that are not safe basenames — prevents path traversal via
+  // segments like "../escape" which path.join would happily resolve outside
+  // the storage root.
+  if (!/^[A-Za-z0-9_\-]+$/.test(userId)) {
+    throw new Error(
+      `userFilePath: userId "${userId}" is not a safe basename. ` +
+        "Only alphanumeric characters, hyphens, and underscores are allowed.",
+    );
+  }
   return path.join(resolveStorageRoot(), userId, "preferences.json");
 }
 
@@ -662,12 +675,21 @@ export function retrieveForInjection(
 
   if (project_id && data.project_overrides[project_id]) {
     projectPrefs = data.project_overrides[project_id]!;
-    const projectPatterns = new Set(projectPrefs.map((p) => p.pattern));
+
+    // Key override identity on preference_type + pattern (not pattern alone).
+    // Two records with the same pattern text but different categories are
+    // independent preferences and must not suppress each other.
+    const projectKeys = new Set(
+      projectPrefs.map((p) => `${p.preference_type}\0${p.pattern}`),
+    );
 
     // Conflict diagnostics: record which globals were suppressed
     for (const gp of prefs) {
-      if (projectPatterns.has(gp.pattern)) {
-        const override = projectPrefs.find((pp) => pp.pattern === gp.pattern);
+      const key = `${gp.preference_type}\0${gp.pattern}`;
+      if (projectKeys.has(key)) {
+        const override = projectPrefs.find(
+          (pp) => pp.preference_type === gp.preference_type && pp.pattern === gp.pattern,
+        );
         diagnostics.push({
           type: "project_override_suppression",
           suppressed_pattern: gp.pattern,
@@ -676,12 +698,14 @@ export function retrieveForInjection(
           override_polarity: override ? override.polarity : "unknown",
           override_strength: override ? override.signal_strength : 0,
           project_id,
-          trace: `${project_id} override ${gp.pattern} active — global ${gp.pattern} (${gp.polarity}, ${gp.signal_strength.toFixed(2)}) suppressed for this generation`,
+          trace: `${project_id} override ${gp.preference_type}/${gp.pattern} active — global ${gp.preference_type}/${gp.pattern} (${gp.polarity}, ${gp.signal_strength.toFixed(2)}) suppressed for this generation`,
         });
       }
     }
 
-    prefs = prefs.filter((p) => !projectPatterns.has(p.pattern));
+    prefs = prefs.filter(
+      (p) => !projectKeys.has(`${p.preference_type}\0${p.pattern}`),
+    );
     prefs = [...prefs, ...projectPrefs];
   }
 
@@ -774,6 +798,10 @@ export function retrieveForInjection(
         const backfill = positiveOverflow.slice(0, trimmed.length);
         if (backfill.length > 0) {
           prefs.push(...backfill);
+          // Remove admitted entries from overflowPrefs so Stage 10 does not
+          // re-admit the same records (which would produce duplicates).
+          const admittedIds = new Set(backfill.map((p) => p.id));
+          overflowPrefs = overflowPrefs.filter((p) => !admittedIds.has(p.id));
           // Re-sort after backfill to maintain ranking order
           prefs.sort((a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0));
           diagnostics.push({
