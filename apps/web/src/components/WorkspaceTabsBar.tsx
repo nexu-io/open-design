@@ -336,8 +336,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   useEffect(() => {
     if (!tabsMenuOpen || !menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
-    const viewportMid = window.innerWidth / 2;
-    setPopoverAlign(rect.left < viewportMid ? 'left' : 'right');
+    const spaceLeft = rect.left;
+    const spaceRight = window.innerWidth - rect.right;
+    setPopoverAlign(spaceLeft > spaceRight ? 'right' : 'left');
   }, [tabsMenuOpen]);
 
   useEffect(() => {
