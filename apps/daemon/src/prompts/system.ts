@@ -346,13 +346,13 @@ export function composeSystemPrompt({
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
 
-  if (!isMediaSurfaceEarly) {
-    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
-  }
-
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
+  }
+
+  if (!isMediaSurfaceEarly) {
+    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
   }
 
   parts.push(
