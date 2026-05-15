@@ -1657,6 +1657,15 @@ export const fr: Dict = {
   'critiqueTheater.replaySpeedInstant': 'Instantané',
   'critiqueTheater.replaySpeedLive': 'Temps réel',
   'critiqueTheater.replaySpeedFast': 'Rapide',
+  'critiqueTheater.settingsNav': 'Jury de design',
+  'critiqueTheater.settingsNavHint': 'Revue de design à cinq panels pour vos exécutions',
+  'critiqueTheater.settingsEnabledLabel': 'Afficher le Jury de design pendant les exécutions de l’agent',
+  'critiqueTheater.settingsEnabledDescription':
+    'Lorsque cette option est activée, une revue à cinq panels apparaît à côté des générations de l’agent et note le résultat avant l’expédition. Vous pouvez l’interrompre à tout moment.',
+  'critiqueTheater.settingsEnabledProjectHint':
+    'Enregistré pour ce projet. Les nouvelles exécutions de ce projet passeront côté serveur par le Jury de design.',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    'Ouvrez un projet pour enregistrer ce réglage côté serveur. D’ici là, seule la préférence dans ce navigateur change.',
   'settings.customInstructionsTitle': 'Instructions personnalisées',
   'settings.customInstructionsHint':
     'Instructions persistantes appliquées à chaque projet. Utilisez-les pour définir les préférences que le modèle doit toujours suivre.',
