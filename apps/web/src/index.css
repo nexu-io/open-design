@@ -7602,6 +7602,11 @@ button.connector-action.is-loading {
 
 /* Examples gallery */
 .examples-panel { gap: 32px; }
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
 .example-card {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -12605,14 +12610,31 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-bottom: 8px;
+  position: sticky;
+  top: 0;
+  /* Sit above example preview iframes while scrolling (iframes get their own
+     compositor layer; z-index: 2 was not always enough for a clean mask). */
+  z-index: 20;
+  isolation: isolate;
+  margin: 0;
+  padding: 0 0 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
 }
 .examples-search {
   position: relative;
-  width: min(360px, 100%);
+  /* Full-width band so scrolling previews cannot show through beside a narrow
+     search field on wide layouts (toolbar stays sticky; iframes layer high). */
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+  background: var(--bg);
 }
 .examples-search input {
+  display: block;
   width: 100%;
+  max-width: 360px;
   padding: 7px 12px 7px 32px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -13766,6 +13788,17 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
    Prompt template gallery
    ============================================================ */
 .prompt-templates-panel { display: flex; flex-direction: column; gap: 16px; }
+.prompt-templates-panel > .tab-panel-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  isolation: isolate;
+  margin: 0;
+  padding: 0 0 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+}
 .prompt-templates-count {
   margin-left: auto;
   color: var(--text-muted);
