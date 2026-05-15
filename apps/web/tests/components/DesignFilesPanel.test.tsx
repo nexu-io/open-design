@@ -475,8 +475,7 @@ describe('DesignFilesPanel large-list regression', () => {
     fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
 
     expect(onDeleteFiles).toHaveBeenCalledTimes(1);
-    expect(onDeleteFiles).toHaveBeenCalledWith(expect.arrayContaining([firstName, secondName]));
-    expect(onDeleteFiles.mock.calls[0][0]).toHaveLength(2);
+    expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
   });
 
   it('renders 500 files within a reasonable time', () => {
