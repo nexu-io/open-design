@@ -41,7 +41,7 @@ All values are sampled from Perplexity's production interface and marketing site
 | `--border` | `#e0e0e0` | Divider |
 | `--text-primary` | `#0f0f10` | Body copy |
 | `--text-secondary` | `#5c5c5e` | Meta |
-| `--accent` | `#7c3aed` | `oklch(48% 0.22 307)` |
+| `--accent` | `#7c3aed` |  Primary CTA, focus ring, active tab |
 
 ### Usage rules
 
