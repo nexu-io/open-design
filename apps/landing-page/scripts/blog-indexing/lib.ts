@@ -100,7 +100,9 @@ export interface BlogIndexingState {
   history: InspectionRecord[];
   /** url -> window -> latest Search Analytics record */
   performance?: Record<string, Partial<Record<'7' | '28', SearchAnalyticsRecord>>>;
-  /** url -> ISO timestamp first seen by the deploy workflow */
+  /** url -> ISO timestamp first inspected by the indexing workflows */
+  firstInspectedAt?: Record<string, string>;
+  /** @deprecated Migrated to firstInspectedAt. Kept for pending status branch reads. */
   firstSeenAt?: Record<string, string>;
 }
 

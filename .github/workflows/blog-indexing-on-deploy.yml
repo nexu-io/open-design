@@ -95,6 +95,12 @@ jobs:
           fi
           echo "gsc=$gsc" >> "$GITHUB_OUTPUT"
           echo "bot=$bot" >> "$GITHUB_OUTPUT"
+          if [ "$gsc" != "true" ]; then
+            echo "::warning title=Blog indexing not fully configured::GSC auth is missing; sitemap submission, URL Inspection, Search Analytics, and status rendering will be skipped."
+          fi
+          if [ "$bot" != "true" ]; then
+            echo "::warning title=Blog indexing status PR disabled::Open Design bot secrets are missing; status PR creation will be skipped."
+          fi
           {
             echo "### Blog indexing configuration"
             echo "- GSC auth configured: \`$gsc\`"
@@ -111,10 +117,29 @@ jobs:
 
       - name: Restore pending indexing status state
         run: |
-          git fetch origin automation/blog-indexing-status:refs/remotes/origin/automation/blog-indexing-status || exit 0
-          git checkout refs/remotes/origin/automation/blog-indexing-status -- \
+          if ! git fetch origin automation/blog-indexing-status:refs/remotes/origin/automation/blog-indexing-status; then
+            {
+              echo "### Blog indexing status restore"
+              echo "No pending \`automation/blog-indexing-status\` branch was found. Starting from the committed status files."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git checkout refs/remotes/origin/automation/blog-indexing-status -- \
             docs/blog-indexing-status.md \
-            docs/blog-indexing-status.json || true
+            docs/blog-indexing-status.json; then
+            {
+              echo "### Blog indexing status restore"
+              echo "Restored pending status files from \`automation/blog-indexing-status\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Blog indexing status restore"
+              echo "Failed to restore pending status files from \`automation/blog-indexing-status\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Blog indexing status restore failed::Fetched automation/blog-indexing-status but could not checkout the status files."
+            exit 1
+          fi
 
       - name: Detect changed blog URLs
         id: detect

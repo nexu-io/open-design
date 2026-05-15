@@ -27,9 +27,9 @@ function parseArgs(argv: string[]): Args {
   return args as Args;
 }
 
-function ageDays(firstSeenAt?: string): number {
-  if (!firstSeenAt) return 0;
-  const since = new Date(firstSeenAt).getTime();
+function ageDays(firstInspectedAt?: string): number {
+  if (!firstInspectedAt) return 0;
+  const since = new Date(firstInspectedAt).getTime();
   return Math.floor((Date.now() - since) / 86_400_000);
 }
 
@@ -63,9 +63,11 @@ function main() {
     if ('error' in record.result || !record.result.isIndexed) continue;
     const slug = slugFromUrl(url);
     const publishedAt = frontmatterDate(slug);
+    const firstInspectedAt =
+      state.firstInspectedAt?.[url] ?? state.firstSeenAt?.[url];
     const age = publishedAt
       ? ageDaysFromDate(publishedAt)
-      : ageDays(state.firstSeenAt?.[url]);
+      : ageDays(firstInspectedAt);
     if (age < minAgeDays) continue;
     const perf7 = state.performance?.[url]?.['7'];
     const perf28 = state.performance?.[url]?.['28'];

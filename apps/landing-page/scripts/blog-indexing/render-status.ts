@@ -50,7 +50,7 @@ function loadState(file: string): BlogIndexingState {
     latest: raw.latest ?? {},
     history: raw.history ?? [],
     performance: raw.performance ?? {},
-    firstSeenAt: raw.firstSeenAt ?? {},
+    firstInspectedAt: raw.firstInspectedAt ?? raw.firstSeenAt ?? {},
   };
 }
 
@@ -168,8 +168,8 @@ function main() {
     for (const record of fresh) {
       state.latest[record.url] = record;
       state.history.unshift(record);
-      state.firstSeenAt ??= {};
-      state.firstSeenAt[record.url] ??= record.inspectedAt;
+      state.firstInspectedAt ??= {};
+      state.firstInspectedAt[record.url] ??= record.inspectedAt;
     }
     state.history = state.history.slice(0, 50);
   }

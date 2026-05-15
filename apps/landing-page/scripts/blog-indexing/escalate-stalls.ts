@@ -71,7 +71,9 @@ function ageDaysFromIso(iso: string): number {
 function postAgeDays(slug: string, record: { url: string; inspectedAt: string }, state: BlogIndexingState): number {
   const publishedAt = frontmatterDate(slug);
   if (publishedAt) return ageDaysFromDate(publishedAt);
-  if (state.firstSeenAt?.[record.url]) return ageDaysFromIso(state.firstSeenAt[record.url]);
+  const firstInspectedAt =
+    state.firstInspectedAt?.[record.url] ?? state.firstSeenAt?.[record.url];
+  if (firstInspectedAt) return ageDaysFromIso(firstInspectedAt);
   return ageDaysFromDate(record.inspectedAt.slice(0, 10));
 }
 
@@ -134,8 +136,8 @@ function main() {
         '',
         '1. Open each URL in [Search Console URL Inspection](https://search.google.com/search-console/inspect?resource_id=sc-domain%3Aopen-design.ai)',
         '2. Confirm the rendered HTML matches what we ship (live test).',
-        '3. If the page looks fine, click "Request Indexing" once (manual, GSC has no public API for this on regular pages).',
-        '4. If the page does not look fine, fix the underlying SEO/content issue, redeploy, and re-inspect.',
+        '3. If the page looks fine, improve the underlying SEO/content signals: title/query fit, internal links, canonical clarity, and content depth.',
+        '4. Redeploy the fix, then let the scheduled monitor re-inspect the URL.',
         '',
         'This issue is auto-updated by `.github/workflows/blog-indexing-monitor.yml`. It will close itself once all listed URLs reach `indexed` status.',
       ].join('\n')

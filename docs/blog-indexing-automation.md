@@ -25,7 +25,9 @@ canonical state is the sidecar `docs/blog-indexing-status.json`.
 Before each run renders a new report, it restores the latest files from
 the pending `automation/blog-indexing-status` branch when that branch
 exists. That keeps inspection history continuous even if the previous
-status PR has not been merged yet.
+status PR has not been merged yet. If that branch exists but the status
+files cannot be restored, the workflow fails and records the restore
+failure in the job summary instead of silently starting from stale state.
 
 ## What is deliberately NOT automated
 
@@ -147,7 +149,8 @@ Console. If Search Console shows `email not found`, use OAuth instead.
 
 If these secrets are not present yet, the workflows do not fail the
 main deploy path. They record the missing configuration in the job
-summary and skip the GSC / bot-write steps until the secrets are added.
+summary, emit a GitHub Actions warning, and skip the GSC / bot-write
+steps until the secrets are added.
 
 ### 3. Optional platform secrets
 
@@ -259,3 +262,8 @@ awareness of search-side health.
 - `.github/workflows/blog-indexing-monitor.yml`
 - `docs/blog-indexing-status.md` — human view (auto-generated)
 - `docs/blog-indexing-status.json` — canonical state (auto-generated)
+
+The JSON state records `firstInspectedAt` as the first time automation
+successfully captured an inspection for a URL. It is not Google's
+first-discovery time; escalation scripts prefer the post frontmatter date
+for age windows and only use this inspection timestamp as a fallback.
