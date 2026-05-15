@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createIpAllowlistMiddleware } from '../src/ip-allowlist.js';
 
 function mockReq(remoteAddress: string) {
@@ -84,8 +84,18 @@ describe('ip-allowlist', () => {
     expect(called).toBe(true);
   });
 
-  it('throws on IPv6 entries at initialization', () => {
-    expect(() => createIpAllowlistMiddleware(['fd00::1'])).toThrow('IPv6 allowlist entries are not supported');
+  it('ignores IPv6 entries with a console warning instead of throwing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const middleware = createIpAllowlistMiddleware(['fd00::1']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('fd00::1'));
+    // IPv6 entry is ignored — a non-loopback IPv4 peer is blocked since no valid entries remain
+    const req = mockReq('10.0.0.5');
+    const res = mockRes();
+    let called = false;
+    await middleware(req, res, () => { called = true; });
+    expect(called).toBe(false);
+    expect(res.status).toHaveBeenCalledWith(403);
+    warnSpy.mockRestore();
   });
 
   it('allows loopback via IPv4-mapped IPv6', async () => {

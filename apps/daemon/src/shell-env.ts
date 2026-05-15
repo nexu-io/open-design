@@ -81,7 +81,10 @@ export async function setShellEnvVar(
     content += `${sep}\n# Added by Open Design\n${exportLine}\n`;
   }
 
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, content, 'utf8');
+  const dir = path.dirname(target);
+  await fs.mkdir(dir, { recursive: true });
+  const tmp = path.join(dir, `.od-shell-env-${process.pid}.tmp`);
+  await fs.writeFile(tmp, content, 'utf8');
+  await fs.rename(tmp, target);
   return { file: target, updated };
 }

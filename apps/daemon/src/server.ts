@@ -4637,6 +4637,7 @@ export async function startServer({
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
       res.setHeader('Referrer-Policy', 'same-origin');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; form-action 'self'; frame-ancestors 'none'");
       next();
     });
   }
@@ -4692,7 +4693,8 @@ export async function startServer({
   app.post('/api/auth/logout', (req, res) => {
     // CSRF protection: reject cross-origin POSTs.
     const origin = req.headers.origin;
-    const expectedOrigin = `http://localhost:${resolvedPortRef.current}`;
+    const host = req.headers.host ?? `localhost:${resolvedPortRef.current}`;
+    const expectedOrigin = `http://${host}`;
     if (origin && origin !== expectedOrigin) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'cross-origin request rejected' });
       return;

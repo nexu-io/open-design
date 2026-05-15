@@ -49,7 +49,8 @@ interface IpMatcher {
 function parseEntry(raw: string): IpMatcher {
   const trimmed = raw.trim();
   if (trimmed.includes(':')) {
-    throw new Error(`IPv6 allowlist entries are not supported: "${trimmed}". Use Tailscale (provides IPv4 CGNAT addresses) or a reverse proxy that normalizes to IPv4.`);
+    console.warn(`[od] ip-allowlist: IPv6 entry "${trimmed}" is not supported — entry ignored. Use Tailscale (IPv4 CGNAT) or a reverse proxy that normalizes to IPv4.`);
+    return { matches: () => false };
   }
   if (trimmed.includes("/")) {
     const parts = trimmed.split("/");
