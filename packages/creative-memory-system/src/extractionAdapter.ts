@@ -163,9 +163,21 @@ function dispatchSignals(
       `dispatchSignals: event.timestamp "${event.timestamp}" is not a valid ISO date string.`,
     );
   }
+  // Validate project_id explicitly: must be null or a non-empty string.
+  // Truthiness coercion (`event.project_id ? "project" : "global"`) would
+  // silently treat an empty string as global scope, leaking project-scoped
+  // signals into global memory and hiding upstream wiring bugs.
+  if (event.project_id !== null && (typeof event.project_id !== "string" || event.project_id.length === 0)) {
+    throw new Error(
+      `dispatchSignals: event.project_id must be null or a non-empty string. ` +
+        `Got: ${JSON.stringify(event.project_id)}. An empty string would be silently ` +
+        "treated as global scope and leak project-scoped signals.",
+    );
+  }
 
   const signals = classifyArtifact(event.artifact_meta);
-  const scope: "global" | "project" = event.project_id ? "project" : "global";
+  // Explicit null check — never truthiness — for scope derivation.
+  const scope: "global" | "project" = event.project_id === null ? "global" : "project";
 
   for (const { preference_type, pattern } of signals) {
     ingestSignal(event.user_id, {
@@ -175,7 +187,7 @@ function dispatchSignals(
       polarity,
       tag_text,
       scope,
-      project_id: event.project_id || null,
+      project_id: event.project_id,
       artifact_id: event.artifact_id,
       session_id: event.session_id,
       timestamp: event.timestamp,

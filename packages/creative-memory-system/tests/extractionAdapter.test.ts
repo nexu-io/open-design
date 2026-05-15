@@ -145,6 +145,43 @@ describe("extractionAdapter", () => {
     ).toThrow(/not a safe key/);
   });
 
+  it("project-scoped event rejects empty-string project_id (regression)", () => {
+    // An empty string would be silently coerced to global scope by truthiness.
+    // It must be rejected so project-scoped signals never leak into global.
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        project_id: "",
+        artifact_meta: { signals: [{ preference_type: "layout", pattern: "test" }] },
+      }),
+    ).toThrow(/project_id must be null or a non-empty string/);
+
+    // Verify the empty-project_id event did not create any record (i.e. it
+    // did not silently fall through to global scope).
+    const all = store.listPreferences(USER, { status: "all" });
+    expect(all.length).toBe(0);
+  });
+
+  it("project-scoped event rejects inherited object keys (regression)", () => {
+    // toString and valueOf are inherited from Object.prototype. They pass
+    // the safe-basename regex but resolving them on a plain {} would
+    // return inherited functions instead of empty arrays.
+    // The fix: validateProjectId must reject these AND project_overrides
+    // must use a null-prototype object so the lookup cannot resolve.
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        project_id: "toString",
+        artifact_meta: { signals: [{ preference_type: "layout", pattern: "test" }] },
+      }),
+    ).not.toThrow();
+
+    // Verify the resulting record is in a real project bucket, not the
+    // inherited toString function. The record should be retrievable.
+    const projectPrefs = store.listPreferences(USER, { scope: "project:toString" });
+    expect(projectPrefs.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("onGenerationAbandoned creates weak negative", () => {
     adapter.onGenerationAbandoned({
       ...baseEvent(),

@@ -169,11 +169,20 @@ function loadFile(userId: string): PreferenceStoreFile | null {
   const fp = userFilePath(userId);
   if (!fs.existsSync(fp)) return null;
   try {
-    return JSON.parse(fs.readFileSync(fp, "utf8")) as PreferenceStoreFile;
+    const parsed = JSON.parse(fs.readFileSync(fp, "utf8")) as PreferenceStoreFile;
+    // Re-establish null prototype on project_overrides. JSON.parse always
+    // returns objects with Object.prototype, so without this re-creation an
+    // attacker-controlled project_id like "toString" or "valueOf" would
+    // resolve to inherited functions on the parsed object.
+    const safeOverrides = Object.create(null) as Record<string, Preference[]>;
+    if (parsed.project_overrides && typeof parsed.project_overrides === "object") {
+      for (const key of Object.keys(parsed.project_overrides)) {
+        safeOverrides[key] = parsed.project_overrides[key]!;
+      }
+    }
+    parsed.project_overrides = safeOverrides;
+    return parsed;
   } catch (err: unknown) {
-    // A corrupt JSON file (e.g., from a crash during write) should not crash
-    // the process. Treat it as if the file doesn't exist — the next ensureFile
-    // call will reinitialize it. Log the error for observability.
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
       `loadFile: failed to parse preferences.json for user "${userId}". ` +
@@ -187,18 +196,31 @@ function saveFile(userId: string, data: PreferenceStoreFile): void {
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   data.last_updated = now();
   const content = JSON.stringify(data, null, 2);
-  // Attempt atomic write (write-to-temp + rename). On platforms where rename
-  // fails (Windows EPERM due to file locking), fall back to direct write.
-  // The atomic path prevents corruption from mid-write crashes on POSIX;
-  // the fallback ensures the subsystem still works on Windows where rename
-  // semantics are less reliable under concurrent access.
+  // Atomic write: write-to-temp + rename. Rename is atomic on POSIX and
+  // prevents a crash mid-write from corrupting the preferences file.
+  //
+  // Windows note: rename can fail with EPERM/EBUSY when the target file is
+  // briefly held (antivirus, indexer, or a concurrent reader). For that
+  // *specific* case we retry with a direct write. Any other failure
+  // (ENOSPC, EACCES on the directory, write errors on the temp file, etc.)
+  // is rethrown so required-step failures stay observable.
   const tmpFp = `${fp}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpFp, content, "utf8");
   try {
-    fs.writeFileSync(tmpFp, content, "utf8");
     fs.renameSync(tmpFp, fp);
-  } catch {
-    // Fallback: direct write (non-atomic but functional)
-    try { fs.unlinkSync(tmpFp); } catch { /* ignore cleanup failure */ }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    const isWindowsRenameRace =
+      process.platform === "win32" && (code === "EPERM" || code === "EBUSY");
+    if (!isWindowsRenameRace) {
+      // Best-effort cleanup of the temp file before rethrowing the original
+      // error. Cleanup failure does not change the outcome we're reporting.
+      try { fs.unlinkSync(tmpFp); } catch { /* intentional: original error wins */ }
+      throw err;
+    }
+    // Windows-specific recoverable case: rename lost a race. Fall back to a
+    // direct write of the same content so the call still completes.
+    try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
     fs.writeFileSync(fp, content, "utf8");
   }
 }
@@ -209,7 +231,12 @@ function initFile(userId: string): PreferenceStoreFile {
     user_id: userId,
     memory_enabled: true,
     global_preferences: [],
-    project_overrides: {},
+    // Use a null-prototype object for project_overrides so inherited keys
+    // (toString, valueOf, hasOwnProperty, …) cannot resolve to function
+    // values when read by project_id. Combined with Object.hasOwn checks
+    // and validateProjectId(), this gives layered protection against bad
+    // or untrusted project_id input.
+    project_overrides: Object.create(null) as Record<string, Preference[]>,
     refinement_log: [],
     last_updated: now(),
   };
@@ -242,7 +269,12 @@ function getPrefArray(
   if (scope === "global") return data.global_preferences;
   if (scope === "project" && projectId) {
     validateProjectId(projectId);
-    if (!data.project_overrides[projectId]) data.project_overrides[projectId] = [];
+    // Use Object.hasOwn to avoid resolving inherited keys (toString,
+    // valueOf, hasOwnProperty, etc.) — those exist on Object.prototype and
+    // would otherwise return functions instead of arrays.
+    if (!Object.hasOwn(data.project_overrides, projectId)) {
+      data.project_overrides[projectId] = [];
+    }
     return data.project_overrides[projectId]!;
   }
   throw new Error(`Invalid scope: ${scope}. Use "global" or "project" with a projectId.`);
@@ -383,7 +415,9 @@ export function listPreferences(
   } else if (scope.startsWith("project:")) {
     const projectId = scope.split(":")[1] ?? "";
     validateProjectId(projectId);
-    prefs = [...(data.project_overrides[projectId] ?? [])];
+    prefs = Object.hasOwn(data.project_overrides, projectId)
+      ? [...data.project_overrides[projectId]!]
+      : [];
   } else {
     prefs = getAllPrefs(data);
   }
@@ -404,7 +438,8 @@ export function resetMemory(userId: string, options: ResetMemoryOptions = {}): v
     data.global_preferences = [];
   }
   if (scope === "all") {
-    data.project_overrides = {};
+    // Reset to a null-prototype object (matches initFile semantics).
+    data.project_overrides = Object.create(null) as Record<string, Preference[]>;
     data.refinement_log = [];
     data.memory_enabled = true; // restore on full reset
   } else if (scope.startsWith("project:")) {
@@ -740,7 +775,7 @@ export function retrieveForInjection(
   let prefs: RankedPreference[] = [...data.global_preferences];
   let projectPrefs: Preference[] = [];
 
-  if (project_id && data.project_overrides[project_id]) {
+  if (project_id && Object.hasOwn(data.project_overrides, project_id)) {
     // Validate project_id as a safe key.
     validateProjectId(project_id);
     projectPrefs = data.project_overrides[project_id]!;
