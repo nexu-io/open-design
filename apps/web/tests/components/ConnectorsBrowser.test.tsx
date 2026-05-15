@@ -352,6 +352,48 @@ describe('ConnectorsBrowser', () => {
     await waitFor(() => expect(fetchConnectorDetail).toHaveBeenCalledTimes(2));
   });
 
+  it('retries failed drawer preview hydration when reopened from a panel alert', async () => {
+    const previewConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      id: 'notion',
+      name: 'Notion',
+      status: 'available',
+      toolCount: 48,
+      tools: [],
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([previewConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([previewConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(fetchConnectorDetail).mockResolvedValue(null);
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: null,
+      error: 'Composio provider is not configured',
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('Notion');
+    fireEvent.click(screen.getByRole('button', { name: 'Open Notion details' }));
+    await waitFor(() => expect(fetchConnectorDetail).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByTestId('connector-drawer')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('notion'));
+    const alert = await screen.findByRole('status');
+    const alertRow = alert.closest('.connector-panel-alert');
+    expect(alertRow).not.toBeNull();
+
+    fireEvent.click(within(alertRow as HTMLElement).getByRole('button', { name: 'Open Notion details' }));
+
+    await waitFor(() => expect(fetchConnectorDetail).toHaveBeenCalledTimes(2));
+    expect(fetchConnectorDetail).toHaveBeenNthCalledWith(2, 'notion', {
+      hydrateTools: true,
+      toolsLimit: 50,
+    });
+  });
+
   it('cancels pending authorization through the daemon before clearing the local state', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,
