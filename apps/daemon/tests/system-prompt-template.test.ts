@@ -338,8 +338,8 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       },
     });
 
-    expect(out).toContain('`media generate` treats the handoff as');
-    expect(out).toContain('exit `0` so the first dispatch does not look like a failed shell call');
+    expect(out).toContain('always exits 0');
+    expect(out).toContain('as a handoff signal');
     expect(out).toContain('`"$OD_NODE_BIN" "$OD_BIN" media generate` exits `0`');
     expect(out).toContain('either `file` or `taskId`');
     expect(out).toContain('`2` from `media wait` is not a failure');
