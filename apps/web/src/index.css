@@ -18867,7 +18867,18 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 4px;
   font-weight: 500;
 }
-.routines-history-link:hover { background: var(--text); color: var(--bg); border-color: var(--text); }
+.routines-history-link:hover {
+  background: var(--text);
+  color: var(--bg-panel);
+  border-color: var(--text);
+}
+.routines-history-link:focus-visible {
+  outline: 2px solid var(--selected);
+  outline-offset: 1px;
+}
+.routines-history-link:active {
+  opacity: 0.85;
+}
 
 .routines-status {
   display: inline-block;
