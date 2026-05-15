@@ -1106,7 +1106,7 @@ export function LiveArtifactViewer({
                     ref={iframeRef}
                     data-testid="live-artifact-preview-frame"
                     title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups"
+                    sandbox="allow-scripts allow-popups allow-downloads"
                     src={previewUrl}
                   />
                 </PreviewDrawOverlay>
@@ -3399,7 +3399,7 @@ function ReactComponentViewer({
             <iframe
               data-testid="react-component-preview-frame"
               title={file.name}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               srcDoc={srcDoc}
               style={{ width: '100%', height: '100%', border: 0 }}
             />
@@ -5758,7 +5758,7 @@ function HtmlViewer({
                       data-testid="artifact-preview-frame"
                       data-od-render-mode="url-load"
                       title={file.name}
-                      sandbox="allow-scripts"
+                      sandbox="allow-scripts allow-downloads"
                       src={previewSrcUrl}
                       onLoad={syncBridgeModes}
                       style={{ width: '100%', height: '100%', border: 0 }}
@@ -5769,7 +5769,7 @@ function HtmlViewer({
                       data-testid="artifact-preview-frame"
                       data-od-render-mode="srcdoc"
                       title={file.name}
-                      sandbox="allow-scripts"
+                      sandbox="allow-scripts allow-downloads"
                       srcDoc={srcDoc}
                       onLoad={() => {
                         replayInspectOverridesToIframe();
@@ -6002,14 +6002,14 @@ function HtmlViewer({
           {useUrlLoadPreview ? (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
               src={previewSrcUrl}
             />
           ) : (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               data-od-render-mode="srcdoc"
               srcDoc={srcDoc}
             />

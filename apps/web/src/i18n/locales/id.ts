@@ -1220,6 +1220,7 @@ export const id: Dict = {
   'pet.fieldGreeting': 'Sapaan',
   'pet.fieldAccent': 'Aksen',
   'pet.fieldAccentCustom': 'Kustom',
+  'pet.fieldAccentDefault': 'Warna aksen default',
   'pet.overlayAria': 'Overlay pet',
   'pet.spriteAria': '{name} - geser untuk memindahkan, klik untuk chat',
   'pet.spriteTitle': 'Halo dari {name}! Klik untuk chat.',

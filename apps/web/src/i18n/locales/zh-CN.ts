@@ -1248,6 +1248,7 @@ export const zhCN: Dict = {
   'pet.fieldGreeting': '问候语',
   'pet.fieldAccent': '主题色',
   'pet.fieldAccentCustom': '自定义颜色',
+  'pet.fieldAccentDefault': '默认主题色',
   'pet.overlayAria': '宠物伙伴',
   'pet.spriteAria': '{name} — 拖动可移动，点击与它互动',
   'pet.spriteTitle': '{name} 来打招呼啦！点击聊天。',

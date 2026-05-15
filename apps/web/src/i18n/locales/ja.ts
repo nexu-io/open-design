@@ -999,6 +999,7 @@ export const ja: Dict = {
   'pet.fieldGreeting': 'あいさつ',
   'pet.fieldAccent': 'アクセントカラー',
   'pet.fieldAccentCustom': 'カスタムカラー',
+  'pet.fieldAccentDefault': 'デフォルトのアクセントカラー',
   'pet.overlayAria': 'ペットの相棒',
   'pet.spriteAria': '{name} — ドラッグで移動、クリックで会話',
   'pet.spriteTitle': '{name} からこんにちは！クリックで会話。',

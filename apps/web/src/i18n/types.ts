@@ -1482,6 +1482,7 @@ export interface Dict {
   'pet.fieldGreeting': string;
   'pet.fieldAccent': string;
   'pet.fieldAccentCustom': string;
+  'pet.fieldAccentDefault': string;
   'pet.overlayAria': string;
   'pet.spriteAria': string;
   'pet.spriteTitle': string;

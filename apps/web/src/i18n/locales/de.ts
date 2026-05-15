@@ -1000,6 +1000,7 @@ export const de: Dict = {
   'pet.fieldGreeting': 'Begrüßung',
   'pet.fieldAccent': 'Akzentfarbe',
   'pet.fieldAccentCustom': 'Eigene Farbe',
+  'pet.fieldAccentDefault': 'Standard-Akzentfarbe',
   'pet.overlayAria': 'Haustier-Begleiter',
   'pet.spriteAria': '{name} — zum Bewegen ziehen, zum Plaudern klicken',
   'pet.spriteTitle': 'Hallo von {name}! Klick zum Plaudern.',

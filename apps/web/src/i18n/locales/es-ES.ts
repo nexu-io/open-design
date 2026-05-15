@@ -960,6 +960,7 @@ export const esES: Dict = {
   'pet.fieldGreeting': 'Saludo',
   'pet.fieldAccent': 'Color de acento',
   'pet.fieldAccentCustom': 'Color personalizado',
+  'pet.fieldAccentDefault': 'Color de acento predeterminado',
   'pet.overlayAria': 'Compañero',
   'pet.spriteAria': '{name} — arrastra para mover, haz clic para conversar',
   'pet.spriteTitle': '¡Hola de {name}! Haz clic para conversar.',

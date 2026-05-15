@@ -1112,6 +1112,7 @@ export const ru: Dict = {
   'pet.fieldGreeting': 'Приветствие',
   'pet.fieldAccent': 'Акцентный цвет',
   'pet.fieldAccentCustom': 'Свой цвет',
+  'pet.fieldAccentDefault': 'Цвет акцента по умолчанию',
   'pet.overlayAria': 'Питомец-компаньон',
   'pet.spriteAria': '{name} — тащите, чтобы переместить, кликните, чтобы пообщаться',
   'pet.spriteTitle': 'Привет от {name}! Кликните, чтобы пообщаться.',

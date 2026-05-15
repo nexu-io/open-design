@@ -1284,6 +1284,7 @@ export const en: Dict = {
   'pet.fieldGreeting': 'Greeting',
   'pet.fieldAccent': 'Accent color',
   'pet.fieldAccentCustom': 'Custom color',
+  'pet.fieldAccentDefault': 'Default accent color',
   'pet.overlayAria': 'Pet companion',
   'pet.spriteAria': '{name} — drag to move, click to chat',
   'pet.spriteTitle': 'Hi from {name}! Click to chat.',

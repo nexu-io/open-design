@@ -1061,6 +1061,7 @@ export const th: Dict = {
   'pet.fieldGreeting': 'เสียงคำทักทายที่กล่าวไว้',
   'pet.fieldAccent': 'ใช้สีโทนสดใสของเน้นตัว',
   'pet.fieldAccentCustom': 'ปรับแต่งของสีด้วยตัวเอง',
+  'pet.fieldAccentDefault': 'สีเน้นเริ่มต้น',
   'pet.overlayAria': 'เป็นโชว์แผงของสัตว์',
   'pet.spriteAria': 'นี่ของ {name} — ตัวกดจับลากและแชทเข้าพูด',
   'pet.spriteTitle': 'แวะมาหวัดดีจาก {name}! จิ้มมาสนทนากัน',

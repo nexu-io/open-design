@@ -1112,6 +1112,7 @@ export const ptBR: Dict = {
   'pet.fieldGreeting': 'Saudação',
   'pet.fieldAccent': 'Cor de destaque',
   'pet.fieldAccentCustom': 'Cor personalizada',
+  'pet.fieldAccentDefault': 'Cor de destaque padrão',
   'pet.overlayAria': 'Companheiro',
   'pet.spriteAria': '{name} — arraste para mover, clique para conversar',
   'pet.spriteTitle': 'Olá de {name}! Clique para conversar.',

@@ -1114,6 +1114,7 @@ export const fa: Dict = {
   'pet.fieldGreeting': 'پیام خوش‌آمد',
   'pet.fieldAccent': 'رنگ تأکید',
   'pet.fieldAccentCustom': 'رنگ سفارشی',
+  'pet.fieldAccentDefault': 'رنگ تأکید پیش‌فرض',
   'pet.overlayAria': 'همراه حیوان خانگی',
   'pet.spriteAria': '{name} — برای جابجایی بکشید، برای گفت‌وگو کلیک کنید',
   'pet.spriteTitle': 'سلام از طرف {name}! برای گفت‌وگو کلیک کنید.',

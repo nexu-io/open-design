@@ -1201,6 +1201,7 @@ export const zhTW: Dict = {
   'pet.fieldGreeting': '問候語',
   'pet.fieldAccent': '主題色',
   'pet.fieldAccentCustom': '自訂顏色',
+  'pet.fieldAccentDefault': '預設主題色',
   'pet.overlayAria': '寵物夥伴',
   'pet.spriteAria': '{name} — 拖曳可移動，點擊與它互動',
   'pet.spriteTitle': '{name} 來打招呼啦！點擊聊天。',

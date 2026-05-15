@@ -1112,6 +1112,7 @@ export const ko: Dict = {
   'pet.fieldGreeting': '인사말',
   'pet.fieldAccent': '강조 색상',
   'pet.fieldAccentCustom': '사용자 색상',
+  'pet.fieldAccentDefault': '기본 강조 색상',
   'pet.overlayAria': '펫 친구',
   'pet.spriteAria': '{name} — 드래그하여 이동, 클릭하여 대화',
   'pet.spriteTitle': '{name}의 인사! 클릭해서 대화하세요.',

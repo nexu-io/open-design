@@ -1071,6 +1071,7 @@ export const hu: Dict = {
   'pet.fieldGreeting': 'Üdvözlés',
   'pet.fieldAccent': 'Kiemelőszín',
   'pet.fieldAccentCustom': 'Egyedi szín',
+  'pet.fieldAccentDefault': 'Alapértelmezett kiemelőszín',
   'pet.overlayAria': 'Háziállat társ',
   'pet.spriteAria': '{name} — húzd a mozgatáshoz, kattints a beszélgetéshez',
   'pet.spriteTitle': 'Üdv tőlem, {name}! Kattints a beszélgetéshez.',

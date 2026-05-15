@@ -1113,6 +1113,7 @@ export const uk: Dict = {
   'pet.fieldGreeting': 'Привіт',
   'pet.fieldAccent': 'Колір акценту',
   'pet.fieldAccentCustom': 'Власний колір',
+  'pet.fieldAccentDefault': 'Колір акценту за замовчуванням',
   'pet.overlayAria': 'Супутник домашної тварини',
   'pet.spriteAria': '{name} — перетягніть для переміщення, натисніть для чату',
   'pet.spriteTitle': 'Привіт від {name}! Натисніть для чату.',

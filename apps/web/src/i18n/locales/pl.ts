@@ -1071,6 +1071,7 @@ export const pl: Dict = {
   'pet.fieldGreeting': 'Powitanie',
   'pet.fieldAccent': 'Kolor akcentu',
   'pet.fieldAccentCustom': 'Własny kolor',
+  'pet.fieldAccentDefault': 'Domyślny kolor akcentu',
   'pet.overlayAria': 'Towarzysz pupil',
   'pet.spriteAria': '{name} — przeciągnij, aby przesunąć, kliknij, aby porozmawiać',
   'pet.spriteTitle': 'Cześć od {name}! Kliknij, aby porozmawiać.',

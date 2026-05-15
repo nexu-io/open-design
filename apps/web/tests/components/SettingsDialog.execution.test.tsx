@@ -1792,7 +1792,7 @@ describe('SettingsDialog appearance interactions', () => {
       {},
     );
 
-    fireEvent.change(screen.getByLabelText('Custom accent color'), {
+    fireEvent.change(screen.getByLabelText('Custom color'), {
       target: { value: '#123456' },
     });
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#123456');
@@ -1804,6 +1804,29 @@ describe('SettingsDialog appearance interactions', () => {
       }),
       {},
     );
+  });
+
+  it('localizes the accent color controls in Chinese', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <SettingsDialog
+          initial={{ ...baseConfig, theme: 'light' }}
+          agents={availableAgents}
+          daemonLive={true}
+          appVersionInfo={null}
+          initialSection="appearance"
+          onPersist={vi.fn()}
+          onPersistComposioKey={vi.fn()}
+          onClose={vi.fn()}
+          onRefreshAgents={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('主题色')).toBeTruthy();
+    expect(screen.getByRole('radiogroup', { name: '主题色' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: '默认主题色' })).toBeTruthy();
+    expect(screen.getByLabelText('自定义颜色')).toBeTruthy();
   });
 });
 

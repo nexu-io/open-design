@@ -1071,6 +1071,7 @@ export const ar: Dict = {
   'pet.fieldGreeting': 'التحية',
   'pet.fieldAccent': 'لون التمييز',
   'pet.fieldAccentCustom': 'لون مخصص',
+  'pet.fieldAccentDefault': 'لون التمييز الافتراضي',
   'pet.overlayAria': 'رفيق الحيوان الأليف',
   'pet.spriteAria': '{name} - اسحب للتحريك، اضغط للدردشة',
   'pet.spriteTitle': 'مرحباً من {name}! اضغط للدردشة.',
