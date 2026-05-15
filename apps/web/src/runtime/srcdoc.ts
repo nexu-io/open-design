@@ -1306,6 +1306,28 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   }
   ownDeckButton('deck-prev', 'prev');
   ownDeckButton('deck-next', 'next');
+  document.addEventListener('keydown', function(e){
+    var target = e.target;
+    var tag = target && target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      go('next');
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      go('prev');
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      go('first');
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      go('last');
+    }
+  }, true);
   // Report once on load and on every scroll-end so the host stays in sync.
   window.addEventListener('load', function(){ setTimeout(restoreInitialSlide, 200); });
   document.addEventListener('scroll', function(){

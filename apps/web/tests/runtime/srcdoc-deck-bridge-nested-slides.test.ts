@@ -99,4 +99,29 @@ describe('deck bridge — nested slide markup (#1530)', () => {
     expect(state).toBeDefined();
     expect(state.count).toBe(3);
   });
+
+  it('handles arrow keys inside the iframe so fullscreen decks still turn pages', async () => {
+    const slides = Array.from({ length: 3 }, (_, i) =>
+      `<section class="slide${i === 0 ? ' active' : ''}">Slide ${i + 1}</section>`,
+    ).join('');
+    const { win, parentPostMessage } = setupDeckBridge(
+      `<div class="deck">${slides}</div>`,
+    );
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    win.document.body.dispatchEvent(
+      new win.KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        code: 'ArrowRight',
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      }),
+    );
+
+    const state = lastSlideState(parentPostMessage);
+    expect(state).toBeDefined();
+    expect(state.count).toBe(3);
+    expect(state.active).toBe(1);
+  });
 });
