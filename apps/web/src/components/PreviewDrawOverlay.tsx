@@ -166,6 +166,14 @@ export function PreviewDrawOverlay({
     redraw();
   }
 
+  useEffect(() => {
+    if (active) return;
+    strokesRef.current = [];
+    drawingRef.current = null;
+    setHasInk(false);
+    redraw();
+  }, [active, redraw]);
+
   function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
     const points = strokesRef.current.flatMap((stroke) => stroke.points);
     if (points.length === 0) return null;
