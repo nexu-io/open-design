@@ -33,7 +33,7 @@ import {
   fetchSkills,
   uploadProjectFiles,
 } from './providers/registry';
-import { navigate, useRoute } from './router';
+import { navigate, useRoute, type Route } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
@@ -154,6 +154,31 @@ export function resolveSettingsCloseConfig(
 ): AppConfig {
   const base = latestPersisted === rendered ? rendered : latestPersisted;
   return base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
+}
+
+// Decision helper for the in-app Back chevron (issue #1789). The previous
+// implementation always pushed `{ kind: 'home', view: 'home' }`, which
+// (a) added a new entry instead of popping and (b) hardcoded the Home
+// tab regardless of which surface the user came from (e.g. /projects,
+// /design-systems). Honoring the real history stack covers every entry
+// surface for free; the fallback only fires for true deep-links where
+// there is nothing to pop back to.
+export type BackNavigationDecision =
+  | { action: 'pop' }
+  | { action: 'navigate'; route: Route };
+
+export function resolveBackNavigation(input: {
+  historyState: unknown;
+  historyLength: number;
+}): BackNavigationDecision {
+  // `history.state` is non-null whenever the SPA itself called
+  // pushState/replaceState — i.e. there is a real prior in-app entry to
+  // pop back to. `length > 1` covers the rarer case of a same-tab
+  // navigation that did not set state (e.g. external → in-app link).
+  if (input.historyState !== null || input.historyLength > 1) {
+    return { action: 'pop' };
+  }
+  return { action: 'navigate', route: { kind: 'home', view: 'home' } };
 }
 
 export function App() {
@@ -942,7 +967,15 @@ export function App() {
   }, []);
 
   const handleBack = useCallback(() => {
-    navigate({ kind: 'home', view: 'home' });
+    const decision = resolveBackNavigation({
+      historyState: window.history.state,
+      historyLength: window.history.length,
+    });
+    if (decision.action === 'pop') {
+      window.history.back();
+      return;
+    }
+    navigate(decision.route);
   }, []);
 
   const handleClearPendingPrompt = useCallback(() => {

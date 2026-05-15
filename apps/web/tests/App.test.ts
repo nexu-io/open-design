@@ -4,6 +4,7 @@ import {
   buildPersistedConfig,
   isAutosaveDraftOnlyChange,
   persistComposioConfigChange,
+  resolveBackNavigation,
   resolveSettingsCloseConfig,
   shouldSyncMediaProvidersOnSave,
 } from '../src/App';
@@ -99,6 +100,46 @@ describe('isAutosaveDraftOnlyChange', () => {
 
   it('returns true for an identical snapshot (no-op autosave tick)', () => {
     expect(isAutosaveDraftOnlyChange(savedComposio, savedComposio)).toBe(true);
+  });
+});
+
+describe('resolveBackNavigation (issue #1789)', () => {
+  // The in-app Back chevron used to push `{ kind: 'home', view: 'home' }`
+  // unconditionally, which (a) ignored the actual history stack and (b)
+  // hardcoded the Home tab even when the user entered the project from
+  // /projects, /design-systems, /tasks, etc. The helper now decides
+  // between popping browser history and a hard navigation fallback so
+  // both behaviors stay covered as the entry surfaces grow.
+
+  it('pops browser history when a prior in-app entry exists', () => {
+    expect(
+      resolveBackNavigation({ historyState: { od: 'project' }, historyLength: 4 }),
+    ).toEqual({ action: 'pop' });
+  });
+
+  it('falls back to the home view on a fresh deep-link with no history', () => {
+    expect(
+      resolveBackNavigation({ historyState: null, historyLength: 1 }),
+    ).toEqual({ action: 'navigate', route: { kind: 'home', view: 'home' } });
+  });
+
+  it('treats a history length of 1 with no state as a deep-link fallback', () => {
+    // Some browsers report `length: 1` for the very first entry even when
+    // navigated to programmatically; without a history state object there
+    // is nothing to pop back to, so the fallback must fire.
+    expect(
+      resolveBackNavigation({ historyState: null, historyLength: 1 }).action,
+    ).toBe('navigate');
+  });
+
+  it('prefers history.back() whenever a state object is present, even at length 1', () => {
+    // SPAs that called pushState before the user clicked Back will have a
+    // non-null state at the current entry — pop honors that real entry
+    // rather than overwriting it with a fresh push to /.
+    expect(
+      resolveBackNavigation({ historyState: { od: 'home/projects' }, historyLength: 1 })
+        .action,
+    ).toBe('pop');
   });
 });
 
