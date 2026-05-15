@@ -139,9 +139,9 @@ export const fr: Dict = {
   'settings.reasoningPicker': 'Effort de raisonnement',
   'settings.modelPickerHint':
     'Récupéré depuis le CLI lorsqu\'il expose une commande `models`. « Par défaut » laisse le choix à la configuration du CLI ; « Personnalisé… » vous permet de saisir n\'importe quel identifiant de modèle accepté par le CLI.',
-  'settings.cliEnvTitle': 'Emplacements de configuration CLI',
+  'settings.cliEnvTitle': 'Proxy CLI et configuration',
   'settings.cliEnvHint':
-    'Définissez les dossiers de configuration non secrets pour les lancements de l’app empaquetée et la détection des agents.',
+    'Environnement facultatif par agent pour les lancements de l’app empaquetée, la détection et l’authentification du proxy local. Les secrets sont stockés dans la configuration locale de l’app et transmis uniquement à la CLI sélectionnée.',
   'settings.cliEnvClaudeConfigDir': 'Dossier de configuration Claude Code',
   'settings.cliEnvClaudeBaseUrl': 'URL de base du proxy Claude',
   'settings.cliEnvClaudeApiKey': 'Clé API du proxy Claude',
