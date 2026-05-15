@@ -7510,7 +7510,7 @@ button.connector-action.is-loading {
   font-weight: 500;
   white-space: nowrap;
 }
-.subtab-pill button:hover:not(.active) { background: rgba(255,255,255,0.6); border-color: transparent; color: var(--text); }
+.subtab-pill button:hover:not(.active) { background: var(--bg-muted); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
   background: var(--bg-panel);
   color: var(--text);
