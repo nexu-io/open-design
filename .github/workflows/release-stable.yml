@@ -633,14 +633,67 @@ jobs:
       - name: Build release linux artifacts
         run: |
           set -euo pipefail
-          pnpm exec tools-pack linux build \
-            --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace release-stable-linux \
-            --portable \
-            --app-version "${{ needs.metadata.outputs.stable_version }}" \
-            --to appimage \
-            --containerized \
+          tools_pack_dir="$RUNNER_TEMP/tools-pack"
+          report_dir="$RUNNER_TEMP/release-report/linux"
+          build_json_path="$report_dir/tools-pack.json"
+          build_log_path="$report_dir/tools-pack.log"
+          rm -rf "$tools_pack_dir"
+          mkdir -p "$report_dir"
+          : > "$build_log_path"
+          build_args=(
+            exec tools-pack linux build
+            --dir "$tools_pack_dir"
+            --namespace release-stable-linux
+            --portable
+            --app-version "${{ needs.metadata.outputs.stable_version }}"
+            --to appimage
+            --containerized
             --json
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$build_json_path"
+            node -e 'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));' "$build_json_path"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output" | tee "$build_json_path"
+            exit "$build_status"
+          fi
+
+      - name: Smoke release linux AppImage runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-stable-linux
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/release-report/linux"
+          mkdir -p "$report_dir/screenshots"
+          cat > "$report_dir/manifest.json" <<EOF
+          {
+            "channel": "${{ needs.metadata.outputs.channel }}",
+            "platform": "linux",
+            "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
+            "spec": "specs/linux.spec.ts",
+            "namespace": "release-stable-linux",
+            "screenshot": "screenshots/open-design-linux-smoke.png",
+            "githubRunId": "$GITHUB_RUN_ID",
+            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
+            "commit": "$GITHUB_SHA"
+          }
+          EOF
+          sudo apt-get update 2>&1 | tee "$report_dir/apt-get-update.log"
+          sudo apt-get install -y xvfb 2>&1 | tee "$report_dir/apt-get-install-xvfb.log"
+          xvfb-run -a pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+
+      - name: Upload linux e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-linux-e2e-report
+          path: ${{ runner.temp }}/release-report/linux
+          if-no-files-found: warn
 
       - name: Prepare linux release assets
         env:
@@ -748,6 +801,13 @@ jobs:
         with:
           name: open-design-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux
+
+      - name: Download linux e2e spec report
+        if: ${{ needs.build_linux.result == 'success' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-linux-e2e-report
+          path: ${{ runner.temp }}/release-report/linux
 
       - name: Download mac e2e spec report
         uses: actions/download-artifact@v8

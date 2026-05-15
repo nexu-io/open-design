@@ -11,9 +11,9 @@
  *   - srcDoc inline: build a self-contained document (via buildSrcdoc),
  *     optionally with relative assets concatenated in by inlineRelative-
  *     Assets, and pass it via the iframe's srcDoc attribute. Required
- *     when we need to inject host-side bridges that have to run before
- *     user scripts (deck navigation, comment-mode targeting), and useful
- *     as an explicit opt-in for self-contained exports.
+ *     when we need to inject host-side bridges that cannot be served from
+ *     the artifact itself (deck navigation, inspect/tweak controls), and
+ *     useful as an explicit opt-in for self-contained exports.
  *
  * The two helpers below isolate the decision so it's directly unit-
  * testable without dragging the whole FileViewer React tree into a
@@ -25,10 +25,14 @@ export interface UrlLoadDecision {
   mode: 'preview' | 'source';
   /** Treat as a slide deck — needs the deck postMessage bridge. */
   isDeck: boolean;
-  /** Comment mode is active — needs the comment bridge. */
+  /** Comment mode is active. Needs either srcDoc injection or an artifact-owned URL-load bridge. */
   commentMode: boolean;
-  /** Inspect mode is active — needs the selection bridge for live tuning. */
+  /** Inspect mode is active — needs the srcdoc selection bridge for live tuning. */
   inspectMode?: boolean;
+  /** Direct text edit is active. Needs either srcDoc injection or an artifact-owned URL-load bridge. */
+  editMode?: boolean;
+  /** The artifact has its own script that listens for host mode postMessages while URL-loaded. */
+  urlModeBridge?: boolean;
   /** Tweaks palette popover open or palette committed — needs the palette bridge. */
   paletteActive?: boolean;
   /** Draw annotations need the srcDoc snapshot bridge for screenshot export. */
@@ -46,16 +50,22 @@ export interface UrlLoadDecision {
 export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   if (d.mode !== 'preview') return false;
   if (d.isDeck) return false;
-  if (d.commentMode) return false;
+  if (d.commentMode && !d.urlModeBridge) return false;
   // Inspect needs the selection bridge injected via buildSrcdoc; a raw
   // URL-loaded iframe has no listener to apply per-element overrides.
   if (d.inspectMode) return false;
+  if (d.editMode && !d.urlModeBridge) return false;
   // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;
   if (d.drawMode) return false;
   if (d.forceInline) return false;
   return true;
+}
+
+export function hasUrlModeBridge(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return /<script\b[^>]*\bsrc\s*=\s*["'][^"']*\bod-direct-edit\.js\b[^"']*["'][^>]*>/i.test(source);
 }
 
 /**

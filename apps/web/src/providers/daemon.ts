@@ -293,6 +293,30 @@ export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusRe
   }
 }
 
+// Push a `tool_result` content block back into a running stream-json child.
+// Used to answer Claude's `AskUserQuestion` tool: the host card collects the
+// user's pick, formats it as one text string, and we route it through the
+// daemon's POST /api/runs/:id/tool-result. The daemon writes it as a JSONL
+// line on the still-open stdin so claude-code can resume mid-call instead
+// of auto-erroring the tool in headless mode.
+export async function submitChatRunToolResult(
+  runId: string,
+  toolUseId: string,
+  content: string,
+  options: { isError?: boolean } = {},
+): Promise<{ ok: boolean; status?: number }> {
+  try {
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/tool-result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toolUseId, content, isError: !!options.isError }),
+    });
+    return { ok: resp.ok, status: resp.status };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,

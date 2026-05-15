@@ -173,4 +173,78 @@ describe('importClaudeDesignZip', () => {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it('normalizes Claude Design canvas wheel handling so vertical scroll does not zoom', async () => {
+    const designCanvas = `
+function DCViewport() {
+  const tf = { current: { x: 0, y: 0, scale: 1 } };
+  const apply = () => {};
+  const zoomAt = () => {};
+  React.useEffect(() => {
+    // Mouse-wheel vs trackpad-scroll heuristic. A physical wheel sends
+    // line-mode deltas (Firefox) or large integer pixel deltas with no X
+    // component (Chrome/Safari, typically multiples of 100/120). Trackpad
+    // two-finger scroll sends small/fractional pixel deltas, often with
+    // non-zero deltaX. ctrlKey is set by the browser for trackpad pinch.
+    const isMouseWheel = (e) =>
+      e.deltaMode !== 0 ||
+      (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 40);
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      if (isGesturing) return; // Safari: gesture* owns the pinch — discard concurrent wheels
+      if ((e.ctrlKey || e.metaKey) && !isMouseWheel(e)) {
+        // trackpad pinch, or ctrl/cmd + smooth-scroll mouse. Notched
+        // wheels fall through to the fixed-step branch below.
+        zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
+      } else if (isMouseWheel(e)) {
+        // notched mouse wheel — fixed-ratio step per click
+        zoomAt(e.clientX, e.clientY, Math.exp(-Math.sign(e.deltaY) * 0.18));
+      } else {
+        // trackpad two-finger scroll — pan
+        tf.current.x -= e.deltaX;
+        tf.current.y -= e.deltaY;
+        apply();
+      }
+    };
+
+    // Safari sends native gesture* events for trackpad pinch with a smooth
+    // e.scale; preferring these over the ctrl+wheel fallback gives a much
+    // better feel there. No-ops on other browsers. Safari also fires
+    // ctrlKey wheel events during the same pinch — isGesturing makes
+    // onWheel drop those entirely so they neither zoom nor pan.
+    let gsBase = 1;
+    let isGesturing = false;
+    const onGestureStart = (e) => { e.preventDefault(); isGesturing = true; gsBase = tf.current.scale; };
+    const onGestureChange = (e) => {
+      e.preventDefault();
+      zoomAt(e.clientX, e.clientY, (gsBase * e.scale) / tf.current.scale);
+    };
+    const onGestureEnd = (e) => { e.preventDefault(); isGesturing = false; };
+  });
+}
+`;
+    const zip = buildZip([
+      { name: 'index.html', body: Buffer.from('<html><script src="design-canvas.jsx"></script></html>') },
+      { name: 'design-canvas.jsx', body: Buffer.from(designCanvas) },
+    ]);
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'cd-import-'));
+    const zipPath = path.join(tmp, 'in.zip');
+    const projectDir = path.join(tmp, 'proj');
+    writeFileSync(zipPath, zip);
+    try {
+      const result = await importClaudeDesignZip(zipPath, projectDir);
+      expect(result.files).toContain('design-canvas.jsx');
+      const written = readFileSync(path.join(projectDir, 'design-canvas.jsx'), 'utf8');
+      expect(written).not.toContain('const isMouseWheel');
+      expect(written).not.toContain('Math.exp(-Math.sign(e.deltaY) * 0.18)');
+      expect(written).not.toContain('(gsBase * e.scale) / tf.current.scale');
+      expect(written).toContain('const panByWheel = (e) =>');
+      expect(written).toContain('if (e.metaKey)');
+      expect(written).toContain('zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));');
+      expect(written).toContain("const limit = axis === 'y' ? 72 : 160;");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });

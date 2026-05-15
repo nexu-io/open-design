@@ -7,7 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import { streamMessage } from '../../src/providers/anthropic';
 import type { StreamHandlers } from '../../src/providers/anthropic';
-import { patchPreviewCommentStatus, writeProjectTextFile } from '../../src/providers/registry';
+import {
+  fetchProjectFilePreview,
+  fetchProjectFileText,
+  fetchProjectFiles,
+  patchPreviewCommentStatus,
+  writeProjectTextFile,
+} from '../../src/providers/registry';
 import { listMessages, saveMessage } from '../../src/state/projects';
 import { playSound } from '../../src/utils/notifications';
 import type {
@@ -24,6 +30,7 @@ import type {
 } from '../../src/types';
 
 const chatPaneMockState = vi.hoisted(() => ({
+  attachments: [] as ChatAttachment[],
   commentAttachments: [] as ChatCommentAttachment[],
 }));
 
@@ -65,6 +72,8 @@ vi.mock('../../src/providers/registry', async () => {
     deletePreviewComment: vi.fn(),
     fetchDesignSystem: vi.fn().mockResolvedValue(null),
     fetchLiveArtifacts: vi.fn().mockResolvedValue([]),
+    fetchProjectFilePreview: vi.fn().mockResolvedValue(null),
+    fetchProjectFileText: vi.fn().mockResolvedValue(null),
     fetchPreviewComments: vi.fn().mockResolvedValue([]),
     fetchProjectFiles: vi.fn().mockResolvedValue([]),
     fetchSkill: vi.fn().mockResolvedValue(null),
@@ -132,7 +141,10 @@ vi.mock('../../src/components/ChatPane', () => ({
   }) => (
     <div>
       {error ? <div>{error}</div> : null}
-      <button type="button" onClick={() => onSend('Create a login page', [], chatPaneMockState.commentAttachments)}>
+      <button
+        type="button"
+        onClick={() => onSend('Create a login page', chatPaneMockState.attachments, chatPaneMockState.commentAttachments)}
+      >
         send
       </button>
       {messages.map((message) => (
@@ -152,6 +164,9 @@ vi.mock('../../src/components/ChatPane', () => ({
 }));
 
 const mockedStreamMessage = vi.mocked(streamMessage);
+const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
+const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
+const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
 const mockedListMessages = vi.mocked(listMessages);
 const mockedSaveMessage = vi.mocked(saveMessage);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
@@ -211,8 +226,15 @@ function renderProjectView(renderProject: Project = project) {
 
 describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
+    chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
     mockedStreamMessage.mockReset();
+    mockedFetchProjectFilePreview.mockReset();
+    mockedFetchProjectFileText.mockReset();
+    mockedFetchProjectFiles.mockReset();
+    mockedFetchProjectFilePreview.mockResolvedValue(null);
+    mockedFetchProjectFileText.mockResolvedValue(null);
+    mockedFetchProjectFiles.mockResolvedValue([]);
     mockedListMessages.mockClear();
     mockedSaveMessage.mockClear();
     mockedWriteProjectTextFile.mockClear();
@@ -336,6 +358,60 @@ describe('ProjectView API empty response handling', () => {
       expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
     });
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+  });
+
+  it('inlines attached document text into the BYOK prompt sent to API providers', async () => {
+    chatPaneMockState.attachments = [
+      { path: 'brief.docx', name: 'brief.docx', kind: 'file', size: 1024 },
+    ];
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'brief.docx',
+        path: 'brief.docx',
+        kind: 'document',
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 1024,
+        mtime: 1,
+      },
+    ] as never);
+    mockedFetchProjectFilePreview.mockResolvedValue({
+      kind: 'document',
+      title: 'brief.docx',
+      sections: [
+        {
+          title: 'Document',
+          lines: ['Hello world', 'Second line'],
+        },
+      ],
+    } as never);
+
+    let capturedHistory: ChatMessage[] = [];
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      capturedHistory = history;
+      handlers.onDelta('hello');
+      handlers.onDone('hello');
+    });
+
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith(project.id, 'brief.docx');
+    });
+    expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
+    const userMessage = capturedHistory.at(-1);
+    expect(userMessage?.role).toBe('user');
+    expect(userMessage?.content).toContain('<attached-project-files>');
+    expect(userMessage?.content).toContain('brief.docx');
+    expect(userMessage?.content).toContain('Hello world');
+    expect(userMessage?.content).toContain('Second line');
   });
 
   it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {

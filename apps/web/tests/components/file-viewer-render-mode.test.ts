@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  hasUrlModeBridge,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -17,8 +18,20 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true })).toBe(false);
   });
 
-  it('falls back to srcDoc when comment mode is active (comment bridge required)', () => {
+  it('falls back to srcDoc when comment mode is active without an artifact-owned bridge', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true })).toBe(false);
+  });
+
+  it('keeps URL-load when comment mode is active and the artifact owns the bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true })).toBe(true);
+  });
+
+  it('falls back to srcDoc when direct edit mode is active without an artifact-owned bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true })).toBe(false);
+  });
+
+  it('keeps URL-load when direct edit mode is active and the artifact owns the bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true, urlModeBridge: true })).toBe(true);
   });
 
   it('falls back to srcDoc when inspect mode is active (selection bridge required)', () => {
@@ -41,6 +54,25 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, commentMode: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, forceInline: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
+  });
+});
+
+describe('hasUrlModeBridge', () => {
+  it('detects an artifact-owned direct-edit bridge script', () => {
+    expect(hasUrlModeBridge('<script src="od-direct-edit.js"></script>')).toBe(true);
+    expect(hasUrlModeBridge('<script defer src="./assets/od-direct-edit.js?v=1"></script>')).toBe(true);
+  });
+
+  it('ignores comments, text nodes, and inline script bodies that only mention the bridge name', () => {
+    expect(hasUrlModeBridge('<!-- TODO: ship od-direct-edit.js -->')).toBe(false);
+    expect(hasUrlModeBridge('<p>Use od-direct-edit.js for editing</p>')).toBe(false);
+    expect(hasUrlModeBridge('<script>console.log("od-direct-edit.js")</script>')).toBe(false);
+  });
+
+  it('ignores unrelated script URLs', () => {
+    expect(hasUrlModeBridge('<script src="direct-edit.js"></script>')).toBe(false);
+    expect(hasUrlModeBridge(null)).toBe(false);
   });
 });
 

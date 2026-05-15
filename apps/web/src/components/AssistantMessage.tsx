@@ -1,7 +1,8 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "./ToolCard";
 import { renderMarkdown } from "../runtime/markdown";
 import { projectFileUrl } from "../providers/registry";
+import { submitChatRunToolResult } from "../providers/daemon";
 import {
   splitOnQuestionForms,
   type QuestionForm,
@@ -76,7 +77,17 @@ export function AssistantMessage({
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
-  const blocks = buildBlocks(events);
+  // Claude sometimes hedges by emitting a markdown duplicate of the same
+  // questions alongside an `AskUserQuestion` tool call. The card already
+  // shows the questions + options, so suppressing the trailing prose
+  // avoids rendering the same content twice. The system prompt asks the
+  // model not to do this; this is the belt-and-suspenders.
+  // The chat-pane-level PinnedTodoBar renders the canonical TodoWrite card
+  // above the composer, so we strip any TodoWrite tool-groups out of the
+  // per-message flow to avoid the same task list rendering twice.
+  const blocks = stripTodoToolGroups(
+    suppressAskUserQuestionFallbackText(buildBlocks(events)),
+  );
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
@@ -115,6 +126,22 @@ export function AssistantMessage({
   // immediately on click (without waiting for the parent to re-render).
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
     () => new Set()
+  );
+  // Route interactive tool answers (currently AskUserQuestion) back to the
+  // still-open stream-json child via the daemon. We resolve to `true` on
+  // success so the card can flip into its answered state; on `false` (run
+  // already terminated, stdin closed, etc.) the card falls back to the
+  // plain-text `onSubmitForm` path so the user is never stuck. Only wire
+  // this when we have an active run id and the message is the latest turn
+  // — older messages whose run is gone use the fallback exclusively.
+  const onAnswerToolUse = useCallback(
+    async (toolUseId: string, content: string) => {
+      if (!isLast) return false;
+      if (!message.runId) return false;
+      const resp = await submitChatRunToolResult(message.runId, toolUseId, content);
+      return resp.ok;
+    },
+    [isLast, message.runId],
   );
 
   return (
@@ -161,6 +188,9 @@ export function AssistantMessage({
                 runSucceeded={runSucceeded}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
+                isLast={!!isLast}
+                onSubmitForm={onSubmitForm}
+                onAnswerToolUse={onAnswerToolUse}
               />
             );
           }
@@ -943,21 +973,87 @@ interface ToolItem {
   result?: Extract<AgentEvent, { kind: "tool_result" }>;
 }
 
+// Snapshot tools (the call IS the state, later calls supersede earlier
+// ones) and tools the model retries verbatim under headless-mode errors
+// are noisy when stacked. Collapse identical-input neighbors to the most
+// recent. Currently:
+//   - TodoWrite / todowrite: the input replaces the previous list, so the
+//     latest call is the only one worth showing; older identical or
+//     superseded snapshots are pure duplication.
+//   - AskUserQuestion / ask_user_question: claude-code -p auto-errors the
+//     tool and the model retries with identical input until it gives up.
+// Other tool names pass through untouched.
+const SNAPSHOT_TOOL_NAMES = new Set([
+  "AskUserQuestion",
+  "ask_user_question",
+  "TodoWrite",
+  "todowrite",
+]);
+
+function dedupeSnapshotToolRetries(items: ToolItem[]): ToolItem[] {
+  if (items.length <= 1) return items;
+  const allSnapshot = items.every((it) => SNAPSHOT_TOOL_NAMES.has(it.use.name));
+  if (!allSnapshot) return items;
+  // For TodoWrite specifically, the LATEST call always wins regardless of
+  // input — it is a state replace, not an append. For AskUserQuestion we
+  // group by input so a sequence of distinct questions (rare) renders as
+  // distinct cards. The cheap unifying behavior: keep the last item per
+  // `(name, JSON.stringify(input))` key; for TodoWrite a single name+input
+  // is the snapshot identity, for AskUserQuestion it's the question text.
+  const lastByKey = new Map<string, ToolItem>();
+  for (const it of items) {
+    let key: string;
+    try {
+      key = `${it.use.name}:${JSON.stringify(it.use.input)}`;
+    } catch {
+      key = it.use.id;
+    }
+    lastByKey.set(key, it);
+  }
+  // For TodoWrite groups, additionally collapse to just the most recent
+  // item overall (a later call supersedes an earlier one even when inputs
+  // differ). We detect by checking whether all items share a TodoWrite
+  // name after the input-key dedupe above.
+  const collapsed = Array.from(lastByKey.values());
+  const allTodoWrite = collapsed.every(
+    (it) => it.use.name === "TodoWrite" || it.use.name === "todowrite",
+  );
+  if (allTodoWrite && collapsed.length > 1) {
+    return [collapsed[collapsed.length - 1]!];
+  }
+  return collapsed;
+}
+
 function ToolGroupCard({
   items,
   runStreaming,
   runSucceeded,
   projectFileNames,
   onRequestOpenFile,
+  isLast,
+  onSubmitForm,
+  onAnswerToolUse,
 }: {
   items: ToolItem[];
   runStreaming: boolean;
   runSucceeded: boolean;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  isLast?: boolean;
+  onSubmitForm?: (text: string) => void;
+  onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+
+  // `claude-code -p` (headless) auto errors `AskUserQuestion` because it
+  // cannot prompt the user, so the model retries the call up to ~4 times
+  // within a single turn. Each retry produces an identical tool_use event,
+  // which used to render as a stack of duplicate question cards. Collapse
+  // consecutive AskUserQuestion uses with identical input to the LAST one
+  // (it has the most up to date tool_use id, which is what we route the
+  // answer against if a backend tool_result wire is added later).
+  items = dedupeSnapshotToolRetries(items);
 
   // A run of one tool collapses to that tool's card directly so we don't
   // wrap a single child in a redundant disclosure.
@@ -970,6 +1066,9 @@ function ToolGroupCard({
         runSucceeded={runSucceeded}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
+        isLast={isLast}
+        onSubmitForm={onSubmitForm}
+        onAnswerToolUse={onAnswerToolUse}
       />
     );
   }
@@ -994,21 +1093,26 @@ function ToolGroupCard({
           <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
         </span>
       </button>
-      {open ? (
-        <div className="action-card-body">
-          {items.map((it, i) => (
-            <ToolCard
-              key={i}
-              use={it.use}
-              result={it.result}
-              runStreaming={runStreaming}
-              runSucceeded={runSucceeded}
-              projectFileNames={projectFileNames}
-              onRequestOpenFile={onRequestOpenFile}
-            />
-          ))}
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="action-card-body">
+            {items.map((it, i) => (
+              <ToolCard
+                key={i}
+                use={it.use}
+                result={it.result}
+                runStreaming={runStreaming}
+                runSucceeded={runSucceeded}
+                projectFileNames={projectFileNames}
+                onRequestOpenFile={onRequestOpenFile}
+                isLast={isLast}
+                onSubmitForm={onSubmitForm}
+                onAnswerToolUse={onAnswerToolUse}
+              />
+            ))}
+          </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -1115,6 +1219,45 @@ type Block =
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
+// Drop any tool-group composed entirely of TodoWrite calls. ChatPane
+// renders one canonical TodoCard above the composer using
+// `latestTodosFromConversation`, so leaving the same task list inline in
+// each assistant message just duplicates the view.
+function stripTodoToolGroups(blocks: Block[]): Block[] {
+  return blocks.filter((block) => {
+    if (block.kind !== "tool-group") return true;
+    return !block.items.every(
+      (it) => it.use.name === "TodoWrite" || it.use.name === "todowrite",
+    );
+  });
+}
+
+// Hide text blocks that follow an `AskUserQuestion` tool use in the same
+// assistant message. Claude tends to also write the same questions as
+// markdown text alongside the tool call. The card already shows the
+// content; the prose is hedge that duplicates and confuses the user.
+function suppressAskUserQuestionFallbackText(blocks: Block[]): Block[] {
+  let seenAskUserQuestion = false;
+  const filtered: Block[] = [];
+  for (const block of blocks) {
+    if (block.kind === "tool-group") {
+      const hasAuq = block.items.some(
+        (it) =>
+          it.use.name === "AskUserQuestion" ||
+          it.use.name === "ask_user_question",
+      );
+      if (hasAuq) seenAskUserQuestion = true;
+      filtered.push(block);
+      continue;
+    }
+    if (seenAskUserQuestion && block.kind === "text") {
+      continue;
+    }
+    filtered.push(block);
+  }
+  return filtered;
+}
+
 function buildBlocks(events: AgentEvent[]): Block[] {
   const out: Block[] = [];
   const resultByToolId = new Map<

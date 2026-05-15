@@ -46,6 +46,7 @@ export type MediaProviderId =
   | 'fishaudio'
   | 'senseaudio'
   | 'tavily'
+  | 'leonardo'
   | 'stub';
 
 export interface MediaProvider {
@@ -133,6 +134,16 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     defaultBaseUrl: 'https://fal.run',
     docsUrl: 'https://fal.ai/dashboard/keys',
     supportsCustomModel: true,
+  },
+  {
+    id: 'leonardo',
+    label: 'Leonardo.ai',
+    hint: 'Phoenix / Kino XL / FLUX',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1',
+    docsUrl: 'https://docs.leonardo.ai/docs/create-an-api-key',
   },
   {
     id: 'replicate',
@@ -352,6 +363,13 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'ideogram-v3-fal', label: 'ideogram-v3', hint: 'Fal · Ideogram v3 · typography + design', provider: 'fal', caps: ['t2i'] },
   { id: 'recraft-v3-fal', label: 'recraft-v3', hint: 'Fal · Recraft v3 · vector + illustration', provider: 'fal', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
+
+  // Leonardo.ai models
+  { id: 'leonardo-phoenix', label: 'Phoenix', hint: 'Leonardo · versatile', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-kino-xl', label: 'Kino XL', hint: 'Leonardo · cinematic', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-dev', label: 'FLUX Dev', hint: 'Leonardo · FLUX', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-schnell', label: 'FLUX Schnell', hint: 'Leonardo · fast', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },

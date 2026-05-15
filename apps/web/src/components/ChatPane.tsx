@@ -4,6 +4,8 @@ import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
+import { latestTodoWriteInputFromMessages } from '../runtime/todos';
+import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
@@ -317,6 +319,11 @@ export function ChatPane({
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  // The user can dismiss the pinned task list once everything is complete.
+  // We key the dismissal on the snapshot (serialized TodoWrite input) so
+  // the next time the agent emits a different snapshot the card returns,
+  // but the same snapshot stays hidden across renders / streaming ticks.
+  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(null);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const hasActiveRunMessage = messages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
@@ -766,18 +773,28 @@ export function ChatPane({
               })}
               {error ? <div className="msg error">{error}</div> : null}
             </div>
-            {scrolledFromBottom ? (
-              <button
-                type="button"
-                className="chat-jump-btn"
-                onClick={jumpToBottom}
-                title={t('chat.scrollToLatest')}
-              >
-                <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
-                <span>{t('chat.jumpToLatest')}</span>
-              </button>
-            ) : null}
+            {/* Always mounted so the CSS transition can play in both
+                directions; the `chat-jump-btn-active` class flips the
+                slide + opacity, and `aria-hidden` + `tabIndex={-1}`
+                keep it out of the a11y tree when it's not visible. */}
+            <button
+              type="button"
+              className={`chat-jump-btn${scrolledFromBottom ? ' chat-jump-btn-active' : ''}`}
+              onClick={jumpToBottom}
+              title={t('chat.scrollToLatest')}
+              aria-hidden={!scrolledFromBottom}
+              tabIndex={scrolledFromBottom ? 0 : -1}
+            >
+              <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
+              <span>{t('chat.jumpToLatest')}</span>
+            </button>
           </div>
+          <PinnedTodoSlot
+            messages={messages}
+            streaming={streaming}
+            dismissedKey={dismissedPinnedTodoKey}
+            onDismiss={setDismissedPinnedTodoKey}
+          />
           <ChatComposer
             ref={composerRef}
             projectId={projectId}
@@ -807,6 +824,55 @@ export function ChatPane({
           />
         </>
       ) : null}
+    </div>
+  );
+}
+
+// Pinned task list above the chat composer. The latest TodoWrite snapshot
+// across the entire conversation is the canonical state; AssistantMessage
+// no longer renders these inline so there is exactly one TodoCard on
+// screen. When every task is complete the user can dismiss the card; the
+// dismissal sticks to the current snapshot only, so a fresh TodoWrite
+// from the agent re-shows it.
+function PinnedTodoSlot({
+  messages,
+  streaming,
+  dismissedKey,
+  onDismiss,
+}: {
+  messages: ChatMessage[];
+  streaming: boolean;
+  dismissedKey: string | null;
+  onDismiss: (key: string | null) => void;
+}) {
+  // `exiting` lets the dismiss click play a slide-down transition before
+  // the slot tears down. Without it React would unmount immediately and
+  // the card would pop out without animation.
+  const [exiting, setExiting] = useState(false);
+  const input = latestTodoWriteInputFromMessages(messages);
+  if (input == null) return null;
+  let snapshotKey: string;
+  try {
+    snapshotKey = JSON.stringify(input);
+  } catch {
+    snapshotKey = String(input);
+  }
+  if (snapshotKey === dismissedKey) return null;
+  return (
+    <div className={`chat-pinned-todo${exiting ? ' chat-pinned-todo-exit' : ''}`}>
+      <TodoCard
+        input={input}
+        runStreaming={streaming}
+        runSucceeded={!streaming}
+        onDismiss={() => {
+          if (exiting) return;
+          setExiting(true);
+          // Match the slide-out duration in CSS (220ms) — once the
+          // transition completes the snapshot key is recorded as
+          // dismissed and the slot is unmounted by the early return.
+          window.setTimeout(() => onDismiss(snapshotKey), 220);
+        }}
+      />
     </div>
   );
 }

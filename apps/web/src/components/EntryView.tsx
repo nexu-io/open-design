@@ -71,7 +71,7 @@ interface Props {
   promptTemplatesLoading?: boolean;
   onCreateProject: (input: CreateInput & { pendingPrompt?: string }) => void;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
-  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolder?: (baseDir: string) => Promise<boolean> | boolean;
   onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;

@@ -810,6 +810,33 @@ function meaningfulDomFallbackTarget(el) {
     return items;
   }
   var postTargetsPending = false;
+  var postPreviewScrollPending = false;
+  function previewScrollElement(){
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function postPreviewScroll(){
+    var el = previewScrollElement();
+    if (!el) return;
+    var frame = document.scrollingElement || document.documentElement;
+    window.parent.postMessage({
+      type: 'od:preview-scroll',
+      canvasLeft: Math.round(el.scrollLeft || 0),
+      canvasTop: Math.round(el.scrollTop || 0),
+      frameLeft: Math.round(frame.scrollLeft || 0),
+      frameTop: Math.round(frame.scrollTop || 0)
+    }, '*');
+  }
+  function schedulePostPreviewScroll(){
+    if (postPreviewScrollPending) return;
+    postPreviewScrollPending = true;
+    window.requestAnimationFrame(function(){
+      postPreviewScrollPending = false;
+      postPreviewScroll();
+    });
+  }
+  function requestPreviewScrollRestore(){
+    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
   function postTargets(){
     if (!active()) return;
     window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
@@ -887,6 +914,14 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
         stroke = [];
         try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
       }
+      return;
+    }
+    if (data.type === 'od:preview-scroll-restore') {
+      var frame = document.scrollingElement || document.documentElement;
+      var el = previewScrollElement();
+      if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
+      if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
+      setTimeout(postPreviewScroll, 0);
       return;
     }
     if (data.type === 'od:inspect-mode') {
@@ -1043,7 +1078,10 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
   document.addEventListener('pointerup', finishStroke, true);
   document.addEventListener('pointercancel', finishStroke, true);
   window.addEventListener('resize', schedulePostTargets);
-  document.addEventListener('scroll', schedulePostTargets, true);
+  document.addEventListener('scroll', function(){
+    schedulePostTargets();
+    schedulePostPreviewScroll();
+  }, true);
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
   // Reflect the host-requested initial modes on the documentElement so
@@ -1058,8 +1096,13 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
   // as save input — it parses the artifact source itself — but emitting it
   // keeps the iframe → host channel symmetric across set/reset/extract.
   if (Object.keys(overrides).length) setTimeout(postOverrides, 0);
+  setTimeout(requestPreviewScrollRestore, 0);
+  setTimeout(requestPreviewScrollRestore, 80);
+  setTimeout(requestPreviewScrollRestore, 240);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
   else setTimeout(postTargets, 0);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
+  else setTimeout(postPreviewScroll, 0);
 })();</script>`;
   const style = `<style data-od-selection-bridge-style>
 html[data-od-comment-mode] body * { cursor: crosshair !important; }

@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th';
+export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th' | 'it';
 
-export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th'];
+export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -22,7 +22,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'fr': 'Français',
   'uk': 'Українська',
   'tr': 'Türkçe',
-  'th': 'ภาษาไทย'
+  'th': 'ภาษาไทย',
+  'it': 'Italiano'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -60,6 +61,7 @@ export interface Dict {
   'common.minutesAgo': string;
   'common.hoursAgo': string;
   'common.daysAgo': string;
+  'common.weeksAgo': string;
   'common.now': string;
   'common.minutesShort': string;
   'common.hoursShort': string;
@@ -924,6 +926,20 @@ export interface Dict {
   'chat.comments.updateSend': string;
   'chat.comments.removeAttachment': string;
   'chat.comments.removeAttachmentAria': string;
+  'chat.comments.comment': string;
+  'chat.comments.sendToChat': string;
+  'chat.comments.sending': string;
+  'chat.comments.edit': string;
+  'chat.comments.select': string;
+  'chat.comments.deselect': string;
+  'chat.comments.nSelected': string;
+  'chat.comments.pin': string;
+  'chat.comments.addNote': string;
+  'chat.comments.savedToast': string;
+  'chat.comments.pinSavedToast': string;
+  'chat.comments.pinAtCoords': string;
+  'chat.comments.capturedItems': string;
+  'chat.comments.clear': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
@@ -1374,6 +1390,14 @@ export interface Dict {
   'tool.openInTab': string;
   'tool.open': string;
   'tool.todos': string;
+  'tool.askQuestion': string;
+  'tool.askQuestionSubmit': string;
+  'tool.askQuestionPending': string;
+  'tool.askQuestionAnswered': string;
+  'tool.todosExpand': string;
+  'tool.todosCollapse': string;
+  'tool.todosDone': string;
+  'tool.todosDismiss': string;
   'tool.write': string;
   'tool.edit': string;
   'tool.read': string;
