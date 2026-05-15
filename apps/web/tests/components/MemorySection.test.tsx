@@ -409,6 +409,59 @@ describe('MemorySection', () => {
     expect(screen.getByText('Updated preference')).toBeTruthy();
   });
 
+  it('keeps the expanded preview control visually distinct from delete', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [
+            {
+              id: 'project_scope',
+              name: 'Project scope',
+              description: 'Current project constraints',
+              type: 'project',
+              updatedAt: Date.now(),
+            },
+          ],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/memory/project_scope' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          entry: {
+            id: 'project_scope',
+            name: 'Project scope',
+            description: 'Current project constraints',
+            type: 'project',
+            body: '- Keep memory actions clear',
+            updatedAt: Date.now(),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    const card = (await screen.findByText('Project scope')).closest('.library-card') as HTMLElement;
+    fireEvent.click(within(card).getByTitle('Preview'));
+
+    await screen.findByText('Keep memory actions clear');
+    const closeIconPaths = card.querySelectorAll('path[d="M18 6 6 18"]');
+
+    expect(closeIconPaths).toHaveLength(1);
+  });
+
   it('deletes an existing memory entry from the list', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     let entries = [

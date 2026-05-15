@@ -902,7 +902,7 @@ export function MemorySection() {
                     title={t('settings.memoryPreview')}
                   >
                     <Icon
-                      name={previewId === entry.id ? 'close' : 'chevron-right'}
+                      name={previewId === entry.id ? 'chevron-down' : 'chevron-right'}
                       size={14}
                     />
                   </button>
