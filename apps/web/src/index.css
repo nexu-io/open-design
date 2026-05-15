@@ -21405,6 +21405,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .plugin-share-confirm__panel {
   max-width: 720px;
 }
+.plugin-share-confirm .plugin-details-modal__foot {
+  padding: 16px 24px 22px;
+}
 .plugin-share-confirm__steps {
   margin: 12px 0 0;
   padding-left: 20px;
