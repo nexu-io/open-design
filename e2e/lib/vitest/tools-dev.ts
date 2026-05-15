@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 import { e2eWorkspaceRoot, type SmokeSuite } from './smoke-suite.ts';
 
 const execFileAsync = promisify(execFile);
+const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
+const pnpmExecPath = process.env.npm_execpath;
 
 export type ToolsDevAppStatus = {
   pid?: number;
@@ -138,7 +140,13 @@ export async function readToolsDevLogs(suite: SmokeSuite): Promise<Record<string
 }
 
 async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T> {
-  const { stdout } = await execFileAsync('pnpm', ['tools-dev', ...args], {
+  const command = process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath
+    ? process.execPath
+    : pnpmCommand;
+  const commandArgs = command === process.execPath && process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath
+    ? [pnpmExecPath, 'tools-dev', ...args]
+    : ['tools-dev', ...args];
+  const { stdout } = await execFileAsync(command, commandArgs, {
     cwd: e2eWorkspaceRoot(),
     env: {
       ...process.env,
@@ -147,6 +155,7 @@ async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T>
       OD_MEDIA_CONFIG_DIR: suite.dataDir,
     },
     maxBuffer: 20 * 1024 * 1024,
+    shell: process.platform === 'win32' && command !== process.execPath,
   });
   return parseJsonOutput<T>(stdout);
 }

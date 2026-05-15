@@ -1,9 +1,16 @@
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { app } from "electron";
-
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
+
+// `electron` is loaded lazily so this module can also be imported from the
+// headless entry, which runs in a plain Node process without the electron
+// dependency on disk. Top-level `import { app } from "electron"` would crash
+// headless at module-load with ERR_MODULE_NOT_FOUND.
+async function loadElectronApp() {
+  const electron = await import("electron");
+  return electron.app;
+}
 
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
@@ -21,6 +28,17 @@ export type RawPackagedConfig = {
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
+  // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
+  // the daemon at runtime; Langfuse credentials never ship in packaged config.
+  telemetryRelayUrl?: string;
+  // PostHog product-analytics ingest key, baked by tools/pack from
+  // process.env.POSTHOG_KEY at packaging time. Forwarded to the daemon
+  // sidecar's spawn env as POSTHOG_KEY. `phc_` keys are public ingest
+  // tokens (write-only event capture); embedding them in the bundle is
+  // the PostHog-recommended pattern. The integration short-circuits when
+  // either this is absent or the user has declined Privacy → metrics.
+  posthogKey?: string;
+  posthogHost?: string;
   webSidecarEntryRelative?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -34,6 +52,9 @@ export type PackagedConfig = {
   namespaceBaseRoot: string;
   nodeCommand: string | null;
   resourceRoot: string;
+  telemetryRelayUrl: string | null;
+  posthogKey: string | null;
+  posthogHost: string | null;
   webSidecarEntry: string | null;
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
@@ -65,9 +86,10 @@ async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
     return config;
   }
 
+  const electronApp = await loadElectronApp();
   return (
     (await readJsonIfExists(resolveDefaultConfigPath())) ??
-    (await readJsonIfExists(join(app.getAppPath(), "open-design-config.json"))) ??
+    (await readJsonIfExists(join(electronApp.getAppPath(), "open-design-config.json"))) ??
     {}
   );
 }
@@ -119,8 +141,9 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
+  const electronApp = await loadElectronApp();
   const namespaceBaseRoot =
-    resolveOptionalPath(raw.namespaceBaseRoot) ?? join(app.getPath("userData"), "namespaces");
+    resolveOptionalPath(raw.namespaceBaseRoot) ?? join(electronApp.getPath("userData"), "namespaces");
   const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
@@ -152,6 +175,9 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     namespaceBaseRoot,
     nodeCommand,
     resourceRoot,
+    telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
+    posthogKey: cleanOptionalString(raw.posthogKey),
+    posthogHost: cleanOptionalString(raw.posthogHost),
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

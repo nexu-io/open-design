@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
+import { WIN_PREBUNDLED_APP_DIR_NAME } from "../win-prebundle.js";
 import {
   ELECTRON_BUILDER_ASAR,
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -107,6 +108,7 @@ export async function collectWinSizeReport(
       markdownBytes: sizeIndex.sizePathBytes(unpackedRoot, { includeFile: (path) => path.endsWith(".md") }),
       nextBytes: sizeIndex.sizePathBytes(join(appNodeModulesRoot, "next")),
       nextSwcBytes: sizeIndex.sumChildDirectorySizes(join(appNodeModulesRoot, "@next"), (name) => name.startsWith("swc-win32-")),
+      prebundledRuntimeBytes: sizeIndex.sizePathBytes(join(appResourcesRoot, "app", WIN_PREBUNDLED_APP_DIR_NAME)),
       sharpLibvipsBytes: sizeIndex.sizePathBytes(join(appNodeModulesRoot, "@img", "sharp-libvips-win32-x64")),
       sourcemapBytes: sizeIndex.sizePathBytes(unpackedRoot, { includeFile: (path) => path.endsWith(".map") }),
       tsbuildInfoBytes: sizeIndex.sizePathBytes(unpackedRoot, { includeFile: (path) => path.endsWith(".tsbuildinfo") }),

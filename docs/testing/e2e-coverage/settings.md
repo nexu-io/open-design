@@ -65,8 +65,8 @@
 | SET-040 | 在 Language 页面切换语言后，触发器文案会立即更新，同时把 locale 写入 `localStorage` 并同步 `html[lang]` | `SettingsDialog.execution.test.tsx` |
 | SET-041 | 切换到 `fa` 等 RTL 语言后，会同步更新 `html[dir=rtl]`，且语言菜单支持 `Escape` 关闭 | `SettingsDialog.execution.test.tsx` |
 | SET-042 | Language 页面不依赖全局保存按钮；语言切换即时生效，关闭 Settings 也不会回滚已应用 locale | `SettingsDialog.execution.test.tsx` |
-| SET-043 | 每个 locale 都覆盖了所有 curated skill、design system、prompt template id | `localized-content.test.ts` |
-| SET-044 | 每个 locale 都覆盖了要求的展示分类和 prompt tag | `localized-content.test.ts` |
+| SET-043 | 多语言内容资源可通过翻译字典或英文 fallback 渲染为非空 skill、design system、prompt template 展示内容 | `localized-content.test.ts` |
+| SET-044 | Design system category、prompt template category 和 tag 在缺少 locale 字典项时回退到源值，已有字典项仍可本地化 | `localized-content.test.ts` |
 | SET-045 | Notifications 默认以 `offline` 展示；开启 completion sound 后才会显示成功/失败音选择器，并立即试听默认成功音 | `SettingsDialog.execution.test.tsx` |
 | SET-046 | Notifications 支持切换 success / failure sound，并把声音选择保存到通知配置 | `SettingsDialog.execution.test.tsx` |
 | SET-047 | Desktop notification 在授权成功后会切为 `active`，支持发送测试通知并展示发送结果文案 | `SettingsDialog.execution.test.tsx` |

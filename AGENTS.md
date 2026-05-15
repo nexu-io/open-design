@@ -51,6 +51,14 @@ This file is the single source of truth for agents entering this repository. Rea
 - Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...` / `pnpm tools-pr ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
 
+## Release channel model
+
+- `beta` is the daily R&D/development validation channel. It is optimized for fast development feedback and is not part of the stable promotion gate.
+- `nightly` is the internal validation channel for stable delivery. Stable releases remain gated by validated nightly artifacts.
+- `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
+- `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on nightly only.
+- Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, and preview uses `Open Design Preview`. Do not ship beta or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
+
 ## Boundary constraints
 
 - Tests under `apps/`, `packages/`, and `tools/` live in a package/app/tool-level `tests/` directory sibling to `src/`; keep `src/` source-only and do not add new `*.test.ts` or `*.test.tsx` files under `src/`. Playwright UI automation belongs to `e2e/ui/`, not app packages.
@@ -70,6 +78,16 @@ This file is the single source of truth for agents entering this repository. Rea
 ## Git commit policy
 
 - Git commits must not include `Co-authored-by` trailers or any other co-author metadata.
+
+## Pull request expectations
+
+- Opening a PR uses `.github/pull_request_template.md`; fill every section, not just the title.
+- "Why" must answer both the author's use case (what made you write this PR) and the pain being addressed (user problem, technical debt, prod issue, or unblocker), not just a one-line restatement of the title.
+- "What users will see" describes the change from a user's perspective — what they click, what new thing appears, what default behavior changed — not from a code perspective.
+- The Surface area checklist must reflect actual surfaces touched; check every box that applies, including extension points (`skills/`, `design-systems/`, `design-templates/`, `craft/`), CLI flags, env vars, i18n keys, and new root `package.json` dependencies.
+- If any UI surface is checked, attach screenshots showing the entry point — where users discover the change — not just the feature in isolation; before/after is best for behavior changes.
+- For bug-fix PRs, link the red-spec test that reproduces the bug and confirm it went red on `main` and green on the branch, per the `Bug follow-up workflow` section above.
+- `CONTRIBUTING.md` covers PR scope, title format, dependency policy, and the issue-first rule for non-trivial features; `docs/code-review-guidelines.md` is the reviewer-facing complement.
 
 ## Code review guide
 
@@ -92,6 +110,33 @@ Common subcommands:
 - `pnpm tools-pr assignment` — assigner-perspective ownership + idle-time / blocker view across the queue.
 
 For the full tag dictionary, operational playbook (direct merge / duplicate-title / awaiting-author / org-member / agent-review flows), comment templates, language-detection rules, and tool-design constraints (precision boundaries, factual-output rule, retry + pagination strategy), see [`tools/pr/AGENTS.md`](tools/pr/AGENTS.md).
+
+## Agent runtime conventions
+
+- `RuntimeAgentDef.promptInputFormat` selects how the daemon writes the prompt to a child's stdin. The default `'text'` writes the composed prompt and ends stdin immediately. `'stream-json'` wraps the prompt as one JSONL `user` message and KEEPS stdin open so the daemon can stream further user messages back in mid-turn. Claude (`apps/daemon/src/runtimes/defs/claude.ts`) ships `'stream-json'` together with `--input-format stream-json` so the host can answer interactive tools like `AskUserQuestion` with a real `tool_result` block. Every other agent stays on `'text'`.
+- `apps/daemon/src/server.ts` tracks `run.pendingHostAnswers` (a Set of `tool_use_id` strings) and `run.stdinOpen` on the run object. The `claude-stream-json` event handler adds AskUserQuestion ids to the set and closes stdin only when both the set is empty AND a `turn_end` (or `usage`) event arrives with a non `tool_use` `stop_reason`. The `tool_use` stop reason means the model paused mid tool (waiting on claude-code's internal runner or on a host answer); closing stdin there would truncate the follow up response.
+- `claude-stream.ts` emits the `turn_end` event AFTER iterating the assistant message's content blocks, not before. When `--include-partial-messages` is unsupported, tool_use events surface only from the assistant wrapper, so emitting `turn_end` first would let the daemon close stdin before the host had registered any pending answers.
+- `POST /api/runs/:id/tool-result` is the daemon endpoint for feeding a `tool_result` block back into a still running stream-json child. Body shape: `{ toolUseId: string, content: string, isError?: boolean }`. Web callers use `submitChatRunToolResult` from `apps/web/src/providers/daemon.ts`. The daemon writes a JSONL `user` message containing one `tool_result` content block, removes the id from `pendingHostAnswers`, and lets the next `turn_end` decide when to close stdin.
+- AskUserQuestion specifically: Claude's system prompt section in `apps/daemon/src/prompts/system.ts` (Claude only block at the bottom of `composeSystemPrompt`) tells the model to use the tool for 2 to 4 finite choices, and to stop generating tokens after the tool call instead of also writing a markdown duplicate. `AssistantMessage.suppressAskUserQuestionFallbackText` is the belt and suspenders that hides any trailing markdown text in the same turn.
+
+## Chat UI conventions
+
+- `apps/web/src/components/file-viewer-render-mode.ts` decides URL-load vs srcDoc for HTML previews. Bridges (deck, comment/inspect selection, palette, edit, tweaks) can ONLY inject through the srcDoc path. Add a new disqualifier to `UrlLoadDecision` whenever a feature needs a srcDoc-only bridge; pass it from `FileViewer.tsx` based on a source-content heuristic where appropriate (e.g. `hasTweaksTemplate`). The host keeps both iframes mounted simultaneously and swaps CSS visibility so toggling render mode does not cause an iframe reload flash; `iframeRef.current` stays aligned with the active iframe via `useEffect`. Receive filters use `isOurIframe(ev.source)` to accept messages from either iframe but signals that should ONLY come from the active iframe (e.g. `od:tweaks-available`) re-check `ev.source === iframeRef.current?.contentWindow`.
+- TodoWrite UI pins one canonical task list above the chat composer via `PinnedTodoSlot` in `ChatPane.tsx`. The slot reads the latest TodoWrite snapshot across the conversation through `latestTodoWriteInputFromMessages` (`apps/web/src/runtime/todos.ts`). `AssistantMessage.stripTodoToolGroups` removes any TodoWrite tool groups from per message rendering so there is exactly one TodoCard on screen. The progress count includes both `completed` and `in_progress` items (1/4 reads "one underway" not "zero finished"). Dismissal via the Done button is keyed on the snapshot's JSON, so a fresh TodoWrite from the agent automatically re shows the card.
+- `AskUserQuestionCard` (in `ToolCard.tsx`) prefers the live `onAnswerToolUse(toolUseId, content)` route (POSTs to `/api/runs/:id/tool-result`) and falls back to the legacy `onSubmitForm(text)` path when the run has already terminated. Selected chips persist across reloads by parsing the stored `tool_result.content` back into the selections shape.
+- Tool group rendering uses `dedupeSnapshotToolRetries` to collapse identical `AskUserQuestion` retries (one card per unique input, keeping the latest tool_use_id) and `TodoWrite` snapshots (only the most recent call, since each call is a state replace).
+
+## i18n keys
+
+- `apps/web/src/i18n/types.ts` is the typed `Dict`; every key must be defined in all 18 locale files under `apps/web/src/i18n/locales/*.ts` (`ar`, `de`, `en`, `es-ES`, `fa`, `fr`, `hu`, `id`, `ja`, `ko`, `pl`, `pt-BR`, `ru`, `th`, `tr`, `uk`, `zh-CN`, `zh-TW`). Add the key to `types.ts` first; missing translations produce a typecheck error.
+
+## UI animation philosophy
+
+- Default ease-out for UI transitions: `cubic-bezier(0.23, 1, 0.32, 1)`. Built-in `ease` is too weak; `ease-in` is forbidden for UI elements because it feels sluggish.
+- Asymmetric durations: enter around 200ms, exit around 140ms. Exit reads as decisive because the user has already chosen to dismiss.
+- Accordion expand and collapse uses `grid-template-rows: 0fr -> 1fr` (modern auto height pattern). Pair with opacity fade and the easing above. The shared `.accordion-collapsible` + `.accordion-collapsible-inner` class pair (defined in `apps/web/src/index.css`) is the canonical implementation; reuse it for new disclosure UI.
+- Never animate from `transform: scale(0)`. Start from `scale(0.9)` or higher with `opacity: 0`.
+- For elements that show conditionally, keep them mounted and toggle a CSS class (e.g. `.chat-jump-btn-active`). React unmounts skip the exit transition entirely.
 
 ## Validation strategy
 

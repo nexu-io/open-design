@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, pi, qoder, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
@@ -22,6 +22,35 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
     '--trust',
     '--workspace',
     '/tmp/od-project',
+  ]);
+});
+
+test('opencode args deliver prompts via stdin without passing a literal dash prompt', () => {
+  const prompt = 'design a dashboard';
+  const baseArgs = opencode.buildArgs(prompt, [], [], {});
+  assert.equal(opencode.promptViaStdin, true);
+  assert.equal(baseArgs.includes('-'), false);
+  assert.equal(baseArgs.includes(prompt), false);
+  assert.deepEqual(baseArgs, [
+    'run',
+    '--format',
+    'json',
+    '--dangerously-skip-permissions',
+  ]);
+
+  const withModel = opencode.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'anthropic/claude-sonnet-4-5' },
+  );
+  assert.deepEqual(withModel, [
+    'run',
+    '--format',
+    'json',
+    '--dangerously-skip-permissions',
+    '--model',
+    'anthropic/claude-sonnet-4-5',
   ]);
 });
 
@@ -588,4 +617,43 @@ test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430
     ['-p', '--help'],
     `claude.helpArgs must be ['-p', '--help'], not just ['--help'], because --add-dir lives under the -p subcommand. Probing global help never finds it! Got: ${JSON.stringify(claude.helpArgs)}`,
   );
+});
+
+// server.ts:4615 branches on `def.promptInputFormat` to decide how to write
+// the composed prompt to a stdin-fed child: 'stream-json' writes one JSONL
+// `user` message and keeps stdin open, anything else writes the raw prompt
+// and ends stdin. Because server.ts opens with `// @ts-nocheck`, a typo on
+// that property (e.g. an undefined `runtimeAdapter.promptInputFormat()`)
+// passes typecheck but throws `ReferenceError` at runtime for every chat
+// run that goes through the stdin-write path — i.e. every agent below.
+// Pin the field shape so a future regression of that contract fails here
+// instead of in production.
+test('promptInputFormat is a string property (or undefined) on every promptViaStdin agent', () => {
+  const stdinAgents = [
+    { name: 'claude', def: claude, expected: 'stream-json' },
+    { name: 'codex', def: codex, expected: undefined },
+    { name: 'copilot', def: copilot, expected: undefined },
+    { name: 'cursor-agent', def: cursorAgent, expected: undefined },
+    { name: 'gemini', def: gemini, expected: undefined },
+    { name: 'opencode', def: opencode, expected: undefined },
+    { name: 'pi', def: pi, expected: undefined },
+    { name: 'qoder', def: qoder, expected: undefined },
+  ];
+  for (const { name, def, expected } of stdinAgents) {
+    assert.equal(
+      def.promptViaStdin,
+      true,
+      `${name} must keep promptViaStdin: true`,
+    );
+    assert.equal(
+      typeof def.promptInputFormat,
+      typeof expected,
+      `${name}.promptInputFormat must be a ${typeof expected}, not a function — server.ts reads it as a property, not a method call`,
+    );
+    assert.equal(
+      def.promptInputFormat,
+      expected,
+      `${name}.promptInputFormat must equal ${JSON.stringify(expected)}`,
+    );
+  }
 });

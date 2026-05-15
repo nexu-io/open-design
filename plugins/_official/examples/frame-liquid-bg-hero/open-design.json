@@ -1,0 +1,78 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-frame-liquid-bg-hero",
+  "title": "流体背景 Hero 帧",
+  "version": "0.1.0",
+  "description": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-liquid-bg-hero",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "liquid",
+    "fluid",
+    "background",
+    "hero",
+    "html-in-canvas",
+    "vfx"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "featured": 39,
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "流体背景 Hero 帧"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

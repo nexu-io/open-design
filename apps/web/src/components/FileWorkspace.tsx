@@ -5,6 +5,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from 'react';
+import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { isMacPlatform } from '../utils/platform';
 import {
@@ -27,6 +28,7 @@ import {
   type ProjectFile,
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
+import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
@@ -42,8 +44,10 @@ import {
 
 interface Props {
   projectId: string;
+  projectKind: TrackingProjectKind;
   files: ProjectFile[];
   liveArtifacts: LiveArtifactSummary[];
+  filesRefreshKey?: number;
   onRefreshFiles: () => Promise<void> | void;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
@@ -58,6 +62,10 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onPluginFolderAgentAction?: (
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
 }
@@ -78,8 +86,10 @@ type TabDropEdge = 'before' | 'after';
 
 export function FileWorkspace({
   projectId,
+  projectKind,
   files,
   liveArtifacts,
+  filesRefreshKey = 0,
   onRefreshFiles,
   isDeck,
   onExportAsPptx,
@@ -92,6 +102,7 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onPluginFolderAgentAction,
   focusMode = false,
   onFocusModeChange,
 }: Props) {
@@ -755,6 +766,7 @@ export function FileWorkspace({
             onNewSketch={startNewSketch}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
+            onPluginFolderAgentAction={onPluginFolderAgentAction}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -784,7 +796,9 @@ export function FileWorkspace({
         ) : activeFile ? (
           <FileViewer
             projectId={projectId}
+            projectKind={projectKind}
             file={activeFile}
+            filesRefreshKey={filesRefreshKey}
             isDeck={isDeck}
             onExportAsPptx={onExportAsPptx}
             streaming={streaming}

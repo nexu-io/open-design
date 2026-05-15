@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';
+import { migratePlugins } from './plugins/persistence.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -92,6 +93,7 @@ function migrate(db: SqliteDb): void {
       events_json TEXT,
       attachments_json TEXT,
       produced_files_json TEXT,
+      feedback_json TEXT,
       started_at INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
@@ -199,6 +201,9 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'metadata_json')) {
     db.exec(`ALTER TABLE projects ADD COLUMN metadata_json TEXT`);
   }
+  if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
+  }
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
@@ -217,6 +222,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'comment_attachments_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
   }
 
   const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
@@ -253,6 +261,7 @@ function migrate(db: SqliteDb): void {
   }
   migrateCritique(db);
   migrateMediaTasks(db);
+  migratePlugins(db);
 }
 
 // ---------- deployments ----------
@@ -415,6 +424,8 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   design_system_id AS designSystemId,
   pending_prompt AS pendingPrompt,
   metadata_json AS metadataJson,
+  applied_plugin_snapshot_id AS appliedPluginSnapshotId,
+  custom_instructions AS customInstructions,
   created_at AS createdAt,
   updated_at AS updatedAt`;
 
@@ -500,8 +511,8 @@ export function insertProject(db: SqliteDb, p: DbRow) {
   db.prepare(
     `INSERT INTO projects
        (id, name, skill_id, design_system_id, pending_prompt,
-        metadata_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        metadata_json, custom_instructions, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     p.id,
     p.name,
@@ -509,6 +520,7 @@ export function insertProject(db: SqliteDb, p: DbRow) {
     p.designSystemId ?? null,
     p.pendingPrompt ?? null,
     p.metadata ? JSON.stringify(p.metadata) : null,
+    p.customInstructions ?? null,
     p.createdAt,
     p.updatedAt,
   );
@@ -530,6 +542,7 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
             design_system_id = ?,
             pending_prompt = ?,
             metadata_json = ?,
+            custom_instructions = ?,
             updated_at = ?
       WHERE id = ?`,
   ).run(
@@ -538,6 +551,7 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
     merged.designSystemId ?? null,
     merged.pendingPrompt ?? null,
     merged.metadata ? JSON.stringify(merged.metadata) : null,
+    merged.customInstructions ?? null,
     merged.updatedAt,
     id,
   );
@@ -564,6 +578,8 @@ function normalizeProject(row: DbRow) {
     designSystemId: row.designSystemId,
     pendingPrompt: row.pendingPrompt ?? undefined,
     metadata,
+    appliedPluginSnapshotId: row.appliedPluginSnapshotId ?? undefined,
+    customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };
@@ -609,6 +625,22 @@ export function getTemplate(db: SqliteDb, id: string) {
   return row ? normalizeTemplate(row) : null;
 }
 
+export function findTemplateByNameAndProject(
+  db: SqliteDb,
+  name: string,
+  sourceProjectId: string,
+) {
+  const row = db
+    .prepare(
+      `SELECT id, name, description, source_project_id AS sourceProjectId,
+              files_json AS filesJson, created_at AS createdAt
+         FROM templates
+        WHERE name = ? AND source_project_id = ?`,
+    )
+    .get(name, sourceProjectId) as DbRow | undefined;
+  return row ? normalizeTemplate(row) : null;
+}
+
 export function insertTemplate(db: SqliteDb, t: DbRow) {
   db.prepare(
     `INSERT INTO templates (id, name, description, source_project_id, files_json, created_at)
@@ -622,6 +654,17 @@ export function insertTemplate(db: SqliteDb, t: DbRow) {
     t.createdAt,
   );
   return getTemplate(db, t.id);
+}
+
+export function updateTemplate(
+  db: SqliteDb,
+  id: string,
+  t: { description: string | null; files: unknown[] },
+) {
+  db.prepare(
+    `UPDATE templates SET description = ?, files_json = ? WHERE id = ?`,
+  ).run(t.description, JSON.stringify(t.files), id);
+  return getTemplate(db, id);
 }
 
 export function deleteTemplate(db: SqliteDb, id: string) {
@@ -648,22 +691,45 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
-  return (db
+  return rows(db
     .prepare(
-      `SELECT id, project_id AS projectId, title,
-              created_at AS createdAt, updated_at AS updatedAt
-         FROM conversations
-        WHERE project_id = ?
-        ORDER BY updated_at DESC`,
+      `WITH project_conversations AS (
+          SELECT id, project_id AS projectId, title,
+                 created_at AS createdAt, updated_at AS updatedAt
+            FROM conversations
+           WHERE project_id = ?
+        ),
+        latest_runs AS (
+          SELECT conversation_id AS conversationId,
+                 run_status AS latestRunStatus,
+                 started_at AS latestRunStartedAt,
+                 ended_at AS latestRunEndedAt,
+                 events_json AS latestRunEventsJson
+            FROM (
+              SELECT m.conversation_id,
+                     m.run_status,
+                     m.started_at,
+                     m.ended_at,
+                     m.events_json,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY m.conversation_id
+                       ORDER BY m.position DESC
+                     ) AS rn
+                FROM messages m
+                JOIN project_conversations c ON c.id = m.conversation_id
+               WHERE m.role = 'assistant'
+                 AND m.run_status IS NOT NULL
+            )
+           WHERE rn = 1
+        )
+        SELECT c.id, c.projectId, c.title, c.createdAt, c.updatedAt,
+               lr.latestRunStatus, lr.latestRunStartedAt,
+               lr.latestRunEndedAt, lr.latestRunEventsJson
+          FROM project_conversations c
+          LEFT JOIN latest_runs lr ON lr.conversationId = c.id
+         ORDER BY c.updatedAt DESC`,
     )
-    .all(projectId) as DbRow[])
-    .map((r: DbRow) => ({
-      id: r.id,
-      projectId: r.projectId,
-      title: r.title ?? null,
-      createdAt: Number(r.createdAt),
-      updatedAt: Number(r.updatedAt),
-    }));
+    .all(projectId)).map(normalizeConversation);
 }
 
 export function getConversation(db: SqliteDb, id: string) {
@@ -676,12 +742,86 @@ export function getConversation(db: SqliteDb, id: string) {
     .get(id) as DbRow | undefined;
   if (!r) return null;
   return {
+    ...normalizeConversation(r),
+    latestRun: latestConversationRunSummary(db, r.id) ?? undefined,
+  };
+}
+
+function normalizeConversation(r: DbRow) {
+  const latestRun = conversationRunSummaryFromRow({
+    runStatus: r.latestRunStatus,
+    startedAt: r.latestRunStartedAt,
+    endedAt: r.latestRunEndedAt,
+    eventsJson: r.latestRunEventsJson,
+  });
+  return {
     id: r.id,
     projectId: r.projectId,
     title: r.title ?? null,
     createdAt: Number(r.createdAt),
     updatedAt: Number(r.updatedAt),
+    latestRun: latestRun ?? undefined,
   };
+}
+
+function latestConversationRunSummary(db: SqliteDb, conversationId: string) {
+  const row = db
+    .prepare(
+      `SELECT run_status AS runStatus,
+              started_at AS startedAt,
+              ended_at AS endedAt,
+              events_json AS eventsJson
+         FROM messages
+        WHERE conversation_id = ?
+          AND role = 'assistant'
+          AND run_status IS NOT NULL
+        ORDER BY position DESC
+        LIMIT 1`,
+    )
+    .get(conversationId) as DbRow | undefined;
+  return conversationRunSummaryFromRow(row);
+}
+
+function conversationRunSummaryFromRow(row: DbRow | undefined) {
+  if (!row || typeof row.runStatus !== 'string') return null;
+  const startedAt = row.startedAt == null ? undefined : Number(row.startedAt);
+  const endedAt = row.endedAt == null ? undefined : Number(row.endedAt);
+  const usageDurationMs = latestUsageDurationMs(row.eventsJson);
+  const durationMs =
+    Number.isFinite(startedAt) && Number.isFinite(endedAt)
+      ? Math.max(0, (endedAt as number) - (startedAt as number))
+      : usageDurationMs;
+  return {
+    status: row.runStatus,
+    ...(Number.isFinite(startedAt) ? { startedAt } : {}),
+    ...(Number.isFinite(endedAt) ? { endedAt } : {}),
+    ...(typeof durationMs === 'number' && Number.isFinite(durationMs)
+      ? { durationMs }
+      : {}),
+  };
+}
+
+function latestUsageDurationMs(eventsJson: unknown): number | undefined {
+  if (typeof eventsJson !== 'string' || eventsJson.length === 0) return undefined;
+  try {
+    const events = JSON.parse(eventsJson);
+    if (!Array.isArray(events)) return undefined;
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i];
+      if (
+        event &&
+        typeof event === 'object' &&
+        event.kind === 'usage' &&
+        typeof event.durationMs === 'number' &&
+        Number.isFinite(event.durationMs)
+      ) {
+        return Math.max(0, event.durationMs);
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 export function insertConversation(db: SqliteDb, c: DbRow) {
@@ -724,6 +864,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               attachments_json AS attachmentsJson,
               comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
+              feedback_json AS feedbackJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -745,7 +886,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
               run_id = ?, run_status = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
-              produced_files_json = ?, started_at = ?, ended_at = ?
+              produced_files_json = ?, feedback_json = ?, started_at = ?, ended_at = ?
         WHERE id = ?`,
     ).run(
       m.role,
@@ -759,6 +900,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
+      m.feedback ? JSON.stringify(m.feedback) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       m.id,
@@ -770,17 +912,17 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       )
       .get(conversationId) as DbRow | undefined;
     const position = (max?.m ?? -1) + 1;
-    // 17 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 18 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
-    // comment_attachments_json, produced_files_json, started_at, ended_at,
+    // comment_attachments_json, produced_files_json, feedback_json, started_at, ended_at,
     // position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
-          started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          feedback_json, started_at, ended_at, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -795,6 +937,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
+      m.feedback ? JSON.stringify(m.feedback) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       position,
@@ -815,6 +958,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               attachments_json AS attachmentsJson,
               comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
+              feedback_json AS feedbackJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -1058,6 +1202,7 @@ function normalizeMessage(row: DbRow) {
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    feedback: parseJsonOrUndef(row.feedbackJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,

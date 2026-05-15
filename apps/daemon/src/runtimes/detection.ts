@@ -1,8 +1,9 @@
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
-import { resolveAgentExecutable } from './executables.js';
+import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
+import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
 import type {
@@ -47,43 +48,109 @@ async function fetchModels(
   }
 }
 
+type VersionProbeOutcome =
+  | { kind: 'not-invocable' }
+  | { kind: 'spawned'; version: string | null };
+
+/**
+ * Run the agent's `--version` probe and classify the result. The probe
+ * has two distinct failure modes the catch arm has to discriminate:
+ *
+ *   - **Not invocable.** The OS rejected the spawn outright (ENOENT
+ *     for a vanished target, EACCES for a stripped-x bit, ENOTDIR
+ *     for a broken parent), OR the wrapper script spawned but its
+ *     underlying interpreter / target is missing and the shim exits
+ *     with code 127 ("command not found") / 126 ("not executable").
+ *     127 is the canonical POSIX shell signal for "I ran but the
+ *     thing I delegate to is gone"; 126 is the perm/not-a-binary
+ *     sibling. Both shapes are reproducible by leftover npm bin
+ *     shims, mise/nvm/fnm pointer files, and Windows `.CMD` shims
+ *     whose target was uninstalled. We mark the agent unavailable
+ *     so Settings does not advertise a ghost entry (issue #658,
+ *     lefarcen review P2 on PR #1301).
+ *
+ *   - **Spawned but `--version` was unhappy.** The binary itself ran
+ *     (any other rejection: timeout, generic non-zero exit, stderr
+ *     noise) so the CLI is invocable; we just can't read a version
+ *     string. Adapters whose `--version` flag is unsupported land
+ *     here and must keep working with `version: null`.
+ *
+ * `child_process.execFile` reports OS-level rejections with a string
+ * `err.code` (`'ENOENT'`, `'EACCES'`, `'ENOTDIR'`) and non-zero exit
+ * codes with a *numeric* `err.code` equal to the exit status, so the
+ * two arms below are unambiguous.
+ */
+async function probeVersionAtPath(
+  def: RuntimeAgentDef,
+  resolved: string,
+  env: NodeJS.ProcessEnv,
+): Promise<VersionProbeOutcome> {
+  try {
+    const { stdout } = await execAgentFile(resolved, def.versionArgs, {
+      env,
+      timeout: 3000,
+    });
+    const version = String(stdout).trim().split('\n')[0] ?? null;
+    return { kind: 'spawned', version };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (typeof code === 'string') {
+      if (code === 'ENOENT' || code === 'EACCES' || code === 'ENOTDIR') {
+        return { kind: 'not-invocable' };
+      }
+    } else if (typeof code === 'number' && (code === 126 || code === 127)) {
+      return { kind: 'not-invocable' };
+    }
+    return { kind: 'spawned', version: null };
+  }
+}
+
+function unavailableAgent(def: RuntimeAgentDef): DetectedAgent {
+  return {
+    ...stripFns(def),
+    models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
+    available: false,
+    ...installMetaForAgent(def.id),
+  };
+}
+
 async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
-  const resolved = resolveAgentExecutable(def, configuredEnv);
-  if (!resolved) {
-    return {
-      ...stripFns(def),
-      models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
-      available: false,
-      ...installMetaForAgent(def.id),
-    };
+  // Detection must probe the exact path the runtime will spawn, not just the
+  // PATH-visible shim. This is load-bearing for Codex under nvm/fnm/mise:
+  // the discovered `codex` entry is often a `#!/usr/bin/env node` wrapper
+  // that is not invocable from a GUI-launched app's stripped PATH, while the
+  // launch resolver can still upgrade it to the packaged native Codex binary.
+  // If detection probes the shim but chat/run spawns the native binary, the
+  // UI incorrectly reports "not installed" until the user pins CODEX_BIN by
+  // hand even though the real launch path is healthy.
+  const launch = resolveAgentLaunch(def, configuredEnv);
+  if (!launch.selectedPath || !launch.launchPath) {
+    return unavailableAgent(def);
   }
-  const probeEnv = spawnEnvForAgent(
-    def.id,
-    {
-      ...process.env,
-      ...(def.env || {}),
-    },
-    configuredEnv,
+  const probeEnv = applyAgentLaunchEnv(
+    spawnEnvForAgent(
+      def.id,
+      {
+        ...process.env,
+        ...(def.env || {}),
+      },
+      configuredEnv,
+    ),
+    launch,
   );
-  let version = null;
-  try {
-    const { stdout } = await execAgentFile(resolved, def.versionArgs, {
-      env: probeEnv,
-      timeout: 3000,
-    });
-    version = String(stdout).trim().split('\n')[0] ?? null;
-  } catch {
-    // binary exists but --version failed; still mark available
+  const outcome = await probeVersionAtPath(def, launch.launchPath, probeEnv);
+  if (outcome.kind === 'not-invocable') {
+    return unavailableAgent(def);
   }
   // Probe `--help` once per agent and record which flags the installed CLI
   // advertises. Cached on `agentCapabilities` for buildArgs to consult.
   if (def.helpArgs && def.capabilityFlags) {
     const caps: RuntimeCapabilityMap = {};
     try {
-      const { stdout } = await execAgentFile(resolved, def.helpArgs, {
+      const { stdout } = await execAgentFile(launch.launchPath, def.helpArgs, {
         env: probeEnv,
         timeout: 5000,
         maxBuffer: 4 * 1024 * 1024,
@@ -92,18 +159,25 @@ async function probe(
         caps[key] = String(stdout).includes(flag);
       }
     } catch {
-      // If --help fails, leave caps empty — buildArgs falls back to the safe
+      // If --help fails, leave caps empty so buildArgs falls back to the safe
       // baseline (no optional flags).
     }
     agentCapabilities.set(def.id, caps);
   }
-  const models = await fetchModels(def, resolved, probeEnv);
+  const models = await fetchModels(def, launch.launchPath, probeEnv);
+  const auth = await probeAgentAuthStatus(def.id, launch.launchPath, probeEnv);
   return {
     ...stripFns(def),
     models,
     available: true,
-    path: resolved,
-    version,
+    path: launch.selectedPath,
+    version: outcome.version,
+    ...(auth
+      ? {
+          authStatus: auth.status,
+          ...(auth.message ? { authMessage: auth.message } : {}),
+        }
+      : {}),
     ...installMetaForAgent(def.id),
   };
 }

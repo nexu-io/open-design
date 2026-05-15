@@ -9,7 +9,10 @@ import type {
   OrbitConfig,
   PetConfig,
 } from '../types';
-import { normalizeAccentColor } from './appearance';
+import {
+  DEFAULT_ACCENT_COLOR,
+  normalizeAccentColor,
+} from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
   DEFAULT_SUCCESS_SOUND_ID,
@@ -71,6 +74,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   designSystemId: null,
   onboardingCompleted: false,
   theme: 'system',
+  accentColor: DEFAULT_ACCENT_COLOR,
   mediaProviders: {},
   composio: {},
   agentModels: {},
@@ -557,8 +561,22 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'privacyDecisionAt',
 ]);
 
+const AGENT_CLI_SECRET_ENV_KEYS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
+
+function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
+  if (!agentCliEnv) return agentCliEnv;
+  const sanitized: NonNullable<AppConfig['agentCliEnv']> = {};
+  for (const [agentId, env] of Object.entries(agentCliEnv)) {
+    const safeEnv = Object.fromEntries(
+      Object.entries(env ?? {}).filter(([key]) => !AGENT_CLI_SECRET_ENV_KEYS.has(key)),
+    );
+    sanitized[agentId] = safeEnv;
+  }
+  return sanitized;
+}
+
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config };
+  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }
@@ -616,6 +634,9 @@ export function mergeDaemonConfig(
     // existed. If the daemon already has an id or telemetry prefs, the user
     // has resolved the first-run prompt and should not see it again.
     next.privacyDecisionAt = Date.now();
+  }
+  if (daemonConfig.customInstructions !== undefined) {
+    next.customInstructions = daemonConfig.customInstructions ?? undefined;
   }
   return next;
 }
@@ -720,6 +741,7 @@ export async function syncConfigToDaemon(
     installationId: config.installationId,
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
+    customInstructions: config.customInstructions ?? null,
   };
   try {
     const response = await fetch('/api/app-config', {

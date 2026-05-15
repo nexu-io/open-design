@@ -52,6 +52,13 @@ export type RuntimeAgentDef = {
   helpArgs?: string[];
   capabilityFlags?: Record<string, string>;
   promptViaStdin?: boolean;
+  // Format for the user prompt fed via stdin. Default is plain text (the
+  // entire prompt buffer goes in raw, then stdin is closed). When set to
+  // 'stream-json' the daemon writes a single JSONL line wrapping the prompt
+  // as an Anthropic user message (so tool_result blocks can later be
+  // injected into the same stdin without re-spawning the child). Only
+  // honored for adapters that also set `promptViaStdin: true`.
+  promptInputFormat?: 'text' | 'stream-json';
   eventParser?: string;
   env?: Record<string, string>;
   listModels?: RuntimeListModels;
@@ -81,6 +88,8 @@ export type DetectedAgent = Omit<
 > & {
   models: RuntimeModelOption[];
   available: boolean;
+  authStatus?: 'ok' | 'missing' | 'unknown';
+  authMessage?: string;
   path?: string;
   version?: string | null;
 };

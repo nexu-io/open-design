@@ -123,7 +123,23 @@ describe('DesignFilesPanel grouping', () => {
     expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
   });
 
-  it('keeps the ungrouped table view as the default view', () => {
+  it('groups files by kind when kind grouping is selected', () => {
+    renderPanel([
+      file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
+      file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
+    ]);
+
+    const sectionLabels = Array.from(
+      document.querySelectorAll<HTMLElement>('.df-section-label'),
+    ).map((el) => el.textContent ?? '');
+    expect(sectionLabels.some((text) => text.includes('HTML page'))).toBe(true);
+    expect(sectionLabels.some((text) => text.includes('Image'))).toBe(true);
+    expect(screen.getByTestId('design-file-row-page.html')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-chart.png')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
+  });
+
+  it('keeps kind grouping selected by default', () => {
     renderPanel([
       file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
       file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
@@ -360,6 +376,14 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(getPageInfo(container)).toContain('31–60 of 500');
   });
 
+  it('keeps the bulk toolbar focused on the all-files action instead of duplicating page select', () => {
+    const { container } = renderPanel(generateFiles(3));
+
+    const toolbar = container.querySelector('.df-select-bar');
+    expect(toolbar?.textContent).toContain('Select everything');
+    expect(toolbar?.textContent).not.toContain('Select all on page');
+  });
+
   it('uses non-control table cells as file row click targets', () => {
     const files = generateFiles(1);
     const { container, onOpenFile } = renderPanel(files);
@@ -444,11 +468,14 @@ describe('DesignFilesPanel large-list regression', () => {
     const { container, onDeleteFiles } = renderPanel(files);
     const rows = Array.from(container.querySelectorAll('.df-file-row'));
 
+    const firstName = rows[0]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
+    const secondName = rows[1]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
     fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
     fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
     fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
 
-    expect(onDeleteFiles).toHaveBeenCalledWith(['file-1.html', 'file-2.png']);
+    expect(onDeleteFiles).toHaveBeenCalledTimes(1);
+    expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
   });
 
   it('renders 500 files within a reasonable time', () => {

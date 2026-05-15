@@ -21,9 +21,14 @@ declare const URL: {
 };
 
 function normalizeBracketedIpv6(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1).toLowerCase()
-    : hostname.toLowerCase();
+  const stripped = hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
+  // FQDN trailing-dot form (RFC 1034) resolves identically to the dotless form,
+  // so `localhost.` must normalize to `localhost` before the equality check in
+  // isLoopbackApiHost — and `0.0.0.0.`, `10.0.0.1.`, etc. must normalize before
+  // isBlockedIpv4 parses them. Strips one or more trailing dots.
+  return stripped.toLowerCase().replace(/\.+$/, '');
 }
 
 function parseIpv4(hostname: string): [number, number, number, number] | null {
@@ -130,6 +135,7 @@ export type ConnectionTestKind =
   | 'upstream_unavailable'
   | 'timeout'
   | 'agent_not_installed'
+  | 'agent_auth_required'
   | 'agent_spawn_failed'
   | 'unknown';
 

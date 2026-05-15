@@ -1,5 +1,10 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
+import { newInsertId } from './analytics.js';
+import {
+  agentIdToTracking,
+  projectKindToTracking,
+} from '@open-design/contracts/analytics';
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle'> {}
 
@@ -32,7 +37,7 @@ function reconcileAssistantMessageOnRunEnd(
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { startChatRun } = ctx.chat;
+  const { startChatRun, submitToolResultToRun } = ctx.chat;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
@@ -43,6 +48,25 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   } = ctx.critique;
   const { validateBaseUrl } = ctx.validation;
   const isDaemonShuttingDown = ctx.lifecycle?.isDaemonShuttingDown ?? (() => false);
+  const rejectProxyPluginContext = (body: Record<string, unknown>, res: any) => {
+    if (
+      (typeof body.pluginId === 'string' && body.pluginId.trim().length > 0) ||
+      (
+        typeof body.appliedPluginSnapshotId === 'string' &&
+        body.appliedPluginSnapshotId.trim().length > 0
+      )
+    ) {
+      sendApiError(
+        res,
+        409,
+        'PLUGIN_REQUIRES_DAEMON',
+        'Plugin runs must go through POST /api/runs so the daemon can resolve and pin the applied plugin snapshot.',
+      );
+      return true;
+    }
+    return false;
+  };
+
   app.post('/api/runs', (req, res) => {
     if (isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
@@ -60,6 +84,129 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     res.status(202).json(body);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
+
+    // Analytics: emit run_created (daemon-side, authoritative) and
+    // schedule a run_finished emission on wait() resolution. Both events
+    // use the same insert_id so PostHog dedupes against the web mirror
+    // that fires on SSE start/end. No-op when POSTHOG_KEY is unset.
+    const context = design.readAnalyticsContext?.(req);
+    if (context) {
+      const reqBody = (req.body || {}) as Record<string, unknown>;
+      const runInsertId = newInsertId();
+      const runStartedAt = Date.now();
+      // Estimate user_query_tokens from the request prompt — we never
+      // transmit the prompt text itself, just the integer count. The
+      // canonical extraction (currentPrompt fallback to message) lives
+      // in telemetryPromptFromRunRequest; mirroring it inline keeps the
+      // analytics emit self-contained and out of the startChatRun
+      // critical path.
+      const promptText =
+        typeof reqBody.currentPrompt === 'string'
+          ? reqBody.currentPrompt
+          : typeof reqBody.message === 'string'
+            ? reqBody.message
+            : '';
+      // ~4 chars per token is the common rough heuristic for English /
+      // Latin text; CJK skews token-per-char higher but this is still the
+      // industry-standard estimate when no tokenizer is available. The
+      // accompanying token_count_source field marks this as 'estimated'
+      // so dashboards can tell estimate from real provider counts.
+      const userQueryTokens = promptText.length > 0
+        ? Math.ceil(promptText.length / 4)
+        : 0;
+      const baseProps: Record<string, unknown> = {
+        page: 'studio',
+        area: 'chat_composer',
+        project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
+        conversation_id:
+          typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
+        run_id: run.id,
+        project_kind: null,
+        design_system_id:
+          typeof reqBody.designSystemId === 'string'
+            ? reqBody.designSystemId
+            : undefined,
+        design_system_source: 'unknown',
+        has_attachment: Array.isArray(reqBody.attachments)
+          ? (reqBody.attachments as unknown[]).length > 0
+          : false,
+        user_query_tokens: userQueryTokens,
+        model_id: typeof reqBody.model === 'string' ? reqBody.model : null,
+        agent_provider_id:
+          typeof reqBody.agentId === 'string'
+            ? agentIdToTracking(reqBody.agentId)
+            : null,
+        skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
+        mcp_id: null,
+        token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
+      };
+      design.analytics.capture({
+        eventName: 'run_created',
+        context,
+        appVersion: design.getAppVersion?.() ?? '0.0.0',
+        properties: baseProps,
+        insertId: runInsertId,
+      });
+      // Run lifecycle hook: emit run_finished when the run reaches a
+      // terminal state. The same context is reused — captures are
+      // synchronous and never block the run.
+      design.runs.wait(run).then((status: { status: string }) => {
+        const result =
+          status.status === 'succeeded'
+            ? 'success'
+            : status.status === 'canceled'
+              ? 'cancelled'
+              : 'failed';
+        // Pull input/output token totals from the agent's usage event,
+        // which claude-stream.ts emits as `{ type: 'usage', usage: {...} }`
+        // and the run service stores in run.events. Provider only gives
+        // totals (no 7-subfield breakdown), so token_count_source flips
+        // to 'provider_usage' here only when at least one number landed;
+        // otherwise stays 'unknown'.
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
+        for (let i = run.events.length - 1; i >= 0; i -= 1) {
+          const ev = run.events[i];
+          const data = ev?.data as
+            | { type?: string; usage?: Record<string, unknown> | null }
+            | null
+            | undefined;
+          if (ev?.event === 'agent' && data?.type === 'usage' && data.usage) {
+            const u = data.usage;
+            if (typeof u.input_tokens === 'number') inputTokens = u.input_tokens;
+            if (typeof u.output_tokens === 'number') outputTokens = u.output_tokens;
+            if (inputTokens !== undefined || outputTokens !== undefined) break;
+          }
+        }
+        const haveUsage = inputTokens !== undefined || outputTokens !== undefined;
+        const totalTokens =
+          inputTokens !== undefined && outputTokens !== undefined
+            ? inputTokens + outputTokens
+            : undefined;
+        design.analytics.capture({
+          eventName: 'run_finished',
+          context,
+          appVersion: design.getAppVersion?.() ?? '0.0.0',
+          properties: {
+            ...baseProps,
+            area: 'chat_panel',
+            result,
+            artifact_count: 0,
+            total_duration_ms: Date.now() - runStartedAt,
+            ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+            ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+            ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
+            // Upgrade source to 'provider_usage' when the agent reported
+            // input/output totals; otherwise inherit baseProps' value
+            // ('estimated' when user_query_tokens > 0, else 'unknown').
+            ...(haveUsage ? { token_count_source: 'provider_usage' } : {}),
+          },
+          insertId: `${runInsertId}-finish`,
+        });
+      }).catch(() => {
+        // wait() can't reject in current runs.ts impl, but guard anyway.
+      });
+    }
   });
 
   app.get('/api/runs', (req, res) => {
@@ -89,6 +236,47 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
     const body = { ok: true };
     res.json(body);
+  });
+
+  // Feed a `tool_result` content block into a running stream-json child.
+  // Currently used to answer Claude's `AskUserQuestion` tool: the host UI
+  // collects the user's choice, the web POSTs the formatted answer here,
+  // and the daemon writes a JSONL line into the still-open stdin. Without
+  // this path Claude auto-errors the tool in headless mode and falls back
+  // to a markdown duplicate of the same options.
+  app.post('/api/runs/:id/tool-result', (req, res) => {
+    if (typeof submitToolResultToRun !== 'function') {
+      return sendApiError(res, 501, 'NOT_IMPLEMENTED', 'tool-result wiring is not available');
+    }
+    const body = (req.body || {}) as {
+      toolUseId?: unknown;
+      content?: unknown;
+      isError?: unknown;
+    };
+    const toolUseId = typeof body.toolUseId === 'string' ? body.toolUseId : '';
+    const content = typeof body.content === 'string' ? body.content : '';
+    const isError = body.isError === true;
+    if (!toolUseId) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'toolUseId is required');
+    }
+    const result = submitToolResultToRun(req.params.id, toolUseId, content, isError);
+    if (!result || !result.ok) {
+      const reason = result && result.reason ? result.reason : 'unknown';
+      if (reason === 'not_found') {
+        return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+      }
+      if (reason === 'run_terminal' || reason === 'stdin_closed') {
+        return sendApiError(res, 410, 'GONE', `run is no longer accepting tool results (${reason})`);
+      }
+      if (reason === 'stdin_text_mode') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'run does not support interactive tool results');
+      }
+      if (reason === 'bad_tool_use_id') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'toolUseId is invalid');
+      }
+      return sendApiError(res, 500, 'INTERNAL', `tool result write failed: ${reason}`);
+    }
+    res.json({ ok: true });
   });
 
   app.post('/api/chat', (req, res) => {
@@ -502,6 +690,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -597,6 +786,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/openai/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -692,6 +882,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/azure/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, apiVersion } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -804,6 +995,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/google/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(
@@ -902,6 +1094,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
   app.post('/api/proxy/ollama/stream', async (req, res) => {
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');

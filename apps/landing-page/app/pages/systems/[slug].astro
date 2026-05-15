@@ -1,0 +1,121 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import { getSystemRecords, type SystemRecord } from '../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const systems = await getSystemRecords();
+  return systems.map((system) => ({
+    params: { slug: system.slug },
+    props: { system, all: systems },
+  }));
+}
+
+interface Props {
+  system: SystemRecord;
+  all: ReadonlyArray<SystemRecord>;
+}
+
+const { system, all } = Astro.props as Props;
+
+const title = `${system.name} — Open Design design system`;
+const description = system.tagline
+  ? `${system.name} (${system.category}) — ${system.tagline}`
+  : `Open Design system bundle: ${system.name}, ${system.category}.`;
+
+const related = all
+  .filter((s) => s.slug !== system.slug && s.category === system.category)
+  .slice(0, 4);
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+      { '@type': 'ListItem', position: 2, name: 'Design Systems', item: new URL('/systems/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: system.name, item: new URL(`/systems/${system.slug}/`, Astro.site).toString() },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CreativeWork',
+    name: system.name,
+    description,
+    url: new URL(`/systems/${system.slug}/`, Astro.site).toString(),
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+    genre: system.category,
+  },
+];
+---
+
+<Layout title={title} description={description} active="systems" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <a href="/systems/">Design Systems</a>
+    <span>/</span>
+    <span aria-current="page">{system.name}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">
+        Design system
+        <span class="ix">· {system.category}</span>
+      </span>
+      <h1 class="display">{system.name}<span class="dot">.</span></h1>
+      {system.tagline && <p class="lead">{system.tagline}</p>}
+      <div class="detail-actions">
+        <a class="btn btn-primary" href={system.source} target="_blank" rel="noopener">
+          View DESIGN.md on GitHub
+        </a>
+      </div>
+    </header>
+
+    {system.palette.length > 0 && (
+      <section class="detail-block">
+        <h2>Palette sample</h2>
+        <p class="block-lead">
+          First {system.palette.length} hex codes lifted from the DESIGN.md
+          color sections. The full palette and roles live in the source spec.
+        </p>
+        <div class="palette-row">
+          {system.palette.map((hex) => (
+            <div class="palette-cell">
+              <span class="swatch" style={`background:${hex}`} />
+              <code>{hex}</code>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {system.atmosphere && (
+      <section class="detail-block">
+        <h2>Visual theme</h2>
+        <p class="atmosphere">{system.atmosphere}</p>
+      </section>
+    )}
+
+    {related.length > 0 && (
+      <section class="detail-block">
+        <h2>Related systems in {system.category}</h2>
+        <ul class="related-grid">
+          {related.map((r) => (
+            <li>
+              <a href={`/systems/${r.slug}/`}>
+                <span class="related-name">{r.name}</span>
+                <span class="related-desc">{r.tagline}</span>
+                <div class="system-swatches" aria-hidden="true">
+                  {r.palette.slice(0, 4).map((hex) => (
+                    <span class="swatch" style={`background:${hex}`} />
+                  ))}
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+  </article>
+</Layout>

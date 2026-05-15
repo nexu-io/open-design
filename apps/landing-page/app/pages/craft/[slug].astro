@@ -1,0 +1,73 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import { getCraftRecords, type CraftRecord } from '../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const records = await getCraftRecords();
+  return records.map((c) => ({
+    params: { slug: c.slug },
+    props: { craft: c, all: records },
+  }));
+}
+
+interface Props {
+  craft: CraftRecord;
+  all: ReadonlyArray<CraftRecord>;
+}
+
+const { craft, all } = Astro.props as Props;
+
+const title = `${craft.name} — Open Design craft principle`;
+const description = craft.summary || `Open Design craft rule: ${craft.name}.`;
+
+const related = all.filter((c) => c.slug !== craft.slug).slice(0, 4);
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+    { '@type': 'ListItem', position: 2, name: 'Craft', item: new URL('/craft/', Astro.site).toString() },
+    { '@type': 'ListItem', position: 3, name: craft.name, item: new URL(`/craft/${craft.slug}/`, Astro.site).toString() },
+  ],
+};
+---
+
+<Layout title={title} description={description} active="craft" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <a href="/craft/">Craft</a>
+    <span>/</span>
+    <span aria-current="page">{craft.name}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">Craft principle</span>
+      <h1 class="display">{craft.name}<span class="dot">.</span></h1>
+      <p class="lead">{craft.summary}</p>
+      <div class="detail-actions">
+        <a class="btn btn-primary" href={craft.source} target="_blank" rel="noopener">
+          Read the full rule on GitHub
+        </a>
+      </div>
+    </header>
+
+    {related.length > 0 && (
+      <section class="detail-block">
+        <h2>Other craft principles</h2>
+        <ul class="related-grid">
+          {related.map((r) => (
+            <li>
+              <a href={`/craft/${r.slug}/`}>
+                <span class="related-name">{r.name}</span>
+                <span class="related-desc">{r.summary}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+  </article>
+</Layout>

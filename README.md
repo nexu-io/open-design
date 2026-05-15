@@ -68,6 +68,8 @@ OD stands on four open-source shoulders:
 | **Deployable to** | Local (`pnpm tools-dev`) · Vercel web layer · packaged Electron desktop app for macOS (Apple Silicon) and Windows (x64) — download from [open-design.ai](https://open-design.ai/) or the [latest release](https://github.com/nexu-io/open-design/releases) |
 | **License** | Apache-2.0 |
 
+Linux AppImage packaging is available through the optional release lane and is covered by the Linux packaged smoke workflow, but public stable downloads remain gated until the release maintainers enable the Linux stable lane.
+
 [acd2]: https://github.com/VoltAgent/awesome-design-md
 [ads]: https://github.com/bergside/awesome-design-skills
 
@@ -373,6 +375,8 @@ pnpm tools-dev run web
 ```
 
 Environment requirements: Node `~24` and pnpm `10.33.x`. `nvm`/`fnm` are optional helpers only; if you use one, run `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` before `pnpm install`.
+
+Windows users can follow [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for the native setup path and a tiny double-click launcher.
 
 For desktop/background startup, fixed-port restarts, and media generation dispatcher checks (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`), see [`QUICKSTART.md`](QUICKSTART.md).
 
@@ -1004,7 +1008,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-11" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-15" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -1021,9 +1025,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-11" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-11" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-11" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-15" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-15" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-15" />
   </picture>
 </a>
 

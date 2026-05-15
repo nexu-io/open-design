@@ -11,12 +11,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   AGENT_DEFS,
+  applyAgentLaunchEnv,
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
   detectAgents,
   inspectAgentExecutableResolution,
+  resolveAgentLaunch,
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../../../src/agents.js';
@@ -25,6 +27,7 @@ import type { RuntimeAgentDef } from '../../../src/runtimes/types.js';
 export {
   assert,
   AGENT_DEFS,
+  applyAgentLaunchEnv,
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
   checkWindowsCmdShimCommandLineBudget,
@@ -36,6 +39,7 @@ export {
   mkdirSync,
   mkdtempSync,
   resolveAgentExecutable,
+  resolveAgentLaunch,
   rmSync,
   spawnEnvForAgent,
   tmpdir,

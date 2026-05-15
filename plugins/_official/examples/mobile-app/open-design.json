@@ -1,0 +1,96 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-mobile-app",
+  "title": "Mobile App",
+  "version": "0.1.0",
+  "description": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame\non the page. Built by copying the seed `assets/template.html` and pasting\none screen archetype from `references/layouts.md`. Use when the brief asks\nfor \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/mobile-app",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "mobile",
+    "mobile-app",
+    "ios-app",
+    "android-app",
+    "phone-screen",
+    "app-ui",
+    "app-mockup",
+    "untitled",
+    "app"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "mobile",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame on the page. Built by copying the seed `assets/template.html` and pasting one screen archetype from `references/layouts.md`. Use when the brief asks for \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\".",
+        "zh-CN": "使用这个插件完成以下任务：A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame on the page. Built by copying the seed `assets/template.html` and pasting one screen archetype from `references/layouts.md`. Use when the brief asks for \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\"."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Mobile App"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "state-coverage",
+        "animation-discipline"
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/layouts.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

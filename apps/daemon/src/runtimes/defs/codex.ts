@@ -44,15 +44,24 @@ export const codexAgentDef = {
       options = {},
       runtimeContext = {},
     ) => {
-      const args = [
-        'exec',
-        '--json',
-        '--skip-git-repo-check',
-        '--sandbox',
-        'workspace-write',
-        '-c',
-        'sandbox_workspace_write.network_access=true',
-      ];
+      // Codex CLI's `workspace-write` sandbox blocks shell invocations on
+      // Windows ("powershell.exe ... rejected: blocked by policy", #1721),
+      // because Codex has no working OS-level sandbox on Windows and falls
+      // back to a coarse policy that rejects any shell. macOS (Seatbelt)
+      // and Linux (Landlock+seccomp) keep workspace-write because their
+      // sandbox enforcement permits shell while restricting writes.
+      const isWindows = process.platform === 'win32';
+      const args = isWindows
+        ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
+        : [
+            'exec',
+            '--json',
+            '--skip-git-repo-check',
+            '--sandbox',
+            'workspace-write',
+            '-c',
+            'sandbox_workspace_write.network_access=true',
+          ];
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }

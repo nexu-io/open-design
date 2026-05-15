@@ -49,7 +49,62 @@ const hyperframesSkillBody = [
   hyperframesSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
 ].join('\n');
 
+describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () => {
+  it('inserts every active stage block after the plugin block when supplied', () => {
+    const stage1 = '\n\n## Active stage: discovery\n\n### discovery-question-form\n\nAsk audience.';
+    const stage2 = '\n\n## Active stage: plan\n\n### todo-write\n\nCommit a plan.';
+    const prompt = composeSystemPrompt({
+      pluginBlock: '\n\n## Active plugin\n\nThe user applied test-plugin.',
+      activeStageBlocks: [stage1, stage2],
+    });
+    expect(prompt).toContain('## Active plugin');
+    expect(prompt.indexOf('## Active stage: discovery')).toBeGreaterThan(prompt.indexOf('## Active plugin'));
+    expect(prompt.indexOf('## Active stage: plan')).toBeGreaterThan(prompt.indexOf('## Active stage: discovery'));
+  });
+
+  it('skips empty / whitespace-only blocks', () => {
+    const prompt = composeSystemPrompt({
+      activeStageBlocks: ['', '   ', '\n\n## Active stage: critique\n\n### critique-theater\n\nScore.'],
+    });
+    expect(prompt).toContain('## Active stage: critique');
+    // Only one stage block means just one heading.
+    expect((prompt.match(/## Active stage:/g) ?? []).length).toBe(1);
+  });
+
+  it('is a no-op when activeStageBlocks is undefined or empty', () => {
+    const baseline = composeSystemPrompt({});
+    const withUndefined = composeSystemPrompt({ activeStageBlocks: undefined });
+    const withEmpty = composeSystemPrompt({ activeStageBlocks: [] });
+    expect(withUndefined).toBe(baseline);
+    expect(withEmpty).toBe(baseline);
+  });
+});
+
 describe('composeSystemPrompt', () => {
+  it('treats an active design system as the visual direction', () => {
+    const prompt = composeSystemPrompt({
+      designSystemTitle: 'ComfyUI',
+      designSystemBody: '# ComfyUI\n\n--accent: #ffd500',
+      metadata: { kind: 'prototype' } as any,
+      activeStageBlocks: [
+        '\n\n## Active stage: plan\n\n### direction-picker\n\nAsk for 3-5 directions.',
+      ],
+    });
+
+    expect(prompt).toContain('## Active design system — ComfyUI');
+    expect(prompt).toContain('Active design system exception');
+    expect(prompt).toContain(
+      'the active design system is the visual direction for this project',
+    );
+    expect(prompt).toContain('Do not ask the user to pick a separate theme color');
+    expect(prompt).toContain('Do not emit a direction question-form');
+    expect(prompt).not.toContain('<question-form id="direction"');
+    expect(prompt).not.toContain('Pick a visual direction');
+    expect(prompt.indexOf('## Active design system visual direction')).toBeGreaterThan(
+      prompt.indexOf('### direction-picker'),
+    );
+  });
+
   it('injects live-artifact skill guidance and metadata intent', () => {
     const prompt = composeSystemPrompt({
       skillName: 'live-artifact',
@@ -98,6 +153,19 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('## Active skill — hyperframes');
     expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
     expect(prompt).toContain('`references/html-in-canvas.md`');
+  });
+
+  it('does not add the responsive web contract to deck metadata without platform fields', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'deck',
+        speakerNotes: true,
+      } as any,
+    });
+
+    expect(prompt).toContain('- **kind**: deck');
+    expect(prompt).not.toContain('**responsive web contract**');
+    expect(prompt).not.toContain('**platformTargets**');
   });
 
   describe('artifact handoff no-emit clauses (#1143)', () => {
@@ -203,6 +271,97 @@ describe('composeSystemPrompt', () => {
       });
       expect(prompt).toContain('- `github`\n');
       expect(prompt).not.toContain('- `github` (github)');
+    });
+  });
+
+  // The daemon experiment for compiling a brand's design system from prose
+  // (DESIGN.md) into a machine-readable contract (tokens.css) plus a worked
+  // fixture (components.html) lives in PR-C. The composer exposes two new
+  // optional inputs (`designSystemTokensCss`, `designSystemFixtureHtml`)
+  // that the daemon populates by default for every brand that ships
+  // those files (PR-D flipped the env gate to default-on, with
+  // `OD_DESIGN_TOKEN_CHANNEL=0` as the kill switch). These tests pin
+  // the injection shape so the prompt structure cannot drift silently.
+  describe('design-system token + fixture injection (#PR-C)', () => {
+    const sampleTokensCss = ':root {\n  --bg: #ffffff;\n  --fg: #111111;\n  --accent: #0050d8;\n}';
+    const sampleFixtureHtml = '<!doctype html>\n<html lang="en">\n  <body><button class="btn btn-primary">Subscribe</button></body>\n</html>';
+
+    it('appends BOTH a tokens block and a fixture block when both inputs are present', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# Neutral Modern\n\n> Category: Utility\n\nProse description.',
+        designSystemTokensCss: sampleTokensCss,
+        designSystemFixtureHtml: sampleFixtureHtml,
+      });
+
+      expect(prompt).toContain('## Active design system tokens — default');
+      expect(prompt).toContain('Paste the unscoped `:root { ... }` block verbatim');
+      expect(prompt).toContain('--accent: #0050d8;');
+
+      expect(prompt).toContain('## Reference fixture — default');
+      expect(prompt).toContain('Match its component shapes');
+      expect(prompt).toContain('class="btn btn-primary"');
+    });
+
+    it('keeps the prompt byte-equivalent to the legacy path when both inputs are omitted', () => {
+      const baseline = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# Neutral Modern\n\nProse only.',
+      });
+      const withFlagOffEquivalent = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# Neutral Modern\n\nProse only.',
+        designSystemTokensCss: undefined,
+        designSystemFixtureHtml: undefined,
+      });
+
+      expect(withFlagOffEquivalent).toBe(baseline);
+      expect(withFlagOffEquivalent).not.toContain('## Active design system tokens');
+      expect(withFlagOffEquivalent).not.toContain('## Reference fixture');
+    });
+
+    it('gates the tokens and fixture blocks independently — either may be absent', () => {
+      const tokensOnly = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemTokensCss: sampleTokensCss,
+      });
+      expect(tokensOnly).toContain('## Active design system tokens — default');
+      expect(tokensOnly).not.toContain('## Reference fixture');
+
+      const fixtureOnly = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemFixtureHtml: sampleFixtureHtml,
+      });
+      expect(fixtureOnly).not.toContain('## Active design system tokens');
+      expect(fixtureOnly).toContain('## Reference fixture — default');
+    });
+
+    it('places the tokens + fixture blocks AFTER the DESIGN.md prose block (prose sets voice, structured form binds names)', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: 'PROSE_BODY_MARKER',
+        designSystemTokensCss: sampleTokensCss,
+        designSystemFixtureHtml: sampleFixtureHtml,
+      });
+      const proseAt = prompt.indexOf('PROSE_BODY_MARKER');
+      const tokensAt = prompt.indexOf('## Active design system tokens');
+      const fixtureAt = prompt.indexOf('## Reference fixture');
+      expect(proseAt).toBeGreaterThan(0);
+      expect(tokensAt).toBeGreaterThan(proseAt);
+      expect(fixtureAt).toBeGreaterThan(tokensAt);
+    });
+
+    it('treats whitespace-only inputs as absent (defensive, matches DESIGN.md block behavior)', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemTokensCss: '   \n  \t  ',
+        designSystemFixtureHtml: '\n\n',
+      });
+      expect(prompt).not.toContain('## Active design system tokens');
+      expect(prompt).not.toContain('## Reference fixture');
     });
   });
 });

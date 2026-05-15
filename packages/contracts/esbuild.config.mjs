@@ -11,6 +11,7 @@ await build({
     "./src/api/finalize.ts",
     "./src/api/providerModels.ts",
     "./src/api/research.ts",
+    "./src/analytics/index.ts",
   ],
   format: "esm",
   outbase: "./src",

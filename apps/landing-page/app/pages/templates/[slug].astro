@@ -1,0 +1,88 @@
+---
+/*
+ * /templates/<slug>/ — detail page for Live Artifact templates.
+ *
+ * Skill-mode templates are listed on `/templates/` but link straight
+ * to `/skills/<slug>/`, so this page only generates routes for the
+ * Live Artifact bundles under `templates/live-artifacts/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getTemplateRecords, type TemplateRecord } from '../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const records = await getTemplateRecords();
+  return records
+    .filter((t) => t.origin === 'live-artifact')
+    .map((template) => ({
+      params: { slug: template.slug },
+      props: { template },
+    }));
+}
+
+interface Props {
+  template: TemplateRecord;
+}
+
+const { template } = Astro.props as Props;
+
+const title = `${template.name} — Open Design template`;
+const description = template.summary;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+    { '@type': 'ListItem', position: 2, name: 'Templates', item: new URL('/templates/', Astro.site).toString() },
+    { '@type': 'ListItem', position: 3, name: template.name, item: new URL(template.detailHref, Astro.site).toString() },
+  ],
+};
+---
+
+<Layout title={title} description={description} active="templates" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <a href="/templates/">Templates</a>
+    <span>/</span>
+    <span aria-current="page">{template.name}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">
+        Template
+        <span class="ix">· Live Artifact</span>
+      </span>
+      <h1 class="display">{template.name}<span class="dot">.</span></h1>
+      <p class="lead">{template.summary}</p>
+      <div class="detail-actions">
+        <a class="btn btn-primary" href={template.source} target="_blank" rel="noopener">
+          Fork on GitHub
+        </a>
+      </div>
+    </header>
+
+    {template.previewUrl && (
+      <figure class="detail-preview">
+        <img src={template.previewUrl} alt={`${template.name} preview`} loading="lazy" decoding="async" />
+        <figcaption>Rendered from the template's seed data.</figcaption>
+      </figure>
+    )}
+
+    <section class="detail-block">
+      <h2>What's in this template</h2>
+      <p class="block-lead">
+        Live Artifact templates ship as a folder you can copy verbatim
+        into your workspace. They include a <code>template.html</code>
+        renderer, a <code>data.json</code> with the seed values, and a
+        README describing the connector wiring.
+      </p>
+      <ul class="trigger-list">
+        <li><code>template.html</code> — the artifact renderer</li>
+        <li><code>data.json</code> — seed values for offline / preview rendering</li>
+        <li><code>README.md</code> — connector wiring, refresh cadence, customization notes</li>
+      </ul>
+    </section>
+  </article>
+</Layout>

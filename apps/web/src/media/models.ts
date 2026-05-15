@@ -44,7 +44,9 @@ export type MediaProviderId =
   | 'udio'
   | 'elevenlabs'
   | 'fishaudio'
+  | 'senseaudio'
   | 'tavily'
+  | 'leonardo'
   | 'stub';
 
 export interface MediaProvider {
@@ -133,6 +135,16 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     docsUrl: 'https://fal.ai/dashboard/keys',
   },
   {
+    id: 'leonardo',
+    label: 'Leonardo.ai',
+    hint: 'Phoenix / Kino XL / FLUX',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1',
+    docsUrl: 'https://docs.leonardo.ai/docs/create-an-api-key',
+  },
+  {
     id: 'replicate',
     label: 'Replicate',
     hint: 'FLUX / SDXL / Ideogram',
@@ -184,7 +196,8 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     id: 'elevenlabs',
     label: 'ElevenLabs',
     hint: 'Voice / SFX',
-    integrated: false,
+    integrated: true,
+    defaultBaseUrl: 'https://api.elevenlabs.io',
     docsUrl: 'https://elevenlabs.io/app/settings/api-keys',
   },
   {
@@ -194,6 +207,14 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.fish.audio',
     docsUrl: 'https://fish.audio',
+  },
+  {
+    id: 'senseaudio',
+    label: 'SenseAudio',
+    hint: 'TTS · 70+ system voices · clone',
+    integrated: true,
+    defaultBaseUrl: 'https://api.senseaudio.cn',
+    docsUrl: 'https://docs.senseaudio.cn',
   },
   {
     id: 'tavily',
@@ -208,6 +229,11 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     label: 'Stub (placeholder)',
     hint: 'Deterministic local placeholder bytes',
     integrated: true,
+    // Internal fixture provider used by the daemon for deterministic
+    // tests / offline demos. Hidden from Settings the same way
+    // HyperFrames is — end users have nothing to configure here, and
+    // exposing it pollutes the provider list.
+    settingsVisible: false,
   },
 ];
 
@@ -330,6 +356,13 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
 
+  // Leonardo.ai models
+  { id: 'leonardo-phoenix', label: 'Phoenix', hint: 'Leonardo · versatile', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-kino-xl', label: 'Kino XL', hint: 'Leonardo · cinematic', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-dev', label: 'FLUX Dev', hint: 'Leonardo · FLUX', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-schnell', label: 'FLUX Schnell', hint: 'Leonardo · fast', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
+
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
 ];
@@ -412,11 +445,12 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'lyria-2', label: 'lyria-2', hint: 'Google', provider: 'google', caps: ['music'] },
   ],
   speech: [
-    { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI · expressive TTS', provider: 'openai', caps: ['tts'] },
-    { id: 'minimax-tts', label: 'minimax-tts', hint: 'MiniMax · default', provider: 'minimax', caps: ['tts'], default: true },
+    { id: 'minimax-tts', label: 'minimax-tts', hint: 'MiniMax', provider: 'minimax', caps: ['tts'], default: true },
     { id: 'fish-speech-2', label: 'fish-speech-2', hint: 'FishAudio', provider: 'fishaudio', caps: ['tts', 'voice-clone'] },
     { id: 'elevenlabs-v3', label: 'elevenlabs-v3', hint: 'ElevenLabs', provider: 'elevenlabs', caps: ['tts', 'voice-clone'] },
-    { id: 'doubao-tts', label: 'doubao-tts', hint: 'Volcengine · TTS', provider: 'volcengine', caps: ['tts'] },
+    { id: 'senseaudio-tts', label: 'senseaudio-tts', hint: 'SenseAudio', provider: 'senseaudio', caps: ['tts', 'voice-clone'] },
+    { id: 'doubao-tts', label: 'doubao-tts', hint: 'Volcengine', provider: 'volcengine', caps: ['tts'] },
+    { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI', provider: 'openai', caps: ['tts'] },
   ],
   sfx: [
     { id: 'elevenlabs-sfx', label: 'elevenlabs-sfx', hint: 'ElevenLabs SFX', provider: 'elevenlabs', caps: ['sfx'], default: true },

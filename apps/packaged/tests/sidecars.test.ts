@@ -81,6 +81,24 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards standard proxy variables to packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      HTTP_PROXY: 'http://127.0.0.1:7890',
+      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      NO_PROXY: 'localhost,127.0.0.1',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+      HTTP_PROXY: 'http://127.0.0.1:7890',
+      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      NO_PROXY: 'localhost,127.0.0.1',
+    });
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
@@ -140,6 +158,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
+      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
       logsRoot: '/tmp/od-pkg/logs',
       namespaceRoot: '/tmp/od-pkg',
       resourceRoot: '/tmp/od-pkg/resources',
@@ -207,6 +226,45 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: true,
     });
     expect(env.OD_DAEMON_CLI_PATH).toBe('/path/to/cli/dist/index.js');
+  });
+
+  it('forwards the packaged telemetry relay URL to the daemon when configured', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      telemetryRelayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+    });
+    expect(env.OPEN_DESIGN_TELEMETRY_RELAY_URL).toBe(
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+  });
+
+  it('forwards POSTHOG_KEY/POSTHOG_HOST to the daemon spawn env when baked into the bundle', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      posthogKey: 'phc_packaged_test',
+      posthogHost: 'https://us.i.posthog.com',
+    });
+    expect(env.POSTHOG_KEY).toBe('phc_packaged_test');
+    expect(env.POSTHOG_HOST).toBe('https://us.i.posthog.com');
+  });
+
+  it('omits POSTHOG_KEY/POSTHOG_HOST for fork builds that lack the secret', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      posthogKey: null,
+      posthogHost: null,
+    });
+    expect(env.POSTHOG_KEY).toBeUndefined();
+    expect(env.POSTHOG_HOST).toBeUndefined();
   });
 });
 

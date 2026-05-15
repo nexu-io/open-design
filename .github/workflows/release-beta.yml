@@ -32,9 +32,20 @@ concurrency:
   group: open-design-release-beta
   cancel-in-progress: false
 
+env:
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  # PostHog product-analytics ingest. Both vars must be defined as
+  # repository/organization secrets/vars for official builds to ship with
+  # analytics enabled. PR builds and forks run without these — the daemon's
+  # /api/analytics/config short-circuits to enabled=false in that case and
+  # no events leave the user's machine.
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+
 jobs:
   metadata:
     name: Prepare beta metadata
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     env:
       OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
@@ -179,7 +190,7 @@ jobs:
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
           source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/builder/mac-arm64/Open Design.app/Contents/Frameworks/Electron Framework.framework"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/builder/mac-arm64/Open Design Beta.app/Contents/Frameworks/Electron Framework.framework"
 
           dump_framework() {
             local label="$1"
@@ -365,7 +376,7 @@ jobs:
         id: win_tools_pack_cache_key
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/contracts/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"
@@ -553,14 +564,65 @@ jobs:
       - name: Build beta linux artifacts
         run: |
           set -euo pipefail
-          pnpm exec tools-pack linux build \
-            --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace release-beta-linux \
-            --portable \
-            --app-version "${{ needs.metadata.outputs.beta_version }}" \
-            --to appimage \
-            --containerized \
+          tools_pack_dir="$RUNNER_TEMP/tools-pack"
+          report_dir="$RUNNER_TEMP/release-report/linux"
+          build_json_path="$report_dir/tools-pack.json"
+          build_log_path="$report_dir/tools-pack.log"
+          rm -rf "$tools_pack_dir"
+          mkdir -p "$report_dir"
+          : > "$build_log_path"
+          build_args=(
+            exec tools-pack linux build
+            --dir "$tools_pack_dir"
+            --namespace release-beta-linux
+            --portable
+            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --to appimage
+            --containerized
             --json
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$build_json_path"
+            node -e 'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));' "$build_json_path"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output" | tee "$build_json_path"
+            exit "$build_status"
+          fi
+
+      - name: Smoke beta linux AppImage runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-beta-linux
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/release-report/linux"
+          mkdir -p "$report_dir/screenshots"
+          cat > "$report_dir/manifest.json" <<EOF
+          {
+            "platform": "linux",
+            "spec": "specs/linux.spec.ts",
+            "namespace": "release-beta-linux",
+            "screenshot": "screenshots/open-design-linux-smoke.png",
+            "githubRunId": "$GITHUB_RUN_ID",
+            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
+            "commit": "$GITHUB_SHA"
+          }
+          EOF
+          sudo apt-get update 2>&1 | tee "$report_dir/apt-get-update.log"
+          sudo apt-get install -y xvfb 2>&1 | tee "$report_dir/apt-get-install-xvfb.log"
+          xvfb-run -a pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+
+      - name: Upload linux e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-linux-e2e-report
+          path: ${{ runner.temp }}/release-report/linux
+          if-no-files-found: warn
 
       - name: Prepare linux beta assets
         env:
@@ -655,6 +717,13 @@ jobs:
         with:
           name: open-design-beta-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux
+
+      - name: Download linux e2e spec report
+        if: ${{ inputs.enable_linux }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-beta-linux-e2e-report
+          path: ${{ runner.temp }}/release-report/linux
 
       - name: Download mac e2e spec report
         if: ${{ inputs.enable_mac }}

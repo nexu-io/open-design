@@ -1,0 +1,78 @@
+---
+/*
+ * /skills/scenario/<slug>/ — every skill targeting a given use-case
+ * scenario (marketing, engineering, design, research, ...).
+ *
+ * Mirrors the mode page but facets on `od.scenario`. One page per
+ * distinct scenario value found across all SKILL.md files.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import SkillRow from '../../../_components/skill-row.astro';
+import {
+  getSkillScenarioIndex,
+  getSkillsForScenario,
+  type TagDescriptor,
+} from '../../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const tags = await getSkillScenarioIndex();
+  return tags.map((tag) => ({
+    params: { scenario: tag.slug },
+    props: { tag },
+  }));
+}
+
+interface Props {
+  tag: TagDescriptor;
+}
+
+const { tag } = Astro.props as Props;
+const { records, label } = await getSkillsForScenario(tag.slug);
+const heading = label ?? tag.label;
+
+const title = `${heading} skills — ${records.length} Open Design ${heading.toLowerCase()} agents`;
+const description =
+  `Every Open Design skill in the ${heading.toLowerCase()} scenario. ` +
+  `${records.length} ready-to-run agents covering decks, prototypes, ` +
+  `templates, and live artifacts — all brand-locked through any DESIGN.md.`;
+
+const url = new URL(`/skills/scenario/${tag.slug}/`, Astro.site).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: `${heading} skills · Open Design`,
+  description,
+  url,
+  numberOfItems: records.length,
+};
+---
+
+<Layout title={title} description={description} active="skills" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/skills/">Skills</a>
+      <span aria-hidden="true">/</span>
+      <span>Scenario</span>
+      <span aria-hidden="true">/</span>
+      <span class="crumb-active">{heading}</span>
+    </nav>
+    <span class="label">Catalog · Nº 01 · Filter</span>
+    <h1 class="display">
+      <em>{heading}</em> — {records.length} {heading.toLowerCase()} skills<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      Filtered to <code>od.scenario: {label ?? tag.label}</code>. Pair any of
+      these with a portable design system and the daemon orchestrates the rest —
+      one prompt, one branded artifact.
+    </p>
+    <p class="filter-clear">
+      <a href="/skills/">← All skills</a>
+    </p>
+  </header>
+
+  <section class="catalog-grid catalog-grid-skills" aria-label={`${heading} skills`}>
+    <ol>
+      {records.map((s, idx) => <SkillRow skill={s} index={idx} />)}
+    </ol>
+  </section>
+</Layout>

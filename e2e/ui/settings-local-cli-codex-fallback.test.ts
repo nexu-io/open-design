@@ -3,6 +3,10 @@ import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+
+test.describe.configure({ timeout: 30_000 });
 
 type AppConfigSeed = Record<string, unknown>;
 
@@ -64,6 +68,20 @@ async function readSavedConfig(page: Page) {
   }, STORAGE_KEY);
 }
 
+async function waitForLoadingToClear(page: Page) {
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+  }
+  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+}
+
 async function openLocalCliSettings(
   page: Page,
   {
@@ -94,6 +112,34 @@ async function openLocalCliSettings(
     });
   });
 
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          config: {
+            onboardingCompleted: true,
+            agentId: typeof config.agentId === 'string' ? config.agentId : 'codex',
+            agentCliEnv: config.agentCliEnv ?? {},
+            agentModels: config.agentModels ?? {},
+            skillId: null,
+            designSystemId: null,
+            disabledSkills: [],
+            disabledDesignSystems: [],
+          },
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({ json: { agents } });
   });
@@ -107,13 +153,21 @@ async function openLocalCliSettings(
     });
   });
 
-  await page.goto('/');
-  await page.getByTitle('Configure execution mode').click();
+  await gotoEntryHome(page);
+  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('tab', { name: /Local CLI.*1 installed/i }).click();
-  await expect(dialog.getByRole('button', { name: /Codex CLI/i })).toBeVisible();
+  await dialog.getByRole('tab', { name: /Local CLI|本机 CLI/i }).click();
+  const codexCard = dialog.getByRole('button', { name: /Codex CLI/i });
+  await expect(codexCard).toBeVisible();
+  await codexCard.click();
+  await expect(
+    dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+  ).toBeVisible();
   return dialog;
 }
 
@@ -143,7 +197,9 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
       },
     });
 
-    await expect(dialog.getByLabel('Codex executable path')).toHaveValue(configuredPath);
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(configuredPath);
     await dialog.getByRole('button', { name: 'Test' }).click();
 
     const status = dialog.locator('.settings-test-status');
@@ -171,7 +227,9 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
         },
       },
     });
-    await expect(dialog.getByLabel('Codex executable path')).toHaveValue(detectedPath);
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(detectedPath);
     await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
   });
 
@@ -207,7 +265,9 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await expect.poll(async () => readSavedConfig(page)).toMatchObject({
       agentCliEnv: {},
     });
-    await expect(dialog.getByLabel('Codex executable path')).toHaveValue('');
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue('');
     await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toHaveCount(0);
   });
 
@@ -264,7 +324,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await dialog.getByRole('button', { name: '测试' }).click();
 
     const status = dialog.locator('.settings-test-status');
-    await expect(status).toContainText('当前配置的 Codex 路径无效');
+    await expect(status).toContainText('已配置的 Codex 路径无效');
     await expect(status).toContainText(configuredPath);
     await expect(status).toContainText(detectedPath);
     await expect(dialog.getByText('当前保存的 Codex 路径不适合继续使用。')).toBeVisible();

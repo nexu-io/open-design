@@ -1,20 +1,81 @@
 import type { Express } from 'express';
+import {
+  defaultScenarioPluginIdForKind,
+  type PluginManifest,
+} from '@open-design/contracts';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
+import { listDesignSystems } from './design-systems.js';
+import {
+  FIRST_PARTY_ATOMS,
+  getInstalledPlugin,
+  listInstalledPlugins,
+  resolvePluginSnapshot,
+} from './plugins/index.js';
 import type { RouteDeps } from './server-context.js';
+import { listSkills } from './skills.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry'> {}
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
-  const { getTemplate, listTemplates, deleteTemplate, insertTemplate } = ctx.templates;
+  const { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate } = ctx.templates;
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
+  async function loadPluginRegistryView() {
+    const [skills, designSystems] = await Promise.all([
+      listSkills(SKILLS_DIR),
+      listDesignSystems(DESIGN_SYSTEMS_DIR),
+    ]);
+    return {
+      skills: skills.map((s) => ({ id: s.id, title: s.name, description: s.description })),
+      designSystems: designSystems.map((d) => ({ id: d.id, title: d.title })),
+      craft: [],
+      atoms: FIRST_PARTY_ATOMS.map((a) => ({ id: a.id, label: a.label })),
+      scenarios: collectBundledScenarios(),
+    };
+  }
+
+  function collectBundledScenarios() {
+    type ScenarioEntry = {
+      id: string;
+      taskKind: 'new-generation' | 'figma-migration' | 'code-migration' | 'tune-collab';
+      pipeline: NonNullable<NonNullable<PluginManifest['od']>['pipeline']>;
+    };
+    const byTaskKind = new Map<ScenarioEntry['taskKind'], ScenarioEntry>();
+    try {
+      const all = listInstalledPlugins(db);
+      for (const row of all) {
+        if (row.sourceKind !== 'bundled') continue;
+        const od = row.manifest.od;
+        if (!od || od.kind !== 'scenario') continue;
+        if (!od.pipeline || !Array.isArray(od.pipeline.stages) || od.pipeline.stages.length === 0) continue;
+        const taskKind = (od.taskKind ?? 'new-generation') as ScenarioEntry['taskKind'];
+        if (
+          taskKind !== 'new-generation' &&
+          taskKind !== 'figma-migration' &&
+          taskKind !== 'code-migration' &&
+          taskKind !== 'tune-collab'
+        ) {
+          continue;
+        }
+        const entry: ScenarioEntry = { id: row.id, taskKind, pipeline: od.pipeline };
+        const existing = byTaskKind.get(taskKind);
+        if (!existing || entry.id === `od-${taskKind}`) {
+          byTaskKind.set(taskKind, entry);
+        }
+      }
+    } catch {
+      return [];
+    }
+    return Array.from(byTaskKind.values());
+  }
+
   app.get('/api/projects', (_req, res) => {
     try {
       const latestRunStatuses = listLatestProjectRunStatuses(db);
@@ -63,7 +124,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, skillId, designSystemId, pendingPrompt, metadata } =
+      const { id, name, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
       if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -93,6 +154,32 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
       }
+      if (customInstructions !== undefined
+          && typeof customInstructions !== 'string'
+          && customInstructions !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions must be a string or null');
+      }
+      if (typeof customInstructions === 'string' && customInstructions.length > 5000) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
+      }
+      if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
+      }
+      const projectMetadata =
+        metadata && typeof metadata === 'object'
+          ? {
+              ...metadata,
+              ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(Array.isArray(metadata.linkedDirs)
+                ? (() => {
+                    const v = validateLinkedDirs(metadata.linkedDirs);
+                    return v.error ? {} : { linkedDirs: v.dirs };
+                  })()
+                : {}),
+            }
+          : skipDiscoveryBrief === true
+            ? { skipDiscoveryBrief: true }
+            : null;
       const now = Date.now();
       const project = insertProject(db, {
         id,
@@ -100,17 +187,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         skillId: skillId ?? null,
         designSystemId: designSystemId ?? null,
         pendingPrompt: pendingPrompt || null,
-        metadata:
-          metadata && typeof metadata === 'object'
-            ? {
-                ...metadata,
-                ...(Array.isArray(metadata.linkedDirs)
-                  ? (() => {
-                      const v = validateLinkedDirs(metadata.linkedDirs);
-                      return v.error ? {} : { linkedDirs: v.dirs };
-                    })()
-                  : {}),
-              }
+        metadata: projectMetadata,
+        customInstructions:
+          typeof customInstructions === 'string'
+            ? customInstructions
             : null,
         createdAt: now,
         updatedAt: now,
@@ -124,6 +204,48 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         createdAt: now,
         updatedAt: now,
       });
+
+      const explicitPlugin =
+        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
+          ? true
+          : typeof req.body?.appliedPluginSnapshotId === 'string'
+            && req.body.appliedPluginSnapshotId.trim().length > 0;
+      let resolveBody =
+        explicitPlugin ? (req.body as Record<string, unknown>) : null;
+      if (!resolveBody) {
+        const fallbackPluginId = defaultScenarioPluginIdForKind(
+          projectMetadata?.kind,
+        );
+        if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
+          resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
+        }
+      }
+      let resolvedSnapshot = null;
+      if (resolveBody) {
+        const registry = await loadPluginRegistryView();
+        const resolved = resolvePluginSnapshot({
+          db,
+          body: resolveBody,
+          projectId: id,
+          conversationId: cid,
+          registry,
+          activeProjectDesignSystem:
+            typeof designSystemId === 'string' && designSystemId.length > 0
+              ? { id: designSystemId }
+              : undefined,
+        });
+        if (resolved && !resolved.ok) {
+          if (!explicitPlugin) {
+            console.warn(
+              `[plugins] default-scenario fallback skipped for project ${id}: ${resolved.body?.error?.code ?? 'unknown'}`,
+            );
+          } else {
+            return res.status(resolved.status).json(resolved.body);
+          }
+        } else {
+          resolvedSnapshot = resolved;
+        }
+      }
       // For "from template" projects, seed the chosen template's snapshot
       // HTML into the new project folder so the agent can Read/edit files
       // on disk (the system prompt also embeds them, but a real on-disk
@@ -160,7 +282,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */
-      const body = { project, conversationId: cid };
+      const body = {
+        project: resolvedSnapshot?.ok ? getProject(db, id) ?? project : project,
+        conversationId: cid,
+        ...(resolvedSnapshot?.ok
+          ? { appliedPluginSnapshotId: resolvedSnapshot.snapshotId }
+          : {}),
+      };
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
@@ -239,6 +367,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           existing?.metadata?.fromTrustedPicker === true
             ? patch.metadata.linkedDirs
             : validated.dirs;
+      }
+      if (patch.customInstructions !== undefined
+          && typeof patch.customInstructions !== 'string'
+          && patch.customInstructions !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions must be a string or null');
+      }
+      if (typeof patch.customInstructions === 'string' && patch.customInstructions.length > 5000) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
@@ -377,6 +513,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
+    ctx.telemetry?.reportFinalizedMessage(saved, m);
     res.json({ message: saved });
   });
 
@@ -504,6 +641,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof name !== 'string' || !name.trim()) {
         return res.status(400).json({ error: 'name required' });
       }
+      if (name.length > 100) {
+        return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+      }
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
@@ -534,14 +674,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           });
         }
       }
-      const t = insertTemplate(db, {
-        id: randomId(),
-        name: name.trim(),
-        description: typeof description === 'string' ? description : null,
-        sourceProjectId,
-        files: snapshot,
-        createdAt: Date.now(),
-      });
+      const trimmedName = name.trim();
+      const descValue = typeof description === 'string' ? description : null;
+      const existing = findTemplateByNameAndProject(db, trimmedName, sourceProjectId);
+      let t;
+      if (existing) {
+        t = updateTemplate(db, existing.id, {
+          description: descValue,
+          files: snapshot,
+        });
+      } else {
+        t = insertTemplate(db, {
+          id: randomId(),
+          name: trimmedName,
+          description: descValue,
+          sourceProjectId,
+          files: snapshot,
+          createdAt: Date.now(),
+        });
+      }
       res.json({ template: t });
     } catch (err: any) {
       res.status(400).json({ error: String(err) });

@@ -52,11 +52,11 @@ export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element 
         role="group"
         aria-label={t('settings.privacyConsentKicker')}
       >
-        <button type="button" className="privacy-consent-action" onClick={onShare}>
-          {t('settings.privacyConsentShare')}
-        </button>
         <button type="button" className="privacy-consent-action" onClick={onDecline}>
           {t('settings.privacyConsentDecline')}
+        </button>
+        <button type="button" className="privacy-consent-action" onClick={onShare}>
+          {t('settings.privacyConsentShare')}
         </button>
       </div>
     </div>

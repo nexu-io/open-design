@@ -1,0 +1,87 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-kami-deck",
+  "title": "Kami Deck",
+  "version": "0.1.0",
+  "description": "Produce a print-grade slide deck in the kami (紙 / 纸) design system — warm parchment background (or ink-blue for cover / chapter slides), serif at one weight, ink-blue accent ≤ 5% per slide, no italic. Horizontal magazine swipe pagination (←/→ · wheel · swipe · ESC overview). One self-contained HTML file, zero dependencies beyond Google Fonts.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/kami-deck",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "kami-deck",
+    "paper-slides",
+    "white-paper-deck",
+    "editorial-deck",
+    "print-style-slides",
+    "kami-slides"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "featured": 0.06,
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Produce a print-grade slide deck in the kami (紙 / 纸) design system — warm parchment background (or ink-blue for cover / chapter slides), serif at one weight, ink-blue accent ≤ 5% per slide, no italic. Horizontal magazine swipe pagination (←/→ · wheel · swipe · ESC overview). One self-contained HTML file, zero dependenc",
+        "zh-CN": "Produce a print-grade slide deck in the kami (紙 / 纸) design system — warm parchment background (or ink-blue for cover / chapter slides), serif at one weight, ink-blue accent ≤ 5% per slide, no italic. Horizontal magazine swipe pagination (←/→ · wheel · swipe · ESC overview). One self-contained HTML file, zero dependenc"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Kami Deck"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "craft": [
+        "typographic-rhythm",
+        "pixel-discipline"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

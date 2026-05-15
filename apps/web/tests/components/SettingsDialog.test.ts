@@ -169,6 +169,7 @@ describe('SettingsDialog test status variant', () => {
       'upstream_unavailable',
       'timeout',
       'agent_not_installed',
+      'agent_auth_required',
       'agent_spawn_failed',
       'unknown',
     ] as const) {

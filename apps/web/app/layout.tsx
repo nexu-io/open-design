@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { I18nProvider } from '../src/i18n';
+import { AnalyticsProvider } from '../src/analytics/provider';
 import '../src/index.css';
+import '../src/styles/home/index.css';
 
 export const metadata: Metadata = {
   title: 'Open Design',
@@ -26,7 +28,7 @@ export const viewport: Viewport = {
  * Keep the accent variable mix ratios in sync with `accentVars()` in
  * `src/state/appearance.ts`; this script cannot import application modules.
  */
-const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'';if(a){var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 86%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 22%, var(--bg-panel))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 12%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 90%, var(--text-strong))');}}catch(e){}})();`;
+const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#c96442';var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 86%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 22%, var(--bg-panel))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 12%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 90%, var(--text-strong))');}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -37,7 +39,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body suppressHydrationWarning>
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          <AnalyticsProvider>{children}</AnalyticsProvider>
+        </I18nProvider>
       </body>
     </html>
   );

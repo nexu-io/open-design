@@ -1,0 +1,168 @@
+---
+/*
+ * /skills/<slug>/ — a detail page per skill.
+ *
+ * Mostly a structured read-out of SKILL.md frontmatter (description,
+ * triggers, mode/scenario/platform, featured rank) plus deep links
+ * to the GitHub source. We deliberately don't render the full
+ * SKILL.md body to avoid duplicating the README and to keep the page
+ * scan-friendly for both humans and search engines.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getSkillRecords, type SkillRecord } from '../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const skills = await getSkillRecords();
+  return skills.map((skill) => ({
+    params: { slug: skill.slug },
+    props: { skill, all: skills },
+  }));
+}
+
+interface Props {
+  skill: SkillRecord;
+  all: ReadonlyArray<SkillRecord>;
+}
+
+const { skill, all } = Astro.props as Props;
+
+const title = `${skill.name} — Open Design skill`;
+const description = skill.description.length > 0
+  ? skill.description
+  : `Open Design skill bundle: ${skill.name}.`;
+
+const related = all
+  .filter((s) => s.slug !== skill.slug)
+  .filter((s) => s.mode === skill.mode || s.scenario === skill.scenario)
+  .slice(0, 4);
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+      { '@type': 'ListItem', position: 2, name: 'Skills', item: new URL('/skills/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: skill.name, item: new URL(`/skills/${skill.slug}/`, Astro.site).toString() },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareSourceCode',
+    name: skill.name,
+    description,
+    codeRepository: skill.source,
+    programmingLanguage: 'Markdown',
+    keywords: skill.triggers.join(', '),
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  },
+];
+---
+
+<Layout title={title} description={description} active="skills" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <a href="/skills/">Skills</a>
+    <span>/</span>
+    <span aria-current="page">{skill.name}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">
+        Skill
+        {typeof skill.featured === 'number' && (
+          <span class="ix">· Featured Nº {String(skill.featured).padStart(2, '0')}</span>
+        )}
+      </span>
+      <h1 class="display">{skill.name}<span class="dot">.</span></h1>
+      <p class="lead">{description}</p>
+      <div class="detail-actions">
+        <a class="btn btn-primary" href={skill.source} target="_blank" rel="noopener">
+          View on GitHub
+        </a>
+        {skill.upstream && (
+          <a class="btn btn-ghost" href={skill.upstream} target="_blank" rel="noopener">
+            Upstream
+          </a>
+        )}
+      </div>
+    </header>
+
+    {skill.previewUrl && (
+      <figure class="detail-preview">
+        <img src={skill.previewUrl} alt={`${skill.name} example output`} loading="lazy" decoding="async" />
+        <figcaption>
+          Rendered from <code>skills/{skill.slug}/example.html</code>
+        </figcaption>
+      </figure>
+    )}
+
+    <dl class="detail-meta">
+      {skill.mode && (
+        <Fragment>
+          <dt>Mode</dt>
+          <dd>{skill.mode}</dd>
+        </Fragment>
+      )}
+      {skill.scenario && (
+        <Fragment>
+          <dt>Scenario</dt>
+          <dd>{skill.scenario}</dd>
+        </Fragment>
+      )}
+      {skill.platform && (
+        <Fragment>
+          <dt>Platform</dt>
+          <dd>{skill.platform}</dd>
+        </Fragment>
+      )}
+      {skill.category && (
+        <Fragment>
+          <dt>Category</dt>
+          <dd>{skill.category}</dd>
+        </Fragment>
+      )}
+    </dl>
+
+    {skill.triggers.length > 0 && (
+      <section class="detail-block">
+        <h2>Triggers</h2>
+        <p class="block-lead">
+          The picker matches these prompts to the skill. Copy one and adapt it to your brief.
+        </p>
+        <ul class="trigger-list">
+          {skill.triggers.map((t) => <li><code>{t}</code></li>)}
+        </ul>
+      </section>
+    )}
+
+    {skill.examplePrompt && (
+      <section class="detail-block">
+        <h2>Example prompt</h2>
+        <pre class="example-prompt">{skill.examplePrompt}</pre>
+      </section>
+    )}
+
+    {related.length > 0 && (
+      <section class="detail-block">
+        <h2>Related skills</h2>
+        <ul class="related-grid">
+          {related.map((r) => (
+            <li>
+              <a href={`/skills/${r.slug}/`}>
+                <span class="related-name">{r.name}</span>
+                <span class="related-desc">{r.description}</span>
+                <span class="related-meta">
+                  {r.mode && <span class="meta-tag">{r.mode}</span>}
+                  {r.scenario && <span class="meta-tag muted">{r.scenario}</span>}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+  </article>
+</Layout>

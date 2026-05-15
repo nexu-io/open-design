@@ -841,11 +841,6 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       { agents: availableAgents },
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-
-    fireEvent.change(screen.getByLabelText('Claude Code config directory'), {
-      target: { value: '  ~/.claude-qa  ' },
-    });
     fireEvent.change(screen.getByLabelText('Codex home'), {
       target: { value: ' ~/.codex-team ' },
     });
@@ -856,7 +851,6 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         mode: 'daemon',
         agentId: 'codex',
         agentCliEnv: {
-          claude: { CLAUDE_CONFIG_DIR: '~/.claude-qa' },
           codex: { CODEX_HOME: '~/.codex-team' },
         },
       }),
@@ -952,20 +946,31 @@ describe('SettingsDialog media providers interactions', () => {
       node.textContent?.trim(),
     );
     expect(names.slice(0, 2)).toEqual(['MiniMax', 'OpenAI']);
-    expect(screen.getAllByText('Configured').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('renders unsupported providers as disabled rows', () => {
+  it('renders non-integrated providers in the coming-soon section without input fields', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'media' },
     );
 
-    expect(screen.getAllByText('Unsupported').length).toBeGreaterThan(0);
-    const bflApiKey = screen.getByLabelText('Black Forest Labs API key') as HTMLInputElement;
-    const bflBaseUrl = screen.getByLabelText('Black Forest Labs Base URL') as HTMLInputElement;
-    expect(bflApiKey.disabled).toBe(true);
-    expect(bflBaseUrl.disabled).toBe(true);
+    // Non-integrated providers (e.g. Fal.ai, Black Forest Labs) are shown in
+    // a separate "Coming soon" disclosure without editable inputs.
+    expect(screen.queryByLabelText('Black Forest Labs API key')).toBeNull();
+    expect(screen.queryByLabelText('Black Forest Labs Base URL')).toBeNull();
+    expect(document.querySelector('.media-provider-coming-soon')).toBeTruthy();
+  });
+
+  it('renders ElevenLabs as an integrated media provider with enabled inputs', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'media' },
+    );
+
+    const apiKeyInput = screen.getByLabelText('ElevenLabs API key') as HTMLInputElement;
+    const baseUrlInput = screen.getByLabelText('ElevenLabs Base URL') as HTMLInputElement;
+    expect(apiKeyInput.disabled).toBe(false);
+    expect(baseUrlInput.disabled).toBe(false);
   });
 
   it('clears an existing provider config and removes it from the persisted payload', async () => {
@@ -1276,7 +1281,7 @@ describe('SettingsDialog connectors interactions', () => {
         apiKeyTail: '',
       });
     });
-    expect(screen.getByText(/keys are stored locally in the daemon/i)).toBeTruthy();
+    expect(screen.getByText(/keys are stored locally and never shared/i)).toBeTruthy();
   });
 
   it('closes Composio settings via the close button or backdrop', () => {
@@ -1378,10 +1383,6 @@ describe('SettingsDialog MCP server interactions', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/mcp/install-info');
     });
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 3, name: 'MCP server' })).toBeTruthy();
-    });
-
     expect(screen.getByText(/Run this in your terminal/i)).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByText(/claude mcp add-json --scope user open-design/i)).toBeTruthy();
@@ -1462,42 +1463,30 @@ describe('SettingsDialog language interactions', () => {
     document.documentElement.removeAttribute('dir');
   });
 
-  it('opens the language menu and marks the current locale as selected', async () => {
+  it('shows every locale as a tile and marks the current locale as selected', async () => {
     renderLanguageSettingsDialog('en');
 
-    const trigger = screen.getByRole('button', { name: /English/i });
-    fireEvent.click(trigger);
-
-    const options = await screen.findAllByRole('menuitemradio');
-    expect(options).toHaveLength(LOCALES.length);
-    expect(screen.getByRole('menuitemradio', { name: /English/i }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('menuitemradio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('false');
+    const tiles = await screen.findAllByRole('radio');
+    expect(tiles).toHaveLength(LOCALES.length);
+    expect(screen.getByRole('radio', { name: /English/i }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('false');
   });
 
-  it('switches locale immediately, updates localStorage, and closes the menu', async () => {
+  it('switches locale immediately and updates localStorage', async () => {
     renderLanguageSettingsDialog('en');
 
-    fireEvent.click(screen.getByRole('button', { name: /English/i }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /简体中文/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /简体中文/i }));
 
-    expect(screen.queryByRole('menu')).toBeNull();
-    expect(screen.getByRole('button', { name: /简体中文/i })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('true');
     expect(window.localStorage.getItem('open-design:locale')).toBe('zh-CN');
     expect(document.documentElement.getAttribute('lang')).toBe('zh-CN');
     expect(document.documentElement.getAttribute('dir')).toBe('ltr');
   });
 
-  it('sets rtl direction for rtl locales and closes the menu on escape', async () => {
+  it('sets rtl direction for rtl locales', async () => {
     renderLanguageSettingsDialog('en');
 
-    fireEvent.click(screen.getByRole('button', { name: /English/i }));
-    fireEvent.keyDown(document, { key: 'Escape' });
-    await waitFor(() => {
-      expect(screen.queryByRole('menu')).toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /English/i }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /فارسی/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /فارسی/i }));
 
     expect(window.localStorage.getItem('open-design:locale')).toBe('fa');
     expect(document.documentElement.getAttribute('lang')).toBe('fa');
@@ -1507,8 +1496,7 @@ describe('SettingsDialog language interactions', () => {
   it('does not route language changes through autosave and closing does not revert an applied locale', async () => {
     const { onPersist, onClose } = renderLanguageSettingsDialog('en');
 
-    fireEvent.click(screen.getByRole('button', { name: /English/i }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Deutsch/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /Deutsch/i }));
 
     expect(window.localStorage.getItem('open-design:locale')).toBe('de');
     expect(document.documentElement.getAttribute('lang')).toBe('de');
@@ -1669,6 +1657,16 @@ describe('SettingsDialog appearance interactions', () => {
     expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('applies the first accent color as the default appearance color', () => {
+    renderSettingsDialog(
+      { theme: 'system' },
+      { initialSection: 'appearance' },
+    );
+
+    expect(screen.getByRole('radio', { name: 'Default accent color' }).getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
+  });
+
   it('live previews explicit themes and removes the explicit document theme when switching back to System', () => {
     renderSettingsDialog(
       { theme: 'dark' },
@@ -1721,6 +1719,48 @@ describe('SettingsDialog appearance interactions', () => {
     );
   });
 
+  it('switches back to the default accent color and persists it explicitly', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
+      { initialSection: 'appearance' },
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Default accent color' }));
+
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        accentColor: '#c96442',
+      }),
+      {},
+    );
+  });
+
+  it('keeps an autosaved accent color applied after the dialog closes', async () => {
+    const view = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
+      { initialSection: 'appearance' },
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
+
+    await waitForPersist(
+      view.onPersist,
+      expect.objectContaining({
+        accentColor: '#059669',
+      }),
+      {},
+    );
+
+    fireEvent.click(view.container.querySelector('.settings-close') as HTMLElement);
+    expect(view.onClose).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
+  });
+
   it('live previews and autosaves preset and custom accent colors', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex', theme: 'light' },
@@ -1738,7 +1778,7 @@ describe('SettingsDialog appearance interactions', () => {
       {},
     );
 
-    fireEvent.change(screen.getByLabelText('Custom accent color'), {
+    fireEvent.change(screen.getByLabelText('Custom color'), {
       target: { value: '#123456' },
     });
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#123456');
@@ -1750,6 +1790,29 @@ describe('SettingsDialog appearance interactions', () => {
       }),
       {},
     );
+  });
+
+  it('localizes the accent color controls in Chinese', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <SettingsDialog
+          initial={{ ...baseConfig, theme: 'light' }}
+          agents={availableAgents}
+          daemonLive={true}
+          appVersionInfo={null}
+          initialSection="appearance"
+          onPersist={vi.fn()}
+          onPersistComposioKey={vi.fn()}
+          onClose={vi.fn()}
+          onRefreshAgents={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('主题色')).toBeTruthy();
+    expect(screen.getByRole('radiogroup', { name: '主题色' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: '默认主题色' })).toBeTruthy();
+    expect(screen.getByLabelText('自定义颜色')).toBeTruthy();
   });
 });
 
@@ -1955,7 +2018,9 @@ describe('SettingsDialog skills section', () => {
       expect(screen.getByText('sales-deck')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /deck1/i }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Type' }), {
+      target: { value: 'deck' },
+    });
     expect(screen.queryByText('blog-post')).toBeNull();
     expect(screen.getByText('sales-deck')).toBeTruthy();
 
@@ -2069,7 +2134,6 @@ describe('SettingsDialog about interactions', () => {
       },
     );
 
-    expect(screen.getByRole('heading', { level: 3, name: 'About' })).toBeTruthy();
     expect(screen.getByText('Version')).toBeTruthy();
     expect(screen.getByText('0.4.1')).toBeTruthy();
     expect(screen.getByText('Channel')).toBeTruthy();

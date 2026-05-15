@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -29,20 +29,27 @@
     "dev": "pnpm run build && node dist/cli.js --no-open",
     "start": "pnpm run build && node dist/cli.js",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "pnpm --filter @open-design/contracts build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/registry-protocol build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/platform": "workspace:*",
+    "@open-design/plugin-runtime": "workspace:*",
+    "@open-design/registry-protocol": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
     "better-sqlite3": "^12.9.0",
     "blake3-wasm": "2.1.5",
     "chokidar": "^5.0.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
     "multer": "^2.1.1",
+    "posthog-node": "^4.18.0",
+    "prom-client": "^15.1.0",
+    "tar": "^7.5.13",
     "undici": "^7.16.0"
   },
   "devDependencies": {
@@ -50,6 +57,7 @@
     "@types/express": "^4.17.21",
     "@types/multer": "^2.1.0",
     "@types/node": "^20.17.10",
+    "@types/tar": "^6.1.13",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   },

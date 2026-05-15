@@ -1,0 +1,89 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-sprite-animation",
+  "title": "Sprite Animation",
+  "version": "0.1.0",
+  "description": "A pixel / sprite-style animated explainer slide — full-bleed cream stage,\nbold display year, animated pixel-art mascot (e.g. Hanafuda card, mushroom,\nor 8-bit console), kinetic Japanese display type, ticking timeline ribbon.\nReads like a single frame of an educational motion video — looping CSS\nkeyframes, no JS, ready to be screen-recorded into a vertical video.\nUse when the brief asks for a \"sprite animation\", \"pixel-art video\",\n\"8-bit explainer\", \"history of X explainer\", \"kinetic typography history\",\n\"Nintendo-style\", \"精灵图动画\", \"像素动画\", or \"复古动画\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/sprite-animation",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "desktop",
+    "sprite-animation",
+    "pixel-art-animation",
+    "8-bit-explainer",
+    "retro-animation",
+    "kinetic-typography",
+    "history-explainer",
+    "nintendo-style",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a sprite-based animation introducing trivia about Nintendo's history. Combine pixel mascots, animated text, and a Hanafuda accent. Use color and type that feel like the Nintendo brand.",
+        "zh-CN": "使用这个插件完成以下任务：Create a sprite-based animation introducing trivia about Nintendo's history. Combine pixel mascots, animated text, and a Hanafuda accent. Use color and type that feel like the Nintendo brand."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Sprite Animation"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

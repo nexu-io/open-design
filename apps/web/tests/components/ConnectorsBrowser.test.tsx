@@ -14,15 +14,21 @@ import {
   fetchConnectorStatuses,
 } from '../../src/providers/registry';
 
-vi.mock('../../src/providers/registry', () => ({
-  cancelConnectorAuthorization: vi.fn(),
-  connectConnector: vi.fn(),
-  disconnectConnector: vi.fn(),
-  fetchConnectorDetail: vi.fn(),
-  fetchConnectorDiscovery: vi.fn(),
-  fetchConnectors: vi.fn(),
-  fetchConnectorStatuses: vi.fn(),
-}));
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    cancelConnectorAuthorization: vi.fn(),
+    connectConnector: vi.fn(),
+    disconnectConnector: vi.fn(),
+    fetchConnectorDetail: vi.fn(),
+    fetchConnectorDiscovery: vi.fn(),
+    fetchConnectors: vi.fn(),
+    fetchConnectorStatuses: vi.fn(),
+  };
+});
 
 const configuredComposioConnector: ConnectorDetail = {
   id: 'github',

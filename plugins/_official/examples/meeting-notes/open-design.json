@@ -1,0 +1,86 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-meeting-notes",
+  "title": "Meeting Notes",
+  "version": "0.1.0",
+  "description": "Meeting notes page — title bar with attendees, agenda checklist, decisions\nblock, action items table with owners + dates, and a \"next meeting\" footer.\nUse when the brief mentions \"meeting notes\", \"minutes\", \"1:1 notes\",\n\"all-hands recap\", or \"会议纪要\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/meeting-notes",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "operations",
+    "web",
+    "desktop",
+    "meeting-notes",
+    "minutes",
+    "1-1-notes",
+    "all-hands-recap",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Write up notes from a 60-minute Growth squad weekly — agenda, decisions, action items with owners, next meeting.",
+        "zh-CN": "使用这个插件完成以下任务：Write up notes from a 60-minute Growth squad weekly — agenda, decisions, action items with owners, next meeting."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Meeting Notes"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

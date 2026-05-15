@@ -1,0 +1,9 @@
+# Cloudflare Pages redirects.
+#
+# Blog slug changes must add explicit redirects here so Google and
+# inbound links do not see a 404. The CI guard accepts either:
+#
+#   /blog/old-slug/ /blog/new-slug/ 301
+#   /blog/old-slug/ /blog/ 301
+#
+# Keep this file committed even when empty; it documents the contract.

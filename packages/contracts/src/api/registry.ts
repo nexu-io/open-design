@@ -8,6 +8,8 @@ export interface AgentInfo {
   name: string;
   bin: string;
   available: boolean;
+  authStatus?: 'ok' | 'missing' | 'unknown';
+  authMessage?: string;
   path?: string;
   version?: string | null;
   models?: AgentModelOption[];

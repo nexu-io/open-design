@@ -8,6 +8,10 @@ import type {
   AudioKind,
   ChatAttachment,
   ChatCommentAttachment,
+  ChatCommentSelectionKind,
+  ChatMessageFeedback,
+  ChatMessageFeedbackRating,
+  ChatMessageFeedbackReasonCode,
   ChatMessage,
   ConnectionTestKind,
   ConnectionTestProtocol,
@@ -37,12 +41,14 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
   Project,
+  ProjectPlatform,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,
   PreviewCommentUpsertRequest,
+  PreviewVisualMarkKind,
   ProjectDisplayStatus,
   ProjectFile,
   ProjectFileKind,
@@ -67,10 +73,12 @@ export type {
   CloudflarePagesDeploySelection,
   CloudflarePagesDeploymentInfo,
   CloudflarePagesZonesResponse,
+  ChatCommentSelectionKind,
   OrbitRunSummary,
   OrbitStatusResponse,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
+  PreviewVisualMarkKind,
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
@@ -329,6 +337,7 @@ export interface AppConfig {
   // Langfuse-backed telemetry endpoint. All three default to off until the
   // user makes an explicit choice.
   telemetry?: TelemetryConfig;
+  customInstructions?: string;
 }
 
 export interface TelemetryConfig {
@@ -350,7 +359,24 @@ export interface LiveArtifactEventItem {
   event: Extract<AgentEvent, { kind: 'live_artifact' | 'live_artifact_refresh' }>;
 }
 
-export type { ChatAttachment, ChatCommentAttachment, ChatMessage };
+export type ChatMessageFeedbackChange =
+  | ({
+      rating: ChatMessageFeedbackRating;
+    } & Partial<
+      Pick<
+        ChatMessageFeedback,
+        'reasonCodes' | 'customReason' | 'reasonsSubmittedAt'
+      >
+    >)
+  | null;
+
+export type {
+  ChatAttachment,
+  ChatCommentAttachment,
+  ChatMessage,
+  ChatMessageFeedbackRating,
+  ChatMessageFeedbackReasonCode,
+};
 
 export interface Artifact {
   identifier: string;
@@ -424,6 +450,7 @@ export type {
   MediaAspect,
   ProjectDeploymentsResponse,
   Project,
+  ProjectPlatform,
   PreviewComment,
   PreviewCommentStatus,
   PreviewCommentTarget,

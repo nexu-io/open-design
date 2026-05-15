@@ -39,6 +39,7 @@ export interface AppConfigPrefs {
    */
   privacyDecisionAt?: number | null;
   orbit?: OrbitConfigPrefs;
+  customInstructions?: string | null;
 }
 
 export interface AppConfigResponse {

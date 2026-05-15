@@ -259,12 +259,12 @@ describe('app-config', () => {
         agentCliEnv: {
           claude: {
             CLAUDE_CONFIG_DIR: '  ~/.claude-2  ',
-            ANTHROPIC_API_KEY: 'sk-should-not-persist',
+            ANTHROPIC_API_KEY: '  sk-proxy-anthropic  ',
           },
           codex: {
             CODEX_HOME: '~/.codex-alt',
             CODEX_BIN: '~/bin/codex-next',
-            OPENAI_API_KEY: 'sk-should-not-persist',
+            OPENAI_API_KEY: '  sk-proxy-openai  ',
           },
           gemini: {
             GEMINI_API_KEY: 'should-not-persist',
@@ -278,8 +278,8 @@ describe('app-config', () => {
       const cfg = await readAppConfig(dataDir);
 
       expect(cfg.agentCliEnv).toEqual({
-        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_API_KEY: 'sk-proxy-anthropic' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_API_KEY: 'sk-proxy-openai' },
       });
     });
 

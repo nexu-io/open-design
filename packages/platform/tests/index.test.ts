@@ -502,26 +502,42 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
-  it("expands per-version Node toolchains for mise / nvm / fnm", () => {
+  it("surfaces GUI-safe PATH additions and sorts versioned Node bins by highest semver first", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-versioned-"));
     try {
       const miseBin = join(home, ".local", "share", "mise", "installs", "node", "24.14.1", "bin");
-      const nvmBin = join(home, ".nvm", "versions", "node", "v22.10.0", "bin");
+      const newestNvmBin = join(home, ".nvm", "versions", "node", "v24.1.0", "bin");
+      const olderNvmBin = join(home, ".nvm", "versions", "node", "v22.10.0", "bin");
       const fnmBin = join(home, ".local", "share", "fnm", "node-versions", "v20.11.1", "installation", "bin");
       mkdirSync(miseBin, { recursive: true });
-      mkdirSync(nvmBin, { recursive: true });
+      mkdirSync(newestNvmBin, { recursive: true });
+      mkdirSync(olderNvmBin, { recursive: true });
       mkdirSync(fnmBin, { recursive: true });
       writeFileSync(join(miseBin, "marker"), "");
-      writeFileSync(join(nvmBin, "marker"), "");
+      writeFileSync(join(newestNvmBin, "marker"), "");
+      writeFileSync(join(olderNvmBin, "marker"), "");
       writeFileSync(join(fnmBin, "marker"), "");
       chmodSync(join(miseBin, "marker"), 0o644);
-      chmodSync(join(nvmBin, "marker"), 0o644);
+      chmodSync(join(newestNvmBin, "marker"), 0o644);
+      chmodSync(join(olderNvmBin, "marker"), 0o644);
       chmodSync(join(fnmBin, "marker"), 0o644);
 
-      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+        includeSystemBins: true,
+      });
+      const newestNvmIdx = dirs.indexOf(newestNvmBin);
+      const olderNvmIdx = dirs.indexOf(olderNvmBin);
+
+      expect(dirs).toContain("/opt/homebrew/bin");
+      expect(dirs).toContain("/usr/local/bin");
       expect(dirs).toContain(miseBin);
-      expect(dirs).toContain(nvmBin);
+      expect(dirs).toContain(newestNvmBin);
+      expect(dirs).toContain(olderNvmBin);
       expect(dirs).toContain(fnmBin);
+      expect(newestNvmIdx).toBeGreaterThan(-1);
+      expect(olderNvmIdx).toBeGreaterThan(newestNvmIdx);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

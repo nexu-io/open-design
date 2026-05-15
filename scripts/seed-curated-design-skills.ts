@@ -907,7 +907,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['ad creative', 'ad headline', 'ad copy', 'paid social ad', 'search ad'],
     mode: 'design-system',
     category: 'marketing-creative',
-    upstream: 'https://github.com/coreyhaines31/skills',
+    upstream: 'https://github.com/coreyhaines31/marketingskills',
     attribution: 'Curated from Corey Haines.',
   },
   {
@@ -917,7 +917,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['copywriting', 'landing copy', 'ad copy', 'homepage copy', 'rewrite copy'],
     mode: 'design-system',
     category: 'marketing-creative',
-    upstream: 'https://github.com/coreyhaines31/skills',
+    upstream: 'https://github.com/coreyhaines31/marketingskills',
     attribution: 'Curated from Corey Haines.',
   },
   {
@@ -927,7 +927,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['marketing psychology', 'behavioral copy', 'persuasion', 'framing', 'cognitive bias'],
     mode: 'design-system',
     category: 'marketing-creative',
-    upstream: 'https://github.com/coreyhaines31/skills',
+    upstream: 'https://github.com/coreyhaines31/marketingskills',
     attribution: 'Curated from Corey Haines.',
   },
   {
@@ -937,7 +937,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['paywall', 'upgrade screen', 'cro paywall', 'upsell modal', 'pricing screen'],
     mode: 'design-system',
     category: 'marketing-creative',
-    upstream: 'https://github.com/coreyhaines31/skills',
+    upstream: 'https://github.com/coreyhaines31/marketingskills',
     attribution: 'Curated from Corey Haines.',
   },
   {

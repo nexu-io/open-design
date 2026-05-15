@@ -12,3 +12,7 @@ Allow: /
 Disallow: /og/
 
 Sitemap: https://open-design.ai/sitemap-index.xml
+
+# Machine-readable discovery surfaces for feed readers and LLM crawlers.
+# RSS: https://open-design.ai/rss.xml
+# LLMs: https://open-design.ai/llms.txt

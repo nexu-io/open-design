@@ -128,6 +128,27 @@ describe('preview comment persistence', () => {
 
     expect(listMessages(db, 'conversation-1')[0]?.commentAttachments).toEqual([attachment]);
   });
+
+  it('persists assistant feedback on messages', () => {
+    const db = seededDb();
+    const feedback = {
+      rating: 'positive' as const,
+      reasonCodes: ['matched_request', 'other'],
+      customReason: 'The output was ready to present.',
+      reasonsSubmittedAt: 1_700_000_000_400,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_000_500,
+    };
+
+    upsertMessage(db, 'conversation-1', {
+      id: 'message-1',
+      role: 'assistant',
+      content: 'Done',
+      feedback,
+    });
+
+    expect(listMessages(db, 'conversation-1')[0]?.feedback).toEqual(feedback);
+  });
 });
 
 describe('preview comment agent payload', () => {
@@ -187,6 +208,37 @@ describe('preview comment agent payload', () => {
     expect(hint).toContain('memberCount: 2');
     expect(normalized[0]?.memberCount).toBe(2);
     expect(hint).toContain('member.1: hero | section.hero | [data-od-id="hero"]');
+  });
+
+  it('normalizes visual annotation attachments without a selector', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'visual-1',
+        elementId: 'visual-mark-1',
+        selector: '',
+        label: 'Marked screenshot region',
+        comment: '',
+        selectionKind: 'visual',
+        screenshotPath: 'uploads/drawing.png',
+        markKind: 'stroke',
+        intent: 'The screenshot has red strokes that identify the visual region the user wants changed.',
+      }),
+    ]);
+
+    const hint = renderCommentAttachmentHint(normalized);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      selectionKind: 'visual',
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      comment: expect.stringContaining('red strokes'),
+    });
+    expect(hint).toContain('targetKind: visual');
+    expect(hint).toContain('screenshot: uploads/drawing.png');
+    expect(hint).toContain('markKind: stroke');
+    expect(hint).toContain('marked region');
+    expect(hint).not.toContain('selector: ');
   });
 });
 

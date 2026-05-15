@@ -96,6 +96,10 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
     examplePrompt:
       'Schreiben Sie ein Runbook für unseren Auth-Service — Alerts, Dashboards, Standardverfahren, On-Call-Rotation.',
   },
+  'faq-page': {
+    examplePrompt:
+      'Eine FAQ-Seite mit zusammenklappbaren Akkordeon-Abschnitten, Suchfunktion und Kategoriefilterung.',
+  },
   'finance-report': {
     examplePrompt:
       'Erstellen Sie einen Q3-Finanzbericht für ein Early-Stage-SaaS — MRR, Burn, Bruttomarge, Top-Accounts.',

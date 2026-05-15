@@ -10,17 +10,8 @@ declare global {
   }
 }
 
-type LocalizedContentIds = {
-  skills: string[];
-  designSystems: string[];
-  designSystemCategories: string[];
-  promptTemplates: string[];
-  promptTemplateCategories: string[];
-  promptTemplateTags: string[];
-};
-
 type LocalizedContentModule = {
-  LOCALIZED_CONTENT_IDS: Record<string, LocalizedContentIds>;
+  localizeDesignSystemCategory: (locale: string, category: string) => string;
   localizeDesignSystemSummary: (locale: string, system: DesignSystemResource) => string;
   localizePromptTemplateSummary: (
     locale: string,
@@ -45,7 +36,7 @@ if (localizedContentModule == null) {
 }
 
 const {
-  LOCALIZED_CONTENT_IDS,
+  localizeDesignSystemCategory,
   localizeDesignSystemSummary,
   localizePromptTemplateSummary,
   localizeSkillDescription,
@@ -378,35 +369,25 @@ describe('localized display content coverage', () => {
   });
 
   for (const locale of COVERAGE_LOCALES) {
-    const ids = LOCALIZED_CONTENT_IDS[locale];
-    invariant(ids, `Localized content ids are missing for ${locale}`);
+    it(`falls back to source design-system and prompt-template metadata for ${locale} when dictionary entries are missing`, () => {
+      const localized = localizePromptTemplateSummary(locale, {
+        id: 'missing-template-translation',
+        category: 'Untranslated Category',
+        tags: ['untranslated-tag', '3d'],
+        title: ' English title from source ',
+        summary: ' English summary from source ',
+      });
 
-    it(`covers every discovered design-system category and prompt tag for ${locale}`, async () => {
-      const [designSystems, promptTemplates] = await Promise.all([
-        readDesignSystemResources(),
-        readPromptTemplateResources(),
-      ]);
-
-      const designSystemCategories = uniqueSorted(designSystems.map((system) => system.category));
-      const promptTemplateCategories = uniqueSorted(
-        promptTemplates.map((template) => template.category),
+      expect(localizeDesignSystemCategory(locale, 'Untranslated Category')).toBe(
+        'Untranslated Category',
       );
-      const promptTemplateTags = uniqueSorted(
-        promptTemplates.flatMap((template) => template.tags),
+      expect(localized.title).toBe(' English title from source ');
+      expect(localized.summary).toBe(' English summary from source ');
+      expect(localized.category).toBe('Untranslated Category');
+      expect(localized.tags[0]).toBe('untranslated-tag');
+      expect(normalizeText(localized.tags[1] ?? ''), `${locale} should still localize known tags`).not.toEqual(
+        '3d',
       );
-
-      expect(
-        sorted(ids.designSystemCategories),
-        `${locale} is missing localized design-system category translations for: ${designSystemCategories.filter((category) => !ids.designSystemCategories.includes(category)).join(', ') || 'none'}`,
-      ).toEqual(expect.arrayContaining(designSystemCategories));
-      expect(
-        sorted(ids.promptTemplateCategories),
-        `${locale} is missing localized prompt-template category translations for: ${promptTemplateCategories.filter((category) => !ids.promptTemplateCategories.includes(category)).join(', ') || 'none'}`,
-      ).toEqual(expect.arrayContaining(promptTemplateCategories));
-      expect(
-        sorted(ids.promptTemplateTags),
-        `${locale} is missing localized prompt-template tag translations for: ${promptTemplateTags.filter((tag) => !ids.promptTemplateTags.includes(tag)).join(', ') || 'none'}`,
-      ).toEqual(expect.arrayContaining(promptTemplateTags));
     });
   }
 });

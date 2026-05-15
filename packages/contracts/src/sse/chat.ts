@@ -24,6 +24,23 @@ export interface LiveArtifactRefreshSsePayload {
   error?: string;
 }
 
+/**
+ * Emitted by the daemon on `/api/projects/:id/events` when a new
+ * conversation is inserted into a project from a path the open
+ * project view can't observe through its own state — currently
+ * Routines "Run now" in reuse-an-existing-project mode (#1361).
+ *
+ * Lives in `packages/contracts` so the daemon producer and the web
+ * consumer share one type and can't drift as the stream grows.
+ */
+export interface ProjectConversationCreatedSsePayload {
+  type: 'conversation-created';
+  projectId: string;
+  conversationId: string;
+  title: string | null;
+  createdAt: number;
+}
+
 export const CHAT_SSE_PROTOCOL_VERSION = 1;
 
 export interface ChatSseStartPayload {

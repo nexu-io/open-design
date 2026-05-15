@@ -1,0 +1,106 @@
+/* ============================================================
+   Recent projects strip — horizontal grid of recent project cards
+   on the Home view, with a "View all" anchor that switches to the
+   Projects view.
+   ============================================================ */
+.recent-projects {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.recent-projects__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.recent-projects__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+.recent-projects__view-all {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+.recent-projects__view-all:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.recent-projects__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.recent-projects__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.recent-projects__card {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.recent-projects__card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.recent-projects__card-thumb {
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--bg-subtle) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.recent-projects__card-glyph {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+.recent-projects__card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 12px;
+  min-width: 0;
+}
+.recent-projects__card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-projects__card-time {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}

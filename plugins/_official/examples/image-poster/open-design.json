@@ -1,0 +1,80 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-image-poster",
+  "title": "Image Poster",
+  "version": "0.1.0",
+  "description": "Single-image generation skill for posters, key art, and editorial\nillustrations. Defaults to gpt-image-2 but is provider-agnostic — the\nsame workflow drives Flux, Imagen, or Midjourney via the active\nupstream tooling. Output is one or more PNG/JPEG files saved to the\nproject folder.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/image-poster",
+  "tags": [
+    "example",
+    "first-party",
+    "image",
+    "design",
+    "poster",
+    "key-art",
+    "illustration",
+    "cover-art",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "design",
+    "surface": "image",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Editorial poster for an indie film festival — one bold abstract\nsilhouette over a warm, slightly grainy paper background; hand-set\nsans serif title at the top, festival dates and venue at the bottom\nin monospace. Muted ochre + ink palette.",
+        "zh-CN": "使用这个插件完成以下任务：Editorial poster for an indie film festival — one bold abstract\nsilhouette over a warm, slightly grainy paper background; hand-set\nsans serif title at the top, festival dates and venue at the bottom\nin monospace. Muted ochre + ink palette."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Image Poster"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

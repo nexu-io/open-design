@@ -50,7 +50,7 @@ export async function importClaudeDesignZip(zipPath: string, projectDir: string)
     totalBytes += body.length;
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
 
-    files.push({ path: relPath, body });
+    files.push({ path: relPath, body: normalizeImportedClaudeDesignFile(relPath, body) });
   }
 
   if (files.length === 0) throw new Error('zip contains no files');
@@ -78,6 +78,58 @@ export async function importClaudeDesignZip(zipPath: string, projectDir: string)
     entryFile,
     files: files.map((f) => f.path),
   };
+}
+
+function normalizeImportedClaudeDesignFile(relPath: string, body: Buffer): Buffer {
+  if (path.basename(relPath) !== 'design-canvas.jsx') return body;
+  const source = body.toString('utf8');
+  const normalized = normalizeDesignCanvasWheelHandling(source);
+  return normalized === source ? body : Buffer.from(normalized, 'utf8');
+}
+
+function normalizeDesignCanvasWheelHandling(source: string): string {
+  const wheelBlock = /    \/\/ Mouse-wheel vs trackpad-scroll heuristic\.[\s\S]*?    const onWheel = \(e\) => \{\n[\s\S]*?    \};\n/;
+  if (!wheelBlock.test(source)) return source;
+  const normalizedWheel = source.replace(wheelBlock, `    // Plain wheel input should pan the infinite canvas. Claude Design exports
+    // previously guessed that large integer vertical deltas were mouse-wheel
+    // zoom clicks, but macOS trackpads can emit the same shape during ordinary
+    // two-finger scrolling. Keep zoom explicit via Cmd+wheel or the host
+    // toolbar so vertical navigation cannot accidentally scale the canvas.
+    const wheelDeltaToPixels = (delta, mode, axis) => {
+      const px = mode === 1 ? delta * 16 : mode === 2 ? delta * 160 : delta;
+      const limit = axis === 'y' ? 72 : 160;
+      return Math.max(-limit, Math.min(limit, px));
+    };
+    const panByWheel = (e) => {
+      const dx = wheelDeltaToPixels(e.deltaX || 0, e.deltaMode || 0, 'x');
+      const dy = wheelDeltaToPixels(e.deltaY || 0, e.deltaMode || 0, 'y');
+      tf.current.x -= dx;
+      tf.current.y -= dy;
+      apply();
+    };
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isGesturing) return;
+      if (e.metaKey) {
+        zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
+        return;
+      }
+      panByWheel(e);
+    };
+`);
+  const gestureBlock = /    \/\/ Safari sends native gesture\* events for trackpad pinch with a smooth\n[\s\S]*?    const onGestureEnd = \(e\) => \{ e\.preventDefault\(\); isGesturing = false; \};/;
+  return normalizedWheel.replace(gestureBlock, `    // Safari can emit native gesture* events while a user scrolls on a
+    // trackpad. Ignore those here; explicit zoom is Cmd+wheel or the host
+    // toolbar.
+    let isGesturing = false;
+    const onGestureStart = (e) => { e.preventDefault(); e.stopPropagation(); isGesturing = true; };
+    const onGestureChange = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onGestureEnd = (e) => { e.preventDefault(); e.stopPropagation(); isGesturing = false; };`);
 }
 
 function readCentralDirectory(zip: Buffer): ZipEntry[] {

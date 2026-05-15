@@ -524,6 +524,10 @@ export function wellKnownUserToolchainBins(
       root: join(home, ".local", "share", "fnm", "node-versions"),
       segments: ["installation", "bin"],
     },
+    {
+      root: join(home, ".fnm", "node-versions"),
+      segments: ["installation", "bin"],
+    },
   ]) {
     for (const dir of existingChildBinDirs(installRoot.root, installRoot.segments)) {
       dirs.push(dir);
@@ -540,10 +544,38 @@ function existingChildBinDirs(root: string, segments: string[]): string[] {
   } catch {
     return out;
   }
-  for (const entry of entries) {
+  for (const entry of sortVersionedDirEntries(entries)) {
     if (!entry.isDirectory()) continue;
     const candidate = join(root, entry.name, ...segments);
     if (existsSync(candidate)) out.push(candidate);
   }
   return out;
+}
+
+type SemverParts = [major: number, minor: number, patch: number];
+
+function sortVersionedDirEntries(entries: import("node:fs").Dirent<string>[]): import("node:fs").Dirent<string>[] {
+  return [...entries].sort((left, right) => compareVersionLikeDirNames(left.name, right.name));
+}
+
+function compareVersionLikeDirNames(left: string, right: string): number {
+  const leftSemver = parseVersionLikeDirName(left);
+  const rightSemver = parseVersionLikeDirName(right);
+  if (leftSemver && rightSemver) {
+    for (let index = 0; index < leftSemver.length; index += 1) {
+      const difference = rightSemver[index] - leftSemver[index];
+      if (difference !== 0) return difference;
+    }
+  } else if (leftSemver) {
+    return -1;
+  } else if (rightSemver) {
+    return 1;
+  }
+  return left.localeCompare(right);
+}
+
+function parseVersionLikeDirName(name: string): SemverParts | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(name);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }

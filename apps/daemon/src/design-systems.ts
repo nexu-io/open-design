@@ -62,6 +62,130 @@ export async function readDesignSystem(root: string, id: string): Promise<string
   }
 }
 
+/**
+ * Structured (compiled) form of a brand's design system. Optional sibling
+ * files alongside DESIGN.md that, when present, give agents a
+ * machine-readable token contract and a worked fixture instead of having
+ * to re-derive both from prose. Both fields are individually optional —
+ * the daemon falls back to the DESIGN.md-only path when neither is
+ * available, which is the current state for the ~138 brands without
+ * hand-authored or derived tokens.
+ *
+ * - `tokensCss`     — verbatim content of `<brand>/tokens.css`.
+ * - `fixtureHtml`   — verbatim content of `<brand>/components.html`.
+ */
+export type DesignSystemAssets = {
+  tokensCss?: string | undefined;
+  fixtureHtml?: string | undefined;
+};
+
+export async function readDesignSystemAssets(
+  root: string,
+  id: string,
+): Promise<DesignSystemAssets> {
+  const [tokensCss, fixtureHtml] = await Promise.all([
+    readFileOptional(path.join(root, id, 'tokens.css')),
+    readFileOptional(path.join(root, id, 'components.html')),
+  ]);
+  return { tokensCss, fixtureHtml };
+}
+
+/**
+ * Returns true when the daemon should inject the structured design-system
+ * channel (tokens.css + components.html) into the system prompt for the
+ * active brand. Default-on as of PR-D — the only value that disables
+ * the channel is the literal string `'0'` on `OD_DESIGN_TOKEN_CHANNEL`,
+ * which acts as the kill switch. Unset, `'1'`, `'true'`, empty string,
+ * or any other value all keep the new default.
+ *
+ * Extracted from `server.ts` so the env-flag semantics (the single
+ * line PR-D actually flipped) can be unit-tested independently of the
+ * full daemon boot path. A regression that, say, restored the old
+ * `=== '1'` semantics or read the wrong env name would change the
+ * return value here and fail the unit test, even before any
+ * downstream prompt-assembly behaviour drifts.
+ */
+export function isDesignTokenChannelEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.OD_DESIGN_TOKEN_CHANNEL !== '0';
+}
+
+/**
+ * Resolves the structured design-system assets the daemon will hand to
+ * `composeSystemPrompt` for a given brand, applying both the
+ * `OD_DESIGN_TOKEN_CHANNEL` kill-switch and the built-in →
+ * user-installed root fallback chain.
+ *
+ * This is the function `server.ts` calls at the prompt-assembly seam.
+ * Extracted so the *whole* server-side asset-resolution path —
+ * env gate + per-file fallback + result shape — is unit-testable
+ * end-to-end from real disk fixtures, not just the boolean predicate.
+ *
+ * Behaviour (pinned by `tests/design-system-assets.test.ts`):
+ *
+ * - **`OD_DESIGN_TOKEN_CHANNEL=0`** (kill switch) — returns
+ *   `{ tokensCss: undefined, fixtureHtml: undefined }` regardless of
+ *   what's on disk. The composer skips both blocks, falling back to
+ *   the pre-PR-C DESIGN.md-only prompt.
+ * - **Any other env state** (unset, `'1'`, `'true'`, …) — reads
+ *   `tokens.css` and `components.html` from `builtInRoot/<id>/`. Any
+ *   file missing there falls back to `userInstalledRoot/<id>/`
+ *   independently per file, so a brand can ship one half built-in and
+ *   the other half from user-installed without losing either.
+ *
+ * Real fs errors that are not "file not found" still propagate (see
+ * `readFileOptional`), so a misconfigured brand surfaces loudly
+ * instead of silently degrading to the prose-only prompt.
+ */
+export async function resolveDesignSystemAssets(
+  designSystemId: string,
+  builtInRoot: string,
+  userInstalledRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<DesignSystemAssets> {
+  if (!isDesignTokenChannelEnabled(env)) {
+    return { tokensCss: undefined, fixtureHtml: undefined };
+  }
+
+  const builtIn = await readDesignSystemAssets(builtInRoot, designSystemId);
+  if (builtIn.tokensCss !== undefined && builtIn.fixtureHtml !== undefined) {
+    return builtIn;
+  }
+
+  const userInstalled = await readDesignSystemAssets(userInstalledRoot, designSystemId);
+  return {
+    tokensCss: builtIn.tokensCss ?? userInstalled.tokensCss,
+    fixtureHtml: builtIn.fixtureHtml ?? userInstalled.fixtureHtml,
+  };
+}
+
+async function readFileOptional(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, 'utf8');
+  } catch (err) {
+    // Only swallow "file genuinely does not exist" failures. Today the
+    // ~138 brands without hand-authored or derived tokens.css /
+    // components.html siblings hit this path on the empty side, which
+    // is the legacy fallback we deliberately preserve. Every other
+    // failure mode — permission denied (`EACCES`), parent-shadowed by
+    // a non-directory (`EPERM`), a directory at the file path
+    // (`EISDIR`), a broken packaged-resource symlink, a transient I/O
+    // error — means the token channel is misconfigured; the caller
+    // (and the smoke-test rollout) needs to see that explicitly
+    // instead of silently degrading to the DESIGN.md-only prompt and
+    // making the experiment look ineffective for the wrong reason.
+    if (isAbsenceError(err)) return undefined;
+    throw err;
+  }
+}
+
+function isAbsenceError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
 function summarize(raw: string): string {
   const lines = raw.split(/\r?\n/);
   const firstH1 = lines.findIndex((l) => /^#\s+/.test(l));

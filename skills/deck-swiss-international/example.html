@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Swiss International · Open Design 2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { font-family: 'Inter Tight','Inter','Noto Sans SC',system-ui,sans-serif; background:#0a0a0a; color:#fafaf8; margin:0; }
+  .slide { width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto; position:relative; overflow:hidden; }
+  .ikb { background:#002FA7; color:#fafaf8; }
+  .paper { background:#fafaf8; color:#0a0a0a; }
+  .mono { font-family:'JetBrains Mono', ui-monospace, monospace; }
+  .hairline-b { border-bottom:1px solid currentColor; }
+  .hairline-t { border-top:1px solid currentColor; }
+  /* ASCII dot field */
+  .ascii { font-family:'JetBrains Mono', monospace; font-size:11px; line-height:1; letter-spacing:6px; opacity:0.2; }
+  .bar { width:60px; background:#002FA7; }
+  .deck { display:grid; gap:24px; padding:24px; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- S01 Cover · Full IKB -->
+  <section class="slide ikb">
+    <div class="absolute inset-0 p-12 flex flex-col justify-between">
+      <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em]">
+        <span>OPEN DESIGN — 2026 ROADMAP</span>
+        <span>S01 / 22</span>
+        <span>2026.05.11</span>
+      </header>
+      <!-- ascii dot matrix top-right -->
+      <pre class="absolute top-20 right-12 ascii">▒▓█▓▒░░▒▓█▓▒
+▒▒▓█▓▒░░▒▓█▓▒
+░▒▓█▓▒░░▒▓█▓▒
+░░▒▓█▓▒░░▒▓█▓
+▒░░▒▓█▓▒░░▒▓
+▒▒░░▒▓█▓▒░░▒</pre>
+      <div>
+        <div class="mono text-[12px] uppercase tracking-[0.18em] opacity-80">№01 · A LANDMARK</div>
+        <h1 class="mt-3 font-black leading-[0.95] tracking-[-0.02em]" style="font-size:clamp(48px,7.5vw,124px)">
+          Designing<br/>intelligence<br/>on warm paper.
+        </h1>
+        <p class="mt-5 max-w-[640px] text-[15px] opacity-90 leading-snug">
+          75 个世界级 HTML 模板 · 17 个本地 AI agent 适配 · 0 API 成本 · 一键发布到任何平台。
+        </p>
+      </div>
+      <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-70 hairline-t pt-3">
+        <span>OPEN-DESIGN.STUDIO</span>
+        <span>BERLIN · 52.5200° N · 13.4050° E</span>
+        <span>VOL. 01</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- S06 KPI Tower · paper bg, 4 IKB bars -->
+  <section class="slide paper">
+    <div class="absolute inset-0 p-12 flex flex-col justify-between">
+      <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em]">
+        <span>KPI TOWER — Q1-Q4 OUTLOOK</span>
+        <span>S06 / 22</span>
+        <span>FY 2026</span>
+      </header>
+      <div>
+        <div class="mono text-[12px] uppercase tracking-[0.18em]" style="color:#002FA7">№06 · GROWTH METRICS</div>
+        <h2 class="mt-2 font-black leading-[1] tracking-[-0.02em]" style="font-size:clamp(36px,4.8vw,80px)">
+          四根柱子, 一个目标 ——<br/>
+          做<span style="color:#002FA7">最被信任</span>的 HTML 生产线。
+        </h2>
+      </div>
+      <!-- bars -->
+      <div class="grid grid-cols-4 gap-10 items-end mt-6">
+        <div class="text-center">
+          <div class="mb-3 mx-auto" style="height:32px">
+            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="8" width="4" height="12"/><rect x="16" y="2" width="4" height="18"/></svg>
+          </div>
+          <div class="bar mx-auto" style="height:60px"></div>
+          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">75</div>
+          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">模板 · 现在</div>
+        </div>
+        <div class="text-center">
+          <div class="mb-3 mx-auto" style="height:32px">
+            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><circle cx="12" cy="12" r="9" fill="none" stroke="#002FA7" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div class="bar mx-auto" style="height:140px"></div>
+          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">200</div>
+          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">模板 · Q4 目标</div>
+        </div>
+        <div class="text-center">
+          <div class="mb-3 mx-auto" style="height:32px">
+            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
+          </div>
+          <div class="bar mx-auto" style="height:230px"></div>
+          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">25K</div>
+          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">GH Stars · 目标</div>
+        </div>
+        <div class="text-center">
+          <div class="mb-3 mx-auto" style="height:32px">
+            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><path d="M5 3l10 9-10 9z"/></svg>
+          </div>
+          <div class="bar mx-auto" style="height:280px"></div>
+          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">80K</div>
+          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">WAU · 目标</div>
+        </div>
+      </div>
+      <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-60 hairline-t pt-3 mt-4">
+        <span>SOURCE — INTERNAL ANALYTICS / 2026-04</span>
+        <span>OPEN-DESIGN.STUDIO</span>
+        <span>№06 / 22</span>
+      </footer>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

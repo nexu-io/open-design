@@ -14,6 +14,10 @@ import { navigate } from '../router';
 
 type ProjectSummary = { id: string; name: string };
 
+type RoutinesSectionProps = {
+  onClose?: () => void;
+};
+
 type ScheduleKind = RoutineSchedule['kind'];
 
 const SCHEDULE_KINDS: { kind: ScheduleKind; label: string }[] = [
@@ -309,7 +313,7 @@ function ScheduleEditor({
   );
 }
 
-function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: number }) {
+function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; refreshKey: number; onClose?: () => void }) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
 
   useEffect(() => {
@@ -345,9 +349,21 @@ function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: 
           <button
             type="button"
             className="routines-history-link"
-            onClick={() =>
-              navigate({ kind: 'project', projectId: r.projectId, fileName: null })
-            }
+            onClick={() => {
+              // Issue #1505: deep-link to this run's specific
+              // conversation, not just the project root. Without the
+              // conversation id, parallel runs that share a project
+              // (reuse mode) all resolve to the same default
+              // conversation in the project view, which made earlier
+              // runs look "absorbed" by the latest one.
+              navigate({
+                kind: 'project',
+                projectId: r.projectId,
+                conversationId: r.conversationId ?? null,
+                fileName: null,
+              });
+              onClose?.();
+            }}
             title="Open the project this run wrote to"
           >
             Open project
@@ -359,7 +375,7 @@ function RunHistory({ routineId, refreshKey }: { routineId: string; refreshKey: 
   );
 }
 
-export function RoutinesSection() {
+export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -516,11 +532,6 @@ export function RoutinesSection() {
       <div className="section-head">
         <div>
           <h3>Routines</h3>
-          <p className="hint">
-            Scheduled, unattended agent sessions. Each run starts a new
-            conversation — either inside an existing project, or in a fresh
-            project minted on the spot.
-          </p>
         </div>
         {!showForm ? (
           <button
@@ -570,6 +581,7 @@ export function RoutinesSection() {
 
           <fieldset className="routines-fieldset">
             <legend>Project</legend>
+
             <label className="routines-radio">
               <input
                 type="radio"
@@ -581,6 +593,7 @@ export function RoutinesSection() {
                 <small>A fresh, isolated workspace per fire.</small>
               </span>
             </label>
+
             <label className="routines-radio">
               <input
                 type="radio"
@@ -592,7 +605,8 @@ export function RoutinesSection() {
                 <small>Each run lives as a new conversation inside the project.</small>
               </span>
             </label>
-            {form.mode === 'reuse' ? (
+
+            {form.mode === 'reuse' && (
               <select
                 className="routines-project-select"
                 value={form.projectId}
@@ -606,7 +620,7 @@ export function RoutinesSection() {
                   </option>
                 ))}
               </select>
-            ) : null}
+            )}
           </fieldset>
 
           <div className="routines-form-actions">
@@ -707,7 +721,7 @@ export function RoutinesSection() {
                 </div>
                 {isExpanded ? (
                   <div className="routines-item-history">
-                    <RunHistory routineId={r.id} refreshKey={historyTick} />
+                    <RunHistory routineId={r.id} refreshKey={historyTick} onClose={onClose} />
                   </div>
                 ) : null}
               </li>

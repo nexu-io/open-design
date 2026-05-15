@@ -61,6 +61,17 @@ if (metadata.channel === "beta") {
   if (metadata.betaVersion !== process.env.EXPECTED_RELEASE_VERSION) {
     throw new Error("unexpected metadata betaVersion: " + metadata.betaVersion);
   }
+} else if (metadata.channel === "preview") {
+  if (metadata.releaseVersion !== process.env.EXPECTED_RELEASE_VERSION) {
+    throw new Error("unexpected metadata releaseVersion: " + metadata.releaseVersion);
+  }
+  if (metadata.previewVersion !== process.env.EXPECTED_RELEASE_VERSION) {
+    throw new Error("unexpected metadata previewVersion: " + metadata.previewVersion);
+  }
+  const expectedPreviewNumber = Number(process.env.EXPECTED_RELEASE_VERSION.split("-preview.")[1]);
+  if (metadata.previewNumber !== expectedPreviewNumber) {
+    throw new Error("unexpected metadata previewNumber: " + metadata.previewNumber);
+  }
 } else {
   if (metadata.releaseVersion !== process.env.EXPECTED_RELEASE_VERSION) {
     throw new Error("unexpected metadata releaseVersion: " + metadata.releaseVersion);

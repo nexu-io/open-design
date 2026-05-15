@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th';
+export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th' | 'it';
 
-export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th'];
+export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -22,7 +22,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'fr': 'Français',
   'uk': 'Українська',
   'tr': 'Türkçe',
-  'th': 'ภาษาไทย'
+  'th': 'ภาษาไทย',
+  'it': 'Italiano'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -60,6 +61,7 @@ export interface Dict {
   'common.minutesAgo': string;
   'common.hoursAgo': string;
   'common.daysAgo': string;
+  'common.weeksAgo': string;
   'common.now': string;
   'common.minutesShort': string;
   'common.hoursShort': string;
@@ -120,6 +122,8 @@ export interface Dict {
   'settings.agentInstall.stepRescan': string;
   'settings.agentInstall.stepSelect': string;
   'settings.noAgentsDetected': string;
+  'settings.agentAuthRequired': string;
+  'settings.agentAuthUnknown': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.customProvider': string;
@@ -159,14 +163,19 @@ export interface Dict {
   'settings.themeSystem': string;
   'settings.themeLight': string;
   'settings.themeDark': string;
+  'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
   'settings.cliEnvTitle': string;
   'settings.cliEnvHint': string;
   'settings.cliEnvClaudeConfigDir': string;
+  'settings.cliEnvClaudeBaseUrl': string;
+  'settings.cliEnvClaudeApiKey': string;
   'settings.cliEnvCodexHome': string;
   'settings.cliEnvCodexBin': string;
+  'settings.cliEnvCodexBaseUrl': string;
+  'settings.cliEnvCodexApiKey': string;
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
@@ -215,6 +224,8 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+  'settings.installLatest': string;
+  'settings.alreadyLatest': string;
   'settings.skills': string;
   'settings.skillsHint': string;
   'settings.skillsNew': string;
@@ -274,6 +285,7 @@ export interface Dict {
   'settings.connectorsSaveKey': string;
   'settings.connectorsSaveKeyTitle': string;
   'settings.connectorsKeySaving': string;
+  'settings.connectorsKeySaved': string;
   'settings.connectorsKeyError': string;
   'settings.connectorsHelpSaved': string;
   'settings.connectorsHelpUnsaved': string;
@@ -348,6 +360,9 @@ export interface Dict {
   // Memory (auto-extracted personalization saved as on-disk markdown)
   'settings.memory': string;
   'settings.memoryHint': string;
+  'settings.customInstructionsTitle': string;
+  'settings.customInstructionsHint': string;
+  'settings.customInstructionsPlaceholder': string;
   'settings.memoryDescription': string;
   'settings.memoryEnabled': string;
   'settings.memoryDisabled': string;
@@ -381,6 +396,7 @@ export interface Dict {
   'settings.memoryFlashSaved': string;
   'settings.memoryFlashDeleted': string;
   'settings.memoryFlashIndexSaved': string;
+  'settings.memoryFlashPathCopied': string;
   'settings.memoryNameLabel': string;
   'settings.memoryTypeLabel': string;
   'settings.memoryDescLabel': string;
@@ -400,6 +416,7 @@ export interface Dict {
   'settings.memoryExtractionsHint': string;
   'settings.memoryExtractionsEmpty': string;
   'settings.memoryExtractionsRefresh': string;
+  'settings.memoryExtractionsRefreshing': string;
   'settings.memoryExtractionPhaseRunning': string;
   'settings.memoryExtractionPhaseSuccess': string;
   'settings.memoryExtractionPhaseSkipped': string;
@@ -506,6 +523,24 @@ export interface Dict {
   'entry.openSettingsAria': string;
   'entry.resizeAria': string;
   'entry.loadingWorkspace': string;
+  'entry.useEverywhereTitle': string;
+  'entry.useEverywhereAria': string;
+  // Left nav rail (icon-only) — surface labels also serve as tooltips
+  'entry.navNewProject': string;
+  'entry.navHome': string;
+  'entry.navProjects': string;
+  'entry.navDesignSystems': string;
+  // Bottom-of-rail help menu
+  'entry.helpAria': string;
+  'entry.helpMenuAria': string;
+  'entry.helpGetHelp': string;
+  'entry.helpSubmitFeature': string;
+  'entry.helpWhatsNew': string;
+  'entry.helpDownloadDesktop': string;
+  // GitHub star pill in the top bar
+  'entry.githubStarLabel': string;
+  'entry.githubStarTitle': string;
+  'entry.githubStarAria': string;
 
   // Connectors tab
   'connectors.title': string;
@@ -615,6 +650,7 @@ export interface Dict {
   'newproj.tabLiveArtifact': string;
   'newproj.tabDeck': string;
   'newproj.tabTemplate': string;
+  'newproj.tabMedia': string;
   'newproj.tabOther': string;
   'newproj.titlePrototype': string;
   'newproj.titleLiveArtifact': string;
@@ -623,6 +659,7 @@ export interface Dict {
   'newproj.titleImage': string;
   'newproj.titleVideo': string;
   'newproj.titleAudio': string;
+  'newproj.titleMedia': string;
   'newproj.titleOther': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;
@@ -632,6 +669,26 @@ export interface Dict {
   'newproj.toggleSpeakerNotesHint': string;
   'newproj.toggleAnimations': string;
   'newproj.toggleAnimationsHint': string;
+  'newproj.targetPlatformsLabel': string;
+  'newproj.targetPlatformsHint': string;
+  'newproj.platform.responsive.label': string;
+  'newproj.platform.responsive.hint': string;
+  'newproj.platform.webDesktop.label': string;
+  'newproj.platform.webDesktop.hint': string;
+  'newproj.platform.mobileIos.label': string;
+  'newproj.platform.mobileIos.hint': string;
+  'newproj.platform.mobileAndroid.label': string;
+  'newproj.platform.mobileAndroid.hint': string;
+  'newproj.platform.tablet.label': string;
+  'newproj.platform.tablet.hint': string;
+  'newproj.platform.desktopApp.label': string;
+  'newproj.platform.desktopApp.hint': string;
+  'newproj.surfaceOptionsLabel': string;
+  'newproj.includeLandingPage': string;
+  'newproj.includeLandingPageHint': string;
+  'newproj.includeOsWidgets': string;
+  'newproj.includeOsWidgetsHint': string;
+  'newproj.includeOsWidgetsDisabledHint': string;
   'newproj.templateLabel': string;
   'newproj.noTemplatesTitle': string;
   'newproj.noTemplatesBody': string;
@@ -667,9 +724,12 @@ export interface Dict {
   'newproj.surfaceVideo': string;
   'newproj.surfaceAudio': string;
   'newproj.modelLabel': string;
+  'newproj.modelSearch': string;
+  'newproj.modelEmpty': string;
+  'newproj.modelRecommended': string;
+  'newproj.modelMissingTitle': string;
+  'newproj.modelMissingSub': string;
   'newproj.aspectLabel': string;
-  'newproj.imageStyleLabel': string;
-  'newproj.imageStylePlaceholder': string;
   'newproj.videoLengthLabel': string;
   'newproj.videoLengthSeconds': string;
   'newproj.audioKindLabel': string;
@@ -751,6 +811,22 @@ export interface Dict {
   'designs.viewKanban': string;
   'designs.kanbanEmptyColumn': string;
   'designs.deleteAria': string;
+  'designs.menuMore': string;
+  'designs.menuRename': string;
+  'designs.menuDelete': string;
+  'designs.renamePrompt': string;
+  'designs.selectMode': string;
+  'designs.cancelSelect': string;
+  'designs.deleteSelected': string;
+  'designs.selectedCount': string;
+  'designs.deleteSelectedConfirm': string;
+  'designs.tagPrototype': string;
+  'designs.tagLiveArtifact': string;
+  'designs.tagSlide': string;
+  'designs.tagMedia': string;
+  'designs.renameTitle': string;
+  'designs.renameSave': string;
+  'designs.renameCancel': string;
 
   // Examples tab
   'examples.typeLabel': string;
@@ -847,9 +923,30 @@ export interface Dict {
   'avatar.reasoningLabel': string;
   'avatar.customSuffix': string;
 
+  // Inline CLI / model switcher (entry topbar)
+  'inlineSwitcher.chipTitle': string;
+  'inlineSwitcher.chipCli': string;
+  'inlineSwitcher.chipByok': string;
+  'inlineSwitcher.modelDefault': string;
+  'inlineSwitcher.noAgent': string;
+  'inlineSwitcher.modeLabel': string;
+  'inlineSwitcher.agentLabel': string;
+  'inlineSwitcher.providerLabel': string;
+  'inlineSwitcher.modelLabel': string;
+  'inlineSwitcher.useCli': string;
+  'inlineSwitcher.useByok': string;
+  'inlineSwitcher.daemonOffline': string;
+  'inlineSwitcher.noAgentsDetected': string;
+  'inlineSwitcher.openSettingsForModel': string;
+  'inlineSwitcher.missingApiKey': string;
+  'inlineSwitcher.openFullSettings': string;
+  'inlineSwitcher.customSuffix': string;
+
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
+  'project.customInstructions': string;
+  'project.customInstructionsPlaceholder': string;
   'project.resizeChatPanel': string;
   'chat.tabChat': string;
   'chat.tabComments': string;
@@ -866,6 +963,20 @@ export interface Dict {
   'chat.comments.updateSend': string;
   'chat.comments.removeAttachment': string;
   'chat.comments.removeAttachmentAria': string;
+  'chat.comments.comment': string;
+  'chat.comments.sendToChat': string;
+  'chat.comments.sending': string;
+  'chat.comments.edit': string;
+  'chat.comments.select': string;
+  'chat.comments.deselect': string;
+  'chat.comments.nSelected': string;
+  'chat.comments.pin': string;
+  'chat.comments.addNote': string;
+  'chat.comments.savedToast': string;
+  'chat.comments.pinSavedToast': string;
+  'chat.comments.pinAtCoords': string;
+  'chat.comments.capturedItems': string;
+  'chat.comments.clear': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
@@ -883,6 +994,8 @@ export interface Dict {
   'chat.scrollToLatest': string;
   'chat.you': string;
   'chat.openFile': string;
+  'chat.copyPrompt': string;
+  'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.composerHint': string;
   'chat.cliSettingsTitle': string;
@@ -1118,6 +1231,13 @@ export interface Dict {
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
+  'fileViewer.viewportAria': string;
+  'fileViewer.viewportDesktop': string;
+  'fileViewer.viewportDesktopTitle': string;
+  'fileViewer.viewportTablet': string;
+  'fileViewer.viewportTabletTitle': string;
+  'fileViewer.viewportMobile': string;
+  'fileViewer.viewportMobileTitle': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;
@@ -1136,6 +1256,8 @@ export interface Dict {
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
   'fileViewer.exportMd': string;
+  'fileViewer.exportImage': string;
+  'fileViewer.exportImageFailed': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
@@ -1163,6 +1285,42 @@ export interface Dict {
   'liveArtifact.refresh.statusReady': string;
   'liveArtifact.refresh.statusSucceeded': string;
   'liveArtifact.refresh.statusFailed': string;
+  'liveArtifact.refresh.statusRunning': string;
+  'liveArtifact.refresh.statusRunningDescription': string;
+  'liveArtifact.refresh.statusSucceededDescription': string;
+  'liveArtifact.refresh.statusFailedDescription': string;
+  'liveArtifact.refresh.statusReadyDescription': string;
+  'liveArtifact.refresh.statusNeverDescription': string;
+  'liveArtifact.refresh.eventStarted': string;
+  'liveArtifact.refresh.eventSucceeded': string;
+  'liveArtifact.refresh.eventFailed': string;
+  'liveArtifact.refresh.eventStartedDetail': string;
+  'liveArtifact.refresh.sourcesUpdatedOne': string;
+  'liveArtifact.refresh.sourcesUpdatedMany': string;
+  'liveArtifact.refresh.timelineEmpty': string;
+  'liveArtifact.refresh.heroLastRefreshedLabel': string;
+  'liveArtifact.refresh.heroLastRefreshedNever': string;
+  'liveArtifact.refresh.justNow': string;
+  'liveArtifact.refresh.factCreated': string;
+  'liveArtifact.refresh.factLastUpdated': string;
+  'liveArtifact.refresh.factUnknown': string;
+  'liveArtifact.refresh.persistedTitle': string;
+  'liveArtifact.refresh.persistedHint': string;
+  'liveArtifact.refresh.persistedEmpty': string;
+  'liveArtifact.refresh.persistedStatusSucceeded': string;
+  'liveArtifact.refresh.persistedStatusRunning': string;
+  'liveArtifact.refresh.persistedStatusFailed': string;
+  'liveArtifact.refresh.persistedStatusCancelled': string;
+  'liveArtifact.refresh.persistedStatusSkipped': string;
+  'liveArtifact.refresh.sessionTitle': string;
+  'liveArtifact.refresh.sessionHint': string;
+  'liveArtifact.refresh.docSourceTitle': string;
+  'liveArtifact.refresh.docSourceHint': string;
+  'liveArtifact.refresh.docSourceType': string;
+  'liveArtifact.refresh.docSourceTool': string;
+  'liveArtifact.refresh.docSourceConnector': string;
+  'liveArtifact.refresh.debugSummary': string;
+  'liveArtifact.refresh.debugNote': string;
   'fileViewer.deployProviderLabel': string;
   'fileViewer.vercelProvider': string;
   'fileViewer.cloudflarePagesProvider': string;
@@ -1269,6 +1427,14 @@ export interface Dict {
   'tool.openInTab': string;
   'tool.open': string;
   'tool.todos': string;
+  'tool.askQuestion': string;
+  'tool.askQuestionSubmit': string;
+  'tool.askQuestionPending': string;
+  'tool.askQuestionAnswered': string;
+  'tool.todosExpand': string;
+  'tool.todosCollapse': string;
+  'tool.todosDone': string;
+  'tool.todosDismiss': string;
   'tool.write': string;
   'tool.edit': string;
   'tool.read': string;
@@ -1291,6 +1457,21 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.feedbackPrompt': string;
+  'assistant.feedbackPositive': string;
+  'assistant.feedbackNegative': string;
+  'assistant.feedbackReasonTitle': string;
+  'assistant.feedbackReasonPositiveMatched': string;
+  'assistant.feedbackReasonPositiveVisual': string;
+  'assistant.feedbackReasonPositiveUseful': string;
+  'assistant.feedbackReasonPositiveEasy': string;
+  'assistant.feedbackReasonNegativeMissed': string;
+  'assistant.feedbackReasonNegativeVisual': string;
+  'assistant.feedbackReasonNegativeIncomplete': string;
+  'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonOther': string;
+  'assistant.feedbackReasonPlaceholder': string;
+  'assistant.feedbackReasonSubmit': string;
   'assistant.emptyResponseLabel': string;
   'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;
@@ -1366,19 +1547,10 @@ export interface Dict {
   'pet.fieldGreeting': string;
   'pet.fieldAccent': string;
   'pet.fieldAccentCustom': string;
+  'pet.fieldAccentDefault': string;
   'pet.overlayAria': string;
   'pet.spriteAria': string;
   'pet.spriteTitle': string;
-  // Right-side rail (entry view)
-  'pet.railAria': string;
-  'pet.railTitle': string;
-  'pet.railHint': string;
-  'pet.railExpand': string;
-  'pet.railCollapse': string;
-  'pet.railHide': string;
-  'pet.railShow': string;
-  'pet.railCustomFlavor': string;
-  'pet.railCustomize': string;
   // Composer pet menu
   'pet.composerTitle': string;
   'pet.composerMenuTitle': string;
@@ -1469,4 +1641,51 @@ export interface Dict {
   'sketch.closeConfirm': string;
   'sketch.textPrompt': string;
   'sketch.textModalTitle': string;
+  // Critique Theater (Phase 8 components; Phase 9 fills non-English locales)
+  'critiqueTheater.userFacingName': string;
+  'critiqueTheater.roleDesigner': string;
+  'critiqueTheater.roleCritic': string;
+  'critiqueTheater.roleBrand': string;
+  'critiqueTheater.roleA11y': string;
+  'critiqueTheater.roleCopy': string;
+  'critiqueTheater.roundLabel': string;
+  'critiqueTheater.mustFix': string;
+  'critiqueTheater.composite': string;
+  'critiqueTheater.threshold': string;
+  'critiqueTheater.consensus': string;
+  'critiqueTheater.interrupt': string;
+  'critiqueTheater.interrupting': string;
+  'critiqueTheater.interrupted': string;
+  'critiqueTheater.degradedHeading': string;
+  'critiqueTheater.degradedReasonMalformed': string;
+  'critiqueTheater.degradedReasonOversize': string;
+  'critiqueTheater.degradedReasonAdapter': string;
+  'critiqueTheater.degradedReasonProtocol': string;
+  'critiqueTheater.degradedReasonMissingArtifact': string;
+  'critiqueTheater.replay': string;
+  'critiqueTheater.replaySpeed': string;
+  'critiqueTheater.readOnly': string;
+  'critiqueTheater.shippedSummary': string;
+  'critiqueTheater.interruptedSummary': string;
+  'critiqueTheater.shippedBadge': string;
+  'critiqueTheater.belowThresholdBadge': string;
+  'critiqueTheater.timedOutBadge': string;
+  'critiqueTheater.failedHeading': string;
+  'critiqueTheater.failedReasonCliExit': string;
+  'critiqueTheater.failedReasonPerRoundTimeout': string;
+  'critiqueTheater.failedReasonTotalTimeout': string;
+  'critiqueTheater.failedReasonOrchestrator': string;
+  'critiqueTheater.transcriptEmpty': string;
+  'critiqueTheater.transcriptLoading': string;
+  'critiqueTheater.transcriptError': string;
+  'critiqueTheater.replaySpeedPaused': string;
+  'critiqueTheater.replaySpeedInstant': string;
+  'critiqueTheater.replaySpeedLive': string;
+  'critiqueTheater.replaySpeedFast': string;
+  'critiqueTheater.settingsNav': string;
+  'critiqueTheater.settingsNavHint': string;
+  'critiqueTheater.settingsEnabledLabel': string;
+  'critiqueTheater.settingsEnabledDescription': string;
+  'critiqueTheater.settingsEnabledProjectHint': string;
+  'critiqueTheater.settingsEnabledNoProjectHint': string;
 }

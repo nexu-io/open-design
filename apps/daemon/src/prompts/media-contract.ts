@@ -85,6 +85,8 @@ Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
   [--aspect 1:1|16:9|9:16|4:3|3:4] \\
   [--length <seconds>]              # video only
   [--duration <seconds>]            # audio only
+  [--prompt-influence <0-1>]        # audio:sfx only; higher follows the prompt more closely
+  [--loop]                          # audio:sfx only; request a seamless loop
   [--audio-kind music|speech|sfx]   # audio only
   [--voice <provider-voice-id>]     # audio:speech only; omit to use provider default
   [--language <lang>]               # audio:speech only; language boost (e.g. Chinese,Yue for Cantonese)
@@ -182,11 +184,13 @@ the same turn.
 ### Long-running renders (Volcengine i2v, hyperframes-html): generate → wait loop
 
 \`media generate\` no longer blocks for the full render. It dispatches
-the task daemon-side and returns within ~1s with a \`{taskId}\`. You then
+the task daemon-side and either returns the finished \`{"file":{...}}\`
+or returns a successful queued/running handoff with \`{taskId}\`. You then
 drive the render to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\` in
 a loop — each call long-polls the daemon for up to 25s, well below your
-shell tool's default 30s timeout. The wait subcommand exits with a
-distinct code per outcome:
+shell tool's default 30s timeout. \`media generate\` treats the handoff as
+exit \`0\` so the first dispatch does not look like a failed shell call.
+The wait subcommand exits with a distinct code per outcome:
 
 - \`exit 0\` — terminal **done**. Final stdout line is \`{"file":{...}}\`.
 - \`exit 5\` — terminal **failed**. Stderr carries the upstream error.
@@ -201,18 +205,22 @@ The pattern in your shell tool:
 \`\`\`bash
 out=$("$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model … --image …)
 ec=$?
-if [ "$ec" -ne 0 ] && [ "$ec" -ne 2 ]; then
+if [ "$ec" -ne 0 ]; then
   echo "$out" >&2; exit "$ec"
 fi
 task_id=$(printf '%s\\n' "$out" | tail -1 | jq -r '.taskId // empty')
 since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // 0')
-while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
+while [ -n "$task_id" ]; do
   out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
   since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
+  if [ "$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "$ec" -ne 2 ]; then
+    echo "$out" >&2; exit "$ec"
+  fi
 done
-# At this point ec is 0 (done) or 5 (failed). Final result on the last
-# stdout line of \`out\`.
+# At this point ec is 0 (done). Final result on the last stdout line of \`out\`.
 \`\`\`
 
 Each \`generate\` and \`wait\` call lasts at most ~25s, so the agent
@@ -263,6 +271,15 @@ substitution. Do not silently fall back.
     (example: \`male-qn-qingse\`). Do not pass natural-language voice
     descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
     flag instead unless you have a real id.
+    For \`elevenlabs-v3\`, \`--voice\` expects a provider-specific ElevenLabs \`voice_id\`; do not pass a natural-language voice description there.
+    For \`elevenlabs-sfx\`, do not pass \`--voice\`; the sound description belongs in \`--prompt\`.
+    Keep ElevenLabs SFX \`--prompt\` under 450 characters; target 180-320 characters so the dispatcher does not waste a generation attempt on provider validation.
+    Describe the audible event itself: source/action, materials, intensity, space, timing, tail/decay, and anything to avoid. Good SFX prompts are literal sound briefs such as "short glass UI confirmation chime, clean attack, soft shimmer tail, no melody, no voice" or "seamless rainy alley ambience loop, distant traffic, wet pavement drips, no voices".
+    For music-like requests on \`elevenlabs-sfx\`, produce a short sound-effects loop or texture, not a full song arrangement. Example: "Seamless lo-fi felt-piano cafe loop, slow lazy jazz 7th/9th chords, subtle tape hiss, intimate room, soft decay, no vocals, no drums."
+    Avoid vague intent-only prompts such as "a nice transition" or "make this section feel premium" unless you translate them into concrete sound sources.
+    Use \`--prompt-influence 0.7\` for user-specified SFX so ElevenLabs follows the prompt more closely; lower it only when the user explicitly wants exploratory/noisier variation.
+    Add \`--loop\` only when the requested SFX must be seamless ambience / background / game loop audio. Mention loop intent in the prompt as well.
+    SFX duration is capped at 30 seconds by the provider.
     \`language\` enables pronunciation boost for specific languages
     (e.g. \`Chinese,Yue\` for Cantonese, \`Chinese\` for Mandarin).
 2. **One discovery turn before generating.** Even with metadata defaults
@@ -298,10 +315,12 @@ substitution. Do not silently fall back.
 
 ### Detecting and surfacing provider errors
 
-Today the dispatcher ships two real provider integrations: \`openai\`
-(image, with Azure OpenAI auto-detected from the configured base URL)
-and \`volcengine\` (Doubao Seedance video / Seedream image). Other
-providers (suno-v5, kling, fishaudio, …) are still stubs.
+Today the dispatcher ships real provider integrations for OpenAI
+(image and speech, with Azure OpenAI auto-detected from the configured
+base URL), Volcengine (Doubao Seedance video / Seedream image), Grok
+image/video, Nano Banana image, HyperFrames video, and the MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations.
+Models whose provider path has no renderer still return a configured
+stub/error signal as described below.
 
 The dispatcher tags every outcome explicitly. Treat the failure
 signals below as hard errors and surface them verbatim to the user —
@@ -312,13 +331,16 @@ do **not** narrate a stub as if it were the final result.
    models without a real renderer, and the CLI prints the daemon's
    error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` and \`"$OD_NODE_BIN" "$OD_BIN" media wait\` exit:
-   \`0\` on real success, \`2\` when the task is **still running** and
-   needs another \`wait\` call (see "Long-running renders" above), \`5\`
-   when the daemon accepted the request but the provider call failed
-   (key missing / 4xx / network blip), and \`1–4\` for client / daemon
-   errors. Always check \`$?\` before describing the output. \`2\` is
-   not a failure — it just means "keep polling".
+2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` exits \`0\` for
+   both immediate completion and successful queued/running handoff; inspect
+   the final stdout JSON for either \`file\` or \`taskId\`. \`"$OD_NODE_BIN"
+   "$OD_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
+   task is still **running** and needs another \`wait\` call (see
+   "Long-running renders" above), \`5\` when the daemon accepted the request
+   but the provider call failed (key missing / 4xx / network blip), and
+   \`1–4\` for client / daemon errors. Always check \`$?\` before describing
+   the output. \`2\` from \`media wait\` is not a failure — it just means
+   "keep polling".
 3. **stderr WARN lines.** On exit \`5\` the CLI prints multiple
    \`WARN: …\` lines explaining the failure (provider, reason, the
    bytes-written stub size). Quote the reason in your reply.
@@ -337,8 +359,7 @@ do **not** narrate a stub as if it were the final result.
    provider call failed (\`providerError\` non-null) — surface that
    distinction in your reply.
 
-A few surfaces (audio, some long-tail image/video providers) are still
-intentional stubs. In that case you can narrate the placeholder as
-expected, but still mention to the user that the real provider
-integration hasn't landed.
+Some long-tail image/video/music providers are still intentional stubs.
+In that case you can narrate the placeholder as expected, but still
+mention to the user that the real provider integration hasn't landed.
 `;

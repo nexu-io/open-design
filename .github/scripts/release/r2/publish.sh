@@ -318,6 +318,15 @@ if (env.RELEASE_CHANNEL === "beta") {
     betaVersion: env.RELEASE_VERSION,
     ...commonMetadata,
   };
+} else if (env.RELEASE_CHANNEL === "preview") {
+  metadata = {
+    assetVersionSuffix: env.ASSET_VERSION_SUFFIX ?? "",
+    baseVersion: env.BASE_VERSION,
+    previewNumber: Number(env.RELEASE_VERSION.split("-preview.")[1]),
+    previewVersion: env.RELEASE_VERSION,
+    releaseVersion: env.RELEASE_VERSION,
+    ...commonMetadata,
+  };
 } else {
   metadata = {
     baseVersion: env.BASE_VERSION,

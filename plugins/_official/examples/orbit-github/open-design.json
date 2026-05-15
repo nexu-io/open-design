@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-orbit-github",
+  "title": "Orbit Github",
+  "version": "0.1.0",
+  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when\nGitHub is the user's only connected connector, or when the user\nexplicitly scopes their daily digest to GitHub. Pulls the past 24\nhours of PRs, review requests, issues, CI runs, and merges from the\nuser's authenticated GitHub connection and renders them in a layout\nthat mirrors GitHub's native Notifications + PR-diff visual language.\nThis skill should not be triggered manually — it is invoked by\nOrbit's daily-digest scheduler against live GitHub data.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/orbit-github",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "orbit",
+    "web",
+    "desktop",
+    "github-briefing",
+    "github-digest",
+    "pr-digest",
+    "github",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "orbit",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Generate today's Open Orbit GitHub briefing. GitHub is my only connected connector — pull yesterday's PRs, review requests, issues, CI runs, and merges and render them as a GitHub Notifications + PR-diff page.",
+        "zh-CN": "使用这个插件完成以下任务：Generate today's Open Orbit GitHub briefing. GitHub is my only connected connector — pull yesterday's PRs, review requests, issues, CI runs, and merges and render them as a GitHub Notifications + PR-diff page."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Orbit Github"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -12,8 +12,8 @@ export type WinInstallIdentity = {
   uninstallerName: string;
 };
 
-function isBetaNamespace(namespace: string): boolean {
-  return /(^|[-_.])beta($|[-_.])/i.test(namespace);
+function isChannelNamespace(namespace: string, channel: "beta" | "preview"): boolean {
+  return new RegExp(`(^|[-_.])${channel}($|[-_.])`, "i").test(namespace);
 }
 
 function sanitizeNamespace(value: string): string {
@@ -22,8 +22,10 @@ function sanitizeNamespace(value: string): string {
 
 export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespace">): WinInstallIdentity {
   const namespaceToken = sanitizeNamespace(config.namespace);
-  const displayName = isBetaNamespace(config.namespace)
+  const displayName = isChannelNamespace(config.namespace, "beta")
     ? `${PRODUCT_NAME} Beta`
+    : isChannelNamespace(config.namespace, "preview")
+      ? `${PRODUCT_NAME} Preview`
     : config.namespace === SIDECAR_DEFAULTS.namespace
       ? PRODUCT_NAME
       : `${PRODUCT_NAME} ${namespaceToken}`;
