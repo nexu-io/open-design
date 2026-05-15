@@ -59,6 +59,13 @@ describe('validateHtmlArtifact', () => {
     if (!result.ok) expect(result.reason).toMatch(/internal storage path/i);
   });
 
+  it('rejects root reserved paths that end at an HTML terminator like a quote', () => {
+    const html = '<!doctype html><html><body><a href="/.live-artifacts">preview</a><p>Enough content to look like a real document.</p></body></html>';
+    const result = validateHtmlArtifact(html);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/internal storage path/i);
+  });
+
   it('accepts a complete <!doctype html> document', () => {
     const html = '<!doctype html><html><head><title>x</title></head><body><h1>hello</h1></body></html>';
     const result = validateHtmlArtifact(html);

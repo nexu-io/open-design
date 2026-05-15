@@ -38,7 +38,7 @@
 
 const MIN_HTML_LENGTH = 64;
 const STARTS_WITH_DOCUMENT_RE = /^(?:<!doctype\s+html\b|<html\b)/i;
-const INTERNAL_STORAGE_PATH_RE = /(?:^|[./"'`(=\s])(?:\.live-artifacts|\.od|\.tmp)(?:[/?#]|$)/i;
+const INTERNAL_STORAGE_PATH_RE = /(?:^|[./"'`(=\s])(?:\.live-artifacts|\.od|\.tmp)(?:[/?#"'`\s>)]|$)/i;
 
 export type HtmlArtifactValidationResult =
   | { ok: true }
