@@ -218,6 +218,11 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     label: 'Stub (placeholder)',
     hint: 'Deterministic local placeholder bytes',
     integrated: true,
+    // Internal fixture provider used by the daemon for deterministic
+    // tests / offline demos. Hidden from Settings the same way
+    // HyperFrames is — end users have nothing to configure here, and
+    // exposing it pollutes the provider list.
+    settingsVisible: false,
   },
 ];
 

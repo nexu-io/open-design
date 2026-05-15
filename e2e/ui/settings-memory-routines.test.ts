@@ -55,11 +55,7 @@ async function seedSettingsBase(page: Page) {
 
 async function openSettings(page: Page) {
   await page.goto('/');
-  const settingsButton = page.locator(
-    'button[aria-label="Configure execution mode"], button[aria-label="配置执行模式"], button[title="Configure execution mode"], button[title="配置执行模式"]',
-  ).first();
-  await expect(settingsButton).toBeVisible();
-  await settingsButton.click();
+  await page.getByTitle('Execution mode').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;

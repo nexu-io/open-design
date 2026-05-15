@@ -227,6 +227,44 @@ button.ghost {
   color: var(--text);
 }
 button.ghost:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
+/*
+ * Transient success state for ghost buttons. Used by the Media
+ * Providers "Reload from daemon" button after a successful reload —
+ * the button briefly turns green with a check icon for ~2s then snaps
+ * back to its idle treatment, replacing what used to be a permanent
+ * success paragraph under the section header. Reusable on any
+ * ghost button that wants the same "did it" pulse.
+ */
+button.ghost.is-success-flash {
+  border-color: var(--green-border, color-mix(in srgb, #1f9d55 32%, var(--border)));
+  background: var(--green-bg, color-mix(in srgb, #1f9d55 8%, transparent));
+  color: var(--green, #137a3d);
+}
+button.ghost.is-success-flash:hover:not(:disabled) {
+  background: var(--green-bg, color-mix(in srgb, #1f9d55 14%, transparent));
+}
+button.ghost.is-success-flash svg {
+  color: currentColor;
+}
+
+/*
+ * Visually-hidden but assistive-tech accessible. We use it to keep
+ * a `role="status"` live-region for actions whose visible feedback
+ * is too transient (e.g. a 2s button-label flash) for a screen
+ * reader to catch reliably. Borrowed from Tailwind's `sr-only` so
+ * it reads as the same primitive everyone already knows.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 button.subtle {
   background: var(--bg-subtle);
@@ -294,6 +332,131 @@ select::-ms-expand { display: none; }
   }
 }
 textarea { resize: vertical; font-family: inherit; }
+
+.od-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.od-select-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.od-select-trigger:hover:not(:disabled),
+.od-select-trigger[aria-expanded='true'] {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.od-select-trigger:focus-visible,
+.od-select-trigger[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+.od-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.od-select-trigger svg {
+  color: var(--text-muted);
+  transition: transform 120ms ease;
+}
+.od-select-trigger[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.od-select-value,
+.od-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-select-menu {
+  z-index: 9000;
+  padding: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+.od-select-menu.portal {
+  position: fixed;
+}
+.od-select-menu.inline {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(280px, 48vh);
+}
+.od-select-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.od-select-option:hover:not(:disabled),
+.od-select-option.active:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.od-select-option.selected {
+  color: var(--text);
+  font-weight: 600;
+}
+.od-select-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.od-select-option-check {
+  display: inline-flex;
+  justify-content: center;
+  color: var(--selected);
+  opacity: 0;
+}
+.od-select-option.selected .od-select-option-check {
+  opacity: 1;
+}
+.od-select-group + .od-select-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+.od-select-group-label {
+  padding: 6px 8px 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+}
 
 code {
   font-family: var(--mono);
@@ -1121,6 +1284,49 @@ code {
   padding: 8px 11px;
   line-height: 1.45;
   box-shadow: var(--shadow-xs);
+}
+
+/* Wrapper for user bubble + copy button */
+.msg.user .user-text-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.msg.user .user-text-wrap .user-text {
+  padding-inline-end: 28px;
+}
+
+.msg.user .user-copy-btn {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  padding: 4px;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  z-index: 1;
+}
+.msg.user .user-copy-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.msg.user .user-text-wrap:hover .user-copy-btn,
+.msg.user .user-text-wrap:focus-within .user-copy-btn,
+.msg.user .user-copy-btn:focus-visible {
+  opacity: 1;
+}
+.msg.user .user-copy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+@media (hover: none) {
+  .msg.user .user-copy-btn {
+    opacity: 1;
+  }
 }
 .msg.assistant .prose { margin-top: 4px; }
 .msg .artifact-badge {
@@ -1955,6 +2161,31 @@ code {
   padding-right: calc(var(--modal-padding) + 56px);
 }
 
+/* Compact settings header: place subtitle on the same line as the h2
+   so opening the dialog doesn't burn 2-3 rows of header height. The
+   row uses baseline alignment so the smaller subtitle sits at the
+   h2 baseline and wraps to its own line on narrow viewports. The
+   welcome hero variant is unaffected — it keeps the stacked layout. */
+.modal-settings .modal-head-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+.modal-settings .modal-head-line > h2 {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.modal-settings .modal-head-line > .subtitle {
+  margin: 0;
+  flex: 1 1 240px;
+  font-size: 12.5px;
+  /* Override the 72ch cap from the stacked variant so the subtitle
+     can take the full remaining inline width before wrapping. */
+  max-width: none;
+}
+
 /* Section-local Save key button for the Composio API key field. We do
    NOT autosave secrets, so this is the explicit gesture. Styled as a
    primary button to stand out next to the password input + ghost
@@ -2314,6 +2545,7 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 4px 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -2340,6 +2572,17 @@ code {
 .seg-btn.active .seg-title { font-weight: 600; }
 .seg-btn .seg-meta { display: none; }
 .seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Inline variant: title and meta sit on a single row instead of
+   stacking, which saves a row of vertical space inside the
+   execution-mode tabs (Local CLI · 2 installed / BYOK · API provider). */
+.seg-btn--inline {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  padding-block: 8px;
+}
+.seg-btn--inline > .seg-title { min-width: 0; flex: 0 0 auto; }
+.seg-btn--inline > .seg-meta { min-width: 0; flex: 1 1 auto; }
 
 /* Secondary protocol selector — pill chips, wraps to multiple rows */
 .protocol-chips {
@@ -2457,6 +2700,12 @@ code {
   border-color: var(--accent-soft);
   background: var(--accent-tint);
   color: var(--accent-strong);
+}
+.section-head-actions .seg-control {
+  display: inline-grid;
+  grid-template-columns: repeat(var(--seg-cols, 2), auto);
+  min-height: unset;
+  min-width: unset;
 }
 .section-head-actions {
   display: inline-flex;
@@ -3247,6 +3496,7 @@ code {
   border-radius: 50%;
   border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   pointer-events: none;
+  z-index: 0;
 }
 @keyframes orbitConfigGateIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -3326,6 +3576,8 @@ code {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 .orbit-config-gate-action {
   display: inline-flex;
@@ -3574,28 +3826,147 @@ code {
   flex-direction: column;
   gap: 8px;
 }
+.mcp-client-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Group 1: what the MCP server does */
+.mcp-capabilities-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  line-height: 1.55;
+}
+.mcp-capabilities-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.mcp-capabilities-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Group 2: setup flow */
+.mcp-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.mcp-setup-card .ds-picker {
+  margin-bottom: 0;
+}
+.mcp-running-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
 .settings-about-list > div {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
   padding: 12px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+.settings-about-version-row {
+  justify-content: space-between;
+}
 .settings-about-list dt {
   font-size: 12px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 .settings-about-list dd {
   margin: 0;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
-  text-align: right;
   overflow-wrap: anywhere;
 }
+.settings-notify-card {
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.settings-notify-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-notify-card-header h4 {
+  margin: 0;
+}
+.settings-notify-card-hint {
+  margin: 16px 0 0;
+}
+.settings-about-version-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-about-version-num {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-about-download-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+.settings-about-download-link:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.settings-about-download-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
+.media-provider-reload-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 4px;
+}
+.media-provider-reload-btn {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  gap: 4px;
+}
+.media-provider-reload-btn:hover {
+  color: var(--text);
+}
 .media-provider-list {
   display: flex;
   flex-direction: column;
@@ -3623,6 +3994,13 @@ code {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+.media-provider-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .media-provider-name {
   font-size: 13px;
@@ -3667,6 +4045,48 @@ code {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 6px;
 }
+/*
+ * "Coming soon" drawer under the media provider list. We render the
+ * roadmap providers as a denser, read-only list rather than the same
+ * editable cards as the main list — the user can't actually configure
+ * these, so giving them the same visual weight is misleading. The
+ * <details>/<summary> is styled by the shared .memory-details-summary
+ * rules; only the inner list needs new styles.
+ */
+.media-provider-coming-soon {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.media-provider-coming-soon[open] {
+  padding-bottom: 12px;
+}
+.media-provider-coming-soon-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.media-provider-coming-soon-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.media-provider-coming-soon-item:first-child {
+  border-top: 0;
+}
+.media-provider-coming-soon-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .media-provider-secret-field {
   position: relative;
   min-width: 0;
@@ -3710,6 +4130,19 @@ code {
 .section-head > div {
   max-width: 100%;
   min-width: 0;
+}
+/*
+  Section-head action buttons (Reload, Test, Rescan, Fetch models, …)
+  must read on a single line. Without an explicit nowrap they wrap when
+  the section title + hint take most of the row, producing label
+  fragments like "Reload from / daemon" that look broken. flex-shrink:0
+  keeps the button at its content width even when the description gets
+  long; long button labels are then guarded by their own copy budget.
+*/
+.section-head > button,
+.section-head .section-head-actions > button {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .section-head h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
 .section-head .hint { margin-top: 2px; }
@@ -3789,6 +4222,22 @@ code {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
+/* Test feedback row injected into the agent grid right after the
+   tested/selected card. Spans both columns so the result reads as a
+   continuation of that card's row, instead of a top-of-section banner
+   that pushes the grid down on every Test/Rescan click. */
+.agent-test-result-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-test-result-row > .settings-test-status {
+  margin: 0;
+}
+.agent-test-result-row > .settings-test-actions {
+  margin-top: 0;
+}
 .agent-card {
   display: flex;
   align-items: center;
@@ -3810,17 +4259,14 @@ code {
 }
 .agent-card:hover:not(.disabled) {
   border-color: var(--border-strong);
-  background: var(--bg-subtle);
 }
 .agent-card.active {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  box-shadow: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .agent-card.disabled {
   cursor: not-allowed;
   opacity: 0.55;
-  background: var(--bg-subtle);
 }
 .agent-card.disabled.agent-card-unavailable {
   opacity: 0.72;
@@ -3830,6 +4276,16 @@ code {
   flex-wrap: wrap;
   gap: 6px 10px;
   margin-top: 3px;
+}
+/* Inline variant: links sit to the right of the agent name as a sibling
+   of .agent-card-body, so unavailable cards collapse to a single row
+   (no "not installed" label, no version meta) and the long tail of
+   unavailable adapters shrinks. */
+.agent-card-actions--inline {
+  margin-top: 0;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 .agent-card-link {
   font-size: 11px;
@@ -3842,6 +4298,34 @@ code {
   color: var(--text);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+/* Docs link: secondary affordance, plain muted text. Sits to the left
+   of the Install ghost button so the primary "do this" action keeps the
+   right edge. Hover toggles the underline only — no background, no
+   color change — to keep visual weight low. */
+.agent-card-link--muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.agent-card-link--muted:hover {
+  color: var(--text);
+}
+/* Install link: primary affordance for an unavailable card, styled as
+   a ghost button (transparent + outlined) so it reads as a real
+   actionable target rather than yet another text link. */
+.agent-card-link--ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+.agent-card-link--ghost:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  text-decoration: none;
 }
 .agent-install-path-hint {
   margin-top: 10px;
@@ -3872,6 +4356,13 @@ code {
   line-height: 1.35;
 }
 .agent-card-meta .muted { color: var(--text-soft); font-style: italic; }
+.agent-model-row-head {
+  font-size: 12px;
+  color: var(--text);
+}
+.agent-model-row-head strong {
+  font-weight: 600;
+}
 .agent-model-row {
   display: flex;
   flex-direction: column;
@@ -3879,7 +4370,28 @@ code {
   padding: 12px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  background: var(--bg-panel);
+}
+.agent-model-row select,
+.agent-model-row input,
+.agent-cli-env select,
+.agent-cli-env input,
+.settings-section-byok select,
+.settings-section-byok input {
+  background-color: var(--bg-subtle);
+}
+/*
+  Generic Settings card — wraps a single panel of related controls in a
+  white-on-soft-border container so users get an obvious "this lump of
+  fields belongs together" boundary instead of a long flat scroll. Used
+  by the BYOK form, the Custom instructions block, the Memory list, and
+  any future Settings section that should read as a card.
+*/
+.settings-section-card {
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
 }
 .agent-model-row .field { gap: 4px; }
 .agent-model-row .field-label {
@@ -3890,26 +4402,50 @@ code {
 }
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
 .agent-cli-env {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
 }
-.agent-cli-env-head {
+.agent-cli-env-summary {
+  list-style: none;
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
 }
-.agent-cli-env-head h4 {
-  margin: 0;
-  font-size: 12px;
+.agent-cli-env-summary::-webkit-details-marker {
+  display: none;
+}
+.agent-cli-env-summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.agent-cli-env[open] > .agent-cli-env-summary::before {
+  transform: rotate(90deg);
+}
+.agent-cli-env-summary-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
-.agent-cli-env-head .hint { margin: 0; font-size: 11.5px; }
+.agent-cli-env-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.agent-cli-env-body .hint {
+  margin: 0;
+  font-size: 11.5px;
+}
 .agent-cli-env-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6218,6 +6754,23 @@ button.connector-action.is-loading {
    blowing the dialog out vertically. */
 .tab-panel.connectors-panel.connectors-panel-embedded {
   gap: 14px;
+  position: relative;
+}
+/* Toast anchor: positions the connector error toast at the center-top
+   of the settings panel rather than at the bottom of the viewport. */
+.connectors-toast-anchor {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+  width: max-content;
+}
+.connectors-toast-anchor .od-toast {
+  position: static;
+  transform: none;
+  pointer-events: auto;
 }
 .connectors-panel-embedded .tab-panel-toolbar {
   justify-content: flex-end;
@@ -6252,6 +6805,10 @@ button.connector-action.is-loading {
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   flex: 0 0 auto;
+}
+/* Hide the provider tabs when there is only one option — no choice = no need for a tab. */
+.connectors-provider-tabs:has(> :only-child) {
+  display: none;
 }
 .connectors-provider-tab {
   appearance: none;
@@ -8328,12 +8885,27 @@ button.connector-action.is-loading {
 }
 .df-pagination select {
   font-size: 12px;
-  padding: 2px 6px;
+  padding: 2px 24px 2px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg);
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 12px 12px;
   color: var(--text);
   cursor: pointer;
+}
+.df-pagination select::-ms-expand { display: none; }
+[data-theme='dark'] .df-pagination select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .df-pagination select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  }
 }
 .df-pagination select:focus-visible {
   outline: 2px solid var(--accent);
@@ -11333,6 +11905,19 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border: 1px solid color-mix(in srgb, #1f9d55 28%, var(--border));
   font-variant-numeric: tabular-nums;
 }
+/*
+ * Inline variant lives next to a label on the same row instead of taking
+ * its own line. We also drop the green "success" treatment because the
+ * media-provider row already has a green "Integrated" badge — two green
+ * pills in one row read as duplicate state. Neutral muted gray keeps it
+ * legible as metadata without competing for attention.
+ */
+.field-status-badge--inline {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  font-weight: 500;
+}
 /* ---------- Composio API key skeleton ----------
    The Composio config is daemon-backed, so on first paint after a
    restart there is a window where the section renders empty even
@@ -11756,6 +12341,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: 4px;
   padding: 1px 4px;
   margin: -1px -4px;
+  max-width: min(100%, 420px);
 }
 .topbar-title .title.editable:focus,
 .app-project-title .title.editable:focus {
@@ -12604,21 +13190,25 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   align-items: center;
 }
 .filter-pill:hover { border-color: var(--border-strong); color: var(--text); }
+/*
+  Selected filter pill — quiet "I am the chosen one" treatment, NOT a CTA.
+  Earlier the active pill borrowed the full `--accent` fill, which read as
+  a primary button competing with the real action ("+ New memory") next to
+  it. Users would mis-read the count (e.g. "All 0") as a clickable big
+  orange button. We now keep the selection bordered + slightly weighted so
+  it still looks "on" but stops shouting; the lone primary button on the
+  right keeps its monopoly on the accent color.
+*/
 .filter-pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 600;
 }
-/* The global `button:hover:not(:disabled)` rule (specificity 0,2,1) is more
-   specific than `.filter-pill.active` (0,2,0), so without an explicit
-   active-hover rule the active pill loses its accent background on hover and
-   the white label drops onto a cream `--bg-subtle` background — invisible.
-   This rule (0,3,0) wins and keeps the accent treatment, swapping in
-   `--accent-hover` for a subtle hover shift. */
 .filter-pill.active:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: white;
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 .filter-pill-count {
   font-size: 11px;
@@ -14444,8 +15034,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 6px;
   margin-top: 12px;
 }
-.pet-tabs .subtab-pill {
-  align-self: flex-start;
+.pet-tabs-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pet-tabs-top-row .subtab-pill {
+  flex: 0 0 auto;
 }
 .pet-tabs-hint {
   margin: 0;
@@ -15589,8 +16185,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 .pet-codex-card {
+  position: relative;
   display: grid;
-  grid-template-columns: 56px 1fr auto;
+  grid-template-columns: 56px 1fr;
   align-items: center;
   gap: 10px;
   padding: 10px;
@@ -15683,6 +16280,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: grid;
   gap: 2px;
   min-width: 0;
+  padding-right: 8px;
 }
 
 .pet-codex-meta strong {
@@ -15701,6 +16299,26 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Adopt button: absolutely positioned at card's right edge so the
+   meta text always fills the full remaining width. Hidden until hover;
+   adopted (active) icon-only check stays visible at all times. */
+.pet-codex-adopt-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.pet-codex-adopt-btn:not(.active) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.pet-codex-card:hover .pet-codex-adopt-btn:not(.active),
+.pet-codex-card:focus-within .pet-codex-adopt-btn:not(.active) {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Slash-command popover in the chat composer */
@@ -15964,6 +16582,22 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 10px;
   margin-bottom: 16px;
 }
+/* Skills toolbar: two-row layout.
+   Row 1: search (grows) + New skill button (right, 12px gap).
+   Row 2: filter dropdowns with inline labels. */
+.library-toolbar.skills-toolbar {
+  flex-direction: column;
+  gap: 10px;
+}
+.skills-toolbar-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skills-toolbar-top .library-search {
+  flex: 1 1 0;
+  min-width: 0;
+}
 
 /* Variant: filter pills on the left, primary action on the right.
    Used by Memory's toolbar where there is no search input above. */
@@ -16019,6 +16653,59 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/*
+ * Compact dropdown row for Skills "Type" + "Category" filters.
+ * Pills don't scale once the option set crosses ~10 entries (Skills'
+ * Category list has 14 today and is growing); they wrap to 2-3 rows
+ * and push the actual cards far below the fold. A labelled <select>
+ * each keeps the same filter affordances in a single fixed-height
+ * row. Source filter (3 options total) keeps its pill row above
+ * because pills are still cheaper for a one-click toggle.
+ */
+.library-filter-selects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.library-filter-select {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.library-filter-select-label {
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+.library-filter-select select {
+  padding: 5px 28px 5px 10px;
+  font-size: 12px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  min-width: 100px;
+  max-width: 180px;
+  cursor: pointer;
+}
+.library-filter-select select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+/* Active = something other than "All" is selected. The darker border
+   tells the user at a glance that a filter is in effect, without
+   relying on the user remembering what the dropdown's idle state
+   looked like. */
+.library-filter-select select[data-active='true'] {
+  border-color: var(--text);
+  background-color: var(--bg-subtle);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .library-content {
@@ -16283,7 +16970,35 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
-  padding: 32px 0;
+  /* Tinted fill so the empty state reads as its own slot inside the
+     card. Without it the message floats in the same white as the card
+     itself and looks like a layout gap rather than an intentional
+     "you have nothing here yet" panel. */
+  padding: 28px 24px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md, 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.library-empty-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.library-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  max-width: 420px;
+  line-height: 1.5;
+}
+.library-empty-hint code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 1px 6px;
+  background: var(--bg-subtle);
+  border-radius: 4px;
 }
 
 /* Memory section: warning banner shown when the memory feature is
@@ -16315,9 +17030,66 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 
 /* Memory section: monospace path showing where the memory files live on
    disk. `break-all` so even long absolute paths fit inside the panel. */
-.memory-root-dir {
-  word-break: break-all;
+.memory-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/*
+  Tiny info button anchored to the Memory title. Hover surfaces the
+  storage path via the native tooltip; a click copies it to the
+  clipboard. Sized to the type so it sits as a quiet glyph rather than
+  a clickable affordance — the hover affordance + copy flash do all
+  the discovery work without a permanent string of /Users/... text
+  occupying a whole row in the card.
+*/
+.memory-info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.memory-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 120ms ease, background 120ms ease;
+}
+.memory-info-btn:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.memory-path-copied-badge {
   font-size: 11px;
+  font-weight: 500;
+  color: var(--success-fg, #16a34a);
+  background: var(--success-bg, #dcfce7);
+  padding: 1px 6px;
+  border-radius: 999px;
+  animation: memory-badge-in 160ms ease;
+  white-space: nowrap;
+}
+@keyframes memory-badge-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Extraction history + MEMORY.md (index) as standalone bordered cards,
+   matching the "Advanced: proxy & custom paths" card style. */
+.memory-collapsible-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  margin-top: 12px;
 }
 
 .memory-details-summary {
@@ -16336,10 +17108,16 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 .memory-details-summary::before {
+  /* Caret used to render at 10px in --text-faint (#aaa). On hi-dpi
+     panels that's a fuzzy speck the user can't even tell points right.
+     Bumping to 13px (matches the summary text weight) and switching to
+     --text-muted gives the disclosure marker enough mass to be obvious
+     without dominating the row. */
   content: '▸';
-  flex: 0 0 1em;
-  color: var(--text-faint, #aaa);
-  font-size: 10px;
+  flex: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
   transition: transform 120ms ease, color 120ms ease;
 }
 
@@ -16349,7 +17127,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 
 .memory-details-summary:hover::before,
 .memory-details-summary:focus-visible::before {
-  color: var(--text-muted, #888);
+  color: var(--text);
 }
 
 .memory-details-summary:focus-visible {
@@ -18519,6 +19297,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ---------------- Routines (Settings → Routines) ---------------- */
 
 .routines-section .section-head { align-items: flex-start; }
+.routines-section .section-head > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 
 .routines-card {
   background: var(--bg-panel);
@@ -18820,7 +19602,18 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 4px;
   font-weight: 500;
 }
-.routines-history-link:hover { background: var(--text); color: var(--bg); border-color: var(--text); }
+.routines-history-link:hover {
+  background: var(--text);
+  color: var(--bg-panel);
+  border-color: var(--text);
+}
+.routines-history-link:focus-visible {
+  outline: 2px solid var(--selected);
+  outline-offset: 1px;
+}
+.routines-history-link:active {
+  opacity: 0.85;
+}
 
 .routines-status {
   display: inline-block;

@@ -100,6 +100,17 @@ export function useCritiqueTheaterEnabled(): boolean {
  *     metadata fields are not at risk.
  *   - PATCH fails: logged in dev; the in-session UI is already
  *     consistent.
+ *   - Concurrent metadata writes (rapid double-toggle, or another
+ *     component patching the same project row): each in-flight setter
+ *     does its own read-merge-write, so the last PATCH wins for the
+ *     toggle field but silently reverts any other metadata field that
+ *     was modified between its GET and PATCH. The toggle itself stays
+ *     correct; other metadata fields can lose updates. The endpoint
+ *     does no conditional-update (`If-Match` / version) check, so this
+ *     is not catchable server-side. M1 surface accepts this trade for
+ *     a single-user-action toggle; a multi-writer surface (template
+ *     re-binding, linkedDirs editor) racing this setter could surface
+ *     as silently reverted edits (PerishCode P3 on PR #1484).
  *
  * `fetchProjectSettings` is a test seam mirroring the
  * `fetchInterrupt` pattern on `CritiqueTheaterMount`; production

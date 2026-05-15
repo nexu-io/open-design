@@ -20,7 +20,7 @@ const ext = {
 
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
-  active?: 'home' | 'skills' | 'systems' | 'templates' | 'craft';
+  active?: 'home' | 'skills' | 'systems' | 'templates' | 'craft' | 'blog';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -78,6 +78,11 @@ export function Header({
             <li>
               <a href='/craft/' className={linkClass('craft')}>
                 Craft<span className='num'>{counts.craft}</span>
+              </a>
+            </li>
+            <li>
+              <a href='/blog/' className={linkClass('blog')}>
+                Blog
               </a>
             </li>
             <li>

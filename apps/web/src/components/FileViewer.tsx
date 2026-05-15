@@ -59,7 +59,12 @@ import {
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { hasUrlModeBridge, parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
+import {
+  hasUrlModeBridge,
+  htmlNeedsSandboxShim,
+  parseForceInline,
+  shouldUrlLoadHtmlPreview,
+} from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
@@ -1109,7 +1114,7 @@ export function LiveArtifactViewer({
                     ref={iframeRef}
                     data-testid="live-artifact-preview-frame"
                     title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups"
+                    sandbox="allow-scripts allow-popups allow-downloads"
                     src={previewUrl}
                   />
                 </PreviewDrawOverlay>
@@ -1964,7 +1969,7 @@ function BoardComposerPopover({
             disabled={pendingCount === 0 || sending}
             onClick={() => void onSendBatch()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? 'Sending…' : 'Send to chat'}
           </button>
         </div>
       </div>
@@ -2114,7 +2119,7 @@ export function CommentSidePanel({
             disabled={sending}
             onClick={() => void onSendSelected()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? 'Sending…' : 'Send to chat'}
           </button>
         </div>
       ) : null}
@@ -3402,7 +3407,7 @@ function ReactComponentViewer({
             <iframe
               data-testid="react-component-preview-frame"
               title={file.name}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               srcDoc={srcDoc}
               style={{ width: '100%', height: '100%', border: 0 }}
             />
@@ -3804,6 +3809,7 @@ function HtmlViewer({
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
+  const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -4017,6 +4023,17 @@ function HtmlViewer({
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
+  // Auto-fall back to the srcDoc path when the artifact will crash under
+  // the URL-load iframe's bare `sandbox="allow-scripts"` — Babel-standalone
+  // React prototypes and any HTML that reads Web Storage at mount throw
+  // SecurityError without `allow-same-origin`. The srcDoc path runs
+  // `injectSandboxShim` before any user script, so those artifacts render.
+  // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
+  // edit mode toggles, slide nav) don't re-scan the HTML each time.
+  const needsSandboxShim = useMemo(
+    () => source != null && htmlNeedsSandboxShim(source),
+    [source],
+  );
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
@@ -4026,7 +4043,7 @@ function HtmlViewer({
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
-    forceInline,
+    forceInline: forceInline || needsSandboxShim,
   });
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
@@ -5025,6 +5042,8 @@ function HtmlViewer({
       setTemplateName('');
       setTemplateDescription('');
       setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
+      // Show success toast
+      setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
     } finally {
       setSavingTemplate(false);
       if (savedName) {
@@ -5972,7 +5991,7 @@ function HtmlViewer({
                       data-testid="artifact-preview-frame"
                       data-od-render-mode="url-load"
                       title={file.name}
-                      sandbox="allow-scripts"
+                      sandbox="allow-scripts allow-downloads"
                       src={previewSrcUrl}
                       onLoad={() => {
                         dcViewportRestoreAtRef.current = Date.now();
@@ -5991,7 +6010,7 @@ function HtmlViewer({
                       data-testid="artifact-preview-frame"
                       data-od-render-mode="srcdoc"
                       title={file.name}
-                      sandbox="allow-scripts"
+                      sandbox="allow-scripts allow-downloads"
                       srcDoc={srcDoc}
                       onLoad={() => {
                         dcViewportRestoreAtRef.current = Date.now();
@@ -6032,6 +6051,15 @@ function HtmlViewer({
                   message={commentSavedToast}
                   ttlMs={2200}
                   onDismiss={() => setCommentSavedToast(null)}
+                />
+              </div>
+            ) : null}
+            {templateSavedToast ? (
+              <div className="comment-toast-anchor">
+                <Toast
+                  message={templateSavedToast}
+                  ttlMs={2200}
+                  onDismiss={() => setTemplateSavedToast(null)}
                 />
               </div>
             ) : null}
@@ -6221,14 +6249,14 @@ function HtmlViewer({
           {useUrlLoadPreview ? (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
               src={previewSrcUrl}
             />
           ) : (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               data-od-render-mode="srcdoc"
               srcDoc={srcDoc}
             />

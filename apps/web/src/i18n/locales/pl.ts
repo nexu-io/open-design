@@ -49,7 +49,7 @@ export const pl: Dict = {
   'settings.welcomeSubtitle':
       "Wybierz sposób generowania projektów. Możesz to zmienić w dowolnym momencie w Ustawieniach na górnym pasku.",
   'settings.kicker': 'Ustawienia',
-  'settings.title': 'Wykonanie i model',
+  'settings.title': 'Tryb wykonywania',
   'settings.subtitle': 'Wybierz lokalne CLI albo BYOK. Klucz API jest przechowywany tylko w tej przeglądarce.',
   'settings.modeAria': 'Tryb wykonywania',
   'settings.protocolAria': 'Protokół API',
@@ -121,7 +121,7 @@ export const pl: Dict = {
   'settings.apiHint': 'Wywołania są wysyłane przez lokalny proxy daemon do ustawionego Base URL. Klucz jest przechowywany tylko w tej przeglądarce i wysyłany z żądaniami do dostawcy.',
   'settings.skipForNow': 'Pomiń na razie',
   'settings.getStarted': 'Rozpocznij',
-  'settings.envConfigure': 'Skonfiguruj tryb wykonywania',
+  'settings.envConfigure': 'Tryb wykonywania',
   'settings.localCli': 'Lokalne CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'nie wybrano agenta',
@@ -132,6 +132,7 @@ export const pl: Dict = {
   'settings.themeSystem': 'Systemowy',
   'settings.themeLight': 'Jasny',
   'settings.themeDark': 'Ciemny',
+  'settings.agentModelHead': 'Model dla:',
   'settings.modelPicker': 'Model',
   'settings.reasoningPicker': 'Poziom rozumowania',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const pl: Dict = {
   'settings.runtimePackaged': 'Aplikacja spakowana',
   'settings.runtimeDevelopment': 'Rozwojowe',
   'settings.versionUnavailable': 'Szczegóły wersji są niedostępne, gdy daemon jest offline.',
+  'settings.installLatest': 'Zainstaluj najnowszą wersję',
+  'settings.alreadyLatest': 'Masz już najnowszą wersję',
 
   'entry.tabDesigns': 'Projekty',
   'entry.tabTemplates': 'Szablony',
@@ -586,6 +589,8 @@ export const pl: Dict = {
   'chat.scrollToLatest': 'Przewiń do najnowszych',
   'chat.you': 'Ty',
   'chat.openFile': 'Otwórz {name}',
+  'chat.copyPrompt': 'Kopiuj prompt',
+  'chat.copyDone': 'Skopiowano!',
   'chat.composerPlaceholder':
       'Opisz projekt, który chcesz stworzyć — wklej obrazy lub użyj @, aby wskazać plik lub skill…',
   'chat.composerHint':
@@ -1069,6 +1074,7 @@ export const pl: Dict = {
   'pet.fieldGreeting': 'Powitanie',
   'pet.fieldAccent': 'Kolor akcentu',
   'pet.fieldAccentCustom': 'Własny kolor',
+  'pet.fieldAccentDefault': 'Domyślny kolor akcentu',
   'pet.overlayAria': 'Towarzysz pupil',
   'pet.spriteAria': '{name} — przeciągnij, aby przesunąć, kliknij, aby porozmawiać',
   'pet.spriteTitle': 'Cześć od {name}! Kliknij, aby porozmawiać.',
@@ -1264,6 +1270,7 @@ export const pl: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Ścieżka skopiowana',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

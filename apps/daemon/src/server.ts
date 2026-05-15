@@ -82,6 +82,7 @@ import {
   parseRolloutPhase,
   type SkillCritiquePolicy,
 } from './critique/rollout.js';
+import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { classifyAgentAuthFailure, cursorAuthGuidance } from './runtimes/auth.js';
@@ -2157,6 +2158,17 @@ function resolveChatRunShutdownGraceMs() {
   return Math.max(0, Math.floor(raw));
 }
 
+function resolveAcpStageTimeoutMs(): number | undefined {
+  // Per-stage silence watchdog for ACP chat sessions. Defaults are owned by
+  // `attachAcpSession` in acp.ts; this resolver only applies when an operator
+  // sets `OD_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
+  // outer chat inactivity watchdog so an oversized override doesn't get
+  // clamped to 1ms by Node's signed-32-bit delay limit.
+  const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return undefined;
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
 export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
@@ -3276,12 +3288,7 @@ export async function startServer({
     // other type (missing key, malformed value) collapses to `null`
     // so the resolver falls through to the env / phase tiers exactly
     // the way it did when the toggle had never been touched.
-    const rawProjectOverride =
-      metadata && typeof metadata === 'object'
-        ? (metadata as { critiqueTheaterEnabled?: unknown }).critiqueTheaterEnabled
-        : undefined;
-    const projectCritiqueOverride: boolean | null =
-      typeof rawProjectOverride === 'boolean' ? rawProjectOverride : null;
+    const projectCritiqueOverride = narrowProjectCritiqueOverride(metadata);
     const critiqueEnabledForRun = isCritiqueEnabled({
       phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
       skillPolicy: skillCritiquePolicy,
@@ -4213,19 +4220,17 @@ export async function startServer({
           typeof projectId === 'string' && projectId ? projectId : null;
         const critiqueBus = {
           emit: (e) => {
+            // Two transports for every critique event: the run-scoped
+            // SSE send back to the originating chat run, plus the
+            // project-scoped fan-out so the Theater mount (subscribed
+            // to /api/projects/:id/events) sees it too. Route the
+            // project fan-out through emitProjectEvent so empty-sink
+            // cleanup and any future broadcast policy (rate limiting,
+            // schema validation, telemetry) apply uniformly across
+            // every project emitter (PerishCode P3 on PR #1338).
             send(e.event, e.data);
             if (critiqueProjectIdForBus) {
-              const sinks = activeProjectEventSinks.get(critiqueProjectIdForBus);
-              if (sinks && sinks.size > 0) {
-                const payload = { ...e.data, type: e.event };
-                for (const sink of Array.from(sinks)) {
-                  try {
-                    sink(payload);
-                  } catch {
-                    sinks.delete(sink);
-                  }
-                }
-              }
+              emitProjectEvent(critiqueProjectIdForBus, { ...e.data, type: e.event });
             }
           },
         };
@@ -4439,6 +4444,7 @@ export async function startServer({
         uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
+      const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
       acpSession = attachAcpSession({
         child,
         prompt: composed,
@@ -4449,6 +4455,7 @@ export async function startServer({
           noteAgentActivity();
           send(event, data);
         },
+        ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame

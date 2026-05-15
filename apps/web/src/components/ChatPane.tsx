@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
@@ -486,6 +487,65 @@ export function ChatPane({
       // right before unmount can leave it stale.
       snapshot(el);
       el.removeEventListener('scroll', onScroll);
+    };
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'chat') return;
+    const el = logRef.current;
+    if (!el) return;
+
+    let followFrame: number | null = null;
+    const followLatestIfPinned = () => {
+      if (!pinnedToBottomRef.current || followFrame !== null) return;
+      followFrame = requestAnimationFrame(() => {
+        followFrame = null;
+        const target = logRef.current;
+        if (!target || !pinnedToBottomRef.current) return;
+        target.scrollTop = target.scrollHeight;
+        setScrolledFromBottom(false);
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(followLatestIfPinned)
+        : null;
+    const observedChildren = new Set<Element>();
+    const syncObservedChildren = () => {
+      if (!resizeObserver) return;
+      const currentChildren = new Set(Array.from(el.children));
+      for (const child of currentChildren) {
+        if (observedChildren.has(child)) continue;
+        resizeObserver.observe(child);
+        observedChildren.add(child);
+      }
+      for (const child of observedChildren) {
+        if (currentChildren.has(child)) continue;
+        resizeObserver.unobserve(child);
+        observedChildren.delete(child);
+      }
+    };
+
+    syncObservedChildren();
+
+    const mutationObserver =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(() => {
+            syncObservedChildren();
+            followLatestIfPinned();
+          })
+        : null;
+    mutationObserver?.observe(el, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      if (followFrame !== null) cancelAnimationFrame(followFrame);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
     };
   }, [tab]);
 
@@ -982,6 +1042,27 @@ function UserMessage({
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    if (!message.content) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    const ok = await copyToClipboard(message.content);
+    if (!ok) return;
+    setCopied(true);
+    copyTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = undefined;
+    }, 2000);
+  }
+
   return (
     <div className="msg user">
       <div className="role">
@@ -1030,7 +1111,20 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content ? <div className="user-text user-bubble">{message.content}</div> : null}
+      {message.content ? (
+        <div className="user-text-wrap">
+          <div className="user-text user-bubble">{message.content}</div>
+          <button
+            type="button"
+            className="ghost user-copy-btn"
+            onClick={handleCopy}
+            aria-label={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
+            title={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={12} />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
