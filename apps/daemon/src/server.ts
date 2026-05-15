@@ -5278,7 +5278,7 @@ export async function startServer({
 
   app.post('/api/restart', async (_req, res) => {
     res.json({ ok: true });
-    setTimeout(() => process.exit(0), 150);
+    setTimeout(() => process.kill(process.pid, 'SIGTERM'), 150);
   });
 
   app.get('/api/auth/keys', async (_req, res) => {
