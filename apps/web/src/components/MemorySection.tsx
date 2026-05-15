@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from 'react';
@@ -284,6 +285,9 @@ export function MemorySection() {
   const [flash, setFlash] = useState<{ kind: FlashKind; key: number } | null>(
     null,
   );
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const editorNameRef = useRef<HTMLInputElement | null>(null);
+  const editingTarget = editing?.id ?? (editing ? 'new' : null);
   // Recent LLM-extraction attempts, newest first. Driven by a one-shot
   // fetch on mount + live SSE updates merged by id so phase transitions
   // (running → success) replace the row in place.
@@ -298,6 +302,12 @@ export function MemorySection() {
     const id = setTimeout(() => setFlash(null), 1800);
     return () => clearTimeout(id);
   }, [flash]);
+
+  useEffect(() => {
+    if (!editingTarget) return;
+    editorRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    editorNameRef.current?.focus({ preventScroll: true });
+  }, [editingTarget]);
 
   const flashLabel = useMemo<Record<FlashKind, string>>(
     () => ({
@@ -679,6 +689,7 @@ export function MemorySection() {
 
       {editing ? (
         <div
+          ref={editorRef}
           className="library-card"
           style={{
             flexDirection: 'column',
@@ -747,6 +758,7 @@ export function MemorySection() {
                   {t('settings.memoryNameLabel')}
                 </label>
                 <input
+                  ref={editorNameRef}
                   type="text"
                   placeholder={t('settings.memoryName')}
                   value={editing.name}

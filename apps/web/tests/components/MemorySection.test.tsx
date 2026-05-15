@@ -8,6 +8,7 @@ import { I18nProvider } from '../../src/i18n';
 
 const originalFetch = globalThis.fetch;
 const originalEventSource = globalThis.EventSource;
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
 
 class StubEventSource {
   url: string;
@@ -51,6 +52,11 @@ describe('MemorySection', () => {
       delete globalThis.EventSource;
     }
     vi.restoreAllMocks();
+    if (originalScrollIntoView) {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+    } else {
+      delete (HTMLElement.prototype as { scrollIntoView?: Element['scrollIntoView'] }).scrollIntoView;
+    }
   });
 
   it('shows the no-provider banner when the latest extraction skipped for missing credentials', async () => {
@@ -225,6 +231,61 @@ describe('MemorySection', () => {
       expect(screen.getByText('✓ Index saved')).toBeTruthy();
     });
     expect(putBodies).toEqual(['# Memory\n\n- Existing bullet\n- New bullet\n']);
+  });
+
+  it('reveals the editor after editing an existing memory entry', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView as Element['scrollIntoView'];
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [
+            {
+              id: 'user_ui_preferences',
+              name: 'UI preferences',
+              description: 'Persistent UI rendering preferences',
+              type: 'user',
+              updatedAt: Date.now(),
+            },
+          ],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/memory/user_ui_preferences') {
+        return new Response(JSON.stringify({
+          entry: {
+            id: 'user_ui_preferences',
+            name: 'UI preferences',
+            description: 'Persistent UI rendering preferences',
+            type: 'user',
+            body: '- Prefer dark mode',
+            updatedAt: Date.now(),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    const entryCard = (await screen.findByText('UI preferences')).closest('.library-card') as HTMLElement;
+    fireEvent.click(within(entryCard).getByTitle('Edit'));
+
+    const nameInput = await screen.findByDisplayValue('UI preferences');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
+    expect(document.activeElement).toBe(nameInput);
   });
 
   it('uses the same expandable affordance for extraction history and memory index', async () => {
