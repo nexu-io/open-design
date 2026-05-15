@@ -49,7 +49,7 @@ export const fr: Dict = {
   'settings.welcomeSubtitle':
     'Choisissez comment vous souhaitez exécuter les générations. Vous pouvez changer cela à tout moment depuis le bouton Paramètres dans la barre supérieure.',
   'settings.kicker': 'Paramètres',
-  'settings.title': 'Exécution et modèle',
+  'settings.title': 'Mode d\'exécution',
   'settings.subtitle': 'Choisissez entre CLI local et BYOK. Votre clé API est stockée uniquement dans ce navigateur.',
   'settings.modeAria': 'Mode d\'exécution',
   'settings.protocolAria': 'Protocole d\'API',
@@ -121,7 +121,7 @@ export const fr: Dict = {
   'settings.apiHint': 'Les appels passent par le proxy du daemon local vers la Base URL définie. La clé est stockée uniquement dans ce navigateur et envoyée avec les requêtes au fournisseur.',
   'settings.skipForNow': 'Passer pour l\'instant',
   'settings.getStarted': 'Commencer',
-  'settings.envConfigure': 'Configurer le mode d\'exécution',
+  'settings.envConfigure': 'Mode d\'exécution',
   'settings.localCli': 'CLI local',
   'settings.anthropicApi': 'API Anthropic',
   'settings.noAgentSelected': 'aucun agent sélectionné',
@@ -132,6 +132,7 @@ export const fr: Dict = {
   'settings.themeSystem': 'Système',
   'settings.themeLight': 'Clair',
   'settings.themeDark': 'Sombre',
+  'settings.agentModelHead': 'Modèle pour :',
   'settings.modelPicker': 'Modèle',
   'settings.reasoningPicker': 'Effort de raisonnement',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const fr: Dict = {
   'settings.runtimePackaged': 'Application empaquetée',
   'settings.runtimeDevelopment': 'Développement',
   'settings.versionUnavailable': 'Les informations de version sont indisponibles lorsque le daemon est hors ligne.',
+  'settings.installLatest': 'Installer la dernière version',
+  'settings.alreadyLatest': 'Vous utilisez la dernière version',
 
   'entry.tabDesigns': 'Designs',
   'entry.tabTemplates': 'Modèles',
@@ -1267,6 +1270,7 @@ export const fr: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Chemin copié',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

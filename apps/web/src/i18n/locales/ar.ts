@@ -49,7 +49,7 @@ export const ar: Dict = {
   'settings.welcomeSubtitle':
     "اختر كيف تريد تشغيل الأجيال. يمكنك تغيير هذا في أي وقت من زر الإعدادات في الشريط العلوي.",
   'settings.kicker': 'الإعدادات',
-  'settings.title': 'التنفيذ والنموذج',
+  'settings.title': 'وضع التنفيذ',
   'settings.subtitle': 'اختر بين CLI المحلي و BYOK. يتم حفظ مفتاح API في هذا المتصفح فقط.',
   'settings.modeAria': 'وضع التنفيذ',
   'settings.protocolAria': 'بروتوكول API',
@@ -121,7 +121,7 @@ export const ar: Dict = {
   'settings.apiHint': 'تُرسل الطلبات عبر وكيل daemon المحلي إلى Base URL الذي تحدده. يُحفظ المفتاح في هذا المتصفح فقط ويُرسل مع طلبات المزود.',
   'settings.skipForNow': 'تخطي الآن',
   'settings.getStarted': 'ابدأ الآن',
-  'settings.envConfigure': 'تكوين وضع التنفيذ',
+  'settings.envConfigure': 'وضع التنفيذ',
   'settings.localCli': 'CLI محلي',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'لم يتم اختيار وكيل',
@@ -132,6 +132,7 @@ export const ar: Dict = {
   'settings.themeSystem': 'النظام',
   'settings.themeLight': 'فاتح',
   'settings.themeDark': 'داكن',
+  'settings.agentModelHead': 'النموذج لـ:',
   'settings.modelPicker': 'النموذج',
   'settings.reasoningPicker': 'جهد التفكير',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const ar: Dict = {
   'settings.runtimePackaged': 'تطبيق معبأ',
   'settings.runtimeDevelopment': 'تطوير',
   'settings.versionUnavailable': 'تفاصيل النسخة غير متوفرة بينما البرنامج الخفي غير متصل.',
+  'settings.installLatest': 'تثبيت الأحدث',
+  'settings.alreadyLatest': 'أنت تستخدم أحدث إصدار',
 
   'entry.tabDesigns': 'التصاميم',
   'entry.tabTemplates': 'قوالب',
@@ -1267,6 +1270,7 @@ export const ar: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ تم نسخ المسار',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

@@ -49,7 +49,7 @@ export const zhTW: Dict = {
   'settings.welcomeSubtitle':
     '選擇你希望使用的執行方式。後續可以隨時從頂端「設定」按鈕中修改。',
   'settings.kicker': '設定',
-  'settings.title': '執行模式與模型',
+  'settings.title': '執行模式',
   'settings.subtitle': '在本機 CLI 與 BYOK 之間選擇。API Key 只儲存在目前瀏覽器中。',
   'settings.modeAria': '執行模式',
   'settings.protocolAria': 'API 協定',
@@ -120,7 +120,7 @@ export const zhTW: Dict = {
   'settings.apiHint': '請求會透過本機 daemon 代理送到你設定的 Base URL。Key 只儲存在目前瀏覽器中，並隨提供方請求送出。',
   'settings.skipForNow': '暫時跳過',
   'settings.getStarted': '開始使用',
-  'settings.envConfigure': '設定執行模式',
+  'settings.envConfigure': '執行模式',
   'settings.localCli': '本機 CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': '尚未選擇代理',
@@ -131,6 +131,7 @@ export const zhTW: Dict = {
   'settings.themeSystem': '系統',
   'settings.themeLight': '淺色',
   'settings.themeDark': '深色',
+  'settings.agentModelHead': '模型：',
   'settings.modelPicker': '模型',
   'settings.reasoningPicker': '推理強度',
   'settings.modelPickerHint':
@@ -193,6 +194,8 @@ export const zhTW: Dict = {
   'settings.runtimePackaged': '已封裝應用程式',
   'settings.runtimeDevelopment': '開發環境',
   'settings.versionUnavailable': '守護程式離線時無法取得版本詳情。',
+  'settings.installLatest': '安裝最新版本',
+  'settings.alreadyLatest': '目前已是最新版本',
 
   // MCP server settings
   'settings.mcpTitle': 'MCP server',
@@ -1169,6 +1172,15 @@ export const zhTW: Dict = {
   'critiqueTheater.replaySpeedInstant': '瞬時',
   'critiqueTheater.replaySpeedLive': '即時',
   'critiqueTheater.replaySpeedFast': '快進',
+  'critiqueTheater.settingsNav': '設計評審團',
+  'critiqueTheater.settingsNavHint': '為代理執行啟用五人設計評審',
+  'critiqueTheater.settingsEnabledLabel': '在代理執行期間顯示設計評審團',
+  'critiqueTheater.settingsEnabledDescription':
+    '啟用後，五人評審面板會在代理產生時同步進行，並在交付前為結果評分。可隨時中斷。',
+  'critiqueTheater.settingsEnabledProjectHint':
+    '已為此專案儲存。此專案的新執行將在伺服器端經過設計評審團。',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    '請開啟專案以將設定持久化至伺服器端。目前僅修改瀏覽器內偏好。',
 
   'pet.title': '寵物',
   'pet.tabBuiltIn': '內建',
@@ -1397,6 +1409,7 @@ export const zhTW: Dict = {
   'settings.memoryFlashSaved': '✓ 已儲存',
   'settings.memoryFlashDeleted': '✓ 已刪除',
   'settings.memoryFlashIndexSaved': '✓ 索引已儲存',
+  'settings.memoryFlashPathCopied': '✓ 路徑已複製',
   'settings.memoryNameLabel': '標題',
   'settings.memoryTypeLabel': '類型',
   'settings.memoryDescLabel': '描述',

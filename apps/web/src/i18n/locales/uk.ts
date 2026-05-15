@@ -49,7 +49,7 @@ export const uk: Dict = {
   'settings.welcomeSubtitle':
     'Виберіть, як ви хочете запускати генерацію. Ви можете змінити це в будь-який час за допомогою кнопки Налаштування в верхній панелі.',
   'settings.kicker': 'Налаштування',
-  'settings.title': 'Виконання та модель',
+  'settings.title': 'Режим виконання',
   'settings.subtitle': 'Виберіть локальний CLI або BYOK. Ваш API-ключ зберігається лише в цьому браузері.',
   'settings.modeAria': 'Режим виконання',
   'settings.protocolAria': 'Протокол API',
@@ -122,7 +122,7 @@ export const uk: Dict = {
   'settings.apiHint': 'Запити надсилаються через локальний проксі daemon до вказаного Base URL. Ключ зберігається лише в цьому браузері й надсилається із запитами до провайдера.',
   'settings.skipForNow': 'Пропустити зараз',
   'settings.getStarted': 'Почати',
-  'settings.envConfigure': 'Налаштування режиму виконання',
+  'settings.envConfigure': 'Режим виконання',
   'settings.localCli': 'Локальний CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'агент не вибран',
@@ -133,6 +133,7 @@ export const uk: Dict = {
   'settings.themeSystem': 'Системна',
   'settings.themeLight': 'Світла',
   'settings.themeDark': 'Темна',
+  'settings.agentModelHead': 'Модель для:',
   'settings.modelPicker': 'Модель',
   'settings.reasoningPicker': 'Інтенсивність міркувань',
   'settings.modelPickerHint':
@@ -196,6 +197,8 @@ export const uk: Dict = {
   'settings.runtimePackaged': 'Упакований додаток',
   'settings.runtimeDevelopment': 'Розробка',
   'settings.versionUnavailable': 'Деталі версії недоступні, поки фоновий процес перебуває в офлайні.',
+  'settings.installLatest': 'Встановити останню версію',
+  'settings.alreadyLatest': 'У вас встановлена остання версія',
 
   'entry.tabDesigns': 'Дизайни',
   'entry.tabTemplates': 'Шаблони',
@@ -1309,6 +1312,7 @@ export const uk: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Шлях скопійовано',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

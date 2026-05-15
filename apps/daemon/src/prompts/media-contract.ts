@@ -181,16 +181,15 @@ reported that exact condition. One failed dispatcher call is enough to
 report the error; do not fan out into alternate execution paths inside
 the same turn.
 
-### All slow renders: handle exit 2 with the generate → wait loop
+### All slow renders: generate → wait loop
 
 Any model whose generation takes longer than ~25s — including **fal flux-pro-ultra,
 fal Veo, fal Sora, Volcengine i2v, hyperframes-html, and anything else with a
-multi-minute pipeline** — causes \`media generate\` to exit with code 2 before the
-result is ready. This is not an error; it is the normal handoff signal.
+multi-minute pipeline** — will not complete within the initial \`media generate\` call.
 
-\`media generate\` dispatches the task daemon-side and polls for up to ~25s. If
-the task finishes within that window it exits 0 with the file result. If not, it
-exits 2 with a \`{taskId, nextSince}\` JSON on stdout. You then drive the render
+\`media generate\` dispatches the task daemon-side and polls for up to ~25s. It
+always exits 0 — either with \`{"file":{...}}\` if the render finished within that
+window, or with \`{"taskId":"..."}\` as a handoff signal. You then drive the render
 to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\`
 in a loop — each call long-polls the daemon for up to 120s. The wait subcommand
 exits with a distinct code per outcome:
@@ -209,19 +208,24 @@ may not be installed):
 \`\`\`bash
 out=\$("$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model flux-pro-ultra --prompt "…")
 ec=\$?
-if [ "\$ec" -ne 0 ] && [ "\$ec" -ne 2 ]; then
+if [ "\$ec" -ne 0 ]; then
   echo "\$out" >&2; exit "\$ec"
 fi
 last=\$(printf '%s\\n' "\$out" | tail -1)
 task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
 since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
 since="\${since:-0}"
-while [ "\$ec" -eq 2 ] && [ -n "\$task_id" ]; do
+while [ -n "\$task_id" ]; do
   out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
   ec=\$?
   last=\$(printf '%s\\n' "\$out" | tail -1)
   since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
   since="\${since:-0}"
+  if [ "\$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "\$ec" -ne 2 ]; then
+    echo "\$out" >&2; exit "\$ec"
+  fi
 done
 # At this point ec is 0 (done) or 5 (failed). Final result on the last stdout line of \$out.
 printf '%s\\n' "\$last"
@@ -234,7 +238,7 @@ waiting silently for a single multi-minute call.
 
 **Always write your shell invocation as the full generate+wait loop above**, even
 for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
-\`veo-3-fal\` take longer. Treat exit 2 as "keep polling, not an error."
+\`veo-3-fal\` take longer. In the wait loop, exit 2 means "keep polling, not an error."
 
 A note on \`fetch failed\` to \`127.0.0.1\`. The OD daemon runs on
 loopback in the same machine that spawned you, so it is essentially
@@ -373,13 +377,16 @@ do **not** narrate a stub as if it were the final result.
    models without a real renderer, and the CLI prints the daemon's
    error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` and \`"$OD_NODE_BIN" "$OD_BIN" media wait\` exit:
-   \`0\` on real success, \`2\` when the task is **still running** and
-   needs another \`wait\` call (see "Long-running renders" above), \`5\`
-   when the daemon accepted the request but the provider call failed
-   (key missing / 4xx / network blip), and \`1–4\` for client / daemon
-   errors. Always check \`$?\` before describing the output. \`2\` is
-   not a failure — it just means "keep polling".
+2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` exits \`0\` for
+   both immediate completion and successful queued/running handoff; inspect
+   the final stdout JSON for either \`file\` or \`taskId\`. \`"$OD_NODE_BIN"
+   "$OD_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
+   task is still **running** and needs another \`wait\` call (see
+   "Long-running renders" above), \`5\` when the daemon accepted the request
+   but the provider call failed (key missing / 4xx / network blip), and
+   \`1–4\` for client / daemon errors. Always check \`$?\` before describing
+   the output. \`2\` from \`media wait\` is not a failure — it just means
+   "keep polling".
 3. **stderr WARN lines.** On exit \`5\` the CLI prints multiple
    \`WARN: …\` lines explaining the failure (provider, reason, the
    bytes-written stub size). Quote the reason in your reply.

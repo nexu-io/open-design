@@ -49,7 +49,7 @@ export const tr: Dict = {
   'settings.welcomeSubtitle':
     "Oluşturmaları nasıl çalıştıracağınızı seçin. Bunu her zaman üst çubuktaki Ayarlar sekmesinden değiştirebilirsiniz.",
   'settings.kicker': 'Ayarlar',
-  'settings.title': 'Çalıştırma & model',
+  'settings.title': 'Yürütme modu',
   'settings.subtitle': 'Yerel CLI ile BYOK arasında seçim yapın. API anahtarınız yalnızca bu tarayıcıda saklanır.',
   'settings.modeAria': 'Çalıştırma modu',
   'settings.protocolAria': 'API protokolü',
@@ -121,7 +121,7 @@ export const tr: Dict = {
   'settings.apiHint': 'İstekler yerel daemon proxy üzerinden ayarladığınız Base URLye gönderilir. Anahtar yalnızca bu tarayıcıda saklanır ve sağlayıcı istekleriyle birlikte gönderilir.',
   'settings.skipForNow': 'Şimdilik atla',
   'settings.getStarted': 'Başla',
-  'settings.envConfigure': 'Yürütme modunu ayarlayın',
+  'settings.envConfigure': 'Yürütme modu',
   'settings.localCli': 'Yerel CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'Ajan seçilmedi',
@@ -132,6 +132,7 @@ export const tr: Dict = {
   'settings.themeSystem': 'Sistem',
   'settings.themeLight': 'Açık',
   'settings.themeDark': 'Koyu',
+  'settings.agentModelHead': 'Model için:',
   'settings.modelPicker': 'Model',
   'settings.reasoningPicker': 'Akıl yürütme eforu',
   'settings.modelPickerHint':
@@ -185,6 +186,8 @@ export const tr: Dict = {
   'settings.runtimePackaged': 'Paketlenmiş uygulama',
   'settings.runtimeDevelopment': 'Geliştirme',
   'settings.versionUnavailable': 'Arka plan servisi devre dışıyken sürüm detayları mevcut değildir.',
+  'settings.installLatest': 'En son sürümü yükle',
+  'settings.alreadyLatest': 'En son sürüme sahipsiniz',
 
   'entry.tabDesigns': 'Tasarımlar',
   'entry.tabTemplates': 'Şablonlar',
@@ -1254,6 +1257,7 @@ export const tr: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Yol kopyalandı',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

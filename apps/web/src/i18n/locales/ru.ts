@@ -49,7 +49,7 @@ export const ru: Dict = {
   'settings.welcomeSubtitle':
     'Выберите, как запускать генерации. Вы можете изменить это в любое время через кнопку Настройки в верхней панели.',
   'settings.kicker': 'Настройки',
-  'settings.title': 'Выполнение и модель',
+  'settings.title': 'Режим выполнения',
   'settings.subtitle': 'Выберите локальный CLI или BYOK. Ваш API-ключ хранится только в этом браузере.',
   'settings.modeAria': 'Режим выполнения',
   'settings.protocolAria': 'Протокол API',
@@ -121,7 +121,7 @@ export const ru: Dict = {
   'settings.apiHint': 'Запросы отправляются через локальный прокси daemon на указанную Base URL. Ключ хранится только в этом браузере и отправляется в запросах к провайдеру.',
   'settings.skipForNow': 'Пропустить сейчас',
   'settings.getStarted': 'Начать',
-  'settings.envConfigure': 'Настроить режим выполнения',
+  'settings.envConfigure': 'Режим выполнения',
   'settings.localCli': 'Локальный CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'агент не выбран',
@@ -132,6 +132,7 @@ export const ru: Dict = {
   'settings.themeSystem': 'Системная',
   'settings.themeLight': 'Светлая',
   'settings.themeDark': 'Тёмная',
+  'settings.agentModelHead': 'Модель для:',
   'settings.modelPicker': 'Модель',
   'settings.reasoningPicker': 'Сложность рассуждений',
   'settings.modelPickerHint':
@@ -194,6 +195,8 @@ export const ru: Dict = {
   'settings.runtimePackaged': 'Упакованное приложение',
   'settings.runtimeDevelopment': 'Разработка',
   'settings.versionUnavailable': 'Сведения о версии недоступны, пока daemon не запущен.',
+  'settings.installLatest': 'Установить последнюю версию',
+  'settings.alreadyLatest': 'У вас установлена последняя версия',
 
   'entry.tabDesigns': 'Дизайны',
   'entry.tabTemplates': 'Шаблоны',
@@ -1308,6 +1311,7 @@ export const ru: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Путь скопирован',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

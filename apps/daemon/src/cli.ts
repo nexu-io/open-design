@@ -399,7 +399,9 @@ async function runMediaGenerate(rawArgs) {
     process.exit(4);
   }
   console.error(`task ${taskId} queued (${accepted.status || 'queued'})`);
-  await pollUntilDoneOrBudget(daemonUrl, taskId, 0);
+  await pollUntilDoneOrBudget(daemonUrl, taskId, 0, {
+    stillRunningExitCode: 0,
+  });
 }
 
 async function runMediaWait(rawArgs) {
@@ -425,11 +427,16 @@ async function runMediaWait(rawArgs) {
   const since = Number.isFinite(Number(flags.since))
     ? Number(flags.since)
     : 0;
-  await pollUntilDoneOrBudget(daemonUrl, taskId, since, 120_000);
+  await pollUntilDoneOrBudget(daemonUrl, taskId, since, { totalBudgetMs: 120_000 });
 }
 
-async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, totalBudgetMs = 25_000) {
+async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
+  const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;
   const perCallTimeoutMs = 4_000;
+  const stillRunningExitCode =
+    typeof options.stillRunningExitCode === 'number'
+      ? options.stillRunningExitCode
+      : 2;
   const startedAt = Date.now();
   const url = `${daemonUrl.replace(/\/$/, '')}/api/media/tasks/${encodeURIComponent(taskId)}/wait`;
 
@@ -519,12 +526,16 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, totalBudgetM
     elapsed: Math.round((Date.now() - startedAt) / 1000),
   };
   process.stdout.write(JSON.stringify(handoff) + '\n');
+  const stillRunningHint =
+    stillRunningExitCode === 0
+      ? 'This is a successful queued/running handoff, not a failure.'
+      : `exit code ${stillRunningExitCode} = still running.`;
   process.stderr.write(
     `task ${taskId} still running after ${handoff.elapsed}s. ` +
       `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
-      `(exit code 2 = still running).\n`,
+      `(${stillRunningHint}).\n`,
   );
-  process.exit(2);
+  process.exit(stillRunningExitCode);
 }
 
 function surfaceFetchError(err, daemonUrl) {

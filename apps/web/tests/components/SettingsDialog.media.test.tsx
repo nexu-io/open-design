@@ -113,10 +113,9 @@ describe('SettingsDialog media providers', () => {
     expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe(
       'https://daemon.example/v1',
     );
-    expect((screen.getByLabelText('Fal.ai Base URL') as HTMLInputElement).value).toBe(
-      'https://queue.fal.run',
-    );
-    expect((screen.getByLabelText('Fal.ai API key') as HTMLInputElement).value).toBe('sk-local-fal');
+    // Fal.ai is a non-integrated (coming-soon) provider and no longer has
+    // editable input fields in the UI; its config is preserved in state via
+    // mergeDaemonMediaProviders (covered by state/config.test.ts).
   });
 
   it('preserves saved media keys when clearing only a non-secret field', async () => {

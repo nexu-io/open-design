@@ -49,7 +49,7 @@ export const ko: Dict = {
   'settings.welcomeSubtitle':
     "생성을 실행할 방법을 선택하세요. 상단 바의 Settings 버튼을 통해 언제든지 변경할 수 있습니다.",
   'settings.kicker': '설정',
-  'settings.title': '실행 및 모델',
+  'settings.title': '실행 모드',
   'settings.subtitle': '로컬 CLI와 BYOK 중에서 선택하세요. API 키는 이 브라우저에만 저장됩니다.',
   'settings.modeAria': '실행 모드',
   'settings.protocolAria': 'API 프로토콜',
@@ -121,7 +121,7 @@ export const ko: Dict = {
   'settings.apiHint': '요청은 로컬 daemon 프록시를 통해 설정한 Base URL로 전송됩니다. 키는 이 브라우저에만 저장되며 제공자 요청과 함께 전송됩니다.',
   'settings.skipForNow': '지금은 건너뛰기',
   'settings.getStarted': '시작하기',
-  'settings.envConfigure': '실행 모드 구성',
+  'settings.envConfigure': '실행 모드',
   'settings.localCli': '로컬 CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': '선택된 에이전트 없음',
@@ -132,6 +132,7 @@ export const ko: Dict = {
   'settings.themeSystem': '시스템',
   'settings.themeLight': '라이트',
   'settings.themeDark': '다크',
+  'settings.agentModelHead': '모델:',
   'settings.modelPicker': '모델',
   'settings.reasoningPicker': '추론 (Reasoning)',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const ko: Dict = {
   'settings.runtimePackaged': '패키징된 앱',
   'settings.runtimeDevelopment': '개발 (Development)',
   'settings.versionUnavailable': '데몬이 오프라인 상태일 때는 버전 세부 정보를 확인할 수 없습니다.',
+  'settings.installLatest': '최신 버전 설치',
+  'settings.alreadyLatest': '최신 버전입니다',
 
   'entry.tabDesigns': '디자인',
   'entry.tabTemplates': '템플릿',
@@ -1080,6 +1083,15 @@ export const ko: Dict = {
   'critiqueTheater.replaySpeedInstant': '즉시',
   'critiqueTheater.replaySpeedLive': '실시간',
   'critiqueTheater.replaySpeedFast': '빠르게',
+  'critiqueTheater.settingsNav': '디자인 배심원단',
+  'critiqueTheater.settingsNavHint': '에이전트 실행 중 5인 패널 리뷰',
+  'critiqueTheater.settingsEnabledLabel': '에이전트 실행 중 디자인 배심원단 표시',
+  'critiqueTheater.settingsEnabledDescription':
+    '활성화하면 에이전트가 생성하는 동안 5인 패널 리뷰가 함께 진행되며 출하 전에 결과에 점수를 매깁니다. 언제든지 중단할 수 있습니다.',
+  'critiqueTheater.settingsEnabledProjectHint':
+    '이 프로젝트에 저장되었습니다. 새 실행은 서버 측에서 디자인 배심원단을 통과합니다.',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    '서버 측에 저장하려면 프로젝트를 여세요. 지금은 브라우저 내 환경설정만 변경됩니다.',
 
   'pet.title': '펫',
   'pet.tabBuiltIn': '내장',
@@ -1308,6 +1320,7 @@ export const ko: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ 경로 복사됨',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

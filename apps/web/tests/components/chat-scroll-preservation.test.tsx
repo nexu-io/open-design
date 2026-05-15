@@ -37,10 +37,12 @@ import type { ChatMessage } from '../../src/types';
 type Geom = { scrollHeight: number; clientHeight: number; scrollTop: number };
 let geom: Geom;
 let rafCallbacks: FrameRequestCallback[] = [];
+let resizeCallbacks: ResizeObserverCallback[] = [];
 let savedDescriptors: Record<
   'scrollTop' | 'scrollHeight' | 'clientHeight',
   PropertyDescriptor | undefined
 >;
+let originalResizeObserver: typeof ResizeObserver | undefined;
 
 function isChatLog(el: HTMLElement): boolean {
   return typeof el?.classList?.contains === 'function' && el.classList.contains('chat-log');
@@ -49,9 +51,24 @@ function isChatLog(el: HTMLElement): boolean {
 beforeEach(() => {
   geom = { scrollHeight: 0, clientHeight: 0, scrollTop: 0 };
   rafCallbacks = [];
+  resizeCallbacks = [];
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     rafCallbacks.push(callback);
     return rafCallbacks.length;
+  });
+  originalResizeObserver = globalThis.ResizeObserver;
+  class MockResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      resizeCallbacks.push(callback);
+    }
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: MockResizeObserver,
   });
   savedDescriptors = {
     scrollTop: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop'),
@@ -85,6 +102,16 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   rafCallbacks = [];
+  resizeCallbacks = [];
+  if (originalResizeObserver) {
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: originalResizeObserver,
+    });
+  } else {
+    delete (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver;
+  }
   for (const key of ['scrollTop', 'scrollHeight', 'clientHeight'] as const) {
     const original = savedDescriptors[key];
     if (original) {
@@ -144,6 +171,16 @@ async function flushFrame() {
   });
 }
 
+async function triggerResize() {
+  await act(async () => {
+    const callbacks = [...resizeCallbacks];
+    callbacks.forEach((callback) =>
+      callback([], {} as ResizeObserver),
+    );
+    await Promise.resolve();
+  });
+}
+
 describe('chat scroll behavior', () => {
   it('does not render the removed comments tab beside chat', () => {
     renderChatPane(sampleMessages);
@@ -180,6 +217,23 @@ describe('chat scroll behavior', () => {
     // Auto-scroll must respect the user's pause: scrollTop stays where
     // they put it instead of snapping to the new scrollHeight.
     expect(geom.scrollTop).toBe(510);
+  });
+
+  it('keeps following the latest content when the pinned chat DOM grows after render', async () => {
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    renderChatPane(sampleMessages);
+    await flushFrame();
+
+    expect(geom.scrollTop).toBe(1000);
+
+    // A message body can grow after the messages effect has already run
+    // (markdown/tool rows/forms/images/layout). If the user was pinned to
+    // the bottom, that DOM resize must still carry them to the latest turn.
+    setGeom({ scrollHeight: 1200 });
+    await triggerResize();
+    await flushFrame();
+
+    expect(geom.scrollTop).toBe(1200);
   });
 
   it('lands new conversation at its own bottom when switching conversations', async () => {

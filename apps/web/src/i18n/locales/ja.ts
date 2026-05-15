@@ -49,7 +49,7 @@ export const ja: Dict = {
   'settings.welcomeSubtitle':
     '生成の実行方法を選んでください。この設定はいつでもトップバーの設定ボタンから変更できます。',
   'settings.kicker': '設定',
-  'settings.title': '実行モデル',
+  'settings.title': '実行モード',
   'settings.subtitle': 'ローカル CLI と BYOK のどちらを使うか選択します。API キーはこのブラウザ内にのみ保存されます。',
   'settings.modeAria': '実行モード',
   'settings.protocolAria': 'API プロトコル',
@@ -121,7 +121,7 @@ export const ja: Dict = {
   'settings.apiHint': 'リクエストはローカル daemon プロキシ経由で設定した Base URL に送信されます。キーはこのブラウザ内にのみ保存され、プロバイダーへのリクエスト時に送信されます。',
   'settings.skipForNow': '今はスキップ',
   'settings.getStarted': '始める',
-  'settings.envConfigure': '実行モードを設定',
+  'settings.envConfigure': '実行モード',
   'settings.localCli': 'ローカル CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'エージェント未選択',
@@ -132,6 +132,7 @@ export const ja: Dict = {
   'settings.themeSystem': 'システム',
   'settings.themeLight': 'ライト',
   'settings.themeDark': 'ダーク',
+  'settings.agentModelHead': 'モデル：',
   'settings.modelPicker': 'モデル',
   'settings.reasoningPicker': '推論の強さ',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const ja: Dict = {
   'settings.runtimePackaged': 'パッケージ版アプリ',
   'settings.runtimeDevelopment': '開発環境',
   'settings.versionUnavailable': 'daemon がオフラインの間はバージョン詳細を取得できません。',
+  'settings.installLatest': '最新版をインストール',
+  'settings.alreadyLatest': '最新バージョンです',
 
   'entry.tabDesigns': 'デザイン',
   'entry.tabTemplates': 'テンプレート',
@@ -967,6 +970,15 @@ export const ja: Dict = {
   'critiqueTheater.replaySpeedInstant': '即時',
   'critiqueTheater.replaySpeedLive': 'ライブ',
   'critiqueTheater.replaySpeedFast': '高速',
+  'critiqueTheater.settingsNav': 'デザイン陪審',
+  'critiqueTheater.settingsNavHint': 'エージェント実行中の 5 名パネルレビュー',
+  'critiqueTheater.settingsEnabledLabel': 'エージェント実行中にデザイン陪審を表示',
+  'critiqueTheater.settingsEnabledDescription':
+    '有効にすると、エージェント生成中に 5 名のパネルレビューが並走し、出荷前に結果を採点します。いつでも中断できます。',
+  'critiqueTheater.settingsEnabledProjectHint':
+    'このプロジェクトに保存しました。今後の実行はサーバ側でデザイン陪審を通ります。',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    'サーバ側に保存するにはプロジェクトを開いてください。それまではブラウザ内の設定のみ変更されます。',
 
   'pet.title': 'ペット',
   'pet.tabBuiltIn': '組み込み',
@@ -1195,6 +1207,7 @@ export const ja: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ パスをコピーしました',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

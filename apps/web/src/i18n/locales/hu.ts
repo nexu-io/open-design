@@ -49,7 +49,7 @@ export const hu: Dict = {
   'settings.welcomeSubtitle':
     'Válaszd ki, hogyan szeretnéd futtatni a generálásokat. Ezt bármikor módosíthatod a felső sáv Beállítások gombjával.',
   'settings.kicker': 'Beállítások',
-  'settings.title': 'Végrehajtás és modell',
+  'settings.title': 'Végrehajtási mód',
   'settings.subtitle': 'Válassz helyi CLI és BYOK között. Az API-kulcs csak ebben a böngészőben tárolódik.',
   'settings.modeAria': 'Végrehajtási mód',
   'settings.protocolAria': 'API protokoll',
@@ -121,7 +121,7 @@ export const hu: Dict = {
   'settings.apiHint': 'A hívások a helyi daemon proxyn keresztül mennek a beállított Base URL-re. A kulcs csak ebben a böngészőben tárolódik, és a szolgáltatói kérésekkel együtt kerül elküldésre.',
   'settings.skipForNow': 'Most kihagyom',
   'settings.getStarted': 'Kezdjük',
-  'settings.envConfigure': 'Végrehajtási mód beállítása',
+  'settings.envConfigure': 'Végrehajtási mód',
   'settings.localCli': 'Helyi CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'nincs kiválasztott ügynök',
@@ -132,6 +132,7 @@ export const hu: Dict = {
   'settings.themeSystem': 'Rendszer',
   'settings.themeLight': 'Világos',
   'settings.themeDark': 'Sötét',
+  'settings.agentModelHead': 'Modell ehhez:',
   'settings.modelPicker': 'Modell',
   'settings.reasoningPicker': 'Gondolkodási erőfeszítés',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const hu: Dict = {
   'settings.runtimePackaged': 'Csomagolt alkalmazás',
   'settings.runtimeDevelopment': 'Fejlesztői',
   'settings.versionUnavailable': 'A verzió adatai nem érhetők el, amíg a daemon offline.',
+  'settings.installLatest': 'Legújabb verzió telepítése',
+  'settings.alreadyLatest': 'Ön már a legújabb verziót használja',
 
   'entry.tabDesigns': 'Tervek',
   'entry.tabTemplates': 'Sablonok',
@@ -1277,6 +1280,7 @@ export const hu: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ Útvonal másolva',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',
