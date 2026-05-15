@@ -54,6 +54,10 @@ export interface BuildMcpInstallPayloadInputs {
   /** First valid MCP key, when available. Included in the payload so
    *  the UI can pre-fill Authorization headers in remote snippets. */
   mcpKey?: string;
+  /** Externally routable base URL (from OD_PUBLIC_BASE_URL). When set,
+   *  overrides the IP-derived remoteUrl so Cloudflare Tunnel / reverse
+   *  proxy users get the correct public address. */
+  publicBaseUrl?: string;
 }
 
 export interface McpInstallPayload {
@@ -122,10 +126,12 @@ export function buildMcpInstallPayload(
         '--daemon-url',
         `http://127.0.0.1:${inputs.port}`,
       ];
-  // Resolve the connectable remote host: 0.0.0.0 / :: are listen-all
-  // addresses that cannot be connected to — use the machine hostname
-  // instead so remote MCP clients get a working URL.
-  const remoteHost = resolveRemoteHost(inputs.bindHost);
+  // Build the remote MCP URL. OD_PUBLIC_BASE_URL wins (Cloudflare Tunnel /
+  // reverse proxy), otherwise derive from the bind host with interface
+  // detection for Tailscale (100.x.x.x) and LAN IPs.
+  const remoteUrl = inputs.publicBaseUrl
+    ? `${inputs.publicBaseUrl}/mcp`
+    : `http://${resolveRemoteHost(inputs.bindHost)}:${inputs.port}/mcp`;
   return {
     command: inputs.execPath,
     args,
@@ -144,23 +150,59 @@ export function buildMcpInstallPayload(
     buildHint: hints.length ? hints.join(' ') : null,
     ...(inputs.networkExposed ? {
       networkExposed: true,
-      remoteUrl: `http://${remoteHost}:${inputs.port}/mcp`,
+      remoteUrl,
       ...(inputs.mcpKey ? { remoteMcpKey: inputs.mcpKey } : {}),
     } : {}),
   };
 }
 
-/** Map a bind host to a connectable address for remote clients. */
+/** Map a bind host to a connectable address for remote clients.
+ *
+ *  Priority: Tailscale CGNAT range (100.64/10) → private LAN → hostname.
+ *  Only invoked when bindHost is 0.0.0.0 / ::; specific IPs are returned
+ *  as-is, and loopback falls back to 127.0.0.1. */
 function resolveRemoteHost(bindHost?: string): string {
   if (!bindHost || bindHost === '127.0.0.1' || bindHost === '::1' || bindHost === 'localhost') {
     return '127.0.0.1';
   }
-  // 0.0.0.0 and [::] mean "listen on all interfaces" — not connectable.
-  // Fall back to the machine hostname so LAN / Tailscale clients can
-  // connect. Users can override with OD_PUBLIC_BASE_URL if they need a
-  // specific IP.
   if (bindHost === '0.0.0.0' || bindHost === '::') {
-    return os.hostname();
+    return findTailscaleIp() ?? findLanIp() ?? os.hostname();
   }
   return bindHost;
+}
+
+/** Return the first Tailscale IP (100.64.0.0/10 CGNAT range) found on any
+ *  network interface. Works on macOS (utun*) and Linux (tailscale0). */
+function findTailscaleIp(): string | undefined {
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family !== 'IPv4' || addr.internal) continue;
+      const second = parseInt(addr.address.split('.')[1] ?? '', 10);
+      if (addr.address.startsWith('100.') && second >= 64 && second <= 127) {
+        return addr.address;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Return the first private LAN IPv4 address (RFC 1918). */
+function findLanIp(): string | undefined {
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family !== 'IPv4' || addr.internal) continue;
+      const ip = addr.address;
+      const b = parseInt(ip.split('.')[1] ?? '', 10);
+      if (
+        ip.startsWith('192.168.') ||
+        ip.startsWith('10.') ||
+        (ip.startsWith('172.') && b >= 16 && b <= 31)
+      ) {
+        return ip;
+      }
+    }
+  }
+  return undefined;
 }

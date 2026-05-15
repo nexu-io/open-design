@@ -99,6 +99,15 @@ describe('auth-middleware', () => {
     }
   });
 
+  it('allows MCP OAuth callback without auth', async () => {
+    const middleware = createAuthMiddleware(defaultOptions());
+    const req = mockReq({ path: '/api/mcp/oauth/callback', method: 'GET' });
+    const res = mockRes();
+    let called = false;
+    await middleware(req, res, () => { called = true; });
+    expect(called).toBe(true);
+  });
+
   it('rejects request without auth when enabled', async () => {
     const middleware = createAuthMiddleware(defaultOptions());
     const req = mockReq();

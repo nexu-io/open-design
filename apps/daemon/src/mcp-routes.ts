@@ -101,6 +101,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       networkExposed: isNetworkExposed(effectiveHost ?? '127.0.0.1'),
       bindHost: effectiveHost ?? '127.0.0.1',
       ...(apiKey ? { mcpKey: apiKey } : {}),
+      publicBaseUrl: process.env.OD_PUBLIC_BASE_URL,
     });
   }
 
@@ -114,7 +115,15 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     }
     const payload = await computeInstallPayload();
     installInfoCache = { t: now, payload };
-    res.json(payload);
+    // Decrypt the API key on every request (not cached) to avoid keeping
+    // plaintext secrets in memory longer than necessary.
+    let apiKey: string | undefined;
+    const mcpKeys = await listMcpKeys(RUNTIME_DATA_DIR);
+    if (mcpKeys.length > 0 && mcpKeys[0]) {
+      const revealed = await revealMcpKey(RUNTIME_DATA_DIR, mcpKeys[0].id);
+      if (revealed) apiKey = revealed.key;
+    }
+    res.json({ ...payload, ...(apiKey ? { apiKey, mcpKey: apiKey, remoteMcpKey: apiKey } : {}) });
   });
 
   // Codex one-click install. Codex CLI exposes `codex mcp add/remove/get`,

@@ -23,6 +23,7 @@ function isPublicPath(path: string, method: string): boolean {
   if (path === "/api/auth/login" && method === "POST") return true;
   if (path === "/api/auth/logout" && method === "POST") return true;
   if (path === "/api/auth/reset-keys" && method === "POST") return true;
+  if (path === "/api/mcp/oauth/callback" && method === "GET") return true;
   return false;
 }
 
