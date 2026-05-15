@@ -107,6 +107,10 @@ export interface CreateInput {
   metadata: ProjectMetadata;
 }
 
+export type ImportClaudeDesignOutcome =
+  | { ok: true }
+  | { ok: false; message?: string; details?: string };
+
 interface Props {
   skills: SkillSummary[];
   designSystems: DesignSystemSummary[];
@@ -115,7 +119,9 @@ interface Props {
   onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput & { requestId?: string }) => void;
-  onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportClaudeDesign?: (
+    file: File,
+  ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   // Web fallback: the user types an absolute baseDir into the manual
   // input and the renderer POSTs `/api/import/folder` itself. Browser
   // builds have no `shell.openPath` surface, so the renderer naming a
@@ -194,6 +200,9 @@ export function NewProjectPanel({
   const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importZipError, setImportZipError] = useState<
+    { message: string; details?: string } | null
+  >(null);
   const [baseDir, setBaseDir] = useState('');
   const [importingFolder, setImportingFolder] = useState(false);
   // PR #974 round-4 (mrcfps): pickAndImport now returns structured
@@ -540,8 +549,19 @@ export function NewProjectPanel({
     ev.target.value = '';
     if (!file || !onImportClaudeDesign) return;
     setImporting(true);
+    setImportZipError(null);
     try {
-      await onImportClaudeDesign(file);
+      const result = await onImportClaudeDesign(file);
+      if (result?.ok === false) {
+        setImportZipError({
+          message: result.message ? `Import failed: ${result.message}` : 'Import failed',
+          details: result.details,
+        });
+      }
+    } catch (err) {
+      setImportZipError({
+        message: err instanceof Error ? `Import failed: ${err.message}` : 'Import failed',
+      });
     } finally {
       setImporting(false);
     }
@@ -878,6 +898,14 @@ export function NewProjectPanel({
         ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
+      {importZipError ? (
+        <Toast
+          message={importZipError.message}
+          details={importZipError.details ?? null}
+          ttlMs={6000}
+          onDismiss={() => setImportZipError(null)}
+        />
+      ) : null}
       {importFolderError ? (
         <Toast
           message={importFolderError.message}

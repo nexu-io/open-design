@@ -18,7 +18,12 @@ import type {
   SkillSummary,
 } from '../types';
 import { Icon } from './Icon';
-import { NewProjectPanel, type CreateInput, type CreateTab } from './NewProjectPanel';
+import {
+  NewProjectPanel,
+  type CreateInput,
+  type CreateTab,
+  type ImportClaudeDesignOutcome,
+} from './NewProjectPanel';
 
 interface Props {
   open: boolean;
@@ -32,7 +37,9 @@ interface Props {
   connectorsLoading?: boolean;
   loading?: boolean;
   onCreate: (input: CreateInput) => void;
-  onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportClaudeDesign?: (
+    file: File,
+  ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
   onClose: () => void;
