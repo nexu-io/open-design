@@ -393,6 +393,197 @@ systemctl --user enable --now open-design
 journalctl --user -u open-design -f
 ```
 
+## Connecting external devices
+
+When the daemon is bound to a non-loopback address, other devices on your network (or tailnet / tunnel) can access it. The steps differ by topology.
+
+### Step 1 — Find the server IP
+
+The **server IP** is whatever you passed to `--host` (or set in `OD_BIND_HOST` / Settings → Network). If you used `0.0.0.0`, you need the machine's actual IP on the relevant interface.
+
+```bash
+# LAN IP (the IP your router assigned)
+ifconfig | grep "inet " | grep -v 127.0.0.1
+# macOS: look for en0 (Wi-Fi) or en1 (Ethernet)
+# Linux: ip addr show | grep "inet " | grep -v 127.0.0.1
+
+# Tailscale IP
+tailscale ip -4
+# e.g. 100.64.0.1
+```
+
+### Step 2 — Configure access on the server
+
+Choose the topology that matches your setup:
+
+| Topology | Daemon bind | IP allowlist | Auth |
+|----------|-------------|--------------|------|
+| LAN only | `0.0.0.0` | `192.168.x.0/24` | API key required |
+| Tailscale direct | `100.64.x.x` | (not needed) | Optional |
+| Tailscale `0.0.0.0` | `0.0.0.0` | `100.64.0.0/10` | API key required |
+| Cloudflare / ngrok | `127.0.0.1` | (not needed) | API key required |
+
+```bash
+# Generate an API key (needed for LAN and tunnel topologies)
+od auth key generate --label "my-phone"
+# => od_abc123...
+```
+
+### Step 3 — Connect from the client device
+
+#### Mobile browser / tablet
+
+1. Find your device's IP to confirm network connectivity:
+   - **iOS**: Settings → Wi-Fi → tap the network name → IP Address
+   - **Android**: Settings → Network → Wi-Fi → tap the network → IP Address
+2. Open `http://<server-ip>:7456` in the browser
+3. Enter the API key on the login page
+
+#### Mobile app (MCP client)
+
+MCP clients (e.g. Claude mobile app, Cursor, etc.) connect to `http://<server-ip>:7456/sse` using an MCP key:
+
+1. Generate an MCP key: Settings → MCP server → Generate
+2. Copy the config snippet (includes the key and URL)
+3. Paste into your MCP client's config
+
+The URL in the config snippet depends on the topology:
+- **LAN**: `http://192.168.x.x:7456/sse`
+- **Tailscale**: `http://100.64.x.x:7456/sse` or `https://my-od.tail1234.ts.net/sse`
+- **Cloudflare/ngrok**: `https://<tunnel-url>/sse`
+
+#### Desktop app on another machine
+
+The Open Design desktop app on a different machine discovers the daemon via the URL you provide at launch:
+
+1. Start the desktop app
+2. When prompted, enter `http://<server-ip>:7456`
+3. If API key auth is active, you'll be redirected to the login page
+
+#### CLI / curl
+
+```bash
+# Test connectivity first
+curl http://<server-ip>:7456/api/health
+
+# Authenticated request
+curl -H "Authorization: Bearer od_abc123..." http://<server-ip>:7456/api/projects
+```
+
+### Finding client IPs for the allowlist
+
+`OD_ALLOWED_HOSTS` controls which **client** IPs can connect. You need the IP of each connecting device, not the server.
+
+```bash
+# On the server — watch for incoming connections (useful for debugging)
+# The daemon logs blocked IPs when allowlist is active:
+# [od] ip-allowlist: blocked 192.168.1.42 (not in [192.168.1.0/24])
+```
+
+| How to find | Device |
+|-------------|--------|
+| `ifconfig` / `ip addr` | Any device's terminal |
+| Settings → Wi-Fi → IP Address | iOS / Android |
+| `tailscale ip -4` | Tailscale device |
+| Check router's DHCP client list | Any LAN device |
+
+Instead of listing individual IPs, prefer CIDR ranges to cover all devices on your network:
+
+| Range | Includes |
+|-------|----------|
+| `192.168.0.0/16` | All `192.168.x.x` devices |
+| `192.168.1.0/24` | Only `192.168.1.x` devices |
+| `100.64.0.0/10` | All Tailscale devices |
+| `10.0.0.0/8` | All `10.x.x.x` devices |
+
+## Verifying connectivity
+
+After setup, verify each layer works:
+
+### 1. Health check (no auth required)
+
+```bash
+# From the server
+curl http://127.0.0.1:7456/api/health
+# => {"status":"ok"}
+
+# From the client device
+curl http://<server-ip>:7456/api/health
+# => {"status":"ok"}
+```
+
+If this fails, the daemon is not reachable — check `--host`, firewall rules, and network connectivity.
+
+### 2. Auth check
+
+```bash
+# Without key — should return 401
+curl http://<server-ip>:7456/api/projects
+# => {"error":"UNAUTHORIZED","reason":"API key required"}
+
+# With key — should return 200
+curl -H "Authorization: Bearer od_abc123..." http://<server-ip>:7456/api/projects
+# => [...]
+```
+
+### 3. Browser check
+
+Open `http://<server-ip>:7456` in a browser:
+
+- **No key / unauthenticated**: redirected to `/login`
+- **After login**: the main Open Design UI loads
+
+### 4. Tailscale-specific checks
+
+```bash
+# On the server — verify Tailscale is running
+tailscale status
+# Should show your devices
+
+# On the client — verify it can reach the server's Tailscale IP
+ping 100.64.0.1
+curl http://100.64.0.1:7456/api/health
+
+# Check that regular LAN devices CANNOT reach Tailscale-bound daemon
+# (from a non-Tailscale device)
+curl http://100.64.0.1:7456/api/health
+# => should timeout (Tailscale IP is not routable from regular LAN)
+```
+
+### 5. Cloudflare Tunnel checks
+
+```bash
+# After starting the tunnel, cloudflared prints the URL:
+# https://some-uuid.trycloudflare.com
+
+# Test from any device (including outside your network)
+curl https://some-uuid.trycloudflare.com/api/health
+# => {"status":"ok"}
+
+# Authenticated
+curl -H "Authorization: Bearer od_abc123..." https://some-uuid.trycloudflare.com/api/projects
+```
+
+For permanent tunnels, verify DNS resolution:
+
+```bash
+dig od.yourdomain.com
+# Should resolve to Cloudflare IPs
+```
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Connection refused | Daemon not running or wrong port | Check `od` is running, verify `--port` |
+| Timeout from LAN | Firewall blocking | Allow port in OS firewall (macOS: System Settings → Network → Firewall) |
+| Timeout from Tailscale | Tailscale not running on client | Run `tailscale up` on the client device |
+| 403 Forbidden | IP not in allowlist | Add device IP or CIDR to `OD_ALLOWED_HOSTS` |
+| 401 Unauthorized | Missing or invalid API key | Generate key: `od auth key generate` |
+| 302 redirect to /login | Browser request without session | Log in with API key on the login page |
+| CORS error in browser | Missing origin in allowlist | Set `OD_ALLOWED_ORIGINS=https://your-origin` |
+| Health check works but API doesn't | Auth layer is active (expected) | Add `Authorization: Bearer od_...` header |
+
 ## Security recommendations
 
 1. **Use Tailscale** for cross-network access. Bind to the Tailscale IP and skip API keys entirely — identity-based auth + WireGuard encryption is stronger than shared secrets on an open LAN.
