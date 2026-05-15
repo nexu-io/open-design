@@ -188,7 +188,7 @@ function parseBlocks(input: string): Block[] {
       buf.push(next);
       i++;
     }
-    out.push({ kind: 'p', text: buf.join(' ') });
+    out.push({ kind: 'p', text: buf.join('\n') });
   }
   return out;
 }

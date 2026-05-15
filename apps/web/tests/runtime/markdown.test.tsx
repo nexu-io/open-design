@@ -116,4 +116,12 @@ describe('renderMarkdown', () => {
     const out = html('first line\nsecond line');
     expect(out).toContain('<p class="md-p">first line<br/>second line</p>');
   });
+
+  it('keeps hard breaks and still starts a table on the next line', () => {
+    const md = ['first line', 'second line', '| a | b |', '|---|---|', '| 1 | 2 |'].join('\n');
+    const out = html(md);
+    expect(out).toContain('first line<br/>second line');
+    expect(out).toContain('<div class="md-table-wrap">');
+    expect(out).toContain('<table class="md-table">');
+  });
 });
