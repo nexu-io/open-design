@@ -24,19 +24,30 @@ on:
 permissions:
   contents: read
 
+# Serialize all bot runs across the whole repository. The bot reads-then-writes
+# `data/contributor-card-state.json`; running events in parallel let multiple
+# runs read the same SHA and only the first PUT succeeds, the rest fail with a
+# 409 Conflict. They also let the same actor receive duplicate cards when a
+# burst of events fires before the first state write lands. A single repo-wide
+# group with `cancel-in-progress: false` queues runs and processes them in
+# arrival order, so every event still gets a card and the state file is never
+# stale on write.
 concurrency:
-  group: contributor-card-bot-${{ github.event.pull_request.number || github.event.issue.number || github.event.discussion.number || github.run_id }}
+  group: contributor-card-bot
   cancel-in-progress: false
 
 jobs:
   recognize:
     name: Render and post contributor card
     if: |
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
-      (github.event_name == 'issues' && github.event.action == 'opened') ||
-      (github.event_name == 'discussion' && github.event.action == 'created') ||
-      (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
-      github.event_name == 'workflow_dispatch'
+      github.repository == 'nexu-io/open-design' &&
+      (
+        (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+        (github.event_name == 'issues' && github.event.action == 'opened') ||
+        (github.event_name == 'discussion' && github.event.action == 'created') ||
+        (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 8
 

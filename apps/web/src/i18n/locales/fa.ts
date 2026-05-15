@@ -49,7 +49,7 @@ export const fa: Dict = {
   'settings.welcomeSubtitle':
     'نحوه اجرای تولیدات را انتخاب کنید. می‌توانید هر زمان از دکمه تنظیمات در نوار بالا این را تغییر دهید.',
   'settings.kicker': 'تنظیمات',
-  'settings.title': 'اجرا و مدل',
+  'settings.title': 'حالت اجرا',
   'settings.subtitle': 'بین CLI محلی و BYOK انتخاب کنید. کلید API فقط در همین مرورگر ذخیره می‌شود.',
   'settings.modeAria': 'حالت اجرا',
   'settings.protocolAria': 'پروتکل API',
@@ -121,7 +121,7 @@ export const fa: Dict = {
   'settings.apiHint': 'درخواست‌ها از طریق پراکسی daemon محلی به Base URL تنظیم‌شده ارسال می‌شوند. کلید فقط در همین مرورگر ذخیره می‌شود و همراه درخواست‌های ارائه‌دهنده فرستاده می‌شود.',
   'settings.skipForNow': 'فعلاً رد کنید',
   'settings.getStarted': 'شروع کنید',
-  'settings.envConfigure': 'پیکربندی حالت اجرا',
+  'settings.envConfigure': 'حالت اجرا',
   'settings.localCli': 'CLI محلی',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': 'هیچ عاملی انتخاب نشده',
@@ -132,6 +132,7 @@ export const fa: Dict = {
   'settings.themeSystem': 'سیستم',
   'settings.themeLight': 'روشن',
   'settings.themeDark': 'تاریک',
+  'settings.agentModelHead': 'مدل برای:',
   'settings.modelPicker': 'مدل',
   'settings.reasoningPicker': 'سطح استدلال',
   'settings.modelPickerHint':
@@ -195,6 +196,8 @@ export const fa: Dict = {
   'settings.runtimePackaged': 'برنامه بسته‌بندی‌شده',
   'settings.runtimeDevelopment': 'توسعه',
   'settings.versionUnavailable': 'تا وقتی daemon آفلاین است جزئیات نسخه در دسترس نیست.',
+  'settings.installLatest': 'نصب جدیدترین',
+  'settings.alreadyLatest': 'شما آخرین نسخه را دارید',
 
   'entry.tabDesigns': 'طرح‌ها',
   'entry.tabTemplates': 'قالب‌ها',
@@ -608,6 +611,8 @@ export const fa: Dict = {
   'chat.scrollToLatest': 'اسکرول به آخرین',
   'chat.you': 'شما',
   'chat.openFile': 'باز کردن {name}',
+  'chat.copyPrompt': 'کپی پرامپت',
+  'chat.copyDone': 'کپی شد!',
   'chat.composerPlaceholder':
     'طرح مورد نظر خود را توصیف کنید — تصاویر را بچسبانید یا رها کنید، یا @ برای مرجع فایل یا مهارت…',
   'chat.composerHint':
@@ -1113,6 +1118,7 @@ export const fa: Dict = {
   'pet.fieldGreeting': 'پیام خوش‌آمد',
   'pet.fieldAccent': 'رنگ تأکید',
   'pet.fieldAccentCustom': 'رنگ سفارشی',
+  'pet.fieldAccentDefault': 'رنگ تأکید پیش‌فرض',
   'pet.overlayAria': 'همراه حیوان خانگی',
   'pet.spriteAria': '{name} — برای جابجایی بکشید، برای گفت‌وگو کلیک کنید',
   'pet.spriteTitle': 'سلام از طرف {name}! برای گفت‌وگو کلیک کنید.',
@@ -1308,6 +1314,7 @@ export const fa: Dict = {
   'settings.memoryFlashSaved': '✓ Memory saved',
   'settings.memoryFlashDeleted': '✓ Memory deleted',
   'settings.memoryFlashIndexSaved': '✓ Index saved',
+  'settings.memoryFlashPathCopied': '✓ مسیر کپی شد',
   'settings.memoryNameLabel': 'Title',
   'settings.memoryTypeLabel': 'Type',
   'settings.memoryDescLabel': 'Description',

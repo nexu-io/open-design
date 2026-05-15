@@ -184,11 +184,13 @@ the same turn.
 ### Long-running renders (Volcengine i2v, hyperframes-html): generate → wait loop
 
 \`media generate\` no longer blocks for the full render. It dispatches
-the task daemon-side and returns within ~1s with a \`{taskId}\`. You then
+the task daemon-side and either returns the finished \`{"file":{...}}\`
+or returns a successful queued/running handoff with \`{taskId}\`. You then
 drive the render to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\` in
 a loop — each call long-polls the daemon for up to 25s, well below your
-shell tool's default 30s timeout. The wait subcommand exits with a
-distinct code per outcome:
+shell tool's default 30s timeout. \`media generate\` treats the handoff as
+exit \`0\` so the first dispatch does not look like a failed shell call.
+The wait subcommand exits with a distinct code per outcome:
 
 - \`exit 0\` — terminal **done**. Final stdout line is \`{"file":{...}}\`.
 - \`exit 5\` — terminal **failed**. Stderr carries the upstream error.
@@ -203,18 +205,22 @@ The pattern in your shell tool:
 \`\`\`bash
 out=$("$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model … --image …)
 ec=$?
-if [ "$ec" -ne 0 ] && [ "$ec" -ne 2 ]; then
+if [ "$ec" -ne 0 ]; then
   echo "$out" >&2; exit "$ec"
 fi
 task_id=$(printf '%s\\n' "$out" | tail -1 | jq -r '.taskId // empty')
 since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // 0')
-while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
+while [ -n "$task_id" ]; do
   out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
   since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
+  if [ "$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "$ec" -ne 2 ]; then
+    echo "$out" >&2; exit "$ec"
+  fi
 done
-# At this point ec is 0 (done) or 5 (failed). Final result on the last
-# stdout line of \`out\`.
+# At this point ec is 0 (done). Final result on the last stdout line of \`out\`.
 \`\`\`
 
 Each \`generate\` and \`wait\` call lasts at most ~25s, so the agent
@@ -325,13 +331,16 @@ do **not** narrate a stub as if it were the final result.
    models without a real renderer, and the CLI prints the daemon's
    error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` and \`"$OD_NODE_BIN" "$OD_BIN" media wait\` exit:
-   \`0\` on real success, \`2\` when the task is **still running** and
-   needs another \`wait\` call (see "Long-running renders" above), \`5\`
-   when the daemon accepted the request but the provider call failed
-   (key missing / 4xx / network blip), and \`1–4\` for client / daemon
-   errors. Always check \`$?\` before describing the output. \`2\` is
-   not a failure — it just means "keep polling".
+2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` exits \`0\` for
+   both immediate completion and successful queued/running handoff; inspect
+   the final stdout JSON for either \`file\` or \`taskId\`. \`"$OD_NODE_BIN"
+   "$OD_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
+   task is still **running** and needs another \`wait\` call (see
+   "Long-running renders" above), \`5\` when the daemon accepted the request
+   but the provider call failed (key missing / 4xx / network blip), and
+   \`1–4\` for client / daemon errors. Always check \`$?\` before describing
+   the output. \`2\` from \`media wait\` is not a failure — it just means
+   "keep polling".
 3. **stderr WARN lines.** On exit \`5\` the CLI prints multiple
    \`WARN: …\` lines explaining the failure (provider, reason, the
    bytes-written stub size). Quote the reason in your reply.

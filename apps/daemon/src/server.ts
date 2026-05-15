@@ -38,7 +38,11 @@ import { installFromTarget, uninstallById, sanitizeRepoName } from './library-in
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
-import { listDesignSystems, readDesignSystem, readDesignSystemAssets } from './design-systems.js';
+import {
+  listDesignSystems,
+  readDesignSystem,
+  resolveDesignSystemAssets,
+} from './design-systems.js';
 import {
   composeMemoryBody,
   deleteMemoryEntry,
@@ -78,6 +82,7 @@ import {
   parseRolloutPhase,
   type SkillCritiquePolicy,
 } from './critique/rollout.js';
+import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { classifyAgentAuthFailure, cursorAuthGuidance } from './runtimes/auth.js';
@@ -2153,6 +2158,17 @@ function resolveChatRunShutdownGraceMs() {
   return Math.max(0, Math.floor(raw));
 }
 
+function resolveAcpStageTimeoutMs(): number | undefined {
+  // Per-stage silence watchdog for ACP chat sessions. Defaults are owned by
+  // `attachAcpSession` in acp.ts; this resolver only applies when an operator
+  // sets `OD_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
+  // outer chat inactivity watchdog so an oversized override doesn't get
+  // clamped to 1ms by Node's signed-32-bit delay limit.
+  const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return undefined;
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
 export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
@@ -3189,12 +3205,17 @@ export async function startServer({
     let designSystemBody;
     let designSystemTitle;
     // Compiled (tokens.css + components.html) form of the active brand.
-    // Gated by `OD_DESIGN_TOKEN_CHANNEL` while the experiment is in the
-    // smoke-test phase: flag-off keeps the daemon byte-equivalent to the
-    // pre-PR-C path; flag-on appends the tokens contract + reference
-    // fixture to the system prompt for any brand that ships those files
-    // (today: `default` and `kami`; every other brand falls through
-    // silently because the files are absent).
+    // Default-on as of PR-D — every chat that picks a brand with
+    // `tokens.css` + `components.html` siblings (today: `default` and
+    // `kami`; every other brand falls through silently because the
+    // files are absent) gets the structured token contract appended to
+    // the system prompt automatically.
+    //
+    // `OD_DESIGN_TOKEN_CHANNEL=0` is the kill switch: it forces the
+    // daemon back to the pre-PR-C DESIGN.md-only path for every brand,
+    // including the structured ones. Any other value (unset, `1`,
+    // `true`, etc.) keeps the new default. Drift on prose-only brands
+    // is pinned by `scripts/check-design-system-flag-parity.ts`.
     let designSystemTokensCss;
     let designSystemFixtureHtml;
     if (effectiveDesignSystemId) {
@@ -3205,23 +3226,17 @@ export async function startServer({
         (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
         undefined;
-      if (process.env.OD_DESIGN_TOKEN_CHANNEL === '1') {
-        // Try built-in dir first, then user-installed dir, mirroring the
-        // DESIGN.md fallback chain above. Any individual file may be
-        // missing (e.g. tokens.css present, components.html absent); the
-        // composer gates each block independently.
-        const builtIn = await readDesignSystemAssets(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId);
-        const installed = builtIn.tokensCss && builtIn.fixtureHtml
-          ? builtIn
-          : {
-              tokensCss: builtIn.tokensCss
-                ?? (await readDesignSystemAssets(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)).tokensCss,
-              fixtureHtml: builtIn.fixtureHtml
-                ?? (await readDesignSystemAssets(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)).fixtureHtml,
-            };
-        designSystemTokensCss = installed.tokensCss;
-        designSystemFixtureHtml = installed.fixtureHtml;
-      }
+      // Single seam: env gate + built-in→user-installed fallback chain
+      // live together inside `resolveDesignSystemAssets` so the whole
+      // server-side asset-resolution path can be tested end-to-end
+      // from real disk fixtures (see `tests/design-system-assets.test.ts`).
+      const assets = await resolveDesignSystemAssets(
+        effectiveDesignSystemId,
+        DESIGN_SYSTEMS_DIR,
+        USER_DESIGN_SYSTEMS_DIR,
+      );
+      designSystemTokensCss = assets.tokensCss;
+      designSystemFixtureHtml = assets.fixtureHtml;
     }
 
     const template =
@@ -3273,12 +3288,7 @@ export async function startServer({
     // other type (missing key, malformed value) collapses to `null`
     // so the resolver falls through to the env / phase tiers exactly
     // the way it did when the toggle had never been touched.
-    const rawProjectOverride =
-      metadata && typeof metadata === 'object'
-        ? (metadata as { critiqueTheaterEnabled?: unknown }).critiqueTheaterEnabled
-        : undefined;
-    const projectCritiqueOverride: boolean | null =
-      typeof rawProjectOverride === 'boolean' ? rawProjectOverride : null;
+    const projectCritiqueOverride = narrowProjectCritiqueOverride(metadata);
     const critiqueEnabledForRun = isCritiqueEnabled({
       phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
       skillPolicy: skillCritiquePolicy,
@@ -4210,19 +4220,17 @@ export async function startServer({
           typeof projectId === 'string' && projectId ? projectId : null;
         const critiqueBus = {
           emit: (e) => {
+            // Two transports for every critique event: the run-scoped
+            // SSE send back to the originating chat run, plus the
+            // project-scoped fan-out so the Theater mount (subscribed
+            // to /api/projects/:id/events) sees it too. Route the
+            // project fan-out through emitProjectEvent so empty-sink
+            // cleanup and any future broadcast policy (rate limiting,
+            // schema validation, telemetry) apply uniformly across
+            // every project emitter (PerishCode P3 on PR #1338).
             send(e.event, e.data);
             if (critiqueProjectIdForBus) {
-              const sinks = activeProjectEventSinks.get(critiqueProjectIdForBus);
-              if (sinks && sinks.size > 0) {
-                const payload = { ...e.data, type: e.event };
-                for (const sink of Array.from(sinks)) {
-                  try {
-                    sink(payload);
-                  } catch {
-                    sinks.delete(sink);
-                  }
-                }
-              }
+              emitProjectEvent(critiqueProjectIdForBus, { ...e.data, type: e.event });
             }
           },
         };
@@ -4436,6 +4444,7 @@ export async function startServer({
         uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
+      const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
       acpSession = attachAcpSession({
         child,
         prompt: composed,
@@ -4446,6 +4455,7 @@ export async function startServer({
           noteAgentActivity();
           send(event, data);
         },
+        ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame

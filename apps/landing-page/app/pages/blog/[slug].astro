@@ -1,6 +1,18 @@
 ---
+/*
+ * Blog post — `/blog/[slug]/`
+ *
+ * Static route generated from the `blog` Content Collection. Renders one
+ * post with a narrow editorial body, magazine-style masthead, and a back
+ * link to the index. Reuses landing CSS variables and the shared header.
+ */
 import { getCollection, render } from 'astro:content';
-import BlogLayout from '../../_components/blog-layout.astro';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Header, type HeaderProps } from '../../_components/header';
+import SeoHead from '../../_components/seo-head.astro';
+import { getCatalogCounts } from '../../_lib/catalog';
+import '../../globals.css';
 
 export async function getStaticPaths() {
   const posts = await getCollection('blog');
@@ -12,31 +24,281 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
-const title = `${post.data.title} · Open Design Blog`;
-const description = post.data.summary;
-const canonical = new URL(Astro.url.pathname, Astro.site).toString();
-const formatDate = new Intl.DateTimeFormat('en', { dateStyle: 'long' });
+const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
+
+const counts = await getCatalogCounts();
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    brandHref: '/',
+    active: 'blog',
+  }),
+);
+
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 ---
 
-<BlogLayout title={title} description={description} canonical={canonical}>
-  <article class="container blog-article">
-    <p class="blog-eyebrow">
-      <a class="blog-link" href="/blog/">Blog</a> / {post.data.category}
-    </p>
-    <h1 class="blog-title">{post.data.title}</h1>
-    <p class="blog-summary">{post.data.summary}</p>
-    <div class="blog-meta blog-meta-block">
-      <span>{formatDate.format(post.data.date)}</span>
-      <span>{post.data.readingTime}</span>
-    </div>
+<!doctype html>
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead
+      kind='article'
+      title={post.data.title}
+      description={post.data.summary}
+      pathname={Astro.url.pathname}
+      datePublished={post.data.date}
+      category={post.data.category}
+    />
+  </head>
+  <body>
+    <Fragment set:html={headerHtml} />
 
-    <div class="blog-prose">
-      <Content />
-    </div>
+    <main class='post-shell'>
+      <article class='post'>
+        <div class='container'>
+          <a class='post-back' href='/blog/'>← Back to Blog</a>
 
-    <footer class="blog-footer">
-      <a class="blog-link" href="/blog/">← More posts</a>
-      <a class="blog-link" href="/">Home</a>
-    </footer>
-  </article>
-</BlogLayout>
+          <h1 class='post-title'>{post.data.title}</h1>
+
+          <p class='post-summary'>{post.data.summary}</p>
+
+          <div class='post-meta'>
+            <span>{fmtDate(post.data.date)}</span>
+            <span>{post.data.readingTime} min read</span>
+            <span>{post.data.category}</span>
+          </div>
+
+          <hr class='post-rule' />
+
+          <div class='post-body'>
+            <Content />
+          </div>
+
+          <hr class='post-rule' />
+
+          <div class='post-foot'>
+            <a class='post-back' href='/blog/'>← Back to Blog</a>
+            <a
+              class='post-github'
+              href={sourceUrl}
+              target='_blank'
+              rel='noreferrer noopener'
+            >
+              View source on GitHub ↗
+            </a>
+          </div>
+        </div>
+      </article>
+    </main>
+
+    <style>
+      .post-shell {
+        position: relative;
+        z-index: 2;
+      }
+      .post {
+        padding: 88px 0 96px;
+      }
+      .post .container {
+        max-width: 860px;
+      }
+      .post-back {
+        display: inline-block;
+        font-family: var(--sans);
+        font-size: 13px;
+        color: var(--ink-mute);
+        text-decoration: none;
+        margin-bottom: 36px;
+        transition: color 160ms ease;
+      }
+      .post-back:hover {
+        color: var(--coral);
+      }
+      .post-title {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(40px, 5vw, 64px);
+        line-height: 1.08;
+        letter-spacing: -0.018em;
+        color: var(--ink);
+        margin: 18px 0 24px;
+      }
+      .post-summary {
+        font-family: var(--serif);
+        font-style: italic;
+        font-weight: 400;
+        font-size: clamp(19px, 1.8vw, 22px);
+        line-height: 1.45;
+        color: var(--ink-soft);
+        max-width: 56ch;
+        margin-bottom: 28px;
+      }
+      .post-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+        margin-bottom: 32px;
+      }
+      .post-meta span + span::before {
+        content: '';
+        display: inline-block;
+        width: 14px;
+        height: 1px;
+        margin-right: 10px;
+        vertical-align: middle;
+        background: var(--line);
+      }
+      .post-rule {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 0 0 40px;
+      }
+      .post-body {
+        font-family: var(--body);
+        font-size: 17px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+      .post-body :global(p) {
+        margin: 0 0 1.4em;
+      }
+      .post-body :global(h2) {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(26px, 2.6vw, 32px);
+        line-height: 1.2;
+        letter-spacing: -0.012em;
+        color: var(--ink);
+        margin: 2.2em 0 0.8em;
+      }
+      .post-body :global(h3) {
+        font-family: var(--sans);
+        font-weight: 600;
+        font-size: 18px;
+        color: var(--ink);
+        margin: 1.8em 0 0.6em;
+      }
+      .post-body :global(a) {
+        color: var(--coral);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        text-decoration-thickness: 1px;
+      }
+      .post-body :global(strong) {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .post-body :global(em) {
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .post-body :global(ul),
+      .post-body :global(ol) {
+        padding-left: 1.4em;
+        margin: 0 0 1.4em;
+      }
+      .post-body :global(li) {
+        margin-bottom: 0.4em;
+      }
+      .post-body :global(blockquote) {
+        border-left: 2px solid var(--coral);
+        padding-left: 18px;
+        margin: 1.6em 0;
+        font-family: var(--serif);
+        font-style: italic;
+        color: var(--ink-soft);
+      }
+      .post-body :global(code) {
+        font-family: var(--mono);
+        font-size: 0.9em;
+        background: var(--paper-warm);
+        padding: 2px 6px;
+        border-radius: 3px;
+        color: var(--ink);
+      }
+      .post-body :global(pre) {
+        background: var(--bone);
+        border: 1px solid var(--line-soft);
+        padding: 20px 22px;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin: 1.4em 0;
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .post-body :global(pre code) {
+        background: transparent;
+        padding: 0;
+        font-size: inherit;
+      }
+      .post-body :global(table) {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.4em 0;
+        font-family: var(--body);
+        font-size: 15px;
+      }
+      .post-body :global(th),
+      .post-body :global(td) {
+        border-bottom: 1px solid var(--line-soft);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .post-body :global(th) {
+        font-family: var(--sans);
+        font-weight: 600;
+        color: var(--ink);
+        border-bottom: 1px solid var(--line);
+      }
+      .post-body :global(hr) {
+        border: 0;
+        border-top: 1px solid var(--line-soft);
+        margin: 2em 0;
+      }
+
+      .post-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-top: 8px;
+      }
+      .post-foot .post-back {
+        margin-bottom: 0;
+      }
+      .post-github {
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        text-decoration: none;
+        transition: color 160ms ease;
+      }
+      .post-github:hover {
+        color: var(--coral);
+      }
+      @media (max-width: 760px) {
+        .post {
+          padding: 56px 0 72px;
+        }
+        .post-foot {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </body>
+</html>

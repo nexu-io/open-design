@@ -47,7 +47,7 @@ export const zhCN: Dict = {
   'settings.welcomeSubtitle':
     '选择你希望使用的执行方式。后续可以随时从顶部「设置」按钮中修改。',
   'settings.kicker': '设置',
-  'settings.title': '执行模式与模型',
+  'settings.title': '执行模式',
   'settings.subtitle': '在本机 CLI 与 BYOK 之间选择。API Key 只保存在当前浏览器中。',
   'settings.modeAria': '执行模式',
   'settings.protocolAria': 'API 协议',
@@ -127,7 +127,7 @@ export const zhCN: Dict = {
   'settings.apiHint': '请求会通过本机 daemon 代理发送到你设置的 Base URL。Key 只保存在当前浏览器中，并随提供方请求发送。',
   'settings.skipForNow': '暂时跳过',
   'settings.getStarted': '开始使用',
-  'settings.envConfigure': '配置执行模式',
+  'settings.envConfigure': '执行模式',
   'settings.localCli': '本机 CLI',
   'settings.anthropicApi': 'Anthropic API',
   'settings.noAgentSelected': '尚未选择代理',
@@ -138,6 +138,7 @@ export const zhCN: Dict = {
   'settings.themeSystem': '系统',
   'settings.themeLight': '浅色',
   'settings.themeDark': '深色',
+  'settings.agentModelHead': '模型：',
   'settings.modelPicker': '模型',
   'settings.reasoningPicker': '推理强度',
   'settings.modelPickerHint':
@@ -200,6 +201,8 @@ export const zhCN: Dict = {
   'settings.runtimePackaged': '已打包应用',
   'settings.runtimeDevelopment': '开发环境',
   'settings.versionUnavailable': '守护进程离线时无法获取版本详情。',
+  'settings.installLatest': '安装最新版本',
+  'settings.alreadyLatest': '当前为最新版本',
 
   // MCP server settings
   'settings.mcpTitle': 'MCP server',
@@ -672,6 +675,8 @@ export const zhCN: Dict = {
   'chat.scrollToLatest': '滚动到最新',
   'chat.you': '你',
   'chat.openFile': '打开 {name}',
+  'chat.copyPrompt': '复制提示词',
+  'chat.copyDone': '已复制！',
   'chat.composerPlaceholder': '描述你想要的设计 — 可粘贴/拖入图片，或用 @ 引用文件或技能…',
   'chat.composerHint': '⌘/Ctrl + Enter 发送 · 可粘贴图片 · @ 引用文件或技能 · / 调出命令',
   'chat.cliSettingsTitle': 'CLI 与模型设置',
@@ -1215,6 +1220,15 @@ export const zhCN: Dict = {
   'critiqueTheater.replaySpeedInstant': '瞬时',
   'critiqueTheater.replaySpeedLive': '实时',
   'critiqueTheater.replaySpeedFast': '快进',
+  'critiqueTheater.settingsNav': '设计评审团',
+  'critiqueTheater.settingsNavHint': '为代理运行启用五人设计评审',
+  'critiqueTheater.settingsEnabledLabel': '在代理运行期间显示设计评审团',
+  'critiqueTheater.settingsEnabledDescription':
+    '启用后，五人评审面板会在代理生成时同时显示，并在交付前对结果评分。你可以随时中断。',
+  'critiqueTheater.settingsEnabledProjectHint':
+    '已为该项目保存。该项目的新运行将在服务端经过设计评审团。',
+  'critiqueTheater.settingsEnabledNoProjectHint':
+    '打开项目后此设置才会服务端持久化；目前仅修改浏览器本地偏好。',
 
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',
@@ -1247,6 +1261,7 @@ export const zhCN: Dict = {
   'pet.fieldGreeting': '问候语',
   'pet.fieldAccent': '主题色',
   'pet.fieldAccentCustom': '自定义颜色',
+  'pet.fieldAccentDefault': '默认主题色',
   'pet.overlayAria': '宠物伙伴',
   'pet.spriteAria': '{name} — 拖动可移动，点击与它互动',
   'pet.spriteTitle': '{name} 来打招呼啦！点击聊天。',
@@ -1445,6 +1460,7 @@ export const zhCN: Dict = {
   'settings.memoryFlashSaved': '✓ 已保存',
   'settings.memoryFlashDeleted': '✓ 已删除',
   'settings.memoryFlashIndexSaved': '✓ 索引已保存',
+  'settings.memoryFlashPathCopied': '✓ 路径已复制',
   'settings.memoryNameLabel': '标题',
   'settings.memoryTypeLabel': '类型',
   'settings.memoryDescLabel': '描述',

@@ -223,9 +223,10 @@ describe('composeSystemPrompt', () => {
   // (DESIGN.md) into a machine-readable contract (tokens.css) plus a worked
   // fixture (components.html) lives in PR-C. The composer exposes two new
   // optional inputs (`designSystemTokensCss`, `designSystemFixtureHtml`)
-  // that the daemon populates only when `OD_DESIGN_TOKEN_CHANNEL=1` is set
-  // AND the active brand actually ships those files. These tests pin the
-  // injection shape so the prompt structure cannot drift silently.
+  // that the daemon populates by default for every brand that ships
+  // those files (PR-D flipped the env gate to default-on, with
+  // `OD_DESIGN_TOKEN_CHANNEL=0` as the kill switch). These tests pin
+  // the injection shape so the prompt structure cannot drift silently.
   describe('design-system token + fixture injection (#PR-C)', () => {
     const sampleTokensCss = ':root {\n  --bg: #ffffff;\n  --fg: #111111;\n  --accent: #0050d8;\n}';
     const sampleFixtureHtml = '<!doctype html>\n<html lang="en">\n  <body><button class="btn btn-primary">Subscribe</button></body>\n</html>';

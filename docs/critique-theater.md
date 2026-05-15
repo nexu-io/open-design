@@ -93,13 +93,17 @@ The feature is gated by a four-tier resolver on the daemon side:
    lets the panel run only at M2 and above.
 2. **Per-project override.** The web's `setCritiqueTheaterEnabled`
    setter (Phase 15.2) writes the toggle to `localStorage` for the
-   in-session UI and, when called with a `projectId`, also
-   round-trips the value through the existing
-   `PATCH /api/projects/:id` settings endpoint as
-   `metadata.critiqueTheaterEnabled`. The daemon reads that field on
-   the next spawn. A dedicated Settings panel control that wires the
-   `projectId`-aware call lands in a follow-up PR; integrators
-   embedding the Theater can already call the setter directly today.
+   in-session UI and, when called with a `projectId`, performs a
+   read-merge-write through the existing `PATCH /api/projects/:id`
+   settings endpoint: GET the current project, merge
+   `critiqueTheaterEnabled` into the existing metadata blob, PATCH
+   the merged object so other metadata fields (`kind`, `templateId`,
+   `linkedDirs`, etc.) survive. If the prefetch GET fails the setter
+   skips the PATCH entirely instead of stomping the row. The daemon
+   reads `metadata.critiqueTheaterEnabled` on the next spawn. A
+   dedicated Settings panel control that wires the `projectId`-aware
+   call lands in a follow-up PR; integrators embedding the Theater
+   can already call the setter directly today.
 3. **`OD_CRITIQUE_ENABLED` env override.** Power-user lane / CI
    fixtures.
 4. **Rollout phase default** (lowest priority). M0 / M1 = `false`,

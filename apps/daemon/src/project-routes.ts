@@ -63,7 +63,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, skillId, designSystemId, pendingPrompt, metadata, customInstructions } =
+      const { id, name, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
       if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -101,6 +101,24 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof customInstructions === 'string' && customInstructions.length > 5000) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
       }
+      if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
+      }
+      const projectMetadata =
+        metadata && typeof metadata === 'object'
+          ? {
+              ...metadata,
+              ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(Array.isArray(metadata.linkedDirs)
+                ? (() => {
+                    const v = validateLinkedDirs(metadata.linkedDirs);
+                    return v.error ? {} : { linkedDirs: v.dirs };
+                  })()
+                : {}),
+            }
+          : skipDiscoveryBrief === true
+            ? { skipDiscoveryBrief: true }
+            : null;
       const now = Date.now();
       const project = insertProject(db, {
         id,
@@ -108,18 +126,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         skillId: skillId ?? null,
         designSystemId: designSystemId ?? null,
         pendingPrompt: pendingPrompt || null,
-        metadata:
-          metadata && typeof metadata === 'object'
-            ? {
-                ...metadata,
-                ...(Array.isArray(metadata.linkedDirs)
-                  ? (() => {
-                      const v = validateLinkedDirs(metadata.linkedDirs);
-                      return v.error ? {} : { linkedDirs: v.dirs };
-                    })()
-                  : {}),
-              }
-            : null,
+        metadata: projectMetadata,
         customInstructions:
           typeof customInstructions === 'string'
             ? customInstructions

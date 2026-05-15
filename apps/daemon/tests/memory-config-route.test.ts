@@ -154,4 +154,138 @@ describe('PATCH /api/memory/config apiKey three-state handling', () => {
     expect(extraction?.provider).toBe('anthropic');
     expect(extraction?.apiKey ?? '').toBe('');
   });
+
+  it('clears the extraction override when the patch sends extraction: null', async () => {
+    await writeMemoryConfig(dataDir, {
+      extraction: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-stored-secret',
+        baseUrl: 'https://api.openai.com',
+      },
+    });
+
+    const res = await patchConfig({
+      extraction: null,
+    });
+    expect(res.status).toBe(200);
+
+    const extraction = await readStoredExtraction();
+    expect(extraction).toBeNull();
+  });
+
+  it('preserves the stored azure apiVersion when the patch omits the field', async () => {
+    await writeMemoryConfig(dataDir, {
+      extraction: {
+        provider: 'azure',
+        model: 'gpt-4.1-mini',
+        apiKey: 'azure-secret',
+        baseUrl: 'https://example.openai.azure.com',
+        apiVersion: '2025-01-01-preview',
+      },
+    });
+
+    const res = await patchConfig({
+      extraction: {
+        provider: 'azure',
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://example.openai.azure.com',
+      },
+    });
+    expect(res.status).toBe(200);
+
+    const extraction = await readStoredExtraction();
+    expect(extraction?.provider).toBe('azure');
+    expect(extraction?.apiVersion).toBe('2025-01-01-preview');
+  });
+
+  it('clears the stored azure apiVersion when the patch sends an explicit empty string', async () => {
+    await writeMemoryConfig(dataDir, {
+      extraction: {
+        provider: 'azure',
+        model: 'gpt-4.1-mini',
+        apiKey: 'azure-secret',
+        baseUrl: 'https://example.openai.azure.com',
+        apiVersion: '2025-01-01-preview',
+      },
+    });
+
+    const res = await patchConfig({
+      extraction: {
+        provider: 'azure',
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://example.openai.azure.com',
+        apiVersion: '',
+      },
+    });
+    expect(res.status).toBe(200);
+
+    const extraction = await readStoredExtraction();
+    expect(extraction?.provider).toBe('azure');
+    expect(extraction?.apiVersion ?? '').toBe('');
+  });
+
+  it('updates the enabled flag independently of extraction settings', async () => {
+    await writeMemoryConfig(dataDir, {
+      enabled: true,
+      extraction: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-stored-secret',
+        baseUrl: 'https://api.openai.com',
+      },
+    });
+
+    const res = await patchConfig({ enabled: false });
+    expect(res.status).toBe(200);
+
+    const json = await res.json() as {
+      enabled: boolean;
+      extraction: { provider: string; apiKeyConfigured: boolean } | null;
+    };
+    expect(json.enabled).toBe(false);
+    expect(json.extraction).toMatchObject({
+      provider: 'openai',
+      apiKeyConfigured: true,
+    });
+
+    const extraction = await readStoredExtraction();
+    expect(extraction?.provider).toBe('openai');
+  });
+
+  it('returns a masked extraction config without leaking the apiKey on GET /api/memory', async () => {
+    await writeMemoryConfig(dataDir, {
+      extraction: {
+        provider: 'azure',
+        model: 'gpt-4.1-mini',
+        apiKey: 'azure-secret-1234',
+        baseUrl: 'https://example.openai.azure.com',
+        apiVersion: '2025-01-01-preview',
+      },
+    });
+
+    const res = await fetch(`${baseUrl}/api/memory`);
+    expect(res.status).toBe(200);
+
+    const json = await res.json() as {
+      extraction: {
+        provider: string;
+        model: string;
+        baseUrl: string;
+        apiVersion: string;
+        apiKeyTail: string;
+        apiKeyConfigured: boolean;
+        apiKey?: string;
+      } | null;
+    };
+    expect(json.extraction).toMatchObject({
+      provider: 'azure',
+      model: 'gpt-4.1-mini',
+      baseUrl: 'https://example.openai.azure.com',
+      apiVersion: '2025-01-01-preview',
+      apiKeyTail: '1234',
+      apiKeyConfigured: true,
+    });
+    expect(json.extraction && 'apiKey' in json.extraction).toBe(false);
+  });
 });
