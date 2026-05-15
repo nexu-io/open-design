@@ -669,6 +669,7 @@ describe('ProjectView daemon cleanup', () => {
         config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
         agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
         skills={[]}
+        designTemplates={[]}
         designSystems={[]}
         daemonLive
         onModeChange={() => {}}
@@ -737,6 +738,7 @@ describe('ProjectView daemon cleanup', () => {
         config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
         agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
         skills={[]}
+        designTemplates={[]}
         designSystems={[]}
         daemonLive
         onModeChange={() => {}}
@@ -783,6 +785,114 @@ describe('ProjectView daemon cleanup', () => {
 
     onProjectsRefresh.mockClear();
     onRunStatus('canceled');
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
+
+  it('delays projects refresh in new-run onRunStatus terminal events until saveMessage resolves', async () => {
+    const onProjectsRefresh = vi.fn();
+    let capturedStreamOptions:
+      | {
+          handlers: { onError?: (err: Error) => void };
+          onRunStatus?: (status: string) => void;
+          onRunCreated?: (runId: string) => void;
+        }
+      | null = null;
+
+    const pendingResolvers: Array<() => void> = [];
+    saveMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pendingResolvers.push(resolve);
+        }),
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async (options: typeof capturedStreamOptions) => {
+      capturedStreamOptions = options;
+      return new Promise<void>(() => {});
+    });
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(capturedChatPaneProps.current).not.toBeNull());
+    const props = capturedChatPaneProps.current as Record<string, unknown> | null;
+    if (!props || typeof props.onSend !== 'function') {
+      throw new Error('Expected ChatPane onSend to be available');
+    }
+
+    await (props.onSend as (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => Promise<void>)(
+      'hello',
+      [],
+      [],
+    );
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const streamOptions = capturedStreamOptions as
+      | {
+          handlers: { onError?: (err: Error) => void };
+          onRunStatus?: (status: string) => void;
+          onRunCreated?: (runId: string) => void;
+        }
+      | null;
+    if (!streamOptions || typeof streamOptions.onRunStatus !== 'function') {
+      throw new Error('Expected streamViaDaemon to capture onRunStatus');
+    }
+    const onRunStatus = streamOptions.onRunStatus;
+
+    // Drain any saveMessage resolvers already queued by mount/send so we
+    // only observe the resolvers produced by the terminal status persist.
+    while (pendingResolvers.length > 0) {
+      const resolver = pendingResolvers.shift();
+      resolver?.();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    onProjectsRefresh.mockClear();
+    saveMessage.mockClear();
+
+    onRunStatus('failed');
+
+    // saveMessage for the terminal status is still pending — refresh must wait.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(saveMessage).toHaveBeenCalled();
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+
+    if (pendingResolvers.length === 0) {
+      throw new Error('Expected terminal saveMessage to be invoked');
+    }
+    for (const resolve of pendingResolvers.splice(0)) resolve();
+
     await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
 
     view.unmount();
