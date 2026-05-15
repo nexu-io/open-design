@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n';
 import { fetchPromptTemplate } from '../providers/registry';
+import { derivePluginSourceLinks } from '../runtime/plugin-source';
 import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
@@ -18,6 +19,15 @@ interface Props {
 // prompt body is fetched lazily so the gallery list stays cheap.
 export function PromptTemplatePreviewModal({ summary, onClose }: Props) {
   const t = useT();
+  const sourceLinks = useMemo(() => derivePluginSourceLinks({
+    source: `github:${summary.source.repo}`,
+    sourceKind: 'github',
+    fsPath: summary.source.repo,
+    manifest: {
+      author: summary.source.author ? { name: summary.source.author, url: summary.source.url } : undefined,
+      homepage: summary.source.url,
+    },
+  }), [summary.source.author, summary.source.repo, summary.source.url]);
   const [detail, setDetail] = useState<PromptTemplateDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -201,6 +211,15 @@ export function PromptTemplatePreviewModal({ summary, onClose }: Props) {
               rel="noopener noreferrer"
             >
               {t('promptTemplates.openSource')}
+            </a>
+          ) : null}
+          {sourceLinks.contributeUrl ? (
+            <a
+              href={sourceLinks.contributeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Contribute
             </a>
           ) : null}
         </footer>
