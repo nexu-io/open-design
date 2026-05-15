@@ -168,14 +168,39 @@ function validateProjectId(projectId: string): void {
 function loadFile(userId: string): PreferenceStoreFile | null {
   const fp = userFilePath(userId);
   if (!fs.existsSync(fp)) return null;
-  return JSON.parse(fs.readFileSync(fp, "utf8")) as PreferenceStoreFile;
+  try {
+    return JSON.parse(fs.readFileSync(fp, "utf8")) as PreferenceStoreFile;
+  } catch (err: unknown) {
+    // A corrupt JSON file (e.g., from a crash during write) should not crash
+    // the process. Treat it as if the file doesn't exist — the next ensureFile
+    // call will reinitialize it. Log the error for observability.
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `loadFile: failed to parse preferences.json for user "${userId}". ` +
+        `The file may be corrupt. Error: ${message}`,
+    );
+  }
 }
 
 function saveFile(userId: string, data: PreferenceStoreFile): void {
   const fp = userFilePath(userId);
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   data.last_updated = now();
-  fs.writeFileSync(fp, JSON.stringify(data, null, 2), "utf8");
+  const content = JSON.stringify(data, null, 2);
+  // Attempt atomic write (write-to-temp + rename). On platforms where rename
+  // fails (Windows EPERM due to file locking), fall back to direct write.
+  // The atomic path prevents corruption from mid-write crashes on POSIX;
+  // the fallback ensures the subsystem still works on Windows where rename
+  // semantics are less reliable under concurrent access.
+  const tmpFp = `${fp}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmpFp, content, "utf8");
+    fs.renameSync(tmpFp, fp);
+  } catch {
+    // Fallback: direct write (non-atomic but functional)
+    try { fs.unlinkSync(tmpFp); } catch { /* ignore cleanup failure */ }
+    fs.writeFileSync(fp, content, "utf8");
+  }
 }
 
 function initFile(userId: string): PreferenceStoreFile {

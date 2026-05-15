@@ -144,6 +144,26 @@ function dispatchSignals(
   polarity: Polarity,
   tag_text: string | null,
 ): void {
+  // Validate required BaseEvent fields at runtime. TypeScript only protects
+  // compile-time callers; at runtime, malformed payloads from the pipeline
+  // could otherwise persist corrupt state.
+  if (typeof event.user_id !== "string" || event.user_id.length === 0) {
+    throw new Error(
+      `dispatchSignals: event.user_id must be a non-empty string. Got: ${JSON.stringify(event.user_id)}`,
+    );
+  }
+  if (typeof event.timestamp !== "string" || event.timestamp.length === 0) {
+    throw new Error(
+      `dispatchSignals: event.timestamp must be a non-empty string. Got: ${JSON.stringify(event.timestamp)}`,
+    );
+  }
+  // Validate timestamp is a parseable date (catches "not-a-date" etc.)
+  if (Number.isNaN(new Date(event.timestamp).getTime())) {
+    throw new Error(
+      `dispatchSignals: event.timestamp "${event.timestamp}" is not a valid ISO date string.`,
+    );
+  }
+
   const signals = classifyArtifact(event.artifact_meta);
   const scope: "global" | "project" = event.project_id ? "project" : "global";
 

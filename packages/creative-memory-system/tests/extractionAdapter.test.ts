@@ -221,4 +221,28 @@ describe("extractionAdapter", () => {
     expect(adapter.TAG_POLARITY["save this direction"]).toBe("positive");
     expect(adapter.TAG_POLARITY["too noisy"]).toBe("negative");
   });
+
+  it("dispatchSignals validates event.timestamp is a parseable date (regression)", () => {
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        timestamp: "not-a-date",
+      }),
+    ).toThrow(/not a valid ISO date string/);
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        timestamp: "",
+      }),
+    ).toThrow(/event.timestamp must be a non-empty string/);
+  });
+
+  it("dispatchSignals validates event.user_id is non-empty (regression)", () => {
+    expect(() =>
+      adapter.onGenerationAccepted({
+        ...baseEvent(),
+        user_id: "",
+      }),
+    ).toThrow(/event.user_id must be a non-empty string/);
+  });
 });
