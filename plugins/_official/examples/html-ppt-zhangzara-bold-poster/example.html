@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bold Poster Business Presentation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FFFFFF;
+      --dark: #1C1410;
+      --red: #D8000F;
+      --light: #F5F2EF;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Libre Baskerville', serif;
+      color: var(--dark);
+    }
+
+    /* ---------- NAV ---------- */
+    .progress {
+      position: fixed; bottom: 0; left: 0; height: 5px;
+      background: var(--red); z-index: 100;
+      transition: width 0.5s cubic-bezier(0.22,1,0.36,1);
+    }
+    .counter {
+      position: fixed; bottom: 18px; right: 24px; z-index: 100;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+      font-weight: 600; color: var(--dark); opacity: 0.5;
+    }
+    .hint {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      z-index: 100; font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--dark); opacity: 0; transition: opacity 0.4s ease;
+      background: var(--light); padding: 6px 14px; border-radius: 4px;
+    }
+    body:hover .hint { opacity: 0.5; }
+
+    /* ---------- SLIDE SYSTEM ---------- */
+    .slides { width: 100%; height: 100%; position: relative; }
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      opacity: 0; pointer-events: none;
+      transform: translateY(30px) scale(0.98);
+      transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.22,1,0.36,1);
+      overflow: hidden; padding: 48px 56px;
+    }
+    .slide.active {
+      opacity: 1; pointer-events: all;
+      transform: translateY(0) scale(1);
+    }
+
+    /* ---------- UTILITIES ---------- */
+    .font-display { font-family: 'Shrikhand', cursive; }
+    .font-serif { font-family: 'Libre Baskerville', serif; }
+    .font-sans { font-family: 'Space Grotesk', sans-serif; }
+
+    .bullet-list {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .bullet-list li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      line-height: 1.45; color: var(--dark); opacity: 0.8;
+      padding-left: 14px; position: relative; margin-bottom: 5px;
+    }
+    .bullet-list li::before {
+      content: '\2014'; position: absolute; left: 0;
+      color: var(--red); font-weight: 700;
+    }
+
+    /* ---------- SLIDE 1: HERO (ULTRA LOW) ---------- */
+    .slide-hero {
+      background: var(--bg);
+      justify-content: flex-start; align-items: flex-start;
+      padding-top: 5vh; padding-left: 7vw;
+    }
+    .hero-meta {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 14px);
+      font-style: italic; color: var(--dark); opacity: 0.6;
+      margin-bottom: 1.5vh; letter-spacing: 0.5px;
+    }
+    .hero-title-group {
+      position: relative; width: 100%;
+    }
+    .hero-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(72px, 16vw, 220px);
+      line-height: 0.88; color: var(--dark); letter-spacing: 1px;
+    }
+    .hero-title.red {
+      color: var(--red);
+      font-size: clamp(84px, 18vw, 260px);
+      line-height: 0.85; transform: rotate(-4deg);
+      display: inline-block; margin-left: -0.5vw; margin-top: -2vh;
+    }
+    .hero-title.bottom {
+      font-size: clamp(64px, 14vw, 200px);
+      line-height: 0.9; transform: rotate(2deg);
+      display: inline-block; margin-top: -1vh;
+    }
+    .hero-tagline {
+      position: absolute; right: 7vw; bottom: 8vh;
+      text-align: right; max-width: 300px;
+    }
+    .hero-tagline .tag-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      letter-spacing: 3px; text-transform: uppercase;
+      font-weight: 600; color: var(--red); margin-bottom: 8px;
+    }
+    .hero-tagline .tag-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      line-height: 1.6; color: var(--dark); font-style: italic;
+    }
+
+    /* ---------- SLIDE 2: RED STATEMENT (ULTRA LOW) ---------- */
+    .slide-red {
+      background: var(--red); color: var(--bg);
+      text-align: center; justify-content: center;
+    }
+    .red-quote {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 7vw, 90px);
+      line-height: 1.15;
+      text-shadow: 2px 2px 0 rgba(28,20,16,0.25), 4px 4px 0 rgba(28,20,16,0.2), 6px 6px 0 rgba(28,20,16,0.15);
+      max-width: 900px;
+    }
+    .red-cite {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.3vw, 16px);
+      font-style: italic; margin-top: 3vh; opacity: 0.85;
+    }
+
+    /* ---------- SLIDE 3: EXECUTIVE SUMMARY (MEDIUM) ---------- */
+    .slide-summary {
+      background: var(--bg); justify-content: center;
+      align-items: center;
+    }
+    .summary-inner {
+      width: 100%; max-width: 1100px;
+    }
+    .summary-header {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 5vw, 64px);
+      color: var(--dark); line-height: 1; margin-bottom: 4vh;
+    }
+    .summary-columns {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 48px; margin-bottom: 4vh;
+    }
+    .summary-col {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      line-height: 1.75; color: var(--dark);
+    }
+    .summary-col strong {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600; font-size: 0.95em;
+      letter-spacing: 0.3px;
+    }
+    .summary-highlights {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; border: 2px solid var(--dark);
+    }
+    .summary-hl {
+      padding: 20px 24px; border: 1px solid var(--dark);
+      display: flex; flex-direction: column;
+    }
+    .summary-hl .hl-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(28px, 3.5vw, 48px);
+      color: var(--red); line-height: 1; margin-bottom: 6px;
+    }
+    .summary-hl .hl-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--dark); margin-bottom: 4px;
+    }
+    .summary-hl .hl-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 13px);
+      line-height: 1.5; color: var(--dark); opacity: 0.75;
+    }
+
+    /* ---------- SLIDE 4: FINANCIAL GRID (HIGH) ---------- */
+    .slide-financial {
+      background: var(--bg); justify-content: center;
+      align-items: stretch;
+    }
+    .fin-header {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(36px, 6vw, 72px);
+      color: var(--dark); margin-bottom: 3vh; line-height: 1;
+    }
+    .fin-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; width: 100%; max-width: 1100px;
+      border: 3px solid var(--dark);
+    }
+    .fin-cell {
+      padding: 22px 20px; border: 1.5px solid var(--dark);
+      display: flex; flex-direction: column; justify-content: flex-start;
+    }
+    .fin-cell .fc-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(28px, 3.5vw, 52px);
+      color: var(--red); line-height: 1; margin-bottom: 8px;
+    }
+    .fin-cell .fc-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--dark); margin-bottom: 6px;
+    }
+    .fin-cell .fc-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 13px);
+      line-height: 1.55; color: var(--dark); opacity: 0.8;
+      margin-bottom: 10px;
+    }
+    .fin-cell .fc-micro {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; color: var(--dark); opacity: 0.5;
+      line-height: 1.4; margin-top: auto;
+    }
+
+    /* ---------- SLIDE 5: BIG STAT (LOW) ---------- */
+    .slide-stat {
+      background: var(--bg); justify-content: center;
+      align-items: center; text-align: center;
+    }
+    .stat-big {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(120px, 26vw, 320px);
+      line-height: 0.82; color: var(--red);
+      transform: rotate(-6deg); display: inline-block;
+    }
+    .stat-row {
+      display: flex; gap: 48px; justify-content: center;
+      margin-top: 5vh;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-item .si-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(28px, 4vw, 56px);
+      color: var(--dark); line-height: 1;
+    }
+    .stat-item .si-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--dark); margin-top: 4px;
+    }
+    .stat-context {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      font-style: italic; color: var(--dark); opacity: 0.7;
+      margin-top: 3vh; max-width: 520px; line-height: 1.6;
+    }
+
+    /* ---------- SLIDE 6: SERVICES (HIGH) ---------- */
+    .slide-services {
+      background: var(--bg); justify-content: center;
+      align-items: center;
+    }
+    .svc-header {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 5vw, 64px);
+      color: var(--dark); line-height: 1; margin-bottom: 3vh;
+    }
+    .svc-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 24px 32px; width: 100%; max-width: 1000px;
+    }
+    .svc-card {
+      border-left: 4px solid var(--red);
+      padding-left: 18px;
+    }
+    .svc-card .svc-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(22px, 3vw, 36px);
+      line-height: 1.1; color: var(--dark); margin-bottom: 8px;
+    }
+    .svc-card .svc-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.6; color: var(--dark); opacity: 0.8;
+      margin-bottom: 10px;
+    }
+    .svc-card .svc-bullets {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .svc-card .svc-bullets li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      line-height: 1.45; color: var(--dark); opacity: 0.7;
+      padding-left: 12px; position: relative; margin-bottom: 3px;
+    }
+    .svc-card .svc-bullets li::before {
+      content: '\2022'; position: absolute; left: 0;
+      color: var(--red);
+    }
+
+    /* ---------- SLIDE 7: ROADMAP (VERY HIGH) ---------- */
+    .slide-roadmap {
+      background: var(--dark); color: var(--bg);
+      justify-content: center; align-items: center;
+      padding: 40px 48px;
+    }
+    .rm-inner {
+      width: 100%; max-width: 1100px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 28px 36px;
+    }
+    .rm-phase {
+      border-left: 3px solid var(--red);
+      padding-left: 16px;
+    }
+    .rm-phase .rm-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 9px; letter-spacing: 3px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--red); margin-bottom: 6px;
+    }
+    .rm-phase .rm-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(18px, 2.5vw, 32px);
+      line-height: 1.1; color: var(--bg); margin-bottom: 8px;
+    }
+    .rm-phase .rm-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 13px);
+      line-height: 1.6; color: var(--bg); opacity: 0.65;
+      margin-bottom: 10px;
+    }
+    .rm-phase .rm-bullets {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .rm-phase .rm-bullets li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.85vw, 11px);
+      line-height: 1.4; color: var(--bg); opacity: 0.5;
+      padding-left: 12px; position: relative; margin-bottom: 3px;
+    }
+    .rm-phase .rm-bullets li::before {
+      content: '\2022'; position: absolute; left: 0;
+      color: var(--red);
+    }
+
+    /* ---------- SLIDE 8: PILLARS (VERY HIGH) ---------- */
+    .slide-pillars {
+      flex-direction: row; padding: 0; background: var(--bg);
+    }
+    .pillar {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: flex-start; align-items: flex-start;
+      padding: 32px 24px; text-align: left;
+      border-right: 3px solid var(--dark); position: relative;
+      overflow-y: auto;
+    }
+    .pillar:last-child { border-right: none; }
+    .pillar:nth-child(odd) { background: var(--light); }
+    .pillar .p-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(36px, 5vw, 64px);
+      color: var(--red); line-height: 1; margin-bottom: 10px;
+    }
+    .pillar .p-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(18px, 2.2vw, 28px);
+      color: var(--dark); line-height: 1.15; margin-bottom: 12px;
+    }
+    .pillar .p-lead {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.6; color: var(--dark); font-style: italic;
+      margin-bottom: 12px;
+    }
+    .pillar .p-bullets {
+      list-style: none; padding: 0; margin: 0; width: 100%;
+    }
+    .pillar .p-bullets li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      line-height: 1.45; color: var(--dark); opacity: 0.75;
+      padding: 5px 0; border-bottom: 1px solid rgba(28,20,16,0.08);
+    }
+    .pillar .p-bullets li:last-child { border-bottom: none; }
+
+    /* ---------- SLIDE 9: GLOBAL (MEDIUM-HIGH) ---------- */
+    .slide-global {
+      background: var(--bg); justify-content: center;
+      align-items: center;
+    }
+    .global-inner {
+      width: 100%; max-width: 1000px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 32px 40px;
+    }
+    .global-header {
+      grid-column: 1 / -1;
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 5vw, 64px);
+      color: var(--dark); line-height: 1; margin-bottom: 1vh;
+    }
+    .global-card {
+      border: 2px solid var(--dark); padding: 24px;
+      display: flex; flex-direction: column;
+    }
+    .global-card .gc-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--red); margin-bottom: 10px;
+    }
+    .global-card .gc-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(20px, 2.5vw, 32px);
+      color: var(--dark); line-height: 1.1; margin-bottom: 10px;
+    }
+    .global-card .gc-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.65; color: var(--dark); opacity: 0.8;
+    }
+    .global-card .gc-stats {
+      display: flex; gap: 20px; margin-top: 14px;
+    }
+    .global-card .gc-stat {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; color: var(--dark); opacity: 0.6;
+      line-height: 1.4;
+    }
+    .global-card .gc-stat strong {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(18px, 2vw, 28px);
+      color: var(--red); display: block; line-height: 1;
+      margin-bottom: 2px;
+    }
+
+    /* ---------- SLIDE 10: CLOSING (ULTRA LOW) ---------- */
+    .slide-close {
+      background: var(--bg); justify-content: center;
+      align-items: center; text-align: center; position: relative;
+    }
+    .close-big {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(80px, 18vw, 260px);
+      line-height: 0.88; color: var(--red);
+      transform: rotate(-5deg); display: inline-block;
+    }
+    .close-sub {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(14px, 1.5vw, 18px);
+      font-style: italic; color: var(--dark);
+      margin-top: 4vh; max-width: 520px; line-height: 1.6;
+    }
+    .close-links {
+      margin-top: 5vh; display: flex; gap: 32px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      letter-spacing: 2px; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .close-links a {
+      color: var(--dark); text-decoration: none;
+      border-bottom: 2px solid var(--red); padding-bottom: 4px;
+      transition: color 0.3s;
+    }
+    .close-links a:hover { color: var(--red); }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width: 768px) {
+      .slide { padding: 32px 24px; }
+      .summary-columns { grid-template-columns: 1fr; gap: 20px; }
+      .summary-highlights { grid-template-columns: 1fr; }
+      .fin-grid { grid-template-columns: 1fr 1fr; }
+      .svc-grid { grid-template-columns: 1fr; gap: 20px; }
+      .rm-inner { grid-template-columns: 1fr; gap: 20px; }
+      .slide-pillars { flex-direction: column; }
+      .pillar { border-right: none; border-bottom: 3px solid var(--dark); padding: 24px; }
+      .pillar:last-child { border-bottom: none; }
+      .global-inner { grid-template-columns: 1fr; gap: 20px; }
+      .stat-row { flex-direction: column; gap: 16px; }
+      .hero-tagline { position: relative; right: auto; bottom: auto; text-align: left; margin-top: 3vh; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="progress" id="progress"></div>
+  <div class="counter" id="counter">01 / 10</div>
+  <div class="hint"><span>&#8592;</span> Click or Swipe <span>&#8594;</span></div>
+
+  <div class="slides" id="slides">
+
+    <!-- SLIDE 1: HERO (ULTRA LOW) -->
+    <div class="slide slide-hero active" data-index="0">
+      <div class="hero-meta">Q3 Strategic Overview &mdash; Fiscal Year 2026</div>
+      <div class="hero-title-group">
+        <div class="hero-title">Apex</div>
+        <div class="hero-title red">Group</div>
+        <div class="hero-title bottom">Ltd.</div>
+      </div>
+      <div class="hero-tagline">
+        <div class="tag-label">Annual Report</div>
+        <div class="tag-body">Building scalable solutions for enterprise partners worldwide since 2019.</div>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: RED STATEMENT (ULTRA LOW) -->
+    <div class="slide slide-red" data-index="1">
+      <div class="red-quote">"We don't follow markets. We build the infrastructure they run on."</div>
+      <div class="red-cite">&mdash; Our operating thesis since day one</div>
+    </div>
+
+    <!-- SLIDE 3: EXECUTIVE SUMMARY (MEDIUM) -->
+    <div class="slide slide-summary" data-index="2">
+      <div class="summary-inner">
+        <div class="summary-header">Executive Summary</div>
+        <div class="summary-columns">
+          <div class="summary-col">
+            <strong>Apex Group Ltd.</strong> partners with ambitious enterprise teams to turn complex operational challenges into scalable software infrastructure. Founded in 2019, we now serve <strong>48 active clients</strong> across fintech, logistics, and SaaS verticals in <strong>12 countries</strong>.
+            <br><br>
+            Our platform model combines strategic consulting, product design, and engineering execution under one engagement structure, eliminating the handoff delays and knowledge loss typical of multi-vendor arrangements.
+          </div>
+          <div class="summary-col">
+            This fiscal year we delivered <strong>14 major product releases</strong>, achieved SOC 2 Type II certification, reduced API latency by 40% at the 99th percentile, and launched a self-serve tier for mid-market customers.
+            <br><br>
+            Looking ahead, we are expanding into EMEA and APAC through two new regional hubs, targeting <strong>$18M ARR</strong> by Q4 2026 with a clear path to profitability at scale.
+          </div>
+        </div>
+        <div class="summary-highlights">
+          <div class="summary-hl">
+            <div class="hl-num">340%</div>
+            <div class="hl-label">YoY Revenue Growth</div>
+            <div class="hl-body">From $2.7M to $12M ARR in 24 months with positive unit economics.</div>
+          </div>
+          <div class="summary-hl">
+            <div class="hl-num">94%</div>
+            <div class="hl-label">Gross Retention</div>
+            <div class="hl-body">Enterprise clients renew at industry-leading rates with zero churn in top quartile.</div>
+          </div>
+          <div class="summary-hl">
+            <div class="hl-num">120</div>
+            <div class="hl-label">Team Members</div>
+            <div class="hl-body">Engineering, design, and strategy distributed across four continents.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: FINANCIAL GRID (HIGH) -->
+    <div class="slide slide-financial" data-index="3">
+      <div class="fin-header">Financial Performance</div>
+      <div class="fin-grid">
+        <div class="fin-cell">
+          <div class="fc-num">$12.4M</div>
+          <div class="fc-label">Annual Recurring Revenue</div>
+          <div class="fc-body">Net revenue retention of 118% driven by expansion revenue from existing accounts.</div>
+          <div class="fc-micro">Up from $2.7M two years prior.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">18%</div>
+          <div class="fc-label">Net Profit Margin</div>
+          <div class="fc-body">Profitable for six consecutive quarters while reinvesting 35% of gross profit into R&D.</div>
+          <div class="fc-micro">EBITDA positive since Q2 FY24.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">$420</div>
+          <div class="fc-label">Avg. Contract Value</div>
+          <div class="fc-body">Enterprise ACV measured in thousands. Median contract length is 24 months with annual escalation.</div>
+          <div class="fc-micro">Top decile ACV: $1.8M.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">4.2x</div>
+          <div class="fc-label">LTV / CAC Ratio</div>
+          <div class="fc-body">Customer lifetime value of $48K against blended acquisition cost of $11.4K across all channels.</div>
+          <div class="fc-micro">Enterprise segment: 6.8x.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">8 mo</div>
+          <div class="fc-label">Cash Runway</div>
+          <div class="fc-body">$8.2M cash on hand with monthly burn of $980K, fully funded to profitability without additional raises.</div>
+          <div class="fc-micro">Series A closed March 2025.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">$18M</div>
+          <div class="fc-label">FY27 Revenue Target</div>
+          <div class="fc-body">Projected ARR by March 2027 based on current pipeline velocity and expansion assumptions.</div>
+          <div class="fc-micro">Weighted pipeline: $31M.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: BIG STAT (LOW) -->
+    <div class="slide slide-stat" data-index="4">
+      <div class="stat-big">96%</div>
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="si-num">48</div>
+          <div class="si-label">Active Clients</div>
+        </div>
+        <div class="stat-item">
+          <div class="si-num">12</div>
+          <div class="si-label">Countries</div>
+        </div>
+        <div class="stat-item">
+          <div class="si-num">99.97%</div>
+          <div class="si-label">Platform Uptime</div>
+        </div>
+      </div>
+      <div class="stat-context">
+        Customer satisfaction score across all active engagements, measured quarterly via NPS and CSAT composite.
+      </div>
+    </div>
+
+    <!-- SLIDE 6: SERVICES (HIGH) -->
+    <div class="slide slide-services" data-index="5">
+      <div class="svc-header">Service Lines</div>
+      <div class="svc-grid">
+        <div class="svc-card">
+          <div class="svc-title">Strategy</div>
+          <div class="svc-body">Market analysis, competitive positioning, and multi-year roadmaps that bridge ambition with executable milestones.</div>
+          <ul class="svc-bullets">
+            <li>Market sizing and TAM analysis</li>
+            <li>Competitive landscape mapping</li>
+            <li>Pricing strategy and packaging design</li>
+            <li>M&A target identification and diligence</li>
+          </ul>
+        </div>
+        <div class="svc-card">
+          <div class="svc-title">Design</div>
+          <div class="svc-body">Product design, brand systems, and user research that make complexity feel effortless to end users.</div>
+          <ul class="svc-bullets">
+            <li>UX research and journey mapping</li>
+            <li>Design systems at scale</li>
+            <li>Prototyping and usability testing</li>
+            <li>Brand identity and visual language</li>
+          </ul>
+        </div>
+        <div class="svc-card">
+          <div class="svc-title">Build</div>
+          <div class="svc-body">Scalable architecture, robust APIs, and infrastructure that grows with demand rather than against it.</div>
+          <ul class="svc-bullets">
+            <li>Cloud-native architecture design</li>
+            <li>API development and developer experience</li>
+            <li>Security audit and compliance engineering</li>
+            <li>CI/CD pipelines and observability</li>
+          </ul>
+        </div>
+        <div class="svc-card">
+          <div class="svc-title">Scale</div>
+          <div class="svc-body">Go-to-market planning, partner programs, and revenue operations that compound quarter over quarter.</div>
+          <ul class="svc-bullets">
+            <li>Partner channel development</li>
+            <li>Sales process and tooling</li>
+            <li>Customer success playbooks</li>
+            <li>Revenue operations and forecasting</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: ROADMAP (VERY HIGH) -->
+    <div class="slide slide-roadmap" data-index="6">
+      <div class="rm-inner">
+        <div class="rm-phase">
+          <div class="rm-label">Phase One &mdash; Complete (FY22-FY24)</div>
+          <div class="rm-title">Foundation</div>
+          <div class="rm-body">Core platform refined. Enterprise-grade compliance and security architecture shipped. Initial customer base validated product-market fit across three verticals.</div>
+          <ul class="rm-bullets">
+            <li>14 major product releases this quarter</li>
+            <li>SOC 2 Type II and ISO 27001 certifications</li>
+            <li>API latency reduced 40% at p99</li>
+            <li>Self-serve onboarding launched for SMB tier</li>
+          </ul>
+        </div>
+        <div class="rm-phase">
+          <div class="rm-label">Phase Two &mdash; Current (FY25)</div>
+          <div class="rm-title">Expansion</div>
+          <div class="rm-body">Two new regional hubs. Localized compliance infrastructure. Partner channel activation. Direct sales team scaling in two new geographies.</div>
+          <ul class="rm-bullets">
+            <li>EMEA hub operational in London by Q1</li>
+            <li>APAC hub in Singapore scheduled Q2</li>
+            <li>5 strategic partners signed, 12 in pipeline</li>
+            <li>Localized pricing and tax handling live</li>
+          </ul>
+        </div>
+        <div class="rm-phase">
+          <div class="rm-label">Phase Three &mdash; FY26-FY27</div>
+          <div class="rm-title">Platformization</div>
+          <div class="rm-body">Opening core infrastructure to certified third-party developers and system integrators. Marketplace model for extensions and integrations.</div>
+          <ul class="rm-bullets">
+            <li>Developer portal and sandbox environment</li>
+            <li>App marketplace with revenue sharing</li>
+            <li>Partner certification program and badge system</li>
+            <li>White-label licensing for large enterprises</li>
+          </ul>
+        </div>
+        <div class="rm-phase">
+          <div class="rm-label">Phase Four &mdash; FY28+</div>
+          <div class="rm-title">Ecosystem</div>
+          <div class="rm-body">Becoming the default infrastructure layer for our vertical across global markets. Strategic M&A to fill capability gaps.</div>
+          <ul class="rm-bullets">
+            <li>Strategic M&A for complementary capabilities</li>
+            <li>Industry consortium and standards body founding</li>
+            <li>Open-source components for community trust</li>
+            <li>Target: 500+ active platform partners</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: PILLARS (VERY HIGH) -->
+    <div class="slide slide-pillars" data-index="7">
+      <div class="pillar">
+        <div class="p-num">01</div>
+        <div class="p-title">Clarity</div>
+        <div class="p-lead">Every decision is documented, traceable, and communicated with context.</div>
+        <ul class="p-bullets">
+          <li>Clear DRI assigned to every initiative</li>
+          <li>Public dashboards with real-time metrics</li>
+          <li>Decision logs published within 24 hours</li>
+          <li>Weekly all-hands with open Q&A format</li>
+          <li>Written strategy docs preferred over decks</li>
+          <li>OKRs visible to all employees by default</li>
+        </ul>
+      </div>
+      <div class="pillar">
+        <div class="p-num">02</div>
+        <div class="p-title">Velocity</div>
+        <div class="p-lead">Speed comes from focus and tooling, not from working longer hours.</div>
+        <ul class="p-bullets">
+          <li>Two-week sprints with public retrospectives</li>
+          <li>CI/CD with production deploys every day</li>
+          <li>Feature flags for gradual, safe rollouts</li>
+          <li>Direct customer feedback in every cycle</li>
+          <li>Bi-weekly demos open to all stakeholders</li>
+          <li>Automated testing at 94% code coverage</li>
+        </ul>
+      </div>
+      <div class="pillar">
+        <div class="p-num">03</div>
+        <div class="p-title">Trust</div>
+        <div class="p-lead">Radical transparency with partners, employees, and the market.</div>
+        <ul class="p-bullets">
+          <li>Real-time uptime dashboards shared externally</li>
+          <li>Quarterly business reviews with all clients</li>
+          <li>Security reports published proactively</li>
+          <li>90-day exit clauses in every contract</li>
+          <li>Named account engineers for enterprise tier</li>
+          <li>Open API status page with incident history</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: GLOBAL (MEDIUM-HIGH) -->
+    <div class="slide slide-global" data-index="8">
+      <div class="global-inner">
+        <div class="global-header">Global Presence</div>
+        <div class="global-card">
+          <div class="gc-label">Headquarters</div>
+          <div class="gc-title">San Francisco</div>
+          <div class="gc-body">Primary engineering, design, and executive leadership based in the Bay Area. Founded here in 2019.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>65</strong> employees</div>
+            <div class="gc-stat"><strong>42K</strong> sq ft office</div>
+          </div>
+        </div>
+        <div class="global-card">
+          <div class="gc-label">Regional Hub</div>
+          <div class="gc-title">London</div>
+          <div class="gc-body">EMEA sales, customer success, and compliance operations. Serves clients across UK, EU, and Middle East.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>28</strong> employees</div>
+            <div class="gc-stat"><strong>18</strong> clients live</div>
+          </div>
+        </div>
+        <div class="global-card">
+          <div class="gc-label">Regional Hub</div>
+          <div class="gc-title">Singapore</div>
+          <div class="gc-body">APAC expansion hub launching Q2 2026. Focus on fintech and logistics verticals in Southeast Asia.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>12</strong> employees</div>
+            <div class="gc-stat"><strong>4</strong> clients pilot</div>
+          </div>
+        </div>
+        <div class="global-card">
+          <div class="gc-label">Distributed</div>
+          <div class="gc-title">Remote Network</div>
+          <div class="gc-body">Engineering and design talent in 8 additional countries. Async-first culture with quarterly offsites.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>15</strong> remote staff</div>
+            <div class="gc-stat"><strong>8</strong> time zones</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: CLOSING (ULTRA LOW) -->
+    <div class="slide slide-close" data-index="9">
+      <div class="close-big">Thank You</div>
+      <div class="close-sub">
+        Ready to explore what we can build together?<br>
+        hello@apexgroup.co &mdash; San Francisco &mdash; Worldwide
+      </div>
+      <div class="close-links">
+        <a href="#">LinkedIn</a>
+        <a href="#">Contact</a>
+        <a href="#">Careers</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    (function() {
+      const slides = document.querySelectorAll('.slide');
+      const progress = document.getElementById('progress');
+      const counter = document.getElementById('counter');
+      const total = slides.length;
+      let current = 0;
+
+      function show(i) {
+        slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+        progress.style.width = ((i + 1) / total * 100) + '%';
+        counter.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0');
+      }
+
+      function next() { if (current < total - 1) { current++; show(current); } }
+      function prev() { if (current > 0) { current--; show(current); } }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Enter' || e.key === 'PageDown') {
+          e.preventDefault(); next();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+          e.preventDefault(); prev();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        const x = e.clientX;
+        const w = window.innerWidth;
+        if (x > w / 2) next(); else prev();
+      });
+
+      let tx = 0;
+      document.addEventListener('touchstart', (e) => { tx = e.changedTouches[0].screenX; });
+      document.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].screenX - tx;
+        if (dx < -50) next();
+        else if (dx > 50) prev();
+      });
+
+      show(0);
+    })();
+  </script>
+</body>
+</html>

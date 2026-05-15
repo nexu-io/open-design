@@ -1,0 +1,108 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-replit-deck",
+  "title": "Replit Deck",
+  "version": "0.1.0",
+  "description": "Single-file horizontal-swipe HTML deck in the style of Replit Slides's\nlanding-page template gallery. Eight distinct themes (helix, holm, vance,\nbevel, world-dark, world-mint, atlas, bluehouse) — each a complete visual\nsystem (palette + type + accent) captured from replit.com/slides. Pick one\ntheme, do not mix. For pitch decks, board reports, brand memos, campaign\nreveals — when the user explicitly wants \"Replit Slides style\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/replit-deck",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "product",
+    "web",
+    "replit-deck",
+    "replit-slides",
+    "replit-ppt",
+    "replit-style-deck",
+    "helix-deck",
+    "holm-memo",
+    "atlas-chapter",
+    "bluehouse",
+    "bevel-campaign"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Single-file horizontal-swipe HTML deck in the style of Replit Slides's landing-page template gallery. Eight distinct themes (helix, holm, vance, bevel, world-dark, world-mint, atlas, bluehouse) — each a complete visual system (palette + type + accent) captured from replit.com/slides. Pick one theme, do not mix. For pit",
+        "zh-CN": "使用这个插件完成以下任务：Single-file horizontal-swipe HTML deck in the style of Replit Slides's landing-page template gallery. Eight distinct themes (helix, holm, vance, bevel, world-dark, world-mint, atlas, bluehouse) — each a complete visual system (palette + type + accent) captured from replit.com/slides. Pick one theme, do not mix. For pit"
+      }
+    },
+    "inputs": [
+      {
+        "name": "theme",
+        "type": "string",
+        "required": true,
+        "default": "helix",
+        "values": [
+          "helix         # Modern minimal · light grey · ink + electric blue · SaaS metrics / board",
+          "holm          # Editorial serif · cream · ink + deep chestnut · legal / finance memo",
+          "vance         # Gallery · cream · cream serif on black bars · art catalog / showcase",
+          "bevel         # Y2K editorial · black · display type + product photo grid · campaign",
+          "world-dark    # Finance green dark · deep green · mint + neon yellow · policy report",
+          "world-mint    # Finance green light · mint · deep green + neon yellow · policy report",
+          "atlas         # Museum · black · serif + vermilion · long-form narrative / chapter deck",
+          "bluehouse     # Consumer card · deep navy · gradient cards + peach → coral · product showcase"
+        ]
+      },
+      {
+        "name": "slide_count",
+        "type": "number",
+        "default": 6,
+        "min": 3,
+        "max": 20
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/components.md",
+        "./references/layouts.md",
+        "./references/themes.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Trading Analysis Dashboard</title>
+  <style>
+    :root{
+      --bg:#0a1220;--panel:#0f1b31;--panel2:#13233e;--line:#294161;--text:#edf3ff;--muted:#94a9c7;
+      --accent:#43b6ff;--accent2:#8f8dff;--good:#4be2ad;--bad:#ff7f9f;--warn:#ffd777;--chip:#162843;
+    }
+    html[data-theme="light"]{
+      --bg:#eaf0f8;--panel:#ffffff;--panel2:#f4f8ff;--line:#d6e0ee;--text:#0d1730;--muted:#5f7392;
+      --accent:#1d87cf;--accent2:#7365ff;--good:#1d9b72;--bad:#c1435f;--warn:#ac7a00;--chip:#edf3fb;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(1000px 400px at 15% -10%,rgba(77,153,255,.18),transparent),var(--bg);color:var(--text);}
+    .app{display:grid;grid-template-columns:230px 1fr;height:100%}
+    .side{border-right:1px solid var(--line);padding:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 90%,transparent),color-mix(in srgb,var(--panel2) 80%,transparent))}
+    .brand{font-weight:800;letter-spacing:.14em;font-size:13px;margin:8px 8px 14px}
+    .nav{display:grid;gap:6px}.nav button{border:0;text-align:left;padding:10px;border-radius:10px;background:transparent;color:var(--muted);font-weight:600;cursor:pointer}
+    .nav button.active,.nav button:hover{background:var(--chip);color:var(--text)}
+    .main{padding:14px;overflow:auto}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .status{display:flex;gap:8px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--chip);font-size:11px;color:var(--muted)}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--good)}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .seg{display:inline-flex;border:1px solid var(--line);background:var(--chip);border-radius:999px;padding:4px}
+    .seg button{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:700;padding:7px 10px;border-radius:999px;cursor:pointer}
+    .seg button.active{background:var(--panel);color:var(--text)}
+    .chip{border:1px solid var(--line);background:var(--chip);color:var(--text);padding:7px 10px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer}
+    .danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
+    .hero{margin-top:10px;display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:10px}
+    .card{border:1px solid var(--line);background:linear-gradient(140deg,color-mix(in srgb,var(--panel) 96%,transparent),color-mix(in srgb,var(--panel2) 94%,transparent));border-radius:14px;padding:12px;position:relative;overflow:hidden}
+    .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+    .v{margin-top:4px;font-size:24px;font-weight:800;font-family:"JetBrains Mono",ui-monospace,monospace}
+    .layout{display:grid;grid-template-columns:1.4fr 1fr;gap:10px;margin-top:10px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    table{width:100%;border-collapse:collapse;font-size:12px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+    th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .badge{font-size:10px;padding:2px 6px;border-radius:999px;border:1px solid var(--line)}
+    .good{color:var(--good)} .bad{color:var(--bad)}
+    .chart-shell{position:relative}
+    .chart{margin-top:8px;height:200px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--chip) 50%,transparent)}
+    .chart svg{width:100%;height:100%}
+    .chart svg .axis-text{font:600 9px "JetBrains Mono",ui-monospace,monospace;fill:var(--muted);letter-spacing:.04em}
+    .chart svg .axis-title{font:700 9px Inter,system-ui,sans-serif;fill:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+    .legend{display:flex;flex-wrap:wrap;gap:10px 14px;margin-top:6px;padding:0 4px;font-size:10px;color:var(--muted);letter-spacing:.04em}
+    .legend .lg{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+    .legend .lg::before{content:"";width:10px;height:2px;background:var(--lg-c,var(--accent));border-radius:2px;display:inline-block}
+    .cursor{position:absolute;inset:0;pointer-events:none;opacity:0}
+    .chart-shell.active .cursor{opacity:1}
+    .cursor .vx,.cursor .hy{position:absolute;background:color-mix(in srgb,var(--accent) 80%,transparent)}
+    .cursor .vx{width:1px;top:0;bottom:0;left:50%}
+    .cursor .hy{height:1px;left:0;right:0;top:50%;background:color-mix(in srgb,var(--accent2) 70%,transparent)}
+    .cursor .lb{position:absolute;right:8px;top:8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:700 10px "JetBrains Mono",monospace}
+    .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+    .step{border:1px solid var(--line);border-radius:10px;background:var(--chip);padding:10px}
+    .step h4{margin:0 0 5px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+    .step p{margin:0;font-size:11px;color:var(--muted)}
+    .risk{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:10px}
+    .bar{height:6px;border-radius:999px;background:color-mix(in srgb,var(--line) 80%,transparent);overflow:hidden;margin-top:6px}
+    .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:var(--w,50%)}
+    .palette{position:fixed;inset:0;background:rgba(5,10,20,.45);backdrop-filter:blur(6px);display:none;align-items:flex-start;justify-content:center;padding-top:15vh;z-index:40}
+    .palette.open{display:flex}
+    .palette-card{width:min(680px,92vw);border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+    .palette input{width:100%;border:0;border-bottom:1px solid var(--line);padding:12px;background:var(--chip);color:var(--text);font:12px "JetBrains Mono",monospace}
+    .palette button{width:100%;border:0;border-bottom:1px solid var(--line);padding:10px 12px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+    .focus{position:fixed;inset:0;background:rgba(4,8,16,.6);backdrop-filter:blur(4px);display:none;z-index:30}
+    .focus.show{display:block}
+    .chart-shell.floating{position:fixed!important;z-index:31!important;box-shadow:0 30px 90px rgba(0,0,0,.45)!important}
+    @media (max-width:1150px){.hero,.risk,.flow,.layout,.grid2{grid-template-columns:1fr}.app{grid-template-columns:84px 1fr}.brand span,.nav button span{display:none}}
+  </style>
+</head>
+<body>
+  <div class="focus" id="focus"></div>
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span>PROMETHEUS</span></div>
+      <nav class="nav">
+        <button><span>Home</span></button><button><span>Trade</span></button><button class="active"><span>Analyze</span></button><button><span>Performance</span></button><button><span>Develop</span></button>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="top">
+        <div class="status"><span class="dot"></span><span>Market Open · NYSE · Source: Cboe One · Latency: <b id="latency">12ms</b></span></div>
+        <div class="controls">
+          <div class="seg" id="mode"><button data-mode="live" class="active">LIVE</button><button data-mode="demo">DEMO</button></div>
+          <select class="chip" id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
+          <select class="chip" id="scenario"><option value="risk-on" selected>Risk-on</option><option value="vol-crush">Vol Crush</option><option value="panic">Panic</option></select>
+          <button class="chip danger" id="kill">KILL SWITCH</button>
+          <div class="seg" id="theme"><button data-theme="dark" class="active">Dark</button><button data-theme="light">Light</button></div>
+        </div>
+      </div>
+      <div class="hero">
+        <div class="card"><div class="k">Alpha Pulse</div><div class="v" id="alpha">LONG BIAS · 0.78</div><div class="k" id="alpha-sub">Expected Move +1.9% · Horizon 2h</div></div>
+        <div class="card"><div class="k">Confidence</div><div class="v" id="conf">78.00%</div></div>
+        <div class="card"><div class="k">Risk Budget</div><div class="v" id="risk-budget">$42,500.00</div></div>
+        <div class="card"><div class="k">Execution Window</div><div class="v">09:30-11:30 ET</div></div>
+      </div>
+
+      <section class="layout">
+        <article class="card">
+          <div class="k">Option Chain</div>
+          <table>
+            <thead><tr><th>Time</th><th>Symbol</th><th>Contract</th><th>Premium</th><th>Sweep</th></tr></thead>
+            <tbody>
+              <tr class="orow" data-strike="160"><td>07:46:01</td><td>SPY</td><td>375 8/18</td><td>$44,751</td><td><span class="badge good">YES</span></td></tr>
+              <tr class="orow" data-strike="155"><td>07:46:02</td><td>SPY</td><td>370 8/18</td><td>$38,905</td><td><span class="badge">NO</span></td></tr>
+              <tr class="orow" data-strike="150"><td>07:46:03</td><td>QQQ</td><td>452 8/25</td><td>$52,204</td><td><span class="badge good">YES</span></td></tr>
+            </tbody>
+          </table>
+          <div class="flow">
+            <div class="step"><h4>Signal</h4><p id="s1">Flow consensus LONG</p></div>
+            <div class="step"><h4>Risk Check</h4><p id="s2">Exposure within limit</p></div>
+            <div class="step"><h4>Order</h4><p id="s3">AAPL BUY 200 @ 221.30</p></div>
+            <div class="step"><h4>Fill</h4><p id="s4">Waiting...</p></div>
+          </div>
+        </article>
+        <article class="grid2">
+          <div class="card chart-shell">
+            <div class="k">Option Greeks</div>
+            <div class="chart chart-interactive">
+              <svg viewBox="0 0 400 200" role="img" aria-label="Option Greeks: Delta and Gamma vs Strike">
+                <title>Option Greeks vs Strike</title>
+                <g stroke="var(--line)"><line x1="30" y1="170" x2="390" y2="170"/><line x1="30" y1="20" x2="30" y2="170"/></g>
+                <g class="axis-text" text-anchor="middle">
+                  <text x="40" y="186">140</text>
+                  <text x="120" y="186">145</text>
+                  <text x="200" y="186">150</text>
+                  <text x="300" y="186">155</text>
+                  <text x="380" y="186">160</text>
+                </g>
+                <g class="axis-text" text-anchor="end">
+                  <text x="26" y="44">1.0</text>
+                  <text x="26" y="96">0.5</text>
+                  <text x="26" y="148">0.0</text>
+                  <text x="26" y="174">−0.5</text>
+                </g>
+                <text class="axis-title" x="210" y="198" text-anchor="middle">Strike ($)</text>
+                <text class="axis-title" x="-100" y="12" transform="rotate(-90)" text-anchor="middle">Sensitivity (Δ / Γ)</text>
+                <polyline fill="none" stroke="#9b79f4" stroke-width="3" points="40,40 120,62 200,92 300,122 380,146"/>
+                <polyline fill="none" stroke="#67d59b" stroke-width="3" points="40,128 120,124 200,118 300,129 380,126"/>
+                <circle class="link-target strike-150" cx="200" cy="92" r="4" fill="#9b79f4"/>
+                <circle class="link-target strike-155" cx="300" cy="122" r="4" fill="#9b79f4"/>
+                <circle class="link-target strike-160" cx="380" cy="146" r="4" fill="#9b79f4"/>
+              </svg>
+            </div>
+            <div class="legend"><span class="lg" style="--lg-c:#9b79f4">Delta (Δ)</span><span class="lg" style="--lg-c:#67d59b">Gamma (Γ)</span></div>
+            <div class="cursor"><span class="vx"></span><span class="hy"></span><span class="lb">x:0 y:0</span></div>
+          </div>
+          <div class="card chart-shell">
+            <div class="k">Cumulative PnL</div>
+            <div class="chart chart-interactive">
+              <svg viewBox="0 0 400 200" role="img" aria-label="Cumulative PnL by session time">
+                <title>Cumulative PnL by Session Time</title>
+                <g stroke="var(--line)"><line x1="30" y1="170" x2="390" y2="170"/><line x1="30" y1="20" x2="30" y2="170"/></g>
+                <g class="axis-text" text-anchor="middle">
+                  <text x="30" y="186">09:30</text>
+                  <text x="120" y="186">11:00</text>
+                  <text x="210" y="186">12:30</text>
+                  <text x="300" y="186">14:00</text>
+                  <text x="390" y="186">16:00</text>
+                </g>
+                <g class="axis-text" text-anchor="end">
+                  <text x="26" y="62">$24k</text>
+                  <text x="26" y="100">$16k</text>
+                  <text x="26" y="138">$8k</text>
+                  <text x="26" y="174">$0</text>
+                </g>
+                <text class="axis-title" x="210" y="198" text-anchor="middle">Session Time (ET)</text>
+                <text class="axis-title" x="-100" y="12" transform="rotate(-90)" text-anchor="middle">Equity ($, USD)</text>
+                <polyline id="eq" fill="none" stroke="#47cf93" stroke-width="3" points="30,150 90,142 150,130 210,118 270,95 330,78 390,62"/>
+              </svg>
+            </div>
+            <div class="legend"><span class="lg" style="--lg-c:#47cf93">Equity Curve ($)</span></div>
+            <div class="cursor"><span class="vx"></span><span class="hy"></span><span class="lb">x:0 y:0</span></div>
+          </div>
+          <div class="card">
+            <div class="k">Risk Cockpit</div>
+            <div class="risk">
+              <div><div class="k">VaR</div><div class="v" id="var">$12,450.00</div><div class="bar"><i style="--w:64%"></i></div></div>
+              <div><div class="k">Beta</div><div class="v" id="beta">1.18</div><div class="bar"><i style="--w:58%"></i></div></div>
+              <div><div class="k">Exposure</div><div class="v" id="expo">68.20%</div><div class="bar"><i style="--w:68%"></i></div></div>
+              <div><div class="k">Max DD</div><div class="v" id="dd">2.40%</div><div class="bar"><i style="--w:24%"></i></div></div>
+              <div><div class="k">Concentration</div><div class="v" id="conc">41.80%</div><div class="bar"><i style="--w:42%"></i></div></div>
+            </div>
+          </div>
+          <div class="card"><div class="k">Demo Story</div><div class="v" id="story">Idle</div></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div class="palette" id="palette">
+    <div class="palette-card">
+      <input id="cmd" value="/" />
+      <button data-cmd="mode demo">mode demo</button>
+      <button data-cmd="scenario panic">scenario panic</button>
+      <button data-cmd="theme light">theme light</button>
+      <button data-cmd="focus chart">focus chart</button>
+    </div>
+  </div>
+
+  <script>
+    const $ = (s, p = document) => p.querySelector(s);
+    const $$ = (s, p = document) => [...p.querySelectorAll(s)];
+    const focus = $("#focus");
+    let floating = null, placeholder = null, demoTimer = null, stepTimer = null;
+    const n = (v, t) => t === "usd" ? `$${Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : t === "pct" ? `${Number(v).toFixed(2)}%` : Number(v).toFixed(2);
+    const clearTimers = () => { if (demoTimer) clearInterval(demoTimer); if (stepTimer) clearTimeout(stepTimer); demoTimer = null; stepTimer = null; };
+
+    // Storage access can throw SecurityError inside sandboxed iframes that allow
+    // scripts but not same-origin (Open Design's preview), so persistence is
+    // strictly best-effort and must never abort initialization.
+    const safeGetTheme = () => { try { return localStorage.getItem("od-trading-theme"); } catch { return null; } };
+    const safeSetTheme = (t) => { try { localStorage.setItem("od-trading-theme", t); } catch { /* sandbox: persistence unavailable */ } };
+    const setTheme = (t) => { document.documentElement.setAttribute("data-theme", t); safeSetTheme(t); $$("#theme button").forEach(b => b.classList.toggle("active", b.dataset.theme === t)); };
+    const savedTheme = safeGetTheme(); if (savedTheme) setTheme(savedTheme);
+    $$("#theme button").forEach(b => b.onclick = () => setTheme(b.dataset.theme));
+
+    const updateTick = () => {
+      const speed = Number($("#speed").value || 1), scenario = $("#scenario").value;
+      const sf = scenario === "panic" ? -1.4 : scenario === "vol-crush" ? .4 : 1, j = () => (Math.random() - .5);
+      $("#latency").textContent = `${Math.max(8, Math.round(12 + j() * 8 * speed))}ms`;
+      $("#alpha").textContent = `${scenario === "panic" ? "DEFENSIVE" : "LONG BIAS"} · ${(0.78 + j() * 0.08 * speed).toFixed(2)}`;
+      $("#alpha-sub").textContent = `Expected Move ${scenario === "panic" ? "-" : "+"}${(1.1 + Math.random() * 1.6).toFixed(1)}% · Horizon 2h`;
+      $("#conf").textContent = n(78 + j() * 5 * speed, "pct");
+      $("#risk-budget").textContent = n(42500 + j() * 1800 * speed, "usd");
+      $("#var").textContent = n(12450 + j() * 500 * speed, "usd");
+      $("#expo").textContent = n(68.2 + j() * 2.8 * speed, "pct");
+      const xs = [30,90,150,210,270,330,390], ys = [150,142,130,118,95,78,62].map(v => Math.max(48, Math.min(170, v + j() * 14 * speed * (scenario === "panic" ? 1.6 : 1))));
+      $("#eq").setAttribute("points", xs.map((x,i)=>`${x},${ys[i].toFixed(1)}`).join(" "));
+    };
+
+    const demoStory = () => {
+      const steps = [
+        ["1/5 Signal spike detected", () => $("#s1").textContent = "Flow consensus LONG · TRIGGERED"],
+        ["2/5 Risk checks passed", () => $("#s2").textContent = "Exposure within limit · PASS"],
+        ["3/5 Order routed", () => $("#s3").textContent = "Routing AAPL BUY 200..."],
+        ["4/5 Fill confirmed", () => $("#s4").textContent = "Filled @ 221.31 · -0.2bp"],
+        ["5/5 PnL + telemetry updated", updateTick]
+      ];
+      let i = 0; clearTimers();
+      demoTimer = setInterval(updateTick, Math.max(700, 2200 / Number($("#speed").value || 1)));
+      const run = () => { $("#story").textContent = steps[i][0]; steps[i][1](); i = (i + 1) % steps.length; stepTimer = setTimeout(run, 6000 / Number($("#speed").value || 1)); };
+      run();
+    };
+
+    $$("#mode button").forEach(b => b.onclick = () => {
+      $$("#mode button").forEach(x => x.classList.toggle("active", x === b));
+      if (b.dataset.mode === "demo") demoStory(); else { clearTimers(); $("#story").textContent = "Idle"; }
+    });
+    $("#speed").onchange = () => $("#mode .active")?.dataset.mode === "demo" && demoStory();
+    $("#scenario").onchange = updateTick;
+    $("#kill").onclick = () => { if (!confirm("Engage kill switch?")) return; clearTimers(); $("#s1").textContent = "HALTED"; $("#s2").textContent = "BLOCK"; $("#s3").textContent = "Orders cancelled"; $("#s4").textContent = "Exposure set to 0%"; $("#story").textContent = "Risk halt engaged"; };
+
+    const clearLink = () => { $$(".orow").forEach(r => r.classList.remove("active")); $$(".link-target").forEach(n => n.classList.remove("active")); };
+    $$(".orow").forEach(r => { r.onmouseenter = () => { clearLink(); r.classList.add("active"); $$(".strike-" + r.dataset.strike).forEach(n => n.classList.add("active")); }; r.onmouseleave = clearLink; });
+
+    $$(".chart-shell").forEach(shell => {
+      const cv = $(".cursor", shell), vx = $(".vx", shell), hy = $(".hy", shell), lb = $(".lb", shell);
+      shell.onmousemove = (e) => { const rect = shell.getBoundingClientRect(), x = ((e.clientX-rect.left)/rect.width)*100, y = ((e.clientY-rect.top)/rect.height)*100; shell.classList.add("active"); vx.style.left = `${x}%`; hy.style.top = `${y}%`; lb.textContent = `x:${x.toFixed(1)} y:${(100-y).toFixed(1)}`; };
+      shell.onmouseleave = () => shell.classList.remove("active");
+      shell.onclick = () => {
+        if (floating === shell) { placeholder.parentNode.insertBefore(shell, placeholder); placeholder.remove(); placeholder = null; floating = null; shell.classList.remove("floating"); shell.style = ""; focus.classList.remove("show"); document.body.style.overflow = ""; return; }
+        if (floating) floating.click();
+        const rect = shell.getBoundingClientRect(); placeholder = document.createElement("div"); placeholder.style.width = rect.width + "px"; placeholder.style.height = rect.height + "px"; shell.parentNode.insertBefore(placeholder, shell);
+        floating = shell; shell.classList.add("floating"); shell.style.top = Math.max(24, (innerHeight - rect.height * 1.25) / 2) + "px"; shell.style.left = Math.max(24, (innerWidth - rect.width * 1.25) / 2) + "px"; shell.style.width = Math.min(innerWidth - 48, rect.width * 1.25) + "px"; shell.style.height = Math.min(innerHeight - 48, rect.height * 1.25) + "px"; document.body.appendChild(shell); focus.classList.add("show"); document.body.style.overflow = "hidden";
+      };
+    });
+    focus.onclick = () => floating && floating.click();
+
+    const palette = $("#palette"), cmd = $("#cmd");
+    const exec = (q) => { q = q.toLowerCase(); if (q.includes("theme dark")) setTheme("dark"); if (q.includes("theme light")) setTheme("light"); if (q.includes("mode demo")) $('#mode button[data-mode="demo"]').click(); if (q.includes("mode live")) $('#mode button[data-mode="live"]').click(); if (q.includes("scenario panic")) { $("#scenario").value = "panic"; updateTick(); } if (q.includes("focus chart")) $(".chart-shell")?.click(); palette.classList.remove("open"); };
+    document.addEventListener("keydown", (e) => { if (e.key === "/" && !palette.classList.contains("open")) { e.preventDefault(); palette.classList.add("open"); cmd.focus(); cmd.value = "/"; } else if (e.key === "Escape") { palette.classList.remove("open"); if (floating) floating.click(); } });
+    cmd.onkeydown = (e) => e.key === "Enter" && exec(cmd.value);
+    $$("#palette button").forEach(b => b.onclick = () => exec(b.dataset.cmd || ""));
+    palette.onclick = (e) => e.target === palette && palette.classList.remove("open");
+
+    $("#mode button[data-mode='demo']").click();
+  </script>
+</body>
+</html>

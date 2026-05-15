@@ -724,10 +724,54 @@ function injectSelectionBridge(
     }
     return true;
   }
+function meaningfulDomFallbackTarget(el) {
+  if (!visibleTarget(el)) return false;
+
+  var tag = el.tagName ? el.tagName.toLowerCase() : '';
+
+  if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th|section|article|main|aside|nav)$/.test(tag)) {
+    return true;
+  }
+
+  if (
+    el.getAttribute &&
+    (
+      el.getAttribute('role') ||
+      el.getAttribute('aria-label') ||
+      el.getAttribute('title')
+    )
+  ) {
+    return true;
+  }
+
+  if (tag === 'svg') {
+    return !!(
+      el.getAttribute &&
+      (
+        el.getAttribute('role') ||
+        el.getAttribute('aria-label') ||
+        el.getAttribute('title')
+      )
+    );
+  }
+
+  var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+
+  var meaningfulChildren = 0;
+  for (var child = el.firstElementChild;child;child = child.nextElementSibling) {
+    if ((child.textContent || '').replace(/\s+/g, ' ').trim()) {
+      meaningfulChildren++;
+      if (meaningfulChildren > 1) return false;
+    }
+  }
+
+  return true;
+}
   function targetFrom(el, allowDomFallback){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     var selector = annotatedSelectorFor(el);
-    if (!id && allowDomFallback && visibleTarget(el)) {
+    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -766,6 +810,33 @@ function injectSelectionBridge(
     return items;
   }
   var postTargetsPending = false;
+  var postPreviewScrollPending = false;
+  function previewScrollElement(){
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function postPreviewScroll(){
+    var el = previewScrollElement();
+    if (!el) return;
+    var frame = document.scrollingElement || document.documentElement;
+    window.parent.postMessage({
+      type: 'od:preview-scroll',
+      canvasLeft: Math.round(el.scrollLeft || 0),
+      canvasTop: Math.round(el.scrollTop || 0),
+      frameLeft: Math.round(frame.scrollLeft || 0),
+      frameTop: Math.round(frame.scrollTop || 0)
+    }, '*');
+  }
+  function schedulePostPreviewScroll(){
+    if (postPreviewScrollPending) return;
+    postPreviewScrollPending = true;
+    window.requestAnimationFrame(function(){
+      postPreviewScrollPending = false;
+      postPreviewScroll();
+    });
+  }
+  function requestPreviewScrollRestore(){
+    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
   function postTargets(){
     if (!active()) return;
     window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
@@ -797,7 +868,7 @@ function injectSelectionBridge(
     var allowDomFallback = mode === 'picker' && canUseDomFallback();
     while (el && el !== document.documentElement) {
       if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
-      if (!fallback && allowDomFallback && visibleTarget(el)) fallback = el;
+if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
       el = el.parentElement;
     }
     return fallback;
@@ -843,6 +914,14 @@ function injectSelectionBridge(
         stroke = [];
         try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
       }
+      return;
+    }
+    if (data.type === 'od:preview-scroll-restore') {
+      var frame = document.scrollingElement || document.documentElement;
+      var el = previewScrollElement();
+      if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
+      if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
+      setTimeout(postPreviewScroll, 0);
       return;
     }
     if (data.type === 'od:inspect-mode') {
@@ -999,7 +1078,10 @@ function injectSelectionBridge(
   document.addEventListener('pointerup', finishStroke, true);
   document.addEventListener('pointercancel', finishStroke, true);
   window.addEventListener('resize', schedulePostTargets);
-  document.addEventListener('scroll', schedulePostTargets, true);
+  document.addEventListener('scroll', function(){
+    schedulePostTargets();
+    schedulePostPreviewScroll();
+  }, true);
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
   // Reflect the host-requested initial modes on the documentElement so
@@ -1014,8 +1096,13 @@ function injectSelectionBridge(
   // as save input — it parses the artifact source itself — but emitting it
   // keeps the iframe → host channel symmetric across set/reset/extract.
   if (Object.keys(overrides).length) setTimeout(postOverrides, 0);
+  setTimeout(requestPreviewScrollRestore, 0);
+  setTimeout(requestPreviewScrollRestore, 80);
+  setTimeout(requestPreviewScrollRestore, 240);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
   else setTimeout(postTargets, 0);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
+  else setTimeout(postPreviewScroll, 0);
 })();</script>`;
   const style = `<style data-od-selection-bridge-style>
 html[data-od-comment-mode] body * { cursor: crosshair !important; }

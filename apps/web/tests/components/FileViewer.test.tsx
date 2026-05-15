@@ -34,7 +34,7 @@ import {
   updateInspectOverride,
 } from '../../src/components/FileViewer';
 import type { InspectOverrideMap } from '../../src/components/FileViewer';
-import type { LiveArtifact, LiveArtifactWorkspaceEntry, ProjectFile } from '../../src/types';
+import type { LiveArtifact, LiveArtifactWorkspaceEntry, PreviewComment, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
 
@@ -360,7 +360,67 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-testid="artifact-preview-frame"');
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
     expect(markup).not.toContain('data-od-render-mode="srcdoc"');
+  });
+
+  it('allows downloads in the in-tab HTML presentation iframe', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+
+    await waitFor(() => {
+      const frame = container.querySelector('.present-overlay iframe');
+      expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+      expect(frame?.getAttribute('data-od-render-mode')).toBe('url-load');
+    });
+  });
+
+  it('allows downloads in React component preview iframes', async () => {
+    const file = baseFile({
+      name: 'Card.jsx',
+      path: 'Card.jsx',
+      mime: 'text/jsx',
+      kind: 'code',
+      artifactManifest: {
+        version: 1,
+        kind: 'react-component',
+        title: 'Card',
+        entry: 'Card.jsx',
+        renderer: 'react-component',
+        exports: ['jsx', 'html', 'zip'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/Card.jsx') {
+        return new Response('export default function Card() { return <button>Download</button>; }');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    const frame = await screen.findByTestId('react-component-preview-frame');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   });
 
   it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
@@ -388,6 +448,7 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(markup).toContain('data-testid="artifact-preview-frame"');
     expect(markup).toContain('data-od-render-mode="srcdoc"');
+    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
     expect(markup).not.toContain('data-od-render-mode="url-load"');
   });
 
@@ -1078,6 +1139,166 @@ describe('FileViewer tweaks toolbar', () => {
     expect(queue.disabled).toBe(false);
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     expect(screen.queryByText('Queues while working')).toBeNull();
+  });
+
+  it('hides non-open saved comments from preview markers when the side panel is empty', () => {
+    const resolvedComment: PreviewComment = {
+      id: 'comment-applying',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-applying',
+      selector: '[data-od-pin="pin-applying"]',
+      label: 'pin-applying',
+      text: '',
+      htmlHint: '',
+      position: { x: 24, y: 32, width: 18, height: 18 },
+      note: 'Already sent to Claude',
+      status: 'applying',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[resolvedComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.queryByTestId('comment-saved-marker-pin-applying')).toBeNull();
+    expect(screen.queryByText('Already sent to Claude')).toBeNull();
+  });
+
+  it('keeps the picker hint clear of the open comment side panel', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.getByTestId('inspect-empty-hint-container').className).toContain(
+      'comment-side-panel-open',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+
+    expect(screen.getByTestId('inspect-empty-hint-container').className).not.toContain(
+      'comment-side-panel-open',
+    );
+  });
+
+  it('does not preload non-open element comments into the picker composer', async () => {
+    const applyingElementComment: PreviewComment = {
+      id: 'comment-element-applying',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'Hero',
+      text: 'Hero',
+      htmlHint: '<main data-od-id="hero">Hero</main>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'Do not resurrect this note',
+      status: 'applying',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[applyingElementComment]}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
+    expect(input.value).toBe('');
+    expect(screen.queryByText('Remove')).toBeNull();
+    expect(screen.queryByText('Do not resurrect this note')).toBeNull();
+  });
+
+  it('closes an open saved-comment composer when that comment leaves the open state', async () => {
+    const openComment: PreviewComment = {
+      id: 'comment-status-transition',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-transition',
+      selector: '[data-od-pin="pin-transition"]',
+      label: 'pin-transition',
+      text: '',
+      htmlHint: '',
+      position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Do not recreate this stale comment',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[openComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open comment for pin-transition' }));
+
+    expect((await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement).value)
+      .toBe('Do not recreate this stale comment');
+
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[{ ...openComment, status: 'applying' }]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('comment-popover-input')).toBeNull();
+    });
+    expect(screen.queryByTestId('comment-saved-marker-pin-transition')).toBeNull();
+    expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
   it('collapses the comment side panel into a narrow reopen rail', () => {

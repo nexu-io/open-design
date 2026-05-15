@@ -1,0 +1,80 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-marine-biologist-exploration",
+  "title": "Cinematic Marine Biologist Exploration",
+  "version": "0.1.0",
+  "description": "A detailed cinematic video prompt for an underwater scene featuring a marine biologist discovering an ancient shipwreck in a coral reef.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "LudovicCreator",
+    "url": "https://x.com/LudovicCreator/status/2049190693550055726"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4394ac601188eb66755d2c92451665c6/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4394ac601188eb66755d2c92451665c6/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "A marine biologist in a sleek wetsuit swims through the vibrant coral reefs of the Great Barrier Reef. At the 3-second mark, he dives deeper to approach an ancient shipwreck. The camera follows him as schools of colorful fish dart around. He retrieves a mysterious artifact from the wreck just as a curious shark glides by.\nUnderwater ruins, coral reef exploration, ancient artifact retrieval, marine life encounter, cinematic underwater lighting, 4K.",
+        "zh-CN": "使用这个插件完成以下任务：A marine biologist in a sleek wetsuit swims through the vibrant coral reefs of the Great Barrier Reef. At the 3-second mark, he dives deeper to approach an ancient shipwreck. The camera follows him as schools of colorful fish dart around. He retrieves a mysterious artifact from the wreck just as a curious shark glides by.\nUnderwater ruins, coral reef exploration, ancient artifact retrieval, marine life encounter, cinematic underwater lighting, 4K."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

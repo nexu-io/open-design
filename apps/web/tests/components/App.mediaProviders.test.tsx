@@ -24,7 +24,7 @@ import {
 import { listProjects, listTemplates } from '../../src/state/projects';
 
 const navigateMock = vi.fn();
-const useRouteMock = vi.fn(() => ({ kind: 'home' as const }));
+const useRouteMock = vi.fn(() => ({ kind: 'home' as const, view: 'home' as const }));
 
 vi.mock('../../src/router', () => ({
   navigate: (...args: unknown[]) => navigateMock(...args),

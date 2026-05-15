@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Short-form video — example</title>
+    <style>
+      :root {
+        --bg: #0e0d0c;
+        --panel: #1a1816;
+        --ink: #f5efe5;
+        --muted: #8b8579;
+        --accent: #c96442;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+        font-family: 'Iowan Old Style', 'Charter', Georgia, serif; }
+      body { min-height: 100dvh; display: grid; place-items: center; padding: 32px; }
+      .stage {
+        width: min(720px, 92vw);
+        background: var(--panel);
+        border-radius: 8px;
+        padding: 22px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      }
+      .frame {
+        position: relative;
+        aspect-ratio: 16 / 9;
+        border-radius: 6px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 30% 35%, #d8b08b 0%, #6f4a35 40%, #1a120c 80%);
+      }
+      .frame::after {
+        content: ''; position: absolute; inset: 0;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 1px, transparent 1px 4px);
+        pointer-events: none;
+        animation: scan 12s linear infinite;
+      }
+      @keyframes scan { from { background-position-y: 0; } to { background-position-y: 200px; } }
+      .frame .mug {
+        position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%);
+        width: 28%; aspect-ratio: 1 / 1;
+        background: radial-gradient(ellipse at 35% 35%, #f5efe5 0%, #c2b8a7 50%, #6f6757 100%);
+        border-radius: 18% 18% 22% 22% / 28% 28% 18% 18%;
+        box-shadow: 18px 6px 30px rgba(0,0,0,0.45);
+        animation: turn 6s ease-in-out infinite alternate;
+      }
+      .frame .mug::after {
+        content: ''; position: absolute; right: -14%; top: 28%;
+        width: 18%; height: 44%;
+        border: 6px solid #c2b8a7; border-left: none; border-radius: 0 100% 100% 0 / 0 50% 50% 0;
+      }
+      @keyframes turn { from { transform: translate(-50%, -50%) rotate(-6deg); } to { transform: translate(-50%, -50%) rotate(6deg); } }
+      .frame .timecode {
+        position: absolute; left: 14px; bottom: 12px;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 11px; letter-spacing: 0.16em;
+        color: var(--muted);
+        background: rgba(0,0,0,0.4);
+        padding: 4px 8px; border-radius: 999px;
+      }
+      .frame .badge {
+        position: absolute; left: 14px; top: 12px;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+        color: var(--accent);
+      }
+      .meta {
+        display: grid; grid-template-columns: 1fr auto; gap: 10px;
+        align-items: end; margin-top: 18px;
+      }
+      .title { font-size: 22px; line-height: 1.1; margin: 0; }
+      .sub { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="frame">
+        <span class="badge">● REC</span>
+        <div class="mug" aria-hidden></div>
+        <span class="timecode">00:05 · 16:9 · seedance-2</span>
+      </div>
+      <div class="meta">
+        <h1 class="title">A 5-second product reveal — saved as MP4.</h1>
+        <span class="sub">Open Design · Video</span>
+      </div>
+    </div>
+  </body>
+</html>

@@ -17,7 +17,8 @@ import {
 } from "../mac-prebundle.js";
 import { copyBundledResourceTrees } from "../resources.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
-import { INTERNAL_PACKAGES, PRODUCT_NAME } from "./constants.js";
+import { INTERNAL_PACKAGES } from "./constants.js";
+import { resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
 import type { MacPaths, PackedTarballInfo } from "./types.js";
 
@@ -176,6 +177,7 @@ export async function writeAssembledApp(
   packedTarballs: PackedTarballInfo[],
 ): Promise<void> {
   const packagedVersion = await readPackagedVersion(config);
+  const identity = resolveMacInstallIdentity(config);
   await rm(join(config.roots.output.namespaceRoot, "assembled"), { force: true, recursive: true });
   await mkdir(paths.assembledAppRoot, { recursive: true });
   const tarballByPackage = Object.fromEntries(
@@ -208,7 +210,7 @@ export async function writeAssembledApp(
         main: "./main.cjs",
         name: "open-design-packaged-app",
         private: true,
-        productName: PRODUCT_NAME,
+        productName: identity.productName,
         version: packagedVersion,
       },
       null,

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-professional-identity-portrait-wallpaper",
+  "title": "Profile / Avatar - Professional Identity Portrait Wallpaper",
+  "version": "0.1.0",
+  "description": "Generates a high-resolution, premium wallpaper featuring a subject in professional attire with career-related activities and typography.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "𝗦𝗮𝗻𝗶𝗮",
+    "url": "https://x.com/saniaspeaks_/status/2048990448882942051"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic",
+    "fantasy",
+    "typography"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453121103_le4xip_HG958SlbsAAESjg.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a portrait size wallpaper of pride in carrying out the profession as an ({argument name=\"name\" default=\"ALINA\"}), in the wallpaper contains a photo of the attached subject wearing a uniform or things related to the profession, make a pose, the subject's expression looks happy, don't have the same expression as the attached photo, give the wallpaper ornaments, decorations related to the profession, add several activities related to the profession arranged neatly, precisely, harmoniously, the typography says \"I am ({argument name=\"job title\" default=\"ALINA FASHION TEACHER\"}) \"above the subject's head, the font adjusts to the subject's job, each part of the wallpaper must be neat, the wallpaper visuals should not look monotonous, should not look stiff, must be original style wallpaper cinematic resolution 8K coloring, grading, wallpaper effects must look premium. Face and body exactly same as uploaded image.",
+        "zh-CN": "使用这个插件完成以下任务：Create a portrait size wallpaper of pride in carrying out the profession as an ({argument name=\"name\" default=\"ALINA\"}), in the wallpaper contains a photo of the attached subject wearing a uniform or things related to the profession, make a pose, the subject's expression looks happy, don't have the same expression as the attached photo, give the wallpaper ornaments, decorations related to the profession, add several activities related to the profession arranged neatly, precisely, harmoniously, the typography says \"I am ({argument name=\"job title\" default=\"ALINA FASHION TEACHER\"}) \"above the subject's head, the font adjusts to the subject's job, each part of the wallpaper must be neat, the wallpaper visuals should not look monotonous, should not look stiff, must be original style wallpaper cinematic resolution 8K coloring, grading, wallpaper effects must look premium. Face and body exactly same as uploaded image."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

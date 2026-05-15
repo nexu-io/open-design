@@ -8,9 +8,12 @@ import { hashPackageSourcePath } from "./package-source-hash.js";
 
 const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/contracts", name: "@open-design/contracts" },
+  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
   { directory: "packages/platform", name: "@open-design/platform" },
+  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
+  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -19,9 +22,12 @@ const WORKSPACE_BUILD_PACKAGES = [
 
 const BUILD_COMMANDS = [
   { args: ["--filter", "@open-design/contracts", "build"] },
+  { args: ["--filter", "@open-design/registry-protocol", "build"] },
   { args: ["--filter", "@open-design/sidecar-proto", "build"] },
   { args: ["--filter", "@open-design/sidecar", "build"] },
   { args: ["--filter", "@open-design/platform", "build"] },
+  { args: ["--filter", "@open-design/agui-adapter", "build"] },
+  { args: ["--filter", "@open-design/plugin-runtime", "build"] },
   { args: ["--filter", "@open-design/daemon", "build"] },
   { args: ["--filter", "@open-design/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
   { args: ["--filter", "@open-design/web", "build:sidecar"] },
@@ -74,7 +80,7 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
     packageManager: await readPackageManager(config.workspaceRoot),
     platform: config.platform,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 4,
+    schemaVersion: 5,
     webOutputMode: config.webOutputMode,
   });
 }
@@ -87,12 +93,18 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
   return [
     "packages/contracts/dist/index.mjs",
     "packages/contracts/dist/index.d.ts",
+    "packages/registry-protocol/dist/index.mjs",
+    "packages/registry-protocol/dist/index.d.ts",
     "packages/sidecar-proto/dist/index.mjs",
     "packages/sidecar-proto/dist/index.d.ts",
     "packages/sidecar/dist/index.mjs",
     "packages/sidecar/dist/index.d.ts",
     "packages/platform/dist/index.mjs",
     "packages/platform/dist/index.d.ts",
+    "packages/agui-adapter/dist/index.mjs",
+    "packages/agui-adapter/dist/index.d.ts",
+    "packages/plugin-runtime/dist/index.mjs",
+    "packages/plugin-runtime/dist/index.d.ts",
     "apps/daemon/dist/cli.js",
     "apps/daemon/dist/cli.d.ts",
     "apps/daemon/dist/sidecar/index.js",
@@ -109,9 +121,12 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
 function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact[] {
   const artifacts = [
     "packages/contracts/dist",
+    "packages/registry-protocol/dist",
     "packages/sidecar-proto/dist",
     "packages/sidecar/dist",
     "packages/platform/dist",
+    "packages/agui-adapter/dist",
+    "packages/plugin-runtime/dist",
     "apps/daemon/dist",
     "apps/web/dist",
     "apps/desktop/dist",
@@ -132,7 +147,7 @@ async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryR
   for (const artifact of workspaceBuildArtifacts(config)) {
     const targetPath = join(entryRoot, artifact.cachePath);
     await mkdir(dirname(targetPath), { recursive: true });
-    await cp(join(config.workspaceRoot, artifact.workspacePath), targetPath, { recursive: true });
+    await cp(join(config.workspaceRoot, artifact.workspacePath), targetPath, { dereference: true, recursive: true });
   }
 }
 

@@ -40,7 +40,8 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible /v1/images/generations endpoint', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
   { id: 'bfl', label: 'Black Forest Labs', hint: 'FLUX 1.1 Pro / FLUX Pro / Dev', integrated: false, defaultBaseUrl: 'https://api.bfl.ai' },
   { id: 'fal', label: 'Fal.ai', hint: 'Sora / Seedance / Veo / FLUX', integrated: false, defaultBaseUrl: 'https://fal.run' },
-  { id: 'replicate', label: 'Replicate', hint: 'FLUX / SDXL / Ideogram', integrated: false, defaultBaseUrl: 'https://api.replicate.com/v1' },
+  { id: 'leonardo', label: 'Leonardo.ai', hint: 'Phoenix / Kino XL / FLUX', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1' },
+  { id: 'replicate', label: 'Replicate', hint: 'FLUX / SDXL / Ideogram', integrated: false, defaultBaseUrl: 'https://api.replicate.com' },
   { id: 'google', label: 'Google AI / Vertex', hint: 'Imagen 4 / Veo 3 / Lyria', integrated: false },
   { id: 'kling', label: 'Kuaishou Kling', hint: 'Kling 1.6 / 2.0 video', integrated: false },
   { id: 'midjourney', label: 'Midjourney (proxy)', hint: 'midjourney-v7', integrated: false },
@@ -102,6 +103,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
+
+  { id: 'leonardo-phoenix', label: 'Phoenix', hint: 'Leonardo · versatile', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-kino-xl', label: 'Kino XL', hint: 'Leonardo · cinematic', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-dev', label: 'FLUX Dev', hint: 'Leonardo · FLUX', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-schnell', label: 'FLUX Schnell', hint: 'Leonardo · fast', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
 ];

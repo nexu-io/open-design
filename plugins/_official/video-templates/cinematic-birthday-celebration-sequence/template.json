@@ -1,0 +1,23 @@
+{
+  "id": "cinematic-birthday-celebration-sequence",
+  "surface": "video",
+  "title": "Cinematic Birthday Celebration Sequence",
+  "summary": "A highly detailed multi-shot video prompt for a birthday sequence, focusing on character consistency and emotional storytelling.",
+  "category": "Cinematic",
+  "tags": [
+    "cinematic",
+    "fantasy",
+    "cinematic-romance"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "0s–4s\nClose-up of a young girl waking up in a softly lit bedroom, warm golden sunlight through curtains, she gently smiles while checking her phone filled with birthday wishes, natural makeup, SAME facial features as reference image, cinematic lighting, shallow depth of field, ultra-realistic, 4K\n\n4s–8s\nCut to a cozy, beautifully decorated room with balloons and fairy lights, her friends surprise her with a birthday cake, everyone cheering, she laughs happily, SAME face as reference image, joyful expressions, cinematic camera movement, vibrant colors, soft glow, high detail\n\n8s–12s\nHer boyfriend enters — a well-dressed young man with neatly styled dark hair, sharp jawline, warm expressive eyes, wearing a clean elegant outfit (white shirt with a fitted blazer), minimal accessories, charming and calm presence ,he presents a beautiful bouquet of fresh flowers, she looks surprised and emotional, soft eye contact, SAME facial features maintained, romantic cinematic tone, warm lighting, slight slow motion, realistic textures, elegant framing\n\n12s–16s\nFinal scene: she stands surrounded by friends, holding the bouquet and cake, boyfriend beside her smiling softly, candles glowing, she closes her eyes to make a wish, SAME face consistency, cinematic wide shot, dreamy atmosphere, soft bokeh lights, high-end film look",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/47f113f50f5bd3794cbd83d2bb99320b/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/47f113f50f5bd3794cbd83d2bb99320b/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Soulful Ai",
+    "url": "https://x.com/soulful__ai/status/2048908956178001993"
+  }
+}

@@ -1,0 +1,2144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Broadside Presentation</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Broadside fonts: Barlow (the workhorse grotesque), IBM Plex Mono (chrome),
+         Noto Sans SC (CJK fallback for all roles) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700;800;900&family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE A · TOKENS                                                     ║
+   ║                                                                      ║
+   ║  This is the ONLY block you replace to change the visual style.      ║
+   ║  Every color, font, and size in this file reads from these vars.     ║
+   ║  Never write raw hex values, font names, or px sizes outside here.   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+      :root {
+        /* ── Palette ──────────────────────────────────────────────────────── */
+        --c-bg: #111111; /* near-black — the default slide background  */
+        --c-bg-alt: #1a1a18; /* secondary surface on dark slides            */
+
+        /* Broadside has NO light slides. These vars are overridden to dark
+           so any accidental .light class still renders dark. */
+        --c-bg-light: #111111;
+        --c-bg-light-alt: #1a1a18;
+
+        /* The signature: orange is not an accent here — it is the ENVIRONMENT.
+           Cover and chapter slides use this as their full background fill. */
+        --c-bg-orange: #e85d26;
+
+        --c-fg: #f0ece5; /* primary text on dark slides                 */
+        --c-fg-2: #888880; /* secondary / muted text on dark              */
+        --c-fg-3: #505048; /* tertiary / hint text on dark                */
+
+        /* Text colours for orange slides — ink on fire */
+        --c-fg-light: #111111; /* primary text on orange                */
+        --c-fg-light-2: #2a1810; /* muted text on orange                  */
+        --c-fg-light-3: rgba(
+          17,
+          17,
+          17,
+          0.55
+        ); /* hint text on orange               */
+
+        --c-accent: #e85d26; /* orange = accent everywhere on dark slides   */
+        --c-border: #282826; /* divider lines on dark slides                */
+        --c-border-light: #282826; /* same dark border even on "light" (overridden)*/
+
+        /* ── Typography ──────────────────────────────────────────────────── */
+        /* Barlow: the defining typeface. Condensed grotesque. Always heavy.
+           Used at max weight — 900 for display, 800 for h1, 700 for h2.
+           Noto Sans SC provides full CJK coverage at matching weights. */
+        --f-display: "Barlow", "Noto Sans SC", sans-serif;
+        --f-heading: "Barlow", "Noto Sans SC", sans-serif;
+        --f-body: "Barlow", "Noto Sans SC", system-ui, sans-serif;
+        /* Mono: IBM Plex Mono for chrome labels, metadata, slide numbers */
+        --f-mono: "IBM Plex Mono", monospace;
+
+        /* ── Type Scale ───────────────────────────────────────────────────── */
+        /* Broadside's defining trait: TYPE IS MASSIVE. Display is 13vw —
+           on a 1440px screen that is ~187px. Words become graphic elements. */
+        --sz-display: 13vw; /* the whole point — nearly abstract at full size */
+        --sz-h1: 7.5vw; /* chapter title — still enormous                */
+        --sz-h2: 4.5vw; /* slide headline                                */
+        --sz-h3: 2.8vw; /* sub-headline                                  */
+        --sz-lead: 1.6vw; /* lead paragraph                                */
+        --sz-body: 1.2vw; /* body text                                     */
+        --sz-caption: 0.9vw; /* captions, footnotes                           */
+        --sz-label: 0.72vw; /* chrome labels, slide numbers, metadata        */
+
+        /* ── Spacing ─────────────────────────────────────────────────────── */
+        --pad-x: 5.5vw; /* tighter than skeleton — type fills the space  */
+        --pad-y: 5.5vh;
+        --gap-lg: 3.5vh;
+        --gap-md: 2vh;
+        --gap-sm: 1vh;
+
+        /* ── Motion ──────────────────────────────────────────────────────── */
+        --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
+        --dur-slide: 0.8s;
+        --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur-enter: 0.5s;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE B · ENGINE — DO NOT MODIFY                                     ║
+   ║                                                                      ║
+   ║  Layout engine, transitions, animation system, navigation.           ║
+   ║  Touching this breaks the mechanics.                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Deck container — all slides sit side by side */
+      #deck {
+        display: flex;
+        height: 100vh;
+        /* Width = N * 100vw, set dynamically by JS */
+        transition: transform var(--dur-slide) var(--ease-slide);
+        will-change: transform;
+      }
+
+      /* Slide base — each slide is one full viewport */
+      .slide {
+        flex: 0 0 100vw;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        padding: var(--pad-y) var(--pad-x);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      /* Prevent grid children from overflowing */
+      .slide-body {
+        min-height: 0;
+      }
+
+      /* Slide themes */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      /* Broadside: .light is overridden to dark — there are no cream/white slides */
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg);
+      }
+      /* The orange theme — the signature Broadside treatment */
+      .slide.orange {
+        background: var(--c-bg-orange);
+        color: var(--c-fg-light);
+      }
+
+      /* ── Animation system ──────────────────────────────────────────────── */
+      /* All data-anim elements start invisible.
+   They animate when their parent slide receives .is-active.
+   JS resets animations before adding .is-active so re-visiting a slide re-plays them. */
+
+      [data-anim] {
+        opacity: 0;
+      }
+
+      .slide.is-active [data-anim] {
+        animation-duration: var(--dur-enter);
+        animation-timing-function: var(--ease-enter);
+        animation-fill-mode: forwards;
+      }
+      .slide.is-active [data-anim="fade-up"] {
+        animation-name: kFadeUp;
+      }
+      .slide.is-active [data-anim="fade-in"] {
+        animation-name: kFadeIn;
+      }
+      .slide.is-active [data-anim="reveal-right"] {
+        animation-name: kRevealRight;
+      }
+      .slide.is-active [data-anim="reveal-left"] {
+        animation-name: kRevealLeft;
+      }
+      .slide.is-active [data-anim="scale-in"] {
+        animation-name: kScaleIn;
+      }
+
+      /* Stagger delays — add data-delay="N" to offset each element */
+      [data-delay="0"] {
+        animation-delay: 0s;
+      }
+      [data-delay="1"] {
+        animation-delay: 0.08s;
+      }
+      [data-delay="2"] {
+        animation-delay: 0.18s;
+      }
+      [data-delay="3"] {
+        animation-delay: 0.3s;
+      }
+      [data-delay="4"] {
+        animation-delay: 0.44s;
+      }
+      [data-delay="5"] {
+        animation-delay: 0.6s;
+      }
+      [data-delay="6"] {
+        animation-delay: 0.78s;
+      }
+
+      @keyframes kFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(28px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes kFadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealRight {
+        from {
+          clip-path: inset(0 100% 0 0);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0% 0 0);
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealLeft {
+        from {
+          clip-path: inset(0 0 0 100%);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0 0 0%);
+          opacity: 1;
+        }
+      }
+      @keyframes kScaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── Navigation ───────────────────────────────────────────────────── */
+      #nav-dots {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        z-index: 100;
+      }
+      .nav-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.22);
+        cursor: pointer;
+        transition:
+          background 0.3s,
+          transform 0.3s;
+        padding: 0;
+      }
+      .nav-dot.is-active {
+        background: rgba(255, 255, 255, 0.8);
+        transform: scale(1.4);
+      }
+
+      #slide-counter {
+        position: fixed;
+        bottom: 20px;
+        right: 28px;
+        font-family: var(--f-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: rgba(255, 255, 255, 0.25);
+        z-index: 100;
+        user-select: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE C · TYPOGRAPHY                                                 ║
+   ║                                                                      ║
+   ║  Use only these classes for text. Never set font-family, font-size,  ║
+   ║  or color inline. Exception: overriding size via                     ║
+   ║  style="--sz-h2: 2.5vw" is OK — it stays within the token system.   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Base typographic classes — all font families read from tokens */
+      .display {
+        font-family: var(--f-display);
+        font-size: var(--sz-display);
+        /* Broadside: maximum weight. Lowercase is the aesthetic — NOT uppercase. */
+        font-weight: 900;
+        line-height: 0.88;
+        letter-spacing: -0.04em;
+      }
+      .h1 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h1);
+        font-weight: 800;
+        line-height: 0.9;
+        letter-spacing: -0.03em;
+      }
+      .h2 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+      }
+      .h3 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .lead {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 400;
+        line-height: 1.5;
+      }
+      .body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 400;
+        line-height: 1.6;
+      }
+      .caption {
+        font-family: var(--f-body);
+        font-size: var(--sz-caption);
+        font-weight: 400;
+        line-height: 1.5;
+      }
+      .label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 500;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      /* Contextual color helpers — reads from active slide theme */
+      .dark .muted {
+        color: var(--c-fg-2);
+      }
+      .light .muted {
+        color: var(--c-fg-2);
+      } /* light = dark in Broadside */
+      /* On orange slides: muted text is dark ink at reduced opacity */
+      .orange .muted {
+        color: var(--c-fg-light-2);
+      }
+
+      /* The orange accent colour — used for emphasis on dark slides */
+      .accent {
+        color: var(--c-accent);
+      }
+
+      /* ── Orange slide text overrides ────────────────────────────────────── */
+      /* On orange slides, display/heading text is near-black (ink on fire).
+         This is the protest-poster aesthetic: dark ink on vivid ground. */
+      .orange .display,
+      .orange .h1,
+      .orange .h2,
+      .orange .h3 {
+        color: #111111;
+      }
+      .orange .lead,
+      .orange .body {
+        color: rgba(17, 17, 17, 0.75);
+      }
+      .orange .label {
+        color: rgba(17, 17, 17, 0.55);
+      }
+      /* On orange, .accent still means "the contrast pop" — use sparingly */
+      .orange .accent {
+        color: #111111;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE D · CHROME                                                     ║
+   ║                                                                      ║
+   ║  Header + footer present on slides that show them.                   ║
+   ║  Cover, chapter, quote, and end slides suppress both.                ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      .slide-chrome,
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .slide-chrome {
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-md);
+      }
+      .slide-foot {
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        margin-top: var(--gap-md);
+      }
+
+      /* On orange slides, chrome borders use dark ink at low opacity */
+      .orange .slide-chrome,
+      .orange .slide-foot {
+        border-color: rgba(17, 17, 17, 0.2);
+      }
+
+      /* Slides that suppress chrome/foot entirely */
+      .slide--cover .slide-chrome,
+      .slide--cover .slide-foot,
+      .slide--chapter .slide-chrome,
+      .slide--chapter .slide-foot,
+      .slide--quote .slide-chrome,
+      .slide--quote .slide-foot,
+      .slide--end .slide-chrome,
+      .slide--end .slide-foot {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE E · LAYOUT PATTERNS                                            ║
+   ║                                                                      ║
+   ║  9 slide types. Use the class names below — do not invent new ones.  ║
+   ║  Broadside note: .slide--cover and .slide--chapter use .orange       ║
+   ║  (not .dark or .light). Dark slides use .dark.                       ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* ── 1. COVER ─────────────────────────────────────────────────────── */
+      /* Title slide. Always orange in Broadside. The broadside-num sits
+         top-left like a catalogue number. Title fills most of the slide. */
+      .slide--cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+      .cover-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        justify-content: flex-end;
+        gap: var(--gap-md);
+      }
+      .cover-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: var(--gap-lg);
+        padding-top: var(--gap-sm);
+        border-top: 1px solid rgba(17, 17, 17, 0.2);
+      }
+
+      /* ── 2. CHAPTER ───────────────────────────────────────────────────── */
+      /* Section divider. Always orange in Broadside.
+         Big weight-900 title, no chrome, maximum negative space. */
+      .slide--chapter {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0;
+      }
+      .chapter-num {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        /* On orange: dark ink; on dark: orange accent */
+        color: rgba(17, 17, 17, 0.55);
+        margin-bottom: var(--gap-md);
+      }
+      /* On dark chapter slides the number gets orange accent */
+      .dark .chapter-num {
+        color: var(--c-accent);
+      }
+      .chapter-rule {
+        width: 36px;
+        height: 2px;
+        background: #111111; /* dark rule on orange */
+        margin-bottom: var(--gap-md);
+      }
+      .dark .chapter-rule {
+        background: var(--c-accent);
+      }
+
+      /* ── 3. STATEMENT ─────────────────────────────────────────────────── */
+      /* Single bold claim. No image. The dark counterpart to the orange covers.
+         4-8 words max. Let the type breathe. */
+      .slide--statement .statement-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* ── 4. SPLIT ─────────────────────────────────────────────────────── */
+      /* Left: text content. Right: image. Dark background.
+         Orange kicker/rule above the headline. */
+      .slide--split .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+      }
+      .split-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .split-image {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: var(--gap-sm);
+      }
+      /* Always explicit height in vh to prevent overflow on different screens */
+      .split-image img {
+        width: 100%;
+        height: 55vh;
+        object-fit: cover;
+        display: block;
+      }
+      /* Placeholder shown when no real image is wired up. Same footprint
+         as a real <img> so the surrounding layout stays unchanged. */
+      .img-placeholder {
+        width: 100%;
+        height: 55vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px dashed var(--c-border);
+        font-family: var(--font-mono, "IBM Plex Mono", monospace);
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--c-fg-2, var(--c-fg));
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      /* ── 5. STATS ─────────────────────────────────────────────────────── */
+      /* 3 or 4 large data cards. Add .cols-4 to .stats-grid for 4 columns. */
+      .slide--stats .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+      }
+      .stats-grid.cols-4 {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .stat-card {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md) var(--gap-md) var(--gap-md) 0;
+        border-top: 1px solid var(--c-border);
+      }
+      /* The big number — orange on dark slides */
+      .stat-value {
+        font-family: var(--f-display);
+        font-size: 5.5vw;
+        font-weight: 900;
+        line-height: 1;
+        color: var(--c-accent);
+        letter-spacing: -0.04em;
+      }
+      .stat-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.5;
+      }
+      .stat-note {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.05em;
+        color: var(--c-fg-3);
+      }
+
+      /* ── 6. QUOTE ─────────────────────────────────────────────────────── */
+      /* Full-slide pull quote. Dark background. Orange opening mark. */
+      .slide--quote {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: calc(var(--pad-y) * 1.2) calc(var(--pad-x) * 1.1);
+      }
+      .quote-mark {
+        font-family: var(--f-display);
+        font-size: 10vw;
+        line-height: 0.6;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+        font-weight: 900;
+      }
+      .quote-text {
+        font-family: var(--f-display);
+        font-size: 3.8vw;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        max-width: 78%;
+        margin-bottom: var(--gap-lg);
+      }
+      .quote-attr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+      }
+
+      /* ── 7. LIST ──────────────────────────────────────────────────────── */
+      /* Headline left, bullets right. Max 3 bullets in Broadside — this style
+         prizes density of impact over density of information. */
+      .slide--list .slide-body {
+        display: grid;
+        grid-template-columns: 2fr 3fr;
+        gap: calc(var(--pad-x) * 0.8);
+        align-items: center;
+      }
+      .list-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-top: var(--gap-sm);
+      }
+      .bullet-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .bullet-list li {
+        display: grid;
+        grid-template-columns: 1.2em 1fr;
+        gap: 0.5em;
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      /* Orange dash marker */
+      .bullet-list li::before {
+        content: "/";
+        color: var(--c-accent);
+        font-family: var(--f-mono);
+        font-weight: 700;
+      }
+      .dark .bullet-list li {
+        color: var(--c-fg);
+      }
+      .light .bullet-list li {
+        color: var(--c-fg);
+      }
+
+      /* ── 8. COMPARE ───────────────────────────────────────────────────── */
+      /* Side-by-side before/after or A vs B. Orange "after" label. */
+      .slide--compare .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+      }
+      .compare-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: var(--gap-md) 0;
+      }
+      .compare-panel.left {
+        padding-right: calc(var(--pad-x) * 0.55);
+        border-right: 1px solid var(--c-border);
+      }
+      .compare-panel.right {
+        padding-left: calc(var(--pad-x) * 0.55);
+      }
+      .compare-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        color: var(--c-fg-2);
+      }
+      /* The "after" panel uses orange — the payoff */
+      .compare-label.after {
+        color: var(--c-accent);
+        border-color: var(--c-accent);
+      }
+
+      /* ── 9. END ───────────────────────────────────────────────────────── */
+      /* Closing slide. Dark background. Massive closing headline. No chrome. */
+      .slide--end {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE F · COMPONENTS                                                 ║
+   ║                                                                      ║
+   ║  Reusable pieces used across multiple layouts.                       ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Accent rule — orange on dark, dark-ink on orange */
+      .rule {
+        width: 36px;
+        height: 2px;
+        background: var(--c-accent);
+      }
+      .orange .rule {
+        background: #111111;
+      }
+      .rule.full {
+        width: 100%;
+        background: var(--c-border);
+      }
+      .orange .rule.full {
+        background: rgba(17, 17, 17, 0.2);
+      }
+
+      /* Eyebrow / kicker label — orange on dark, dark-ink on orange */
+      .kicker {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+      }
+      .orange .kicker {
+        color: rgba(17, 17, 17, 0.55);
+      }
+
+      /* Bordered tag */
+      .tag {
+        display: inline-block;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+        border: 1px solid var(--c-accent);
+        padding: 0.3em 0.8em;
+        line-height: 1;
+      }
+      .orange .tag {
+        color: #111111;
+        border-color: rgba(17, 17, 17, 0.4);
+      }
+
+      /* Image caption */
+      .img-caption {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.04em;
+        opacity: 0.5;
+        margin-top: 0.8vh;
+      }
+
+      /* ── Broadside-specific: slide number ─────────────────────────────── */
+      /* The large catalogue number in the top-left corner of orange slides.
+         Inspired by SPACE10 deck: "01" in small mono, top-left, low opacity. */
+      .broadside-num {
+        font-family: var(--f-mono);
+        font-size: 1.1vw;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        color: rgba(17, 17, 17, 0.45); /* dark ink on orange */
+      }
+      /* On dark slides the number uses muted fg */
+      .dark .broadside-num {
+        color: var(--c-fg-3);
+      }
+
+      /* Corner label utility — used for section labels at slide edges */
+      .corner-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: rgba(17, 17, 17, 0.4);
+      }
+      .dark .corner-label {
+        color: var(--c-fg-3);
+      }
+
+      /* Orange slide cover: a thin top strip showing the slide number + section name */
+      .broadside-top-chrome {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: auto;
+        padding-bottom: 0;
+      }
+
+      /* ── FADELIST (SPACE10 Before/During/After) ────────────────────────── */
+      .slide--fadelist {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .fadelist-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      .fadelist-items {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0;
+        line-height: 0.92;
+      }
+      .fadelist-item {
+        font-family: var(--f-display);
+        font-size: 7.5vw;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        color: #111111;
+        line-height: 1;
+      }
+      .fadelist-item:nth-child(2) {
+        opacity: 0.5;
+      }
+      .fadelist-item:nth-child(3) {
+        opacity: 0.22;
+      }
+      .fadelist-title {
+        font-family: var(--f-display);
+        font-size: 10.5vw;
+        font-weight: 900;
+        line-height: 0.9;
+        letter-spacing: -0.04em;
+        color: #111111;
+        align-self: flex-end;
+      }
+
+      /* Stats on orange: dark ink instead of cream */
+      .orange .stat-value {
+        color: #111111;
+      }
+      .orange .stat-label {
+        color: rgba(17, 17, 17, 0.65);
+      }
+      .orange .stat-note {
+        color: rgba(17, 17, 17, 0.4);
+      }
+      .orange .stat-card {
+        border-top-color: rgba(17, 17, 17, 0.22);
+      }
+
+      /* Compare: right panel gets orange fill */
+      .compare-panel.panel-orange {
+        padding-left: calc(var(--pad-x) * 0.55);
+        background: var(--c-accent);
+      }
+      .compare-panel.panel-orange .compare-label {
+        color: rgba(17, 17, 17, 0.55);
+        border-color: rgba(17, 17, 17, 0.22);
+      }
+      .compare-panel.panel-orange .h3 {
+        color: #111111;
+      }
+      .compare-panel.panel-orange .lead {
+        color: rgba(17, 17, 17, 0.7);
+      }
+      .compare-panel.panel-orange .bullet-list li {
+        color: #111111;
+      }
+      .compare-panel.panel-orange .bullet-list li::before {
+        color: rgba(17, 17, 17, 0.45);
+      }
+
+      /* ── CHART ─────────────────────────────────────────────────────────── */
+      .slide--chart .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-shrink: 0;
+      }
+      .chart-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 0;
+      }
+      .bar-track {
+        height: 30vh;
+        display: flex;
+        align-items: flex-end;
+        gap: 4vw;
+        border-left: 1px solid var(--c-border);
+        padding-left: 0.5vw;
+      }
+      .orange .bar-track {
+        border-color: rgba(17, 17, 17, 0.2);
+      }
+      .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 1vh;
+        height: 100%;
+      }
+      .bar-fill {
+        width: 100%;
+        background: var(--c-fg-3);
+        transition: height 0.6s var(--ease-enter);
+      }
+      .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .orange .bar-fill {
+        background: rgba(17, 17, 17, 0.22);
+      }
+      .orange .bar-fill.accent {
+        background: #111111;
+      }
+      .bar-x-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+      .orange .bar-x-label {
+        color: rgba(17, 17, 17, 0.45);
+      }
+      .bar-val {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 700;
+        color: var(--c-fg-2);
+      }
+      .bar-val.hi {
+        color: var(--c-accent);
+      }
+      .orange .bar-val {
+        color: rgba(17, 17, 17, 0.55);
+      }
+      .orange .bar-val.hi {
+        color: #111111;
+      }
+      .chart-baseline {
+        height: 1px;
+        background: var(--c-border);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .orange .chart-baseline {
+        background: rgba(17, 17, 17, 0.2);
+      }
+      .chart-source {
+        flex-shrink: 0;
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        color: var(--c-fg-3);
+        letter-spacing: 0.06em;
+        margin-top: var(--gap-sm);
+      }
+      .orange .chart-source {
+        color: rgba(17, 17, 17, 0.4);
+      }
+
+      /* ── DIAGRAM ────────────────────────────────────────────────────────── */
+      .slide--diagram .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+        min-height: 0;
+      }
+      .flow {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+      }
+      .flow-step {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding-right: calc(var(--pad-x) * 0.35);
+      }
+      .flow-num {
+        font-family: var(--f-display);
+        font-size: 5vw;
+        font-weight: 900;
+        line-height: 1;
+        color: var(--c-accent);
+        letter-spacing: -0.03em;
+      }
+      .orange .flow-num {
+        color: rgba(17, 17, 17, 0.2);
+      }
+      .flow-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 700;
+        line-height: 1.15;
+        color: var(--c-fg);
+      }
+      .orange .flow-title {
+        color: #111111;
+      }
+      .flow-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.6;
+        font-weight: 400;
+      }
+      .orange .flow-desc {
+        color: rgba(17, 17, 17, 0.6);
+      }
+      .flow-arrow {
+        display: flex;
+        align-items: flex-start;
+        padding-top: 1.2em;
+        padding-right: calc(var(--pad-x) * 0.35);
+        font-size: 2.2vw;
+        color: var(--c-accent);
+        font-weight: 300;
+        flex-shrink: 0;
+      }
+      .orange .flow-arrow {
+        color: rgba(17, 17, 17, 0.3);
+      }
+      /* ── PIE / DONUT CHART ──────────────────────────────────────────────── */
+      .slide--pie .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pie-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+        flex: 1;
+        min-height: 0;
+      }
+      .pie-donut {
+        width: min(28vw, 44vh);
+        height: min(28vw, 44vh);
+        border-radius: 50%;
+        position: relative;
+        flex-shrink: 0;
+        justify-self: center;
+      }
+      .pie-donut::after {
+        content: "";
+        position: absolute;
+        inset: 20%;
+        border-radius: 50%;
+        background: var(--c-bg);
+      }
+      .orange .pie-donut::after {
+        background: var(--c-bg-orange);
+      }
+      .pie-legend {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .pie-item {
+        display: grid;
+        grid-template-columns: 0.8em 1fr auto;
+        gap: 1em;
+        align-items: center;
+      }
+      .pie-swatch {
+        width: 0.8em;
+        height: 0.8em;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .pie-item-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 700;
+        line-height: 1.4;
+      }
+      .pie-item-val {
+        font-family: var(--f-mono);
+        font-size: var(--sz-body);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: var(--c-accent);
+      }
+      .orange .pie-item-val {
+        color: #111;
+      }
+      .pie-total {
+        margin-top: var(--gap-sm);
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+      }
+
+      /* ── PYRAMID ─────────────────────────────────────────────────────────── */
+      .slide--pyramid .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pyramid {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+      }
+      .pyr-level {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5vh 2.5vw;
+        border-left: 4px solid var(--c-accent);
+        transition: width 0.3s;
+      }
+      .orange .pyr-level {
+        border-left-color: rgba(17, 17, 17, 0.4);
+      }
+      .pyr-level:nth-child(1) {
+        background: color-mix(in srgb, var(--c-accent) 75%, var(--c-bg));
+        width: 36%;
+      }
+      .pyr-level:nth-child(2) {
+        background: color-mix(in srgb, var(--c-accent) 50%, var(--c-bg));
+        width: 52%;
+      }
+      .pyr-level:nth-child(3) {
+        background: color-mix(in srgb, var(--c-accent) 28%, var(--c-bg));
+        width: 68%;
+      }
+      .pyr-level:nth-child(4) {
+        background: color-mix(in srgb, var(--c-accent) 14%, var(--c-bg));
+        width: 84%;
+      }
+      .pyr-level:nth-child(5) {
+        background: color-mix(in srgb, var(--c-accent) 6%, var(--c-bg));
+        width: 100%;
+      }
+      .pyr-name {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 900;
+        line-height: 1.1;
+        text-transform: lowercase;
+      }
+      .pyr-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        text-align: right;
+        max-width: 55%;
+        line-height: 1.4;
+        font-weight: 400;
+      }
+
+      /* ── VERTICAL TIMELINE ───────────────────────────────────────────────── */
+      .slide--vtimeline {
+        grid-template-rows: auto auto 1fr auto;
+      }
+      .vt-hl {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 900;
+        text-transform: lowercase;
+        letter-spacing: -0.03em;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .vtimeline {
+        display: grid;
+        grid-template-columns: 8em 2px 1fr;
+        gap: 0;
+        min-height: 0;
+        padding-top: var(--gap-md);
+      }
+      .vt-date {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        text-align: right;
+        padding: 0 1.5vw 3.5vh 0;
+        line-height: 1.4;
+      }
+      .vt-spine {
+        background: var(--c-border);
+        position: relative;
+      }
+      .vt-spine::before {
+        content: "";
+        position: absolute;
+        top: 0.2em;
+        left: -5px;
+        width: 10px;
+        height: 10px;
+        background: var(--c-accent);
+      }
+      .vt-content {
+        padding: 0 0 3.5vh 1.5vw;
+      }
+      .vt-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 900;
+        margin-bottom: 0.6vh;
+        line-height: 1.1;
+        text-transform: lowercase;
+      }
+      .vt-body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.65;
+        font-weight: 400;
+      }
+
+      /* ── CYCLE PROCESS ───────────────────────────────────────────────────── */
+      .slide--cycle .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .cycle-grid {
+        display: grid;
+        grid-template-columns: 1fr 3em 1fr;
+        grid-template-rows: 1fr 3em 1fr;
+        gap: var(--gap-sm);
+        flex: 1;
+        min-height: 0;
+        align-items: center;
+      }
+      .cycle-step {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md);
+        border-top: 3px solid var(--c-accent);
+      }
+      .cycle-num {
+        font-family: var(--f-display);
+        font-size: 4vw;
+        font-weight: 900;
+        color: var(--c-accent);
+        line-height: 1;
+        letter-spacing: -0.03em;
+        text-transform: lowercase;
+      }
+      .cycle-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 900;
+        line-height: 1.1;
+        text-transform: lowercase;
+      }
+      .cycle-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        color: var(--c-fg-2);
+        line-height: 1.6;
+        font-weight: 400;
+      }
+      .cycle-arrow {
+        color: var(--c-fg-3);
+        font-size: 2.2vw;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="deck">
+      <!-- ══════════════════════════════════════════════════════════════════
+     LAYOUT 1 · COVER  (Broadside: orange)
+     ──────────────────────────────────────────────────────────────────
+     The SPACE10 aesthetic: full orange fill, "01" top-left in tiny mono,
+     section label top-right. Massive weight-900 lowercase title.
+     Tiny mono subtitle. Author + date in bottom corners.
+     ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide slide--cover orange">
+        <!-- Top chrome: slide number left, section label right -->
+        <div class="broadside-top-chrome">
+          <span class="broadside-num" data-anim="fade-in" data-delay="0"
+            >01</span
+          >
+          <span class="corner-label" data-anim="fade-in" data-delay="0"
+            >Broadside</span
+          >
+        </div>
+
+        <!-- Main content: fills the slide, anchored to bottom -->
+        <div class="cover-body">
+          <h1
+            class="display"
+            data-anim="fade-up"
+            data-delay="1"
+            style="max-width: 95%"
+          >
+            this is the broadside style
+          </h1>
+          <p
+            class="lead"
+            data-anim="fade-up"
+            data-delay="2"
+            style="opacity: 0.65; max-width: 55%"
+          >
+            Protest poster meets publication cover. Type so large it becomes
+            image.
+          </p>
+        </div>
+
+        <!-- Bottom meta: author left, date right -->
+        <div class="cover-meta" data-anim="fade-in" data-delay="3">
+          <span class="broadside-num">[[Author Name]]</span>
+          <span class="broadside-num">[Year] · Context</span>
+        </div>
+      </section>
+      <section class="slide slide--chapter orange">
+        <!-- Chapter number: top-left, same small mono as cover -->
+        <div
+          class="broadside-num"
+          data-anim="fade-in"
+          data-delay="0"
+          style="margin-bottom: var(--gap-lg)"
+        >
+          02 / Chapter
+        </div>
+
+        <h2 class="h1" data-anim="fade-up" data-delay="1">
+          the next chapter begins here
+        </h2>
+
+        <p
+          class="lead"
+          data-anim="fade-up"
+          data-delay="2"
+          style="max-width: 50%; margin-top: var(--gap-md); opacity: 0.65"
+        >
+          One optional sentence that frames what this section is about.
+        </p>
+      </section>
+      <section class="slide slide--statement dark">
+        <header class="slide-chrome">
+          <span class="label muted">The Argument</span>
+          <span class="label muted">03</span>
+        </header>
+
+        <div class="statement-body">
+          <p class="kicker" data-anim="fade-in" data-delay="0">Core Thesis</p>
+          <div
+            class="rule"
+            data-anim="reveal-right"
+            data-delay="1"
+            style="margin: 1.8vh 0"
+          ></div>
+          <!-- The .accent class makes this orange — the punchline -->
+          <h2
+            class="h1 accent"
+            data-anim="fade-up"
+            data-delay="2"
+            style="max-width: 75%"
+          >
+            orange is not an accent. it is the room.
+          </h2>
+        </div>
+
+        <footer class="slide-foot">
+          <span class="label muted">Broadside</span>
+          <span class="label muted">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--split dark">
+        <header class="slide-chrome">
+          <span class="label muted">Details</span>
+          <span class="label muted">04</span>
+        </header>
+
+        <div class="slide-body">
+          <div class="split-text">
+            <p class="kicker" data-anim="fade-in" data-delay="0">Context</p>
+            <div
+              class="rule"
+              data-anim="reveal-right"
+              data-delay="1"
+              style="margin: 1.5vh 0"
+            ></div>
+            <h2 class="h2" data-anim="fade-up" data-delay="2">
+              when content needs image support
+            </h2>
+            <p
+              class="lead muted"
+              data-anim="fade-up"
+              data-delay="3"
+              style="max-width: 90%"
+            >
+              One or two sentences of supporting context. Short. Dense. No
+              padding.
+            </p>
+            <!-- Broadside list: max 3 items, forward-slash bullet -->
+            <ul class="bullet-list" data-anim="fade-up" data-delay="4">
+              <li>First key supporting point</li>
+              <li>Second point, equally direct</li>
+              <li>Third and final — end strong</li>
+            </ul>
+          </div>
+
+          <div class="split-image" data-anim="reveal-right" data-delay="2">
+            <div class="img-placeholder">Image Placeholder</div>
+            <p class="img-caption">Image caption or source · Year</p>
+          </div>
+        </div>
+
+        <footer class="slide-foot">
+          <span class="label muted">Broadside</span>
+          <span class="label muted">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--stats orange">
+        <header class="slide-chrome">
+          <span class="broadside-num">05</span>
+          <span class="corner-label">By the numbers</span>
+        </header>
+        <div class="slide-body">
+          <div class="stats-grid" data-anim="fade-up" data-delay="1">
+            <div class="stat-card">
+              <div class="stat-value" data-anim="scale-in" data-delay="1">
+                $3.5B
+              </div>
+              <div class="stat-label body">
+                Series E closed at $61.5B valuation
+              </div>
+              <div class="stat-note">[Source] · [Year]</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" data-anim="scale-in" data-delay="2">
+                3×
+              </div>
+              <div class="stat-label body">
+                Enterprise deployments up quarter over quarter
+              </div>
+              <div class="stat-note">Primary research</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" data-anim="scale-in" data-delay="3">
+                #1
+              </div>
+              <div class="stat-label body">
+                App Store ranking · [Product Name] · [Date]
+              </div>
+              <div class="stat-note">App Store Charts</div>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="broadside-num" style="opacity: 0.4">Broadside</span>
+          <span class="broadside-num" style="opacity: 0.4">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--fadelist orange">
+        <div class="fadelist-top">
+          <span class="broadside-num" data-anim="fade-in" data-delay="0"
+            >01</span
+          >
+          <div class="fadelist-items" data-anim="fade-up" data-delay="1">
+            <span class="fadelist-item">Before</span>
+            <span class="fadelist-item">During</span>
+            <span class="fadelist-item">After</span>
+          </div>
+        </div>
+        <div class="fadelist-title" data-anim="fade-up" data-delay="2">
+          the<br />session
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding-top: var(--gap-sm);
+            border-top: 1px solid rgba(17, 17, 17, 0.15);
+          "
+        >
+          <span class="broadside-num" style="opacity: 0.4"
+            >[Studio X] Guidelines</span
+          >
+          <span class="broadside-num" style="opacity: 0.4">06 / 10</span>
+        </div>
+      </section>
+      <section class="slide slide--list dark">
+        <header class="slide-chrome">
+          <span class="label muted">The Framework</span>
+          <span class="label muted">07</span>
+        </header>
+        <div class="slide-body">
+          <div class="list-head">
+            <p class="kicker" data-anim="fade-in" data-delay="0">Four rules</p>
+            <h2 class="h2" data-anim="fade-up" data-delay="1">
+              what separates<br />signal from noise
+            </h2>
+          </div>
+          <ul class="bullet-list" data-anim="fade-up" data-delay="2">
+            <li>Ship before it's ready — learn faster than you plan</li>
+            <li>
+              One metric that matters — ignore everything else this quarter
+            </li>
+            <li>
+              The customer is always wrong about solutions, never about problems
+            </li>
+            <li>
+              Speed is a feature — slow companies don't get a second chance
+            </li>
+          </ul>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">Broadside</span>
+          <span class="label muted">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--quote dark">
+        <p
+          class="kicker accent"
+          data-anim="fade-in"
+          data-delay="0"
+          style="margin-bottom: var(--gap-lg)"
+        >
+          On speed
+        </p>
+        <div class="quote-text" data-anim="fade-up" data-delay="1">
+          "Move fast and you'll break things. Move slow and something else will
+          break you."
+        </div>
+        <div class="quote-attr" data-anim="fade-up" data-delay="2">
+          <span class="label accent">[Industry Leader]</span>
+          <span class="label muted">[Source] · [Year]</span>
+        </div>
+      </section>
+      <section class="slide slide--compare dark">
+        <header class="slide-chrome">
+          <span class="label muted">Before · After</span>
+          <span class="label muted">09</span>
+        </header>
+        <div class="slide-body">
+          <div class="compare-panel left">
+            <div class="compare-label" data-anim="fade-in" data-delay="0">
+              Before
+            </div>
+            <h3 class="h3" data-anim="fade-up" data-delay="1">
+              six-month build cycles
+            </h3>
+            <p class="lead muted" data-anim="fade-up" data-delay="2">
+              Teams planned for months before shipping anything. By launch, the
+              market had moved.
+            </p>
+            <ul
+              class="bullet-list"
+              data-anim="fade-up"
+              data-delay="3"
+              style="--sz-lead: 1.2vw"
+            >
+              <li>Waterfall planning, quarterly roadmaps</li>
+              <li>User testing at the end, not the start</li>
+              <li>Success measured by features shipped</li>
+            </ul>
+          </div>
+          <div class="compare-panel panel-orange">
+            <div class="compare-label after" data-anim="fade-in" data-delay="0">
+              After
+            </div>
+            <h3
+              class="h3"
+              data-anim="fade-up"
+              data-delay="1"
+              style="color: #111"
+            >
+              two-week iteration loops
+            </h3>
+            <p
+              class="lead"
+              data-anim="fade-up"
+              data-delay="2"
+              style="color: rgba(17, 17, 17, 0.65)"
+            >
+              Ship a rough version. Watch what users actually do. Rebuild. Ship
+              again.
+            </p>
+            <ul
+              class="bullet-list"
+              data-anim="fade-up"
+              data-delay="3"
+              style="--sz-lead: 1.2vw"
+            >
+              <li>Weekly user sessions, continuous discovery</li>
+              <li>Metrics reviewed daily, not quarterly</li>
+              <li>Success measured by behavior change</li>
+            </ul>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">Broadside</span>
+          <span class="label muted">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--chart dark">
+        <header class="slide-chrome">
+          <span class="label muted">Growth Metrics</span>
+          <span class="label muted">11</span>
+        </header>
+        <div class="slide-body">
+          <div class="chart-header">
+            <h2 class="h2" data-anim="fade-up" data-delay="0">
+              revenue by quarter
+            </h2>
+            <span class="caption muted" data-anim="fade-in" data-delay="1"
+              >USD · Millions · FY 2025</span
+            >
+          </div>
+          <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
+            <div class="bar-track">
+              <div class="bar-col">
+                <span class="bar-val">$1.2M</span>
+                <div class="bar-fill" style="height: 12vh"></div>
+                <span class="bar-x-label">Q1</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">$1.7M</span>
+                <div class="bar-fill" style="height: 17vh"></div>
+                <span class="bar-x-label">Q2</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">$2.1M</span>
+                <div class="bar-fill" style="height: 21vh"></div>
+                <span class="bar-x-label">Q3</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val hi">$2.8M</span>
+                <div class="bar-fill accent" style="height: 28vh"></div>
+                <span class="bar-x-label">Q4</span>
+              </div>
+            </div>
+            <div class="chart-baseline"></div>
+          </div>
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: Internal finance data · Q4 2025 Annual Report
+          </p>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">Broadside</span>
+          <span class="label muted">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--diagram orange">
+        <header class="slide-chrome">
+          <span class="broadside-num">12</span>
+          <span class="corner-label">The Process</span>
+        </header>
+        <div class="slide-body">
+          <h2
+            class="h2"
+            style="color: #111; letter-spacing: -0.02em"
+            data-anim="fade-up"
+            data-delay="0"
+          >
+            how it works
+          </h2>
+          <div class="flow" data-anim="fade-up" data-delay="1">
+            <div class="flow-step">
+              <div class="flow-num">01</div>
+              <div class="flow-title">Discover</div>
+              <div class="flow-desc">
+                Talk to users. Read the data. Surface what's actually true vs.
+                what the team assumes.
+              </div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+              <div class="flow-num">02</div>
+              <div class="flow-title">Define</div>
+              <div class="flow-desc">
+                Narrow to one problem worth solving. Write it as a testable
+                hypothesis, not a feature request.
+              </div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+              <div class="flow-num">03</div>
+              <div class="flow-title">Design</div>
+              <div class="flow-desc">
+                Build the simplest thing that could prove or disprove the
+                hypothesis. Skip the polish.
+              </div>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+              <div class="flow-num">04</div>
+              <div class="flow-title">Deploy</div>
+              <div class="flow-desc">
+                Ship to real users. Measure behavior, not opinions. Repeat from
+                step one with new data.
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot" style="border-color: rgba(17, 17, 17, 0.15)">
+          <span class="broadside-num" style="opacity: 0.4">Broadside</span>
+          <span class="broadside-num" style="opacity: 0.4">[Author Name]</span>
+        </footer>
+      </section>
+      <section class="slide slide--pie dark">
+        <header class="slide-chrome">
+          <span class="label muted">Market Share</span>
+          <span class="label muted">13</span>
+        </header>
+        <div class="slide-body">
+          <h2
+            class="h2"
+            data-anim="fade-up"
+            data-delay="0"
+            style="font-weight: 900"
+          >
+            where the market sits
+          </h2>
+          <div class="pie-row" data-anim="fade-up" data-delay="1">
+            <!-- Donut: conic-gradient segments match legend order -->
+            <div
+              class="pie-donut"
+              style="
+                background: conic-gradient(
+                  var(--c-accent) 0% 40%,
+                  #3a3a38 40% 68%,
+                  #555550 68% 88%,
+                  #282826 88% 100%
+                );
+              "
+            ></div>
+            <div class="pie-legend">
+              <div class="pie-item">
+                <div
+                  class="pie-swatch"
+                  style="background: var(--c-accent)"
+                ></div>
+                <span class="pie-item-label">Leader</span>
+                <span class="pie-item-val">40%</span>
+              </div>
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: #3a3a38"></div>
+                <span class="pie-item-label">Challenger</span>
+                <span class="pie-item-val">28%</span>
+              </div>
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: #555550"></div>
+                <span class="pie-item-label">Followers</span>
+                <span class="pie-item-val">20%</span>
+              </div>
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: #282826"></div>
+                <span class="pie-item-label">Other</span>
+                <span class="pie-item-val">12%</span>
+              </div>
+              <div class="pie-total">TOTAL MARKET: $[X]B · [Year] ESTIMATE</div>
+            </div>
+          </div>
+          <p class="chart-source" data-anim="fade-in" data-delay="2">
+            Source: [Industry report] · [Year] · Estimates only
+          </p>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Author]</span>
+          <span class="label muted">[Year]</span>
+        </footer>
+      </section>
+      <section class="slide slide--pyramid dark">
+        <header class="slide-chrome">
+          <span class="label muted">The Hierarchy</span>
+          <span class="label muted">14</span>
+        </header>
+        <div class="slide-body">
+          <h2
+            class="h2"
+            data-anim="fade-up"
+            data-delay="0"
+            style="font-weight: 900"
+          >
+            what actually matters
+          </h2>
+          <div class="pyramid" data-anim="fade-up" data-delay="1">
+            <div class="pyr-level">
+              <span class="pyr-name">mission</span>
+              <span class="pyr-desc">why this exists</span>
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">strategy</span>
+              <span class="pyr-desc">what we're betting on</span>
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">product</span>
+              <span class="pyr-desc">what we're building</span>
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">growth</span>
+              <span class="pyr-desc">how we reach people</span>
+            </div>
+            <div class="pyr-level">
+              <span class="pyr-name">operations</span>
+              <span class="pyr-desc">how we run the day-to-day</span>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Author]</span>
+          <span class="label muted">[Year]</span>
+        </footer>
+      </section>
+      <section class="slide slide--vtimeline dark">
+        <header class="slide-chrome">
+          <span class="label muted">The Story</span>
+          <span class="label muted">15</span>
+        </header>
+        <div class="vt-hl" data-anim="fade-up" data-delay="0">
+          how we got here
+        </div>
+        <div class="vtimeline" data-anim="fade-up" data-delay="1">
+          <!-- Event 1 -->
+          <div class="vt-date">[Year −3]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">the idea</div>
+            <div class="vt-body">
+              One slide. Three slides. Nineteen rejections. One yes.
+            </div>
+          </div>
+          <!-- Event 2 -->
+          <div class="vt-date">[Year −2]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">first product</div>
+            <div class="vt-body">
+              Launched to [N] users. [X]% used it daily after week one.
+            </div>
+          </div>
+          <!-- Event 3 -->
+          <div class="vt-date">[Year −1]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">the pivot</div>
+            <div class="vt-body">
+              Killed [X] features. Found the one thing that changed retention.
+            </div>
+          </div>
+          <!-- Event 4 -->
+          <div class="vt-date">[Year 0]</div>
+          <div class="vt-spine"></div>
+          <div class="vt-content">
+            <div class="vt-title">now</div>
+            <div class="vt-body">
+              [N]k users. $[X]M ARR. The hard part starts here.
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Author] / [Year]</span>
+          <span class="label muted">15</span>
+        </footer>
+      </section>
+      <section class="slide slide--cycle dark">
+        <header class="slide-chrome">
+          <span class="label muted">The Loop</span>
+          <span class="label muted">16</span>
+        </header>
+        <div class="slide-body">
+          <h2
+            class="h2"
+            data-anim="fade-up"
+            data-delay="0"
+            style="font-weight: 900"
+          >
+            build · measure · learn
+          </h2>
+          <div class="cycle-grid" data-anim="fade-up" data-delay="1">
+            <!-- Row 1 -->
+            <div class="cycle-step">
+              <div class="cycle-num">01</div>
+              <div class="cycle-title">build</div>
+              <div class="cycle-desc">
+                Ship the smallest version that could prove the idea wrong.
+              </div>
+            </div>
+            <div class="cycle-arrow">→</div>
+            <div class="cycle-step">
+              <div class="cycle-num">02</div>
+              <div class="cycle-title">measure</div>
+              <div class="cycle-desc">
+                What did users actually do? Not what they said — what they did.
+              </div>
+            </div>
+            <!-- Row 2: arrows -->
+            <div class="cycle-arrow">↓</div>
+            <div></div>
+            <div class="cycle-arrow">↓</div>
+            <!-- Row 3 (reversed: left=04, right=03 to form clockwise loop) -->
+            <div class="cycle-step">
+              <div class="cycle-num">04</div>
+              <div class="cycle-title">learn</div>
+              <div class="cycle-desc">
+                Update the hypothesis. Kill what didn't work. Double what did.
+              </div>
+            </div>
+            <div class="cycle-arrow">←</div>
+            <div class="cycle-step">
+              <div class="cycle-num">03</div>
+              <div class="cycle-title">decide</div>
+              <div class="cycle-desc">
+                Ship to more users or go back to step one. There is no third
+                option.
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">[Author] / [Year]</span>
+          <span class="label muted">16</span>
+        </footer>
+      </section>
+      <section class="slide slide--end orange">
+        <div class="broadside-top-chrome">
+          <span class="broadside-num" data-anim="fade-in" data-delay="0"
+            >10</span
+          >
+          <span class="corner-label" data-anim="fade-in" data-delay="0"
+            >End</span
+          >
+        </div>
+        <h1
+          class="display"
+          data-anim="fade-up"
+          data-delay="1"
+          style="
+            color: #111;
+            max-width: 80%;
+            line-height: 0.9;
+            letter-spacing: -0.04em;
+          "
+        >
+          let's<br />talk.
+        </h1>
+        <div
+          style="display: flex; flex-direction: column; gap: var(--gap-sm)"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          <p class="lead" style="color: rgba(17, 17, 17, 0.65); max-width: 45%">
+            [hello@company.com] · [@handle] · [company.com]
+          </p>
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: auto;
+            padding-top: var(--gap-sm);
+            border-top: 1px solid rgba(17, 17, 17, 0.15);
+          "
+        >
+          <span class="broadside-num" style="opacity: 0.4">[Author Name]</span>
+          <span class="broadside-num" style="opacity: 0.4">[Year]</span>
+        </div>
+      </section>
+    </div>
+    <!-- /#deck -->
+
+    <nav id="nav-dots" aria-label="Slide navigation"></nav>
+    <div id="slide-counter"></div>
+
+    <script>
+      (function () {
+        const deck = document.getElementById("deck");
+        const dotsNav = document.getElementById("nav-dots");
+        const counter = document.getElementById("slide-counter");
+        const slides = Array.from(deck.querySelectorAll(".slide"));
+        const total = slides.length;
+        let current = 0;
+        let isAnimating = false;
+
+        // Size the deck to fit all slides side by side
+        deck.style.width = "calc(" + total + " * 100vw)";
+
+        // Build navigation dots dynamically from slide count
+        slides.forEach(function (_, i) {
+          const dot = document.createElement("button");
+          dot.className = "nav-dot";
+          dot.setAttribute("aria-label", "Slide " + (i + 1));
+          dot.addEventListener("click", function () {
+            goTo(i);
+          });
+          dotsNav.appendChild(dot);
+        });
+
+        function pad(n) {
+          return String(n).padStart(2, "0");
+        }
+
+        function goTo(index) {
+          if (isAnimating) return;
+          if (index < 0 || index >= total) return;
+          if (
+            index === current &&
+            slides[current].classList.contains("is-active")
+          )
+            return;
+
+          isAnimating = true;
+          slides[current].classList.remove("is-active");
+
+          current = index;
+          const slide = slides[current];
+
+          // Reset animations so re-visiting a slide re-plays them
+          slide.querySelectorAll("[data-anim]").forEach(function (el) {
+            el.style.animation = "none";
+            void el.offsetHeight; // force reflow to clear animation state
+            el.style.animation = "";
+          });
+
+          slide.classList.add("is-active");
+          deck.style.transform = "translateX(calc(-" + current + " * 100vw))";
+
+          // Update dots
+          dotsNav.querySelectorAll(".nav-dot").forEach(function (d, i) {
+            d.classList.toggle("is-active", i === current);
+          });
+
+          // Update counter
+          counter.textContent = pad(current + 1) + " / " + pad(total);
+
+          setTimeout(function () {
+            isAnimating = false;
+          }, 900);
+        }
+
+        // Keyboard navigation — arrows, space, Home/End
+        document.addEventListener("keydown", function (e) {
+          if (
+            e.key === "ArrowRight" ||
+            e.key === " " ||
+            e.key === "ArrowDown"
+          ) {
+            e.preventDefault();
+            goTo(current + 1);
+          }
+          if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            goTo(current - 1);
+          }
+          if (e.key === "Home") goTo(0);
+          if (e.key === "End") goTo(total - 1);
+        });
+
+        // Touch swipe — 40px threshold
+        var touchStartX = 0;
+        document.addEventListener(
+          "touchstart",
+          function (e) {
+            touchStartX = e.touches[0].clientX;
+          },
+          { passive: true },
+        );
+        document.addEventListener(
+          "touchend",
+          function (e) {
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(dx) > 40) goTo(current + (dx < 0 ? 1 : -1));
+          },
+          { passive: true },
+        );
+
+        // Mouse wheel — 1000ms lock prevents double-firing
+        var wheelLocked = false;
+        document.addEventListener(
+          "wheel",
+          function (e) {
+            if (wheelLocked) return;
+            var primary =
+              Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            goTo(current + (primary > 0 ? 1 : -1));
+            wheelLocked = true;
+            setTimeout(function () {
+              wheelLocked = false;
+            }, 1000);
+          },
+          { passive: true },
+        );
+
+        // Kick off on slide 1
+        goTo(0);
+      })();
+    </script>
+  </body>
+</html>

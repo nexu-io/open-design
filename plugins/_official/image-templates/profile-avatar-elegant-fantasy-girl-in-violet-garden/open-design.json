@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-elegant-fantasy-girl-in-violet-garden",
+  "title": "Profile / Avatar - Elegant Fantasy Girl in Violet Garden",
+  "version": "0.1.0",
+  "description": "This prompt generates a polished anime-style fantasy portrait of an elegant woman with glossy styled hair, ornate violet-black clothing, and a flower-filled magical garden setting, ideal for character",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "美和",
+    "url": "https://x.com/tokikageyomikag/status/2049200427842064715#reversed-1"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "anime",
+    "fantasy",
+    "cinematic-romance"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453212849_lh9pew_HHA47WybEAAft9f.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A highly detailed anime fantasy portrait of a beautiful young woman seated at a stone table in an enchanted flower garden at golden hour, framed from the waist up in a vertical composition. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair that is long, silky, glossy, and carefully groomed, with smooth flowing strands, soft waves, delicate shine, no frizz, no messy texture, and an elegant partial updo with a braided side twist and a gold hair ornament. Her visible styling should emphasize healthy, luxurious hair with clean strand definition and luminous highlights. She wears an ornate fantasy dress in {argument name=\"outfit colors\" default=\"black, white, and violet\"}, featuring a high black collar with gold filigree, white floral lace over the bodice, translucent puffed sleeves with lace cuffs, jeweled purple crystal ornaments, and elegant arm accessories. A large faceted violet gemstone pendant rests at her chest, with matching purple earrings and decorative accents. Her pose is graceful and refined, one hand lightly raised near her chin and the other holding a small bouquet of purple flowers. Surround her with blooming violet flowers in the foreground and background, glowing butterflies, drifting petals, and a dreamy cathedral-like garden with gothic arches and spires softly blurred in the distance. Place an open book on the table in the lower foreground. Use warm backlighting, rim light through the hair, soft magical bloom, pastel lavender and pink atmosphere, sparkling particles, shallow depth of field, ultra-detailed textures, polished anime illustration, romantic fantasy mood, ethereal elegance, and a luxurious painterly finish.",
+        "zh-CN": "使用这个插件完成以下任务：A highly detailed anime fantasy portrait of a beautiful young woman seated at a stone table in an enchanted flower garden at golden hour, framed from the waist up in a vertical composition. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair that is long, silky, glossy, and carefully groomed, with smooth flowing strands, soft waves, delicate shine, no frizz, no messy texture, and an elegant partial updo with a braided side twist and a gold hair ornament. Her visible styling should emphasize healthy, luxurious hair with clean strand definition and luminous highlights. She wears an ornate fantasy dress in {argument name=\"outfit colors\" default=\"black, white, and violet\"}, featuring a high black collar with gold filigree, white floral lace over the bodice, translucent puffed sleeves with lace cuffs, jeweled purple crystal ornaments, and elegant arm accessories. A large faceted violet gemstone pendant rests at her chest, with matching purple earrings and decorative accents. Her pose is graceful and refined, one hand lightly raised near her chin and the other holding a small bouquet of purple flowers. Surround her with blooming violet flowers in the foreground and background, glowing butterflies, drifting petals, and a dreamy cathedral-like garden with gothic arches and spires softly blurred in the distance. Place an open book on the table in the lower foreground. Use warm backlighting, rim light through the hair, soft magical bloom, pastel lavender and pink atmosphere, sparkling particles, shallow depth of field, ultra-detailed textures, polished anime illustration, romantic fantasy mood, ethereal elegance, and a luxurious painterly finish."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

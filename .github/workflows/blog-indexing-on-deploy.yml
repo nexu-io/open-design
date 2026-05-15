@@ -1,0 +1,265 @@
+name: blog-indexing-on-deploy
+
+# Runs after every successful `landing-page-deploy` on main. The job is
+# idempotent and follows the blog-indexing-automation skill:
+#
+#   1. Detect blog URLs added/modified in the deploy
+#   2. Verify each URL is operationally ready (200, no noindex, canonical, in sitemap)
+#   3. Submit the sitemap-index to Google Search Console (one call per deploy)
+#   4. Capture a baseline URL Inspection per new URL (monitoring, not submission)
+#   5. Open a PR that updates docs/blog-indexing-status.{md,json}
+#
+# Indexing is NOT requested via API — Google's Indexing API does not
+# support normal blog content. The skill explicitly forbids UI
+# automation against Search Console. Operationally, sitemap submission
+# + healthy internal linking is what makes URLs discoverable.
+
+on:
+  workflow_run:
+    workflows: ['landing-page-deploy']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      head_sha:
+        description: 'Commit SHA to diff against its parent. Defaults to HEAD on main.'
+        required: false
+      base_sha:
+        description: 'Optional base SHA for multi-commit deploy diffs.'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blog-indexing-on-deploy
+  cancel-in-progress: false
+
+jobs:
+  index:
+    name: Index newly deployed blog posts
+    if: >-
+      github.repository == 'nexu-io/open-design'
+      && (
+        github.event_name == 'workflow_dispatch'
+        || github.event.workflow_run.conclusion == 'success'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          # Need history to diff against the parent commit and to
+          # compute first-commit dates for posts.
+          fetch-depth: 0
+          ref: >-
+            ${{
+              github.event.inputs.head_sha
+              || github.event.workflow_run.head_sha
+              || github.sha
+            }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies (landing-page only)
+        run: pnpm install --frozen-lockfile --filter @open-design/landing-page
+
+      - name: Check indexing configuration
+        id: config
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+          BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+          BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+        run: |
+          gsc=false
+          bot=false
+          if { [ -n "$GSC_OAUTH_CLIENT_ID" ] && [ -n "$GSC_OAUTH_CLIENT_SECRET" ] && [ -n "$GSC_OAUTH_REFRESH_TOKEN" ]; } || [ -n "$GSC_SERVICE_ACCOUNT_KEY" ]; then
+            gsc=true
+          fi
+          if [ -n "$BOT_APP_ID" ] && [ -n "$BOT_APP_PRIVATE_KEY" ]; then
+            bot=true
+          fi
+          echo "gsc=$gsc" >> "$GITHUB_OUTPUT"
+          echo "bot=$bot" >> "$GITHUB_OUTPUT"
+          if [ "$gsc" != "true" ]; then
+            echo "::warning title=Blog indexing not fully configured::GSC auth is missing; sitemap submission, URL Inspection, Search Analytics, and status rendering will be skipped."
+          fi
+          if [ "$bot" != "true" ]; then
+            echo "::warning title=Blog indexing status PR disabled::Open Design bot secrets are missing; status PR creation will be skipped."
+          fi
+          {
+            echo "### Blog indexing configuration"
+            echo "- GSC auth configured: \`$gsc\`"
+            echo "- Open Design bot configured: \`$bot\`"
+            if [ "$gsc" != "true" ]; then
+              echo ""
+              echo "GSC-dependent sitemap submission and URL Inspection steps will be skipped."
+            fi
+            if [ "$bot" != "true" ]; then
+              echo ""
+              echo "Status PR creation will be skipped."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore pending indexing status state
+        run: |
+          if ! git fetch origin automation/blog-indexing-status:refs/remotes/origin/automation/blog-indexing-status; then
+            {
+              echo "### Blog indexing status restore"
+              echo "No pending \`automation/blog-indexing-status\` branch was found. Starting from the committed status files."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git checkout refs/remotes/origin/automation/blog-indexing-status -- \
+            docs/blog-indexing-status.md \
+            docs/blog-indexing-status.json; then
+            {
+              echo "### Blog indexing status restore"
+              echo "Restored pending status files from \`automation/blog-indexing-status\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Blog indexing status restore"
+              echo "Failed to restore pending status files from \`automation/blog-indexing-status\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Blog indexing status restore failed::Fetched automation/blog-indexing-status but could not checkout the status files."
+            exit 1
+          fi
+
+      - name: Detect changed blog URLs
+        id: detect
+        run: |
+          mkdir -p .blog-indexing
+          BASE="${{ github.event.inputs.base_sha || '' }}"
+          if [ -z "$BASE" ]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/detect-changed-urls.ts \
+            --base "$BASE" \
+            --head HEAD \
+            --out ../../.blog-indexing/changed-urls.json
+          echo '--- changed-urls.json ---'
+          cat .blog-indexing/changed-urls.json
+          count=$(node -e "const j=require('./.blog-indexing/changed-urls.json');console.log((j.addedUrls.length+j.modifiedUrls.length))")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Verify readiness
+        if: steps.detect.outputs.count != '0'
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/verify-readiness.ts \
+            --urls ../../.blog-indexing/changed-urls.json \
+            --out ../../.blog-indexing/readiness.json \
+            --timeout-ms 240000
+
+      - name: Submit URLs to IndexNow
+        if: steps.detect.outputs.count != '0'
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-indexnow.ts \
+            --urls ../../.blog-indexing/changed-urls.json \
+            --out ../../.blog-indexing/indexnow.json
+
+      - name: Submit sitemap to Search Console
+        if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-sitemap.ts
+
+      - name: Inspect new URLs (baseline)
+        if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
+            --urls ../../.blog-indexing/changed-urls.json \
+            --out ../../.blog-indexing/inspections.json
+          echo '--- inspections.json ---'
+          cat .blog-indexing/inspections.json
+
+      - name: Query Search Console traffic (baseline)
+        if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
+            --urls ../../.blog-indexing/changed-urls.json \
+            --out ../../.blog-indexing/analytics.json
+
+      - name: Render status report
+        if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/render-status.ts \
+            --inspections ../../.blog-indexing/inspections.json \
+            --analytics ../../.blog-indexing/analytics.json
+
+      - name: Upload artifacts
+        if: always() && steps.detect.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: blog-indexing-${{ github.run_id }}
+          path: |
+            .blog-indexing/changed-urls.json
+            .blog-indexing/readiness.json
+            .blog-indexing/indexnow.json
+            .blog-indexing/inspections.json
+            .blog-indexing/analytics.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Generate Open Design bot token
+        if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open status PR
+        if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.open-design-bot-token.outputs.token }}
+          add-paths: |
+            docs/blog-indexing-status.md
+            docs/blog-indexing-status.json
+          branch: automation/blog-indexing-status
+          delete-branch: true
+          commit-message: 'docs(blog): refresh indexing status after deploy'
+          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          title: 'docs(blog): refresh indexing status after deploy'
+          body: |
+            Refreshes `docs/blog-indexing-status.md` with the URL Inspection
+            verdicts captured immediately after the latest landing-page deploy.
+
+            Generated by `.github/workflows/blog-indexing-on-deploy.yml`. The
+            sidecar `docs/blog-indexing-status.json` is the canonical state;
+            the markdown file is rendered from it.
