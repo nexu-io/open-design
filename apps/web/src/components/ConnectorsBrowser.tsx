@@ -918,7 +918,7 @@ export function ConnectorsBrowser({
                 className="icon-only connector-panel-alert-action"
                 aria-label={t('connectors.openDetailsAria', { name: alert.connectorName })}
                 title={t('connectors.openDetailsAria', { name: alert.connectorName })}
-                onClick={() => setDetailConnectorId(alert.connectorId)}
+                onClick={() => openConnectorDetails(alert.connectorId)}
               >
                 <Icon name="external-link" size={12} />
               </button>
