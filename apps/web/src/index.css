@@ -13516,7 +13516,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   gap: 6px;
   align-items: center;
 }
-.filter-pill:hover { border-color: var(--border-strong); color: var(--text); }
+button.filter-pill:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
 /*
   Selected filter pill — quiet "I am the chosen one" treatment, NOT a CTA.
   Earlier the active pill borrowed the full `--accent` fill, which read as
@@ -13532,7 +13536,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text);
   font-weight: 600;
 }
-.filter-pill.active:hover {
+button.filter-pill.active:hover:not(:disabled) {
   background: var(--bg-muted);
   border-color: var(--border-strong);
   color: var(--text);
@@ -13540,6 +13544,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .filter-pill-count {
   font-size: 11px;
   opacity: 0.7;
+}
+button.filter-pill:hover:not(:disabled) .filter-pill-count,
+.filter-pill.active .filter-pill-count {
+  color: currentColor;
+  opacity: 0.9;
 }
 .example-card-actions {
   display: flex;
