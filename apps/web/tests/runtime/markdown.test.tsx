@@ -111,4 +111,9 @@ describe('renderMarkdown', () => {
     const bodyTd = (out.match(/<tbody>[\s\S]*<\/tbody>/)?.[0] ?? '').match(/<td/g) ?? [];
     expect(bodyTd.length).toBe(2);
   });
+
+  it('keeps hard line breaks inside plain paragraphs', () => {
+    const out = html('first line\nsecond line');
+    expect(out).toContain('<p class="md-p">first line<br/>second line</p>');
+  });
 });
