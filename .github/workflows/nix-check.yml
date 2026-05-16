@@ -1,27 +1,6 @@
 name: nix-check
 
 on:
-  push:
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.mdx'
-      - '**/*.txt'
-      - LICENSE
-      - .gitignore
-      - .editorconfig
-      - .vscode/**
-      - .idea/**
-      - docs/**
-      - assets/**
-      - '**/*.png'
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.gif'
-      - '**/*.svg'
-      - '**/*.webp'
-      - .github/ISSUE_TEMPLATE/**
-      - .github/PULL_REQUEST_TEMPLATE.md
-      - .github/CODEOWNERS
   pull_request:
     paths-ignore:
       - '**/*.md'
