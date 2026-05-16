@@ -51,7 +51,7 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
             'baseUrl must be a non-empty string when provided',
           );
         }
-        const validated = validateExternalApiBaseUrl(baseUrl);
+        const validated = await validateExternalApiBaseUrl(baseUrl);
         if (validated.error) {
           return sendApiError(
             res,
