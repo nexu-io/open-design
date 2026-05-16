@@ -1200,6 +1200,52 @@ describe('FileViewer tweaks toolbar', () => {
     );
   });
 
+  it('keeps saved comment marker numbers aligned with the side panel order', () => {
+    const olderComment: PreviewComment = {
+      id: 'comment-older',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-older',
+      selector: '[data-od-pin="pin-older"]',
+      label: 'pin-older',
+      text: '',
+      htmlHint: '',
+      position: { x: 24, y: 32, width: 18, height: 18 },
+      note: 'Older comment',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+    };
+    const newerComment: PreviewComment = {
+      ...olderComment,
+      id: 'comment-newer',
+      elementId: 'pin-newer',
+      selector: '[data-od-pin="pin-newer"]',
+      label: 'pin-newer',
+      position: { x: 72, y: 32, width: 18, height: 18 },
+      note: 'Newer comment',
+      createdAt: 20,
+      updatedAt: 20,
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[olderComment, newerComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    expect(screen.getAllByTestId('comment-side-item')[0]?.textContent).toContain('Newer comment');
+    expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toContain('1');
+    expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toContain('2');
+  });
+
   it('does not preload non-open element comments into the picker composer', async () => {
     const applyingElementComment: PreviewComment = {
       id: 'comment-element-applying',

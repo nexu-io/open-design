@@ -14,7 +14,7 @@ hosted AI design tools.
 - Systems: https://open-design.ai/systems/
 - Craft: https://open-design.ai/craft/
 - Templates: https://open-design.ai/templates/
-- RSS: https://open-design.ai/rss.xml
+- RSS: https://open-design.ai/blog/rss.xml
 - Sitemap: https://open-design.ai/sitemap-index.xml
 
 ## Key Blog Posts

@@ -5007,6 +5007,24 @@ a.avatar-item:visited {
   color: var(--text-muted);
 }
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
+.agent-model-select-wrap {
+  position: relative;
+}
+.agent-model-select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+  padding-right: 28px;
+  width: 100%;
+}
+.agent-model-select-chevron {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  pointer-events: none;
+}
 .agent-cli-env {
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
@@ -8123,7 +8141,7 @@ button.connector-action.is-loading {
   font-weight: 500;
   white-space: nowrap;
 }
-.subtab-pill button:hover:not(.active) { background: rgba(255,255,255,0.6); border-color: transparent; color: var(--text); }
+.subtab-pill button:hover:not(.active) { background: var(--bg-muted); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
   background: var(--bg-panel);
   color: var(--text);
@@ -14706,7 +14724,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   gap: 6px;
   align-items: center;
 }
-.filter-pill:hover { border-color: var(--border-strong); color: var(--text); }
+button.filter-pill:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
 /*
   Selected filter pill — quiet "I am the chosen one" treatment, NOT a CTA.
   Earlier the active pill borrowed the full `--accent` fill, which read as
@@ -14722,7 +14744,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text);
   font-weight: 600;
 }
-.filter-pill.active:hover {
+button.filter-pill.active:hover:not(:disabled) {
   background: var(--bg-muted);
   border-color: var(--border-strong);
   color: var(--text);
@@ -14730,6 +14752,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .filter-pill-count {
   font-size: 11px;
   opacity: 0.7;
+}
+button.filter-pill:hover:not(:disabled) .filter-pill-count,
+.filter-pill.active .filter-pill-count {
+  color: currentColor;
+  opacity: 0.9;
 }
 .example-card-actions {
   display: flex;
@@ -21404,6 +21431,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 
 .plugin-share-confirm__panel {
   max-width: 720px;
+}
+.plugin-share-confirm .plugin-details-modal__foot {
+  padding: 16px 24px 22px;
 }
 .plugin-share-confirm__steps {
   margin: 12px 0 0;

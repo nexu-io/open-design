@@ -1291,4 +1291,7 @@ export const th: Dict = {
   'notify.failureBody': 'หน้าที่ทำผิดพลาด',
   'settings.memoryExtractionsRefresh': 'รีเฟรช',
   'settings.memoryExtractionsRefreshing': 'กำลังรีเฟรช…',
+  'settings.skillsNoFiles': 'ไม่มีไฟล์ในโฟลเดอร์ทักษะนี้',
+  'settings.skillsNameRequired': 'ต้องระบุชื่อทักษะ',
+  'settings.skillsBodyRequired': 'ต้องระบุเนื้อหาทักษะ',
 };

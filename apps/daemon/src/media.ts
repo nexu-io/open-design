@@ -27,6 +27,10 @@
 //                              /v1/images/generations for grok-imagine-image
 //                              and async /v1/videos/generations + GET poll
 //                              for grok-imagine-video (t2v + i2v + audio)
+//   * provider 'imagerouter'→ ImageRouter OpenAI-compatible image/video
+//                              generation endpoints
+//   * provider 'custom-image'→ user-supplied OpenAI-compatible
+//                              /v1/images/generations endpoint
 //
 // The fallback stub handlers are gated behind OD_MEDIA_ALLOW_STUBS=1; in
 // release builds they throw StubProviderDisabledError (mapped to HTTP
@@ -123,6 +127,8 @@ const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
 // https://ai.google.dev/gemini-api/docs/models
 const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
+const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
+const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -410,10 +416,15 @@ export async function generateMedia(args: {
   };
 
   const credentials = await resolveProviderConfig(projectRoot, def.provider);
+  const customImageCredentials =
+    surface === 'image' && def.provider === 'openai'
+      ? await resolveProviderConfig(projectRoot, 'custom-image')
+      : null;
 
   let bytes: Buffer;
   let providerNote: string;
   let suggestedExt: string | undefined;
+  let providerId = def.provider;
   // Tracks whether the bytes came from a real provider call or from the
   // stub fallback. Surfaces in the response so the CLI/agent can tell a
   // legitimate placeholder ("provider not integrated yet") apart from a
@@ -426,7 +437,17 @@ export async function generateMedia(args: {
   // no real renderer is wired up for this (provider, surface) pair.
   let intentionalStub = false;
   try {
-    if (def.provider === 'openai' && surface === 'image') {
+    if (
+      def.provider === 'openai'
+      && surface === 'image'
+      && customImageOverridesOpenAIModel(ctx, customImageCredentials)
+    ) {
+      providerId = 'custom-image';
+      const result = await renderCustomOpenAIImage(ctx, customImageCredentials!);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'openai' && surface === 'image') {
       const result = await renderOpenAIImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
@@ -462,6 +483,21 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'nanobanana' && surface === 'image') {
       const result = await renderNanoBananaImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'imagerouter' && surface === 'image') {
+      const result = await renderImageRouterImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'imagerouter' && surface === 'video') {
+      const result = await renderImageRouterVideo(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'custom-image' && surface === 'image') {
+      const result = await renderCustomOpenAIImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -549,14 +585,14 @@ export async function generateMedia(args: {
     const stub = await renderStub(ctx, safeOut);
     bytes = stub.bytes;
     const msg = errorMessage(err);
-    providerNote = `[${def.provider} error → stub] ${msg}`;
+    providerNote = `[${providerId} error → stub] ${msg}`;
     providerError = msg;
     usedStubFallback = true;
     // Also log to daemon stderr so the failure is visible in the daemon
     // terminal — easiest place for the developer/operator to spot it.
     try {
       console.error(
-        `[media] ${def.provider}/${surface}/${model} failed: ${msg}`,
+        `[media] ${providerId}/${surface}/${model} failed: ${msg}`,
       );
     } catch {
       // best-effort logging only
@@ -593,7 +629,7 @@ export async function generateMedia(args: {
     model,
     surface,
     providerNote,
-    providerId: def.provider,
+    providerId,
     providerError,
     usedStubFallback,
     intentionalStub,
@@ -725,6 +761,177 @@ async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig)
   };
 }
 
+async function renderImageRouterImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
+  const wireModel = (credentials.model || ctx.wireModel).trim();
+  const url = buildOpenAIImageUrl(baseUrl, false);
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    model: wireModel,
+    quality: 'auto',
+    size: imageRouterSizeFor(ctx.aspect, 'image'),
+    response_format: 'b64_json',
+    output_format: 'png',
+  };
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await parseOpenAICompatibleJson(resp, 'imagerouter image');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'imagerouter image');
+  return {
+    bytes,
+    providerNote: `imagerouter/${wireModel} · ${imageRouterSizeFor(ctx.aspect, 'image')} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
+  const wireModel = (credentials.model || ctx.wireModel).trim();
+  const url = buildOpenAIVideoUrl(baseUrl);
+  const seconds = typeof ctx.length === 'number' ? ctx.length : 'auto';
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    model: wireModel,
+    size: imageRouterSizeFor(ctx.aspect, 'video'),
+    seconds,
+    response_format: 'b64_json',
+  };
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await parseOpenAICompatibleJson(resp, 'imagerouter video');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'imagerouter video');
+  return {
+    bytes,
+    providerNote: `imagerouter/${wireModel} · ${imageRouterSizeFor(ctx.aspect, 'video')} · ${seconds === 'auto' ? 'auto' : `${seconds}s`} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  const baseUrl = (credentials.baseUrl || '').trim();
+  if (!baseUrl) {
+    throw new Error(
+      'Custom Image API base URL required — configure a /v1/images/generations compatible endpoint in Settings',
+    );
+  }
+  const wireModel = (
+    credentials.model
+    || (ctx.wireModel !== CUSTOM_IMAGE_MODEL_ID ? ctx.wireModel : '')
+  ).trim();
+  if (!wireModel) {
+    throw new Error(
+      'Custom Image API model required — configure the provider model in Settings',
+    );
+  }
+
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (credentials.apiKey) {
+    headers.authorization = `Bearer ${credentials.apiKey}`;
+  }
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    model: wireModel,
+    n: 1,
+    size: openaiSizeFor('gpt-image-1', ctx.aspect),
+  };
+
+  const resp = await fetch(buildOpenAIImageUrl(baseUrl, false), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await parseOpenAICompatibleJson(resp, 'custom image');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'custom image');
+  return {
+    bytes,
+    providerNote: `custom-image/${wireModel} · ${body.size} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function customImageOverridesOpenAIModel(
+  ctx: MediaContext,
+  credentials: ProviderConfig | null,
+): credentials is ProviderConfig {
+  const baseUrl = credentials?.baseUrl?.trim();
+  const model = credentials?.model?.trim();
+  if (!baseUrl || !model) return false;
+  return model === ctx.model || model === ctx.wireModel;
+}
+
+async function parseOpenAICompatibleJson(resp: Response, providerTag: string): Promise<any> {
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`${providerTag} ${resp.status}: ${truncate(text, 240)}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${providerTag} non-JSON response: ${truncate(text, 200)}`);
+  }
+}
+
+async function bytesFromOpenAICompatibleData(data: any, providerTag: string): Promise<Buffer> {
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error(`${providerTag} response had no data[0]`);
+  if (typeof entry.b64_json === 'string' && entry.b64_json) {
+    const raw = entry.b64_json.includes(',')
+      ? entry.b64_json.slice(entry.b64_json.indexOf(',') + 1)
+      : entry.b64_json;
+    return Buffer.from(raw, 'base64');
+  }
+  if (typeof entry.url === 'string' && entry.url) {
+    const mediaResp = await fetch(entry.url);
+    if (!mediaResp.ok) {
+      throw new Error(`${providerTag} media fetch ${mediaResp.status}`);
+    }
+    const arr = await mediaResp.arrayBuffer();
+    return Buffer.from(arr);
+  }
+  throw new Error(`${providerTag} response had neither b64_json nor url`);
+}
+
+function imageRouterSizeFor(aspect: string | undefined, surface: 'image' | 'video'): string {
+  if (surface === 'video') {
+    if (aspect === '1:1') return '1024x1024';
+    if (aspect === '9:16') return '576x1024';
+    if (aspect === '4:3') return '1024x768';
+    if (aspect === '3:4') return '768x1024';
+    return '1024x576';
+  }
+  if (aspect === '16:9') return '1024x576';
+  if (aspect === '9:16') return '576x1024';
+  if (aspect === '4:3') return '1024x768';
+  if (aspect === '3:4') return '768x1024';
+  return '1024x1024';
+}
+
 /**
  * Heuristic: do we think this base URL points at an Azure OpenAI
  * deployment rather than the public OpenAI API?
@@ -750,21 +957,39 @@ function detectAzureEndpoint(baseUrl: string): boolean {
  * appending the default api-version for Azure when the user didn't
  * specify one. Returns a string ready for `fetch`.
  */
-function buildOpenAIImageUrl(baseUrl: string, isAzure: boolean): string {
+function buildOpenAICompatibleGenerationUrl(baseUrl: string, endpoint: 'images' | 'videos'): string {
+  const suffix = `/${endpoint}/generations`;
   let parsed;
   try {
     parsed = new URL(baseUrl);
   } catch {
+    const stripped = baseUrl.replace(/\/$/, '');
+    return stripped.endsWith(suffix) ? stripped : `${stripped}${suffix}`;
+  }
+  const strippedPath = parsed.pathname.replace(/\/+$/, '');
+  if (!strippedPath.endsWith(suffix)) {
+    parsed.pathname = `${strippedPath}${suffix}`;
+  }
+  return parsed.toString();
+}
+
+function buildOpenAIImageUrl(baseUrl: string, isAzure: boolean): string {
+  let parsed;
+  try {
+    parsed = new URL(buildOpenAICompatibleGenerationUrl(baseUrl, 'images'));
+  } catch {
     // Bad URL — fall back to naive concat so the upstream error is
     // surfaced through the normal HTTP path rather than a parse crash.
-    const stripped = baseUrl.replace(/\/$/, '');
-    return `${stripped}/images/generations`;
+    return buildOpenAICompatibleGenerationUrl(baseUrl, 'images');
   }
-  parsed.pathname = parsed.pathname.replace(/\/+$/, '') + '/images/generations';
   if (isAzure && !parsed.searchParams.has('api-version')) {
     parsed.searchParams.set('api-version', AZURE_DEFAULT_API_VERSION);
   }
   return parsed.toString();
+}
+
+function buildOpenAIVideoUrl(baseUrl: string): string {
+  return buildOpenAICompatibleGenerationUrl(baseUrl, 'videos');
 }
 
 function openaiSizeFor(model: string, aspect?: string): string {

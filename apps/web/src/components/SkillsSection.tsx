@@ -236,11 +236,11 @@ export function SkillsSection({ cfg, setCfg }: Props) {
     const name = draft.name.trim();
     const body = draft.body.trim();
     if (!name) {
-      setDraftError('Skill name is required.');
+      setDraftError(t('settings.skillsNameRequired'));
       return;
     }
     if (!body) {
-      setDraftError('Skill body is required.');
+      setDraftError(t('settings.skillsBodyRequired'));
       return;
     }
     const triggers = parseTriggers(draft.triggers);

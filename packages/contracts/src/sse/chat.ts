@@ -1,3 +1,4 @@
+import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -10,7 +11,14 @@ export interface LiveArtifactSsePayload {
   projectId: string;
   artifactId: string;
   title: string;
-  refreshStatus?: string;
+  /**
+   * Refresh lifecycle state of the artifact at emit time. Typed against the
+   * canonical `LiveArtifactRefreshStatus` enum used by the REST API so that
+   * SSE consumers (web, CLI) can switch on the same union members without
+   * widening to `string`. Optional because the daemon may omit the field on
+   * legacy events; consumers must still null-check before narrowing.
+   */
+  refreshStatus?: LiveArtifactRefreshStatus;
 }
 
 export interface LiveArtifactRefreshSsePayload {

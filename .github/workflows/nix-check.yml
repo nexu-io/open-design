@@ -2,6 +2,8 @@ name: nix-check
 
 on:
   push:
+    branches:
+      - main
     paths-ignore:
       - '**/*.md'
       - '**/*.mdx'
