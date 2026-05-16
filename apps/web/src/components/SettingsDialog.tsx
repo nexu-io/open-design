@@ -1,5 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import type {
+  ClaudeCodeInstalledMcpServersResponse,
+  ClaudeCodeInstalledSkillsResponse,
+} from '@open-design/contracts';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import { AgentIcon } from './AgentIcon';
@@ -1490,6 +1494,9 @@ function IntegrationsSection() {
   const [copied, setCopied] = useState(false);
   const [info, setInfo] = useState<McpInstallInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
+  const [ccMcp, setCcMcp] = useState<ClaudeCodeInstalledMcpServersResponse | null>(null);
+  const [ccSkills, setCcSkills] = useState<ClaudeCodeInstalledSkillsResponse | null>(null);
+  const [ccRefreshTick, setCcRefreshTick] = useState(0);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   // The reset is wired through a ref-driven timer rather than effect
   // cleanup so re-clicks during the 2s window restart the countdown.
@@ -1544,6 +1551,37 @@ function IntegrationsSection() {
       cancelled = true;
     };
   }, []);
+
+  // Sync display of Claude Code CLI-installed MCP servers and skills.
+  // Only fires when the user has the Claude Code client selected — keeps
+  // the daemon scan off the critical path for users on other clients.
+  useEffect(() => {
+    if (clientId !== 'claude') {
+      setCcMcp(null);
+      setCcSkills(null);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/claude-code/mcp-servers')
+      .then((res) => res.json() as Promise<ClaudeCodeInstalledMcpServersResponse>)
+      .then((data) => {
+        if (!cancelled) setCcMcp(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCcMcp({ available: false, servers: [] });
+      });
+    fetch('/api/claude-code/skills')
+      .then((res) => res.json() as Promise<ClaudeCodeInstalledSkillsResponse>)
+      .then((data) => {
+        if (!cancelled) setCcSkills(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCcSkills({ available: false, skills: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, ccRefreshTick]);
 
   const client = MCP_CLIENTS.find((c) => c.id === clientId) ?? MCP_CLIENTS[0]!;
   const snippet = info ? client.buildSnippet(info) : '';
@@ -1787,6 +1825,14 @@ function IntegrationsSection() {
           </span>
         </div>
 
+        {clientId === 'claude' ? (
+          <ClaudeCodeInstalledPanel
+            mcp={ccMcp}
+            skills={ccSkills}
+            onRefresh={() => setCcRefreshTick((n) => n + 1)}
+          />
+        ) : null}
+
         <div style={{ marginTop: 20, lineHeight: 1.55 }}>
           <p
             style={{
@@ -1838,6 +1884,204 @@ function IntegrationsSection() {
         </p>
       </div>
     </section>
+  );
+}
+
+function ClaudeCodeInstalledPanel({
+  mcp,
+  skills,
+  onRefresh,
+}: {
+  mcp: ClaudeCodeInstalledMcpServersResponse | null;
+  skills: ClaudeCodeInstalledSkillsResponse | null;
+  onRefresh: () => void;
+}) {
+  const loaded = mcp !== null && skills !== null;
+  const notDetected = mcp?.available === false && skills?.available === false;
+
+  if (notDetected) {
+    return (
+      <div
+        className="empty-card"
+        style={{ marginTop: 14, fontSize: 13, lineHeight: 1.5 }}
+      >
+        Claude Code config not detected at <code>~/.claude/</code>. Install
+        Claude Code and run <code>claude mcp add</code> or install a plugin
+        to manage them from here.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <ClaudeCodeListSection
+        title="Installed MCP servers"
+        emptyHelp="No MCP servers detected. Run `claude mcp add` to register one."
+        loaded={loaded}
+        onRefresh={onRefresh}
+        items={(mcp?.servers ?? []).map((s) => ({
+          key: `${s.source}:${s.name}`,
+          primary: s.name,
+          source: s.source,
+          pluginLabel:
+            s.source === 'plugin' && s.pluginName
+              ? s.pluginVersion
+                ? `${s.pluginName}@${s.pluginVersion}`
+                : s.pluginName
+              : null,
+          description: undefined,
+        }))}
+      />
+      <ClaudeCodeListSection
+        title="Installed skills"
+        emptyHelp="No skills detected under `~/.claude/skills/` or installed plugins."
+        loaded={loaded}
+        onRefresh={onRefresh}
+        items={(skills?.skills ?? []).map((s) => ({
+          key: `${s.source}:${s.id}:${s.path}`,
+          primary: s.id,
+          source: s.source,
+          pluginLabel:
+            s.source === 'plugin' && s.pluginName
+              ? s.pluginVersion
+                ? `${s.pluginName}@${s.pluginVersion}`
+                : s.pluginName
+              : null,
+          description: s.description,
+        }))}
+      />
+    </>
+  );
+}
+
+function ClaudeCodeListSection({
+  title,
+  emptyHelp,
+  loaded,
+  onRefresh,
+  items,
+}: {
+  title: string;
+  emptyHelp: string;
+  loaded: boolean;
+  onRefresh: () => void;
+  items: Array<{
+    key: string;
+    primary: string;
+    source: 'user' | 'plugin';
+    pluginLabel: string | null;
+    description?: string;
+  }>;
+}) {
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 8,
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            fontWeight: 600,
+          }}
+        >
+          {title}
+        </p>
+        <button
+          type="button"
+          className="ghost"
+          onClick={onRefresh}
+          style={{ padding: '2px 8px', fontSize: 12 }}
+          aria-label={`Refresh ${title}`}
+        >
+          <Icon name="refresh" size={12} />
+        </button>
+      </div>
+      {!loaded ? (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+          Loading…
+        </p>
+      ) : items.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+          {emptyHelp}
+        </p>
+      ) : (
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+          {items.map((item) => (
+            <li
+              key={item.key}
+              style={{
+                padding: '6px 0',
+                borderBottom: '1px solid var(--border)',
+                fontSize: 13,
+                lineHeight: 1.4,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                  }}
+                >
+                  {item.primary}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-muted)',
+                    textTransform: 'lowercase',
+                  }}
+                >
+                  {item.source}
+                </span>
+                {item.pluginLabel ? (
+                  <span
+                    style={{ fontSize: 11, color: 'var(--text-muted)' }}
+                  >
+                    {item.pluginLabel}
+                  </span>
+                ) : null}
+              </div>
+              {item.description ? (
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={item.description}
+                >
+                  {item.description}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
