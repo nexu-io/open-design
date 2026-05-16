@@ -316,6 +316,21 @@ export function clearConnectorAuthorizationErrorsForConnected(
   return mutated ? next : errors;
 }
 
+export function clearConnectorAuthorizationCancelFailuresForConnected(
+  failures: Record<string, boolean>,
+  statuses: ConnectorStatusResponse['statuses'],
+): Record<string, boolean> {
+  let mutated = false;
+  const next = { ...failures };
+  for (const [connectorId, status] of Object.entries(statuses)) {
+    if (status.status === 'connected' && next[connectorId] !== undefined) {
+      delete next[connectorId];
+      mutated = true;
+    }
+  }
+  return mutated ? next : failures;
+}
+
 export function clearConnectorAuthorizationPending(
   pending: ConnectorAuthorizationPendingState,
   connectorId: string,
@@ -571,6 +586,8 @@ export function ConnectorsBrowser({
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
     setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
     setConnectorAuthorizationError((curr) => clearConnectorAuthorizationErrorsForConnected(curr, statuses));
+    setConnectorAuthorizationCancelFailed((curr) => clearConnectorAuthorizationCancelFailuresForConnected(curr, statuses));
+    return statuses;
   }, []);
 
   useEffect(() => {
@@ -827,6 +844,12 @@ export function ConnectorsBrowser({
       });
       setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
       return;
+    }
+    try {
+      const statuses = await reloadConnectorStatuses();
+      if (statuses[connectorId]?.status === 'connected') return;
+    } catch {
+      // Keep the local failure visible when the status refresh itself fails.
     }
     setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
   }
