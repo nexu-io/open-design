@@ -10,6 +10,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed: desktop "Export PDF" now opens a direct "Save as PDF" file dialog and writes the PDF to disk, instead of opening the macOS system print dialog. Fixes [#1774](https://github.com/nexu-io/open-design/issues/1774).
 - Docs: clarify that packaged macOS support includes a verified Intel x64 ZIP path on Monterey, and document the Finder `PATH` caveat for packaged CLI detection. Fixes [#327](https://github.com/nexu-io/open-design/issues/327).
 
+---
+
+Draft entries collected since `0.7.0` (2026-05-12). Release manager
+should edit before cutting the next tag — see #1893 for context.
+
+### Added
+
+- Critique Theater Settings toggle with i18n across 6 locales. (#1484)
+- Custom select web component primitive. (#1714)
+- AskUserQuestion tool wired through chat with TodoWrite pinning. (#1743)
+- Structured tokens for Notion, Linear, GitHub design systems. (#1825)
+- Structured tokens for Cursor, Apple, Stripe design systems. (#1831)
+- OpenAI-compatible media providers in daemon. (#1712)
+- Leonardo.ai image generation provider. (#1123)
+- Italian (`it`) locale support. (#1323)
+
+### Changed
+
+- Packaged client lazy-loads Electron to enable headless config imports. (#1798)
+- Claude design import canvas no longer zooms on scroll. (#1726)
+
+### Fixed
+
+#### Web / UI
+
+- Agent model select duplicate chevrons on macOS (wrapper+icon pattern). (#1831)
+- Memory editor reveal after edit click. (#1827)
+- Memory preview action distinct from delete. (#1813, follow-up #1863)
+- Settings subtab-pill hover contrast in dark theme. (#1815)
+- Filter pill hover label readability across themes. (#1828)
+- Comment marker numbering in panels. (#1826)
+- Draw overlay scroll interaction. (#1848)
+- Plugin publish footer spacing. (#1849)
+- Picker hint clarity relative to comments panel. (#1820)
+- Draw ink clears when exiting draw mode. (#1821)
+- Chrome action icon alignment. (#1783)
+- Manual folder import error feedback. (#1666)
+- Template toolbar stickiness during scroll. (#1785)
+- Comment panel string localization. (#1443)
+- Resolved comments hidden from preview overlays. (#1762)
+- HTML preview sandbox fallback to `srcDoc`. (#1754)
+- BYOK chat inlines attached file context. (#1730)
+
+#### Daemon
+
+- Claude connection smoke wraps stdin properly. (#1844)
+- BYOK proxy honors IP-literal `OD_ALLOWED_ORIGINS` in no-Origin Host check. (#1775)
+- ACP stage timeout aligned to outer chat inactivity window. (#1743)
+
+#### Documentation
+
+- Korean README desktop/background startup paragraph. (#1876)
+- Windows troubleshooting link synced across 12 locale READMEs. (#1875)
+- 0.8.0-preview banner pointing to Discussion #1727. (#1781)
+
+#### Packaging
+
+- Nix flake `pnpmDepsHash` refresh after merging main. (#1765)
+
+### Security
+
+- DNS-rebinding SSRF prevented by resolving hostname before approving external API base URLs. (#1176)
+
+### Internal / Tests
+
+- Italian locale cleanup (`onImportFolder` signature + stale pet rail keys). (#1814)
+- Linux packaged client parity smoke coverage. (#1204)
+- Metrics PRs trigger required checks. (#1801)
+- Packaged-linux runtime logs captured into headless artifact. (#1823)
+- Memory preview icon assertion decoupled for test stability. (#1863)
+
 ## [0.7.0] - 2026-05-12
 
 A memory-plus-UI release: **auto-memory store** carries agent context across runs and projects, **Critique Theater advances to Phase 7** (state machine + replay) with daemon-side **Phase 6.2** artifact extraction, **HyperFrames** lands **HTML-in-Canvas** end-to-end, and the web UI gets a **top-to-bottom Designs tab redesign**, **in-context preview comments**, a **unified Media tab**, and a **tweaks palette with HSL hue-shift recoloring**. Plus **responsive design handoff** outputs, **install/uninstall skills & design systems in-app**, **HTTP 206 range requests** for video/audio, **scheduled routines** for unattended agent runs, **macOS Intel (x64) builds**, an official **Nix flake**, four new design systems (hud, loom, trading-terminal, WeChat), and an `agent-browser` skill. 107 merged PRs since 0.6.0.
