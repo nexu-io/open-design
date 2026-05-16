@@ -1107,14 +1107,18 @@ export function ProjectView({
   );
 
   const persistMessageById = useCallback(
-    (messageId: string, options?: SaveMessageOptions) => {
-      if (!activeConversationId) return;
-      setMessages((curr) => {
-        const found = curr.find((m) => m.id === messageId);
-        if (found && !isPhantomDaemonRunMessage(found)) {
-          void saveMessage(project.id, activeConversationId, found, options);
-        }
-        return curr;
+    (messageId: string, options?: SaveMessageOptions): Promise<void> => {
+      if (!activeConversationId) return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        setMessages((curr) => {
+          const found = curr.find((m) => m.id === messageId);
+          if (found && !isPhantomDaemonRunMessage(found)) {
+            Promise.resolve(saveMessage(project.id, activeConversationId, found, options)).then(resolve, reject);
+          } else {
+            resolve();
+          }
+          return curr;
+        });
       });
     },
     [project.id, activeConversationId],
@@ -1127,27 +1131,33 @@ export function ProjectView({
       persist = false,
       persistOptions?: SaveMessageOptions,
     ): Promise<void> => {
-      let saved: ChatMessage | null = null;
-      setMessages((curr) => {
-        const next = curr.map((m) => {
-          if (m.id !== messageId) return m;
-          const updated = updater(m);
-          saved = updated;
-          return updated;
-        });
-        // Same phantom guard as persistMessage: skip writes for a daemon
-        // assistant row that is still in-flight (active runStatus, no runId).
-        // The runId-arriving update from onRunCreated passes through because
-        // the updater sets runId before this check runs.
-        if (persist && saved && activeConversationId && !isPhantomDaemonRunMessage(saved)) {
-          void saveMessage(project.id, activeConversationId, saved, persistOptions);
-        }
-        return next;
-      });
-      if (persist && saved && activeConversationId) {
-        return saveMessage(project.id, activeConversationId, saved, persistOptions);
+      if (!persist) {
+        setMessages((curr) =>
+          curr.map((m) => (m.id === messageId ? updater(m) : m)),
+        );
+        return Promise.resolve();
       }
-      return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        setMessages((curr) => {
+          let saved: ChatMessage | null = null;
+          const next = curr.map((m) => {
+            if (m.id !== messageId) return m;
+            const updated = updater(m);
+            saved = updated;
+            return updated;
+          });
+          // Same phantom guard as persistMessage: skip writes for a daemon
+          // assistant row that is still in-flight (active runStatus, no runId).
+          // The runId-arriving update from onRunCreated passes through because
+          // the updater sets runId before this check runs.
+          if (saved && activeConversationId && !isPhantomDaemonRunMessage(saved)) {
+            Promise.resolve(saveMessage(project.id, activeConversationId, saved, persistOptions)).then(resolve, reject);
+          } else {
+            resolve();
+          }
+          return next;
+        });
+      });
     },
     [project.id, activeConversationId],
   );

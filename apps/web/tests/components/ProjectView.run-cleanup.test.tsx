@@ -91,6 +91,7 @@ const chatPaneSpy = vi.fn();
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: Record<string, unknown>) => {
     chatPaneSpy(props);
+    capturedChatPaneProps.current = props;
     return null;
   },
 }));
