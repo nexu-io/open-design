@@ -518,7 +518,13 @@ describe('MemorySection', () => {
     fireEvent.click(within(card).getByTitle('Preview'));
 
     await screen.findByText('Keep memory actions clear');
-    const closeIconPaths = card.querySelectorAll('path[d="M18 6 6 18"]');
+    // The repo's `Icon name="close"` deliberately uses 4→20 coordinates
+    // (`M20 4 4 20` + `m4 4 16 16`) instead of the Lucide default 6→18 to
+    // make compact close glyphs read better — see `apps/web/src/components/Icon.tsx`.
+    // The delete button is the only consumer of `name="close"` on this card;
+    // the expanded preview control now uses `chevron-down`, so exactly one
+    // close-shaped path should be present.
+    const closeIconPaths = card.querySelectorAll('path[d="M20 4 4 20"]');
 
     expect(closeIconPaths).toHaveLength(1);
   });
