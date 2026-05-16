@@ -532,11 +532,6 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
       <div className="section-head">
         <div>
           <h3>Routines</h3>
-          <p className="hint">
-            Scheduled, unattended agent sessions. Each run starts a new
-            conversation — either inside an existing project, or in a fresh
-            project minted on the spot.
-          </p>
         </div>
         {!showForm ? (
           <button

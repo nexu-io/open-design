@@ -59,7 +59,12 @@ import {
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { hasUrlModeBridge, parseForceInline, shouldUrlLoadHtmlPreview } from './file-viewer-render-mode';
+import {
+  hasUrlModeBridge,
+  htmlNeedsSandboxShim,
+  parseForceInline,
+  shouldUrlLoadHtmlPreview,
+} from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
@@ -1109,7 +1114,7 @@ export function LiveArtifactViewer({
                     ref={iframeRef}
                     data-testid="live-artifact-preview-frame"
                     title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups"
+                    sandbox="allow-scripts allow-popups allow-downloads"
                     src={previewUrl}
                   />
                 </PreviewDrawOverlay>
@@ -1872,8 +1877,8 @@ function BoardComposerPopover({
         <div title={target.elementId}>
           {isFreePin ? (
             <>
-              <strong id={titleId}>Pin</strong>
-              <span>at {target.position.x + 12}, {target.position.y + 12}</span>
+              <strong id={titleId}>{t('chat.comments.pin')}</strong>
+              <span>{t('chat.comments.pinAtCoords', { x: target.position.x + 12, y: target.position.y + 12 })}</span>
             </>
           ) : (
             <>
@@ -1894,7 +1899,7 @@ function BoardComposerPopover({
       </div>
       {podMembers.length > 0 ? (
         <div className="board-pod-summary">
-          <strong>{target.memberCount || podMembers.length} captured items</strong>
+          <strong>{t('chat.comments.capturedItems', { n: target.memberCount || podMembers.length })}</strong>
           <div className="board-pod-members">
             {podMembers.slice(0, 6).map((member) => (
               <span key={member.elementId} className="board-pod-chip">
@@ -1910,7 +1915,7 @@ function BoardComposerPopover({
             <div key={`${target.elementId}-${index}`} className="board-note-item">
               <span>{note}</span>
               <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
-                Remove
+                {t('chat.comments.remove')}
               </button>
             </div>
           ))}
@@ -1944,7 +1949,7 @@ function BoardComposerPopover({
               disabled={!draft.trim()}
               onClick={onAddDraft}
             >
-              Add note
+              {t('chat.comments.addNote')}
             </button>
           ) : (
             <button
@@ -1954,7 +1959,7 @@ function BoardComposerPopover({
               disabled={!draft.trim()}
               onClick={() => void onSaveComment()}
             >
-              Comment
+              {t('chat.comments.comment')}
             </button>
           )}
           <button
@@ -1964,7 +1969,7 @@ function BoardComposerPopover({
             disabled={pendingCount === 0 || sending}
             onClick={() => void onSendBatch()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
           </button>
         </div>
       </div>
@@ -1972,22 +1977,22 @@ function BoardComposerPopover({
   );
 }
 
-function formatCommentTime(ts: number): string {
+function formatCommentTime(ts: number, t: TranslateFn): string {
   const diff = Date.now() - ts;
-  if (diff < 60_000) return 'just now';
+  if (diff < 60_000) return t('common.justNow');
   const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return t('common.minutesAgo', { n: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('common.hoursAgo', { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return t('common.daysAgo', { n: days });
   const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `${weeks}w ago`;
+  if (weeks < 5) return t('common.weeksAgo', { n: weeks });
   return new Date(ts).toLocaleDateString();
 }
 
-function commentDisplayLabel(comment: PreviewComment): string {
-  if (comment.elementId.startsWith('pin-')) return 'Pin';
+function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
+  if (comment.elementId.startsWith('pin-')) return t('chat.comments.pin');
   return comment.label || comment.elementId;
 }
 
@@ -2075,13 +2080,13 @@ export function CommentSidePanel({
                   <span className="comment-side-avatar" aria-hidden>
                     {commentAvatarInitial(comment)}
                   </span>
-                  <strong>{commentDisplayLabel(comment)}</strong>
+                  <strong>{commentDisplayLabel(comment, t)}</strong>
                 </span>
-                <span className="comment-side-time">{formatCommentTime(comment.createdAt)}</span>
+                <span className="comment-side-time">{formatCommentTime(comment.createdAt, t)}</span>
                 <button
                   type="button"
                   className={`comment-side-check${selected ? ' checked' : ''}`}
-                  aria-label={selected ? 'Deselect' : 'Select'}
+                  aria-label={selected ? t('chat.comments.deselect') : t('chat.comments.select')}
                   aria-pressed={selected}
                   onClick={() => onToggleSelect(comment.id)}
                 >
@@ -2095,7 +2100,7 @@ export function CommentSidePanel({
                 data-testid="comment-side-edit"
                 onClick={() => onReply(comment)}
               >
-                Edit
+                {t('chat.comments.edit')}
               </button>
             </div>
           );
@@ -2103,9 +2108,9 @@ export function CommentSidePanel({
       </div>
       {selectedCount > 0 ? (
         <div className="comment-side-selectbar" data-testid="comment-side-selectbar">
-          <span className="comment-side-selectcount">{selectedCount} selected</span>
+          <span className="comment-side-selectcount">{t('chat.comments.nSelected', { n: selectedCount })}</span>
           <button type="button" className="ghost" onClick={onClearSelection}>
-            Clear
+            {t('chat.comments.clear')}
           </button>
           <button
             type="button"
@@ -2114,7 +2119,7 @@ export function CommentSidePanel({
             disabled={sending}
             onClick={() => void onSendSelected()}
           >
-            {sending ? 'Sending…' : 'Send to Claude'}
+            {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
           </button>
         </div>
       ) : null}
@@ -3402,7 +3407,7 @@ function ReactComponentViewer({
             <iframe
               data-testid="react-component-preview-frame"
               title={file.name}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               srcDoc={srcDoc}
               style={{ width: '100%', height: '100%', border: 0 }}
             />
@@ -3777,6 +3782,7 @@ function HtmlViewer({
   );
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
@@ -3804,6 +3810,7 @@ function HtmlViewer({
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
+  const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -4017,6 +4024,17 @@ function HtmlViewer({
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
+  // Auto-fall back to the srcDoc path when the artifact will crash under
+  // the URL-load iframe's bare `sandbox="allow-scripts"` — Babel-standalone
+  // React prototypes and any HTML that reads Web Storage at mount throw
+  // SecurityError without `allow-same-origin`. The srcDoc path runs
+  // `injectSandboxShim` before any user script, so those artifacts render.
+  // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
+  // edit mode toggles, slide nav) don't re-scan the HTML each time.
+  const needsSandboxShim = useMemo(
+    () => source != null && htmlNeedsSandboxShim(source),
+    [source],
+  );
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
@@ -4026,7 +4044,7 @@ function HtmlViewer({
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
-    forceInline,
+    forceInline: forceInline || needsSandboxShim,
   });
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
@@ -4367,6 +4385,7 @@ function HtmlViewer({
     if (!selectionMode) {
       setActiveCommentTarget((current) => (current ? null : current));
       setHoveredCommentTarget((current) => (current ? null : current));
+      setActivePreviewCommentId((current) => (current ? null : current));
       setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
       setQueuedBoardNotes((current) => (current.length > 0 ? [] : current));
       setStrokePoints((current) => (current.length > 0 ? [] : current));
@@ -4434,11 +4453,16 @@ function HtmlViewer({
       if (data.type === 'od:comment-target') {
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId) return;
-        const existing = previewComments.find((comment) => comment.elementId === snapshot.elementId);
+        const existing = previewComments.find((comment) =>
+          comment.filePath === file.name &&
+          comment.status === 'open' &&
+          comment.elementId === snapshot.elementId,
+        );
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
         if (boardMode) {
+          setActivePreviewCommentId(existing?.id ?? null);
           setCommentDraft(existing?.note ?? '');
           setQueuedBoardNotes([]);
         }
@@ -4474,6 +4498,7 @@ function HtmlViewer({
         }
         setActiveCommentTarget(nextTarget);
         setHoveredCommentTarget(nextTarget);
+        setActivePreviewCommentId(null);
         setQueuedBoardNotes([]);
         setCommentDraft('');
         setStrokePoints([]);
@@ -5025,6 +5050,8 @@ function HtmlViewer({
       setTemplateName('');
       setTemplateDescription('');
       setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
+      // Show success toast
+      setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
     } finally {
       setSavingTemplate(false);
       if (savedName) {
@@ -5221,6 +5248,7 @@ function HtmlViewer({
   function clearBoardComposer() {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
+    setActivePreviewCommentId(null);
     setCommentDraft('');
     setQueuedBoardNotes([]);
     setStrokePoints([]);
@@ -5262,7 +5290,7 @@ function HtmlViewer({
     );
     if (saved) {
       clearBoardComposer();
-      setCommentSavedToast(isFreePin ? 'Pin saved' : 'Comment saved');
+      setCommentSavedToast(isFreePin ? t('chat.comments.pinSavedToast') : t('chat.comments.savedToast'));
     }
   }
 
@@ -5270,9 +5298,17 @@ function HtmlViewer({
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
-  const visibleSideComments = previewComments.filter(
-    (comment) => comment.filePath === file.name && comment.status === 'open',
+  const visibleSideComments = useMemo(
+    () => previewComments
+      .filter((comment) => comment.filePath === file.name && comment.status === 'open')
+      .sort((a, b) => b.createdAt - a.createdAt),
+    [file.name, previewComments],
   );
+  useEffect(() => {
+    if (!boardMode || !activePreviewCommentId) return;
+    const stillOpen = visibleSideComments.some((comment) => comment.id === activePreviewCommentId);
+    if (!stillOpen) clearBoardComposer();
+  }, [activePreviewCommentId, boardMode, visibleSideComments]);
   const activeDeployment = deployResult || deployment;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
@@ -5972,7 +6008,7 @@ function HtmlViewer({
                       data-testid="artifact-preview-frame"
                       data-od-render-mode="url-load"
                       title={file.name}
-                      sandbox="allow-scripts"
+                      sandbox="allow-scripts allow-downloads"
                       src={previewSrcUrl}
                       onLoad={() => {
                         dcViewportRestoreAtRef.current = Date.now();
@@ -5991,7 +6027,7 @@ function HtmlViewer({
                       data-testid="artifact-preview-frame"
                       data-od-render-mode="srcdoc"
                       title={file.name}
-                      sandbox="allow-scripts"
+                      sandbox="allow-scripts allow-downloads"
                       srcDoc={srcDoc}
                       onLoad={() => {
                         dcViewportRestoreAtRef.current = Date.now();
@@ -6011,7 +6047,7 @@ function HtmlViewer({
             </div>
             {(boardMode || drawClickSelectionMode) ? (
               <CommentPreviewOverlays
-                comments={boardMode ? previewComments : []}
+                comments={boardMode ? visibleSideComments : []}
                 liveTargets={liveCommentTargets}
                 hoveredTarget={hoveredCommentTarget}
                 activeTarget={activeCommentTarget}
@@ -6021,6 +6057,7 @@ function HtmlViewer({
                 onOpenComment={(comment, snapshot) => {
                   setActiveCommentTarget(snapshot);
                   setHoveredCommentTarget(snapshot);
+                  setActivePreviewCommentId(comment.id);
                   setCommentDraft(comment.note);
                   setQueuedBoardNotes([]);
                 }}
@@ -6035,10 +6072,19 @@ function HtmlViewer({
                 />
               </div>
             ) : null}
+            {templateSavedToast ? (
+              <div className="comment-toast-anchor">
+                <Toast
+                  message={templateSavedToast}
+                  ttlMs={2200}
+                  onDismiss={() => setTemplateSavedToast(null)}
+                />
+              </div>
+            ) : null}
             {boardMode && activeCommentTarget ? (
               <BoardComposerPopover
                 target={activeCommentTarget}
-                existing={previewComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
+                existing={visibleSideComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
                 draft={commentDraft}
                 notes={queuedBoardNotes}
                 onDraft={setCommentDraft}
@@ -6093,6 +6139,7 @@ function HtmlViewer({
                   };
                   setActiveCommentTarget(snapshot);
                   setHoveredCommentTarget(snapshot);
+                  setActivePreviewCommentId(comment.id);
                   setCommentDraft(comment.note);
                   setQueuedBoardNotes([]);
                 }}
@@ -6169,7 +6216,12 @@ function HtmlViewer({
               && openHintBox
               && !activeInspectTarget
               && !activeCommentTarget ? (
-              <div className="inspect-empty-hint-container">
+              <div
+                className={`inspect-empty-hint-container${
+                  boardMode && !commentSidePanelCollapsed ? ' comment-side-panel-open' : ''
+                }`}
+                data-testid="inspect-empty-hint-container"
+              >
                 {liveCommentTargets.size === 0 ? (
                   <div
                     className="inspect-empty-hint"
@@ -6221,14 +6273,14 @@ function HtmlViewer({
           {useUrlLoadPreview ? (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
               src={previewSrcUrl}
             />
           ) : (
             <iframe
               title="present"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               data-od-render-mode="srcdoc"
               srcDoc={srcDoc}
             />

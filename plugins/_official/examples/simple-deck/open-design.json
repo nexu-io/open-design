@@ -1,0 +1,142 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-simple-deck",
+  "title": "Simple Deck",
+  "version": "0.1.1",
+  "description": "Single-file horizontal-swipe HTML deck. Built by copying the seed\n`assets/template.html` (which carries the proven 5-rule iframe nav script)\nand pasting slide layouts from `references/layouts.md`. Pitch decks,\nproduct overviews, study material — when you don't need the magazine\naesthetic of `magazine-web-ppt`.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/simple-deck",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "product",
+    "web",
+    "slides",
+    "ppt",
+    "presentation",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a {{slideCount}}-slide {{deckType}} for {{audience}} about {{topic}}. Speaker notes: {{speakerNotes}}. Use {{designSystem}} as the design-system direction. Build a single-file horizontal-swipe HTML deck by copying `assets/template.html` and pasting slide layouts from `references/layouts.md`.",
+        "zh-CN": "使用这个插件完成以下任务：为 {{audience}} 创建一个 {{slideCount}} 页的 {{deckType}}，主题是 {{topic}}。演讲者备注：{{speakerNotes}}。设计系统方向使用 {{designSystem}}。复制 `assets/template.html` 并从 `references/layouts.md` 粘贴版面，构建单文件横向滑动 HTML deck。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Simple Deck"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "pitch deck",
+          "product overview",
+          "study deck",
+          "strategy deck",
+          "sales deck"
+        ],
+        "default": "pitch deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "AI operations platform for modern support teams",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Series A investors",
+        "default": "decision makers"
+      },
+      {
+        "name": "slideCount",
+        "label": "Slide count",
+        "type": "number",
+        "required": true,
+        "default": 10
+      },
+      {
+        "name": "speakerNotes",
+        "label": "Speaker notes",
+        "type": "select",
+        "options": [
+          "include speaker notes",
+          "no speaker notes"
+        ],
+        "default": "include speaker notes"
+      },
+      {
+        "name": "designSystem",
+        "label": "Design system",
+        "type": "string",
+        "placeholder": "Swiss, Linear, editorial, or active project design system",
+        "default": "the active project design system"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/layouts.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

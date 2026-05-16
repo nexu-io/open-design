@@ -14,6 +14,7 @@ import {
   MAC_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH,
   MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
 } from "../mac-prebundle.js";
+import { resolveMacInstallIdentity } from "./identity.js";
 import type { MacPaths } from "./types.js";
 
 export function sanitizeNamespace(value: string): string {
@@ -24,8 +25,8 @@ export function macAppBundleName(namespace: string): string {
   return `${PRODUCT_NAME}.${sanitizeNamespace(namespace)}.app`;
 }
 
-export function macAppExecutablePath(appPath: string): string {
-  return join(appPath, "Contents", "MacOS", PRODUCT_NAME);
+export function macAppExecutablePath(appPath: string, executableName = PRODUCT_NAME): string {
+  return join(appPath, "Contents", "MacOS", executableName);
 }
 
 export function resolveMacAppOutputDirectoryName(): string {
@@ -36,10 +37,11 @@ export function resolveMacPaths(config: ToolPackConfig): MacPaths {
   const namespaceRoot = config.roots.output.namespaceRoot;
   const appBuilderOutputRoot = config.roots.output.appBuilderRoot;
   const namespaceToken = sanitizeNamespace(config.namespace);
+  const identity = resolveMacInstallIdentity(config);
   const appPath = join(
     appBuilderOutputRoot,
     resolveMacAppOutputDirectoryName(),
-    `${PRODUCT_NAME}.app`,
+    identity.publicAppBundleName,
   );
   const installApplicationsRoot = join(namespaceRoot, "install", "Applications");
   const installedAppPath = join(installApplicationsRoot, macAppBundleName(config.namespace));
@@ -67,9 +69,9 @@ export function resolveMacPaths(config: ToolPackConfig): MacPaths {
     packagedMainPrebundlePath: join(namespaceRoot, "assembled", MAC_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH),
     packagedConfigPath: join(namespaceRoot, "open-design-config.json"),
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
-    systemApplicationsAppPath: join("/Applications", macAppBundleName(config.namespace)),
+    systemApplicationsAppPath: join("/Applications", identity.systemAppBundleName),
     tarballsRoot: join(namespaceRoot, "tarballs"),
-    userApplicationsAppPath: join(homedir(), "Applications", macAppBundleName(config.namespace)),
+    userApplicationsAppPath: join(homedir(), "Applications", identity.systemAppBundleName),
     webStandaloneHookAuditPath: join(namespaceRoot, "web-standalone-after-pack-audit.json"),
     webStandaloneHookConfigPath: join(namespaceRoot, "web-standalone-after-pack-config.json"),
     webSidecarPrebundleMetaPath: join(namespaceRoot, MAC_PREBUNDLE_META_DIR_NAME, "web-sidecar.meta.json"),

@@ -33,6 +33,8 @@ export type MediaProviderId =
   | 'grok'
   | 'hyperframes'
   | 'nanobanana'
+  | 'imagerouter'
+  | 'custom-image'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -46,6 +48,7 @@ export type MediaProviderId =
   | 'fishaudio'
   | 'senseaudio'
   | 'tavily'
+  | 'leonardo'
   | 'stub';
 
 export interface MediaProvider {
@@ -66,6 +69,8 @@ export interface MediaProvider {
   docsUrl?: string;
   /** Whether Settings should expose a custom model override field. */
   supportsCustomModel?: boolean;
+  /** Placeholder text for custom model override fields in Settings. */
+  customModelPlaceholder?: string;
 }
 
 /**
@@ -118,6 +123,25 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     supportsCustomModel: true,
   },
   {
+    id: 'imagerouter',
+    label: 'ImageRouter',
+    hint: 'OpenAI-compatible image + video routing',
+    integrated: true,
+    defaultBaseUrl: 'https://api.imagerouter.io/v1/openai',
+    docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video',
+  },
+  {
+    id: 'custom-image',
+    label: 'Custom Image API',
+    hint: 'OpenAI-compatible /v1/images/generations endpoint',
+    integrated: true,
+    docsUrl: 'https://platform.openai.com/docs/api-reference/images',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'my-image-model',
+  },
+  {
     id: 'bfl',
     label: 'Black Forest Labs',
     hint: 'FLUX 1.1 Pro / FLUX Pro / Dev',
@@ -132,6 +156,16 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: false,
     defaultBaseUrl: 'https://fal.run',
     docsUrl: 'https://fal.ai/dashboard/keys',
+  },
+  {
+    id: 'leonardo',
+    label: 'Leonardo.ai',
+    hint: 'Phoenix / Kino XL / FLUX',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1',
+    docsUrl: 'https://docs.leonardo.ai/docs/create-an-api-key',
   },
   {
     id: 'replicate',
@@ -218,6 +252,11 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     label: 'Stub (placeholder)',
     hint: 'Deterministic local placeholder bytes',
     integrated: true,
+    // Internal fixture provider used by the daemon for deterministic
+    // tests / offline demos. Hidden from Settings the same way
+    // HyperFrames is — end users have nothing to configure here, and
+    // exposing it pollutes the provider list.
+    settingsVisible: false,
   },
 ];
 
@@ -323,6 +362,38 @@ export const IMAGE_MODELS: MediaModel[] = [
     caps: ['t2i'],
   },
 
+  // ImageRouter — OpenAI-compatible routed image models.
+  {
+    id: 'openai/gpt-image-2',
+    label: 'openai/gpt-image-2',
+    hint: 'ImageRouter · routed GPT Image',
+    provider: 'imagerouter',
+    caps: ['t2i'],
+  },
+  {
+    id: 'openai/gpt-image-1.5',
+    label: 'openai/gpt-image-1.5',
+    hint: 'ImageRouter · routed GPT Image',
+    provider: 'imagerouter',
+    caps: ['t2i'],
+  },
+  {
+    id: 'black-forest-labs/FLUX-1.1-pro',
+    label: 'FLUX-1.1-pro',
+    hint: 'ImageRouter · Black Forest Labs',
+    provider: 'imagerouter',
+    caps: ['t2i'],
+  },
+
+  // Custom OpenAI-compatible /v1/images/generations endpoint.
+  {
+    id: 'custom-image',
+    label: 'custom-image',
+    hint: 'Custom · OpenAI-compatible endpoint',
+    provider: 'custom-image',
+    caps: ['t2i'],
+  },
+
   // Black Forest Labs FLUX family.
   { id: 'flux-1.1-pro', label: 'flux-1.1-pro', hint: 'BFL · flagship', provider: 'bfl', caps: ['t2i', 'i2i'] },
   { id: 'flux-pro', label: 'flux-pro', hint: 'BFL', provider: 'bfl', caps: ['t2i'] },
@@ -339,6 +410,13 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
+
+  // Leonardo.ai models
+  { id: 'leonardo-phoenix', label: 'Phoenix', hint: 'Leonardo · versatile', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-kino-xl', label: 'Kino XL', hint: 'Leonardo · cinematic', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-dev', label: 'FLUX Dev', hint: 'Leonardo · FLUX', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-flux-schnell', label: 'FLUX Schnell', hint: 'Leonardo · fast', provider: 'leonardo', caps: ['t2i'] },
+  { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
@@ -394,6 +472,29 @@ export const VIDEO_MODELS: MediaModel[] = [
     hint: 'xAI · 720p t2v + i2v + native audio',
     provider: 'grok',
     caps: ['t2v', 'i2v', 'audio'],
+  },
+
+  // ImageRouter — routed video models.
+  {
+    id: 'xAI/grok-imagine-video',
+    label: 'xAI/grok-imagine-video',
+    hint: 'ImageRouter · routed video',
+    provider: 'imagerouter',
+    caps: ['t2v', 'audio'],
+  },
+  {
+    id: 'bytedance/seedance-1.5-pro',
+    label: 'seedance-1.5-pro',
+    hint: 'ImageRouter · Bytedance',
+    provider: 'imagerouter',
+    caps: ['t2v'],
+  },
+  {
+    id: 'google/veo-3.1-lite',
+    label: 'veo-3.1-lite',
+    hint: 'ImageRouter · Google',
+    provider: 'imagerouter',
+    caps: ['t2v'],
   },
 
   // Kuaishou Kling.

@@ -49,7 +49,62 @@ const hyperframesSkillBody = [
   hyperframesSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
 ].join('\n');
 
+describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () => {
+  it('inserts every active stage block after the plugin block when supplied', () => {
+    const stage1 = '\n\n## Active stage: discovery\n\n### discovery-question-form\n\nAsk audience.';
+    const stage2 = '\n\n## Active stage: plan\n\n### todo-write\n\nCommit a plan.';
+    const prompt = composeSystemPrompt({
+      pluginBlock: '\n\n## Active plugin\n\nThe user applied test-plugin.',
+      activeStageBlocks: [stage1, stage2],
+    });
+    expect(prompt).toContain('## Active plugin');
+    expect(prompt.indexOf('## Active stage: discovery')).toBeGreaterThan(prompt.indexOf('## Active plugin'));
+    expect(prompt.indexOf('## Active stage: plan')).toBeGreaterThan(prompt.indexOf('## Active stage: discovery'));
+  });
+
+  it('skips empty / whitespace-only blocks', () => {
+    const prompt = composeSystemPrompt({
+      activeStageBlocks: ['', '   ', '\n\n## Active stage: critique\n\n### critique-theater\n\nScore.'],
+    });
+    expect(prompt).toContain('## Active stage: critique');
+    // Only one stage block means just one heading.
+    expect((prompt.match(/## Active stage:/g) ?? []).length).toBe(1);
+  });
+
+  it('is a no-op when activeStageBlocks is undefined or empty', () => {
+    const baseline = composeSystemPrompt({});
+    const withUndefined = composeSystemPrompt({ activeStageBlocks: undefined });
+    const withEmpty = composeSystemPrompt({ activeStageBlocks: [] });
+    expect(withUndefined).toBe(baseline);
+    expect(withEmpty).toBe(baseline);
+  });
+});
+
 describe('composeSystemPrompt', () => {
+  it('treats an active design system as the visual direction', () => {
+    const prompt = composeSystemPrompt({
+      designSystemTitle: 'ComfyUI',
+      designSystemBody: '# ComfyUI\n\n--accent: #ffd500',
+      metadata: { kind: 'prototype' } as any,
+      activeStageBlocks: [
+        '\n\n## Active stage: plan\n\n### direction-picker\n\nAsk for 3-5 directions.',
+      ],
+    });
+
+    expect(prompt).toContain('## Active design system — ComfyUI');
+    expect(prompt).toContain('Active design system exception');
+    expect(prompt).toContain(
+      'the active design system is the visual direction for this project',
+    );
+    expect(prompt).toContain('Do not ask the user to pick a separate theme color');
+    expect(prompt).toContain('Do not emit a direction question-form');
+    expect(prompt).not.toContain('<question-form id="direction"');
+    expect(prompt).not.toContain('Pick a visual direction');
+    expect(prompt.indexOf('## Active design system visual direction')).toBeGreaterThan(
+      prompt.indexOf('### direction-picker'),
+    );
+  });
+
   it('injects live-artifact skill guidance and metadata intent', () => {
     const prompt = composeSystemPrompt({
       skillName: 'live-artifact',

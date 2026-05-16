@@ -2,6 +2,15 @@
 
 # Open Design
 
+> [!IMPORTANT]
+> ### 🔥 وصلت النسخة `0.8.0-preview`. عالم التصميم القديم ينتهي هنا.
+>
+> بديل مفتوح المصدر و agent-native لـ Claude Design / Figma — 40k نجمة في أسبوعين أوصلتنا إلى هنا. **نحتاجك لدفعنا بقية الطريق.**
+>
+> **تكرار سريع على `main`** — 0.8.0 هي المرحلة التالية من Open Design. أرسل PR، اطرح فكرة جامحة، أبلغ عن عُلّة — ما تجلبه أنت هو ما تصير إليه هذه الحركة.
+>
+> → [**اقرأ الإعلان · حمّل المثبّت · انضم إلى الحركة**](https://github.com/nexu-io/open-design/discussions/1727) · يعمل جنبًا إلى جنب مع نسخة 0.7 الحالية لديك.
+
 > **البديل مفتوح المصدر لـ [Claude Design][cd].** يعمل محلياً أولاً، قابل للنشر على Vercel، ويدعم BYOK في كل طبقة — **16 أداة CLI لوكلاء البرمجة** يكتشفها تلقائياً من `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) لتصبح هي محرّك التصميم، مدفوعةً بـ **31 Skill قابلة للتركيب** و**72 نظام تصميم بمستوى الهوية البصرية**. لا توجد لديك CLI؟ بروكسي BYOK متوافق مع OpenAI يقدّم نفس الحلقة بدون عملية الـ spawn.
 
 <p align="center">
@@ -789,7 +798,7 @@ Issues و PRs و skills جديدة وأنظمة تصميم جديدة، كلّه
 شكراً لكلّ من ساعد في دفع Open Design للأمام — بكود، بوثائق، بملاحظات، بـ skills جديدة، بأنظمة تصميم جديدة، أو حتى بـ issue حادّة. كلّ مساهمة حقيقية تهمّ، والجدار أدناه أسهل طريقة لقول ذلك علناً.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-13" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-15" alt="Open Design contributors" />
 </a>
 
 إن شحنت أوّل PR — مرحباً. تصنيف [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) هو نقطة الدخول.
@@ -806,9 +815,9 @@ Issues و PRs و skills جديدة وأنظمة تصميم جديدة، كلّه
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-13" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-15" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-15" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-15" />
   </picture>
 </a>
 

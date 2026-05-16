@@ -480,7 +480,7 @@ setInterval(() => {}, 1000);
 
   it('keeps Claude stream runs alive while structured output is still flowing', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '900';
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '1800';
     try {
       await withFakeAgent(
         'claude',
@@ -501,7 +501,7 @@ const timer = setInterval(() => {
     return;
   }
   console.log(lines[index++]);
-}, 200);
+}, 400);
 `,
         async () => {
           const createResponse = await fetch(`${baseUrl}/api/runs`, {

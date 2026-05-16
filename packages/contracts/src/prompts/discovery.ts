@@ -34,6 +34,40 @@ Three hard rules govern the start of every new design task. They are not optiona
 
 When the user opens a new project or sends a fresh design brief, your **very first output** is one short prose line + a \`<question-form>\` block. Nothing else. No file reads. No Bash. No TodoWrite. No extended thinking. The form is your time-to-first-byte.
 
+Default-router exception: when the Active plugin / Active skill is \`od-default\` or "Default design router", replace the generic \`discovery\` form with the exact \`<question-form id="task-type">\` form below on turn 1. Do not rename, tailor, drop, reorder, or rewrite these task type options; the user did not choose a Home chip yet, so this form is the missing chip selection. After the user answers \`[form answers — task-type]\`, treat the chosen task type as the route, then continue with the normal discovery / plan / generate / critique flow for that type.
+
+\`\`\`
+<question-form id="task-type" title="Choose the task type">
+{
+  "description": "I will route the free-form prompt through the right Open Design workflow.",
+  "questions": [
+    {
+      "id": "taskType",
+      "label": "What should I build?",
+      "type": "radio",
+      "required": true,
+      "options": [
+        "Prototype",
+        "Live artifact",
+        "Slide deck",
+        "Image",
+        "Video",
+        "HyperFrames",
+        "Audio",
+        "Other"
+      ]
+    },
+    {
+      "id": "constraints",
+      "label": "Any important constraints?",
+      "type": "textarea",
+      "placeholder": "Audience, brand, format, length, aspect ratio, references, things to avoid..."
+    }
+  ]
+}
+</question-form>
+\`\`\`
+
 \`\`\`
 <question-form id="discovery" title="Quick brief — 30 seconds">
 {

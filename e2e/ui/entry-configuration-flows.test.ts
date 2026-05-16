@@ -138,7 +138,14 @@ test('prompt template retry preserves the edited body in project metadata', asyn
   await page.getByTestId('prompt-template-body').fill(
     'Edited QA prompt: bold poster, one hero product, crisp headline.',
   );
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  const createResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith('/api/projects') &&
+    response.request().method() === 'POST',
+  );
   await page.getByTestId('create-project').click();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok(), await createResponse.text()).toBeTruthy();
 
   const project = await fetchCurrentProject(page);
   expect(project.metadata?.promptTemplate).toMatchObject({
@@ -157,18 +164,19 @@ test('live artifact empty connector CTA opens the gated connector setup path', a
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
 
-  // The empty CTA now opens Settings → Connectors directly. The Composio API
-  // key field sits at the top of the section; the catalog (and its gate)
+  // The empty CTA now opens Integrations → Connectors directly. The Composio
+  // API key field sits at the top of the section; the catalog (and its gate)
   // sits below it.
   await page.getByTestId('new-project-connectors-empty').click();
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  await expect(
-    settingsDialog.getByRole('heading', { level: 3, name: 'Connectors' }),
-  ).toBeVisible();
-  await expect(settingsDialog.getByPlaceholder('Paste Composio API key')).toBeVisible();
-  await expect(settingsDialog.getByTestId('connector-gate')).toBeVisible();
-  await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();
+  await expect(page.getByTestId('new-project-modal')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByPlaceholder('Paste Composio API key')).toBeVisible();
+  await expect(page.getByTestId('connector-gate')).toBeVisible();
+  await expect(page.getByTestId('connectors-search-input')).toBeDisabled();
 });
 
 test('connectors search supports empty results and keyboard-closeable details', async ({ page }) => {
@@ -195,14 +203,7 @@ test('connectors search supports empty results and keyboard-closeable details', 
   }, STORAGE_KEY);
 
   await page.goto('/');
-  // Connector cards + search now live under Settings → Connectors. Open the
-  // settings dialog via the entry sidebar's "Configure execution mode" pill
-  // and switch to the Connectors section before exercising the
-  // search/empty/details flow.
-  await page.getByRole('button', { name: 'Configure execution mode' }).click();
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();
+  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
   await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
 
   const search = settingsDialog.getByTestId('connectors-search-input');
@@ -253,11 +254,8 @@ test('saving a Composio key from Settings unlocks the connectors gate immediatel
     await route.fulfill({ status: 200, body: '{}' });
   });
 
-  await gotoEntryHome(page);
-  await page.getByRole('button', { name: 'Configure execution mode' }).click();
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();
+  await page.goto('/');
+  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
   await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();
 
   await settingsDialog.getByPlaceholder('Paste Composio API key').fill('cmp-secret-1234');
@@ -315,11 +313,8 @@ test('typing a draft replacement Composio key does not trigger global autosave',
     await route.fulfill({ status: 200, body: '{}' });
   });
 
-  await gotoEntryHome(page);
-  await page.getByRole('button', { name: 'Configure execution mode' }).click();
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  await settingsDialog.getByRole('button', { name: /^Connectors\b/ }).click();
+  await page.goto('/');
+  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
   await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
   await expect(settingsDialog.getByText('Saved · ••••1234')).toBeVisible();
 
@@ -362,7 +357,24 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
+async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
+  const settingsButton = page.getByRole('button', { name: /open settings/i });
+  await settingsButton.click();
+  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+  await expect(settingsMenu).toBeVisible();
+  await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+
+  const settingsDialog = page.getByRole('dialog');
+  await expect(settingsDialog).toBeVisible();
+  if (sectionName) {
+    await settingsDialog.getByRole('button', { name: sectionName }).click();
+  }
+  return settingsDialog;
 }
 
 async function routeComposioConfig(

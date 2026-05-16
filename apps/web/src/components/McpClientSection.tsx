@@ -366,10 +366,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       <div className="section-head">
         <div>
           <h3>External MCP servers</h3>
-          <p className="hint">
-            Surface tools from third-party MCP servers (Higgsfield, GitHub,
-            filesystem…) to your coding agent.
-          </p>
+          <p className="hint">Third-party tools for your coding agent.</p>
         </div>
         <button
           type="button"

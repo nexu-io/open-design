@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { I18nProvider } from '../src/i18n';
 import { AnalyticsProvider } from '../src/analytics/provider';
 import '../src/index.css';
+import '../src/styles/home/index.css';
 
 export const metadata: Metadata = {
   title: 'Open Design',

@@ -238,12 +238,12 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     }, 'model');
 
     await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Configure execution mode');
+    await openDesktopSettingsSection(desktop, 'Execution mode');
 
     await waitFor(async () => {
       const snapshot = await readDesktopSettingsSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Execution & model');
+      expect(snapshot.heading).toBe('Execution mode');
       expect(snapshot.selectedProtocol).toBe('Anthropic API');
       expect(snapshot.quickFillProvider).toBe('Anthropic (Claude)');
       expect(snapshot.baseUrl).toBe('https://api.anthropic.com');
@@ -266,7 +266,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     }, 'baseUrl');
 
     await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Configure execution mode');
+    await openDesktopSettingsSection(desktop, 'Execution mode');
 
     await waitFor(async () => {
       const snapshot = await readDesktopSettingsSnapshot(desktop);
@@ -350,13 +350,13 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     }, 'agentId');
 
     await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Configure execution mode');
+    await openDesktopSettingsSection(desktop, 'Execution mode');
     await clickDesktopExecutionModeTab(desktop, 'Local CLI');
 
     await waitFor(async () => {
       const snapshot = await readDesktopLocalCliSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Execution & model');
+      expect(snapshot.heading).toBe('Execution mode');
       expect(snapshot.localCliTabSelected).toBe(true);
       expect(snapshot.selectedAgent).toBe('Codex CLI');
       expect(snapshot.codexHome).toBe('~/.codex-team');
@@ -388,7 +388,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     }, 'baseUrl');
 
     await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Configure execution mode');
+    await openDesktopSettingsSection(desktop, 'Execution mode');
 
     await waitFor(async () => {
       const snapshot = await readDesktopSettingsSnapshot(desktop);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
 
 import { Icon } from './Icon';
 import type { PreviewVisualMarkKind } from '../types';
@@ -159,12 +159,29 @@ export function PreviewDrawOverlay({
     redraw();
   }
 
+  function onCanvasWheel(e: WheelEvent<HTMLCanvasElement>) {
+    if (mode !== 'draw' || sending) return;
+    const iframe = wrapRef.current?.querySelector('iframe');
+    const win = iframe?.contentWindow;
+    if (!win || typeof win.scrollBy !== 'function') return;
+    e.preventDefault();
+    win.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: 'auto' });
+  }
+
   function clearInk() {
     strokesRef.current = [];
     drawingRef.current = null;
     setHasInk(false);
     redraw();
   }
+
+  useEffect(() => {
+    if (active) return;
+    strokesRef.current = [];
+    drawingRef.current = null;
+    setHasInk(false);
+    redraw();
+  }, [active, redraw]);
 
   function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
     const points = strokesRef.current.flatMap((stroke) => stroke.points);
@@ -366,6 +383,7 @@ export function PreviewDrawOverlay({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onWheel={onCanvasWheel}
           style={{
             position: 'absolute',
             inset: 0,

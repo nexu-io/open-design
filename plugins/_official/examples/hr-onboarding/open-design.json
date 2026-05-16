@@ -1,0 +1,88 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hr-onboarding",
+  "title": "Hr Onboarding",
+  "version": "0.1.0",
+  "description": "A new-hire onboarding plan as a single page — first week schedule,\nbuddy + manager intro, learning track, equipment checklist, and \"you're\nset when…\" outcomes. Use when the brief mentions \"onboarding\",\n\"new hire\", \"first week plan\", or \"入职\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/hr-onboarding",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "hr",
+    "web",
+    "desktop",
+    "onboarding",
+    "new-hire",
+    "first-week",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "hr",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a 30-day onboarding plan for a new product designer joining a 40-person startup.",
+        "zh-CN": "使用这个插件完成以下任务：Build a 30-day onboarding plan for a new product designer joining a 40-person startup."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Hr Onboarding"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "accessibility-baseline"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

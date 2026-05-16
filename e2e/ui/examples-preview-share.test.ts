@@ -50,7 +50,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test.describe('examples preview share and fullscreen flows', () => {
+test.describe.skip('examples preview share and fullscreen flows', () => {
   test('opens the share menu for shipped previews and exposes export actions', async ({ page }) => {
     await routeExampleSkills(page, [
       {

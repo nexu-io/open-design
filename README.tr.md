@@ -1,5 +1,14 @@
 # Open Design
 
+> [!IMPORTANT]
+> ### 🔥 `0.8.0-preview` burada. Tasarımın eski dünyası burada bitiyor.
+>
+> Claude Design / Figma'ya açık kaynaklı, agent-native bir alternatif — iki haftada 40k stars bizi buraya getirdi. **Yolun geri kalanını birlikte yürüyelim.**
+>
+> **`main` üzerinde hızlı iterasyon** — 0.8.0 Open Design'in bir sonraki aşaması. Bir PR gönder, çılgın bir fikir at, bir bug bildir — sen ne getirirsen bu hareket o olur.
+>
+> → [**Duyuruyu oku · kurulum dosyasını indir · harekete katıl**](https://github.com/nexu-io/open-design/discussions/1727) · mevcut 0.7'nin yanına paralel kurulur.
+
 > **[Claude Design][cd] için açık kaynak alternatif.** Yerel öncelikli, web'e dağıtılabilir, her katmanda BYOK; `PATH` üzerinde otomatik algılanan **16 coding-agent CLI** (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) tasarım motoruna dönüşür. Hepsi **31 birleştirilebilir Skill** ve **72 marka kalitesinde Design System** tarafından yönlendirilir. CLI yok mu? OpenAI uyumlu BYOK proxy aynı döngünün agent spawn olmadan çalışan halidir.
 
 <p align="center">
@@ -876,7 +885,7 @@ Tam walkthrough, merge çıtası, code style ve kabul etmediklerimiz → [`CONTR
 Open Design'ı kod, doküman, feedback, yeni skill, yeni design system veya keskin bir issue ile ileri taşıyan herkese teşekkürler. Her gerçek katkı önemlidir; aşağıdaki wall bunu yüksek sesle söylemenin en kolay yolu.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-13" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-15" alt="Open Design contributors" />
 </a>
 
 İlk PR'ını gönderdiysen hoş geldin. [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label'ı giriş noktasıdır.
@@ -893,9 +902,9 @@ Yukarıdaki SVG [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml)
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-13" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-15" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-15" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-15" />
   </picture>
 </a>
 

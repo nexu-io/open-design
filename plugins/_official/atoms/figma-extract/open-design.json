@@ -1,0 +1,36 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "figma-extract",
+  "title": "Figma extract",
+  "version": "0.1.0",
+  "description": "Pull a Figma file's node tree, design tokens, and embedded assets into the project cwd as a structured snapshot.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/figma-extract",
+  "tags": [
+    "atom",
+    "first-party",
+    "figma-migration",
+    "phase-6"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "atom",
+    "taskKind": "figma-migration",
+    "scenario": "figma-migration",
+    "mode": "extract",
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

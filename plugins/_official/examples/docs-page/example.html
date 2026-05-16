@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Filebase docs — Quickstart</title>
+  <style>
+    :root {
+      --bg: #fafaf9; --fg: #1c1b1a; --muted: #6b6964; --border: #e6e4e0;
+      --accent: #c96442; --surface: #ffffff; --code-bg: #f4f4f2;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, system-ui, sans-serif; }
+    .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 28px; display: flex; justify-content: space-between; align-items: center; }
+    .topbar .brand { font-weight: 600; }
+    .topbar input { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); width: 280px; font: inherit; background: var(--bg); }
+    .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 220px; gap: 0; min-height: calc(100vh - 50px); }
+    @media (max-width: 1024px) { .layout { grid-template-columns: 220px 1fr; } .toc { display: none; } }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } .sidebar { display: none; } }
+    .sidebar { padding: 24px 16px; border-right: 1px solid var(--border); overflow-y: auto; font-size: 14px; }
+    .sidebar .group { margin-bottom: 22px; }
+    .sidebar .group-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 0 8px 8px; }
+    .sidebar a { display: block; color: var(--fg); text-decoration: none; padding: 5px 8px; border-radius: 6px; }
+    .sidebar a:hover { background: var(--surface); }
+    .sidebar a.active { background: var(--accent); color: white; }
+    article { padding: 40px 56px 80px; max-width: 760px; }
+    .crumbs { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+    h1 { font-size: 36px; letter-spacing: -0.02em; margin: 0 0 12px; }
+    .lede { color: var(--muted); font-size: 17px; margin: 0 0 32px; }
+    h2 { font-size: 22px; letter-spacing: -0.01em; margin: 40px 0 12px; }
+    h3 { font-size: 16px; margin: 24px 0 8px; }
+    p { margin: 12px 0; }
+    code { font-family: ui-monospace, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+    pre code { background: transparent; padding: 0; }
+    .callout { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; }
+    .callout .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 4px; }
+    .toc { padding: 40px 24px 24px; font-size: 13px; border-left: 1px solid var(--border); }
+    .toc .toc-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px; }
+    .toc a { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; }
+    .toc a.active { color: var(--accent); font-weight: 500; }
+    .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border); }
+    .pager a { flex: 1; text-decoration: none; color: var(--fg); padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+    .pager a small { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <header class="topbar" data-od-id="topbar">
+    <span class="brand">◰ Filebase docs</span>
+    <input placeholder="Search · ⌘K" />
+  </header>
+  <div class="layout">
+    <nav class="sidebar" data-od-id="sidebar">
+      <div class="group">
+        <div class="group-label">Getting started</div>
+        <a href="#" class="active">Quickstart</a>
+        <a href="#">Concepts</a>
+        <a href="#">Authentication</a>
+      </div>
+      <div class="group">
+        <div class="group-label">Sync engine</div>
+        <a href="#">Block-level deltas</a>
+        <a href="#">Conflict resolution</a>
+        <a href="#">Resumable uploads</a>
+      </div>
+      <div class="group">
+        <div class="group-label">CLI</div>
+        <a href="#">Install</a>
+        <a href="#">Configuration</a>
+        <a href="#">Subcommands</a>
+      </div>
+    </nav>
+    <article data-od-id="article">
+      <div class="crumbs">Docs › Getting started › Quickstart</div>
+      <h1>Quickstart</h1>
+      <p class="lede">Sync your first folder in under five minutes. The CLI is the fastest path; the desktop app and the API client all wrap the same engine.</p>
+      <h2 id="install">1. Install the CLI</h2>
+      <p>The CLI is distributed as a single binary for macOS, Linux, and Windows.</p>
+<pre><code># macOS · Homebrew
+brew install filebase
+
+# Linux · curl
+curl -fsSL https://get.filebase.dev | sh</code></pre>
+      <p>Verify the install:</p>
+<pre><code>filebase --version
+# filebase 0.6.4</code></pre>
+      <h2 id="auth">2. Authenticate</h2>
+      <p>Sign in with your Filebase account. The token is stored in <code>~/.config/filebase/credentials</code>.</p>
+<pre><code>filebase auth login
+# → opens your browser
+# ✓ Logged in as you@example.com</code></pre>
+      <div class="callout">
+        <div class="label">Note</div>
+        On servers without a browser, use <code>filebase auth login --device</code> for a device-code flow.
+      </div>
+      <h2 id="sync">3. Sync a folder</h2>
+      <p>Pick a local directory and link it to a remote root. Filebase watches it for changes and pushes block-level diffs in the background.</p>
+<pre><code>cd ~/projects
+filebase init my-team
+filebase sync</code></pre>
+      <h3>Excluding files</h3>
+      <p>Add a <code>.filebaseignore</code> at the root of the synced folder. Same syntax as <code>.gitignore</code>:</p>
+<pre><code>node_modules/
+*.log
+build/</code></pre>
+      <h2 id="next">4. Where to go next</h2>
+      <p>Read <a href="#">Conflict resolution</a> to understand how Filebase merges concurrent edits, or skip to the <a href="#">CLI reference</a> for the full subcommand list.</p>
+      <div class="pager">
+        <a href="#"><small>← Previous</small>Concepts</a>
+        <a href="#" style="text-align: right;"><small>Next →</small>Conflict resolution</a>
+      </div>
+    </article>
+    <aside class="toc" data-od-id="toc">
+      <div class="toc-label">On this page</div>
+      <a href="#install" class="active">1. Install the CLI</a>
+      <a href="#auth">2. Authenticate</a>
+      <a href="#sync">3. Sync a folder</a>
+      <a href="#next">4. Where to go next</a>
+    </aside>
+  </div>
+</body>
+</html>

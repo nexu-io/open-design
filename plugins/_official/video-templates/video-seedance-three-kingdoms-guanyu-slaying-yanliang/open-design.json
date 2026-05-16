@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-video-seedance-three-kingdoms-guanyu-slaying-yanliang",
+  "title": "Video - Three Kingdoms ARPG - Guan Yu Slays Yan Liang (Seedance 2.0)",
+  "version": "0.1.0",
+  "description": "A ~10s in-engine cinematic action sequence bringing the companion image template game-screenshot-three-kingdoms-guanyu-slaying-yanliang to life. Guan Yu (关羽) rides his Red Hare horse straight into an enemy battle line, raises the Green Dragon Crescent Blade, and executes a single clean cleave of the opposing general Yan Liang. Tuned for Seedance 2.0 — tight camera discipline, one decisive strike, clean horse-and-blade physics, photoreal lighting, absolutely no gore on-screen (the strike is implied by a gold qi flash, not by any blood). Designed as the direct video companion to the matching image template so the still and the clip can be served as a pair. Reference image: the Guan Yu slaying-Yan-Liang screenshot template.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "open-design contributors",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "game-cinematic",
+    "arpg",
+    "three-kingdoms",
+    "ancient-china",
+    "combat",
+    "cavalry",
+    "guanyu",
+    "key-visual",
+    "hud-safe",
+    "companion-to-image"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/video/video-seedance-three-kingdoms-guanyu-slaying-yanliang-poster.jpg",
+      "video": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/video/video-seedance-three-kingdoms-guanyu-slaying-yanliang.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "A ~10 second in-engine cinematic ARPG action sequence, photoreal, Unreal-Engine-5-grade render quality, desaturated filmic color grading, shallow depth of field on the background. Strict in-game camera discipline — one continuous beat, no cuts, no swish pans.\n\n# Scene (reference image: {argument name=\"reference_image\" default=\"game-screenshot-three-kingdoms-guanyu-slaying-yanliang\"})\n- Setting: {argument name=\"environment\" default=\"a broad open battlefield at dawn, dry yellow earth churned by thousands of hooves, low ground mist clinging to the field, distant spear forests on both sides, tattered war banners fluttering, a cold teal sky with warm amber sunrise light from the left\"}.\n- Hero (center-left of frame, stays identical from first to last frame): {argument name=\"hero\" default=\"Guan Yu (关羽), a towering red-faced general in ornate green-lacquered lamellar armor with a long flowing beard, phoenix-eye expression, silk headband under a ridged helmet, red-green battle robe fluttering behind him\"}.\n- Mount: {argument name=\"mount\" default=\"Red Hare (赤兔), a massive crimson-chestnut warhorse with a long mane, bronze-studded tack, full gallop\"}.\n- Weapon: {argument name=\"weapon\" default=\"the Green Dragon Crescent Blade (青龙偃月刀), a long polearm with a heavy curved blade and a dragon-head socket, held in his right hand\"}.\n- Opposing general (mid-ground, center-right): {argument name=\"target\" default=\"Yan Liang, an enemy general in dark iron armor on his own black warhorse, turning late to face the charge\"}.\n\n# Action (three micro-beats across ~10s, single continuous shot)\n1. 0.0 - 4.0s  Charge. Hero rides Red Hare full gallop directly toward camera-right; beard and robe stream backwards; hooves kick up dust trails; the polearm is held low and trailing so the crescent blade only catches a single glint of sunrise; camera tracks alongside on a smooth lateral dolly matching the horse's speed, framing the hero and horse in a clean center-left third.\n2. 4.0 - 7.0s  Raise + lock on. Hero rises slightly in the saddle and swings the Green Dragon Crescent Blade up into a shoulder-high guard; the blade catches a long sharp highlight; a faint {argument name=\"qi_color\" default=\"cold jade-green\"} qi glow builds along the edge; the enemy general is now fully in the mid-ground turning; their horses begin to cross paths; the background armies blur to a soft bokeh.\n3. 7.0 - 10.0s  Single clean cleave. Hero swings the blade in one decisive diagonal arc from high-right down to low-left as the two riders cross; a single bright gold-into-jade qi flash briefly blooms along the arc; the enemy general's helmet flies off-frame; his horse rears back; no blood, no gore, no on-screen text; hero's blade recovers smoothly to a trailing low guard; camera continues its lateral track and gently decelerates as the cleave finishes, ending on the hero's stoic profile riding past.\n\n# Technical direction\n- Framing: hero + Red Hare occupy the center-left third for the full shot; the enemy enters from the right third around the 4s mark; horizon low; never cut to a closeup.\n- Camera: smooth lateral dolly matching horse speed, zero handheld shake, zero rack-focus; focus stays on the hero throughout.\n- Lighting: cinematic cold-sunrise key from the left, warm amber rim on the armor, volumetric ground mist drifting left-to-right, subtle bloom on the qi glow only.\n- Motion: photoreal horse gallop, 4-beat gait, plausible saddle bounce on the hero, blade weight feels real. The cleave is in real time — no slow-motion ramp. The qi flash lasts less than 0.2s.\n- Color: desaturated filmic grade, cold teal + warm amber split, slight filmic grain, subtle chromatic aberration at frame edges only.\n- HUD: none rendered in this shot (the companion image template carries the HUD; this video is a pure in-engine action beat).\n\n# Negative prompt\nno blood, no gore, no decapitated head shown on-screen, no severed limbs, no red splatter, no anime cel-shading, no comic speed lines, no slow-motion ramp, no whip-pan, no lens flare, no particle fireworks, no explosion, no watermark, no on-screen text or UI, no warped Chinese characters or garbled glyphs on banners, no modern clothing, no firearms, no Western medieval armor, no duplicated hero, no wandering crowd extras in the foreground, no extra fingers on the hero, no broken horse geometry, no weightless polearm, no jump cut.",
+        "zh-CN": "A ~10 second in-engine cinematic ARPG action sequence, photoreal, Unreal-Engine-5-grade render quality, desaturated filmic color grading, shallow depth of field on the background. Strict in-game camera discipline — one continuous beat, no cuts, no swish pans.\n\n# Scene (reference image: {argument name=\"reference_image\" default=\"game-screenshot-three-kingdoms-guanyu-slaying-yanliang\"})\n- Setting: {argument name=\"environment\" default=\"a broad open battlefield at dawn, dry yellow earth churned by thousands of hooves, low ground mist clinging to the field, distant spear forests on both sides, tattered war banners fluttering, a cold teal sky with warm amber sunrise light from the left\"}.\n- Hero (center-left of frame, stays identical from first to last frame): {argument name=\"hero\" default=\"Guan Yu (关羽), a towering red-faced general in ornate green-lacquered lamellar armor with a long flowing beard, phoenix-eye expression, silk headband under a ridged helmet, red-green battle robe fluttering behind him\"}.\n- Mount: {argument name=\"mount\" default=\"Red Hare (赤兔), a massive crimson-chestnut warhorse with a long mane, bronze-studded tack, full gallop\"}.\n- Weapon: {argument name=\"weapon\" default=\"the Green Dragon Crescent Blade (青龙偃月刀), a long polearm with a heavy curved blade and a dragon-head socket, held in his right hand\"}.\n- Opposing general (mid-ground, center-right): {argument name=\"target\" default=\"Yan Liang, an enemy general in dark iron armor on his own black warhorse, turning late to face the charge\"}.\n\n# Action (three micro-beats across ~10s, single continuous shot)\n1. 0.0 - 4.0s  Charge. Hero rides Red Hare full gallop directly toward camera-right; beard and robe stream backwards; hooves kick up dust trails; the polearm is held low and trailing so the crescent blade only catches a single glint of sunrise; camera tracks alongside on a smooth lateral dolly matching the horse's speed, framing the hero and horse in a clean center-left third.\n2. 4.0 - 7.0s  Raise + lock on. Hero rises slightly in the saddle and swings the Green Dragon Crescent Blade up into a shoulder-high guard; the blade catches a long sharp highlight; a faint {argument name=\"qi_color\" default=\"cold jade-green\"} qi glow builds along the edge; the enemy general is now fully in the mid-ground turning; their horses begin to cross paths; the background armies blur to a soft bokeh.\n3. 7.0 - 10.0s  Single clean cleave. Hero swings the blade in one decisive diagonal arc from high-right down to low-left as the two riders cross; a single bright gold-into-jade qi flash briefly blooms along the arc; the enemy general's helmet flies off-frame; his horse rears back; no blood, no gore, no on-screen text; hero's blade recovers smoothly to a trailing low guard; camera continues its lateral track and gently decelerates as the cleave finishes, ending on the hero's stoic profile riding past.\n\n# Technical direction\n- Framing: hero + Red Hare occupy the center-left third for the full shot; the enemy enters from the right third around the 4s mark; horizon low; never cut to a closeup.\n- Camera: smooth lateral dolly matching horse speed, zero handheld shake, zero rack-focus; focus stays on the hero throughout.\n- Lighting: cinematic cold-sunrise key from the left, warm amber rim on the armor, volumetric ground mist drifting left-to-right, subtle bloom on the qi glow only.\n- Motion: photoreal horse gallop, 4-beat gait, plausible saddle bounce on the hero, blade weight feels real. The cleave is in real time — no slow-motion ramp. The qi flash lasts less than 0.2s.\n- Color: desaturated filmic grade, cold teal + warm amber split, slight filmic grain, subtle chromatic aberration at frame edges only.\n- HUD: none rendered in this shot (the companion image template carries the HUD; this video is a pure in-engine action beat).\n\n# Negative prompt\nno blood, no gore, no decapitated head shown on-screen, no severed limbs, no red splatter, no anime cel-shading, no comic speed lines, no slow-motion ramp, no whip-pan, no lens flare, no particle fireworks, no explosion, no watermark, no on-screen text or UI, no warped Chinese characters or garbled glyphs on banners, no modern clothing, no firearms, no Western medieval armor, no duplicated hero, no wandering crowd extras in the foreground, no extra fingers on the hero, no broken horse geometry, no weightless polearm, no jump cut."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

@@ -1,0 +1,81 @@
+name: 🐛 Bug report
+description: Something isn't working as expected in Open Design.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! A clear, reproducible report helps us fix it faster.
+
+        Before you submit:
+        - Check whether the issue is already reported in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I do X, I expected Y but I see Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reliably reproduce the problem.
+      placeholder: |
+        1. Open Open Design
+        2. Click ...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Open Design version
+      description: Find this in the app's About menu, or run `od --version`.
+      placeholder: e.g. 0.7.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots (optional)
+      description: |
+        If relevant, paste any error output, console logs, or screenshots.
+        For daemon logs, run `pnpm tools-dev logs --json`.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help us understand the issue (plugins installed, design systems in use, related issues, etc.).
+    validations:
+      required: false

@@ -1,0 +1,22 @@
+{
+  "id": "profile-avatar-snowy-rabbit-hanfu-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Snowy Rabbit Hanfu Portrait",
+  "summary": "This prompt generates an ultra-detailed fantasy beauty portrait of a rabbit-eared woman in embroidered hanfu, ideal for elegant character art, costume design, or cinematic AI portrait showcases.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A highly detailed fantasy portrait of a young woman in side profile wearing elegant white rabbit ears and traditional East Asian hanfu in a snowy winter garden. She has {argument name=\"hair color\" default=\"silver white\"} hair, extremely long, silky, and softly wind-swept, styled with ornate floral and jeweled hair ornaments. The face is mostly obscured by a large centered rectangular blur mask in muted gray, covering the eyes, nose, and upper cheeks, as if censored for privacy. The rabbit ears are tall, plush, white, and realistic, with pale pink inner fur, attached through an elaborate headdress featuring black lace, silver filigree, small blossoms, crystals, beads, and tassels. Visible in the headdress are 2 round embroidered ornaments with black rabbit motifs, plus multiple dangling tassels in black and white, delicate chains, and floral metal branches. She wears asymmetrical long earrings with beads and tassels. Her robe is a layered {argument name=\"outfit style\" default=\"black-and-white hanfu with rabbit embroidery\"}, with glossy dark trim, translucent pale fabric, and embroidered rabbit designs visible in 3 places: one small rabbit near the collar, one large circular rabbit emblem on the chest, and one faint rabbit motif on the sleeve. The overall palette is monochrome silver, white, charcoal, and soft gray, creating a cold ethereal mood. Snow is gently falling in the foreground and background. Behind her is a softly blurred {argument name=\"background setting\" default=\"snow-covered classical Chinese garden with pavilion roofs\"}, with shallow depth of field, atmospheric haze, cinematic bokeh, ultra-fine textile detail, soft winter lighting, elegant composition, and a serene mystical aesthetic. Vertical portrait framing, upper torso crop, luxurious fantasy costume photography, ultra-realistic, high detail, polished editorial beauty image.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453211568_as7go2_HG_dAFracAA38vJ.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-3"
+  }
+}

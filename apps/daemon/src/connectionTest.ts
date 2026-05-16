@@ -17,6 +17,7 @@
 // contracts so Settings and daemon-side checks reject the same hosts.
 
 import { spawn } from 'node:child_process';
+import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,9 +42,11 @@ import {
 } from './runtimes/auth.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import {
+  isBlockedExternalApiHostname,
   isLoopbackApiHost,
   validateBaseUrl,
   type AgentTestRequest,
+  type BaseUrlValidationResult,
   type ConnectionTestKind,
   type ConnectionTestProtocol,
   type ConnectionTestResponse,
@@ -52,6 +55,68 @@ import {
 } from '@open-design/contracts/api/connectionTest';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+
+// DNS-aware companion to `validateBaseUrl`. The contracts-side check only
+// inspects the literal hostname string, so a public DNS name pointing at
+// internal infrastructure (`internal.example.com → 10.0.0.5`) slips through
+// and the daemon ends up issuing a request to a private address on behalf of
+// whichever caller supplied the base URL. Resolve the hostname and re-run
+// the block-list against every address the system would actually connect to.
+//
+// Loopback is intentionally allowed for local LLM providers like Ollama; any
+// hostname that resolves to a loopback address (including `*.localhost` per
+// RFC 6761 and IPv4-mapped IPv6 loopback) follows that same carve-out.
+//
+// DNS lookup failures are *not* treated as a security signal — the caller is
+// going to surface a connection error from `fetch` anyway, and turning a
+// transient resolver hiccup into a 403 would just confuse users. The sync
+// hostname check still rejected the obvious literal-IP cases before we ever
+// got here.
+
+export type DnsLookupAddress = { address: string; family: number };
+export type DnsLookupFn = (hostname: string) => Promise<DnsLookupAddress[]>;
+
+const defaultDnsLookup: DnsLookupFn = async (hostname) => {
+  const result = await dnsPromises.lookup(hostname, { all: true, family: 0 });
+  return result.map(({ address, family }) => ({ address, family }));
+};
+
+function looksLikeIpLiteral(hostname: string): boolean {
+  const host = hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return true;
+  return host.includes(':');
+}
+
+export async function validateBaseUrlResolved(
+  baseUrl: string,
+  lookup: DnsLookupFn = defaultDnsLookup,
+): Promise<BaseUrlValidationResult> {
+  const sync = validateBaseUrl(baseUrl);
+  if (sync.error || !sync.parsed) return sync;
+
+  const hostname = sync.parsed.hostname.toLowerCase();
+  if (isLoopbackApiHost(hostname)) return sync;
+  if (looksLikeIpLiteral(hostname)) return sync;
+
+  let addresses: DnsLookupAddress[];
+  try {
+    addresses = await lookup(hostname);
+  } catch {
+    return sync;
+  }
+
+  for (const addr of addresses) {
+    const ip = String(addr.address).toLowerCase();
+    if (isLoopbackApiHost(ip)) continue;
+    if (isBlockedExternalApiHostname(ip)) {
+      return { error: 'Internal IPs blocked', forbidden: true };
+    }
+  }
+
+  return sync;
+}
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
@@ -557,7 +622,7 @@ export async function testProviderConnection(
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model = String(input.model ?? '');
-  const validated = validateBaseUrl(input.baseUrl);
+  const validated = await validateBaseUrlResolved(input.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {

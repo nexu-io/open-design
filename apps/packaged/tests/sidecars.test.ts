@@ -158,6 +158,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
+      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
       logsRoot: '/tmp/od-pkg/logs',
       namespaceRoot: '/tmp/od-pkg',
       resourceRoot: '/tmp/od-pkg/resources',

@@ -5,6 +5,8 @@ import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
 
+test.describe.configure({ timeout: 30_000 });
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
@@ -19,9 +21,31 @@ test.beforeEach(async ({ page }) => {
         designSystemId: null,
         onboardingCompleted: true,
         agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
       }),
     );
   }, STORAGE_KEY);
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
 });
 
 const designFileFlows = new Set([
@@ -51,7 +75,7 @@ for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.
       });
     });
 
-    await page.goto('/');
+    await gotoEntryHome(page);
     await createProject(page, entry);
     await expectWorkspaceReady(page);
 
@@ -83,14 +107,32 @@ async function createProject(page: Page, entry: UiScenario) {
 }
 
 async function createProjectNameOnly(page: Page, entry: UiScenario) {
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   if (entry.create.tab) {
     await page.getByTestId(`new-project-tab-${entry.create.tab}`).click();
   }
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
 }
 
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await expect(privacyDialog).toHaveCount(0);
+  }
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+}
+
+async function openNewProjectModal(page: Page) {
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
 async function expectWorkspaceReady(page: Page) {
+  await waitForLoadingToClear(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -125,38 +167,60 @@ async function seedProjectFile(
   encoding?: 'base64',
   artifactManifest?: Record<string, unknown>,
 ) {
-  const response = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: {
-      name,
-      content,
-      ...(encoding ? { encoding } : {}),
-      ...(artifactManifest ? { artifactManifest } : {}),
+  const response = await page.request.post(
+    `/api/projects/${projectId}/files`,
+    {
+      data: {
+        name,
+        content,
+        ...(encoding ? { encoding } : {}),
+        ...(artifactManifest ? { artifactManifest } : {}),
+      },
+      timeout: 15_000,
     },
-  });
+  );
   expect(response.ok()).toBeTruthy();
 }
 
 async function seedHtmlArtifact(page: Page, projectId: string, fileName: string, content: string) {
-  const resp = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: {
-      name: fileName,
-      content,
-      artifactManifest: {
-        version: 1,
-        kind: 'html',
-        title: fileName,
-        entry: fileName,
-        renderer: 'html',
-        exports: ['html'],
+  const resp = await page.request.post(
+    `/api/projects/${projectId}/files`,
+    {
+      data: {
+        name: fileName,
+        content,
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: fileName,
+          entry: fileName,
+          renderer: 'html',
+          exports: ['html'],
+        },
       },
+      timeout: 15_000,
     },
-  });
+  );
   expect(resp.ok()).toBeTruthy();
 }
 
 async function openDesignFile(page: Page, fileName: string) {
+  const preview = page.getByTestId('artifact-preview-frame');
+  if (await preview.isVisible().catch(() => false)) return;
+
+  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace('.', '\\.'), 'i') });
+  if (await fileTab.isVisible().catch(() => false)) {
+    await fileTab.click();
+    return;
+  }
+
   await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+}
+
+async function waitForLoadingToClear(page: Page) {
+  const loading = page.getByText('Loading Open Design…');
+  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
 }
 
 async function runUploadedImageRendersInPreviewFlow(page: Page) {
@@ -286,11 +350,23 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   await page.reload();
 
   const restoredFirstTab = page.getByRole('tab', { name: /first-tab\.png/i });
-  const restoredSecondTab = page.getByRole('tab', { name: /second-tab\.png/i });
   await expect(restoredFirstTab).toBeVisible();
-  await expect(restoredSecondTab).toBeVisible();
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'true');
-  await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'false');
+
+  // The refreshed workspace restores the active file tab, while other project files
+  // remain available from the Design Files list until the user reopens them.
+  await page.getByTestId('design-files-tab').click();
+  const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: 'second-tab.png',
+  });
+  await expect(secondFileRow).toBeVisible();
+  await secondFileRow.getByRole('button').first().click();
+  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+
+  const restoredSecondTab = page.getByRole('tab', { name: /second-tab\.png/i });
+  await expect(restoredSecondTab).toBeVisible();
+  await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'true');
+  await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'false');
 }
 
 function homeDesignCard(page: Page, name: string): Locator {

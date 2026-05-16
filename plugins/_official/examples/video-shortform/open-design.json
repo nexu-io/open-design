@@ -1,0 +1,79 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-video-shortform",
+  "title": "Video Shortform",
+  "version": "0.1.0",
+  "description": "Short-form video generation skill — 3-10 second clips for product\nreveals, motion teasers, ambient loops. Defaults to Seedance 2 but\nworks the same with Kling 3 / 4, Veo 3 or Sora 2. Output is one MP4\nsaved to the project folder. When the workspace also ships an\ninteractive-video / hyperframes skill, prefer composing several short\nshots into a single timeline rather than one long monolithic clip.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/video-shortform",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "marketing",
+    "clip",
+    "shortform",
+    "reel",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "marketing",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "5-second product reveal — ceramic coffee mug rotating on a soft\npaper backdrop, warm side-light from camera-left, micro dust motes\ndrifting through the beam. Cinematic, 16:9, slow drift on the camera.",
+        "zh-CN": "使用这个插件完成以下任务：5-second product reveal — ceramic coffee mug rotating on a soft\npaper backdrop, warm side-light from camera-left, micro dust motes\ndrifting through the beam. Cinematic, 16:9, slow drift on the camera."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Video Shortform"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@open-design/agui-adapter",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure-TS bidirectional adapter between Open Design's PersistedAgentEvent / GenUIEvent / PluginPipelineStageEvent union and the AG-UI canonical event protocol (see https://github.com/CopilotKit/CopilotKit). No node:fs imports — daemon emits, web/CopilotKit consumes.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "esbuild": "0.27.7",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

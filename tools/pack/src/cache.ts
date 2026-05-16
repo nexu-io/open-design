@@ -158,7 +158,7 @@ export class ToolPackCache {
       const nextManifest = manifest ?? await (async () => {
         status = existingManifest == null ? "miss" : "stale";
         reason = invalidation?.reason ?? "missing manifest";
-        const stagingPath = join(dirname(entryPath), `${basename(entryPath)}.tmp-${process.pid}-${randomUUID()}`);
+        const stagingPath = join(dirname(entryPath), `${basename(entryPath).slice(0, 12)}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`);
         await rm(stagingPath, { force: true, recursive: true });
         await mkdir(stagingPath, { recursive: true });
         try {

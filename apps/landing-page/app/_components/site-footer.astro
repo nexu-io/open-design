@@ -1,0 +1,51 @@
+---
+import type { HeaderProps } from './header';
+
+interface Props {
+  counts: HeaderProps['counts'];
+}
+
+const { counts } = Astro.props;
+const REPO = 'https://github.com/nexu-io/open-design';
+---
+
+<footer class='sub-footer' data-od-id='sub-footer'>
+  <div class='container sub-footer-inner'>
+    <div class='sub-footer-grid'>
+      <div class='sub-footer-brand'>
+        <a href='/' class='brand'>
+          <span class='brand-mark'>
+            <img src='/logo.png' alt='' width='36' height='36' />
+          </span>
+          <span>Open Design</span>
+        </a>
+        <p>
+          The open-source alternative to Claude Design. Apache-2.0,
+          local-first, BYOK at every layer.
+        </p>
+      </div>
+      <div class='sub-footer-col'>
+        <h5>Catalog</h5>
+        <ul>
+          <li><a href='/skills/'>{counts.skills} Skills</a></li>
+          <li><a href='/systems/'>{counts.systems} Systems</a></li>
+          <li><a href='/templates/'>{counts.templates} Templates</a></li>
+          <li><a href='/craft/'>{counts.craft} Craft principles</a></li>
+        </ul>
+      </div>
+      <div class='sub-footer-col'>
+        <h5>Connect</h5>
+        <ul>
+          <li><a href={REPO} target='_blank' rel='noopener'>GitHub</a></li>
+          <li><a href={`${REPO}/issues`} target='_blank' rel='noopener'>Issues</a></li>
+          <li><a href={`${REPO}/releases`} target='_blank' rel='noopener'>Releases</a></li>
+          <li><a href='/#contact'>Contact</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class='sub-footer-bottom'>
+      <span>● Open Design · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26</span>
+      <span>Berlin / Open / Earth · 52.5200° N · 13.4050° E</span>
+    </div>
+  </div>
+</footer>

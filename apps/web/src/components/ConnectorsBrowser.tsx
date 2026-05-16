@@ -25,6 +25,7 @@ import {
 } from './EntryView';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
+import { Toast } from './Toast';
 
 const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
 const CONNECTOR_AUTH_PENDING_STORAGE_KEY = 'od-connectors-authorization-pending';
@@ -556,6 +557,7 @@ export function ConnectorsBrowser({
   const [connectorAuthorizationPending, setConnectorAuthorizationPending] = useState<ConnectorAuthorizationPendingState>(() => loadConnectorAuthorizationPending());
   const [connectorAuthorizationCancelFailed, setConnectorAuthorizationCancelFailed] = useState<Record<string, boolean>>({});
   const [connectorAuthorizationError, setConnectorAuthorizationError] = useState<Record<string, string>>({});
+  const [connectErrorToast, setConnectErrorToast] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const [toolPreviewLoadingIds, setToolPreviewLoadingIds] = useState<Record<string, boolean>>({});
   const [toolPreviewFetchedIds, setToolPreviewFetchedIds] = useState<Record<string, boolean>>({});
@@ -710,6 +712,7 @@ export function ConnectorsBrowser({
         const result = await connectConnector(connectorId);
         updateConnector(result.connector);
         if (result.connector && !result.error) {
+          setConnectErrorToast(null);
           setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
             connector: result.connector!,
             ...(result.auth === undefined ? {} : { auth: result.auth }),
@@ -717,7 +720,7 @@ export function ConnectorsBrowser({
         } else {
           setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
           if (result.error) {
-            setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
+            setConnectErrorToast(result.error);
           }
         }
       } else {
@@ -815,6 +818,15 @@ export function ConnectorsBrowser({
 
   return (
     <div className="tab-panel connectors-panel connectors-panel-embedded">
+      {connectErrorToast ? (
+        <div className="connectors-toast-anchor">
+          <Toast
+            message={connectErrorToast}
+            role="alert"
+            onDismiss={() => setConnectErrorToast(null)}
+          />
+        </div>
+      ) : null}
       <div className="tab-panel-toolbar">
         <div className="toolbar-left connectors-heading">
           <div>
@@ -1173,11 +1185,6 @@ function ConnectorCard({
           ) : null}
         </div>
       </div>
-      {authorizationError ? (
-        <p className="connector-authorization-hint connector-authorization-error" role="alert">
-          {authorizationError}
-        </p>
-      ) : null}
       {authorizationCancelFailed ? (
         <p className="connector-authorization-hint connector-authorization-error" role="alert">
           {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
@@ -1342,11 +1349,6 @@ function ConnectorDetailDrawer({
                 </p>
               ) : null}
             </section>
-          ) : null}
-          {authorizationError ? (
-            <p className="connector-authorization-hint connector-authorization-error" role="alert">
-              {authorizationError}
-            </p>
           ) : null}
           {authorizationCancelFailed ? (
             <p className="connector-authorization-hint connector-authorization-error" role="alert">

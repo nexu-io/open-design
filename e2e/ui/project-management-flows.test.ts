@@ -97,6 +97,7 @@ test('new project tabs switch visible form sections and preserve drafts', async 
   });
 
   await page.goto('/');
+  await openNewProjectPanel(page);
   await expect(page.getByTestId('new-project-tab-prototype')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.newproj-title')).toContainText('New prototype');
   await expect(page.getByTestId('design-system-trigger')).toBeVisible();
@@ -141,6 +142,7 @@ test('design system multi-select stores primary and inspiration metadata', async
   });
 
   await page.goto('/');
+  await openNewProjectPanel(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system multi select metadata');
   await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
@@ -154,7 +156,9 @@ test('design system multi-select stores primary and inspiration metadata', async
 
   await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
   await expect(page.getByTestId('design-system-trigger')).toContainText('+2');
-  await page.keyboard.press('Escape');
+  await page.getByTestId('design-system-trigger').click();
+  await expect(page.locator('.ds-picker-popover')).toHaveCount(0);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
   await page.getByTestId('create-project').click();
   await expectWorkspaceReady(page);
 
@@ -172,6 +176,7 @@ test('design system picker searches and switches the single selected system', as
   });
 
   await page.goto('/');
+  await openNewProjectPanel(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system single switch flow');
   await expect(page.getByTestId('design-system-trigger')).toBeVisible();
@@ -248,7 +253,7 @@ test('home design card deletion supports cancel and confirm flows', async ({ pag
 
   const { projectId } = getProjectContextFromUrl(page);
   await page.getByRole('button', { name: /back to projects/i }).click();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expectDesignsView(page);
 
   const designCard = homeDesignCard(page, projectName);
   await expect(designCard).toBeVisible();
@@ -285,7 +290,7 @@ test('home designs view toggle switches between grid and kanban and persists', a
   await expectWorkspaceReady(page);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expectDesignsView(page);
   await expect(homeDesignCard(page, projectName)).toBeVisible();
   await expect(page.locator('.design-grid')).toBeVisible();
   await expect(page.locator('.design-kanban-board')).toHaveCount(0);
@@ -298,7 +303,7 @@ test('home designs view toggle switches between grid and kanban and persists', a
   await expect(page.locator('.design-kanban-card', { hasText: projectName })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expectDesignsView(page);
   await expect(page.locator('.design-kanban-board')).toBeVisible();
   await expect(page.getByTestId('designs-view-kanban')).toHaveAttribute('aria-pressed', 'true');
 
@@ -317,12 +322,12 @@ test('home designs search filters projects and recovers from no results', async 
   await createProject(page, alphaName);
   await expectWorkspaceReady(page);
   await page.getByRole('button', { name: /back to projects/i }).click();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expectDesignsView(page);
 
   await createProject(page, betaName);
   await expectWorkspaceReady(page);
   await page.getByRole('button', { name: /back to projects/i }).click();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expectDesignsView(page);
   await expect(homeDesignCard(page, alphaName)).toBeVisible();
   await expect(homeDesignCard(page, betaName)).toBeVisible();
 
@@ -348,16 +353,8 @@ test('change pet opens pet settings and updates the custom companion draft', asy
   });
 
   await page.goto('/');
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
-
-  await page
-    .locator('.entry-side-foot')
-    .getByRole('button', { name: /change pet/i })
-    .click();
-
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { level: 3, name: 'Pets' })).toBeVisible();
+  const dialog = await openEntrySettingsDialog(page, /^Pets\b/);
+  await expect(dialog.getByRole('heading', { level: 2, name: 'Pets' })).toBeVisible();
 
   await dialog.getByRole('tab', { name: 'Custom' }).click();
   const customPanel = dialog.locator('.pet-custom');
@@ -420,10 +417,41 @@ async function createProject(
   page: Page,
   projectName: string,
 ) {
+  await openNewProjectPanel(page);
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(projectName);
   await page.getByTestId('create-project').click();
+}
+
+async function openNewProjectPanel(page: Page) {
+  if (await page.getByTestId('new-project-panel').isVisible().catch(() => false)) return;
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
+async function expectDesignsView(page: Page) {
+  if (!/\/projects$/.test(new URL(page.url()).pathname)) {
+    await page.getByTestId('entry-nav-projects').click();
+  }
+  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page.locator('.design-grid, .design-kanban-board')).toBeVisible();
+}
+
+async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
+  const settingsButton = page.getByRole('button', { name: /open settings/i });
+  await settingsButton.click();
+  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+  await expect(settingsMenu).toBeVisible();
+  await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+
+  const settingsDialog = page.getByRole('dialog');
+  await expect(settingsDialog).toBeVisible();
+  if (sectionName) {
+    await settingsDialog.getByRole('button', { name: sectionName }).click();
+  }
+  return settingsDialog;
 }
 
 async function expectWorkspaceReady(page: Page) {
