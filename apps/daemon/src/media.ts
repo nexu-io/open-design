@@ -1627,11 +1627,14 @@ async function renderOpenRouterImage(
   }
   const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
 
-  // Strip the `openrouter/` catalogue prefix so the wire model name
+  // Respect model-alias contract: credentials.model (from stored config)
+  // overrides ctx.wireModel (from OD_MEDIA_MODEL_ALIASES / resolveModelAlias).
+  // Then strip the `openrouter/` catalogue prefix so the wire model name
   // matches OpenRouter's canonical slug.
-  const wireModel = ctx.model.startsWith('openrouter/')
-    ? ctx.model.slice('openrouter/'.length)
-    : ctx.model;
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const wireModel = resolved.startsWith('openrouter/')
+    ? resolved.slice('openrouter/'.length)
+    : resolved;
 
   // Multi-modal models (Gemini variants) accept both image and text
   // output; image-only models (Flux, Recraft, Sourceful) only accept
@@ -1754,11 +1757,14 @@ async function renderOpenRouterVideo(
   }
   const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
 
-  // Strip the `openrouter/` catalogue prefix so the wire model name
+  // Respect model-alias contract: credentials.model (from stored config)
+  // overrides ctx.wireModel (from OD_MEDIA_MODEL_ALIASES / resolveModelAlias).
+  // Then strip the `openrouter/` catalogue prefix so the wire model name
   // matches OpenRouter's canonical slug (e.g. `bytedance/seedance-2.0`).
-  const wireModel = ctx.model.startsWith('openrouter/')
-    ? ctx.model.slice('openrouter/'.length)
-    : ctx.model;
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const wireModel = resolved.startsWith('openrouter/')
+    ? resolved.slice('openrouter/'.length)
+    : resolved;
 
   const aspectRatio = openRouterAspectFor(ctx.aspect);
 
@@ -1825,7 +1831,7 @@ async function renderOpenRouterVideo(
   const maxMs =
     Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
       ? configuredMaxMs
-      : 20 * 60 * 1000; // 20 minutes default
+      : 30 * 60 * 1000; // 30 minutes default
 
   let lastStatus = submitData?.status || 'pending';
   let videoUrls: string[] | null = null;
