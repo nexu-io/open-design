@@ -271,6 +271,57 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('keeps the timeout armed through the body read — a stalled response body aborts instead of hanging', async () => {
+    const { db, projectsRoot } = setupProjectFixture();
+    seedConversation(db);
+
+    // fetch() resolves as soon as the upstream sends headers; this body
+    // never enqueues and never closes. The stream honors init.signal the
+    // way a real fetch body does, so a mid-read abort errors the stream.
+    const fetchImpl = vi.fn((_url: string, init: RequestInit) => {
+      const body = new ReadableStream({
+        start(controller) {
+          init.signal?.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            controller.error(err);
+          });
+        },
+      });
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    });
+
+    const pending = synthesizeHandoffPrompt(db, projectsRoot, PROJECT_ID, {
+      ...baseOptions,
+      fetchImpl,
+      timeoutMs: 5,
+    });
+
+    // If clearTimeout runs before response.json() (the regressed bug), the
+    // timeout is disarmed and the stalled body read hangs forever — 'hung'
+    // would win this race. The timeout must stay armed and abort the read.
+    let hangTimer: ReturnType<typeof setTimeout>;
+    const outcome = await Promise.race([
+      pending.then(
+        () => 'resolved',
+        (err) => err,
+      ),
+      new Promise((resolve) => {
+        hangTimer = setTimeout(() => resolve('hung'), 500);
+      }),
+    ]);
+    clearTimeout(hangTimer!);
+
+    expect(outcome).not.toBe('hung');
+    expect(outcome).not.toBe('resolved');
+    expect(outcome).toMatchObject({ name: 'AbortError' });
+  });
+
   it('truncates transcripts over 384 KiB to fit the prompt budget', async () => {
     const { db, projectsRoot } = setupProjectFixture();
     seedConversation(db, { messageCount: 5_000 });

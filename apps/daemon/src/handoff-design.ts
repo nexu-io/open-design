@@ -165,8 +165,12 @@ export async function synthesizeHandoffPrompt(
 
   const timeoutController = new AbortController();
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  // The timeout must stay armed until the response BODY has been fully
+  // read, not just until headers arrive. `fetch()` resolves as soon as the
+  // upstream sends headers, so clearing the timeout before `response.json()`
+  // would leave a stalled body able to hang the route indefinitely. Hence
+  // the single `finally` below spans both the call and the body parse.
   const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
-  let response: Response;
   try {
     const callParams: AnthropicCallParams = {
       apiKey: options.apiKey,
@@ -180,6 +184,8 @@ export async function synthesizeHandoffPrompt(
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
     if (options.fetchImpl) callParams.fetchImpl = options.fetchImpl;
+
+    let response: Response;
     try {
       response = await callAnthropicWithRetry(callParams);
     } catch (err: unknown) {
@@ -192,34 +198,44 @@ export async function synthesizeHandoffPrompt(
       const message = err instanceof Error ? err.message : String(err);
       throw new FinalizeUpstreamError(502, '', `upstream network error: ${message}`);
     }
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (err: unknown) {
+      // A timeout (or caller cancellation) that lands mid-body aborts the
+      // shared signal, which rejects this read with an AbortError. Re-throw
+      // it as-is — mirroring the call-phase catch above — so the route maps
+      // it to the intended `503` "handoff timed out" rather than a
+      // misleading `502` "non-JSON body".
+      const errName =
+        err && typeof err === 'object' && 'name' in err
+          ? (err as { name?: unknown }).name
+          : '';
+      if (errName === 'AbortError') throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      throw new FinalizeUpstreamError(
+        502,
+        '',
+        `upstream Anthropic returned non-JSON body: ${message}`,
+      );
+    }
+
+    const prompt = extractDesignMd(payload);
+    const usage = (payload as {
+      usage?: { input_tokens?: number; output_tokens?: number };
+    }).usage ?? {};
+    const inputTokens = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
+    const outputTokens = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
+
+    return {
+      prompt,
+      model: options.model,
+      inputTokens,
+      outputTokens,
+      transcriptMessageCount: transcriptResult.messageCount,
+    };
   } finally {
     clearTimeout(timeoutId);
   }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new FinalizeUpstreamError(
-      502,
-      '',
-      `upstream Anthropic returned non-JSON body: ${message}`,
-    );
-  }
-
-  const prompt = extractDesignMd(payload);
-  const usage = (payload as {
-    usage?: { input_tokens?: number; output_tokens?: number };
-  }).usage ?? {};
-  const inputTokens = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
-  const outputTokens = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
-
-  return {
-    prompt,
-    model: options.model,
-    inputTokens,
-    outputTokens,
-    transcriptMessageCount: transcriptResult.messageCount,
-  };
 }
