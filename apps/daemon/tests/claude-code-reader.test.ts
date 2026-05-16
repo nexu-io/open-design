@@ -2,7 +2,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { detectAvailability, readUserMcpServers } from '../src/claude-code/reader.js';
+import {
+  detectAvailability,
+  readPluginMcpServers,
+  readUserMcpServers,
+} from '../src/claude-code/reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,5 +62,35 @@ describe('readUserMcpServers', () => {
   it('returns [] without throwing when .claude.json is malformed', () => {
     const home = path.join(FIXTURES, 'claude-home-malformed-json', 'home');
     expect(readUserMcpServers(home)).toEqual([]);
+  });
+});
+
+describe('readPluginMcpServers', () => {
+  it('returns servers declared in plugin manifests with plugin attribution', () => {
+    const home = path.join(FIXTURES, 'claude-home-plugin-mcp', 'home');
+    const servers = readPluginMcpServers(home);
+    expect(servers.map((s) => s.name).sort()).toEqual(['github', 'sentry']);
+
+    const gh = servers.find((s) => s.name === 'github')!;
+    expect(gh.source).toBe('plugin');
+    expect(gh.pluginName).toBe('example-pack');
+    expect(gh.pluginVersion).toBe('1.2.3');
+    expect(gh.transport).toBe('stdio');
+    expect(gh.command).toBe('node /abs/github.js');
+
+    const sentry = servers.find((s) => s.name === 'sentry')!;
+    expect(sentry.transport).toBe('sse');
+    expect(sentry.url).toBe('https://sentry.example/sse');
+  });
+
+  it('returns [] when no plugin cache exists', () => {
+    expect(readPluginMcpServers(path.join(FIXTURES, 'claude-home-empty'))).toEqual([]);
+  });
+
+  it('skips plugins with malformed manifests without crashing the scan', () => {
+    const home = path.join(FIXTURES, 'claude-home-plugin-mcp', 'home');
+    const servers = readPluginMcpServers(home);
+    expect(servers.every((s) => s.pluginName !== 'broken')).toBe(true);
+    expect(servers.some((s) => s.pluginName === 'example-pack')).toBe(true);
   });
 });

@@ -33,6 +33,62 @@ function classifyTransport(entry: RawMcpEntry): TransportFields {
   return { transport: 'unknown' };
 }
 
+function safeReaddir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+interface PluginRecord {
+  manifest: Record<string, unknown>;
+  pluginName: string;
+  pluginVersion: string;
+  versionDir: string;
+}
+
+function readPluginManifests(home: string): PluginRecord[] {
+  const cacheRoot = path.join(home, 'plugins', 'cache');
+  const out: PluginRecord[] = [];
+  for (const marketplace of safeReaddir(cacheRoot)) {
+    for (const plugin of safeReaddir(path.join(cacheRoot, marketplace))) {
+      for (const version of safeReaddir(path.join(cacheRoot, marketplace, plugin))) {
+        const versionDir = path.join(cacheRoot, marketplace, plugin, version);
+        const manifestPath = path.join(versionDir, '.claude-plugin', 'plugin.json');
+        let manifest: Record<string, unknown>;
+        try {
+          manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        const manifestName = typeof manifest.name === 'string' ? manifest.name : plugin;
+        const manifestVersion = typeof manifest.version === 'string' ? manifest.version : version;
+        out.push({ manifest, pluginName: manifestName, pluginVersion: manifestVersion, versionDir });
+      }
+    }
+  }
+  return out;
+}
+
+export function readPluginMcpServers(home: string): ClaudeCodeMcpServer[] {
+  const out: ClaudeCodeMcpServer[] = [];
+  for (const { manifest, pluginName, pluginVersion } of readPluginManifests(home)) {
+    const servers = manifest.mcpServers;
+    if (!servers || typeof servers !== 'object') continue;
+    for (const [name, entry] of Object.entries(servers as Record<string, RawMcpEntry>)) {
+      out.push({
+        name,
+        source: 'plugin',
+        pluginName,
+        pluginVersion,
+        ...classifyTransport(entry),
+      });
+    }
+  }
+  return out;
+}
+
 export function readUserMcpServers(home: string): ClaudeCodeMcpServer[] {
   const configPath = path.join(home, '..', '.claude.json');
   let parsed: { mcpServers?: Record<string, RawMcpEntry> };

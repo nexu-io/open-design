@@ -1,0 +1,8 @@
+{
+  "name": "example-pack",
+  "version": "1.2.3",
+  "mcpServers": {
+    "github": { "command": "node", "args": ["/abs/github.js"] },
+    "sentry": { "url": "https://sentry.example/sse", "type": "sse" }
+  }
+}
