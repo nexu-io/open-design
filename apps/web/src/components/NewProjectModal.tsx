@@ -33,7 +33,7 @@ interface Props {
   loading?: boolean;
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
-  onImportFolder?: (baseDir: string) => Promise<boolean> | boolean;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
   onClose: () => void;
 }
