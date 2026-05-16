@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { ClaudeCodeMcpServer } from '@open-design/contracts';
+import type { ClaudeCodeMcpServer, ClaudeCodeSkill } from '@open-design/contracts';
+
+import { parseFrontmatter } from '../frontmatter.js';
 
 export function detectAvailability(home: string): boolean {
   try {
@@ -105,4 +107,45 @@ export function readUserMcpServers(home: string): ClaudeCodeMcpServer[] {
     source: 'user' as const,
     ...classifyTransport(entry),
   }));
+}
+
+function readSkillFile(
+  skillMdPath: string,
+  source: 'user' | 'plugin',
+  extra: Partial<ClaudeCodeSkill> = {},
+): ClaudeCodeSkill | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(skillMdPath, 'utf8');
+  } catch {
+    return null;
+  }
+  let data: Record<string, unknown> = {};
+  try {
+    const parsed = parseFrontmatter(raw) as { data?: Record<string, unknown> };
+    data = parsed.data ?? {};
+  } catch {
+    data = {};
+  }
+  const idFromFm = typeof data.name === 'string' && data.name.length > 0 ? data.name : null;
+  const fallbackId = path.basename(path.dirname(skillMdPath));
+  const description = typeof data.description === 'string' ? data.description : undefined;
+  return {
+    id: idFromFm ?? fallbackId,
+    source,
+    description,
+    path: skillMdPath,
+    ...extra,
+  };
+}
+
+export function readUserSkills(home: string): ClaudeCodeSkill[] {
+  const root = path.join(home, 'skills');
+  const out: ClaudeCodeSkill[] = [];
+  for (const entry of safeReaddir(root)) {
+    const skillMd = path.join(root, entry, 'SKILL.md');
+    const skill = readSkillFile(skillMd, 'user');
+    if (skill) out.push(skill);
+  }
+  return out;
 }

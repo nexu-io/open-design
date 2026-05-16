@@ -6,6 +6,7 @@ import {
   detectAvailability,
   readPluginMcpServers,
   readUserMcpServers,
+  readUserSkills,
 } from '../src/claude-code/reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -92,5 +93,32 @@ describe('readPluginMcpServers', () => {
     const servers = readPluginMcpServers(home);
     expect(servers.every((s) => s.pluginName !== 'broken')).toBe(true);
     expect(servers.some((s) => s.pluginName === 'example-pack')).toBe(true);
+  });
+});
+
+describe('readUserSkills', () => {
+  it('returns skills parsed from ~/.claude/skills/<name>/SKILL.md', () => {
+    const home = path.join(FIXTURES, 'claude-home-user-skills', 'home');
+    const skills = readUserSkills(home);
+    const ids = skills.map((s) => s.id);
+    expect(ids).toContain('web-animation-design');
+
+    const wad = skills.find((s) => s.id === 'web-animation-design')!;
+    expect(wad.source).toBe('user');
+    expect(wad.description).toContain('animations');
+    expect(wad.path.endsWith('SKILL.md')).toBe(true);
+  });
+
+  it('falls back to directory name when SKILL.md has no frontmatter', () => {
+    const home = path.join(FIXTURES, 'claude-home-user-skills', 'home');
+    const skills = readUserSkills(home);
+    const noFm = skills.find((s) => s.id === 'no-frontmatter');
+    expect(noFm).toBeDefined();
+    expect(noFm!.description).toBeUndefined();
+    expect(noFm!.source).toBe('user');
+  });
+
+  it('returns [] when ~/.claude/skills does not exist', () => {
+    expect(readUserSkills(path.join(FIXTURES, 'claude-home-empty'))).toEqual([]);
   });
 });
