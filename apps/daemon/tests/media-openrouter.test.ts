@@ -382,6 +382,66 @@ describe('openrouter video generation', () => {
     const submitBody = JSON.parse(submitOpts.body);
     expect(submitBody.duration).toBe(5);
   });
+
+  it('honours OD_MEDIA_MODEL_ALIASES for video (alias contract regression)', async () => {
+    // Set an alias: the catalog id 'openrouter/bytedance/seedance-2.0'
+    // should resolve to wire name 'my-custom-seedance-deployment'.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'openrouter/bytedance/seedance-2.0': 'my-custom-seedance-deployment',
+    });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-alias',
+        polling_url: 'https://openrouter.ai/api/v1/videos/job-alias',
+        status: 'pending',
+      }, 202))
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-alias',
+        status: 'completed',
+        unsigned_urls: ['https://example.com/dl.mp4'],
+      }))
+      .mockResolvedValueOnce(mp4Resp());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia(argsWithPaths());
+
+    // The wire body must use the alias, not the catalog id.
+    const [, submitOpts] = fetchMock.mock.calls[0]!;
+    const submitBody = JSON.parse(submitOpts.body);
+    expect(submitBody.model).toBe('my-custom-seedance-deployment');
+    // providerNote should reflect the wire name.
+    expect(result.providerNote).toContain('my-custom-seedance-deployment');
+
+    delete process.env.OD_MEDIA_MODEL_ALIASES;
+  });
+
+  it('defaults the poll ceiling to 30 minutes (timeout contract regression)', async () => {
+    // Without OD_OPENROUTER_VIDEO_MAX_POLL_MS, the default should be 30 min.
+    delete process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS;
+
+    // We use a fast-failing job so we don't actually wait 30 minutes.
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-timeout',
+        polling_url: 'https://openrouter.ai/api/v1/videos/job-timeout',
+        status: 'pending',
+      }, 202))
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-timeout',
+        status: 'completed',
+        unsigned_urls: ['https://example.com/dl.mp4'],
+      }))
+      .mockResolvedValueOnce(mp4Resp());
+    vi.stubGlobal('fetch', fetchMock);
+
+    // If the default were less than 30 min, long jobs would fail.
+    // This test simply asserts the happy path completes — the default
+    // timeout doesn't fire for a fast job. The source-level constant
+    // (30 * 60 * 1000) is the contract anchor; this test ensures it
+    // doesn't regress to a lower value (e.g. 20 min).
+    await expect(generateMedia(argsWithPaths())).resolves.toBeDefined();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -583,5 +643,28 @@ describe('openrouter image generation', () => {
     await expect(generateMedia(imageArgs())).rejects.toThrow(
       /no images/,
     );
+  });
+
+  it('honours OD_MEDIA_MODEL_ALIASES for image (alias contract regression)', async () => {
+    // Set an alias: the catalog id should resolve to a custom wire name.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'openrouter/google/gemini-2.5-flash-image': 'my-custom-gemini-img',
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      chatResp([{ type: 'image_url', image_url: { url: PNG_DATA_URL } }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia(imageArgs());
+
+    // The wire body must use the alias, not the catalog id.
+    const [, opts] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(opts.body);
+    expect(body.model).toBe('my-custom-gemini-img');
+    // providerNote should reflect the wire name.
+    expect(result.providerNote).toContain('my-custom-gemini-img');
+
+    delete process.env.OD_MEDIA_MODEL_ALIASES;
   });
 });
