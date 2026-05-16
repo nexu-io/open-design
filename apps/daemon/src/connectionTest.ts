@@ -564,6 +564,10 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${apiKey}`,
+          ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
+            'HTTP-Referer': 'https://opendesign.dev',
+            'X-Title': 'Open Design',
+          } : {}),
         },
         body: {
           model,
