@@ -485,8 +485,24 @@ export function ingestSignal(userId: string, signal: Signal): Preference | null 
     throw new Error(`Unknown signal_type: ${signal.signal_type}`);
   }
 
+  // Validate timestamp at the store boundary as well. The adapter side
+  // already validates, but direct store callers (tests, future host code,
+  // CLI/admin tooling) must not be able to inject events with empty or
+  // unparseable timestamps. Falling back to now() would invent event time
+  // and silently change decay/ordering behavior.
+  if (typeof signal.timestamp !== "string" || signal.timestamp.length === 0) {
+    throw new Error(
+      `ingestSignal: signal.timestamp must be a non-empty string. Got: ${JSON.stringify(signal.timestamp)}`,
+    );
+  }
+  if (Number.isNaN(new Date(signal.timestamp).getTime())) {
+    throw new Error(
+      `ingestSignal: signal.timestamp "${signal.timestamp}" is not a valid ISO date string.`,
+    );
+  }
+
   const array = getPrefArray(data, signal.scope, signal.project_id);
-  const t = signal.timestamp || now();
+  const t = signal.timestamp;
 
   // Look for existing record matching this pattern + polarity.
   // Skip archived records — they should not silently absorb new signals.
@@ -771,13 +787,28 @@ export function retrieveForInjection(
   const { project_id, preference_types } = context;
   const diagnostics: Diagnostic[] = [];
 
+  // Validate context.project_id at the read path. The adapter validates this
+  // on the write side, but direct store callers (tests, future host code,
+  // CLI/admin tooling) can also pass malformed values here. An empty string
+  // or unsafe key would otherwise silently fall through to global retrieval
+  // and leak/hide intent. Treat any defined project_id as "must be a safe,
+  // non-empty string"; the Object.hasOwn check below is then purely for
+  // bucket existence.
+  if (project_id !== undefined && project_id !== null) {
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      throw new Error(
+        `retrieveForInjection: context.project_id must be null/undefined or a non-empty string. ` +
+          `Got: ${JSON.stringify(project_id)}`,
+      );
+    }
+    validateProjectId(project_id);
+  }
+
   // Stage 2 — Project-override merge
   let prefs: RankedPreference[] = [...data.global_preferences];
   let projectPrefs: Preference[] = [];
 
   if (project_id && Object.hasOwn(data.project_overrides, project_id)) {
-    // Validate project_id as a safe key.
-    validateProjectId(project_id);
     projectPrefs = data.project_overrides[project_id]!;
 
     // Key override identity on preference_type + pattern (not pattern alone).

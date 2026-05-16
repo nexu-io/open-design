@@ -533,4 +533,48 @@ describe("category diversity quota", () => {
     const uniqueIds = new Set(allIds);
     expect(allIds.length).toBe(uniqueIds.size);
   });
+
+  it("ADV-32: retrieveForInjection rejects malformed context.project_id (regression)", () => {
+    // Direct store callers can also pass malformed project_id at the read
+    // path. Validation must fire before the Object.hasOwn lookup so empty
+    // strings and unsafe keys can't silently fall through to global retrieval.
+    expect(() => store.retrieveForInjection(USER, { project_id: "" })).toThrow(
+      /project_id must be null\/undefined or a non-empty string/,
+    );
+    expect(() => store.retrieveForInjection(USER, { project_id: "foo/bar" })).toThrow(
+      /not a safe key/,
+    );
+    expect(() => store.retrieveForInjection(USER, { project_id: "__proto__" })).toThrow(
+      /not a safe key/,
+    );
+    // null and undefined are valid (mean global-only retrieval) and must not throw.
+    // Cast around exactOptionalPropertyTypes to test the runtime null branch.
+    expect(() =>
+      store.retrieveForInjection(USER, { project_id: null } as unknown as Parameters<typeof store.retrieveForInjection>[1]),
+    ).not.toThrow();
+    expect(() => store.retrieveForInjection(USER, {})).not.toThrow();
+  });
+
+  it("ADV-33: ingestSignal rejects malformed signal.timestamp (regression)", () => {
+    // The store boundary must validate timestamps too — falling back to now()
+    // for empty/invalid values would invent event time and silently change
+    // decay/ordering behavior.
+    const baseSignal = {
+      signal_type: "explicit_tag" as const,
+      pattern: "p_ts",
+      preference_type: "tp_ts",
+      polarity: "positive" as const,
+      tag_text: null,
+      scope: "global" as const,
+      project_id: null,
+      artifact_id: "a",
+      session_id: "s",
+    };
+    expect(() => store.ingestSignal(USER, { ...baseSignal, timestamp: "" })).toThrow(
+      /signal.timestamp must be a non-empty string/,
+    );
+    expect(() => store.ingestSignal(USER, { ...baseSignal, timestamp: "not-a-date" })).toThrow(
+      /not a valid ISO date string/,
+    );
+  });
 });
