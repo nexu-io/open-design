@@ -322,6 +322,8 @@ pnpm tools-dev run web
 
 Ortam gereksinimleri: Node `~24` ve pnpm `10.33.x`. `nvm`/`fnm` yalnızca opsiyonel yardımcılardır; birini kullanıyorsan `pnpm install` öncesinde `nvm install 24 && nvm use 24` veya `fnm install 24 && fnm use 24` çalıştır.
 
+Windows kullanıcıları native kurulum yolu ve küçük bir çift-tıklama launcher için [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) belgesini takip edebilir.
+
 Desktop/background startup, fixed-port restart'lar ve medya üretimi dispatcher kontrolleri (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`) için [`QUICKSTART.md`](QUICKSTART.md) oku.
 
 İlk yükleme:

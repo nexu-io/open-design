@@ -330,6 +330,8 @@ pnpm tools-dev run web
 
 환경 요구사항: Node `~24`와 pnpm `10.33.x`. `nvm` / `fnm`은 선택적 보조 도구일 뿐입니다; 사용한다면 `pnpm install` 전에 `nvm install 24 && nvm use 24` 또는 `fnm install 24 && fnm use 24`를 실행하세요.
 
+Windows 사용자는 네이티브 설치 경로와 작은 더블 클릭 런처에 대해서는 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md)를 참고하세요.
+
 데스크톱/백그라운드 시작, 고정 포트 재시작, 미디어 생성 dispatcher 확인(`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`)은 [`QUICKSTART.md`](QUICKSTART.md)를 참고하세요.
 
 첫 번째 로드 시:

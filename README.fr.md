@@ -331,6 +331,8 @@ pnpm tools-dev run web
 
 Prérequis : Node `~24` et pnpm `10.33.x`. `nvm` / `fnm` ne sont que des aides facultatives ; si vous en utilisez un, lancez `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` avant `pnpm install`.
 
+Les utilisateurs Windows peuvent suivre [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) pour le chemin d'installation natif et un petit launcher en double-clic.
+
 Pour le démarrage desktop/background, les redémarrages sur ports fixes et les checks du dispatcher de génération média (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`), voir [`QUICKSTART.fr.md`](QUICKSTART.fr.md).
 
 Au premier chargement :

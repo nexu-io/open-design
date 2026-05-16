@@ -330,6 +330,8 @@ pnpm tools-dev run web
 
 环境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可选辅助工具，不是项目必需步骤；如果使用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再运行 `pnpm install`。
 
+Windows 用户可参考 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) 了解原生安装路径和一个小型的双击启动器。
+
 桌面端/后台启动、固定端口重启，以及 media 生成派发器检查（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）见 [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
 
 第一次加载会：
