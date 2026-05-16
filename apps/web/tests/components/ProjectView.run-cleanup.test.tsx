@@ -1358,4 +1358,91 @@ describe('ProjectView daemon cleanup', () => {
 
     view.unmount();
   });
+
+  // Regression for issue #731: when the reattach loop discovers that the
+  // daemon has no record of the runId (fetchChatRunStatus -> null), the
+  // assistant message is marked failed locally and onProjectsRefresh used
+  // to fire synchronously — before the failed runStatus row was persisted.
+  // The Designs home card then re-read the still-running row and showed
+  // "Completed" while the detail view showed the failed state.
+  it('delays projects refresh in reattach missing-status recovery until saveMessage resolves', async () => {
+    const onProjectsRefresh = vi.fn();
+
+    const pendingResolvers: Array<() => void> = [];
+    saveMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pendingResolvers.push(resolve);
+        }),
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        content: 'working',
+        createdAt: Date.now(),
+        runId: 'run-missing',
+        runStatus: 'running',
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalled());
+
+    // Wait for the failed snapshot saveMessage to be queued.
+    await waitFor(() => {
+      const failedCall = saveMessage.mock.calls.find(
+        (call) =>
+          call[2]?.id === 'msg-1' && call[2]?.runStatus === 'failed',
+      );
+      expect(failedCall).toBeTruthy();
+    });
+
+    // saveMessage is still pending — the projects refresh must wait.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+
+    if (pendingResolvers.length === 0) {
+      throw new Error('Expected saveMessage to be invoked');
+    }
+    for (const resolve of pendingResolvers.splice(0)) resolve();
+
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
 });

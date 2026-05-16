@@ -1362,13 +1362,13 @@ export function ProjectView({
         const status = fallbackRun ?? await fetchChatRunStatus(runId);
         if (cancelled) return;
         if (!status) {
-          updateMessageById(
+          const saved = updateMessageById(
             message.id,
             (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
             true,
           );
           completedReattachRunsRef.current.add(runId);
-          onProjectsRefresh();
+          void Promise.allSettled([saved]).then(() => onProjectsRefresh());
           continue;
         }
         updateMessageById(
