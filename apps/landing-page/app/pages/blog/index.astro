@@ -1,0 +1,637 @@
+---
+/*
+ * Blog index — `/blog/`
+ *
+ * Editorial list page that reuses the landing-page CSS variables and the
+ * shared <Header /> component so the magazine aesthetic stays consistent
+ * with `/`.
+ *
+ * Posts come from the `blog` Content Collection defined in
+ * `app/content.config.ts`. Sorted by date descending. A tiny inline script
+ * powers category filtering via `?category=...`.
+ */
+import { getCollection } from 'astro:content';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import HeaderEnhancer from '../../_components/header-enhancer.astro';
+import { Header, type HeaderProps } from '../../_components/header';
+import SeoHead from '../../_components/seo-head.astro';
+import SiteFooter from '../../_components/site-footer.astro';
+import Topbar from '../../_components/topbar.astro';
+import { getCatalogCounts } from '../../_lib/catalog';
+import { getGithubRepoMeta } from '../../_lib/github';
+import '../../globals.css';
+import '../../sub-pages.css';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime(),
+);
+const FEATURED_POST_ID = 'open-source-alternative-to-claude-design';
+const featuredPost = posts.find((post) => post.id === FEATURED_POST_ID) ?? posts[0];
+const cardPosts = posts.filter((post) => post.id !== featuredPost?.id);
+
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: '/',
+    active: 'blog',
+  }),
+);
+
+const seoTitle = 'Blog — Open Design';
+const seoDescription =
+  'Notes to help you understand, explore, and build with Open Design — across product, guides, use cases, and community.';
+const categoryChips = [
+  { label: 'All', value: 'all' },
+  { label: 'Product', value: 'product' },
+  { label: 'Guides', value: 'guides' },
+  { label: 'Use cases', value: 'use-cases' },
+  { label: 'Community', value: 'community' },
+];
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
+const postImages: Record<string, { src: string; alt: string }> = {
+  'open-source-alternative-to-claude-design': {
+    src: '/blog/plate-10-crystal-exploded.png',
+    alt: 'An editorial plate with black crystal fragments arranged around a red circle',
+  },
+  '31-skills-72-systems-how-the-library-works': {
+    src: '/blog/plate-11-ledger-compass.png',
+    alt: 'An open notebook with a brass compass and leaf over a red circle study plate',
+  },
+  'byok-design-workflow-claude-codex-qwen': {
+    src: '/blog/plate-12-pure-abstract.png',
+    alt: 'An abstract paper plate with a red circle, dotted fields, arcs, and leaves',
+  },
+  'byok-reality-check-5-things-that-break': {
+    src: '/blog/plate-09-geometric-solids.png',
+    alt: 'A geometric study plate with a red circle, branch, sphere, and black cube',
+  },
+  'why-we-built-open-design-as-a-skill-layer': {
+    src: '/blog/plate-12-pure-abstract.png',
+    alt: 'An abstract paper plate with layered circles, arcs, and botanical details',
+  },
+};
+const getPostImage = (id: string) => postImages[id];
+
+---
+
+<!doctype html>
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead
+      kind='website'
+      title={seoTitle}
+      description={seoDescription}
+      pathname={Astro.url.pathname}
+    />
+  </head>
+  <body>
+    <div class='shell'>
+      <Topbar github={github} />
+      <Fragment set:html={headerHtml} />
+
+      <main class='blog-shell'>
+      <section class='blog-masthead'>
+        <div class='container'>
+          <h1 class='blog-title'>Blog</h1>
+          <p class='blog-sub'>
+            Notes to help you understand, explore, and build with Open Design
+            — across product, guides, use cases, and community.
+          </p>
+        </div>
+      </section>
+
+      {
+        featuredPost && (
+          <section
+            class='blog-feature'
+            data-featured-post
+            data-category={categoryValue(featuredPost.data.category)}
+          >
+            <div class='container'>
+              <a
+                class='blog-feature-card'
+                href={`/blog/${featuredPost.id}/`}
+                style={`--accent-index: ${posts.findIndex((post) => post.id === featuredPost.id) + 1};`}
+              >
+                <span
+                  class={`media-panel media-panel-large ${getPostImage(featuredPost.id) ? 'has-image' : ''}`}
+                >
+                  {getPostImage(featuredPost.id) ? (
+                    <img
+                      src={getPostImage(featuredPost.id)?.src}
+                      alt={getPostImage(featuredPost.id)?.alt}
+                      loading='eager'
+                    />
+                  ) : (
+                    <>
+                      <span class='media-kicker'>{featuredPost.data.category}</span>
+                      <span class='media-title'>{featuredPost.data.title}</span>
+                      <span class='media-grid' />
+                      <span class='media-orbit' />
+                    </>
+                  )}
+                </span>
+                <span class='blog-feature-copy'>
+                  <span class='blog-card-cat'>{featuredPost.data.category}</span>
+                  <h2 class='blog-feature-title'>{featuredPost.data.title}</h2>
+                  <p class='blog-feature-summary'>{featuredPost.data.summary}</p>
+                  <span class='blog-feature-meta'>
+                    <span>{fmtDate(featuredPost.data.date)}</span>
+                    <span>·</span>
+                    <span>{featuredPost.data.readingTime} min read</span>
+                    <span class='blog-feature-cta'>Read more →</span>
+                  </span>
+                </span>
+              </a>
+            </div>
+          </section>
+        )
+      }
+
+      <section class='blog-categories'>
+        <div class='container'>
+          <div class='blog-category-strip' aria-label='Blog categories'>
+            {categoryChips.map((category, index) => (
+              <a
+                class:list={['blog-chip', index === 0 && 'is-active']}
+                href={category.value === 'all' ? '/blog/' : `/blog/?category=${category.value}`}
+                data-category-filter={category.value}
+              >
+                {category.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class='blog-list'>
+        <div class='container'>
+          {
+            posts.length === 0 ? (
+              <p class='blog-empty'>No entries yet. Check back soon.</p>
+            ) : (
+              <ol class='blog-grid'>
+                {cardPosts.map((post, idx) => (
+                  <li
+                    class='blog-card'
+                    data-blog-item
+                    data-category={categoryValue(post.data.category)}
+                  >
+                    <a
+                      class='blog-card-link'
+                      href={`/blog/${post.id}/`}
+                      style={`--accent-index: ${idx + 2};`}
+                    >
+                      <span class={`media-panel ${getPostImage(post.id) ? 'has-image' : ''}`}>
+                        {getPostImage(post.id) ? (
+                          <img
+                            src={getPostImage(post.id)?.src}
+                            alt={getPostImage(post.id)?.alt}
+                            loading='lazy'
+                          />
+                        ) : (
+                          <>
+                            <span class='media-kicker'>{post.data.category}</span>
+                            <span class='media-title'>{post.data.title}</span>
+                            <span class='media-grid' />
+                            <span class='media-orbit' />
+                          </>
+                        )}
+                      </span>
+                      <span class='blog-card-body'>
+                        <span class='blog-card-cat'>{post.data.category}</span>
+                        <h2 class='blog-card-title'>{post.data.title}</h2>
+                        <p class='blog-card-summary'>{post.data.summary}</p>
+                        <span class='blog-card-foot'>
+                          <span class='blog-card-date'>{fmtDate(post.data.date)}</span>
+                          <span class='blog-card-rt'>{post.data.readingTime} min read</span>
+                          <span class='blog-card-cta'>Read →</span>
+                        </span>
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            )
+          }
+          <p class='blog-empty is-filter-empty' data-blog-empty hidden>
+            No posts in this category yet. More field notes are coming.
+          </p>
+        </div>
+      </section>
+
+      </main>
+      <SiteFooter counts={counts} />
+    </div>
+
+    <script is:inline>
+      (() => {
+        const normalize = (value) => (value || 'all').toLowerCase();
+        const params = new URLSearchParams(window.location.search);
+        const active = normalize(params.get('category'));
+        const filters = document.querySelectorAll('[data-category-filter]');
+        const items = document.querySelectorAll('[data-blog-item]');
+        const empty = document.querySelector('[data-blog-empty]');
+
+        let visibleCount = 0;
+        for (const item of items) {
+          const matches =
+            active === 'all' || item.getAttribute('data-category') === active;
+          item.hidden = !matches;
+          if (matches) visibleCount += 1;
+        }
+
+        for (const filter of filters) {
+          const isActive = filter.getAttribute('data-category-filter') === active;
+          filter.classList.toggle('is-active', isActive);
+          if (isActive) filter.setAttribute('aria-current', 'page');
+          else filter.removeAttribute('aria-current');
+        }
+
+        if (empty) empty.hidden = visibleCount !== 0;
+      })();
+    </script>
+    <HeaderEnhancer />
+
+    <style>
+      .blog-shell {
+        position: relative;
+        z-index: 2;
+      }
+      .blog-shell + .sub-footer {
+        margin-top: 0;
+      }
+      .blog-masthead {
+        padding: 24px 0 14px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .blog-title {
+        font-family: var(--sans);
+        font-weight: 800;
+        letter-spacing: -0.028em;
+        font-size: clamp(46px, 5.4vw, 78px);
+        line-height: 0.94;
+        color: var(--ink);
+        margin: 0 0 8px;
+      }
+      .blog-sub {
+        font-family: var(--body);
+        font-size: 17px;
+        line-height: 1.48;
+        color: var(--ink-soft);
+        max-width: 58ch;
+        margin-bottom: 0;
+      }
+      .blog-categories {
+        padding: 12px 0 0;
+      }
+      .blog-category-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 0 0 14px;
+      }
+      .blog-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 8px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        background: rgba(247, 241, 222, 0.38);
+        text-decoration: none;
+        transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+      }
+      .blog-chip:hover {
+        color: var(--ink);
+        border-color: rgba(21, 20, 15, 0.42);
+        background: rgba(247, 241, 222, 0.72);
+      }
+      .blog-chip.is-active {
+        color: var(--paper);
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      .blog-feature {
+        padding: 14px 0 16px;
+      }
+      .blog-feature-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.96fr);
+        min-height: 252px;
+        border: 1px solid var(--line);
+        background: var(--bone);
+        color: var(--ink);
+        text-decoration: none;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .blog-feature-copy {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 11px;
+        padding: 26px 36px;
+      }
+      .blog-feature-title {
+        font-family: var(--serif);
+        font-size: clamp(31px, 3vw, 43px);
+        font-weight: 500;
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .blog-feature-summary {
+        font-family: var(--body);
+        font-size: 15px;
+        line-height: 1.42;
+        color: var(--ink-mute);
+        max-width: 56ch;
+      }
+      .blog-feature-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line-soft);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+      }
+      .blog-feature-cta {
+        margin-left: auto;
+        font-family: var(--sans);
+        font-size: 13px;
+        letter-spacing: 0;
+        color: var(--ink);
+      }
+      .blog-list {
+        padding: 4px 0 64px;
+      }
+      .blog-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px;
+        list-style: none;
+      }
+      .blog-card {
+        min-width: 0;
+      }
+      .blog-card-link {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        border: 1px solid var(--line);
+        background: rgba(247, 241, 222, 0.46);
+        color: var(--ink);
+        text-decoration: none;
+        overflow: hidden;
+        transition: background 180ms ease, transform 180ms ease;
+      }
+      .blog-card-link:hover {
+        background: var(--paper-warm);
+        transform: translateY(-2px);
+      }
+      .blog-card-body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 12px;
+        padding: 24px 26px 24px;
+      }
+      .blog-card-cat {
+        font-family: var(--sans);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--coral);
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .blog-card-cat::before {
+        content: '';
+        width: 18px;
+        height: 1px;
+        background: var(--coral);
+      }
+      .blog-card-title {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(25px, 2.2vw, 34px);
+        line-height: 1.12;
+        letter-spacing: -0.012em;
+        color: var(--ink);
+      }
+      .blog-card-summary {
+        font-family: var(--body);
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--ink-mute);
+      }
+      .blog-card-foot {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: auto;
+        padding-top: 16px;
+        border-top: 1px solid var(--line-soft);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+      }
+      .blog-card-cta {
+        margin-left: auto;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 13px;
+        letter-spacing: 0;
+      }
+      .media-panel {
+        position: relative;
+        display: block;
+        min-height: 172px;
+        overflow: hidden;
+        border-bottom: 1px solid var(--line);
+        background:
+          radial-gradient(circle at 20% 20%, rgba(237, 106, 90, 0.18), transparent 30%),
+          radial-gradient(circle at 80% 40%, rgba(21, 20, 15, 0.12), transparent 28%),
+          linear-gradient(135deg, rgba(239, 231, 210, 0.9), rgba(247, 241, 222, 0.58));
+      }
+      .media-panel.has-image {
+        background: var(--bone);
+      }
+      .media-panel.has-image img {
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        filter: saturate(0.98) contrast(1.02);
+      }
+      .media-panel.has-image::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        background-image: linear-gradient(
+          180deg,
+          rgba(247, 241, 222, 0.08),
+          rgba(21, 20, 15, 0.08)
+        );
+        pointer-events: none;
+      }
+      .media-panel.has-image::after {
+        display: none;
+      }
+      .media-panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(21, 20, 15, 0.09) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(21, 20, 15, 0.09) 1px, transparent 1px);
+        background-size: 24px 24px;
+        mask-image: radial-gradient(circle at 70% 44%, black, transparent 62%);
+      }
+      .media-panel::after {
+        content: '';
+        position: absolute;
+        right: 28px;
+        bottom: 24px;
+        width: 72px;
+        height: 72px;
+        border: 1px solid rgba(21, 20, 15, 0.45);
+        box-shadow: -48px -38px 0 -22px rgba(237, 106, 90, 0.82);
+      }
+      .media-panel-large {
+        min-height: 252px;
+        height: clamp(232px, 25vw, 282px);
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+      }
+      .media-kicker {
+        position: absolute;
+        left: 26px;
+        top: 24px;
+        z-index: 2;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--coral);
+      }
+      .media-title {
+        position: absolute;
+        left: 26px;
+        right: 28px;
+        bottom: 26px;
+        z-index: 2;
+        font-family: var(--serif);
+        font-size: clamp(24px, 2.6vw, 38px);
+        line-height: 1.04;
+        letter-spacing: -0.018em;
+        color: var(--ink);
+      }
+      .media-grid,
+      .media-orbit {
+        position: absolute;
+        pointer-events: none;
+      }
+      .media-grid {
+        right: 34px;
+        top: 32px;
+        width: 128px;
+        height: 96px;
+        background-image: radial-gradient(rgba(21, 20, 15, 0.38) 1.2px, transparent 1.2px);
+        background-size: 12px 12px;
+      }
+      .media-orbit {
+        right: 58px;
+        top: 72px;
+        width: 150px;
+        height: 150px;
+        border: 28px solid rgba(237, 106, 90, 0.28);
+        border-radius: 50%;
+      }
+      .blog-empty {
+        font-family: var(--body);
+        color: var(--ink-mute);
+        padding: 32px 0;
+      }
+      .blog-empty.is-filter-empty {
+        border-top: 1px solid var(--line);
+      }
+      @media (max-width: 980px) {
+        .blog-feature-card {
+          grid-template-columns: 1fr;
+        }
+        .media-panel-large {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .blog-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 760px) {
+        .blog-masthead {
+          padding: 22px 0 18px;
+        }
+        .blog-title {
+          font-size: clamp(42px, 13vw, 50px);
+          margin-bottom: 10px;
+        }
+        .blog-sub {
+          font-size: 15.5px;
+          line-height: 1.35;
+          margin-bottom: 12px;
+        }
+        .blog-category-strip {
+          gap: 8px;
+          margin-bottom: 18px;
+        }
+        .blog-chip {
+          min-height: 30px;
+          padding: 6px 11px;
+          font-size: 10.5px;
+        }
+        .blog-feature-copy {
+          padding: 24px 20px;
+        }
+        .blog-feature-title {
+          font-size: clamp(27px, 8vw, 34px);
+        }
+        .blog-grid {
+          grid-template-columns: 1fr;
+        }
+        .blog-card-body {
+          padding: 22px 20px;
+        }
+      }
+    </style>
+  </body>
+</html>

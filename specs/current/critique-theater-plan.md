@@ -1418,11 +1418,11 @@ git commit -m "feat(daemon): branch agent spawn through critique orchestrator wh
 
 ## Phase 5: Prompt protocol addendum
 
-### Task 5.1: Implement `apps/web/src/prompts/panel.ts`
+### Task 5.1: Implement `apps/daemon/src/prompts/panel.ts`
 
 **Files:**
-- Create: `apps/web/src/prompts/panel.ts`
-- Test: `apps/web/tests/prompts/panel.test.ts`
+- Create: `apps/daemon/src/prompts/panel.ts`
+- Test: `apps/daemon/tests/prompts/panel.test.ts`
 
 - [ ] **Step 1: Failing snapshot test**
 
@@ -1466,7 +1466,7 @@ describe('renderPanelPrompt', () => {
 - [ ] **Step 3: Implement**
 
 ```ts
-// apps/web/src/prompts/panel.ts
+// apps/daemon/src/prompts/panel.ts
 import { type CritiqueConfig, PROTOCOL_VERSION } from '@open-design/contracts/critique';
 
 export interface PanelRenderInput {
@@ -1530,25 +1530,25 @@ Skill: ${skill.id}.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/prompts/panel.ts apps/web/tests/prompts/panel.test.ts
+git add apps/daemon/src/prompts/panel.ts apps/daemon/tests/prompts/panel.test.ts
 git commit -m "feat(web): add Critique Theater prompt protocol addendum"
 ```
 
 ### Task 5.2: Compose `panel.ts` into the existing prompt pipeline
 
 **Files:**
-- Modify: `apps/web/src/prompts/discovery.ts` (existing)
+- Modify: `apps/daemon/src/prompts/discovery.ts` (existing)
 
 - [ ] **Step 1: Read existing composer to learn append point**
 
 ```bash
-grep -n "compose\|render\|prompt" apps/web/src/prompts/discovery.ts | head -20
+grep -n "compose\|render\|prompt" apps/daemon/src/prompts/discovery.ts | head -20
 ```
 
 - [ ] **Step 2: Add failing test that final composed prompt contains PROTOCOL block**
 
 ```ts
-// apps/web/tests/prompts/discovery.test.ts (extend)
+// apps/daemon/tests/prompts/discovery.test.ts (extend)
 it('appends Critique Theater protocol when cfg.enabled', () => {
   const out = composeDiscoveryPrompt({ ...input, critique: { enabled: true } });
   expect(out).toContain('<CRITIQUE_RUN');
@@ -1582,7 +1582,7 @@ pnpm --filter @open-design/web test discovery.test.ts
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/prompts
+git add apps/daemon/src/prompts
 git commit -m "feat(web): wire panel prompt addendum into discovery composer"
 ```
 

@@ -1,4 +1,4 @@
-import type { OkResponse } from '../common';
+import type { OkResponse } from '../common.js';
 
 export type PreviewCommentStatus =
   | 'open'
@@ -16,6 +16,7 @@ export interface PreviewCommentPosition {
 }
 
 export type PreviewCommentSelectionKind = 'element' | 'pod';
+export type PreviewVisualMarkKind = 'click' | 'stroke' | 'click+stroke';
 
 export interface PreviewCommentMember {
   elementId: string;

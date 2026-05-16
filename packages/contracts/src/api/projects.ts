@@ -1,4 +1,4 @@
-import type { ChatMessage } from './chat';
+import type { ChatMessage, ChatRunStatus } from './chat.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -10,6 +10,15 @@ export type ProjectKind =
   | 'audio';
 
 export type MediaAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
+
+export type ProjectPlatform =
+  | 'auto'
+  | 'responsive'
+  | 'web-desktop'
+  | 'mobile-ios'
+  | 'mobile-android'
+  | 'tablet'
+  | 'desktop-app';
 
 export type AudioKind = 'music' | 'speech' | 'sfx';
 
@@ -59,12 +68,35 @@ export interface ProjectMetadata {
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
+  includeLandingPage?: boolean;
+  includeOsWidgets?: boolean;
   templateId?: string;
   templateLabel?: string;
+  /** Primary target surface selected at project creation. */
+  platform?: ProjectPlatform;
+  /** Concrete delivery surfaces the artifact must account for. `responsive` is a web breakpoint target, not a native app expansion. */
+  platformTargets?: ProjectPlatform[];
   inspirationDesignSystemIds?: string[];
-  importedFrom?: 'claude-design' | string;
+  importedFrom?: 'claude-design' | 'folder' | string;
   entryFile?: string;
   sourceFileName?: string;
+  // Folder-import (#597): when set, the project's files live under this
+  // absolute path instead of .od/projects/<id>/. OD reads and writes
+  // directly inside the user's folder. Stored as the realpath() result so
+  // symlinks can't redirect writes after import time.
+  baseDir?: string;
+  // PR #974: marker stamped by the daemon's HMAC-gated import handler
+  // when a folder import passed the desktop-main-process trust gate.
+  // Only set on folder-imported projects (`baseDir` set) and only when
+  // the import request carried a valid `X-OD-Desktop-Import-Token`
+  // signed with the secret the desktop main process registered with the
+  // daemon at startup. The desktop `shell.openPath` IPC refuses to
+  // forward folder-imported projects whose metadata lacks this marker,
+  // so a renderer cannot launder an attacker-chosen baseDir into a
+  // file-manager reveal even if a future codepath inadvertently lets
+  // it set `baseDir` outside the trusted flow. Privileged: rejected
+  // by `POST /api/projects` and `PATCH /api/projects/:id`.
+  fromTrustedPicker?: true;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
@@ -81,6 +113,13 @@ export interface ProjectMetadata {
   promptTemplate?: PromptTemplateMetadata;
   // Absolute paths to local code folders the agent can read via --add-dir.
   linkedDirs?: string[];
+  // Batch/API-created projects can opt out of the initial discovery form so
+  // the first agent turn builds immediately from the submitted brief.
+  skipDiscoveryBrief?: boolean;
+  // Plugins selected through @ mentions on Home. These are additive
+  // context references; the explicit "Use plugin" snapshot, when present,
+  // remains the primary executable plugin for the run.
+  contextPlugins?: Array<{ id: string; title: string; description?: string }>;
 }
 
 export interface Project {
@@ -93,6 +132,13 @@ export interface Project {
   status?: ProjectStatusInfo;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  // Plan §3.A1 / spec §11.5 — set when the project was created with a
+  // plugin pinned (e.g. via PluginLoopHome on the web entry). Lets the
+  // UI hide the in-composer plugin rail and render the active plugin
+  // as context on user messages instead of re-prompting the user to
+  // pick a plugin they already selected.
+  appliedPluginSnapshotId?: string;
+  customInstructions?: string;
 }
 
 export interface ProjectTemplate {
@@ -110,6 +156,12 @@ export interface Conversation {
   title: string | null;
   createdAt: number;
   updatedAt: number;
+  latestRun?: {
+    status: ChatRunStatus;
+    startedAt?: number;
+    endedAt?: number;
+    durationMs?: number;
+  };
 }
 
 export interface CreateProjectRequest {
@@ -118,6 +170,12 @@ export interface CreateProjectRequest {
   designSystemId?: string | null;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  pluginId?: string;
+  appliedPluginSnapshotId?: string;
+  pluginInputs?: Record<string, unknown>;
+  customInstructions?: string;
+  /** Persisted to metadata.skipDiscoveryBrief for automated project runs. */
+  skipDiscoveryBrief?: boolean;
 }
 
 export interface UpdateProjectRequest {
@@ -126,6 +184,7 @@ export interface UpdateProjectRequest {
   designSystemId?: string | null;
   pendingPrompt?: string | null;
   metadata?: ProjectMetadata | null;
+  customInstructions?: string | null;
 }
 
 export interface ProjectsResponse {
@@ -136,8 +195,37 @@ export interface ProjectResponse {
   project: Project;
 }
 
+// Response body for `GET /api/projects/:id`. Carries the same `project`
+// payload as `ProjectResponse` plus a derived `resolvedDir` so the web
+// client can address the on-disk working directory directly (e.g. for
+// `shell.openPath` from the desktop bridge). For folder-imported projects
+// `resolvedDir === metadata.baseDir`; for native projects it is
+// `path.join(<daemon projects root>, project.id)`. Computed server-side via
+// `resolveProjectDir(...)` so the web client never reconstructs the path.
+export interface ProjectDetailResponse extends ProjectResponse {
+  resolvedDir: string;
+}
+
 export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
+  appliedPluginSnapshotId?: string;
+}
+
+// POST /api/import/folder — create a project rooted at an existing local
+// folder. The submitted baseDir is stored as the project's metadata.baseDir
+// (after realpath canonicalization) and OD reads/writes directly inside it.
+// The user owns version control; OD does not snapshot or copy.
+export interface ImportFolderRequest {
+  baseDir: string;
+  name?: string;
+  skillId?: string | null;
+  designSystemId?: string | null;
+}
+
+export interface ImportFolderResponse {
+  project: Project;
+  conversationId: string;
+  entryFile: string | null;
 }
 
 export interface ConversationsResponse {
@@ -160,7 +248,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -169,19 +257,112 @@ export type DeploymentStatus =
   | 'protected'
   | 'failed';
 
+export interface CloudflarePagesConfigHints {
+  lastZoneId?: string;
+  lastZoneName?: string;
+  lastDomainPrefix?: string;
+}
+
+export interface CloudflarePagesZoneInfo {
+  id: string;
+  name: string;
+  status?: string;
+  type?: string;
+}
+
+export interface CloudflarePagesZonesResponse {
+  zones: CloudflarePagesZoneInfo[];
+  cloudflarePages?: CloudflarePagesConfigHints;
+}
+
+export interface CloudflarePagesDeploySelection {
+  zoneId: string;
+  zoneName: string;
+  domainPrefix: string;
+}
+
+export type DeploymentLinkStatus =
+  | 'ready'
+  | 'link-delayed'
+  | 'protected'
+  | 'failed';
+
+export interface DeploymentLinkInfo {
+  url: string;
+  status: DeploymentLinkStatus;
+  statusMessage?: string;
+  reachableAt?: number;
+}
+
+export type CloudflarePagesDnsStatus =
+  | 'skipped'
+  | 'created'
+  | 'reused'
+  | 'unmarked'
+  | 'patched'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesDomainStatus =
+  | 'skipped'
+  | 'pending'
+  | 'active'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesCustomDomainStatus =
+  | 'pending'
+  | 'ready'
+  | 'conflict'
+  | 'failed';
+
+export type CloudflarePagesDnsOwnership = 'marked' | 'unmarked' | 'external';
+
+export interface CloudflarePagesCustomDomainInfo {
+  hostname: string;
+  url: string;
+  zoneId: string;
+  zoneName: string;
+  domainPrefix: string;
+  status: CloudflarePagesCustomDomainStatus;
+  statusMessage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  dnsStatus?: CloudflarePagesDnsStatus;
+  dnsRecordId?: string;
+  dnsOwnership?: CloudflarePagesDnsOwnership;
+  domainStatus?: CloudflarePagesDomainStatus;
+  pagesDomainStatus?: string;
+  validationData?: unknown;
+  verificationData?: unknown;
+}
+
+export interface CloudflarePagesDeploymentInfo {
+  projectName: string;
+  pagesDev: DeploymentLinkInfo;
+  customDomain?: CloudflarePagesCustomDomainInfo;
+}
+
 export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
   tokenMask: string;
   teamId: string;
   teamSlug: string;
+  accountId?: string;
+  projectName?: string;
+  cloudflarePages?: CloudflarePagesConfigHints;
   target: 'preview';
 }
 
 export interface UpdateDeployConfigRequest {
+  providerId?: DeployProviderId;
   token?: string;
   teamId?: string;
   teamSlug?: string;
+  accountId?: string;
+  projectName?: string;
+  cloudflarePages?: CloudflarePagesConfigHints;
 }
 
 export interface DeploymentInfo {
@@ -196,6 +377,7 @@ export interface DeploymentInfo {
   status: DeploymentStatus;
   statusMessage?: string;
   reachableAt?: number;
+  cloudflarePages?: CloudflarePagesDeploymentInfo;
   createdAt: number;
   updatedAt: number;
 }
@@ -207,6 +389,7 @@ export interface ProjectDeploymentsResponse {
 export interface DeployProjectFileRequest {
   fileName: string;
   providerId?: DeployProviderId;
+  cloudflarePages?: CloudflarePagesDeploySelection;
 }
 
 export interface DeployProjectFileResponse extends DeploymentInfo {}

@@ -1,0 +1,52 @@
+{
+  "slug": "zhangzara-stencil-tablet",
+  "name": "Stencil & Tablet",
+  "tagline": "Bone paper with stencil-cut headlines and a six-color earth palette: archaeology meets brand.",
+  "mood": [
+    "archival",
+    "earthy",
+    "tactile",
+    "considered",
+    "graphic"
+  ],
+  "occasion": [
+    "museum / cultural institution",
+    "art / architecture brand",
+    "longform research",
+    "heritage / craft brand",
+    "manifesto"
+  ],
+  "tone": [
+    "weighty",
+    "considered",
+    "tactile",
+    "literary"
+  ],
+  "formality": "medium-high",
+  "density": "medium",
+  "palette": {
+    "bone": "#E2DCC9",
+    "ink": "#0A0A0A",
+    "paper": "#F4EFE0",
+    "sienna": "#A06A3C",
+    "magenta": "#C73B7A",
+    "orange": "#EE7A2E",
+    "teal": "#2D7E73",
+    "blue": "#3F73B7",
+    "olive": "#6F7A2E",
+    "description": "warm bone and paper neutrals with a saturated earthy palette (sienna, magenta, orange, teal, blue, olive) used in stencil-cut blocks"
+  },
+  "typography": {
+    "display": "Bowlby One",
+    "stencil": "Stardos Stencil",
+    "condensed": "Barlow Condensed",
+    "body": "Inter",
+    "style": "ultra-heavy display + stencil + tall condensed + clean body; reads like an archaeological field manual"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel archival, tactile, and weighty-graphic: museum and cultural-institution decks, art / architecture brands, longform research, heritage and craft brands, manifestos. A great choice anytime — including across tech and business — when you want the deck to feel like a field manual rather than a slide deck.",
+  "avoid_for": "Contexts that demand digital-native polish or playful pop — the stencil-cut display and earth-tone palette commit to a deliberate analog feel.",
+  "slide_count": 11,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/stencil-tablet"
+}

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { reattachDaemonRun, streamViaDaemon } from '../../src/providers/daemon';
+import {
+  buildDaemonTranscript,
+  latestUserPromptFromHistory,
+  reattachDaemonRun,
+  streamViaDaemon,
+} from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
 
@@ -31,6 +36,90 @@ describe('parseSseFrame', () => {
 });
 
 describe('streamViaDaemon', () => {
+  it('sends the latest user turn separately from the full CLI transcript', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [
+        { id: '1', role: 'user', content: 'pre-consent brief' },
+        { id: '2', role: 'assistant', content: 'draft response' },
+        { id: '3', role: 'user', content: 'post-consent revision' },
+      ],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.message).toContain('pre-consent brief');
+    expect(body.message).toContain('post-consent revision');
+    expect(body.currentPrompt).toBe('post-consent revision');
+  });
+
+  it('extracts only the latest user prompt for telemetry', () => {
+    expect(
+      latestUserPromptFromHistory([
+        { id: '1', role: 'user', content: 'first turn' },
+        { id: '2', role: 'assistant', content: 'answer' },
+        { id: '3', role: 'user', content: 'current turn' },
+      ]),
+    ).toBe('current turn');
+  });
+
+  it('truncates oversized prior messages before composing daemon context', () => {
+    const transcript = buildDaemonTranscript([
+      { id: '1', role: 'user', content: 'x'.repeat(13_000) },
+      { id: '2', role: 'assistant', content: 'small answer' },
+    ]);
+
+    expect(transcript).toContain('## user');
+    expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
+    expect(transcript).not.toContain('x'.repeat(13_000));
+    expect(transcript).toContain('small answer');
+  });
+
+  it('adds a compact context warning for high-usage agent-browser doc runs', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content: 'The prior run failed.',
+        events: [
+          { kind: 'usage', inputTokens: 924_126, outputTokens: 12 },
+          {
+            kind: 'tool_use',
+            id: 'call-1',
+            name: 'Bash',
+            input: { command: 'agent-browser skills get core' },
+          },
+          {
+            kind: 'tool_result',
+            toolUseId: 'call-1',
+            content: 'agent-browser skills get core\n' + 'doc '.repeat(3_000),
+            isError: false,
+          },
+        ],
+      },
+      { id: '2', role: 'user', content: 'retry compactly' },
+    ]);
+
+    expect(transcript).toContain('## context warning');
+    expect(transcript).toContain('924126 input tokens');
+    expect(transcript).toContain('agent-browser documentation output was seen earlier');
+    expect(transcript).toContain('retry compactly');
+  });
+
   it('ignores comment frames without notifying handlers', async () => {
     const handlers = createDaemonHandlers();
     vi.stubGlobal('fetch', vi.fn()
@@ -119,6 +208,147 @@ describe('streamViaDaemon', () => {
     });
 
     expect(handlers.onError).toHaveBeenCalledWith(new Error('typed message'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('includes unified SSE error details in daemon error messages', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              'data: {"message":"Claude Code failed","error":{"code":"AGENT_EXECUTION_FAILED","message":"Claude Code failed","details":{"detail":"Set CLAUDE_CONFIG_DIR in Settings and retry."}}}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Set CLAUDE_CONFIG_DIR in Settings'),
+      }),
+    );
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('treats an explicit succeeded status with a SIGTERM exit as a successful run', async () => {
+    // ACP agents that don't shut down on stdin.end() (e.g. Devin for Terminal)
+    // are SIGTERM'd by the daemon after a clean prompt completion. The end
+    // event still declares `status: 'succeeded'`, and the chat must trust
+    // that authoritative success even though `signal === 'SIGTERM'` would
+    // otherwise look like a failure to the exit-code/signal safety net.
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stdout',
+              'data: {"chunk":"ok"}',
+              '',
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"succeeded"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('ok');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces an error when the end event has a non-zero code and no status field', async () => {
+    // Regression guard for the local 'succeeded' fallback at the end-event
+    // handler: a compatible or older daemon may omit `status` from the end
+    // payload, in which case `endStatus` is filled with the local default
+    // `'succeeded'`. The exit-code/signal safety net must still apply for
+    // that case so a real failure is not silently suppressed.
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":1}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('agent exited with code 1'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces an error when the end event has a signal but no status field', async () => {
+    // Same regression as above for the signal arm of the safety net. Without
+    // explicit `status: 'succeeded'` from the server, a SIGTERM-style signal
+    // exit must keep producing an error banner — only the explicit ACP
+    // success path is allowed to bypass.
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('agent exited with signal SIGTERM'));
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -465,6 +695,58 @@ describe('streamViaDaemon', () => {
         comment: 'Shorten the headline',
       }),
     ]);
+  });
+
+  it('sends canonical research query metadata to daemon runs', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'Search for: EV market' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      research: { enabled: true, query: 'EV market' },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.research).toEqual({ enabled: true, query: 'EV market' });
+  });
+
+  it('preserves detail on agent status events', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"status","label":"researching","detail":"tavily · shallow"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'status',
+      label: 'researching',
+      detail: 'tavily · shallow',
+    });
   });
 });
 

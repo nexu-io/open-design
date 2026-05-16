@@ -7,13 +7,13 @@ This file is the single source of truth for agents entering this repository. Rea
 - Product and onboarding: `README.md`, `README.zh-CN.md`, `QUICKSTART.md`.
 - Contribution and environment: `CONTRIBUTING.md`, `CONTRIBUTING.zh-CN.md`.
 - Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
-- Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `specs/current/maintainability-roadmap.md`.
+- Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
 - Directory-level agent guidance: `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
 
 ## Workspace directories
 
 - Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
-- Top-level content directories: `skills/` (artifact-shape skills), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`).
+- Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`).
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
@@ -22,6 +22,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane and mac beta release artifact preparation surface.
+- `tools/pr` is the maintainer PR-duty control plane: a thin `gh` wrapper that encodes this repo's review-lane derivation, forbidden-surface flags, lane checklists, and validation-command suggestions.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
 
 ## Inactive or placeholder directories
@@ -46,9 +47,17 @@ This file is the single source of truth for agents entering this repository. Rea
 
 ## Root command boundary
 
-- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, and `pnpm tools-pack`.
-- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
+- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-pr`.
+- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...` / `pnpm tools-pr ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
+
+## Release channel model
+
+- `beta` is the daily R&D/development validation channel. It is optimized for fast development feedback and is not part of the stable promotion gate.
+- `nightly` is the internal validation channel for stable delivery. Stable releases remain gated by validated nightly artifacts.
+- `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
+- `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on nightly only.
+- Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, and preview uses `Open Design Preview`. Do not ship beta or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
 
 ## Boundary constraints
 
@@ -70,6 +79,65 @@ This file is the single source of truth for agents entering this repository. Rea
 
 - Git commits must not include `Co-authored-by` trailers or any other co-author metadata.
 
+## Pull request expectations
+
+- Opening a PR uses `.github/pull_request_template.md`; fill every section, not just the title.
+- "Why" must answer both the author's use case (what made you write this PR) and the pain being addressed (user problem, technical debt, prod issue, or unblocker), not just a one-line restatement of the title.
+- "What users will see" describes the change from a user's perspective — what they click, what new thing appears, what default behavior changed — not from a code perspective.
+- The Surface area checklist must reflect actual surfaces touched; check every box that applies, including extension points (`skills/`, `design-systems/`, `design-templates/`, `craft/`), CLI flags, env vars, i18n keys, and new root `package.json` dependencies.
+- If any UI surface is checked, attach screenshots showing the entry point — where users discover the change — not just the feature in isolation; before/after is best for behavior changes.
+- For bug-fix PRs, link the red-spec test that reproduces the bug and confirm it went red on `main` and green on the branch, per the `Bug follow-up workflow` section above.
+- `CONTRIBUTING.md` covers PR scope, title format, dependency policy, and the issue-first rule for non-trivial features; `docs/code-review-guidelines.md` is the reviewer-facing complement.
+
+## Code review guide
+
+- Use `docs/code-review-guidelines.md` as the repository-wide review standard. That document is the operational guide; this `AGENTS.md` is the source of truth when the two disagree.
+- Walk reviews top-down through `docs/code-review-guidelines.md`: Product relevance test → forbidden surfaces → ownership/scope → matching lane → checklist → comments → approval bar.
+- Pick the matching review lane: default code/tests, contract and protocol changes, design-system additions, skill additions, or craft additions.
+- Before reviewing changes under `apps/`, `packages/`, `tools/`, or `e2e/`, read that directory's `AGENTS.md` and apply its local boundaries.
+- Blocking review feedback should focus on correctness, security/secrets, data integrity, repository boundary violations, contract/migration breakage, missing required validation, or high-risk maintainability issues.
+- Only maintainers may close a PR instead of requesting changes, and only when the change is not salvageable on the existing branch (wrong target product, foreign test harness, DOM/API assumptions absent from this repo, or scripts that conflict with lifecycle rules).
+
+## PR-duty tooling
+
+`pnpm tools-pr` is the maintainer-only control plane for PR-duty work on this repo. It is a thin `gh` wrapper that encodes repo-specific knowledge — review-lane derivation, forbidden-surface flags, per-lane checklists, validation-command suggestions, and a fixed dictionary of factual classify tags (`bot-only-approval`, `needs-rebase`, `stale-approval`, `unresolved-changes-requested`, `awaiting-*` timing, `org-member`, etc.). The tool is read-only on the PR surface: it never approves, merges, comments, or closes; those side effects stay in explicit `gh` invocations the maintainer runs.
+
+Common subcommands:
+
+- `pnpm tools-pr list` — triage the open queue by lane and review-state bucket.
+- `pnpm tools-pr view <num>` — factual review brief for a single PR.
+- `pnpm tools-pr classify --all` — script-level tag JSON for the whole open queue (entry point for cron / digest consumers); per-PR `classify <num>` for spot checks.
+- `pnpm tools-pr assignment` — assigner-perspective ownership + idle-time / blocker view across the queue.
+
+For the full tag dictionary, operational playbook (direct merge / duplicate-title / awaiting-author / org-member / agent-review flows), comment templates, language-detection rules, and tool-design constraints (precision boundaries, factual-output rule, retry + pagination strategy), see [`tools/pr/AGENTS.md`](tools/pr/AGENTS.md).
+
+## Agent runtime conventions
+
+- `RuntimeAgentDef.promptInputFormat` selects how the daemon writes the prompt to a child's stdin. The default `'text'` writes the composed prompt and ends stdin immediately. `'stream-json'` wraps the prompt as one JSONL `user` message and KEEPS stdin open so the daemon can stream further user messages back in mid-turn. Claude (`apps/daemon/src/runtimes/defs/claude.ts`) ships `'stream-json'` together with `--input-format stream-json` so the host can answer interactive tools like `AskUserQuestion` with a real `tool_result` block. Every other agent stays on `'text'`.
+- `apps/daemon/src/server.ts` tracks `run.pendingHostAnswers` (a Set of `tool_use_id` strings) and `run.stdinOpen` on the run object. The `claude-stream-json` event handler adds AskUserQuestion ids to the set and closes stdin only when both the set is empty AND a `turn_end` (or `usage`) event arrives with a non `tool_use` `stop_reason`. The `tool_use` stop reason means the model paused mid tool (waiting on claude-code's internal runner or on a host answer); closing stdin there would truncate the follow up response.
+- `claude-stream.ts` emits the `turn_end` event AFTER iterating the assistant message's content blocks, not before. When `--include-partial-messages` is unsupported, tool_use events surface only from the assistant wrapper, so emitting `turn_end` first would let the daemon close stdin before the host had registered any pending answers.
+- `POST /api/runs/:id/tool-result` is the daemon endpoint for feeding a `tool_result` block back into a still running stream-json child. Body shape: `{ toolUseId: string, content: string, isError?: boolean }`. Web callers use `submitChatRunToolResult` from `apps/web/src/providers/daemon.ts`. The daemon writes a JSONL `user` message containing one `tool_result` content block, removes the id from `pendingHostAnswers`, and lets the next `turn_end` decide when to close stdin.
+- AskUserQuestion specifically: Claude's system prompt section in `apps/daemon/src/prompts/system.ts` (Claude only block at the bottom of `composeSystemPrompt`) tells the model to use the tool for 2 to 4 finite choices, and to stop generating tokens after the tool call instead of also writing a markdown duplicate. `AssistantMessage.suppressAskUserQuestionFallbackText` is the belt and suspenders that hides any trailing markdown text in the same turn.
+
+## Chat UI conventions
+
+- `apps/web/src/components/file-viewer-render-mode.ts` decides URL-load vs srcDoc for HTML previews. Bridges (deck, comment/inspect selection, palette, edit, tweaks) can ONLY inject through the srcDoc path. Add a new disqualifier to `UrlLoadDecision` whenever a feature needs a srcDoc-only bridge; pass it from `FileViewer.tsx` based on a source-content heuristic where appropriate (e.g. `hasTweaksTemplate`). The host keeps both iframes mounted simultaneously and swaps CSS visibility so toggling render mode does not cause an iframe reload flash; `iframeRef.current` stays aligned with the active iframe via `useEffect`. Receive filters use `isOurIframe(ev.source)` to accept messages from either iframe but signals that should ONLY come from the active iframe (e.g. `od:tweaks-available`) re-check `ev.source === iframeRef.current?.contentWindow`.
+- TodoWrite UI pins one canonical task list above the chat composer via `PinnedTodoSlot` in `ChatPane.tsx`. The slot reads the latest TodoWrite snapshot across the conversation through `latestTodoWriteInputFromMessages` (`apps/web/src/runtime/todos.ts`). `AssistantMessage.stripTodoToolGroups` removes any TodoWrite tool groups from per message rendering so there is exactly one TodoCard on screen. The progress count includes both `completed` and `in_progress` items (1/4 reads "one underway" not "zero finished"). Dismissal via the Done button is keyed on the snapshot's JSON, so a fresh TodoWrite from the agent automatically re shows the card.
+- `AskUserQuestionCard` (in `ToolCard.tsx`) prefers the live `onAnswerToolUse(toolUseId, content)` route (POSTs to `/api/runs/:id/tool-result`) and falls back to the legacy `onSubmitForm(text)` path when the run has already terminated. Selected chips persist across reloads by parsing the stored `tool_result.content` back into the selections shape.
+- Tool group rendering uses `dedupeSnapshotToolRetries` to collapse identical `AskUserQuestion` retries (one card per unique input, keeping the latest tool_use_id) and `TodoWrite` snapshots (only the most recent call, since each call is a state replace).
+
+## i18n keys
+
+- `apps/web/src/i18n/types.ts` is the typed `Dict`; every key must be defined in all 18 locale files under `apps/web/src/i18n/locales/*.ts` (`ar`, `de`, `en`, `es-ES`, `fa`, `fr`, `hu`, `id`, `ja`, `ko`, `pl`, `pt-BR`, `ru`, `th`, `tr`, `uk`, `zh-CN`, `zh-TW`). Add the key to `types.ts` first; missing translations produce a typecheck error.
+
+## UI animation philosophy
+
+- Default ease-out for UI transitions: `cubic-bezier(0.23, 1, 0.32, 1)`. Built-in `ease` is too weak; `ease-in` is forbidden for UI elements because it feels sluggish.
+- Asymmetric durations: enter around 200ms, exit around 140ms. Exit reads as decisive because the user has already chosen to dismiss.
+- Accordion expand and collapse uses `grid-template-rows: 0fr -> 1fr` (modern auto height pattern). Pair with opacity fade and the easing above. The shared `.accordion-collapsible` + `.accordion-collapsible-inner` class pair (defined in `apps/web/src/index.css`) is the canonical implementation; reuse it for new disclosure UI.
+- Never animate from `transform: scale(0)`. Start from `scale(0.9)` or higher with `opacity: 0`.
+- For elements that show conditionally, keep them mounted and toggle a CSS class (e.g. `.chat-jump-btn-active`). React unmounts skip the exit transition entirely.
+
 ## Validation strategy
 
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
@@ -78,6 +146,20 @@ This file is the single source of truth for agents entering this repository. Rea
 - On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
 - Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
 - Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
+
+## Bug follow-up workflow
+
+The following is a working playbook for routine bug follow-ups, distilled from recent practice. Treat it as a default action shape, not a contract — production reality always has edges these bullets can't anticipate, so use judgment when the situation doesn't fit cleanly.
+
+- **Lead with a red spec.** Default to encoding the bug as a falsifiable test that goes red before any source change, so the fix is anchored in observable behavior rather than source-code intuition. If a red spec can't be written cheaply, that's usually a signal to clarify scope rather than push forward on a guess.
+- **Try the cheapest layer first.** Reach for the lightest test layer that can still see the symptom (e2e Vitest at the daemon HTTP boundary → app-local Vitest → Playwright UI → platform-native harnesses), and drop down only when the cheaper layer can't.
+- **Hold the spec's scope.** Defects discovered outside the bug's described boundary belong in a follow-up — their own red spec, their own PR — not in this fix. List them in the PR body's "Adjacent issues" section with the rationale and move on.
+- **Let the fix read as an invariant.** Prefer a named helper whose docblock describes what must hold over a bolt-on `if` guard with apologetic history-comments. The call site should read as intent.
+- **Diff against the baseline.** When neighboring suites have pre-existing failures, stash or check out upstream before claiming "no new failures."
+- **Link the issue from the PR body.** Use `Fixes #N` / `Closes #N` / `Resolves #N` so the issue auto-closes on merge and the release-time reverse lookup (`gh issue view N --json closedByPullRequestsReferences` → `git tag --contains <merge sha>`) actually has a chain to follow. The repo's PR template prompts for this; deleting the prompt is fine when the PR genuinely closes nothing.
+- **Stage human verification for visible bugs.** When the symptom needs an eye to confirm — UI, platform-native behavior, animations, race conditions a unit test can't see — green specs alone aren't acceptance. Stand up a buggy-vs-fix comparison the reviewer can drive themselves (typical shape: two namespaced runtimes, one on `main`, one on the fix branch), and seed any required data only through production HTTP APIs; source-level test backdoors invalidate the verification because they prove a fake flow rather than the real one.
+
+For a worked example of one full loop (red e2e spec → fix → green), see `e2e/tests/dialog/stop-reconciles-message.test.ts` (issue #135).
 
 # Common commands
 
@@ -100,6 +182,14 @@ pnpm typecheck
 ```
 
 ```bash
+pnpm tools-pr list
+pnpm tools-pr list --bucket=merge-ready,approved-blocked
+pnpm tools-pr list --lane=skill,contract --json
+pnpm tools-pr view 1180
+pnpm tools-pr view 1180 --json
+```
+
+```bash
 pnpm --filter @open-design/web typecheck
 pnpm --filter @open-design/web test
 pnpm --filter @open-design/web build
@@ -108,6 +198,7 @@ pnpm --filter @open-design/daemon build
 pnpm --filter @open-design/desktop build
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack build
+pnpm --filter @open-design/tools-pr build
 ```
 
 ```bash

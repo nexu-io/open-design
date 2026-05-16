@@ -1,0 +1,105 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-media-generation",
+  "title": "Media generation (default scenario)",
+  "version": "0.1.0",
+  "description": "Default scenario plugin for image, video, and audio projects. Routes through the media-* atoms based on the project kind and wraps the result in a live artifact.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-media-generation",
+  "tags": [
+    "scenario",
+    "first-party",
+    "media-generation",
+    "image",
+    "video",
+    "audio"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "media-generation",
+    "mode": "scenario",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": ["discovery-question-form"]
+        },
+        {
+          "id": "plan",
+          "atoms": ["todo-write"]
+        },
+        {
+          "id": "generate",
+          "atoms": ["media-image", "media-video", "media-audio", "live-artifact"]
+        },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image",
+      "media:video",
+      "media:audio",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Generate a {{mediaKind}} of {{subject}}. Style: {{style}}. Aspect: {{aspect}}. Use the media-* atom that matches the project kind, then wrap the result in a live artifact for preview. Iterate on the critique signal until it converges.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{mediaKind}} of {{subject}}. Style: {{style}}. Aspect: {{aspect}}. Use the media-* atom that matches the project kind, then wrap the result in a live artifact for preview. Iterate on the critique signal until it converges."
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "mediaKind",
+        "type": "string",
+        "required": false,
+        "label": "Media kind",
+        "placeholder": "image",
+        "options": ["image", "video", "audio"],
+        "default": "image"
+      },
+      {
+        "name": "subject",
+        "type": "string",
+        "required": true,
+        "label": "Subject",
+        "placeholder": "A neon-lit dashboard with floating glass cards"
+      },
+      {
+        "name": "style",
+        "type": "string",
+        "required": false,
+        "label": "Style",
+        "placeholder": "cinematic, soft volumetric light"
+      },
+      {
+        "name": "aspect",
+        "type": "string",
+        "required": false,
+        "label": "Aspect",
+        "placeholder": "16:9",
+        "options": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        "default": "16:9"
+      }
+    ]
+  }
+}

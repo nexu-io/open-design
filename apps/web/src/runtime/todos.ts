@@ -35,7 +35,7 @@ export function latestTodosFromEvents(events: AgentEvent[] | undefined): TodoIte
   if (!events) return [];
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
-    if (event?.kind !== 'tool_use' || event.name !== 'TodoWrite') continue;
+    if (event?.kind !== 'tool_use' || !isTodoWriteToolName(event.name)) continue;
     return parseTodoWriteInput(event.input);
   }
   return [];
@@ -43,4 +43,29 @@ export function latestTodosFromEvents(events: AgentEvent[] | undefined): TodoIte
 
 export function unfinishedTodosFromEvents(events: AgentEvent[] | undefined): TodoItem[] {
   return latestTodosFromEvents(events).filter((todo) => todo.status !== 'completed');
+}
+
+// Walk the conversation in reverse to find the most recent TodoWrite
+// tool_use, return its raw input so callers can hand it to a `TodoCard`
+// without re-implementing the discovery logic. Returns `null` when no
+// TodoWrite has been emitted yet in this conversation.
+export function latestTodoWriteInputFromMessages(
+  messages: ReadonlyArray<{ events?: AgentEvent[] | undefined }> | undefined,
+): unknown | null {
+  if (!messages || messages.length === 0) return null;
+  for (let mi = messages.length - 1; mi >= 0; mi -= 1) {
+    const events = messages[mi]?.events;
+    if (!events || events.length === 0) continue;
+    for (let ei = events.length - 1; ei >= 0; ei -= 1) {
+      const event = events[ei];
+      if (event?.kind !== 'tool_use') continue;
+      if (!isTodoWriteToolName(event.name)) continue;
+      return event.input;
+    }
+  }
+  return null;
+}
+
+function isTodoWriteToolName(name: string): boolean {
+  return name === 'TodoWrite' || name === 'todowrite';
 }

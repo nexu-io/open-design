@@ -17,5 +17,5 @@
     "target": "ES2024",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.cts"]
 }

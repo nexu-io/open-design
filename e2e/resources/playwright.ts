@@ -53,6 +53,88 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
   },
   {
+    id: 'home-rail-prototype-generation',
+    title: 'Home rail Prototype chip creates a project and generated content',
+    kind: 'prototype',
+    flow: 'home-rail-generation',
+    automated: true,
+    description:
+      'Clicks the Home rail Prototype chip, submits a prompt, verifies the project is persisted as a prototype, and confirms generated HTML content is saved and previewed.',
+    create: {
+      projectName: 'Rail prototype project',
+      railChip: 'prototype',
+      expectedProjectKind: 'prototype',
+      expectedPluginId: 'example-web-prototype',
+    },
+    prompt: 'Create a compact onboarding prototype from the Home rail prototype chip',
+    mockArtifact: {
+      identifier: 'rail-prototype-artifact',
+      title: 'Rail Prototype Artifact',
+      fileName: 'rail-prototype-artifact.html',
+      heading: 'Rail Prototype Artifact',
+      html:
+        '<!doctype html><html><body><main><h1>Rail Prototype Artifact</h1><p>Generated from the Prototype rail chip.</p><button>Start flow</button></main></body></html>',
+    },
+    notes: [
+      'Covers the screenshot toolbar chip instead of the New Project modal.',
+      'Persists through the real daemon project and file APIs while mocking only the agent run stream.',
+    ],
+  },
+  {
+    id: 'home-rail-deck-generation',
+    title: 'Home rail Slide deck chip creates a project and generated deck',
+    kind: 'deck',
+    flow: 'home-rail-generation',
+    automated: true,
+    description:
+      'Clicks the Home rail Slide deck chip, submits a prompt, verifies the project is persisted as a deck, and confirms a deck-shaped artifact is saved and previewed.',
+    create: {
+      projectName: 'Rail slide deck project',
+      railChip: 'deck',
+      expectedProjectKind: 'deck',
+      expectedPluginId: 'example-simple-deck',
+    },
+    prompt: 'Create a three-slide strategy deck from the Home rail slide deck chip',
+    mockArtifact: {
+      identifier: 'rail-slide-deck',
+      title: 'Rail Slide Deck',
+      fileName: 'rail-slide-deck.html',
+      heading: 'Rail Slide Deck',
+      html:
+        '<!doctype html><html><body><section class="slide"><h1>Rail Slide Deck</h1><p>Opening thesis generated from the Slide deck rail chip.</p></section><section class="slide" hidden><h1>Roadmap</h1></section><section class="slide" hidden><h1>Launch Plan</h1></section></body></html>',
+    },
+    notes: [
+      'Keeps the requested scope to slides without exercising unrelated media chips.',
+    ],
+  },
+  {
+    id: 'home-rail-hyperframes-generation',
+    title: 'Home rail HyperFrames chip creates a video project and generated motion content',
+    kind: 'hyperframes',
+    flow: 'home-rail-generation',
+    automated: true,
+    description:
+      'Clicks the Home rail HyperFrames chip, submits a prompt, verifies the project is persisted as a video project, and confirms generated HyperFrames-style HTML content is saved and previewed.',
+    create: {
+      projectName: 'Rail HyperFrames project',
+      railChip: 'hyperframes',
+      expectedProjectKind: 'video',
+      expectedPluginId: 'example-hyperframes',
+    },
+    prompt: 'Create a five-second HyperFrames product reveal from the Home rail HyperFrames chip',
+    mockArtifact: {
+      identifier: 'rail-hyperframes-motion',
+      title: 'Rail HyperFrames Motion',
+      fileName: 'rail-hyperframes-motion.html',
+      heading: 'Rail HyperFrames Motion',
+      html:
+        '<!doctype html><html><body><main data-duration="5" data-width="1920" data-height="1080"><h1>Rail HyperFrames Motion</h1><p>Generated from the HyperFrames rail chip with a timed motion canvas.</p></main></body></html>',
+    },
+    notes: [
+      'Uses the HyperFrames scenario plugin but keeps the run stream deterministic for CI.',
+    ],
+  },
+  {
     id: 'comment-attachment-flow',
     title: 'Preview comments attach to chat and send as structured context',
     kind: 'prototype',
@@ -343,7 +425,7 @@ export const playwrightUiScenarios: UiScenario[] = [
     title: 'Deck preview previous and next controls move in the correct direction',
     kind: 'deck',
     flow: 'deck-pagination-next-prev-correctness',
-    automated: false,
+    automated: true,
     description:
       'Should verify that deck preview pagination moves to the actual previous and next slide instead of routing both actions to the same page.',
     create: {
@@ -351,13 +433,16 @@ export const playwrightUiScenarios: UiScenario[] = [
       tab: 'deck',
     },
     prompt: 'Review pagination behavior in a multi-slide deck preview',
+    notes: [
+      'Seeds deterministic deck HTML through the project files API and verifies previous/next controls in Playwright.',
+    ],
   },
   {
     id: 'deck-pagination-per-file-isolated',
     title: 'Each HTML deck tab preserves its own pagination state',
     kind: 'deck',
     flow: 'deck-pagination-per-file-isolated',
-    automated: false,
+    automated: true,
     description:
       'Should verify that switching between multiple deck HTML files does not leak page position across tabs or reset both files to page 1.',
     create: {
@@ -365,13 +450,16 @@ export const playwrightUiScenarios: UiScenario[] = [
       tab: 'deck',
     },
     prompt: 'Keep pagination state isolated per generated deck file',
+    notes: [
+      'Seeds two deterministic deck HTML files and verifies each open tab preserves its own active slide.',
+    ],
   },
   {
     id: 'uploaded-image-renders-in-preview',
     title: 'Uploaded reference images render correctly in generated deck preview',
     kind: 'workspace',
     flow: 'uploaded-image-renders-in-preview',
-    automated: false,
+    automated: true,
     description:
       'Should verify that uploaded images resolve to loadable src paths inside generated HTML instead of rendering as broken images.',
     create: {
@@ -379,13 +467,16 @@ export const playwrightUiScenarios: UiScenario[] = [
       tab: 'prototype',
     },
     prompt: 'Use uploaded brand images inside a generated deck preview',
+    notes: [
+      'Seeds an image plus relative HTML reference and asserts the preview iframe loads the image.',
+    ],
   },
   {
     id: 'python-source-preview',
     title: 'Python files should open with a readable inline source preview',
     kind: 'workspace',
     flow: 'python-source-preview',
-    automated: false,
+    automated: true,
     description:
       'Should verify that opening a .py file in the main workspace renders a readable source/code preview instead of an unsupported blank state.',
     create: {
@@ -394,8 +485,25 @@ export const playwrightUiScenarios: UiScenario[] = [
     },
     prompt: 'Open a generated Python file and inspect its source inline',
     notes: [
-      'Candidate follow-up to the Python preview gap in the file viewer.',
-      'Likely automation shape: seed a .py file through the project files API, open it, and assert the viewer renders code text.',
+      'Seeds a deterministic .py file through the project files API, opens it from the file list, and asserts the source viewer renders readable code text.',
+    ],
+  },
+  {
+    id: 'plugin-create-import',
+    title: 'Plugin creation and import flow applies a test query end to end',
+    kind: 'workspace',
+    flow: 'plugin-create-import',
+    automated: true,
+    description:
+      'Exercises the Plugins view create entry point, installs a local fixture plugin through the import dialog, applies it from Home search, and verifies the seeded query creates and auto-runs a project.',
+    create: {
+      projectName: 'Plugin create import flow',
+      tab: 'prototype',
+    },
+    prompt: 'Generate a release QA brief for general.',
+    notes: [
+      'Uses the daemon plugin install endpoint with a generated query plugin fixture instead of mocking the import response.',
+      'Mocks only the final agent run SSE so the UI path stays deterministic while the plugin install/apply APIs remain real.',
     ],
   },
 ];

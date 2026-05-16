@@ -168,10 +168,9 @@ function resolveConfiguredStandaloneRoot(): string | null {
 }
 
 export function resolveStandaloneServerEntry(
-  webRoot: string = resolveWebRoot(),
+  webRoot: string | null = resolveWebRoot(),
   standaloneRoot: string | null = resolveConfiguredStandaloneRoot(),
 ): string | null {
-  const distDir = resolveWebDistDir(webRoot);
   const configuredRoot = standaloneRoot == null || standaloneRoot.length === 0
     ? null
     : isAbsolute(standaloneRoot)
@@ -184,8 +183,12 @@ export function resolveStandaloneServerEntry(
         join(configuredRoot, "apps", "web", "server.js"),
         join(configuredRoot, "server.js"),
       ]),
-    join(distDir, "standalone", "apps", "web", "server.js"),
-    join(distDir, "standalone", "server.js"),
+    ...(webRoot == null
+      ? []
+      : [
+        join(resolveWebDistDir(webRoot), "standalone", "apps", "web", "server.js"),
+        join(resolveWebDistDir(webRoot), "standalone", "server.js"),
+      ]),
   ];
 
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
@@ -414,10 +417,14 @@ async function waitForStandaloneBackendReady(
   throw new Error(`timed out after ${timeoutMs}ms waiting for standalone Next.js server at ${origin}; override with ${STANDALONE_STARTUP_TIMEOUT_ENV}`);
 }
 
-async function startStandaloneBackend(webRoot: string): Promise<StandaloneBackend> {
+async function startStandaloneBackend(webRoot: string | null): Promise<StandaloneBackend> {
   const entryPath = resolveStandaloneServerEntry(webRoot);
   if (entryPath == null) {
-    throw new Error(`missing Next.js standalone server under ${resolveWebDistDir(webRoot)}; rebuild with ${WEB_OUTPUT_MODE_ENV}=standalone`);
+    throw new Error(
+      webRoot == null
+        ? `missing Next.js standalone server under ${WEB_STANDALONE_ROOT_ENV}; configure ${WEB_STANDALONE_ROOT_ENV} or install @open-design/web`
+        : `missing Next.js standalone server under ${resolveWebDistDir(webRoot)}; rebuild with ${WEB_OUTPUT_MODE_ENV}=standalone`,
+    );
   }
 
   const port = await reserveTcpPort(STANDALONE_BACKEND_HOST);
@@ -625,7 +632,7 @@ async function startRegularNextSidecar(
 
 async function startStandaloneNextSidecar(
   runtime: SidecarRuntimeContext<SidecarStamp>,
-  webRoot: string,
+  webRoot: string | null,
 ): Promise<WebSidecarHandle> {
   const daemonOrigin = resolveDaemonOrigin();
   const backend = await startStandaloneBackend(webRoot);
@@ -653,10 +660,11 @@ async function startStandaloneNextSidecar(
 }
 
 export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<WebSidecarHandle> {
-  const webRoot = resolveWebRoot();
   if (shouldUseStandaloneOutput(runtime)) {
+    const webRoot = resolveConfiguredStandaloneRoot() == null ? resolveWebRoot() : null;
     return await startStandaloneNextSidecar(runtime, webRoot);
   }
 
+  const webRoot = resolveWebRoot();
   return await startRegularNextSidecar(runtime, webRoot);
 }

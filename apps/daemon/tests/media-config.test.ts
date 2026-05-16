@@ -1,10 +1,12 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  readAliasMap,
   readMaskedConfig,
+  resolveModelAlias,
   resolveProviderConfig,
   writeConfig,
 } from '../src/media-config.js';
@@ -27,11 +29,13 @@ describe('media-config OpenAI OAuth fallback', () => {
   );
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-home-'));
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-project-'));
     process.env.HOME = homeDir;
+    homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
     for (const key of OPENAI_ENV_KEYS) {
       delete process.env[key];
     }
@@ -62,6 +66,7 @@ describe('media-config OpenAI OAuth fallback', () => {
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
     }
+    homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
   });
@@ -180,6 +185,32 @@ describe('media-config OpenAI OAuth fallback', () => {
     });
 
     delete process.env.OD_NANOBANANA_API_KEY;
+  });
+
+  it('preserves a stored apiKey when writeConfig updates only non-secret fields', async () => {
+    await writeStoredMediaConfig({
+      providers: {
+        openai: {
+          apiKey: 'stored-openai-key',
+          baseUrl: 'https://before.example/v1',
+        },
+      },
+    });
+
+    await writeConfig(projectRoot, {
+      providers: {
+        openai: {
+          preserveApiKey: true,
+          baseUrl: 'https://after.example/v1',
+        },
+      },
+      force: true,
+    });
+
+    await expect(resolveProviderConfig(projectRoot, 'openai')).resolves.toEqual({
+      apiKey: 'stored-openai-key',
+      baseUrl: 'https://after.example/v1',
+    });
   });
 
   describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {
@@ -371,5 +402,266 @@ describe('media-config OpenAI OAuth fallback', () => {
         baseUrl: 'https://fresh.test/v1',
       });
     });
+
+    // Round 3 review feedback on PR #530.
+    // resolveOverrideDir shares expandHomePrefix with resolveDataDir, so
+    // OD_DATA_DIR=$HOME/.open-design (and ${HOME}/.open-design) routes
+    // both daemon runtime data AND media credentials to the same expanded
+    // path. Without this, media-config.json was written under
+    // <projectRoot>/$HOME/.open-design and stored provider keys appeared
+    // missing on the next read.
+    it('expands $HOME/... in OD_DATA_DIR fallback so media-config co-locates with daemon data', async () => {
+      const subdir = '.od-test-home';
+      process.env.OD_DATA_DIR = `$HOME/${subdir}`;
+      const expandedDir = path.join(homeDir, subdir);
+      await writeProvidersAt(expandedDir, {
+        providers: {
+          openai: {
+            apiKey: 'home-key',
+            baseUrl: 'https://home.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'home-key',
+        baseUrl: 'https://home.test/v1',
+      });
+    });
+
+    it('expands ${HOME}/... in OD_DATA_DIR fallback', async () => {
+      const subdir = '.od-test-braced';
+      process.env.OD_DATA_DIR = `\${HOME}/${subdir}`;
+      const expandedDir = path.join(homeDir, subdir);
+      await writeProvidersAt(expandedDir, {
+        providers: {
+          openai: {
+            apiKey: 'braced-key',
+            baseUrl: 'https://braced.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'braced-key',
+        baseUrl: 'https://braced.test/v1',
+      });
+    });
+
+    it('expands $HOME/... in OD_MEDIA_CONFIG_DIR (explicit override path)', async () => {
+      const subdir = '.od-media-home';
+      process.env.OD_MEDIA_CONFIG_DIR = `$HOME/${subdir}`;
+      const expandedDir = path.join(homeDir, subdir);
+      await writeProvidersAt(expandedDir, {
+        providers: {
+          openai: {
+            apiKey: 'media-home-key',
+            baseUrl: 'https://media-home.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveProviderConfig(projectRoot, 'openai');
+      expect(resolved).toEqual({
+        apiKey: 'media-home-key',
+        baseUrl: 'https://media-home.test/v1',
+      });
+    });
+  });
+});
+
+describe('media-config model alias resolution (issue #1277)', () => {
+  let projectRoot: string;
+  const originalEnvAliases = process.env.OD_MEDIA_MODEL_ALIASES;
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-alias-'));
+    delete process.env.OD_MEDIA_MODEL_ALIASES;
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
+  });
+
+  afterEach(async () => {
+    if (originalEnvAliases == null) {
+      delete process.env.OD_MEDIA_MODEL_ALIASES;
+    } else {
+      process.env.OD_MEDIA_MODEL_ALIASES = originalEnvAliases;
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
+    }
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  async function writeStoredMediaConfig(data: unknown) {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
+  it('passes through unmapped model ids unchanged', async () => {
+    expect(await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415')).toBe(
+      'doubao-seedream-3-0-t2i-250415',
+    );
+  });
+
+  it('redirects via the stored aliases map in media-config.json', async () => {
+    // The flagship use case from the issue: registered catalog id
+    // -> the new model name the user actually has access to.
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0' },
+    });
+    expect(
+      await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
+    ).toBe('doubao-seedream-5-0');
+  });
+
+  it('redirects via the OD_MEDIA_MODEL_ALIASES env var', async () => {
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
+    });
+    expect(
+      await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
+    ).toBe('doubao-seedream-5-0');
+  });
+
+  it('lets the env var override an on-disk alias (env wins for power users)', async () => {
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'doubao-seedream-3-0-t2i-250415': 'on-disk-alias' },
+    });
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'doubao-seedream-3-0-t2i-250415': 'env-alias',
+    });
+    expect(
+      await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
+    ).toBe('env-alias');
+  });
+
+  it('tolerates malformed env JSON and falls through to the stored map', async () => {
+    // A user with a half-typed env var (`OD_MEDIA_MODEL_ALIASES='{'`)
+    // should still get their on-disk aliases, not a hard error mid-
+    // generation.
+    process.env.OD_MEDIA_MODEL_ALIASES = '{not valid json';
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0' },
+    });
+    expect(
+      await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
+    ).toBe('doubao-seedream-5-0');
+  });
+
+  it('drops non-string and empty alias entries during coercion', async () => {
+    // Defends against a future schema bump (number / null / nested
+    // object) and against accidental empty-string entries from a
+    // Settings UI form. The coercion must never feed garbage into a
+    // dispatcher's request body.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'good-key': 'good-value',
+      'empty-key': '',
+      'null-key': null,
+      'object-key': { nested: 'no' },
+      '': 'blank-key-rejected',
+    });
+    expect(await resolveModelAlias(projectRoot, 'good-key')).toBe('good-value');
+    expect(await resolveModelAlias(projectRoot, 'empty-key')).toBe('empty-key');
+    expect(await resolveModelAlias(projectRoot, 'null-key')).toBe('null-key');
+    expect(await resolveModelAlias(projectRoot, 'object-key')).toBe('object-key');
+  });
+
+  it('exposes the merged map via readAliasMap so Settings can show source attribution', async () => {
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'stored-only': 'a', 'overridden': 'stored-value' },
+    });
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'env-only': 'b',
+      'overridden': 'env-value',
+    });
+    const map = await readAliasMap(projectRoot);
+    expect(map.stored).toEqual({ 'stored-only': 'a', 'overridden': 'stored-value' });
+    expect(map.env).toEqual({ 'env-only': 'b', 'overridden': 'env-value' });
+    expect(map.effective).toEqual({
+      'stored-only': 'a',
+      'env-only': 'b',
+      'overridden': 'env-value',
+    });
+  });
+
+  it('readMaskedConfig surfaces the alias map for the Settings UI', async () => {
+    // Lefarcen P3 (#1309 review): the prior PR description claimed
+    // `readAliasMap` was the daemon-public API for the Settings UI,
+    // but the HTTP route returned only `readMaskedConfig` (which
+    // had no aliases field). The fix wires aliases into the GET
+    // response so a future Settings UI PR can consume them without
+    // touching the daemon.
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'dall-e-3': 'azure-dalle3' },
+    });
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'gpt-4o-mini-tts': 'custom-tts',
+    });
+
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(masked.aliases.stored).toEqual({ 'dall-e-3': 'azure-dalle3' });
+    expect(masked.aliases.env).toEqual({ 'gpt-4o-mini-tts': 'custom-tts' });
+    expect(masked.aliases.effective).toEqual({
+      'dall-e-3': 'azure-dalle3',
+      'gpt-4o-mini-tts': 'custom-tts',
+    });
+  });
+
+  it('readMaskedConfig returns empty alias maps when no aliases are configured', async () => {
+    // Settings UI needs a stable shape so it can render "no aliases
+    // configured" without crashing on `aliases.effective` being
+    // undefined.
+    const masked = await readMaskedConfig(projectRoot);
+    expect(masked.aliases.effective).toEqual({});
+    expect(masked.aliases.env).toEqual({});
+    expect(masked.aliases.stored).toEqual({});
+  });
+
+  it('writeConfig preserves aliases when a Settings-style provider PUT lands', async () => {
+    // The Settings UI in its current shape writes providers only.
+    // Without alias preservation, every provider edit would wipe the
+    // user's aliases. This pins the regression so a future refactor
+    // that touches writeStored has to keep both fields.
+    await writeStoredMediaConfig({
+      providers: {},
+      aliases: { 'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0' },
+    });
+    await writeConfig(projectRoot, {
+      providers: {
+        openai: { apiKey: 'sk-key', baseUrl: '' },
+      },
+    });
+    const onDisk = JSON.parse(
+      await readFile(
+        path.join(projectRoot, '.od', 'media-config.json'),
+        'utf8',
+      ),
+    );
+    expect(onDisk.providers.openai).toMatchObject({ apiKey: 'sk-key' });
+    expect(onDisk.aliases).toEqual({
+      'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
+    });
+    expect(
+      await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
+    ).toBe('doubao-seedream-5-0');
   });
 });

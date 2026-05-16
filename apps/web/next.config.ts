@@ -22,6 +22,7 @@ const isServerOutput = webOutputMode === 'server' || webOutputMode === 'standalo
 const shouldStaticExport = isProd && !isServerOutput;
 
 const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
+const WORKSPACE_ROOT = dirname(dirname(WEB_ROOT));
 const toPosixPath = (value: string) => value.replaceAll('\\', '/');
 
 function resolveDistDir(defaultValue: string) {
@@ -43,7 +44,11 @@ const DEV_TSCONFIG_PATH = resolveDevTsconfigPath();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
+  outputFileTracingRoot: WORKSPACE_ROOT,
   reactStrictMode: true,
+  turbopack: {
+    root: WORKSPACE_ROOT,
+  },
   ...(DEV_TSCONFIG_PATH ? { typescript: { tsconfigPath: DEV_TSCONFIG_PATH } } : {}),
   // Keep the bundle output predictable so the daemon's STATIC_DIR can point
   // at it without any glob trickery.

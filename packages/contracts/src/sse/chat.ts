@@ -1,5 +1,6 @@
-import type { SseErrorPayload } from '../errors';
-import type { SseTransportEvent } from './common';
+import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
+import type { SseErrorPayload } from '../errors.js';
+import type { SseTransportEvent } from './common.js';
 
 export type LiveArtifactSseAction = 'created' | 'updated' | 'deleted';
 export type LiveArtifactRefreshSsePhase = 'started' | 'succeeded' | 'failed';
@@ -10,7 +11,14 @@ export interface LiveArtifactSsePayload {
   projectId: string;
   artifactId: string;
   title: string;
-  refreshStatus?: string;
+  /**
+   * Refresh lifecycle state of the artifact at emit time. Typed against the
+   * canonical `LiveArtifactRefreshStatus` enum used by the REST API so that
+   * SSE consumers (web, CLI) can switch on the same union members without
+   * widening to `string`. Optional because the daemon may omit the field on
+   * legacy events; consumers must still null-check before narrowing.
+   */
+  refreshStatus?: LiveArtifactRefreshStatus;
 }
 
 export interface LiveArtifactRefreshSsePayload {
@@ -22,6 +30,23 @@ export interface LiveArtifactRefreshSsePayload {
   title?: string;
   refreshedSourceCount?: number;
   error?: string;
+}
+
+/**
+ * Emitted by the daemon on `/api/projects/:id/events` when a new
+ * conversation is inserted into a project from a path the open
+ * project view can't observe through its own state — currently
+ * Routines "Run now" in reuse-an-existing-project mode (#1361).
+ *
+ * Lives in `packages/contracts` so the daemon producer and the web
+ * consumer share one type and can't drift as the stream grows.
+ */
+export interface ProjectConversationCreatedSsePayload {
+  type: 'conversation-created';
+  projectId: string;
+  conversationId: string;
+  title: string | null;
+  createdAt: number;
 }
 
 export const CHAT_SSE_PROTOCOL_VERSION = 1;

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-pricing-page",
+  "title": "Pricing Page",
+  "version": "0.1.0",
+  "description": "A standalone pricing page — header, plan tiers, feature comparison table,\nand an FAQ. Use when the brief asks for \"pricing\", \"plans\",\n\"subscription tiers\", or a \"compare plans\" page.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/pricing-page",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "sales",
+    "web",
+    "desktop",
+    "pricing",
+    "pricing-page",
+    "plans",
+    "subscription",
+    "compare-plans",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "sales",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "A standalone pricing page — header, plan tiers, feature comparison table, and an FAQ. Use when the brief asks for \"pricing\", \"plans\", \"subscription tiers\", or a \"compare plans\" page.",
+        "zh-CN": "使用这个插件完成以下任务：A standalone pricing page — header, plan tiers, feature comparison table, and an FAQ. Use when the brief asks for \"pricing\", \"plans\", \"subscription tiers\", or a \"compare plans\" page."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Pricing Page"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "laws-of-ux"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

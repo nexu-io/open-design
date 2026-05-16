@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Monday morning briefing · Quiver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Editorial · calm Monday morning */
+    --paper:        #f5f1ea;          /* warm cream background */
+    --paper-elev:   #fdfcf9;          /* card surface */
+    --paper-deep:   #efe9dd;          /* elevation contrast */
+    --ink:          #1c1c1f;          /* deep near-black */
+    --ink-soft:     #3b3b3f;
+    --muted:        #6b6b66;
+    --muted-2:      #8e8e88;
+    --line:         #e3ddd0;
+    --line-strong:  #cdc4b1;
+    --hairline:     rgba(28,28,31,0.06);
+
+    /* Editorial accent palette — earthy, calm */
+    --espresso:     #6f4e37;          /* coffee */
+    --sage:         #6e8865;
+    --sage-soft:    #e7eee2;
+    --slate-blue:   #4a6e8a;
+    --slate-soft:   #e3ebf2;
+    --terracotta:   #c8775c;
+    --tc-soft:      #f6e4dd;
+    --gold:         #c9a45a;
+    --gold-soft:    #f1e7ce;
+    --plum:         #6e4e6e;
+    --plum-soft:    #ece2ec;
+
+    /* Type */
+    --serif:   'Instrument Serif', Iowan, Charter, Georgia, serif;
+    --display: 'Instrument Serif', Iowan, Charter, Georgia, serif;
+    --body:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:    'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --r: 12px;
+    --r-pill: 999px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      /* paper grain — barely-there noise via SVG */
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.07 0 0 0 0 0.06 0 0 0 0 0.04 0 0 0 0.06 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>"),
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ─────── Header ─────── */
+  header.app {
+    border-bottom: 1px solid var(--line);
+    padding: 22px 32px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--paper);
+  }
+  .masthead {
+    font-family: var(--serif);
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+  .masthead .small {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.16em;
+    margin-bottom: 6px;
+  }
+  .masthead .word {
+    display: inline-flex; gap: 8px; align-items: baseline;
+  }
+  .masthead .quiver {
+    font-family: var(--serif); font-style: italic;
+    color: var(--espresso);
+    font-size: 22px;
+  }
+
+  .head-right { display: flex; align-items: center; gap: 14px; }
+  .pill-soft {
+    padding: 6px 12px; font-size: 12px;
+    border: 1px solid var(--line); border-radius: var(--r-pill);
+    background: var(--paper-elev); color: var(--ink-soft);
+    font-family: var(--mono); letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+  .pill-soft:hover { border-color: var(--line-strong); color: var(--ink); }
+  .pill-soft .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--sage); margin-right: 8px; vertical-align: 1px;
+    box-shadow: 0 0 6px var(--sage);
+  }
+  .icon-btn {
+    padding: 7px 14px; border-radius: var(--r-pill);
+    background: var(--ink); color: var(--paper);
+    font-size: 12px; font-weight: 500; letter-spacing: 0.01em;
+    border: 1px solid var(--ink);
+    display: inline-flex; gap: 8px; align-items: center;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { transform: translateY(-1px); }
+  .icon-btn.ghost { background: transparent; color: var(--ink); }
+  .icon-btn .ic { width: 13px; height: 13px; }
+  .icon-btn.spin .ic { animation: spin 0.8s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─────── Layout ─────── */
+  main {
+    max-width: 1220px; margin: 0 auto;
+    padding: 40px 32px 80px;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 48px;
+  }
+
+  /* ─────── Hero greeting ─────── */
+  .greeting {
+    margin-bottom: 36px;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 28px;
+  }
+  .greeting .pretitle {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .greeting h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0;
+    color: var(--ink);
+  }
+  .greeting h1 em {
+    font-style: italic; color: var(--espresso);
+  }
+  .greeting .lede {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 19px;
+    color: var(--ink-soft);
+    margin-top: 10px;
+    max-width: 64ch;
+    line-height: 1.5;
+  }
+  .greeting .meta-row {
+    margin-top: 18px;
+    display: flex; gap: 24px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--muted);
+  }
+  .greeting .meta-row .v { color: var(--ink); margin-right: 4px; }
+  .greeting .meta-row .sep { color: var(--line-strong); }
+
+  /* ─────── Section style ─────── */
+  section.block {
+    margin-bottom: 40px;
+  }
+  .block > .head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .block > .head h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 26px;
+    letter-spacing: -0.005em;
+    line-height: 1;
+    margin: 0;
+  }
+  .block > .head h2 .ord {
+    font-family: var(--serif); font-style: italic; color: var(--espresso);
+    margin-right: 12px; font-size: 18px; vertical-align: 4px;
+  }
+  .block > .head .meta {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  .block > .head .pill-soft { padding: 4px 10px; font-size: 11px; }
+
+  .card {
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 20px 22px;
+    box-shadow: 0 1px 0 rgba(28,28,31,0.02);
+  }
+
+  /* ─────── Revenue card ─────── */
+  .rev-card {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 28px;
+    align-items: center;
+    padding: 24px 28px;
+  }
+  .rev-stat .label {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em;
+  }
+  .rev-stat .big {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 60px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin-top: 8px;
+    color: var(--ink);
+  }
+  .rev-stat .delta {
+    margin-top: 10px; font-size: 13px;
+    color: var(--sage); font-weight: 500;
+  }
+  .rev-stat .delta .arr { font-family: var(--mono); }
+  .rev-stat .sub { color: var(--muted); font-size: 12px; margin-top: 12px; max-width: 30ch; }
+
+  .rev-chart svg { width: 100%; height: 140px; display: block; }
+
+  /* ─────── Email digest ─────── */
+  .digest-list { display: flex; flex-direction: column; gap: 12px; }
+  .digest-item {
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .digest-item:hover {
+    border-color: var(--line-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(28,28,31,0.05);
+  }
+  .digest-av {
+    width: 38px; height: 38px; border-radius: 50%;
+    color: var(--paper); font-family: var(--serif); font-size: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .digest-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .digest-from { color: var(--ink); font-weight: 500; }
+  .digest-subject {
+    margin-top: 4px; font-family: var(--serif); font-size: 17px; line-height: 1.35;
+    color: var(--ink);
+  }
+  .digest-snippet {
+    margin-top: 4px; color: var(--muted); font-size: 12.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 64ch;
+  }
+  .digest-tag {
+    align-self: center;
+    font-family: var(--mono); font-size: 10px;
+    padding: 3px 9px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .digest-tag.urgent { background: var(--tc-soft); color: var(--terracotta); }
+  .digest-tag.warm   { background: var(--gold-soft); color: #8e6f1f; }
+  .digest-tag.calm   { background: var(--sage-soft); color: #496938; }
+  .digest-tag.fyi    { background: var(--slate-soft); color: var(--slate-blue); }
+
+  /* ─────── Stuck issues ─────── */
+  .stuck-list { display: flex; flex-direction: column; gap: 10px; }
+  .stuck-row {
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 14px 18px;
+    display: grid; grid-template-columns: 1fr auto auto auto; gap: 18px;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .stuck-row:hover { border-color: var(--line-strong); }
+  .stuck-row .id {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); margin-bottom: 4px;
+    letter-spacing: 0.04em;
+  }
+  .stuck-row .title { font-size: 14.5px; color: var(--ink); font-weight: 500; }
+  .stuck-row .who {
+    display: inline-flex; gap: 6px; align-items: center;
+    font-size: 12px; color: var(--muted);
+  }
+  .stuck-row .who .av {
+    width: 22px; height: 22px; border-radius: 50%;
+    color: #fff; font-size: 10px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .stuck-row .age {
+    font-family: var(--mono); font-size: 11.5px;
+    padding: 3px 9px; border-radius: 5px;
+    background: var(--tc-soft); color: var(--terracotta);
+    font-weight: 600;
+  }
+  .stuck-row .age.warm { background: var(--gold-soft); color: #8e6f1f; }
+  .stuck-row .nudge {
+    padding: 5px 11px; font-family: var(--mono); font-size: 11px;
+    border-radius: 6px; border: 1px solid var(--line); background: var(--paper);
+    color: var(--ink-soft); font-weight: 500;
+    transition: all 0.15s;
+  }
+  .stuck-row .nudge:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  /* ─────── Schedule timeline ─────── */
+  .schedule {
+    display: flex; flex-direction: column; gap: 0;
+    padding: 0;
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+  .sched-row {
+    display: grid; grid-template-columns: 80px 12px 1fr auto; gap: 16px;
+    align-items: center;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--hairline);
+    transition: background 0.12s;
+    position: relative;
+    cursor: pointer;
+  }
+  .sched-row:last-child { border-bottom: 0; }
+  .sched-row:hover { background: var(--paper-deep); }
+  .sched-row .time {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink); font-weight: 500;
+  }
+  .sched-row .time .dur { color: var(--muted); font-size: 10.5px; display: block; margin-top: 2px; }
+  .sched-row .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--sage); justify-self: center;
+  }
+  .sched-row.now .dot {
+    background: var(--terracotta);
+    box-shadow: 0 0 0 4px var(--tc-soft);
+    animation: nowPulse 2.4s ease-out infinite;
+  }
+  @keyframes nowPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.18); }
+  }
+  .sched-row.past .dot { background: var(--muted-2); opacity: 0.55; }
+  .sched-row.past .title, .sched-row.past .desc { opacity: 0.55; }
+  .sched-row.past .title { text-decoration: line-through; text-decoration-color: var(--muted-2); }
+  .sched-row .title { font-size: 14.5px; color: var(--ink); font-weight: 500; }
+  .sched-row .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .sched-row .source {
+    font-family: var(--mono); font-size: 10.5px;
+    padding: 2px 8px; border-radius: 4px;
+    color: var(--muted); border: 1px solid var(--line);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
+  /* ─────── PR list ─────── */
+  .pr-list { display: flex; flex-direction: column; gap: 0;
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+  .pr-row {
+    display: grid; grid-template-columns: 1fr auto auto auto; gap: 14px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--hairline);
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .pr-row:last-child { border-bottom: 0; }
+  .pr-row:hover { background: var(--paper-deep); }
+  .pr-row .num { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .pr-row .title { font-size: 14px; color: var(--ink); font-weight: 500; margin-top: 2px; }
+  .pr-row .files {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: var(--paper-deep);
+    padding: 3px 8px; border-radius: 4px;
+  }
+  .pr-row .age {
+    font-family: var(--mono); font-size: 11.5px;
+    padding: 3px 8px; border-radius: 5px;
+    color: var(--ink-soft);
+  }
+  .pr-row .age.urgent { background: var(--tc-soft); color: var(--terracotta); }
+  .pr-row .age.warm { background: var(--gold-soft); color: #8e6f1f; }
+  .pr-row .age.calm { background: var(--sage-soft); color: #496938; }
+
+  /* ─────── Wins (subtle bottom) ─────── */
+  .wins {
+    margin-top: 36px;
+    padding: 32px 36px;
+    background: linear-gradient(180deg, transparent, var(--paper-deep));
+    border-radius: var(--r);
+    border: 1px dashed var(--line-strong);
+  }
+  .wins-title {
+    font-family: var(--serif); font-style: italic; font-size: 28px;
+    color: var(--espresso); margin: 0 0 14px;
+    line-height: 1; letter-spacing: -0.01em;
+  }
+  .wins-list { columns: 2; column-gap: 32px; }
+  .wins-list .win {
+    break-inside: avoid;
+    margin-bottom: 14px;
+    display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: flex-start;
+  }
+  .wins-list .checkmark {
+    color: var(--sage); font-family: var(--serif); font-size: 18px; line-height: 1;
+  }
+  .wins-list .text { font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+
+  /* ─────── Sidebar ─────── */
+  aside.briefing-side {
+    align-self: start;
+    position: sticky; top: 32px;
+  }
+  .first-thing {
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: var(--r);
+    padding: 20px 22px;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .first-thing::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(220px 120px at 110% -20%, rgba(255,180,120,0.12), transparent 70%);
+    pointer-events: none;
+  }
+  .first-thing .label {
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.55);
+  }
+  .first-thing h3 {
+    font-family: var(--serif); font-size: 22px; font-weight: 400;
+    margin: 8px 0 8px; line-height: 1.15; color: var(--paper);
+    letter-spacing: -0.005em;
+  }
+  .first-thing p {
+    color: rgba(255,255,255,0.78); font-size: 13px; margin: 0;
+    line-height: 1.55;
+  }
+  .first-thing .actions {
+    margin-top: 16px; display: flex; gap: 8px;
+  }
+  .first-thing .a-btn {
+    padding: 6px 12px; font-size: 12px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.06); color: var(--paper);
+    font-family: var(--mono); letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+  .first-thing .a-btn:hover { background: rgba(255,255,255,0.14); }
+  .first-thing .a-btn.primary {
+    background: var(--gold); color: var(--ink); border-color: var(--gold);
+    font-weight: 600;
+  }
+
+  .side-card {
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .side-card h4 {
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 500;
+  }
+  .quick-action {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; font-size: 13px; color: var(--ink-soft);
+    border-bottom: 1px dashed var(--hairline);
+    cursor: pointer;
+    transition: color 0.12s;
+  }
+  .quick-action:last-child { border-bottom: 0; }
+  .quick-action:hover { color: var(--ink); }
+  .quick-action .arr { font-family: var(--mono); color: var(--muted); }
+
+  .weather-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+  }
+  .weather-glyph {
+    width: 44px; height: 44px;
+    background: linear-gradient(180deg, #ffce72, #f0a23a);
+    border-radius: 50%;
+    box-shadow: 0 0 22px rgba(255,180,80,0.45);
+    flex-shrink: 0;
+  }
+  .weather-card .temp {
+    font-family: var(--serif); font-size: 28px; line-height: 1; letter-spacing: -0.01em;
+  }
+  .weather-card .desc { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  /* Toast */
+  .toast-box {
+    position: fixed; bottom: 24px; right: 24px; z-index: 200;
+    display: flex; flex-direction: column; gap: 10px;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    min-width: 280px; max-width: 380px;
+    padding: 14px 16px;
+    background: var(--paper-elev);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--espresso);
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(28,28,31,0.10);
+    font-size: 13px;
+    color: var(--ink);
+    animation: toastIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .toast.success { border-left-color: var(--sage); }
+  .toast.warn { border-left-color: var(--gold); }
+  .toast.urgent { border-left-color: var(--terracotta); }
+  .toast .t-title { font-family: var(--serif); font-size: 16px; line-height: 1.2; margin-bottom: 4px; }
+  .toast .t-body { color: var(--ink-soft); line-height: 1.45; }
+  .toast .t-body strong { color: var(--ink); }
+  .toast.fade { opacity: 0; transform: translateX(20px); transition: all 0.25s; }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @media (max-width: 1080px) {
+    main { grid-template-columns: 1fr; }
+    aside.briefing-side { position: static; }
+    .greeting h1 { font-size: 40px; }
+    .rev-card { grid-template-columns: 1fr; }
+    .wins-list { columns: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="masthead">
+    <div class="small">Daily Briefing · Volume IV · Issue 18</div>
+    <div class="word">
+      <span>The Monday Memo</span>
+      <span class="quiver">— from quiver</span>
+    </div>
+  </div>
+  <div class="head-right">
+    <span class="pill-soft"><span class="dot"></span>5 sources connected · synced 6:42 AM</span>
+    <button class="icon-btn ghost" id="snoozeBtn">Snooze 1h</button>
+    <button class="icon-btn" id="doneBtn">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Mark briefing done
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <div>
+
+    <!-- ─────── Greeting ─────── -->
+    <div class="greeting">
+      <div class="pretitle">Monday · May 6, 2026 · 8:42 AM</div>
+      <h1>Good morning, <em>PT.</em></h1>
+      <div class="lede">
+        Six things deserve your attention this morning. The rest can wait until coffee #2.
+      </div>
+      <div class="meta-row">
+        <span><span class="v">San Francisco</span></span><span class="sep">·</span>
+        <span><span class="v">62°</span> light fog, clearing 11 AM</span><span class="sep">·</span>
+        <span><span class="v">Sunset</span> 8:09 PM</span><span class="sep">·</span>
+        <span><span class="v" style="color:var(--sage)">7h 24m</span> sleep</span>
+      </div>
+    </div>
+
+    <!-- ─────── 1. Revenue ─────── -->
+    <section class="block">
+      <div class="head">
+        <h2><span class="ord">i.</span>This week's revenue</h2>
+        <span class="meta">Stripe · 7-day rolling</span>
+      </div>
+      <div class="rev-card card">
+        <div class="rev-stat">
+          <div class="label">Past 7 days</div>
+          <div class="big">$84,210</div>
+          <div class="delta"><span class="arr">▲</span> +12.4% vs prior week · +$9,316</div>
+          <div class="sub">Driven by 3 enterprise expansions on Wed–Thu. Two SMB churns absorbed in net new.</div>
+        </div>
+        <div class="rev-chart">
+          <svg viewBox="0 0 600 140" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="revG" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#6e8865" stop-opacity="0.32"/>
+                <stop offset="100%" stop-color="#6e8865" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <!-- horizontal guides -->
+            <line x1="0" y1="40" x2="600" y2="40" stroke="rgba(28,28,31,0.06)" stroke-dasharray="2 4"/>
+            <line x1="0" y1="80" x2="600" y2="80" stroke="rgba(28,28,31,0.06)" stroke-dasharray="2 4"/>
+            <line x1="0" y1="120" x2="600" y2="120" stroke="rgba(28,28,31,0.06)" stroke-dasharray="2 4"/>
+            <!-- prior week ghost line -->
+            <polyline fill="none" stroke="rgba(28,28,31,0.32)" stroke-width="1.2" stroke-dasharray="3 4"
+              points="20,90 100,86 180,82 260,86 340,80 420,78 500,72 580,70"/>
+            <!-- this week area + line -->
+            <polygon fill="url(#revG)" points="20,140 20,82 100,76 180,68 260,70 340,58 420,52 500,40 580,30 580,140"/>
+            <polyline fill="none" stroke="#6e8865" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"
+              points="20,82 100,76 180,68 260,70 340,58 420,52 500,40 580,30"/>
+            <!-- weekday labels -->
+            <g font-family="Geist Mono,monospace" font-size="9.5" fill="#6b6b66" text-anchor="middle">
+              <text x="20" y="138">Mon</text>
+              <text x="100" y="138">Tue</text>
+              <text x="180" y="138">Wed</text>
+              <text x="260" y="138">Thu</text>
+              <text x="340" y="138">Fri</text>
+              <text x="420" y="138">Sat</text>
+              <text x="500" y="138">Sun</text>
+              <text x="580" y="138" fill="#1c1c1f" font-weight="600">Mon</text>
+            </g>
+            <!-- "now" marker -->
+            <circle cx="580" cy="30" r="3.5" fill="#1c1c1f"/>
+            <text x="586" y="22" font-family="Instrument Serif,serif" font-style="italic" font-size="13" fill="#1c1c1f">today</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────── 2. Email digest ─────── -->
+    <section class="block">
+      <div class="head">
+        <h2><span class="ord">ii.</span>Customers who deserve a reply</h2>
+        <span class="meta">Gmail · curated by relevance</span>
+      </div>
+      <div class="digest-list" id="digest"></div>
+    </section>
+
+    <!-- ─────── 3. Stuck Linear issues ─────── -->
+    <section class="block">
+      <div class="head">
+        <h2><span class="ord">iii.</span>What's stuck on the team</h2>
+        <span class="meta">Linear · idle &gt; 48h</span>
+      </div>
+      <div class="stuck-list" id="stuck"></div>
+    </section>
+
+    <!-- ─────── 4. Today's schedule ─────── -->
+    <section class="block">
+      <div class="head">
+        <h2><span class="ord">iv.</span>Today, hour by hour</h2>
+        <span class="meta">Google Calendar · 6 events</span>
+      </div>
+      <div class="schedule" id="schedule"></div>
+    </section>
+
+    <!-- ─────── 5. PRs ─────── -->
+    <section class="block">
+      <div class="head">
+        <h2><span class="ord">v.</span>Pull requests waiting on you</h2>
+        <span class="meta">GitHub · 4 PRs</span>
+      </div>
+      <div class="pr-list" id="prList"></div>
+    </section>
+
+    <!-- ─────── 6. Wins ─────── -->
+    <div class="wins">
+      <div class="wins-title">Yesterday, quietly:</div>
+      <div class="wins-list">
+        <div class="win"><span class="checkmark">✓</span><span class="text"><strong>Voltage Co.</strong> went live in production at 6:14 PM. Zero rollback. Onboarding kickoff tomorrow.</span></div>
+        <div class="win"><span class="checkmark">✓</span><span class="text">Mira closed <strong>Atlas Cooperative</strong> ($240k) on a Sunday call. The handshake email landed at 11:47 PM.</span></div>
+        <div class="win"><span class="checkmark">✓</span><span class="text">QA cleared the Q2 release — <strong>0 P0s, 2 P3s</strong>. Cleanest cut in 7 quarters.</span></div>
+        <div class="win"><span class="checkmark">✓</span><span class="text"><strong>Nora's onboarding</strong> wrapped a week ahead. Already shipping in <code>src/agent/router</code>.</span></div>
+        <div class="win"><span class="checkmark">✓</span><span class="text">Stripe weekly closed at <strong>$84.2k</strong> — fourth straight week above $80k. Comfortable Q2 trajectory.</span></div>
+        <div class="win"><span class="checkmark">✓</span><span class="text">Sam shipped the auth migration with a <strong>54-line PR</strong>. The rollback plan was three commits.</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─────── Sidebar ─────── -->
+  <aside class="briefing-side">
+
+    <div class="first-thing">
+      <div class="label">Your first thing today</div>
+      <h3>Reply to Lattice Health by 10 AM.</h3>
+      <p>Their legal review wraps tomorrow. A short "we're ready when you are" keeps the proposal on Friday's close list.</p>
+      <div class="actions">
+        <button class="a-btn primary" data-action="draft">Draft reply</button>
+        <button class="a-btn" data-action="snooze1">Snooze 1h</button>
+      </div>
+    </div>
+
+    <div class="weather-card side-card">
+      <div class="weather-glyph"></div>
+      <div>
+        <div class="temp">62°</div>
+        <div class="desc">Light fog · clearing by 11</div>
+      </div>
+    </div>
+
+    <div class="side-card">
+      <h4>Quick actions</h4>
+      <div class="quick-action" data-action="generatePlan"><span>✦ Generate next week's plan</span><span class="arr">→</span></div>
+      <div class="quick-action" data-action="standup"><span>Post standup digest</span><span class="arr">→</span></div>
+      <div class="quick-action" data-action="snooze"><span>Snooze whole briefing 1h</span><span class="arr">→</span></div>
+      <div class="quick-action" data-action="email"><span>Email me a copy at 7 PM</span><span class="arr">→</span></div>
+    </div>
+
+    <div class="side-card">
+      <h4>Connected sources</h4>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;color:var(--ink-soft);">
+          <span>Stripe</span><span style="font-family:var(--mono);font-size:11px;color:var(--sage);">live</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:var(--ink-soft);">
+          <span>Gmail</span><span style="font-family:var(--mono);font-size:11px;color:var(--sage);">live</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:var(--ink-soft);">
+          <span>Linear</span><span style="font-family:var(--mono);font-size:11px;color:var(--sage);">live</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:var(--ink-soft);">
+          <span>GitHub</span><span style="font-family:var(--mono);font-size:11px;color:var(--sage);">live</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:var(--ink-soft);">
+          <span>Calendar</span><span style="font-family:var(--mono);font-size:11px;color:var(--sage);">live</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;font-family:var(--serif);font-style:italic;color:var(--muted);font-size:14px;line-height:1.4;padding:14px 8px;">
+      "What gets your attention<br/>shapes your week."
+      <div style="font-family:var(--mono);font-style:normal;font-size:10.5px;color:var(--muted-2);margin-top:6px;letter-spacing:0.06em;">— quiver, vol. IV</div>
+    </div>
+
+  </aside>
+
+</main>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+(() => {
+  // ─────── Email digest ───────
+  const EMAILS = [
+    { from: 'Pioneer Robotics — Sarah Chen', subject: 'Re: Pricing 2-pager and onboarding timeline', snippet: 'Quick one — the team is ready to move forward, just need the term sheet by Wednesday so legal can…', tag: 'urgent', ago: '2h', av: 'S', avBg: '#1f2937' },
+    { from: 'Lattice Health — David Park', subject: 'Procurement asked for a SOC 2 letter', snippet: 'Hey, our procurement team had one last item on the list. Can you send the SOC 2 attestation letter to…', tag: 'warm', ago: '4h', av: 'D', avBg: '#0ea5e9' },
+    { from: 'Foundry Group — Thomas Brun', subject: 'Loved the demo recording — sharing internally', snippet: 'Just to close the loop: I forwarded the recording to two engineering directors. They\'re penciled in for…', tag: 'calm', ago: '14h', av: 'T', avBg: '#dc2626' },
+    { from: 'Ironclad Mfg — Priya Anand', subject: 'Term sheet v2 attached', snippet: 'Here\'s our redline. Two small changes on the indemnification and one substantial on the data residency…', tag: 'urgent', ago: '18h', av: 'P', avBg: '#475569' },
+    { from: 'Mosaic Health — Lin Chen', subject: 'Intro to procurement (cc\'d)', snippet: 'Looping in our head of procurement. They have time this Thursday or next Monday for a first call…', tag: 'fyi', ago: '1d', av: 'L', avBg: '#7c3aed' }
+  ];
+  const dgEl = document.getElementById('digest');
+  dgEl.innerHTML = EMAILS.map((e, i) => `
+    <div class="digest-item" data-i="${i}">
+      <span class="digest-av" style="background:${e.avBg}">${e.av}</span>
+      <div>
+        <div class="digest-meta"><span class="digest-from">${e.from}</span> · ${e.ago} ago</div>
+        <div class="digest-subject">${e.subject}</div>
+        <div class="digest-snippet">${e.snippet}</div>
+      </div>
+      <span class="digest-tag ${e.tag}">${e.tag === 'urgent' ? 'reply today' : e.tag === 'warm' ? 'this week' : e.tag === 'calm' ? 'reviewed' : 'fyi'}</span>
+    </div>
+  `).join('');
+  dgEl.querySelectorAll('.digest-item').forEach(item => {
+    const e = EMAILS[+item.dataset.i];
+    item.addEventListener('click', () => {
+      toast({ kind: e.tag === 'urgent' ? 'urgent' : 'warn', title: e.subject, body: `From <strong>${e.from}</strong> · Opening Gmail thread…` });
+    });
+  });
+
+  // ─────── Stuck issues ───────
+  const STUCK = [
+    { id: 'ENG-1284', title: 'Fix flaky test in payment-rollback path', who: 'Mira O.', whoBg: '#f97316', age: '5d', ageClass: '' },
+    { id: 'ENG-1271', title: 'Refactor session token rotation (security review feedback)', who: 'Sam D.', whoBg: '#10b981', age: '3d', ageClass: 'warm' },
+    { id: 'GROW-462', title: 'Wire Mixpanel funnel to onboarding step 3', who: 'Jules K.', whoBg: '#a855f7', age: '4d', ageClass: '' },
+    { id: 'ENG-1268', title: 'Migrate cron worker to durable queue', who: 'Sam D.', whoBg: '#10b981', age: '6d', ageClass: '' },
+    { id: 'DESIGN-118', title: 'Settings page redesign — needs eng pairing', who: 'Nora L.', whoBg: '#0ea5e9', age: '2d', ageClass: 'warm' }
+  ];
+  document.getElementById('stuck').innerHTML = STUCK.map((s, i) => `
+    <div class="stuck-row" data-i="${i}">
+      <div>
+        <div class="id">${s.id}</div>
+        <div class="title">${s.title}</div>
+      </div>
+      <span class="who"><span class="av" style="background:${s.whoBg}">${s.who[0]}</span>${s.who}</span>
+      <span class="age ${s.ageClass}">stuck ${s.age}</span>
+      <button class="nudge" data-i="${i}">Nudge</button>
+    </div>
+  `).join('');
+  document.querySelectorAll('.stuck-row').forEach(row => {
+    const s = STUCK[+row.dataset.i];
+    row.querySelector('.nudge').addEventListener('click', e => {
+      e.stopPropagation();
+      toast({ kind: 'success', title: 'Nudge sent', body: `Sent ${s.who} a gentle Slack DM about <strong>${s.id}</strong>.` });
+    });
+    row.addEventListener('click', () => {
+      toast({ title: s.id, body: `<strong>${s.title}</strong> · stuck ${s.age} · assigned ${s.who}` });
+    });
+  });
+
+  // ─────── Schedule ───────
+  const NOW_HOUR = 8 * 60 + 42;  // 8:42 AM
+  const SCHED = [
+    { time: '7:30 AM', dur: '30m', title: 'Morning run', desc: 'Bay-side loop · Strava', source: 'CAL', t: 7*60 + 30 },
+    { time: '9:00 AM', dur: '15m', title: 'Sync with Mira', desc: 'Pipeline review · 1:1', source: 'GMEET', t: 9*60 },
+    { time: '10:00 AM', dur: '45m', title: 'Lattice Health follow-up', desc: 'Review SOC 2 + draft reply', source: 'FOCUS', t: 10*60 },
+    { time: '11:30 AM', dur: '30m', title: 'Eng standup', desc: 'Fri release + Q3 capacity', source: 'GMEET', t: 11*60 + 30 },
+    { time: '2:00 PM', dur: '60m', title: 'Pioneer Robotics — term sheet review', desc: 'Joint with Sam · legal walks through redlines', source: 'ZOOM', t: 14*60 },
+    { time: '4:30 PM', dur: '20m', title: 'PR review block', desc: 'Clear the 4 PRs in queue', source: 'FOCUS', t: 16*60 + 30 }
+  ];
+  document.getElementById('schedule').innerHTML = SCHED.map((s, i) => {
+    const past = s.t + parseInt(s.dur) < NOW_HOUR;
+    const now = s.t <= NOW_HOUR && NOW_HOUR < s.t + parseInt(s.dur);
+    const cls = past ? 'past' : (now ? 'now' : '');
+    return `
+      <div class="sched-row ${cls}" data-i="${i}">
+        <div class="time">${s.time}<span class="dur">${s.dur}</span></div>
+        <div class="dot"></div>
+        <div>
+          <div class="title">${s.title}</div>
+          <div class="desc">${s.desc}</div>
+        </div>
+        <span class="source">${s.source}</span>
+      </div>
+    `;
+  }).join('');
+  document.querySelectorAll('.sched-row').forEach(r => {
+    const s = SCHED[+r.dataset.i];
+    r.addEventListener('click', () => toast({ title: s.title, body: `${s.time} · ${s.dur} · ${s.source.toLowerCase()}<br/>${s.desc}` }));
+  });
+
+  // ─────── PRs ───────
+  const PRS = [
+    { num: '#1284', title: 'Add session-token rotation primitive', files: '6 files', author: 'Sam', age: 'opened 18h ago', ageClass: 'urgent' },
+    { num: '#1271', title: 'Migrate cron worker to durable queue (RFC implementation)', files: '14 files', author: 'Sam', age: '2d ago', ageClass: 'urgent' },
+    { num: '#1268', title: 'Mixpanel funnel hooks for onboarding step 3', files: '4 files', author: 'Jules', age: '1d ago', ageClass: 'warm' },
+    { num: '#1262', title: 'Settings page redesign · scaffolding only', files: '22 files', author: 'Nora', age: '4h ago', ageClass: 'calm' }
+  ];
+  document.getElementById('prList').innerHTML = PRS.map((p, i) => `
+    <div class="pr-row" data-i="${i}">
+      <div>
+        <span class="num">${p.num} · @${p.author}</span>
+        <div class="title">${p.title}</div>
+      </div>
+      <span class="files">${p.files}</span>
+      <span class="age ${p.ageClass}">${p.age}</span>
+    </div>
+  `).join('');
+  document.querySelectorAll('.pr-row').forEach(r => {
+    const p = PRS[+r.dataset.i];
+    r.addEventListener('click', () => toast({ title: p.num + ' · ' + p.title, body: `${p.files} · @${p.author} · ${p.age}<br/>Opening on GitHub…` }));
+  });
+
+  // ─────── Toasts ───────
+  const toastBox = document.getElementById('toastBox');
+  function toast(opts) {
+    const { kind = '', title = '', body = '' } = (typeof opts === 'string') ? { body: opts } : opts;
+    const node = document.createElement('div');
+    node.className = `toast ${kind}`;
+    node.innerHTML = `<div class="t-title">${title}</div><div class="t-body">${body}</div>`;
+    toastBox.appendChild(node);
+    setTimeout(() => {
+      node.classList.add('fade');
+      setTimeout(() => node.remove(), 280);
+    }, 4200);
+  }
+
+  // ─────── Side actions + header ───────
+  const map = {
+    draft: { kind: 'success', title: 'Reply drafted', body: 'A short "we\'re ready when you are" is in your <strong>Lattice Health</strong> Gmail draft. Send when ready.' },
+    snooze1: { kind: 'warn', title: 'Snoozed', body: 'Lattice Health bumped to 11 AM.' },
+    generatePlan: { kind: '', title: 'Plan drafted', body: 'Next week\'s plan ready in Notion · 4 priorities · 14 commitments inferred from your week.' },
+    standup: { kind: 'success', title: 'Standup posted', body: '#eng-standup got a 4-line digest of yesterday\'s wins + today\'s focus.' },
+    snooze: { kind: 'warn', title: 'Briefing snoozed', body: 'See you in an hour. We\'ll re-pull fresh data.' },
+    email: { kind: 'success', title: 'Email scheduled', body: 'You\'ll get a copy of this briefing in your inbox at 7 PM.' }
+  };
+  document.querySelectorAll('[data-action]').forEach(b => {
+    b.addEventListener('click', () => {
+      const k = b.dataset.action;
+      if (map[k]) toast(map[k]);
+    });
+  });
+
+  document.getElementById('doneBtn').addEventListener('click', () => {
+    toast({ kind: 'success', title: 'Briefing done', body: '6 of 6 sections reviewed. See you tomorrow at 6:42 AM.' });
+  });
+  document.getElementById('snoozeBtn').addEventListener('click', () => {
+    toast({ kind: 'warn', title: 'Briefing snoozed', body: 'Re-pulling at 9:42 AM.' });
+  });
+
+})();
+</script>
+
+</body>
+</html>

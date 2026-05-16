@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-soft-editorial",
+  "name": "Soft Editorial",
+  "tagline": "Cormorant Garamond serif on warm paper with sage, blush, and lemon accents.",
+  "mood": [
+    "literary",
+    "elegant",
+    "quiet",
+    "warm-classical"
+  ],
+  "occasion": [
+    "editorial feature",
+    "longform brand story",
+    "gallery or museum",
+    "literary pitch",
+    "advisory deliverable",
+    "wedding / lifestyle media"
+  ],
+  "tone": [
+    "literary",
+    "considered",
+    "warm",
+    "magazine"
+  ],
+  "formality": "high",
+  "density": "low",
+  "palette": {
+    "paper": "#F2EEDF",
+    "ink": "#2A241B",
+    "pink": "#E1A4C2",
+    "lemon": "#D6DD63",
+    "blush": "#E8C9B6",
+    "sage": "#B7C7A8",
+    "description": "warm paper canvas with deep ink type, accented by soft pink, lemon, blush, and sage; reads like a Sunday editorial spread"
+  },
+  "typography": {
+    "display": "Cormorant Garamond",
+    "body": "Work Sans",
+    "style": "high-contrast garalde serif headlines paired with a clean humanist sans body"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel literary, elegant, and unhurried: editorial features, longform brand stories, gallery / museum decks, advisory deliverables, wedding / lifestyle media, founder essays. Equally good for tech, research, or business decks that want a Sunday-supplement warmth instead of corporate polish.",
+  "avoid_for": "Decks that need visual heat or punch — the warm-paper palette and Cormorant serif are intentionally quiet.",
+  "slide_count": 12,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/soft-editorial"
+}

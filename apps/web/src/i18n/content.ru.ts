@@ -7,6 +7,12 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
     description:
       'Генерация аудио для джинглов, музыкальных подложек, закадрового голоса и звуковых эффектов. Музыкальные запросы направляются в Suno V5 / Udio / Lyria, речь — в MiniMax TTS / FishAudio / ElevenLabs V3, а SFX — в ElevenLabs SFX или AudioCraft. На выходе — файл MP3/WAV в папке проекта.',
   },
+  'agent-browser': {
+    examplePrompt:
+      'Проверьте локальный preview Open Design через agent-browser: запустите или подключите CDP Chrome, откройте http://127.0.0.1:17573/, сообщите title, URL, видимый текст и сохраните screenshot.',
+    description:
+      'Автоматизация браузера для проверки локального preview Open Design. Подключается к проверенному CDP-эндпоинту Chrome, считывает отрендеренное состояние страницы, при необходимости кликает/вводит текст и сохраняет screenshot.',
+  },
   'blog-post': {
     examplePrompt:
       'Развернутая статья / пост для блога — masthead, hero-изображение-заглушка, основной текст с иллюстрациями и врезками с цитатами, строка автора, связанные материалы.',
@@ -49,6 +55,10 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   'eng-runbook': {
     examplePrompt:
       'Напишите runbook для нашего сервиса аутентификации — алерты, дашборды, стандартные процедуры, график on-call.',
+  },
+  'faq-page': {
+    examplePrompt:
+      'Страница FAQ со складными секциями-аккордеонами, поиском и фильтрацией по категориям.',
   },
   'finance-report': {
     examplePrompt:
@@ -236,6 +246,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   kraken: 'Криптотрейдинг. Темный UI с фиолетовым акцентом, насыщенные данными дашборды.',
   lamborghini: 'Бренд суперкаров. Абсолютно черные поверхности, золотые акценты, драматичная капительная типографика.',
   'linear-app': 'Управление проектами. Ультраминимализм, точность, фиолетовый акцент.',
+  loom: 'Асинхронные видеосообщения. Фиолетовый primary, малиновый акцент, светлый UI с белыми поверхностями для видеосвязи.',
   lovable: 'AI-конструктор full-stack-продуктов. Игривые градиенты, дружелюбная эстетика для разработчиков.',
   mastercard: 'Глобальная платежная сеть. Теплое кремовое полотно, орбитальные pill-формы, редакционное тепло.',
   meta: 'Тех-ритейл. Опора на фотографию, бинарные светлые/темные поля, CTA в Meta Blue.',
@@ -273,6 +284,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   theverge:
     'Тех-издание. Акценты acid mint и ultraviolet, display Manuka, карточки сюжетов в духе rave-flyer.',
   'together-ai': 'Open-source AI-инфраструктура. Технический язык, дизайн в духе blueprint.',
+  'trading-terminal': 'Финансовый терминал. Data-dense интерфейс в стиле Bloomberg, только темный режим.',
   uber: 'Платформа мобильности. Сильный черно-белый контраст, узкая типографика, городская энергия.',
   vercel: 'Frontend-деплой. Черно-белая точность, шрифт Geist.',
   vodafone: 'Глобальный телеком-бренд. Монументальная display-типографика в верхнем регистре, красные chapter bands Vodafone.',
@@ -285,6 +297,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   wise: 'Денежные переводы. Яркий зеленый акцент, дружелюбно и ясно.',
   'x-ai': 'AI-лаборатория Илона Маска. Строгий монохром, футуристический минимализм.',
   xiaohongshu: 'Lifestyle UGC-соцсеть. Единый фирменный красный, щедрый радиус, content-first.',
+  wechat: 'Мини-программы WeChat. Свежий зелёный (#07C160), PingFang SC, UI с чат-пузырями, панель вкладок.',
   zapier: 'Платформа автоматизации. Теплый оранжевый, дружелюбная иллюстративная подача.',
 };
 
@@ -304,95 +317,15 @@ export const RU_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Fintech & Crypto': 'Финтех и крипто',
   'E-Commerce & Retail': 'Электронная коммерция и ритейл',
   'Media & Consumer': 'Медиа и потребительские',
+  'Social & Messaging': 'Социальные сети и мессенджеры',
   Automotive: 'Автомобили',
   'Editorial & Print': 'Редакционные и печатные',
   'Editorial · Studio': 'Редакционная студия',
   'Retro & Nostalgic': 'Ретро и ностальгия',
   'Themed & Unique': 'Тематические и уникальные',
+  'Editorial / Personal / Publication': 'Редакционные / Персональные / Публикации',
   Uncategorized: 'Без категории',
 };
-
-export const RU_SKILL_IDS_WITH_EN_FALLBACK = [
-  'html-ppt-taste-brutalist',
-  'html-ppt-taste-editorial',
-  'orbit-general',
-  'orbit-github',
-  'orbit-gmail',
-  'orbit-linear',
-  'orbit-notion',
-  'social-media-dashboard',
-  'web-prototype-taste-brutalist',
-  'web-prototype-taste-editorial',
-  'web-prototype-taste-soft',
-] as const;
-
-export const RU_DESIGN_SYSTEM_IDS_WITH_EN_FALLBACK = [
-  'agentic',
-  'ant',
-  'application',
-  'arc',
-  'artistic',
-  'bento',
-  'bold',
-  'brutalism',
-  'cafe',
-  'canva',
-  'claymorphism',
-  'clean',
-  'colorful',
-  'contemporary',
-  'corporate',
-  'cosmic',
-  'creative',
-  'dashboard',
-  'discord',
-  'dithered',
-  'doodle',
-  'dramatic',
-  'duolingo',
-  'editorial',
-  'elegant',
-  'energetic',
-  'enterprise',
-  'expressive',
-  'fantasy',
-  'flat',
-  'friendly',
-  'futuristic',
-  'github',
-  'glassmorphism',
-  'gradient',
-  'huggingface',
-  'levels',
-  'lingo',
-  'luxury',
-  'material',
-  'minimal',
-  'modern',
-  'mono',
-  'neobrutalism',
-  'neon',
-  'neumorphism',
-  'openai',
-  'pacman',
-  'paper',
-  'perspective',
-  'premium',
-  'professional',
-  'publication',
-  'refined',
-  'retro',
-  'shadcn',
-  'simple',
-  'skeumorphism',
-  'sleek',
-  'spacious',
-  'storytelling',
-  'totality-festival',
-  'tetris',
-  'vibrant',
-  'vintage',
-] as const;
 
 export const RU_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Infographic: 'Инфографика',
@@ -415,9 +348,9 @@ export const RU_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Product: 'Продукт',
   'Short Form': 'Короткий формат',
   Travel: 'Путешествия',
+  'Live Artifact': 'Live-артефакт',
+  'VFX / HTML-in-Canvas': 'VFX / HTML-in-Canvas',
 };
-
-export const RU_PROMPT_TEMPLATE_IDS_WITH_EN_FALLBACK = [] as const;
 
 export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   '3d': '3D',
@@ -474,6 +407,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'key-visual': 'Ключевой визуал',
   'kinetic-typography': 'Кинетическая типографика',
   'linear-style': 'Стиль Linear',
+  'live-artifact': 'Live-артефакт',
   logo: 'Логотип',
   lyubu: 'Люй Бу',
   map: 'Карта',
@@ -517,6 +451,25 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'website-to-video': 'Сайт-в-видео',
   wuxia: 'Уся',
   zhaoyun: 'Чжао Юнь',
+  dashboard: 'Дашборд',
+  data: 'Данные',
+  destruction: 'Разрушение',
+  displacement: 'Смещение',
+  hero: 'Главный герой',
+  'html-in-canvas': 'HTML-в-Canvas',
+  iphone: 'iPhone',
+  keynote: 'Keynote',
+  liquid: 'Жидкость',
+  'liquid-glass': 'Liquid Glass',
+  macbook: 'MacBook',
+  magnetic: 'Магнитный',
+  particles: 'Частицы',
+  portal: 'Портал',
+  'product-demo': 'Демо продукта',
+  shader: 'Шейдер',
+  shatter: 'Раскалывание',
+  text: 'Текст',
+  webgl: 'WebGL',
 };
 
 export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>> = {

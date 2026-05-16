@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt",
+  "title": "Html Ppt",
+  "version": "0.1.0",
+  "description": "HTML PPT Studio — author professional static HTML presentations in many styles, layouts, and animations, all driven by templates. Use when the user asks for a presentation, PPT, slides, keynote, deck, slideshow, \"幻灯片\", \"演讲稿\", \"做一份 PPT\", \"做一份 slides\", a reveal-style HTML deck, a 小红书 图文, or any kind of multi-slide pitch/report/sharing document that should look tasteful and be usable with keyboard navigation. Triggers include keywords like \"presentation\", \"ppt\", \"slides\", \"deck\", \"keynote\", \"reveal\", \"slideshow\", \"幻灯片\", \"演讲稿\", \"分享稿\", \"小红书图文\", \"talk slides\", \"pitch deck\", \"tech sharing\", \"technical presentation\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "ppt",
+    "slides",
+    "presentation",
+    "keynote",
+    "reveal",
+    "slideshow",
+    "untitled",
+    "talk-slides",
+    "pitch-deck",
+    "tech-sharing",
+    "technical-presentation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "featured": 19,
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use html-ppt to create a 12-page HTML PPT. First confirm three things with me: content/page count/audience, theme choice (recommend 2-3 from the 36 available themes), and the starting full-deck template (choose from pitch-deck, tech-sharing, weekly-report, xhs-post, or presenter-mode-reveal). After alignment, start writing the slides.",
+        "zh-CN": "用 html-ppt 做一份 12 页的 HTML PPT。先帮我确认三件事：内容/页数/受众、主题（从 36 套里推荐 2-3 个）、起点全 deck 模板（pitch-deck / tech-sharing / weekly-report / xhs-post / presenter-mode-reveal 任选一个），对齐之后再开始写 slides。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/base.css",
+        "./assets/fonts.css",
+        "./assets/runtime.js",
+        "./references/animations.md",
+        "./references/authoring-guide.md",
+        "./references/full-decks.md",
+        "./references/layouts.md",
+        "./references/presenter-mode.md",
+        "./references/themes.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

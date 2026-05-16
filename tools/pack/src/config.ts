@@ -20,6 +20,8 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
 export type ToolPackCliOptions = {
+  appVersion?: string;
+  cacheDir?: string;
   containerized?: boolean;
   dir?: string;
   expr?: string;
@@ -49,10 +51,12 @@ export type ToolPackRoots = {
     namespaceBaseRoot: string;
     namespaceRoot: string;
   };
+  cacheRoot: string;
   toolPackRoot: string;
 };
 
 export type ToolPackConfig = {
+  appVersion?: string;
   containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
@@ -68,6 +72,19 @@ export type ToolPackConfig = {
   roots: ToolPackRoots;
   silent: boolean;
   signed: boolean;
+  telemetryRelayUrl?: string;
+  /**
+   * PostHog product-analytics ingest key, sourced from process.env.POSTHOG_KEY
+   * at packaging time. Baked into open-design-config.json so the packaged
+   * daemon can read it as POSTHOG_KEY env at launch — only official Open
+   * Design builds (CI with the secret set) ship with this; forks compiling
+   * locally produce binaries that omit the key and the integration
+   * short-circuits cleanly. Apache-2.0 keeps the bundle public, but `phc_`
+   * keys are write-only event ingest keys (cannot read your project data),
+   * so embedding them in the binary is the PostHog-recommended pattern.
+   */
+  posthogKey?: string;
+  posthogHost?: string;
   to: ToolPackBuildOutput;
   webOutputMode: ToolPackWebOutputMode;
   workspaceRoot: string;
@@ -87,12 +104,67 @@ function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCo
   throw new Error(`unsupported mac --mac-compression value: ${value}`);
 }
 
+function resolveToolPackAppVersion(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) throw new Error("--app-version must not be empty");
+  if (/\s/.test(normalized)) throw new Error(`--app-version must not contain whitespace: ${value}`);
+  return normalized;
+}
+
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
-  // Standalone web output is wired for mac first; other platforms fall back to server mode until their paths are enabled.
-  if (platform !== "mac") return "server";
+  // Standalone web output is wired for desktop packaged platforms; Linux stays on
+  // the existing server output until its AppImage resource path is optimized.
+  if (platform === "linux") return "server";
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
+}
+
+function resolveToolPackPosthogKey(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  // PostHog public keys start with `phc_`. We don't hard-fail on other
+  // shapes — third-party PostHog deployments may use different prefixes —
+  // but flag obviously-wrong values (whitespace, control chars) so a
+  // misconfigured CI secret doesn't silently bake garbage into the bundle.
+  if (/[\s\x00-\x1f]/.test(normalized)) {
+    throw new Error(`POSTHOG_KEY contains whitespace or control chars: ${value}`);
+  }
+  return normalized;
+}
+
+function resolveToolPackPosthogHost(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`POSTHOG_HOST must be an absolute URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`POSTHOG_HOST must be http(s): ${value}`);
+  }
+  return normalized.replace(/\/+$/, "");
+}
+
+function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`OPEN_DESIGN_TELEMETRY_RELAY_URL must be an absolute https URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`OPEN_DESIGN_TELEMETRY_RELAY_URL must use https: ${value}`);
+  }
+  return normalized.replace(/\/+$/, "");
 }
 
 function resolveElectronVersion(workspaceRoot: string): string {
@@ -128,12 +200,14 @@ export function resolveToolPackConfig(
     namespace: options.namespace ?? SIDECAR_DEFAULTS.namespace,
   });
   const toolPackRoot = resolve(options.dir ?? join(WORKSPACE_ROOT, ".tmp", "tools-pack"));
+  const cacheRoot = resolve(options.cacheDir ?? join(toolPackRoot, "cache"));
   const outputRoot = join(toolPackRoot, "out");
   const outputPlatformRoot = join(outputRoot, platform);
   const outputNamespaceRoot = join(outputPlatformRoot, "namespaces", namespace);
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
 
   return {
+    appVersion: resolveToolPackAppVersion(options.appVersion),
     containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
@@ -153,6 +227,7 @@ export function resolveToolPackConfig(
         namespaceBaseRoot: runtimeNamespaceBaseRoot,
         namespaceRoot: join(runtimeNamespaceBaseRoot, namespace),
       },
+      cacheRoot,
       toolPackRoot,
     },
     removeData: options.removeData === true,
@@ -161,6 +236,9 @@ export function resolveToolPackConfig(
     removeSidecars: options.removeSidecars === true,
     silent: options.silent !== false,
     signed: options.signed === true,
+    telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
+    posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
+    posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,

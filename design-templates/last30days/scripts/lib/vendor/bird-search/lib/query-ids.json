@@ -1,0 +1,20 @@
+{
+  "CreateTweet": "nmdAQXJDxw6-0KKF2on7eA",
+  "CreateRetweet": "LFho5rIi4xcKO90p9jwG7A",
+  "CreateFriendship": "8h9JVdV8dlSyqyRDJEPCsA",
+  "DestroyFriendship": "ppXWuagMNXgvzx6WoXBW0Q",
+  "FavoriteTweet": "lI07N6Otwv1PhnEgXILM7A",
+  "DeleteBookmark": "Wlmlj2-xzyS1GN3a6cj-mQ",
+  "TweetDetail": "_NvJCnIjOW__EP5-RF197A",
+  "SearchTimeline": "6AAys3t42mosm_yTI_QENg",
+  "Bookmarks": "RV1g3b8n_SGOHwkqKYSCFw",
+  "BookmarkFolderTimeline": "KJIQpsvxrTfRIlbaRIySHQ",
+  "Following": "mWYeougg_ocJS2Vr1Vt28w",
+  "Followers": "SFYY3WsgwjlXSLlfnEUE4A",
+  "Likes": "ETJflBunfqNa1uE1mBPCaw",
+  "ExploreSidebar": "lpSN4M6qpimkF4nRFPE3nQ",
+  "ExplorePage": "kheAINB_4pzRDqkzG3K-ng",
+  "GenericTimelineById": "uGSr7alSjR9v6QJAIaqSKQ",
+  "TrendHistory": "Sj4T-jSB9pr0Mxtsc1UKZQ",
+  "AboutAccountQuery": "zs_jFPFT78rBpXv9Z3U2YQ"
+}

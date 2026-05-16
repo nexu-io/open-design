@@ -1,0 +1,79 @@
+---
+/*
+ * /skills/mode/<slug>/ — every skill that emits a given artifact mode
+ * (deck, prototype, template, image, video, audio, design-system, utility).
+ *
+ * One static page per distinct `od.mode` value. Mode is the strongest
+ * mental-model facet ("I want a deck-builder") so this is the primary
+ * faceted view; scenario/category live alongside.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import SkillRow from '../../../_components/skill-row.astro';
+import {
+  getSkillModeIndex,
+  getSkillsForMode,
+  type TagDescriptor,
+} from '../../../_lib/catalog';
+
+export async function getStaticPaths() {
+  const tags = await getSkillModeIndex();
+  return tags.map((tag) => ({
+    params: { mode: tag.slug },
+    props: { tag },
+  }));
+}
+
+interface Props {
+  tag: TagDescriptor;
+}
+
+const { tag } = Astro.props as Props;
+const { records, label } = await getSkillsForMode(tag.slug);
+const heading = label ?? tag.label;
+
+const title = `${heading} skills — ${records.length} Open Design ${heading.toLowerCase()} agents`;
+const description =
+  `Every Open Design skill that produces ${heading.toLowerCase()} artifacts. ` +
+  `${records.length} ready-to-run, system-aware agents — installable through ` +
+  `the daemon, brand-locked through any DESIGN.md system.`;
+
+const url = new URL(`/skills/mode/${tag.slug}/`, Astro.site).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: `${heading} skills · Open Design`,
+  description,
+  url,
+  numberOfItems: records.length,
+};
+---
+
+<Layout title={title} description={description} active="skills" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/skills/">Skills</a>
+      <span aria-hidden="true">/</span>
+      <span>Mode</span>
+      <span aria-hidden="true">/</span>
+      <span class="crumb-active">{heading}</span>
+    </nav>
+    <span class="label">Catalog · Nº 01 · Filter</span>
+    <h1 class="display">
+      <em>{heading}</em> — {records.length} brand-grade {heading.toLowerCase()} agents<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      Filtered to <code>od.mode: {label ?? tag.label}</code>. Every skill below
+      reads the active <code>DESIGN.md</code> as a system prompt, so it inherits
+      colors, type, and spacing from any portable system you pair it with.
+    </p>
+    <p class="filter-clear">
+      <a href="/skills/">← All skills ({tag.count} of total)</a>
+    </p>
+  </header>
+
+  <section class="catalog-grid catalog-grid-skills" aria-label={`${heading} skills`}>
+    <ol>
+      {records.map((s, idx) => <SkillRow skill={s} index={idx} />)}
+    </ol>
+  </section>
+</Layout>

@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAW GRID — Neobrutalist Presentation Template</title>
+<style>
+/* =============================================
+   RAW GRID — Neobrutalist Presentation Template
+   ============================================= */
+
+/* --- RESET & BASE --- */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --black: #0a0a0a;
+  --white: #ffffff;
+  --pink: #f2d4cf;
+  --green: #e5edd6;
+  --gray: #f5f5f5;
+  --darkgray: #333333;
+  --border: 3px solid var(--black);
+  --shadow: 6px 6px 0 var(--black);
+  --shadow-sm: 4px 4px 0 var(--black);
+}
+html, body {
+  width: 100%; height: 100%;
+  font-family: 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  background: var(--white);
+  color: var(--black);
+  overflow: hidden;
+}
+
+/* --- SLIDE SYSTEM --- */
+.slide-deck {
+  width: 100vw; height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+.slide {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: none;
+  background: var(--white);
+  overflow: hidden;
+}
+.slide.active { display: flex; }
+.slide-content {
+  width: 100%; height: 100%;
+  overflow: hidden;
+}
+
+/* --- TYPOGRAPHY --- */
+.t-display {
+  font-size: clamp(48px, 7vw, 96px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+.t-headline {
+  font-size: clamp(32px, 4.5vw, 64px);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.t-title {
+  font-size: clamp(24px, 2.5vw, 36px);
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+.t-subtitle {
+  font-size: clamp(16px, 1.4vw, 22px);
+  font-weight: 700;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.t-body {
+  font-size: clamp(16px, 1.3vw, 20px);
+  font-weight: 500;
+  line-height: 1.6;
+}
+.t-caption {
+  font-size: clamp(11px, 1vw, 13px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.t-number {
+  font-size: clamp(64px, 8vw, 120px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+/* --- UTILITIES --- */
+.b { border: var(--border); }
+.b-t { border-top: var(--border); }
+.b-b { border-bottom: var(--border); }
+.b-l { border-left: var(--border); }
+.b-r { border-right: var(--border); }
+.bg-pink { background: var(--pink); }
+.bg-green { background: var(--green); }
+.bg-black { background: var(--black); }
+.bg-gray { background: var(--gray); }
+.bg-white { background: var(--white); }
+.c-white { color: var(--white); }
+.c-black { color: var(--black); }
+.pad-lg { padding: clamp(32px, 4vw, 64px); }
+.pad-md { padding: clamp(20px, 2.5vw, 40px); }
+.pad-sm { padding: clamp(12px, 1.5vw, 20px); }
+.shadow { box-shadow: var(--shadow); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.w-100 { width: 100%; }
+.h-100 { height: 100%; }
+.flex { display: flex; }
+.col { flex-direction: column; }
+.center { align-items: center; justify-content: center; }
+.grow { flex: 1; }
+.gap-sm { gap: clamp(8px, 1vw, 16px); }
+.gap-md { gap: clamp(16px, 2vw, 32px); }
+.gap-lg { gap: clamp(24px, 3vw, 48px); }
+.arrow::before { content: "\2192\00a0"; }
+.grid { display: grid; }
+
+/* --- SPECIAL COMPONENTS --- */
+.label {
+  display: inline-block;
+  background: var(--black);
+  color: var(--white);
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.line {
+  width: 60px;
+  height: 4px;
+  background: var(--black);
+}
+.line-w { width: 100%; }
+.line-v {
+  width: 4px;
+  height: 60px;
+  background: var(--black);
+}
+
+/* =============================================
+   SLIDE 1 — TITLE / COVER
+   ============================================= */
+.s1 .slide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+.s1-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--pink);
+  border-right: var(--border);
+}
+.s1-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.s1-logo-box {
+  width: 48px; height: 48px;
+  border: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  background: var(--white);
+}
+.s1-brand-text {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.s1-headline { margin-top: auto; margin-bottom: auto; }
+.s1-cta .label { cursor: pointer; }
+.s1-right {
+  display: flex;
+  flex-direction: column;
+}
+.s1-list-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 clamp(24px, 3vw, 48px);
+  border-bottom: var(--border);
+  font-size: clamp(18px, 2vw, 28px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.s1-list-item:last-child { border-bottom: none; }
+.s1-list-item:hover { background: var(--green); }
+.s1-list-item::before {
+  content: "\2192\00a0";
+  margin-right: 12px;
+  font-size: 0.85em;
+}
+
+/* =============================================
+   SLIDE 2 — SPLIT FEATURE
+   ============================================= */
+.s2 .slide-content {
+  display: grid;
+  grid-template-columns: 45% 55%;
+  height: 100%;
+}
+.s2-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  border-right: var(--border);
+}
+.s2-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: clamp(24px, 3vw, 48px);
+}
+.s2-right {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+}
+.s2-block {
+  padding: clamp(24px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.s2-block:first-child { border-bottom: var(--border); }
+
+/* =============================================
+   SLIDE 3 — DATA BAR CHART
+   ============================================= */
+.s3 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s3-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s3-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.s3-chart-area {
+  padding: clamp(24px, 3vw, 48px);
+  border-right: var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.s3-chart-title {
+  margin-bottom: 24px;
+}
+.s3-bar-group {
+  margin-bottom: 20px;
+}
+.s3-bar-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.s3-bar-track {
+  width: 100%;
+  height: 32px;
+  border: var(--border);
+  background: var(--white);
+  position: relative;
+}
+.s3-bar-fill {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  transition: width 0.8s ease;
+}
+.s3-bar-fill.pink { background: var(--pink); }
+.s3-bar-fill.green { background: var(--green); }
+.s3-bar-fill.black { background: var(--black); color: var(--white); }
+.s3-insights {
+  padding: clamp(24px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(16px, 2vw, 32px);
+}
+.s3-stat-box {
+  border: var(--border);
+  padding: clamp(16px, 2vw, 28px);
+  background: var(--white);
+}
+.s3-stat-number {
+  font-size: clamp(36px, 4vw, 56px);
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.s3-stat-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* =============================================
+   SLIDE 4 — 4-CARD GRID
+   ============================================= */
+.s4 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s4-header {
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.s4-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.s4-card {
+  padding: clamp(24px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.s4-card:nth-child(1) { border-right: var(--border); border-bottom: var(--border); background: var(--white); }
+.s4-card:nth-child(2) { border-bottom: var(--border); background: var(--green); }
+.s4-card:nth-child(3) { border-right: var(--border); background: var(--pink); }
+.s4-card:nth-child(4) { background: var(--gray); }
+.s4-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.s4-num {
+  font-size: clamp(40px, 5vw, 72px);
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.35;
+}
+.s4-icon {
+  width: 48px; height: 48px;
+  border: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 900;
+  background: var(--white);
+}
+
+/* =============================================
+   SLIDE 5 — FULL IMAGE + TEXT OVERLAY
+   ============================================= */
+.s5 .slide-content {
+  display: grid;
+  grid-template-columns: 55% 45%;
+  height: 100%;
+}
+.s5-image-area {
+  background: var(--black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.s5-image-placeholder {
+  width: 80%;
+  height: 70%;
+  border: 4px solid var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+.s5-text-area {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--white);
+}
+.s5-badge {
+  align-self: flex-start;
+  margin-bottom: clamp(24px, 3vw, 40px);
+}
+
+/* =============================================
+   SLIDE 6 — TIMELINE / PROCESS
+   ============================================= */
+.s6 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s6-header {
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s6-body {
+  flex: 1;
+  display: flex;
+  padding: 0 clamp(32px, 4vw, 64px);
+}
+.s6-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(24px, 3vw, 48px) clamp(16px, 2vw, 28px);
+  position: relative;
+}
+.s6-step + .s6-step { border-left: var(--border); }
+.s6-step-num {
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: clamp(16px, 2vw, 28px);
+  opacity: 0.2;
+}
+.s6-step-title { margin-bottom: 12px; }
+.s6-connector {
+  position: absolute;
+  top: clamp(40px, 5vw, 64px);
+  right: -18px;
+  width: 32px; height: 32px;
+  border: var(--border);
+  background: var(--black);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 900;
+  z-index: 10;
+}
+.s6-step:nth-child(1) .s6-step-num { color: var(--black); }
+.s6-step:nth-child(2) .s6-step-num { color: var(--black); }
+.s6-step:nth-child(3) { background: var(--green); }
+.s6-step:nth-child(4) { background: var(--pink); }
+
+/* =============================================
+   SLIDE 7 — PIE / DONUT CHART + METRICS
+   ============================================= */
+.s7 .slide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+.s7-left {
+  padding: clamp(32px, 4vw, 64px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-right: var(--border);
+}
+.s7-donut-container {
+  position: relative;
+  width: clamp(200px, 22vw, 320px);
+  height: clamp(200px, 22vw, 320px);
+  margin-bottom: clamp(24px, 3vw, 40px);
+}
+.s7-donut-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.s7-donut-value {
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 900;
+  line-height: 1;
+}
+.s7-donut-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+.s7-legend {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.s7-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.s7-legend-swatch {
+  width: 16px; height: 16px;
+  border: var(--border);
+}
+.s7-right {
+  display: flex;
+  flex-direction: column;
+}
+.s7-metric-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s7-metric-row:last-child { border-bottom: none; }
+.s7-metric-num {
+  font-size: clamp(36px, 4vw, 56px);
+  font-weight: 900;
+  min-width: 120px;
+}
+.s7-metric-info { margin-left: clamp(16px, 2vw, 32px); }
+.s7-metric-title { margin-bottom: 4px; }
+
+/* =============================================
+   SLIDE 8 — STATEMENT / QUOTE
+   ============================================= */
+.s8 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s8-top {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--green);
+  border-bottom: var(--border);
+  position: relative;
+}
+.s8-quote-mark {
+  position: absolute;
+  top: clamp(20px, 3vw, 40px);
+  left: clamp(32px, 4vw, 64px);
+  font-size: clamp(80px, 12vw, 160px);
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.15;
+}
+.s8-statement {
+  position: relative;
+  z-index: 2;
+  max-width: 900px;
+}
+.s8-bottom {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: 140px;
+}
+.s8-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-right: var(--border);
+}
+.s8-stat:last-child { border-right: none; }
+.s8-stat-num {
+  font-size: clamp(24px, 2.5vw, 36px);
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+.s8-stat:nth-child(1) { background: var(--white); }
+.s8-stat:nth-child(2) { background: var(--pink); }
+.s8-stat:nth-child(3) { background: var(--gray); }
+.s8-stat:nth-child(4) { background: var(--black); color: var(--white); }
+
+/* =============================================
+   SLIDE 9 — COMPARISON TABLE
+   ============================================= */
+.s9 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s9-header {
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.s9-table-wrap {
+  flex: 1;
+  padding: clamp(24px, 3vw, 48px) clamp(32px, 4vw, 64px);
+  overflow: auto;
+}
+.s9-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.s9-table th {
+  border: var(--border);
+  padding: clamp(12px, 1.5vw, 20px);
+  font-size: clamp(12px, 1.1vw, 14px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+  background: var(--black);
+  color: var(--white);
+}
+.s9-table td {
+  border: var(--border);
+  padding: clamp(12px, 1.5vw, 20px);
+  font-size: clamp(14px, 1.2vw, 17px);
+  font-weight: 600;
+}
+.s9-table tr:nth-child(even) td { background: var(--gray); }
+.s9-table tr:hover td { background: var(--green); }
+
+/* =============================================
+   SLIDE 10 — CLOSING / CTA
+   ============================================= */
+.s10 .slide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+.s10-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--pink);
+  border-right: var(--border);
+}
+.s10-right {
+  display: flex;
+  flex-direction: column;
+}
+.s10-r-top {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s10-r-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100px;
+}
+.s10-rb-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.s10-rb-block:first-child { border-right: var(--border); background: var(--green); }
+.s10-rb-block:last-child { background: var(--black); color: var(--white); }
+
+/* =============================================
+   PRINT
+   ============================================= */
+@media print {
+  /* print styles */
+  .slide { position: static; display: flex !important; page-break-after: always; }
+}
+</style>
+</head>
+<body>
+
+<div class="slide-deck" id="deck">
+
+<!-- ====== SLIDE 1: COVER ====== -->
+<div class="slide s1 active">
+  <div class="slide-content">
+    <div class="s1-left">
+      <div class="s1-brand">
+        <div class="s1-logo-box">RG</div>
+        <span class="s1-brand-text">RAW GRID</span>
+      </div>
+      <div class="s1-headline">
+        <div class="t-display">Cities.<br>Startups.</div>
+      </div>
+      <div class="s1-cta">
+        <span class="label arrow">Discover All Startups</span>
+      </div>
+    </div>
+    <div class="s1-right">
+      <div class="s1-list-item">San Francisco</div>
+      <div class="s1-list-item">New York</div>
+      <div class="s1-list-item bg-green">Cupertino</div>
+      <div class="s1-list-item">Menlo Park</div>
+      <div class="s1-list-item">Santa Clara</div>
+      <div class="s1-list-item">Mountain View</div>
+      <div class="s1-list-item">Sunnyvale</div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 2: SPLIT FEATURE ====== -->
+<div class="slide s2">
+  <div class="slide-content">
+    <div class="s2-left">
+      <div class="s2-meta">
+        <div class="line"></div>
+        <span class="t-caption">About The Platform</span>
+      </div>
+      <div class="t-headline" style="margin-bottom: 24px;">Connecting Founders With Opportunity</div>
+      <p class="t-body" style="max-width: 420px;">A centralized ecosystem designed to bridge the gap between emerging ventures and the resources they need to scale effectively across global markets.</p>
+    </div>
+    <div class="s2-right">
+      <div class="s2-block">
+        <span class="t-number">250+</span>
+        <span class="t-subtitle" style="margin-top: 8px;">Active Startups</span>
+        <p class="t-body" style="margin-top: 12px; opacity: 0.7;">Ventures currently enrolled and scaling through our network.</p>
+      </div>
+      <div class="s2-block bg-green">
+        <span class="t-number">14</span>
+        <span class="t-subtitle" style="margin-top: 8px;">Cities Covered</span>
+        <p class="t-body" style="margin-top: 12px; opacity: 0.7;">Metropolitan tech hubs across North America and Europe.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 3: BAR CHART ====== -->
+<div class="slide s3">
+  <div class="slide-content">
+    <div class="s3-header">
+      <span class="t-title">Quarterly Growth Metrics</span>
+      <span class="label">Fiscal Year 2026</span>
+    </div>
+    <div class="s3-body">
+      <div class="s3-chart-area">
+        <div class="t-subtitle s3-chart-title">Revenue by Quarter ($M)</div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Q1</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill pink" style="width: 45%;">$4.5M</div></div>
+        </div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Q2</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill green" style="width: 62%;">$6.2M</div></div>
+        </div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Q3</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill black" style="width: 78%;">$7.8M</div></div>
+        </div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Q4</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill pink" style="width: 91%;">$9.1M</div></div>
+        </div>
+      </div>
+      <div class="s3-insights">
+        <div class="s3-stat-box">
+          <div class="s3-stat-number">+47%</div>
+          <div class="s3-stat-label">Year over Year Growth</div>
+        </div>
+        <div class="s3-stat-box bg-green">
+          <div class="s3-stat-number">$27.6M</div>
+          <div class="s3-stat-label">Total Annual Revenue</div>
+        </div>
+        <div class="s3-stat-box bg-pink">
+          <div class="s3-stat-number">12.4K</div>
+          <div class="s3-stat-label">New User Signups</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 4: 4-CARD GRID ====== -->
+<div class="slide s4">
+  <div class="slide-content">
+    <div class="s4-header">
+      <span class="t-title">Core Services</span>
+      <span class="t-caption">What We Provide</span>
+    </div>
+    <div class="s4-grid">
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">01</span>
+          <div class="s4-icon">I</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Venture Funding</div>
+          <p class="t-body">Direct access to seed and series funding through our curated investor network.</p>
+        </div>
+      </div>
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">02</span>
+          <div class="s4-icon">II</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Mentorship</div>
+          <p class="t-body">One-on-one guidance from industry veterans who have built and exited companies.</p>
+        </div>
+      </div>
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">03</span>
+          <div class="s4-icon">III</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Workspace</div>
+          <p class="t-body">Flexible office arrangements in prime locations across all partner cities.</p>
+        </div>
+      </div>
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">04</span>
+          <div class="s4-icon">IV</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Community</div>
+          <p class="t-body">A tight-knit network of founders sharing resources, referrals, and support.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 5: IMAGE + TEXT ====== -->
+<div class="slide s5">
+  <div class="slide-content">
+    <div class="s5-image-area">
+      <div class="s5-image-placeholder">[ Image Placeholder ]</div>
+    </div>
+    <div class="s5-text-area">
+      <div class="label s5-badge">Featured</div>
+      <div class="t-headline" style="margin-bottom: 20px;">The Founders Lab</div>
+      <p class="t-body" style="margin-bottom: 20px;">An intensive twelve-week program designed to take early-stage concepts and transform them into market-ready products with validated traction.</p>
+      <p class="t-body" style="opacity: 0.7; margin-bottom: 32px;">Cohots launch every quarter with dedicated workspace, engineering support, and direct pipeline to investor demo days.</p>
+      <div class="line"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 6: TIMELINE ====== -->
+<div class="slide s6">
+  <div class="slide-content">
+    <div class="s6-header">
+      <div class="t-title">Application Process</div>
+    </div>
+    <div class="s6-body">
+      <div class="s6-step">
+        <span class="s6-step-num">01</span>
+        <div class="s6-connector">&rarr;</div>
+        <div class="t-subtitle s6-step-title">Submit</div>
+        <p class="t-body">Complete the online application with your pitch deck and team overview.</p>
+      </div>
+      <div class="s6-step">
+        <span class="s6-step-num">02</span>
+        <div class="s6-connector">&rarr;</div>
+        <div class="t-subtitle s6-step-title">Review</div>
+        <p class="t-body">Our committee evaluates fit, market potential, and team capability.</p>
+      </div>
+      <div class="s6-step">
+        <span class="s6-step-num">03</span>
+        <div class="s6-connector">&rarr;</div>
+        <div class="t-subtitle s6-step-title">Interview</div>
+        <p class="t-body">Shortlisted teams present to our panel of partners and alumni founders.</p>
+      </div>
+      <div class="s6-step">
+        <span class="s6-step-num">04</span>
+        <div class="t-subtitle s6-step-title">Onboard</div>
+        <p class="t-body">Accepted ventures join the next cohort with full access to all resources.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 7: DONUT CHART + METRICS ====== -->
+<div class="slide s7">
+  <div class="slide-content">
+    <div class="s7-left">
+      <div class="s7-donut-container">
+        <svg viewBox="0 0 200 200" width="100%" height="100%">
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#0a0a0a" stroke-width="24" stroke-dasharray="314 502" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#f2d4cf" stroke-width="24" stroke-dasharray="126 502" stroke-dashoffset="-314" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#e5edd6" stroke-width="24" stroke-dasharray="50 502" stroke-dashoffset="-440" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#0a0a0a" stroke-width="1.5" opacity="0.1"/>
+        </svg>
+        <div class="s7-donut-center">
+          <div class="s7-donut-value">63%</div>
+          <div class="s7-donut-label">Market Share</div>
+        </div>
+      </div>
+      <div class="s7-legend">
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-black"></div>Enterprise</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-pink"></div>Consumer</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-green"></div>Non-Profit</div>
+      </div>
+    </div>
+    <div class="s7-right">
+      <div class="s7-metric-row">
+        <div class="s7-metric-num">89%</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Retention Rate</div>
+          <p class="t-caption">Founders who renew after year one</p>
+        </div>
+      </div>
+      <div class="s7-metric-row bg-green">
+        <div class="s7-metric-num">3.2x</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Average ROI</div>
+          <p class="t-caption">Return on capital invested</p>
+        </div>
+      </div>
+      <div class="s7-metric-row">
+        <div class="s7-metric-num">156</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Jobs Created</div>
+          <p class="t-caption">Net new positions this quarter</p>
+        </div>
+      </div>
+      <div class="s7-metric-row bg-pink">
+        <div class="s7-metric-num">$42M</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Capital Deployed</div>
+          <p class="t-caption">Total funding distributed to date</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 8: STATEMENT / QUOTE ====== -->
+<div class="slide s8">
+  <div class="slide-content">
+    <div class="s8-top">
+      <div class="s8-quote-mark">"</div>
+      <div class="s8-statement">
+        <div class="t-headline" style="margin-bottom: 24px;">We don't incubate ideas. We accelerate the people bold enough to build them.</div>
+        <div class="line"></div>
+      </div>
+    </div>
+    <div class="s8-bottom">
+      <div class="s8-stat">
+        <span class="s8-stat-num">98%</span>
+        <span class="t-caption">Satisfaction</span>
+      </div>
+      <div class="s8-stat">
+        <span class="s8-stat-num">4.9</span>
+        <span class="t-caption">Avg Rating</span>
+      </div>
+      <div class="s8-stat">
+        <span class="s8-stat-num">500+</span>
+        <span class="t-caption">Alumni</span>
+      </div>
+      <div class="s8-stat">
+        <span class="s8-stat-num">$1B+</span>
+        <span class="t-caption">Valuation</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 9: COMPARISON TABLE ====== -->
+<div class="slide s9">
+  <div class="slide-content">
+    <div class="s9-header">
+      <span class="t-title">Plan Comparison</span>
+      <span class="label">Pricing Tiers</span>
+    </div>
+    <div class="s9-table-wrap">
+      <table class="s9-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Starter</th>
+            <th>Professional</th>
+            <th>Enterprise</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Workspace Access</td>
+            <td>Shared Desk</td>
+            <td>Dedicated Desk</td>
+            <td>Private Office</td>
+          </tr>
+          <tr>
+            <td>Mentor Hours</td>
+            <td>2 / Month</td>
+            <td>8 / Month</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td>Investor Introductions</td>
+            <td>Quarterly</td>
+            <td>Monthly</td>
+            <td>Weekly</td>
+          </tr>
+          <tr>
+            <td>Legal &amp; Accounting</td>
+            <td>Basic Templates</td>
+            <td>Guided Support</td>
+            <td>Full Service</td>
+          </tr>
+          <tr>
+            <td>Event Access</td>
+            <td>Online Only</td>
+            <td>In-Person</td>
+            <td>VIP &amp; Speaker</td>
+          </tr>
+          <tr>
+            <td>Support Response</td>
+            <td>48 Hours</td>
+            <td>24 Hours</td>
+            <td>4 Hours</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 10: CLOSING / CTA ====== -->
+<div class="slide s10">
+  <div class="slide-content">
+    <div class="s10-left">
+      <div class="t-display" style="margin-bottom: 24px;">Let's<br>Build.</div>
+      <p class="t-body" style="margin-bottom: 32px; max-width: 380px;">Ready to take your venture to the next level? Join the Raw Grid community and start scaling today.</p>
+      <span class="label arrow">Get Started Now</span>
+    </div>
+    <div class="s10-right">
+      <div class="s10-r-top">
+        <div class="t-title" style="margin-bottom: 20px;">Get In Touch</div>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Email:</strong> hello@rawgrid.studio</p>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Phone:</strong> +1 (555) 000-0000</p>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Location:</strong> 123 Innovation Drive, San Francisco</p>
+        <p class="t-body"><strong>Hours:</strong> Monday — Friday, 9:00 — 18:00</p>
+      </div>
+      <div class="s10-r-bottom">
+        <div class="s10-rb-block">Instagram</div>
+        <div class="s10-rb-block">LinkedIn</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /slide-deck -->
+
+<script>
+const slides = document.querySelectorAll('.slide');
+let current = 0;
+const total = slides.length;
+
+function showSlide(idx) {
+  slides[current].classList.remove('active');
+  current = Math.max(0, Math.min(idx, total - 1));
+  slides[current].classList.add('active');
+  /* slide change handler */
+}
+function nextSlide() { showSlide(current + 1); }
+function prevSlide() { showSlide(current - 1); }
+function firstSlide() { showSlide(0); }
+function lastSlide() { showSlide(total - 1); }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+  else if (e.key === 'Home') { e.preventDefault(); firstSlide(); }
+  else if (e.key === 'End') { e.preventDefault(); lastSlide(); }
+});
+
+let touchStartY = 0;
+document.addEventListener('touchstart', e => { touchStartY = e.changedTouches[0].screenY; });
+document.addEventListener('touchend', e => {
+  const touchEndY = e.changedTouches[0].screenY;
+  if (touchStartY - touchEndY > 50) nextSlide();
+  else if (touchEndY - touchStartY > 50) prevSlide();
+});
+</script>
+</body>
+</html>

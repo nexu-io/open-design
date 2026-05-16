@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Persisted event shape under test is `PersistedAgentEvent` from
 // packages/contracts/src/api/chat.ts (the discriminator is `kind`, the
 // thinking field is `text`). The daemon's claude-stream emits a different
@@ -17,6 +16,7 @@
 // because it returns the underlying CJS `module.exports` object.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,7 +46,37 @@ afterEach(() => {
   projectsRoot = null;
 });
 
-function setup(opts: { skipMkdir?: boolean } = {}): { db: any; projectsRoot: string } {
+type TranscriptLine = Record<string, unknown>;
+type TranscriptLines = TranscriptLine[];
+type PersistedAgentEvent =
+  | { kind: 'status'; label: string; detail?: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'thinking'; text: string }
+  | { kind: 'tool_use'; id: string; name: string; input: unknown }
+  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
+  | { kind: 'raw'; line: string };
+type ChatAttachment = { path: string; name: string; kind: string; size?: number };
+type ChatCommentAttachment = {
+  id: string;
+  order: number;
+  filePath: string;
+  elementId: string;
+  selector: string;
+  label: string;
+  comment: string;
+  currentText: string;
+  pagePosition: { x: number; y: number };
+  htmlHint: string;
+};
+
+function line(lines: TranscriptLines, index: number): TranscriptLine {
+  const item = lines[index];
+  if (!item) throw new Error(`missing transcript line ${index}`);
+  return item;
+}
+
+function setup(opts: { skipMkdir?: boolean } = {}): { db: Database.Database; projectsRoot: string } {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-tx-'));
   const db = openDatabase(tempDir);
   insertProject(db, {
@@ -62,16 +92,16 @@ function setup(opts: { skipMkdir?: boolean } = {}): { db: any; projectsRoot: str
   return { db, projectsRoot };
 }
 
-function readLines(filePath: string): any[] {
+function readLines(filePath: string): TranscriptLines {
   const raw = fs.readFileSync(filePath, 'utf8');
   expect(raw.endsWith('\n')).toBe(true);
   return raw
     .split('\n')
     .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l));
+    .map((l) => JSON.parse(l) as TranscriptLine) as TranscriptLines;
 }
 
-function seedConversation(db: any, opts: { id: string; createdAt: number; updatedAt?: number; title?: string | null }) {
+function seedConversation(db: Database.Database, opts: { id: string; createdAt: number; updatedAt?: number; title?: string | null }) {
   insertConversation(db, {
     id: opts.id,
     projectId: PROJECT_ID,
@@ -82,15 +112,15 @@ function seedConversation(db: any, opts: { id: string; createdAt: number; update
 }
 
 function seedMessage(
-  db: any,
+  db: Database.Database,
   conversationId: string,
   m: {
     id: string;
     role: 'user' | 'assistant';
     content?: string;
-    events?: any[];
-    attachments?: any[];
-    commentAttachments?: any[];
+    events?: PersistedAgentEvent[];
+    attachments?: ChatAttachment[];
+    commentAttachments?: ChatCommentAttachment[];
   },
 ) {
   upsertMessage(db, conversationId, {
@@ -115,7 +145,7 @@ describe('exportProjectTranscript', () => {
 
     const lines = readLines(result.path);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toEqual({
+    expect(line(lines, 0)).toEqual({
       kind: 'header',
       schemaVersion: 2,
       projectId: PROJECT_ID,
@@ -146,26 +176,26 @@ describe('exportProjectTranscript', () => {
     const lines = readLines(result.path);
 
     expect(lines).toHaveLength(4);
-    expect(lines[0].kind).toBe('header');
-    expect(lines[0].schemaVersion).toBe(2);
-    expect(lines[0].conversationCount).toBe(1);
-    expect(lines[0].messageCount).toBe(2);
-    expect(lines[1]).toEqual({
+    expect(line(lines, 0).kind).toBe('header');
+    expect(line(lines, 0).schemaVersion).toBe(2);
+    expect(line(lines, 0).conversationCount).toBe(1);
+    expect(line(lines, 0).messageCount).toBe(2);
+    expect(line(lines, 1)).toEqual({
       kind: 'conversation',
       id: 'c1',
       title: 'Greeting',
       createdAt: 100,
       updatedAt: expect.any(Number),
     });
-    expect(lines[2].kind).toBe('message');
-    expect(lines[2].conversationId).toBe('c1');
-    expect(lines[2].id).toBe('m1');
-    expect(lines[2].role).toBe('user');
-    expect(lines[2].position).toBe(0);
-    expect(lines[2].blocks).toEqual([{ type: 'text', text: 'hello' }]);
-    expect(lines[3].id).toBe('m2');
-    expect(lines[3].position).toBe(1);
-    expect(lines[3].blocks).toEqual([{ type: 'text', text: 'world' }]);
+    expect(line(lines, 2).kind).toBe('message');
+    expect(line(lines, 2).conversationId).toBe('c1');
+    expect(line(lines, 2).id).toBe('m1');
+    expect(line(lines, 2).role).toBe('user');
+    expect(line(lines, 2).position).toBe(0);
+    expect(line(lines, 2).blocks).toEqual([{ type: 'text', text: 'hello' }]);
+    expect(line(lines, 3).id).toBe('m2');
+    expect(line(lines, 3).position).toBe(1);
+    expect(line(lines, 3).blocks).toEqual([{ type: 'text', text: 'world' }]);
   });
 
   it('coalesces adjacent text events into a single text block', () => {
@@ -182,7 +212,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    const msg = lines[2];
+    const msg = line(lines, 2);
     expect(msg.blocks).toEqual([{ type: 'text', text: 'hello world' }]);
   });
 
@@ -201,7 +231,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'text', text: 'I will read.' },
       { type: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/x' } },
       { type: 'tool_result', toolUseId: 'tu_1', content: 'file contents', isError: false },
@@ -225,7 +255,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'thinking', thinking: 'reasoning' },
       { type: 'text', text: 'answer' },
     ]);
@@ -245,7 +275,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'thinking', thinking: 'plan' },
       { type: 'text', text: 'ok' },
       { type: 'tool_use', id: 't', name: 'X', input: {} },
@@ -266,7 +296,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'text', text: 'pre' },
       { type: 'thinking', thinking: 'mid' },
       { type: 'text', text: 'post' },
@@ -291,7 +321,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'thinking', thinking: 'first second third' },
       { type: 'text', text: 'visible' },
     ]);
@@ -341,8 +371,8 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].id).toBe('m-user');
-    expect(lines[2].blocks).toEqual([{ type: 'text', text: 'Make me a landing page.' }]);
+    expect(line(lines, 2).id).toBe('m-user');
+    expect(line(lines, 2).blocks).toEqual([{ type: 'text', text: 'Make me a landing page.' }]);
   });
 
   it('prefers event-derived blocks over the content fallback when both are present', () => {
@@ -363,7 +393,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'text', text: 'final coalesced text' },
       { type: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/x' } },
     ]);
@@ -384,8 +414,8 @@ describe('exportProjectTranscript', () => {
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
     const lines = readLines(result.path);
     expect(lines).toHaveLength(3); // header + conversation + 1 message
-    expect(lines[2].id).toBe('mbad');
-    expect(lines[2].blocks).toEqual([]);
+    expect(line(lines, 2).id).toBe('mbad');
+    expect(line(lines, 2).blocks).toEqual([]);
   });
 
   it('rejects unsafe project ids (path-traversal guard from projectDir)', () => {
@@ -482,8 +512,8 @@ describe('exportProjectTranscript', () => {
     const after = fs.readFileSync(finalPath, 'utf8');
     expect(after).not.toContain('sentinel');
     const lines = after.split('\n').filter((l) => l.length > 0).map((l) => JSON.parse(l));
-    expect(lines[0].kind).toBe('header');
-    expect(lines[2].id).toBe('m1');
+    expect(line(lines, 0).kind).toBe('header');
+    expect(line(lines, 2).id).toBe('m1');
   });
 
   // ---------- §1.5 lock contention (test #19, advisor-redesigned) ----------
@@ -527,13 +557,14 @@ describe('exportProjectTranscript', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain('mmal');
-    expect(warn.mock.calls[0][0]).toContain(PROJECT_ID);
-    expect(warn.mock.calls[0][0]).toContain('malformed');
+    const warning = warn.mock.calls[0]?.[0];
+    expect(warning).toContain('mmal');
+    expect(warning).toContain(PROJECT_ID);
+    expect(warning).toContain('malformed');
 
     const lines = readLines(result.path);
-    expect(lines[2].id).toBe('mmal');
-    expect(lines[2].blocks).toEqual([{ type: 'text', text: 'fallback content' }]);
+    expect(line(lines, 2).id).toBe('mmal');
+    expect(line(lines, 2).blocks).toEqual([{ type: 'text', text: 'fallback content' }]);
   });
 
   it('warns when events_json is JSON but not an array', () => {
@@ -547,11 +578,12 @@ describe('exportProjectTranscript', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain('mobj');
-    expect(warn.mock.calls[0][0]).toContain('not_array');
+    const warning = warn.mock.calls[0]?.[0];
+    expect(warning).toContain('mobj');
+    expect(warning).toContain('not_array');
 
     const lines = readLines(result.path);
-    expect(lines[2].blocks).toEqual([{ type: 'text', text: 'fallback content' }]);
+    expect(line(lines, 2).blocks).toEqual([{ type: 'text', text: 'fallback content' }]);
   });
 
   // ---------- §1.6 attachments (tests #22-#23) ----------
@@ -591,9 +623,9 @@ describe('exportProjectTranscript', () => {
 
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
     const lines = readLines(result.path);
-    expect(lines[0].attachmentCount).toBe(3);
-    expect(lines[0].commentAttachmentCount).toBe(1);
-    expect(lines[0].attachmentsInlined).toBe(false);
+    expect(line(lines, 0).attachmentCount).toBe(3);
+    expect(line(lines, 0).commentAttachmentCount).toBe(1);
+    expect(line(lines, 0).attachmentsInlined).toBe(false);
   });
 
   it('per-message line carries attachments / commentAttachments only when present', () => {
@@ -628,6 +660,8 @@ describe('exportProjectTranscript', () => {
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
     const withAtt = lines.find((l) => l.id === 'm-with');
     const bare = lines.find((l) => l.id === 'm-bare');
+    if (!withAtt) throw new Error('m-with transcript line not found');
+    if (!bare) throw new Error('m-bare transcript line not found');
 
     expect(withAtt.attachments).toEqual([
       { path: 'a.png', name: 'a.png', kind: 'image', size: 99 },
@@ -651,8 +685,8 @@ describe('exportProjectTranscript', () => {
     const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW });
     expect(fs.existsSync(result.path)).toBe(true);
     const lines = readLines(result.path);
-    expect(lines[0].kind).toBe('header');
-    expect(lines[2].id).toBe('m1');
+    expect(line(lines, 0).kind).toBe('header');
+    expect(line(lines, 2).id).toBe('m1');
   });
 
   // ---------- Codex P2 (3188524878): thinking-start boundary preservation ----------
@@ -678,7 +712,7 @@ describe('exportProjectTranscript', () => {
     });
 
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
-    expect(lines[2].blocks).toEqual([
+    expect(line(lines, 2).blocks).toEqual([
       { type: 'thinking', thinking: 'ab' },
       { type: 'thinking', thinking: 'cd' },
     ]);

@@ -57,14 +57,16 @@ function createPackagedDesktopRootIdentity(options: {
 }
 
 export async function writePackagedDesktopIdentity(options: {
+  identityPath?: string;
   paths: PackagedNamespacePaths;
   stamp: SidecarStamp;
 }): Promise<PackagedDesktopIdentityHandle> {
   const identity = createPackagedDesktopRootIdentity(options);
+  const identityPath = options.identityPath ?? options.paths.desktopIdentityPath;
 
   const writeIdentity = async () => {
     identity.updatedAt = new Date().toISOString();
-    await writeJsonFile(options.paths.desktopIdentityPath, identity);
+    await writeJsonFile(identityPath, identity);
   };
 
   await writeIdentity();
@@ -76,7 +78,7 @@ export async function writePackagedDesktopIdentity(options: {
   return {
     async close() {
       clearInterval(heartbeat);
-      await removeFile(options.paths.desktopIdentityPath).catch(() => undefined);
+      await removeFile(identityPath).catch(() => undefined);
     },
     identity,
   };

@@ -1,14 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  createTabToTracking,
+  projectKindToTracking,
+} from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import { trackHomeClickCreateButton } from '../analytics/events';
+import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
+
+// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
+// so the new openPath + pickAndImport methods (#451 / PR #974) and
+// existing openExternal stay in one place. PR #974 deleted the raw
+// `pickFolder` bridge: the renderer no longer receives a filesystem
+// path from the main process, only the daemon's import response.
+
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
+import { isStoredMediaProviderEntryPresent } from '../state/config';
 import type {
   AudioKind,
   DesignSystemSummary,
   MediaAspect,
   ProjectKind,
   ProjectMetadata,
+  ProjectPlatform,
   ProjectTemplate,
   MediaProviderCredentials,
   PromptTemplateSummary,
@@ -29,6 +44,37 @@ import {
 } from '../media/models';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
+import { Toast } from './Toast';
+
+/**
+ * Best-effort flattening of the `details` field that the
+ * pickAndImport main-process handler attaches when the daemon returned
+ * a structured error envelope (PR #974 round-4 mrcfps). Daemon errors
+ * carry `error.message` and sometimes nested `error.details.reason`;
+ * we surface the most operator-actionable string we can find without
+ * over-coupling to any particular error code.
+ */
+function formatPickAndImportErrorDetails(details: unknown): string | undefined {
+  if (typeof details === 'string' && details.length > 0) return details;
+  if (details == null || typeof details !== 'object') return undefined;
+  const record = details as Record<string, unknown>;
+  const error = record.error;
+  if (error != null && typeof error === 'object') {
+    const errRecord = error as Record<string, unknown>;
+    const message = errRecord.message;
+    const nestedDetails = errRecord.details;
+    if (typeof message === 'string' && message.length > 0) {
+      if (nestedDetails != null && typeof nestedDetails === 'object') {
+        const nestedReason = (nestedDetails as Record<string, unknown>).reason;
+        if (typeof nestedReason === 'string' && nestedReason.length > 0) {
+          return `${message} (${nestedReason})`;
+        }
+      }
+      return message;
+    }
+  }
+  return undefined;
+}
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -38,9 +84,51 @@ type PromptTemplatePick = {
   prompt: string;
 };
 
+const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
+
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other';
+type NewProjectPlatform = Exclude<ProjectPlatform, 'auto'>;
+
+const DESIGN_PLATFORMS: Array<{
+  value: NewProjectPlatform;
+  labelKey: keyof Dict;
+  hintKey: keyof Dict;
+}> = [
+  {
+    value: 'responsive',
+    labelKey: 'newproj.platform.responsive.label',
+    hintKey: 'newproj.platform.responsive.hint',
+  },
+  {
+    value: 'web-desktop',
+    labelKey: 'newproj.platform.webDesktop.label',
+    hintKey: 'newproj.platform.webDesktop.hint',
+  },
+  {
+    value: 'mobile-ios',
+    labelKey: 'newproj.platform.mobileIos.label',
+    hintKey: 'newproj.platform.mobileIos.hint',
+  },
+  {
+    value: 'mobile-android',
+    labelKey: 'newproj.platform.mobileAndroid.label',
+    hintKey: 'newproj.platform.mobileAndroid.hint',
+  },
+  {
+    value: 'tablet',
+    labelKey: 'newproj.platform.tablet.label',
+    hintKey: 'newproj.platform.tablet.hint',
+  },
+  {
+    value: 'desktop-app',
+    labelKey: 'newproj.platform.desktopApp.label',
+    hintKey: 'newproj.platform.desktopApp.hint',
+  },
+];
+
+export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
+export type MediaSurface = 'image' | 'video' | 'audio';
 
 export interface CreateInput {
   name: string;
@@ -54,9 +142,21 @@ interface Props {
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
+  onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
-  onCreate: (input: CreateInput) => void;
+  onCreate: (input: CreateInput & { requestId?: string }) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  // Web fallback: the user types an absolute baseDir into the manual
+  // input and the renderer POSTs `/api/import/folder` itself. Browser
+  // builds have no `shell.openPath` surface, so the renderer naming a
+  // path here cannot escalate (PR #974 trust model).
+  onImportFolder?: (baseDir: string) => Promise<boolean> | boolean;
+  // Electron flow: the desktop main process owns the picker dialog and
+  // the import call atomically (`pickAndImport` IPC). The renderer
+  // never sees the path or the HMAC token; it only receives the
+  // daemon's import response and forwards it here so App-level state
+  // can update without a second fetch.
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -69,10 +169,14 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   'live-artifact': 'newproj.tabLiveArtifact',
   deck: 'newproj.tabDeck',
   template: 'newproj.tabTemplate',
+  media: 'newproj.tabMedia',
+  other: 'newproj.tabOther',
+};
+
+const MEDIA_SURFACE_LABEL_KEYS: Record<MediaSurface, keyof Dict> = {
   image: 'newproj.surfaceImage',
   video: 'newproj.surfaceVideo',
   audio: 'newproj.surfaceAudio',
-  other: 'newproj.tabOther',
 };
 
 export function defaultDesignSystemSelection(
@@ -102,9 +206,12 @@ export function NewProjectPanel({
   designSystems,
   defaultDesignSystemId,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   onCreate,
   onImportClaudeDesign,
+  onImportFolder,
+  onImportFolderResponse,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -112,9 +219,25 @@ export function NewProjectPanel({
   loading = false,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [baseDir, setBaseDir] = useState('');
+  const [importingFolder, setImportingFolder] = useState(false);
+  // PR #974 round-4 (mrcfps): pickAndImport now returns structured
+  // failure shapes (`desktop auth secret not registered`, `web sidecar
+  // URL not available`, `daemon returned HTTP X`) — surfacing them
+  // gives the user a recovery hint instead of a silent no-op.
+  // Shape: `{ message, details? }`. `null` means no toast.
+  const [importFolderError, setImportFolderError] = useState<
+    { message: string; details?: string } | null
+  >(null);
   const [tab, setTab] = useState<CreateTab>('prototype');
+  // Media tab consolidates image / video / audio. The active surface picks
+  // which set of options + skill resolution applies; submission still maps
+  // back to the existing image/video/audio ProjectKind branches so the
+  // backend contract is unchanged.
+  const [mediaSurface, setMediaSurface] = useState<MediaSurface>('image');
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
   const [name, setName] = useState('');
@@ -136,13 +259,16 @@ export function NewProjectPanel({
   const [fidelity, setFidelity] = useState<'wireframe' | 'high-fidelity'>(
     'high-fidelity',
   );
+  const [platformTargets, setPlatformTargets] = useState<NewProjectPlatform[]>(['responsive']);
+  const [includeLandingPage, setIncludeLandingPage] = useState(false);
+  const [includeOsWidgets, setIncludeOsWidgets] = useState(false);
   const [speakerNotes, setSpeakerNotes] = useState(false);
   const [animations, setAnimations] = useState(false);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
-  const [imageStyle, setImageStyle] = useState('');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
+  const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
   const [videoLength, setVideoLength] = useState(5);
   const [audioKind, setAudioKind] = useState<AudioKind>('speech');
@@ -169,11 +295,12 @@ export function NewProjectPanel({
     tab === 'deck' ||
     tab === 'template' ||
     tab === 'other';
-  // Some skills (e.g. the Orbit briefings) ship their own complete visual
-  // language baked into example.html and explicitly opt out of DESIGN.md
-  // injection via `od.design_system.requires: false`. When such a skill is
-  // the active default for the current tab, hide the picker entirely so
-  // the user isn't asked to attach a brand we'll then ignore.
+  // Orbit briefings ship their own complete visual language baked into
+  // example.html and explicitly opt out of DESIGN.md injection via
+  // `od.design_system.requires: false`. Hide the picker only for those
+  // Orbit scenario skills; the general prototype creation surface should
+  // still honor the user's configured default design system even when a
+  // non-Orbit default skill does not require one.
   const tabDefaultSkillForcesNoDs = useMemo(() => {
     const tabSkillId = ((): string | null => {
       if (tab === 'prototype' || tab === 'live-artifact') {
@@ -190,7 +317,9 @@ export function NewProjectPanel({
     })();
     if (!tabSkillId) return false;
     const s = skills.find((x) => x.id === tabSkillId);
-    return s ? s.designSystemRequired === false : false;
+    return s
+      ? s.scenario === 'orbit' && s.designSystemRequired === false
+      : false;
   }, [tab, skills]);
   const showDesignSystemPicker =
     tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
@@ -245,14 +374,77 @@ export function NewProjectPanel({
         ?? list[0]?.id
         ?? null;
     }
-    if (tab === 'image' || tab === 'video' || tab === 'audio') {
-      const list = skills.filter((s) => s.mode === tab || s.surface === tab);
-      return list.find((s) => s.defaultFor.includes(tab))?.id
+    if (tab === 'media') {
+      const list = skills.filter(
+        (s) => s.mode === mediaSurface || s.surface === mediaSurface,
+      );
+      // The HyperFrames-HTML render path lives in the `hyperframes` skill.
+      // When the user has chosen `hyperframes-html` (via dropdown or template),
+      // pin the project to that skill explicitly.
+      if (mediaSurface === 'video' && videoModel === 'hyperframes-html') {
+        const hyper = list.find((s) => s.id === 'hyperframes');
+        if (hyper) return hyper.id;
+      }
+      return list.find((s) => s.defaultFor.includes(mediaSurface))?.id
         ?? list[0]?.id
         ?? null;
     }
     return null;
-  }, [tab, skills]);
+  }, [tab, mediaSurface, skills, videoModel]);
+
+  // When the user picks a curated prompt template, propagate the template's
+  // declared `model` and `aspect` onto the actual project state. Without
+  // this the user picks (e.g.) a HyperFrames template but `videoModel`
+  // stays on the default seedance — the agent then dispatches the wrong
+  // model and the render path mismatches the prompt.
+  function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
+    setImagePromptTemplate(pick);
+    const m = pick?.summary.model;
+    if (m && IMAGE_MODELS.some((x) => x.id === m)) setImageModel(m);
+    const a = pick?.summary.aspect;
+    if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
+      setImageAspect(a as MediaAspect);
+    }
+  }
+  function handleVideoPromptTemplate(pick: PromptTemplatePick | null) {
+    setVideoPromptTemplate(pick);
+    const m = pick?.summary.model;
+    if (m && VIDEO_MODELS.some((x) => x.id === m)) {
+      setVideoModel(m);
+      setVideoModelTouched(true);
+    }
+    const a = pick?.summary.aspect;
+    if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
+      setVideoAspect(a as MediaAspect);
+    }
+  }
+  function handleVideoModel(id: string) {
+    setVideoModel(id);
+    setVideoModelTouched(true);
+  }
+
+  // The HyperFrames skill renders HTML compositions through a local
+  // `npx hyperframes render` path, which dispatches under the
+  // `hyperframes-html` model — not seedance/veo/sora. When the resolved
+  // skill for the video tab is hyperframes, default `videoModel` so the
+  // model dropdown matches the actual render path. Once the user has
+  // explicitly chosen a model (via the dropdown or by picking a template
+  // that declares a model), `videoModelTouched` latches and this effect
+  // becomes a no-op for the rest of the panel session — re-entering the
+  // Media tab's Video surface no longer silently rewrites their override back to
+  // hyperframes-html.
+  useEffect(() => {
+    if (tab !== 'media' || mediaSurface !== 'video') return;
+    if (skillIdForTab !== 'hyperframes') return;
+    if (videoModelTouched) return;
+    if (videoPromptTemplate) return;
+    if (!VIDEO_MODELS.some((m) => m.id === 'hyperframes-html')) return;
+    setVideoModel('hyperframes-html');
+    // Intentionally leaving videoPromptTemplate / videoModel out of deps
+    // so this only fires when the user toggles the tab or the skill
+    // resolution shifts — not whenever the user changes the dropdown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, mediaSurface, skillIdForTab, videoModelTouched]);
 
   const canCreate =
     !loading && (tab !== 'template' || templateId != null);
@@ -311,21 +503,26 @@ export function NewProjectPanel({
     const { primary: primaryDs, inspirations } =
       buildDesignSystemCreateSelection(showDesignSystemPicker, selectedDsIds);
     const promptTemplatePick =
-      tab === 'image'
-        ? imagePromptTemplate
-        : tab === 'video'
-          ? videoPromptTemplate
-          : null;
+      tab === 'media'
+        ? mediaSurface === 'image'
+          ? imagePromptTemplate
+          : mediaSurface === 'video'
+            ? videoPromptTemplate
+            : null
+        : null;
     const metadata = buildMetadata({
       tab,
+      mediaSurface,
       fidelity,
+      platformTargets,
+      includeLandingPage,
+      includeOsWidgets,
       speakerNotes,
       animations,
       templateId,
       templates,
       imageModel,
       imageAspect,
-      imageStyle,
       videoModel,
       videoAspect,
       videoLength,
@@ -336,11 +533,29 @@ export function NewProjectPanel({
       inspirationIds: inspirations,
       promptTemplate: promptTemplatePick,
     });
+    // Generate the click→result correlation id here so the home_click and
+    // the eventual project_create_result share request_id.
+    const requestId = analytics.newRequestId();
+    const trackedKind = projectKindToTracking(metadata?.kind ?? null) ?? 'prototype';
+    trackHomeClickCreateButton(
+      analytics.track,
+      {
+        page: 'home',
+        area: 'create_panel',
+        element: 'create_button',
+        action: 'create_project',
+        source_tab: createTabToTracking(tab),
+        project_kind: trackedKind,
+        has_project_name: name.trim().length > 0,
+      },
+      { requestId },
+    );
     onCreate({
-      name: name.trim() || autoName(tab, t),
+      name: name.trim() || autoName(tab, mediaSurface, t),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
       metadata,
+      requestId,
     });
   }
 
@@ -353,6 +568,73 @@ export function NewProjectPanel({
       await onImportClaudeDesign(file);
     } finally {
       setImporting(false);
+    }
+  }
+
+  // PR #974: the bridge no longer exposes `pickFolder` (raw path
+  // crossing to the renderer). The Electron flow now uses
+  // `pickAndImport`, which performs the picker + the HMAC-gated import
+  // atomically in the main process and returns the daemon response.
+  // The web fallback continues to use the manual baseDir input —
+  // browser builds have no `shell.openPath` surface so a renderer-named
+  // path cannot escalate.
+  const hasElectronPickAndImport =
+    typeof window !== 'undefined' && typeof window.electronAPI?.pickAndImport === 'function';
+
+  async function handleOpenFolder() {
+    if (hasElectronPickAndImport) {
+      if (!onImportFolderResponse) return;
+      setImportFolderError(null);
+      setImportingFolder(true);
+      try {
+        const result = await window.electronAPI!.pickAndImport!({
+          skillId: skillIdForTab,
+        });
+        if (!result) return;
+        if (result.ok === true) {
+          await onImportFolderResponse(result.response);
+          return;
+        }
+        // Round-4 (mrcfps #2): every non-OK shape used to fall through
+        // a silent `return`. Reserve silent for the explicit cancel
+        // case; surface the structured reason for everything else
+        // (auth-not-registered, web-sidecar-down, daemon HTTP errors,
+        // network errors). The pickAndImport handler already pre-shapes
+        // these into a `{ ok: false, reason, details? }` envelope.
+        if ('canceled' in result && result.canceled === true) return;
+        const reason = 'reason' in result && typeof result.reason === 'string'
+          ? result.reason
+          : 'unknown failure';
+        const details = 'details' in result && result.details != null
+          ? formatPickAndImportErrorDetails(result.details)
+          : undefined;
+        setImportFolderError({
+          message: `Open folder failed: ${reason}`,
+          ...(details ? { details } : {}),
+        });
+      } finally {
+        setImportingFolder(false);
+      }
+      return;
+    }
+    if (!onImportFolder) return;
+    const trimmed = baseDir.trim();
+    if (!trimmed) return;
+    setImportFolderError(null);
+    setImportingFolder(true);
+    try {
+      const opened = await onImportFolder(trimmed);
+      if (!opened) {
+        setImportFolderError({
+          message: `Open folder failed: ${trimmed}`,
+        });
+      }
+    } catch (err) {
+      setImportFolderError({
+        message: `Open folder failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      });
+    } finally {
+      setImportingFolder(false);
     }
   }
 
@@ -394,7 +676,7 @@ export function NewProjectPanel({
       </div>
       <div className="newproj-body">
         <h3 className="newproj-title">
-          <span className="newproj-title-text">{titleForTab(tab, t)}</span>
+          <span className="newproj-title-text">{titleForTab(tab, mediaSurface, t)}</span>
           {tab === 'live-artifact' ? (
             // "Beta" is an internationally adopted brand-style status marker;
             // intentionally not run through t() (consistent with short product
@@ -423,25 +705,62 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        {tab === 'image' ? (
+        {tab === 'media' ? (
+          <div
+            className="newproj-media-segmented"
+            role="tablist"
+            aria-label={t('newproj.tabMedia')}
+          >
+            {(Object.keys(MEDIA_SURFACE_LABEL_KEYS) as MediaSurface[]).map((surface) => (
+              <button
+                key={surface}
+                type="button"
+                role="tab"
+                data-testid={`new-project-media-surface-${surface}`}
+                aria-selected={mediaSurface === surface}
+                className={`newproj-media-surface ${mediaSurface === surface ? 'active' : ''}`}
+                onClick={() => setMediaSurface(surface)}
+              >
+                {t(MEDIA_SURFACE_LABEL_KEYS[surface])}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {tab === 'media' && mediaSurface === 'image' ? (
           <PromptTemplatePicker
             surface="image"
             templates={promptTemplates}
             value={imagePromptTemplate}
-            onChange={setImagePromptTemplate}
+            onChange={handleImagePromptTemplate}
           />
         ) : null}
 
-        {tab === 'video' ? (
+        {tab === 'media' && mediaSurface === 'video' ? (
           <PromptTemplatePicker
             surface="video"
             templates={promptTemplates}
             value={videoPromptTemplate}
-            onChange={setVideoPromptTemplate}
+            onChange={handleVideoPromptTemplate}
           />
         ) : null}
 
-        {tab === 'prototype' || tab === 'live-artifact' ? (
+        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+          <PlatformPicker value={platformTargets} onChange={setPlatformTargets} />
+        ) : null}
+
+        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+          <SurfaceOptions
+            includeLandingPage={includeLandingPage}
+            includeOsWidgets={includeOsWidgets}
+            onIncludeLandingPage={setIncludeLandingPage}
+            onIncludeOsWidgets={setIncludeOsWidgets}
+          />
+        ) : null}
+
+        {/* Live artifact always renders at high fidelity — its whole point
+            is data-bound polished UI, so the wireframe option is hidden. */}
+        {tab === 'prototype' ? (
           <FidelityPicker value={fidelity} onChange={setFidelity} />
         ) : null}
 
@@ -468,6 +787,7 @@ export function NewProjectPanel({
               templates={templates}
               value={templateId}
               onChange={setTemplateId}
+              onDelete={onDeleteTemplate}
             />
             <ToggleRow
               label={t('newproj.toggleAnimations')}
@@ -478,33 +798,31 @@ export function NewProjectPanel({
           </>
         ) : null}
 
-        {tab === 'image' ? (
+        {tab === 'media' && mediaSurface === 'image' ? (
           <MediaProjectOptions
             surface="image"
             imageModel={imageModel}
             imageAspect={imageAspect}
-            imageStyle={imageStyle}
             mediaProviders={mediaProviders}
             onImageModel={setImageModel}
             onImageAspect={setImageAspect}
-            onImageStyle={setImageStyle}
           />
         ) : null}
 
-        {tab === 'video' ? (
+        {tab === 'media' && mediaSurface === 'video' ? (
           <MediaProjectOptions
             surface="video"
             videoModel={videoModel}
             videoAspect={videoAspect}
             videoLength={videoLength}
             mediaProviders={mediaProviders}
-            onVideoModel={setVideoModel}
+            onVideoModel={handleVideoModel}
             onVideoAspect={setVideoAspect}
             onVideoLength={setVideoLength}
           />
         ) : null}
 
-        {tab === 'audio' ? (
+        {tab === 'media' && mediaSurface === 'audio' ? (
           <MediaProjectOptions
             surface="audio"
             audioKind={audioKind}
@@ -515,6 +833,9 @@ export function NewProjectPanel({
             onAudioKind={(kind) => {
               setAudioKind(kind);
               setAudioModel(DEFAULT_AUDIO_MODEL[kind]);
+              if (kind === 'sfx') {
+                setAudioDuration((duration) => Math.min(duration, SFX_AUDIO_DURATIONS_SEC.at(-1) ?? 30));
+              }
             }}
             onAudioModel={setAudioModel}
             onAudioDuration={setAudioDuration}
@@ -567,9 +888,220 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
+        {(hasElectronPickAndImport ? onImportFolderResponse : onImportFolder) ? (
+          <div className="newproj-open-folder">
+            {!hasElectronPickAndImport ? (
+              <input
+                type="text"
+                className="newproj-folder-input"
+                placeholder="/path/to/project"
+                value={baseDir}
+                onChange={(e) => setBaseDir(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
+                disabled={importingFolder}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="ghost newproj-import"
+              disabled={(!hasElectronPickAndImport && !baseDir.trim()) || importingFolder}
+              onClick={() => void handleOpenFolder()}
+            >
+              <Icon name="folder" size={13} />
+              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
+      {importFolderError ? (
+        <Toast
+          message={importFolderError.message}
+          details={importFolderError.details ?? null}
+          ttlMs={6000}
+          onDismiss={() => setImportFolderError(null)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function PlatformPicker({
+  value,
+  onChange,
+}: {
+  value: NewProjectPlatform[];
+  onChange: (v: NewProjectPlatform[]) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const listboxId = useId();
+
+  function togglePlatform(next: NewProjectPlatform) {
+    const active = value.includes(next);
+    const updated = active
+      ? value.filter((item) => item !== next)
+      : [...value, next];
+    onChange(updated.length > 0 ? updated : ['responsive']);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    // Defer listener registration by a tick so the very click that opened
+    // the popover doesn't get re-interpreted as an outside-click on the
+    // mousedown that follows in the same event cycle.
+    const tid = window.setTimeout(() => {
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(tid);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const primary = DESIGN_PLATFORMS.find((o) => o.value === value[0]) ?? null;
+  const extraCount = Math.max(0, value.length - 1);
+
+  return (
+    <div
+      className="newproj-section ds-picker platform-picker"
+      ref={wrapRef}
+    >
+      <label className="newproj-label">Target platforms</label>
+      <button
+        type="button"
+        className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+      >
+        <span className="ds-picker-meta">
+          <span className="ds-picker-title">
+            {primary ? t(primary.labelKey) : 'Pick a platform'}
+            {extraCount > 0 ? (
+              <span className="ds-picker-extra-pill">+{extraCount}</span>
+            ) : null}
+          </span>
+        </span>
+        <Icon
+          name="chevron-down"
+          size={14}
+          className="ds-picker-chevron"
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </button>
+      {open ? (
+        <div
+          className="ds-picker-popover"
+          id={listboxId}
+          role="listbox"
+          aria-label="Target platforms"
+          aria-multiselectable="true"
+        >
+          <div className="ds-picker-list">
+            {DESIGN_PLATFORMS.map((option) => {
+              const active = value.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={`ds-picker-item${active ? ' active' : ''}`}
+                  onClick={() => togglePlatform(option.value)}
+                >
+                  <span className="ds-picker-item-text">
+                    <span className="ds-picker-item-title">{t(option.labelKey)}</span>
+                    <span className="ds-picker-item-sub">{t(option.hintKey)}</span>
+                  </span>
+                  <span
+                    className={`ds-picker-mark check${active ? ' active' : ''}`}
+                    aria-hidden
+                  >
+                    {active ? '✓' : ''}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SurfaceOptions({
+  includeLandingPage,
+  includeOsWidgets,
+  onIncludeLandingPage,
+  onIncludeOsWidgets,
+}: {
+  includeLandingPage: boolean;
+  includeOsWidgets: boolean;
+  onIncludeLandingPage: (v: boolean) => void;
+  onIncludeOsWidgets: (v: boolean) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="newproj-section surface-options">
+      <label className="newproj-label">{t('newproj.surfaceOptionsLabel')}</label>
+      <div className="compact-toggle-list">
+        <CompactToggle
+          label={t('newproj.includeLandingPage')}
+          hint={t('newproj.includeLandingPageHint')}
+          checked={includeLandingPage}
+          onChange={onIncludeLandingPage}
+        />
+        <CompactToggle
+          label={t('newproj.includeOsWidgets')}
+          hint={t('newproj.includeOsWidgetsHint')}
+          checked={includeOsWidgets}
+          onChange={onIncludeOsWidgets}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Lightweight inline toggle row. The hint moves to a native tooltip so the
+// row stays one line tall — used by SurfaceOptions where the toggles are
+// secondary controls and the full card treatment of ToggleRow felt too heavy.
+function CompactToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`compact-toggle${checked ? ' on' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
+      aria-pressed={checked}
+      disabled={disabled}
+      title={hint}
+    >
+      <span className="compact-toggle-label">{label}</span>
+      <span className="compact-toggle-switch" aria-hidden />
+    </button>
   );
 }
 
@@ -607,8 +1139,8 @@ function FidelityPicker({
    - Lists configured connectors as compact chips so the user can
      see at a glance what data sources this artifact can pull from.
    - When no connector is configured (or the list hasn't loaded yet
-     and ended up empty), shows a guidance card that, on click, pops
-     the entry-tab-connectors tab in the main view.
+     and ended up empty), shows a guidance card that, on click, opens
+     the Settings → Connectors surface (the new home of the catalog).
    ============================================================ */
 function ConnectorsSection({
   connectors,
@@ -767,18 +1299,21 @@ function ToggleRow({
   hint,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
   hint?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
     <button
       type="button"
-      className={`toggle-row${checked ? ' on' : ''}`}
-      onClick={() => onChange(!checked)}
+      className={`toggle-row${checked ? ' on' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
       aria-pressed={checked}
+      disabled={disabled}
     >
       <div className="toggle-row-text">
         <span className="toggle-row-label">{label}</span>
@@ -793,10 +1328,12 @@ function TemplatePicker({
   templates,
   value,
   onChange,
+  onDelete,
 }: {
   templates: ProjectTemplate[];
   value: string | null;
   onChange: (id: string | null) => void;
+  onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
   return (
@@ -824,6 +1361,10 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
+                onDelete={onDelete ? async () => {
+                  const ok = await onDelete(tpl.id);
+                  if (ok && value === tpl.id) onChange(null);
+                } : () => {}}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1134,27 +1675,40 @@ function PromptTemplateAvatar({
 function TemplateOption({
   active,
   onClick,
+  onDelete,
   name,
   description,
 }: {
   active: boolean;
   onClick: () => void;
+  onDelete: () => void;
   name: string;
   description: string;
 }) {
   return (
-    <button
-      type="button"
-      className={`template-option${active ? ' active' : ''}`}
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      <span className={`template-radio${active ? ' active' : ''}`} aria-hidden />
-      <span className="template-option-text">
-        <span className="template-option-name">{name}</span>
-        <span className="template-option-desc">{description}</span>
-      </span>
-    </button>
+    <div className={`template-option${active ? ' active' : ''}`}>
+      <button
+        type="button"
+        className="template-option-select"
+        onClick={onClick}
+        aria-pressed={active}
+      >
+        <span className={`template-radio${active ? ' active' : ''}`} aria-hidden />
+        <span className="template-option-text">
+          <span className="template-option-name">{name}</span>
+          <span className="template-option-desc">{description}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="template-option-delete"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        title="Delete template"
+        aria-label={`Delete template ${name}`}
+      >
+        ✕
+      </button>
+    </div>
   );
 }
 
@@ -1366,7 +1920,7 @@ function DesignSystemPicker({
               </button>
             </div>
           </div>
-          <div className="ds-picker-list">
+          <div className="ds-picker-list ds-picker-list-design-systems">
             <DsPickerItem
               active={selectedIds.length === 0}
               multi={multi}
@@ -1531,11 +2085,9 @@ function MediaProjectOptions(props:
       surface: 'image';
       imageModel: string;
       imageAspect: MediaAspect;
-      imageStyle: string;
       mediaProviders?: Record<string, MediaProviderCredentials>;
       onImageModel: (value: string) => void;
       onImageAspect: (value: MediaAspect) => void;
-      onImageStyle: (value: string) => void;
     }
   | {
       surface: 'video';
@@ -1577,14 +2129,6 @@ function MediaProjectOptions(props:
           value={props.imageAspect}
           onChange={props.onImageAspect}
         />
-        <label className="newproj-label">
-          <span>{t('newproj.imageStyleLabel')}</span>
-          <input
-            value={props.imageStyle}
-            placeholder={t('newproj.imageStylePlaceholder')}
-            onChange={(e) => props.onImageStyle(e.target.value)}
-          />
-        </label>
       </div>
     );
   }
@@ -1617,12 +2161,16 @@ function MediaProjectOptions(props:
   }
 
   const models = supportedModels('audio', AUDIO_MODELS_BY_KIND[props.audioKind]);
+  const audioDurations = props.audioKind === 'sfx'
+    ? SFX_AUDIO_DURATIONS_SEC
+    : AUDIO_DURATIONS_SEC;
   return (
     <div className="newproj-media-options">
       <OptionCards
         label={t('newproj.audioKindLabel')}
         options={[
           { value: 'speech' as const, title: t('newproj.audioKindSpeech') },
+          { value: 'sfx' as const, title: t('newproj.audioKindSfx') },
         ]}
         value={props.audioKind}
         onChange={props.onAudioKind}
@@ -1637,7 +2185,7 @@ function MediaProjectOptions(props:
       <label className="newproj-label">
         <span>{t('newproj.audioDurationLabel')}</span>
         <select value={props.audioDuration} onChange={(e) => props.onAudioDuration(Number(e.target.value))}>
-          {AUDIO_DURATIONS_SEC.map((sec) => (
+          {audioDurations.map((sec) => (
             <option key={sec} value={sec}>{t('newproj.audioDurationSeconds', { n: sec })}</option>
           ))}
         </select>
@@ -1660,7 +2208,7 @@ export function supportedModels(surface: 'image' | 'video' | 'audio', models: Me
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
     image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
     video: new Set(['volcengine', 'hyperframes', 'grok']),
-    audio: new Set(['minimax', 'fishaudio']),
+    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']),
   };
   return models.filter((model) => {
     const provider = findProvider(model.provider);
@@ -1681,67 +2229,201 @@ function MediaModelCards({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const groups: Array<{
-    providerId: string;
-    providerLabel: string;
-    status: 'configured' | 'integrated' | 'unsupported';
-    models: MediaModel[];
-  }> = [];
-  for (const model of models) {
-    const provider = findProvider(model.provider);
-    const providerId = provider?.id ?? model.provider;
-    const entry = mediaProviders?.[providerId];
-    const configured = provider?.credentialsRequired === false || Boolean(entry?.apiKey.trim() || entry?.baseUrl.trim());
-    let group = groups.find((g) => g.providerId === providerId);
-    if (!group) {
-      group = {
-        providerId,
-        providerLabel: provider?.label ?? model.provider,
-        status: configured
-          ? 'configured'
-          : provider?.integrated
-            ? 'integrated'
-            : 'unsupported',
-        models: [],
-      };
-      groups.push(group);
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  // Group models by provider once. The trigger row needs the same provider
+  // metadata (label + status) to render the selected model's caption, so we
+  // compute groups regardless of whether the popover is open.
+  const groups = useMemo(() => {
+    const out: Array<{
+      providerId: string;
+      providerLabel: string;
+      status: 'configured' | 'integrated' | 'unsupported';
+      models: MediaModel[];
+    }> = [];
+    for (const model of models) {
+      const provider = findProvider(model.provider);
+      const providerId = provider?.id ?? model.provider;
+      const entry = mediaProviders?.[providerId];
+      const configured =
+        provider?.credentialsRequired === false ||
+        isStoredMediaProviderEntryPresent(entry);
+      let group = out.find((g) => g.providerId === providerId);
+      if (!group) {
+        group = {
+          providerId,
+          providerLabel: provider?.label ?? model.provider,
+          status: configured
+            ? 'configured'
+            : provider?.integrated
+              ? 'integrated'
+              : 'unsupported',
+          models: [],
+        };
+        out.push(group);
+      }
+      group.models.push(model);
     }
-    group.models.push(model);
+    return out;
+  }, [models, mediaProviders]);
+
+  const selected = useMemo(() => {
+    for (const group of groups) {
+      const hit = group.models.find((m) => m.id === value);
+      if (hit) return { model: hit, group };
+    }
+    return null;
+  }, [groups, value]);
+
+  const filteredGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups;
+    return groups
+      .map((g) => ({
+        ...g,
+        models: g.models.filter((m) => {
+          return (
+            m.id.toLowerCase().includes(q) ||
+            m.label.toLowerCase().includes(q) ||
+            m.hint.toLowerCase().includes(q) ||
+            g.providerLabel.toLowerCase().includes(q)
+          );
+        }),
+      }))
+      .filter((g) => g.models.length > 0);
+  }, [groups, query]);
+
+  const totalMatches = filteredGroups.reduce((n, g) => n + g.models.length, 0);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = window.setTimeout(() => searchRef.current?.focus(), 30);
+    return () => window.clearTimeout(id);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    const id = window.setTimeout(() => {
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  function pick(modelId: string) {
+    onChange(modelId);
+    setOpen(false);
+    setQuery('');
   }
 
+  const triggerTitle = selected?.model.label ?? t('newproj.modelMissingTitle');
+  // The model.hint frequently leads with the provider name (e.g.
+  // "OpenAI · 4K, native multimodal"), so emitting providerLabel as a
+  // separate prefix would duplicate it. If the hint already opens with the
+  // provider label, just use the hint verbatim — otherwise prefix it.
+  const triggerSub = selected
+    ? selected.model.hint.toLowerCase().startsWith(selected.group.providerLabel.toLowerCase())
+      ? selected.model.hint
+      : `${selected.group.providerLabel} · ${selected.model.hint}`
+    : t('newproj.modelMissingSub');
+
   return (
-    <div className="newproj-media-field">
-      <div className="newproj-label">{label}</div>
-      <div className="newproj-model-groups">
-        {groups.map((group) => (
-          <div className="newproj-model-group" key={group.providerId}>
-            <div className="newproj-provider-row">
-              <span>{group.providerLabel}</span>
-              <span className={`newproj-provider-badge ${group.status}`}>
-                {group.status === 'configured'
-                  ? 'Configured'
-                  : group.status === 'integrated'
-                    ? 'Integrated'
-                    : 'Unsupported'}
-              </span>
-            </div>
-            <div className="newproj-model-grid">
-              {group.models.map((model) => (
-                <button
-                  key={model.id}
-                  type="button"
-                  className={`newproj-card newproj-model-card${value === model.id ? ' active' : ''}`}
-                  onClick={() => onChange(model.id)}
-                  aria-pressed={value === model.id}
-                >
-                  <span className="newproj-model-name">{model.label}</span>
-                  <span className="newproj-model-hint">{model.hint}</span>
-                </button>
-              ))}
-            </div>
+    <div className="newproj-section ds-picker model-picker" ref={wrapRef}>
+      <label className="newproj-label">{label}</label>
+      <button
+        type="button"
+        data-testid="model-picker-trigger"
+        className={`ds-picker-trigger${open ? ' open' : ''}${selected ? '' : ' empty'}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="ds-picker-meta">
+          <span className="ds-picker-title">{triggerTitle}</span>
+          <span className="ds-picker-sub">{triggerSub}</span>
+        </span>
+        <Icon
+          name="chevron-down"
+          size={14}
+          className="ds-picker-chevron"
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </button>
+      {open ? (
+        <div className="ds-picker-popover" role="listbox">
+          <div className="ds-picker-head">
+            <input
+              ref={searchRef}
+              data-testid="model-picker-search"
+              className="ds-picker-search"
+              placeholder={t('newproj.modelSearch')}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </div>
-        ))}
-      </div>
+          <div className="ds-picker-list">
+            {totalMatches === 0 ? (
+              <div className="ds-picker-empty">{t('newproj.modelEmpty')}</div>
+            ) : (
+              filteredGroups.map((group) => (
+                <div className="ds-picker-group" key={group.providerId}>
+                  <div className="ds-picker-group-head">
+                    <span>{group.providerLabel}</span>
+                    <span className={`newproj-provider-badge ${group.status}`}>
+                      {group.status === 'configured'
+                        ? 'Configured'
+                        : group.status === 'integrated'
+                          ? 'Integrated'
+                          : 'Unsupported'}
+                    </span>
+                  </div>
+                  {group.models.map((model) => {
+                    const active = value === model.id;
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        data-testid={`model-picker-option-${model.id}`}
+                        className={`ds-picker-item${active ? ' active' : ''}`}
+                        onClick={() => pick(model.id)}
+                      >
+                        <span className="ds-picker-item-text">
+                          <span className="ds-picker-item-title">
+                            {model.label}
+                            {model.default ? (
+                              <span className="ds-picker-item-badge">
+                                {t('newproj.modelRecommended')}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="ds-picker-item-sub">{model.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1765,22 +2447,27 @@ function AspectCards({
   return (
     <div className="newproj-media-field">
       <div className="newproj-label">{label}</div>
-      <div className="newproj-option-grid aspect-grid">
-        {MEDIA_ASPECTS.map((aspect) => (
-          <button
-            key={aspect}
-            type="button"
-            className={`newproj-card newproj-option-card${value === aspect ? ' active' : ''}`}
-            onClick={() => onChange(aspect)}
-            aria-pressed={value === aspect}
-          >
-            <span className={`aspect-glyph aspect-${aspect.replace(':', '-')}`} aria-hidden />
-            <span className="aspect-copy">
-              <strong>{labels[aspect]}</strong>
-              <small>{aspect}</small>
-            </span>
-          </button>
-        ))}
+      <div className="newproj-aspect-segmented" role="radiogroup" aria-label={label}>
+        {MEDIA_ASPECTS.map((aspect) => {
+          const active = value === aspect;
+          return (
+            <button
+              key={aspect}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              title={`${labels[aspect]} · ${aspect}`}
+              className={`newproj-aspect-pill${active ? ' active' : ''}`}
+              onClick={() => onChange(aspect)}
+            >
+              <span
+                className={`newproj-aspect-icon newproj-aspect-icon-${aspect.replace(':', '-')}`}
+                aria-hidden
+              />
+              <span className="newproj-aspect-ratio">{aspect}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1820,14 +2507,17 @@ function OptionCards<T extends string | number>({
 
 function buildMetadata(input: {
   tab: CreateTab;
+  mediaSurface: MediaSurface;
   fidelity: 'wireframe' | 'high-fidelity';
+  platformTargets: NewProjectPlatform[];
+  includeLandingPage: boolean;
+  includeOsWidgets: boolean;
   speakerNotes: boolean;
   animations: boolean;
   templateId: string | null;
   templates: ProjectTemplate[];
   imageModel: string;
   imageAspect: MediaAspect;
-  imageStyle: string;
   videoModel: string;
   videoAspect: MediaAspect;
   videoLength: number;
@@ -1838,14 +2528,34 @@ function buildMetadata(input: {
   inspirationIds: string[];
   promptTemplate: PromptTemplatePick | null;
 }): ProjectMetadata {
-  const kind: ProjectKind = input.tab === 'live-artifact' ? 'prototype' : input.tab;
+  const kind: ProjectKind =
+    input.tab === 'live-artifact'
+      ? 'prototype'
+      : input.tab === 'media'
+        ? input.mediaSurface
+        : input.tab;
+  const selectedPlatforms = normalizeSelectedPlatforms(input.platformTargets);
+  const concreteTargets = platformTargetsFor(selectedPlatforms);
+  const canIncludeOsWidgets = platformTargetsSupportOsWidgets(concreteTargets);
+  const surfaceOptions = {
+    ...(input.includeLandingPage ? { includeLandingPage: true } : {}),
+    ...(input.includeOsWidgets && canIncludeOsWidgets ? { includeOsWidgets: true } : {}),
+  };
+  const base = {
+    platform: selectedPlatforms[0],
+    platformTargets: concreteTargets,
+    ...surfaceOptions,
+  };
   const inspirations = input.inspirationIds.length > 0
     ? { inspirationDesignSystemIds: input.inspirationIds }
     : {};
   if (input.tab === 'prototype' || input.tab === 'live-artifact') {
     return {
       kind,
-      fidelity: input.fidelity,
+      ...base,
+      // Live artifact is locked to high fidelity (the picker is hidden in
+      // the panel) — wireframe live artifacts don't make sense.
+      fidelity: input.tab === 'live-artifact' ? 'high-fidelity' : input.fidelity,
       ...(input.tab === 'live-artifact' ? { intent: 'live-artifact' as const } : {}),
       ...inspirations,
     };
@@ -1855,50 +2565,101 @@ function buildMetadata(input: {
   }
   if (input.tab === 'template') {
     if (input.templateId == null) {
-      return { kind, animations: input.animations, ...inspirations };
+      return { kind, ...base, animations: input.animations, ...inspirations };
     }
     const tpl = input.templates.find((x) => x.id === input.templateId);
     // The fallback label is consumed by the agent prompt rather than the
     // UI, so we keep it in English to match the rest of the prompt corpus.
     return {
       kind,
+      ...base,
       animations: input.animations,
       templateId: input.templateId,
       templateLabel: tpl?.name ?? 'Saved template',
       ...inspirations,
     };
   }
-  if (input.tab === 'image') {
-    return {
-      kind,
-      imageModel: input.imageModel,
-      imageAspect: input.imageAspect,
-      imageStyle: input.imageStyle.trim() || undefined,
-      ...buildPromptTemplateMetadata(input.promptTemplate),
-      ...inspirations,
-    };
-  }
-  if (input.tab === 'video') {
-    return {
-      kind,
-      videoModel: input.videoModel,
-      videoAspect: input.videoAspect,
-      videoLength: input.videoLength,
-      ...buildPromptTemplateMetadata(input.promptTemplate),
-      ...inspirations,
-    };
-  }
-  if (input.tab === 'audio') {
+  if (input.tab === 'media') {
+    if (input.mediaSurface === 'image') {
+      return {
+        kind,
+        imageModel: input.imageModel,
+        imageAspect: input.imageAspect,
+        ...buildPromptTemplateMetadata(input.promptTemplate),
+        ...inspirations,
+      };
+    }
+    if (input.mediaSurface === 'video') {
+      return {
+        kind,
+        videoModel: input.videoModel,
+        videoAspect: input.videoAspect,
+        videoLength: input.videoLength,
+        ...buildPromptTemplateMetadata(input.promptTemplate),
+        ...inspirations,
+      };
+    }
     return {
       kind,
       audioKind: input.audioKind,
       audioModel: input.audioModel,
       audioDuration: input.audioDuration,
-      voice: input.voice.trim() || undefined,
+      ...(input.audioKind === 'speech' && input.voice.trim()
+        ? { voice: input.voice.trim() }
+        : {}),
       ...inspirations,
     };
   }
-  return { kind: 'other', ...inspirations };
+  return { kind: 'other', ...base, ...inspirations };
+}
+
+function normalizeSelectedPlatforms(platforms: NewProjectPlatform[]): NewProjectPlatform[] {
+  const seen = new Set<NewProjectPlatform>();
+  for (const platform of platforms) {
+    if (DESIGN_PLATFORMS.some((option) => option.value === platform)) {
+      seen.add(platform);
+    }
+  }
+  return seen.size > 0 ? [...seen] : ['responsive'];
+}
+
+function platformTargetsSupportOsWidgets(platforms: ProjectPlatform[] | NewProjectPlatform[]): boolean {
+  return platforms.some((platform) =>
+    platform === 'mobile-ios'
+    || platform === 'mobile-android'
+    || platform === 'tablet',
+  );
+}
+
+function platformTargetsFor(platforms: NewProjectPlatform[]): ProjectPlatform[] {
+  const targets = new Set<ProjectPlatform>();
+  for (const platform of platforms) {
+    switch (platform) {
+      case 'responsive':
+        targets.add('responsive');
+        break;
+      case 'web-desktop':
+        targets.add('web-desktop');
+        break;
+      case 'mobile-ios':
+        targets.add('mobile-ios');
+        break;
+      case 'mobile-android':
+        targets.add('mobile-android');
+        break;
+      case 'tablet':
+        targets.add('tablet');
+        break;
+      case 'desktop-app':
+        targets.add('desktop-app');
+        break;
+      default: {
+        const exhaustive: never = platform;
+        targets.add(exhaustive);
+      }
+    }
+  }
+  return targets.size > 0 ? [...targets] : ['responsive'];
 }
 
 function buildPromptTemplateMetadata(
@@ -1931,7 +2692,11 @@ function buildPromptTemplateMetadata(
   };
 }
 
-function titleForTab(tab: CreateTab, t: TranslateFn): string {
+function titleForTab(
+  tab: CreateTab,
+  mediaSurface: MediaSurface,
+  t: TranslateFn,
+): string {
   switch (tab) {
     case 'prototype':
       return t('newproj.titlePrototype');
@@ -1941,18 +2706,32 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
       return t('newproj.titleDeck');
     case 'template':
       return t('newproj.titleTemplate');
-    case 'image':
-      return t('newproj.titleImage');
-    case 'video':
-      return t('newproj.titleVideo');
-    case 'audio':
-      return t('newproj.titleAudio');
+    case 'media': {
+      // Title tracks the active surface so the heading still reads "New
+      // image" / "New video" / "New audio" — the shared "Media" label only
+      // appears on the tab strip itself.
+      const key: keyof Dict =
+        mediaSurface === 'image'
+          ? 'newproj.titleImage'
+          : mediaSurface === 'video'
+            ? 'newproj.titleVideo'
+            : 'newproj.titleAudio';
+      return t(key);
+    }
     case 'other':
       return t('newproj.titleOther');
   }
 }
 
-function autoName(tab: CreateTab, t: TranslateFn): string {
+function autoName(
+  tab: CreateTab,
+  mediaSurface: MediaSurface,
+  t: TranslateFn,
+): string {
   const stamp = new Date().toLocaleDateString();
-  return `${t(TAB_LABEL_KEYS[tab])} · ${stamp}`;
+  // For the Media tab the auto name reads "Image · {date}" / "Video · …" /
+  // "Audio · …" so the project list still surfaces the actual surface.
+  const labelKey: keyof Dict =
+    tab === 'media' ? MEDIA_SURFACE_LABEL_KEYS[mediaSurface] : TAB_LABEL_KEYS[tab];
+  return `${t(labelKey)} · ${stamp}`;
 }

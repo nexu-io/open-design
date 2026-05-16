@@ -1,0 +1,50 @@
+{
+  "slug": "zhangzara-long-table",
+  "name": "Long Table",
+  "tagline": "Warm cream and rust-red supper-club aesthetic with bold uppercase grotesk headlines, italic Fraunces, and pill-shaped outlined buttons.",
+  "mood": [
+    "warm",
+    "intimate",
+    "modern",
+    "friendly",
+    "small-batch",
+    "social",
+    "hospitality"
+  ],
+  "occasion": [
+    "supper club or dinner series",
+    "event or community gathering",
+    "small hospitality / restaurant brand",
+    "creative studio open house",
+    "membership or subscription pitch",
+    "wine or food brand catalogue",
+    "modern lifestyle brand"
+  ],
+  "tone": [
+    "warm",
+    "playful",
+    "considered",
+    "social",
+    "magazine-friendly",
+    "modern-editorial"
+  ],
+  "formality": "medium",
+  "density": "medium",
+  "palette": {
+    "paper": "#FAF1E2",
+    "ink": "#B53D2A",
+    "ink-deep": "#8E2D1F",
+    "description": "warm buttery-cream paper with one strict rust-red / terracotta ink used for type, pill borders, and outlined info cards — strictly bichromatic, very social-media friendly"
+  },
+  "typography": {
+    "display": "Bricolage Grotesque",
+    "body": "Fraunces (italic + roman)",
+    "style": "bold uppercase Bricolage Grotesque for hero / chapter titles paired with Fraunces italic for body, captions, button labels, and tagline — a contemporary mix-and-match modern editorial pairing"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel like a warm, intimate, modern hospitality / community brand: supper clubs, dinner series, small restaurants, creative-studio events, membership pitches, lifestyle and wine brands. Equally good for any deck wanting a single warm accent colour, italic-meets-bold typography, and a social-media-aware modern-editorial voice.",
+  "avoid_for": "Decks that need corporate polish, technical density, or a cold / minimalist register — the rust-red palette and bold-italic mix are intentionally warm and people-facing.",
+  "slide_count": 8,
+  "navigation": "vanilla JS (arrow keys, space, Home/End, touch swipe)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/long-table"
+}

@@ -1,15 +1,63 @@
 // Daemon-backed app preferences (onboarding state, agent/skill/DS selection).
 //
-// The web frontend pushes non-sensitive preferences here via PUT
-// /api/app-config; the daemon persists them to <dataDir>/app-config.json
-// (where dataDir defaults to <projectRoot>/.od but follows OD_DATA_DIR when
-// set, keeping test and multi-namespace runs isolated).
-// This survives browser storage resets and origin changes so onboarding
-// and agent selection don't reappear unexpectedly.
+// The web frontend pushes preferences here via PUT /api/app-config; the
+// daemon persists them to <dataDir>/app-config.json (where dataDir defaults
+// to <projectRoot>/.od but follows OD_DATA_DIR when set, keeping test and
+// multi-namespace runs isolated). This survives browser storage resets and
+// origin changes so onboarding and agent selection don't reappear unexpectedly.
+//
+// `agentCliEnv` is intentionally limited by allowlist below. It may include
+// proxy/auth overrides for local CLIs (for example ANTHROPIC_BASE_URL +
+// ANTHROPIC_API_KEY for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY for
+// Codex). Those values are local-only and should not be logged or returned
+// outside this machine.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+
+// Plugin-system env knobs. See docs/plans/plugins-implementation.md F6 / F9.
+// Phase 1 only reads them; the GC worker that enforces snapshot expiry lands
+// in Phase 5. Centralized here to keep daemon modules from sprinkling magic
+// numbers across the codebase.
+export interface PluginEnvKnobs {
+  // Hard ceiling on devloop iterations per stage (spec §10.2).
+  maxDevloopIterations: number;
+  // Days before an unreferenced applied_plugin_snapshots row expires. A
+  // value of 0 means "keep forever" (operators can opt out of GC entirely).
+  snapshotUnreferencedTtlDays: number;
+  // Optional cap on how long even a referenced snapshot stays around once
+  // its run/conversation/project is terminal. Default unset -> unlimited.
+  snapshotRetentionDays: number | null;
+  // GC worker tick interval. Phase 5 reads this; Phase 1 just exposes the
+  // knob through `od config get` so operators can plan ahead.
+  snapshotGcIntervalMs: number;
+}
+
+function intFromEnv(key: string, fallback: number): number {
+  const raw = process.env[key];
+  if (typeof raw !== 'string' || raw.trim().length === 0) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.floor(parsed);
+}
+
+function nullableIntFromEnv(key: string): number | null {
+  const raw = process.env[key];
+  if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+}
+
+export function readPluginEnvKnobs(): PluginEnvKnobs {
+  return {
+    maxDevloopIterations:        intFromEnv('OD_MAX_DEVLOOP_ITERATIONS', 10),
+    snapshotUnreferencedTtlDays: intFromEnv('OD_SNAPSHOT_UNREFERENCED_TTL_DAYS', 30),
+    snapshotRetentionDays:       nullableIntFromEnv('OD_SNAPSHOT_RETENTION_DAYS'),
+    snapshotGcIntervalMs:        intFromEnv('OD_SNAPSHOT_GC_INTERVAL_MS', 6 * 60 * 60 * 1000),
+  };
+}
 
 export interface AgentModelPrefs {
   model?: string;
@@ -17,6 +65,18 @@ export interface AgentModelPrefs {
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
+
+export interface TelemetryPrefs {
+  metrics?: boolean;
+  content?: boolean;
+  artifactManifest?: boolean;
+}
+
+export interface OrbitConfigPrefs {
+  enabled: boolean;
+  time: string;
+  templateSkillId?: string | null;
+}
 
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
@@ -27,6 +87,11 @@ export interface AppConfigPrefs {
   designSystemId?: string | null;
   disabledSkills?: string[];
   disabledDesignSystems?: string[];
+  installationId?: string | null;
+  telemetry?: TelemetryPrefs;
+  privacyDecisionAt?: number | null;
+  orbit?: OrbitConfigPrefs;
+  customInstructions?: string | null;
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -38,6 +103,11 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'designSystemId',
   'disabledSkills',
   'disabledDesignSystems',
+  'installationId',
+  'telemetry',
+  'privacyDecisionAt',
+  'orbit',
+  'customInstructions',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -46,9 +116,41 @@ function configFile(dataDir: string): string {
 
 const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
 
+const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
+  'metrics',
+  'content',
+  'artifactManifest',
+]);
+
+function validateTelemetry(raw: unknown): TelemetryPrefs | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const result: Record<string, boolean> = Object.create(null);
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k === '__proto__' || k === 'constructor') continue;
+    if (!TELEMETRY_KEYS.has(k)) continue;
+    if (typeof v === 'boolean') result[k] = v;
+  }
+  return Object.keys(result).length > 0 ? (result as TelemetryPrefs) : undefined;
+}
+
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ['claude', new Set(['CLAUDE_CONFIG_DIR'])],
-  ['codex', new Set(['CODEX_HOME'])],
+  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'])],
+  ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'OPENAI_API_KEY'])],
+  ['copilot', new Set(['COPILOT_BIN'])],
+  ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
+  ['deepseek', new Set(['DEEPSEEK_BIN'])],
+  ['devin', new Set(['DEVIN_BIN'])],
+  ['gemini', new Set(['GEMINI_BIN'])],
+  ['hermes', new Set(['HERMES_BIN'])],
+  ['kimi', new Set(['KIMI_BIN'])],
+  ['kiro', new Set(['KIRO_BIN'])],
+  ['kilo', new Set(['KILO_BIN'])],
+  ['opencode', new Set(['OPENCODE_BIN'])],
+  ['pi', new Set(['PI_BIN'])],
+  ['qoder', new Set(['QODER_BIN'])],
+  ['qwen', new Set(['QWEN_BIN'])],
+  ['vibe', new Set(['VIBE_BIN'])],
 ]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {
@@ -76,7 +178,7 @@ function validateAgentModels(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
+export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const result: AgentCliEnvPrefs = Object.create(null);
@@ -97,6 +199,33 @@ function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
     if (Object.keys(env).length > 0) result[agentId] = env;
   }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function isValidOrbitTime(time: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return false;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
+function validateOrbit(raw: unknown): OrbitConfigPrefs | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const enabled = typeof obj.enabled === 'boolean' ? obj.enabled : false;
+  const time = typeof obj.time === 'string' && isValidOrbitTime(obj.time)
+    ? obj.time
+    : '08:00';
+  const orbit: OrbitConfigPrefs = { enabled, time };
+
+  if (Object.hasOwn(obj, 'templateSkillId')) {
+    orbit.templateSkillId = typeof obj.templateSkillId === 'string' && obj.templateSkillId.trim()
+      ? obj.templateSkillId.trim()
+      : null;
+  }
+
+  return orbit;
 }
 
 export function agentCliEnvForAgent(
@@ -144,6 +273,45 @@ function applyConfigValue(
     } else {
       delete target[key];
     }
+  }
+  if (key === 'installationId') {
+    if (typeof value === 'string' || value === null) target[key] = value;
+    return;
+  }
+  if (key === 'telemetry') {
+    const validated = validateTelemetry(value);
+    if (validated !== undefined) {
+      target[key] = validated;
+    } else {
+      delete target[key];
+    }
+  }
+  if (key === 'privacyDecisionAt') {
+    if (
+      value === null ||
+      (typeof value === 'number' && Number.isFinite(value) && value >= 0)
+    ) {
+      target[key] = value;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'orbit') {
+    const validated = validateOrbit(value);
+    if (validated !== undefined) {
+      target[key] = validated;
+    } else {
+      delete target[key];
+    }
+  }
+  if (key === 'customInstructions') {
+    if (typeof value === 'string') {
+      target[key] = value.slice(0, 5000);
+    } else if (value === null) {
+      target[key] = value;
+    }
+    return;
   }
 }
 

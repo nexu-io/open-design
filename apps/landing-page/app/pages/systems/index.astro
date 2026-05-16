@@ -1,0 +1,60 @@
+---
+/*
+ * /systems/ — index of every portable design system in the repo.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import SystemCard from '../../_components/system-card.astro';
+import { getSystemRecords, getSystemCategoryIndex } from '../../_lib/catalog';
+
+const systems = await getSystemRecords();
+
+const categoryTags = await getSystemCategoryIndex();
+
+const title = `Design Systems — ${systems.length} portable visual systems | Open Design`;
+const description =
+  'Browse the full Open Design design systems catalog: 100+ DESIGN.md token bundles spanning editorial, productivity, brand, futuristic, and minimalist systems. Pick one in the daemon top-bar and every skill renders in that visual language.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Open Design Design Systems catalog',
+  description,
+  url: new URL('/systems/', Astro.site).toString(),
+  numberOfItems: systems.length,
+};
+---
+
+<Layout title={title} description={description} active="systems" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">Catalog · Nº 02</span>
+    <h1 class="display">
+      <em>Design Systems</em> — {systems.length} portable visual systems<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      Each system is a single <code>DESIGN.md</code> token spec. Pick one in
+      the daemon top-bar and every skill reads it as part of its system
+      prompt — colors, type, spacing, components, all consistent.
+    </p>
+  </header>
+
+  <section class="filter-strip" aria-label="Design system filters">
+    <div class="filter-group">
+      <span class="filter-label">Category</span>
+      <ul>
+        {categoryTags.map((tag) => (
+          <li>
+            <a class="chip chip-link" href={`/systems/category/${tag.slug}/`}>
+              {tag.label}<span class="chip-num">{tag.count}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="catalog-grid systems-grid" aria-label="All systems">
+    <ul>
+      {systems.map((s) => <SystemCard system={s} />)}
+    </ul>
+  </section>
+</Layout>

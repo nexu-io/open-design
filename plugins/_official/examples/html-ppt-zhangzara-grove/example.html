@@ -1,0 +1,1676 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grove Presentation</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Grove style uses four font families:
+        1. Playfair Display    — editorial serif for headlines, italic in coral for accent emphasis
+        2. Jost                — clean light grotesque for body copy (weight 300 — the "good paper" feel)
+        3. JetBrains Mono      — labels, metadata, vertical sidebar text
+        4. Noto Serif SC / Noto Sans SC — Chinese fallbacks for every role
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@300;400&family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE A · TOKENS  —  GROVE STYLE                                     ║
+   ║                                                                      ║
+   ║  Replace this block to change the visual style entirely.             ║
+   ║  Every color, font, and size in this file reads from these vars.     ║
+   ║  Never write raw hex values, font names, or px sizes outside here.   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+      :root {
+        /* ── Palette ──────────────────────────────────────────────────────── */
+        /* Deep forest green: grounded, considered, editorial — the Grove base */
+        --c-bg: #192b1b;
+        /* Slightly lighter forest green for secondary dark surfaces */
+        --c-bg-alt: #1e3221;
+        /* Warm parchment: light slide background — feels like good paper */
+        --c-bg-light: #e8e4d6;
+        /* Slightly cooler parchment for secondary light surfaces */
+        --c-bg-light-alt: #dedad0;
+
+        /* Primary text on dark: warm cream, never pure white */
+        --c-fg: #d4cfbf;
+        /* Secondary text on dark: muted cream at 60% opacity */
+        --c-fg-2: rgba(212, 207, 191, 0.6);
+        /* Tertiary / hint text on dark: 32% opacity — near-invisible */
+        --c-fg-3: rgba(212, 207, 191, 0.32);
+        /* Primary text on light: forest green near-black */
+        --c-fg-light: #192b1b;
+        /* Secondary text on light */
+        --c-fg-light-2: rgba(25, 43, 27, 0.58);
+        /* Tertiary text on light */
+        --c-fg-light-3: rgba(25, 43, 27, 0.33);
+
+        /* Accent: terracotta coral — the single warm note; used sparingly */
+        --c-accent: #c8524a;
+        /* Dividers on dark: faint cream border at 12% opacity */
+        --c-border: rgba(212, 207, 191, 0.12);
+        /* Dividers on light: faint green border at 14% opacity */
+        --c-border-light: rgba(25, 43, 27, 0.14);
+
+        /* ── Typography ──────────────────────────────────────────────────── */
+        /* Display + Heading: Playfair Display — editorial serif.
+           Italic in accent coral is the Grove signature move.
+           NEVER use weight 700 or bold on a serif in Grove. */
+        --f-display: "Playfair Display", "Noto Serif SC", Georgia, serif;
+        --f-heading: "Playfair Display", "Noto Serif SC", Georgia, serif;
+        /* Body: Jost weight 300 — light grotesque that steps back so the serif leads */
+        --f-body: "Jost", "Noto Sans SC", system-ui, sans-serif;
+        /* Mono: JetBrains Mono — labels, vertical sidebar text, metadata */
+        --f-mono: "JetBrains Mono", monospace;
+
+        /* ── Type Scale ───────────────────────────────────────────────────── */
+        /* vw units keep all sizes proportional regardless of window width */
+        --sz-display: 10vw; /* hero cover title — very large, commanding */
+        --sz-h1: 5.5vw; /* chapter and statement titles */
+        --sz-h2: 3.2vw; /* slide headlines */
+        --sz-h3: 2vw; /* sub-headlines, compare panel titles */
+        --sz-lead: 1.45vw; /* lead paragraph */
+        --sz-body: 1.05vw; /* body text, bullets */
+        --sz-caption: 0.82vw; /* captions, footnotes, chart sources */
+        --sz-label: 0.7vw; /* chrome labels, kickers, mono metadata */
+
+        /* ── Spacing ─────────────────────────────────────────────────────── */
+        /* Grove is intentionally spacious — breathing room is the aesthetic */
+        --pad-x: 8vw; /* horizontal slide padding */
+        --pad-y: 6.5vh; /* vertical slide padding */
+        --gap-lg: 4.5vh; /* between major content sections */
+        --gap-md: 2.8vh; /* between related elements */
+        --gap-sm: 1.4vh; /* between tightly coupled elements */
+
+        /* ── Motion ──────────────────────────────────────────────────────── */
+        /* Slide pan: sharp and deliberate — Grove moves with intention */
+        --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
+        --dur-slide: 0.9s;
+        /* Element entrance: spring-y ease-out for content reveals */
+        --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur-enter: 0.7s;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE B · ENGINE — DO NOT MODIFY                                     ║
+   ║                                                                      ║
+   ║  Layout engine, transitions, animation system, navigation.           ║
+   ║  Touching this breaks the mechanics.                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Deck container — all slides sit side by side in one horizontal strip */
+      #deck {
+        display: flex;
+        height: 100vh;
+        transition: transform var(--dur-slide) var(--ease-slide);
+        will-change: transform;
+      }
+
+      /* Slide base — each slide occupies exactly one full viewport */
+      .slide {
+        flex: 0 0 100vw;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        padding: var(--pad-y) var(--pad-x);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      .slide-body {
+        min-height: 0;
+      }
+
+      /* Slide themes */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+      }
+
+      /* ── Animation system ─────────────────────────────────────────────── */
+      /* Elements start invisible; become visible only when slide is active */
+      [data-anim] {
+        opacity: 0;
+      }
+      .slide.is-active [data-anim] {
+        animation-duration: var(--dur-enter);
+        animation-timing-function: var(--ease-enter);
+        animation-fill-mode: forwards;
+      }
+      .slide.is-active [data-anim="fade-up"] {
+        animation-name: kFadeUp;
+      }
+      .slide.is-active [data-anim="fade-in"] {
+        animation-name: kFadeIn;
+      }
+      .slide.is-active [data-anim="reveal-right"] {
+        animation-name: kRevealRight;
+      }
+      .slide.is-active [data-anim="reveal-left"] {
+        animation-name: kRevealLeft;
+      }
+      .slide.is-active [data-anim="scale-in"] {
+        animation-name: kScaleIn;
+      }
+
+      /* Staggered delays via data-delay attribute (0–6) */
+      [data-delay="0"] {
+        animation-delay: 0s;
+      }
+      [data-delay="1"] {
+        animation-delay: 0.08s;
+      }
+      [data-delay="2"] {
+        animation-delay: 0.18s;
+      }
+      [data-delay="3"] {
+        animation-delay: 0.3s;
+      }
+      [data-delay="4"] {
+        animation-delay: 0.44s;
+      }
+      [data-delay="5"] {
+        animation-delay: 0.6s;
+      }
+      [data-delay="6"] {
+        animation-delay: 0.78s;
+      }
+
+      @keyframes kFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(28px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes kFadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealRight {
+        from {
+          clip-path: inset(0 100% 0 0);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0% 0 0);
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealLeft {
+        from {
+          clip-path: inset(0 0 0 100%);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0 0 0%);
+          opacity: 1;
+        }
+      }
+      @keyframes kScaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── Navigation UI ───────────────────────────────────────────────── */
+      #nav-dots {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        z-index: 100;
+      }
+      .nav-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.22);
+        cursor: pointer;
+        transition:
+          background 0.3s,
+          transform 0.3s;
+        padding: 0;
+      }
+      .nav-dot.is-active {
+        background: rgba(255, 255, 255, 0.8);
+        transform: scale(1.4);
+      }
+
+      /* Disabled: the slide-foot bar already shows "NN / TT" on every
+         slide; the fixed counter at the viewport edge was a duplicate. */
+      #slide-counter {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE C · TYPOGRAPHY                                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Display: Playfair 400 — the Grove rule: never bold on serif */
+      .display {
+        font-family: var(--f-display);
+        font-size: var(--sz-display);
+        font-weight: 400;
+        line-height: 1;
+        letter-spacing: -0.01em;
+      }
+      .h1 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h1);
+        font-weight: 400;
+        line-height: 1.1;
+      }
+      .h2 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 400;
+        line-height: 1.2;
+      }
+      .h3 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        line-height: 1.3;
+      }
+
+      /* Grove signature: italic serif in terracotta coral for em inside headings */
+      .h1 em,
+      .h2 em,
+      .h3 em {
+        font-style: italic;
+        color: var(--c-accent);
+      }
+
+      .lead {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 300;
+        line-height: 1.65;
+      }
+      .body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        line-height: 1.75;
+      }
+      .caption {
+        font-family: var(--f-body);
+        font-size: var(--sz-caption);
+        font-weight: 300;
+        line-height: 1.55;
+      }
+      .label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 300;
+        letter-spacing: 0.12em;
+      }
+
+      /* Muted text — adapts to dark/light context automatically */
+      .muted {
+        color: var(--c-fg-2);
+      }
+      .accent {
+        color: var(--c-accent);
+      }
+      .light .muted {
+        color: var(--c-fg-light-2);
+      }
+
+      /* Bullet list — clean coral dash leaders, Jost 300 */
+      .bullet-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        line-height: 1.65;
+        padding-left: 0;
+      }
+      .bullet-list li {
+        display: grid;
+        grid-template-columns: 2em 1fr;
+        gap: 0.5em;
+      }
+      /* Coral em-dash replaces bullet point */
+      .bullet-list li::before {
+        content: "—";
+        color: var(--c-accent);
+        font-family: var(--f-mono);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE D · CHROME                                                     ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Chrome (top bar) and footer */
+      .slide-chrome,
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .slide-chrome {
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-md);
+      }
+      .slide-foot {
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        margin-top: var(--gap-md);
+      }
+      .light .slide-chrome,
+      .light .slide-foot {
+        border-color: var(--c-border-light);
+      }
+
+      /* Layouts that are chromeless — no top bar or footer */
+      .slide--cover .slide-chrome,
+      .slide--cover .slide-foot,
+      .slide--chapter .slide-chrome,
+      .slide--chapter .slide-foot,
+      .slide--quote .slide-chrome,
+      .slide--quote .slide-foot,
+      .slide--end .slide-chrome,
+      .slide--end .slide-foot {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE E · GROVE COMPONENTS + LAYOUT PATTERNS                        ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* ── Grove: large decorative watermark number ────────────────────────── */
+      /* Massive serif digit in the background — compositional texture, not UI.
+         Near-invisible: only 6% opacity. Positions in bottom-right corner. */
+      .grove-num {
+        font-family: var(--f-display);
+        font-size: 18vw;
+        font-weight: 400;
+        line-height: 1;
+        color: rgba(212, 207, 191, 0.06); /* near-invisible watermark on dark */
+        position: absolute;
+        right: var(--pad-x);
+        bottom: -0.15em;
+        pointer-events: none;
+        user-select: none;
+        letter-spacing: -0.03em;
+      }
+      /* Same watermark effect on light slides uses forest green tint */
+      .light .grove-num {
+        color: rgba(25, 43, 27, 0.06);
+      }
+
+      /* ── Grove: vertical sidebar label ──────────────────────────────────── */
+      /* Disabled: vertical/rotated sidebar text was added as a chapter-tab
+         decoration but read as overflow / clutter on most viewports.
+         Hidden across the deck; the slide-chrome bar and slide-foot already
+         provide section name and page number. */
+      .grove-sidebar {
+        display: none !important;
+      }
+      .light .grove-sidebar {
+        color: var(--c-fg-light-3);
+      }
+
+      /* ── Grove: stat card ────────────────────────────────────────────────── */
+      /* Spacious layout: large serif number in coral, mono label beneath, border-bottom rule */
+      .grove-stat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border);
+      }
+      /* Large serif stat value in terracotta coral */
+      .grove-stat-val {
+        font-family: var(--f-display);
+        font-size: 4.5vw;
+        font-weight: 400;
+        line-height: 1;
+        color: var(--c-accent);
+        letter-spacing: -0.02em;
+      }
+      /* Italic suffix within stat values: e.g. 73<em>%</em> */
+      .grove-stat-val em {
+        font-style: italic;
+      }
+      /* Mono uppercase label beneath the number */
+      .grove-stat-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--c-fg-2);
+      }
+      .light .grove-stat-label {
+        color: var(--c-fg-light-2);
+      }
+      .light .grove-stat {
+        border-color: var(--c-border-light);
+      }
+
+      /* ── Image placeholder ────────────────────────────────────────────── */
+      /* Used in place of <img> tags — marks where real images will go */
+      .img-placeholder {
+        background: var(--c-bg-alt);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-3);
+        width: 100%;
+        flex: 1;
+        min-height: 30vh;
+      }
+      .light .img-placeholder {
+        background: var(--c-border-light);
+        color: var(--c-fg-light-3);
+      }
+
+      /* ── Decorative rule lines ────────────────────────────────────────── */
+      /* Short coral horizontal rule — a compositional beat between kicker and headline */
+      .rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+      }
+      .rule.full {
+        width: 100%;
+        background: var(--c-border);
+      }
+      .light .rule.full {
+        background: var(--c-border-light);
+      }
+
+      /* ── Kicker label (above headlines) ──────────────────────────────── */
+      .kicker {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+      }
+
+      /* ── 1. COVER ───────────────────────────────────────────────────────── */
+      /* Chromeless — flex column, fills full viewport height */
+      .slide--cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      /* ── 2. CHAPTER ─────────────────────────────────────────────────────── */
+      .slide--chapter {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      /* Mono kicker above chapter title */
+      .chapter-num {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+      /* Short coral rule between kicker and title */
+      .chapter-rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+
+      /* ── 3. STATEMENT ───────────────────────────────────────────────────── */
+      .slide--statement .statement-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+      /* Cap the statement headline so a 3-line thesis can't overflow on
+         shorter viewports. min() takes the smallest of width-based, height-
+         based, and absolute caps, ensuring the line-stack always fits. */
+      .slide--statement .h1 {
+        font-size: min(4.5vw, 7.5vh, 88px);
+        line-height: 1.15;
+      }
+
+      /* ── 4. SPLIT ───────────────────────────────────────────────────────── */
+      /* Two columns: text left, image right */
+      .slide--split .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+      }
+      .split-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .split-image {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        height: 100%;
+      }
+
+      /* ── 5. STATS ───────────────────────────────────────────────────────── */
+      .slide--stats .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+      }
+      /* Three grove-stat cards in a row — generous spacing between them */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: calc(var(--pad-x) * 0.6);
+      }
+
+      /* ── 6. LIST ────────────────────────────────────────────────────────── */
+      /* Two-column: intro left, bullets right */
+      .slide--list .slide-body {
+        display: grid;
+        grid-template-columns: 2fr 3fr;
+        gap: calc(var(--pad-x) * 0.8);
+        align-items: center;
+      }
+      .list-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-top: var(--gap-sm);
+      }
+      /* Body copy on the list slide: bumped up for legibility. The default
+         --sz-body of 1.05vw reads as ~12px on typical laptop viewports. */
+      .slide--list .body,
+      .slide--list .bullet-list {
+        font-size: max(1.4vw, 17px);
+        line-height: 1.6;
+      }
+
+      /* ── 7. QUOTE ───────────────────────────────────────────────────────── */
+      /* Chromeless — the emotional centerpiece of the deck */
+      .slide--quote {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: calc(var(--pad-y) * 1.2) calc(var(--pad-x) * 1.1);
+      }
+      /* Large decorative opening quote mark in coral */
+      .quote-mark {
+        font-family: var(--f-display);
+        font-size: 8vw;
+        line-height: 0.6;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+        font-weight: 400;
+      }
+      /* Large italic serif quote body */
+      .quote-text {
+        font-family: var(--f-display);
+        font-size: 3.2vw;
+        font-weight: 400;
+        line-height: 1.35;
+        letter-spacing: -0.01em;
+        max-width: 75%;
+        margin-bottom: var(--gap-lg);
+        font-style: italic;
+      }
+      .quote-attr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+      }
+
+      /* ── 8. COMPARE ─────────────────────────────────────────────────────── */
+      /* Two panels divided by a vertical line */
+      .slide--compare .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+      }
+      .compare-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: var(--gap-md) 0;
+      }
+      .compare-panel.left {
+        padding-right: calc(var(--pad-x) * 0.55);
+        border-right: 1px solid var(--c-border);
+      }
+      .compare-panel.right {
+        padding-left: calc(var(--pad-x) * 0.55);
+      }
+      .light .compare-panel.left {
+        border-color: var(--c-border-light);
+      }
+      /* Panel label: coral on the "after" side */
+      .compare-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .compare-label.after {
+        color: var(--c-accent);
+      }
+      .light .compare-label {
+        border-color: var(--c-border-light);
+      }
+
+      /* ── 9. END ─────────────────────────────────────────────────────────── */
+      /* Chromeless — closes the deck with generosity of space */
+      .slide--end {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* ── CHART ──────────────────────────────────────────────────────────── */
+      .slide--chart .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-shrink: 0;
+      }
+      .chart-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 0;
+      }
+      /* Bars aligned to a left spine line */
+      .bar-track {
+        height: 30vh;
+        display: flex;
+        align-items: flex-end;
+        gap: 4vw;
+        border-left: 1px solid var(--c-border);
+        padding-left: 0.5vw;
+      }
+      .light .bar-track {
+        border-color: var(--c-border-light);
+      }
+      .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 1vh;
+        height: 100%;
+      }
+      /* Default bar: muted fg-3 color */
+      .bar-fill {
+        width: 100%;
+        background: var(--c-fg-3);
+      }
+      /* Accent bar: terracotta coral highlight for the featured value */
+      .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .light .bar-fill {
+        background: var(--c-fg-light-3);
+      }
+      .light .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .bar-x-label {
+        font-family: var(--f-mono);
+        /* Bumped from var(--sz-caption) (~10px on laptop) so the category
+           labels are actually readable. */
+        font-size: max(1.1vw, 13px);
+        letter-spacing: 0.1em;
+        /* Lifted from --c-fg-3 (32% opacity) to --c-fg-2 (60% opacity);
+           the 32% reading was nearly invisible on the dark background. */
+        color: var(--c-fg-2);
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+      .light .bar-x-label {
+        color: var(--c-fg-light-2);
+      }
+      .bar-val {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-2);
+      }
+      /* Highlighted bar value: coral and slightly bolder */
+      .bar-val.hi {
+        color: var(--c-accent);
+        font-weight: 400;
+      }
+      .light .bar-val {
+        color: var(--c-fg-light-2);
+      }
+      /* Thin baseline rule below bars */
+      .chart-baseline {
+        height: 1px;
+        background: var(--c-border);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .light .chart-baseline {
+        background: var(--c-border-light);
+      }
+      /* Source attribution below chart */
+      .chart-source {
+        flex-shrink: 0;
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        color: var(--c-fg-3);
+        letter-spacing: 0.06em;
+        margin-top: var(--gap-sm);
+      }
+      .light .chart-source {
+        color: var(--c-fg-light-3);
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- NAV DOTS: generated by JS -->
+    <nav id="nav-dots"></nav>
+    <!-- SLIDE COUNTER: generated by JS -->
+    <div id="slide-counter"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         DECK — all slides live here, side by side in one horizontal strip
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div id="deck">
+      <!-- ═══════ SLIDE 1 · COVER dark ══════════════════════════════════════
+           Chromeless. grove-sidebar rotated along left edge.
+           grove-num watermark "01" in bottom-right corner.
+           Display title in Playfair 400 with italic coral emphasis word.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--cover">
+        <!-- Vertical sidebar label: rotated text on the left edge -->
+        <div class="grove-sidebar" data-anim="fade-in" data-delay="0">
+          Strategy · Presentation
+        </div>
+        <!-- Watermark number: near-invisible serif "01" in background -->
+        <div class="grove-num">01</div>
+
+        <!-- Main content: grows to fill, centers vertically -->
+        <div
+          style="
+            padding-top: calc(var(--pad-y) * 1.5);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          "
+        >
+          <!-- Studio name kicker: mono uppercase, coral -->
+          <div class="kicker" data-anim="fade-in" data-delay="1">
+            [Studio Name] · [Year]
+          </div>
+          <!-- Short coral rule revealing right -->
+          <div
+            class="rule"
+            data-anim="reveal-right"
+            data-delay="2"
+            style="margin: var(--gap-sm) 0"
+          ></div>
+          <!-- h1 headline: Playfair 400, max 55% width, italic em in coral -->
+          <h1
+            class="h1"
+            style="max-width: 55%; margin-top: var(--gap-md)"
+            data-anim="fade-up"
+            data-delay="3"
+          >
+            [Presentation Title Goes <em>Here</em>]
+          </h1>
+          <!-- Lead subtitle: Jost 300, muted, generous line-height -->
+          <p
+            class="lead muted"
+            style="max-width: 40%; margin-top: var(--gap-md)"
+            data-anim="fade-up"
+            data-delay="4"
+          >
+            A [type of work] for [audience or occasion]. [Month, Year].
+          </p>
+        </div>
+
+        <!-- Bottom meta bar: thin top border, two mono labels -->
+        <div
+          style="
+            border-top: 1px solid var(--c-border);
+            padding-top: var(--gap-sm);
+            display: flex;
+            justify-content: space-between;
+          "
+          data-anim="fade-in"
+          data-delay="5"
+        >
+          <span class="label muted">[Prepared by]</span>
+          <span class="label muted">[Confidential]</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 2 · CHAPTER dark ════════════════════════════════════
+           Section 01 divider. Giant watermark number creates depth.
+           Kicker shows "01 / CONTEXT" then rule then h1 title.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--chapter">
+        <!-- Watermark: massive near-invisible "01" in background -->
+        <div class="grove-num">01</div>
+        <!-- Section kicker: "01 / CONTEXT" in mono coral -->
+        <div class="chapter-num" data-anim="fade-in" data-delay="0">
+          01 / Context
+        </div>
+        <!-- Short coral rule -->
+        <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
+        <!-- Chapter title: Playfair 400, max 62% width -->
+        <h1
+          class="h1"
+          style="max-width: 62%; margin-bottom: var(--gap-md)"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          The landscape has shifted. Now we must decide where to <em>stand</em>.
+        </h1>
+        <!-- Supporting line: Jost 300 muted -->
+        <p
+          class="lead muted"
+          style="max-width: 48%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          An honest assessment of where the market is, and where the opportunity
+          lies.
+        </p>
+      </section>
+
+      <!-- ═══════ SLIDE 3 · STATEMENT dark ══════════════════════════════════
+           Single bold thesis — the most important idea in the deck.
+           One sentence, max 62% width. Italic coral emphasis word.
+           grove-sidebar provides category context.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--statement">
+        <!-- Vertical sidebar label -->
+        <div class="grove-sidebar">The Thesis</div>
+        <!-- Chrome bar: section name left, page number right -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >Core Insight</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">03</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="statement-body">
+            <div class="kicker" data-anim="fade-in" data-delay="1">
+              The Argument
+            </div>
+            <div class="rule" data-anim="reveal-right" data-delay="2"></div>
+            <!-- Main thesis: large serif, generous white space around it -->
+            <h1
+              class="h1"
+              style="max-width: 62%"
+              data-anim="fade-up"
+              data-delay="3"
+            >
+              The brands that will lead the next decade are not the ones with
+              the best product. They are the ones with the deepest
+              <em>understanding</em>.
+            </h1>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">03 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 4 · SPLIT light ═════════════════════════════════════
+           Text left, image placeholder right.
+           Warm parchment background — editorial, considered.
+           grove-sidebar provides section context.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--split">
+        <div class="grove-sidebar">The Evidence</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Research · Insight</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >04</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left: text content -->
+          <div class="split-text" data-anim="fade-up" data-delay="1">
+            <div class="kicker">What We Found</div>
+            <h2 class="h2">
+              Audiences have outgrown the stories being told about <em>them</em>
+            </h2>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              Three years of primary research across six markets revealed a
+              consistent pattern: the gap between how brands communicate and how
+              people actually live is widening.
+            </p>
+            <ul class="bullet-list" style="color: var(--c-fg-light)">
+              <li>
+                Authenticity is valued over aspiration in all categories tested
+              </li>
+              <li>Trust is earned through consistency, not campaigns</li>
+              <li>
+                Communities form around shared values, not product features
+              </li>
+            </ul>
+          </div>
+
+          <!-- Right: image placeholder fills the column -->
+          <div
+            data-anim="fade-in"
+            data-delay="3"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: var(--gap-sm);
+              height: 100%;
+            "
+          >
+            <div class="img-placeholder">[IMAGE PLACEHOLDER]</div>
+            <p
+              class="caption"
+              style="
+                color: var(--c-fg-light-3);
+                font-family: var(--f-mono);
+                letter-spacing: 0.08em;
+              "
+            >
+              [Caption: research context or visual annotation]
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">04 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 5 · STATS dark ═══════════════════════════════════════
+           Three grove-stat cards in a row.
+           Large serif numbers in terracotta coral — let them breathe.
+           grove-sidebar provides section context.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--stats">
+        <div class="grove-sidebar">By The Numbers</div>
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >Market · Metrics</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">05</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Section headline above stats -->
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            Three numbers that define the <em>opportunity</em>
+          </h2>
+
+          <!-- Three stat cards — spacious, no crowding -->
+          <div class="stats-row" data-anim="fade-up" data-delay="2">
+            <div class="grove-stat">
+              <!-- Serif stat value in coral: 73 + italic % suffix -->
+              <div class="grove-stat-val">73<em>%</em></div>
+              <div class="grove-stat-label">
+                Of consumers distrust brand-created content
+              </div>
+            </div>
+            <div class="grove-stat">
+              <div class="grove-stat-val">4.8<em>×</em></div>
+              <div class="grove-stat-label">
+                Higher engagement for community-driven campaigns
+              </div>
+            </div>
+            <div class="grove-stat">
+              <div class="grove-stat-val">#1</div>
+              <div class="grove-stat-label">
+                Driver of purchase decisions: peer recommendation
+              </div>
+            </div>
+          </div>
+
+          <!-- Source line below stats -->
+          <p
+            class="caption muted"
+            style="font-family: var(--f-mono); letter-spacing: 0.08em"
+            data-anim="fade-in"
+            data-delay="3"
+          >
+            Source: [Primary Research] · [Year] · N=[sample size] across
+            [geographies]
+          </p>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">05 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 6 · LIST light ══════════════════════════════════════
+           Two-column layout: intro heading left, bullet list right.
+           grove-sidebar on left edge.
+           Light parchment — feels like a printed document.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--list">
+        <div class="grove-sidebar">Our Approach</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Framework</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >06</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left: heading and intro -->
+          <div class="list-head" data-anim="fade-up" data-delay="1">
+            <div class="kicker">What Changes</div>
+            <h2 class="h2">
+              Five principles that <em>reframe</em> how we think about brand
+            </h2>
+            <p class="body" style="color: var(--c-fg-light-2)">
+              These are not tactics. They are the underlying commitments that
+              make everything else possible.
+            </p>
+          </div>
+
+          <!-- Right: bullet list with coral dash leaders -->
+          <ul
+            class="bullet-list"
+            style="color: var(--c-fg-light)"
+            data-anim="fade-up"
+            data-delay="2"
+          >
+            <li>
+              Start with the community, not the product — earn presence before
+              claiming it
+            </li>
+            <li>
+              Replace broadcast with conversation — listen before speaking
+            </li>
+            <li>
+              Make the values visible in operations, not just in messaging
+            </li>
+            <li>
+              Treat long-term relationship as the primary metric, not reach
+            </li>
+            <li>
+              Give audiences ownership of the narrative — participation over
+              performance
+            </li>
+          </ul>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">06 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 7 · QUOTE dark ═══════════════════════════════════════
+           Long italic serif quote — emotional centerpiece of the deck.
+           Chromeless. Large coral opening quote mark.
+           Attribution below: coral name, muted role/year.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--quote">
+        <!-- Large decorative opening quote mark in terracotta coral -->
+        <div class="quote-mark" data-anim="fade-in" data-delay="0">"</div>
+
+        <!-- Quote body: italic Playfair, spacious line-height -->
+        <p class="quote-text" data-anim="fade-up" data-delay="1">
+          The most radical thing a brand can do right now is simply tell the
+          truth about what it is, and what it is not.
+        </p>
+
+        <!-- Attribution: coral name, muted role -->
+        <div class="quote-attr" data-anim="fade-up" data-delay="3">
+          <span class="label accent">[Author Name]</span>
+          <span class="label muted">[Title] · [Year]</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 8 · COMPARE light ════════════════════════════════════
+           Before and after in two panels, divided by vertical rule.
+           Light parchment — document-like, considered.
+           Left panel: old model (no coral). Right panel: new model (coral label).
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--compare">
+        <div class="grove-sidebar">Before / After</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >The Shift</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >08</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left panel: the old way — muted label, no coral -->
+          <div class="compare-panel left" data-anim="fade-up" data-delay="1">
+            <div class="compare-label" style="color: var(--c-fg-light-2)">
+              The Old Model
+            </div>
+            <h3 class="h3">Brand as broadcaster — pushing messages outward</h3>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              The organization speaks. The audience receives. Feedback is
+              collected in annual surveys and processed into next year's
+              messaging brief.
+            </p>
+            <ul
+              class="bullet-list"
+              style="font-size: var(--sz-body); color: var(--c-fg-light)"
+            >
+              <li>Campaigns replace conversations</li>
+              <li>Reach is the primary metric</li>
+              <li>Community is a distribution channel</li>
+            </ul>
+          </div>
+
+          <!-- Right panel: the new way — coral label, italic emphasis -->
+          <div class="compare-panel right" data-anim="fade-up" data-delay="2">
+            <div class="compare-label after">The New Model</div>
+            <h3 class="h3">
+              Brand as participant — embedded in the <em>community</em>
+            </h3>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              The organization listens first and speaks in response. Feedback is
+              constant, not a project. The community owns the story as much as
+              the brand does.
+            </p>
+            <ul
+              class="bullet-list"
+              style="font-size: var(--sz-body); color: var(--c-fg-light)"
+            >
+              <li>Relationships replace campaigns</li>
+              <li>Trust is the primary metric</li>
+              <li>Community is the source of strategy</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">08 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 9 · CHAPTER dark ════════════════════════════════════
+           Section 02 divider — same pattern as slide 2, watermark "02".
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--chapter">
+        <!-- Watermark: massive near-invisible "02" -->
+        <div class="grove-num">02</div>
+        <div class="chapter-num" data-anim="fade-in" data-delay="0">
+          02 / Recommendation
+        </div>
+        <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
+        <h1
+          class="h1"
+          style="max-width: 58%; margin-bottom: var(--gap-md)"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          What we propose — and why we believe it will <em>work</em>
+        </h1>
+        <p
+          class="lead muted"
+          style="max-width: 45%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          A practical framework built on the evidence, with clear priorities and
+          measurable outcomes.
+        </p>
+      </section>
+
+      <!-- ═══════ SLIDE 10 · STATEMENT light ════════════════════════════════
+           Strong thesis on warm parchment — a change of emotional register.
+           Light version of the statement slide. Same structure, different texture.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--statement">
+        <div class="grove-sidebar">The Recommendation</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Strategic Direction</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >10</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <div class="statement-body">
+            <div class="kicker" data-anim="fade-in" data-delay="1">
+              The Path Forward
+            </div>
+            <div class="rule" data-anim="reveal-right" data-delay="2"></div>
+            <!-- Forest green text on parchment, coral italic emphasis -->
+            <h1
+              class="h1"
+              style="max-width: 65%; color: var(--c-fg-light)"
+              data-anim="fade-up"
+              data-delay="3"
+            >
+              Stop managing perception. Start <em>deserving</em> it.
+            </h1>
+            <p
+              class="lead"
+              style="
+                max-width: 52%;
+                color: var(--c-fg-light-2);
+                margin-top: var(--gap-md);
+              "
+              data-anim="fade-up"
+              data-delay="4"
+            >
+              The organizations that win the next decade will earn trust slowly,
+              through consistent action — not through the perfection of their
+              messaging.
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">10 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 11 · CHART dark ═════════════════════════════════════
+           Simple bar chart using grove design tokens.
+           Muted bars for most values, accent coral bar for the highlight.
+           All colors from CSS vars — no raw hex values.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--chart">
+        <div class="grove-sidebar">The Data</div>
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >Trust Index · Category Benchmarks</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">11</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Chart header: headline left, unit annotation right -->
+          <div class="chart-header">
+            <h2 class="h2" data-anim="fade-up" data-delay="1">
+              Consumer trust by <em>category</em>
+            </h2>
+            <span class="caption muted" data-anim="fade-in" data-delay="1"
+              >Score out of 100 · [Year] · N=[X]</span
+            >
+          </div>
+
+          <!-- Bar chart: 5 categories, coral accent on the highest bar -->
+          <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
+            <div class="bar-track">
+              <div class="bar-col">
+                <span class="bar-val">38</span>
+                <div class="bar-fill" style="height: 12vh"></div>
+                <span class="bar-x-label">Finance</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">44</span>
+                <div class="bar-fill" style="height: 15vh"></div>
+                <span class="bar-x-label">Media</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">56</span>
+                <div class="bar-fill" style="height: 18vh"></div>
+                <span class="bar-x-label">Retail</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">62</span>
+                <div class="bar-fill" style="height: 21vh"></div>
+                <span class="bar-x-label">Healthcare</span>
+              </div>
+              <!-- Highest bar: coral accent fill, coral value label -->
+              <div class="bar-col">
+                <span class="bar-val hi">79</span>
+                <div class="bar-fill accent" style="height: 27vh"></div>
+                <span class="bar-x-label">Community</span>
+              </div>
+            </div>
+            <!-- Thin baseline rule below all bars -->
+            <div class="chart-baseline"></div>
+          </div>
+
+          <!-- Source attribution -->
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: [Research Institute] · Consumer Trust Index · [Year]
+          </p>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">[Organization] · [Year]</span>
+          <span class="label muted">11 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 12 · END dark ════════════════════════════════════════
+           Closing thought + contact information. Chromeless.
+           The deck ends as it began: with generosity of space.
+           Watermark "12" in the background grounds the composition.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--end">
+        <!-- Watermark number in the background -->
+        <div class="grove-num">12</div>
+
+        <!-- Organization kicker -->
+        <div class="kicker" data-anim="fade-in" data-delay="0">
+          [Organization]
+        </div>
+
+        <!-- Short coral rule -->
+        <div class="rule" data-anim="reveal-right" data-delay="1"></div>
+
+        <!-- Closing headline: the last thing they read -->
+        <h1
+          class="h1"
+          style="max-width: 55%"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          The work begins when the presentation <em>ends</em>.
+        </h1>
+
+        <!-- Contact information: lead size, muted, spacious -->
+        <p
+          class="lead muted"
+          style="max-width: 45%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          [Author Name] · [author@organization.com] · [organization.com]
+        </p>
+
+        <!-- Small follow-up line: mono, very muted -->
+        <p
+          class="label muted"
+          style="margin-top: var(--gap-lg)"
+          data-anim="fade-in"
+          data-delay="4"
+        >
+          [Deck version] · [Date] · [Confidentiality note]
+        </p>
+      </section>
+    </div>
+    <!-- /deck -->
+
+    <script>
+      /* ══════════════════════════════════════════════════════════════════════
+         GROVE PRESENTATION ENGINE
+         Self-contained navigation: keyboard, touch, mouse-wheel, nav-dots.
+         No external dependencies.
+         ══════════════════════════════════════════════════════════════════════ */
+      (function () {
+        "use strict";
+
+        /* ── State ─────────────────────────────────────────────────────────── */
+        const deck = document.getElementById("deck");
+        const slides = Array.from(document.querySelectorAll(".slide"));
+        const dotsEl = document.getElementById("nav-dots");
+        const counter = document.getElementById("slide-counter");
+        const total = slides.length;
+        let current = 0;
+        let animating = false;
+
+        /* ── Bootstrap: set deck width, build nav dots ─────────────────────── */
+        function init() {
+          // The deck is one wide strip — width equals N full viewports
+          deck.style.width = total + "00vw";
+
+          // Build one dot per slide
+          slides.forEach(function (_, i) {
+            const btn = document.createElement("button");
+            btn.className = "nav-dot";
+            btn.setAttribute("aria-label", "Go to slide " + (i + 1));
+            btn.addEventListener("click", function () {
+              goTo(i);
+            });
+            dotsEl.appendChild(btn);
+          });
+
+          // Activate the first slide immediately
+          goTo(0, true); // true = skip transition on load
+        }
+
+        /* ── goTo: the single source of truth for navigation ───────────────── */
+        function goTo(index, instant) {
+          // Clamp to valid range
+          index = Math.max(0, Math.min(total - 1, index));
+          if (index === current && !instant) return;
+
+          // Mark animating to block rapid key/swipe spam
+          animating = true;
+
+          // Deactivate current slide: reset animations by toggling is-active
+          const prev = slides[current];
+          prev.classList.remove("is-active");
+          // Force a reflow so removing then re-adding is-active (on same slide)
+          // actually re-triggers the keyframe animations
+          void prev.offsetWidth; // eslint-disable-line no-void
+
+          // Translate the deck
+          if (instant) {
+            // Remove transition temporarily for the initial load snap
+            deck.style.transition = "none";
+            deck.style.transform = "translateX(-" + index + "00vw)";
+            void deck.offsetWidth; // force reflow
+            deck.style.transition = "";
+          } else {
+            deck.style.transform = "translateX(-" + index + "00vw)";
+          }
+
+          // Activate new slide
+          current = index;
+          const next = slides[current];
+          next.classList.add("is-active");
+
+          // Update nav dots
+          Array.from(dotsEl.children).forEach(function (dot, i) {
+            dot.classList.toggle("is-active", i === current);
+          });
+
+          // Update counter: "3 / 12"
+          counter.textContent = current + 1 + " / " + total;
+
+          // Unlock after transition completes
+          const delay = instant
+            ? 0
+            : parseFloat(getComputedStyle(deck).transitionDuration) * 1000;
+          setTimeout(function () {
+            animating = false;
+          }, delay);
+        }
+
+        /* ── Keyboard navigation ──────────────────────────────────────────── */
+        document.addEventListener("keydown", function (e) {
+          if (animating) return;
+          if (
+            e.key === "ArrowRight" ||
+            e.key === "ArrowDown" ||
+            e.key === " "
+          ) {
+            e.preventDefault();
+            goTo(current + 1);
+          } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            goTo(current - 1);
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            goTo(0);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            goTo(total - 1);
+          }
+        });
+
+        /* ── Mouse-wheel navigation ───────────────────────────────────────── */
+        let wheelCooldown = false;
+        document.addEventListener(
+          "wheel",
+          function (e) {
+            e.preventDefault();
+            if (animating || wheelCooldown) return;
+            wheelCooldown = true;
+            setTimeout(function () {
+              wheelCooldown = false;
+            }, 900);
+            if (e.deltaY > 0 || e.deltaX > 0) {
+              goTo(current + 1);
+            } else {
+              goTo(current - 1);
+            }
+          },
+          { passive: false },
+        );
+
+        /* ── Touch swipe navigation ───────────────────────────────────────── */
+        let touchStartX = null;
+        let touchStartY = null;
+
+        document.addEventListener(
+          "touchstart",
+          function (e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+          },
+          { passive: true },
+        );
+
+        document.addEventListener(
+          "touchend",
+          function (e) {
+            if (touchStartX === null) return;
+            const dx = touchStartX - e.changedTouches[0].clientX;
+            const dy = touchStartY - e.changedTouches[0].clientY;
+            // Only respond if horizontal swipe is dominant
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+              if (animating) return;
+              if (dx > 0) {
+                goTo(current + 1); // swipe left: next
+              } else {
+                goTo(current - 1); // swipe right: prev
+              }
+            }
+            touchStartX = null;
+            touchStartY = null;
+          },
+          { passive: true },
+        );
+
+        /* ── Boot ─────────────────────────────────────────────────────────── */
+        init();
+      })();
+    </script>
+  </body>
+</html>

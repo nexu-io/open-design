@@ -1,0 +1,91 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-kanban-board",
+  "title": "Kanban Board",
+  "version": "0.1.0",
+  "description": "Kanban / task board with columns (To do / In progress / In review / Done),\ndraggable-looking cards, assignee avatars, swimlanes, and a top filter\nbar. Use when the brief mentions \"kanban\", \"task board\", \"sprint board\",\n\"trello\", \"看板\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/kanban-board",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "operations",
+    "web",
+    "desktop",
+    "kanban",
+    "task-board",
+    "sprint-board",
+    "trello",
+    "jira-board",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make me a kanban board for a 5-person growth squad mid-sprint — backlog, doing, review, done.",
+        "zh-CN": "使用这个插件完成以下任务：Make me a kanban board for a 5-person growth squad mid-sprint — backlog, doing, review, done."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Kanban Board"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "state-coverage",
+        "laws-of-ux"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

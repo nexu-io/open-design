@@ -5,38 +5,116 @@
 
 import { useEffect, useState } from 'react';
 
+// Entry-shell sub-views. The home/project landing renders one of three
+// columns and each sub-view now owns a top-level path so the browser
+// back/forward buttons work, deep links are shareable, and per-tab
+// state isn't trapped behind a `useState` boundary.
+export type EntryHomeView =
+  | 'home'
+  | 'projects'
+  | 'tasks'
+  | 'plugins'
+  | 'design-systems'
+  | 'integrations';
+
 export type Route =
-  | { kind: 'home' }
-  | { kind: 'project'; projectId: string; fileName: string | null };
+  | { kind: 'home'; view: EntryHomeView }
+  | {
+      kind: 'project';
+      projectId: string;
+      /**
+       * Deep-link to a specific conversation inside the project. When
+       * present, the project view picks this conversation as the active
+       * one instead of defaulting to `list[0]`. Falls back to the
+       * default picker when the routed conversation no longer exists.
+       * Added for issue #1505 (Routines history → specific conversation).
+       */
+      conversationId?: string | null;
+      fileName: string | null;
+    }
+  | { kind: 'marketplace' }
+  | { kind: 'marketplace-detail'; pluginId: string };
 
 export function parseRoute(pathname: string): Route {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
-  if (parts.length === 0) return { kind: 'home' };
-  if (parts[0] === 'projects' && parts[1]) {
-    const projectId = decodeURIComponent(parts[1]);
-    if (parts[2] === 'files' && parts[3]) {
-      return {
-        kind: 'project',
-        projectId,
-        fileName: decodeURIComponent(parts.slice(3).join('/')),
-      };
+  if (parts.length === 0) return { kind: 'home', view: 'home' };
+  if (parts[0] === 'projects') {
+    if (parts[1]) {
+      const projectId = decodeURIComponent(parts[1]);
+      // /projects/:id/conversations/:cid[/files/...]
+      if (parts[2] === 'conversations' && parts[3]) {
+        const conversationId = decodeURIComponent(parts[3]);
+        if (parts[4] === 'files' && parts[5]) {
+          return {
+            kind: 'project',
+            projectId,
+            conversationId,
+            fileName: decodeURIComponent(parts.slice(5).join('/')),
+          };
+        }
+        return { kind: 'project', projectId, conversationId, fileName: null };
+      }
+      // /projects/:id/files/...
+      if (parts[2] === 'files' && parts[3]) {
+        return {
+          kind: 'project',
+          projectId,
+          conversationId: null,
+          fileName: decodeURIComponent(parts.slice(3).join('/')),
+        };
+      }
+      return { kind: 'project', projectId, conversationId: null, fileName: null };
     }
-    return { kind: 'project', projectId, fileName: null };
+    return { kind: 'home', view: 'projects' };
   }
-  return { kind: 'home' };
+  if (parts[0] === 'design-systems') {
+    return { kind: 'home', view: 'design-systems' };
+  }
+  if (parts[0] === 'automations' || parts[0] === 'tasks') {
+    return { kind: 'home', view: 'tasks' };
+  }
+  if (parts[0] === 'plugins' && !parts[1]) {
+    return { kind: 'home', view: 'plugins' };
+  }
+  if (parts[0] === 'integrations') {
+    return { kind: 'home', view: 'integrations' };
+  }
+  // Phase 2B / spec §11.6 — marketplace deep UI routes. Two paths:
+  //   /marketplace            → catalog grid (MarketplaceView)
+  //   /marketplace/<pluginId> → detail page (PluginDetailView)
+  // Aliases to /plugins remain reserved for the public site (spec §13);
+  // in-app we keep /marketplace canonical.
+  if (parts[0] === 'marketplace' || parts[0] === 'plugins') {
+    if (parts[1]) {
+      return { kind: 'marketplace-detail', pluginId: decodeURIComponent(parts[1]) };
+    }
+    return { kind: 'marketplace' };
+  }
+  return { kind: 'home', view: 'home' };
 }
 
 export function buildPath(route: Route): string {
-  if (route.kind === 'home') return '/';
-  const id = encodeURIComponent(route.projectId);
-  if (route.fileName) {
-    const file = route.fileName
-      .split('/')
-      .map((s) => encodeURIComponent(s))
-      .join('/');
-    return `/projects/${id}/files/${file}`;
+  if (route.kind === 'home') {
+    if (route.view === 'projects') return '/projects';
+    if (route.view === 'tasks') return '/automations';
+    if (route.view === 'plugins') return '/plugins';
+    if (route.view === 'design-systems') return '/design-systems';
+    if (route.view === 'integrations') return '/integrations';
+    return '/';
   }
-  return `/projects/${id}`;
+  if (route.kind === 'marketplace') return '/marketplace';
+  if (route.kind === 'marketplace-detail') return `/marketplace/${encodeURIComponent(route.pluginId)}`;
+  const id = encodeURIComponent(route.projectId);
+  const file = route.fileName
+    ? route.fileName.split('/').map((s) => encodeURIComponent(s)).join('/')
+    : null;
+  if (route.conversationId) {
+    const cid = encodeURIComponent(route.conversationId);
+    return file
+      ? `/projects/${id}/conversations/${cid}/files/${file}`
+      : `/projects/${id}/conversations/${cid}`;
+  }
+  return file ? `/projects/${id}/files/${file}` : `/projects/${id}`;
 }
 
 // Centralized navigation. Components call this instead of mutating

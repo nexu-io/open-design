@@ -1,6 +1,15 @@
 # Open Design
 
-> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。一个都没装？还有多 provider BYOK 代理 `/api/proxy/{anthropic,openai,azure,google}/stream` 兜底，同一条 loop，少一次 spawn 而已。
+> [!IMPORTANT]
+> ### 🔥 `0.8.0-preview` 已发布。设计的旧世界，到此为止。
+>
+> 开源、agent-native 的 Claude Design / Figma 替代品 —— 上线两周，40k stars 在身，且仍在加速。**剩下的路，需要你和我们一起推完。**
+>
+> **正在 `main` 分支飞速迭代中** —— 0.8.0 是 Open Design 的下一阶段。提一个 PR、扔一个想法、报一个 bug —— 你带来的，就是这场运动接下来的样子。
+>
+> → [**读公告 · 下载安装包 · 加入这场运动**](https://github.com/nexu-io/open-design/discussions/1727) · 可与你现有的 0.7 并行安装。
+
+> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design 封面：与本地 AI 智能体共同设计" width="100%" />
@@ -21,13 +30,13 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#支持的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
-  <a href="#内置-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
+  <a href="#内置-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-加入-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.zh-CN.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -43,7 +52,7 @@ Anthropic 的 [Claude Design][cd]（2026-04-17 发布，基于 Opus 4.7）让大
 
 OD 站在四个开源项目的肩膀上：
 
-- [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) —— 设计哲学的指南针。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」思路 —— 全部蒸馏进 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts)。
+- [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) —— 设计哲学的指南针。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」思路 —— 全部蒸馏进 [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts)。
 - [**`op7418/guizang-ppt-skill`**（歸藏的杂志风 PPT skill）](https://github.com/op7418/guizang-ppt-skill) —— Deck 模式。原样捆绑在 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下，原 LICENSE 保留；杂志版式、WebGL hero、P0/P1/P2 checklist。
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) —— UX 北极星，也是我们最接近的同类。第一个开源的 Claude-Design 替代品。我们借鉴了它的流式 artifact 循环、沙盒 iframe 预览模式（自带 React 18 + Babel）、实时 agent 面板（todos + tool calls + 可中断生成）、5 种导出格式列表（HTML / PDF / PPTX / ZIP / Markdown）。我们刻意在形态上分流 —— 它是桌面 Electron 应用，把 [`pi-ai`][piai] 打包进去做 agent；我们是 Web 应用 + 本地 daemon，把 agent 运行时**委托**给你已经装好的 CLI。
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) —— Daemon 与运行时架构。PATH 扫描式 agent 检测，本地 daemon 作为唯一的特权进程，agent-as-teammate 的世界观。
@@ -57,7 +66,7 @@ OD 站在四个开源项目的肩膀上：
 | **内置 design system** | **72 套** —— 2 套手写起手 + 70 套从 [`awesome-design-md`][acd2] 导入的产品系统（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小红书…） |
 | **内置 skill** | **31 个** —— 27 个 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 个 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分组：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **媒体生成** | 图像 · 视频 · 音频三类 surface 与设计循环并行可用。**gpt-image-2**（Azure / OpenAI）做海报、头像、信息图、城市插画地图 · **Seedance 2.0**（字节跳动）做 15 秒电影感 t2v + i2v · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）做 HTML→MP4 动态图形（产品揭示、动力学排版、数据图表、社媒卡片、Logo 收尾）。**93 条**可一键复刻的 prompt gallery —— 43 条 gpt-image-2 + 39 条 Seedance + 11 条 HyperFrames，统一放在 [`prompt-templates/`](prompt-templates/) 下，附预览图与来源署名。Chat 入口和写代码同一处；输出真实的 `.mp4` / `.png` 落到项目工作区里。 |
-| **视觉方向** | 5 套精选流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental），每套自带 OKLch 色板 + 字体栈（[`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)） |
+| **视觉方向** | 5 套精选流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental），每套自带 OKLch 色板 + 字体栈（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **设备外壳** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome —— 像素级精确，跨 skill 共享，统一在 [`assets/frames/`](assets/frames/) |
 | **Agent 运行时** | 本地 daemon 在你的项目目录里 spawn CLI —— agent 拥有真实的 `Read` / `Write` / `Bash` / `WebFetch`，作用在真实磁盘上；每个 adapter 都有 Windows `ENAMETOOLONG` 兜底（stdin / 临时 prompt 文件） |
 | **导入** | 把 [Claude Design][cd] 导出的 ZIP 直接拖到欢迎弹窗 —— `POST /api/import/claude-design` 解压成真实项目，agent 接着 Anthropic 停下的地方继续编辑，不用再向模型重述上下文 |
@@ -253,7 +262,7 @@ DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、�
   + （deck kind 且无 skill 种子时） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
 ```
 
-每一层都可组合。每一层都是一个你能改的文件。看 [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) 和 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) 就知道真实契约长什么样。
+每一层都可组合。每一层都是一个你能改的文件。看 [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) 和 [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) 就知道真实契约长什么样。
 
 ## 技术架构
 
@@ -319,9 +328,9 @@ pnpm tools-dev run web
 # 打开 tools-dev 输出的 web URL
 ```
 
-Windows 启动器：请按照 `tools/launcher/README.md` 中的说明自行构建 `OpenDesign.exe`，或从 GitHub Releases 下载。然后将它放到仓库根目录并双击；它会在需要时运行 `pnpm install`，再用 `pnpm tools-dev` 启动 Open Design。
-
 环境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可选辅助工具，不是项目必需步骤；如果使用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再运行 `pnpm install`。
+
+Windows 用户可参考 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) 了解原生安装路径和一个小型的双击启动器。
 
 桌面端/后台启动、固定端口重启，以及 media 生成派发器检查（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）见 [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
 
@@ -492,7 +501,7 @@ open-design/
 | Brutalist | 粗粝、巨字、无阴影、刺眼强调 | Bloomberg Businessweek · Achtung |
 | Soft warm | 大方、低对比、桃色中性 | Notion 营销页 · Apple Health |
 
-完整 spec → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
+完整 spec → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)。
 
 ## 媒体生成
 
@@ -582,7 +591,7 @@ Chat / artifact 循环最显眼，但这套仓库里还有几个能力被埋得�
 
 ## 反 AI Slop 机制
 
-下面整套机制都是 [`huashu-design`](https://github.com/alchaincyf/huashu-design) 的 playbook，被移植进 OD 的提示词栈，并通过 skill 副文件 pre-flight 让每个 skill 都能落地执行。看 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) 是真实文案：
+下面整套机制都是 [`huashu-design`](https://github.com/alchaincyf/huashu-design) 的 playbook，被移植进 OD 的提示词栈，并通过 skill 副文件 pre-flight 让每个 skill 都能落地执行。看 [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) 是真实文案：
 
 - **先表单。** Turn 1 必须是 `<question-form>`，**不准** thinking、不准 tools、不准旁白。用户用 radio 速度选默认。
 - **品牌资产协议。** 用户贴截图或 URL 时，agent 走 5 步流程（定位 · 下载 · grep hex · 写 `brand-spec.md` · 复述）才能开始写 CSS。**绝不从记忆里猜品牌色**。
@@ -657,7 +666,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 | 项目 | 在这里的角色 |
 |---|---|
 | [`Claude Design`][cd] | 本仓库为之提供开源替代的闭源产品。 |
-| [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) | 设计哲学的核心。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」库 —— 全部蒸馏进 [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) 与 [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。 |
+| [**`alchaincyf/huashu-design`**（花叔的画术）](https://github.com/alchaincyf/huashu-design) | 设计哲学的核心。Junior-Designer 工作流、5 步品牌资产协议、anti-AI-slop checklist、五维自评审、以及方向选择器背后的「5 流派 × 20 种设计哲学」库 —— 全部蒸馏进 [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) 与 [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)。 |
 | [**`op7418/guizang-ppt-skill`**（歸藏）][guizang] | Magazine-web-PPT skill 原样捆绑在 [`skills/guizang-ppt/`](skills/guizang-ppt/) 下，原 LICENSE 保留。Deck 模式默认。P0/P1/P2 checklist 文化也被借给了所有其他 skill。 |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + adapter 架构。PATH 扫描式 agent 检测、本地 daemon 作为唯一特权进程、agent-as-teammate 世界观。我们采纳模型，不 vendor 代码。 |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 第一个开源的 Claude-Design 替代品，也是我们最接近的同类。已采纳的 UX 模式：流式 artifact 循环、沙盒 iframe 预览（自带 React 18 + Babel）、实时 agent 面板（todos + tool calls + 可中断）、5 种导出格式列表（HTML/PDF/PPTX/ZIP/Markdown）、本地优先的 designs hub、`SKILL.md` 品味注入，以及评论模式预览标注的第一版。路线图上的 UX 模式：可靠的局部 patch 和 AI 自吐 tweaks 面板。**我们刻意不 vendor [`pi-ai`][piai]** —— open-codesign 把它打包成 agent 运行时；我们则委托给用户已经装好的 CLI。 |
@@ -713,7 +722,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 感谢每一位让 Open Design 变得更好的朋友 —— 无论是写代码、修文档、提 issue、加 skill 还是加 design system，每一次真实贡献都会被记住。下面这面墙是最直观的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-06" alt="Open Design 贡献者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-16" alt="Open Design 贡献者" />
 </a>
 
 第一次提 PR？欢迎从 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 标签起步。
@@ -730,9 +739,9 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-06" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-06" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-16" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-16" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-16" />
   </picture>
 </a>
 

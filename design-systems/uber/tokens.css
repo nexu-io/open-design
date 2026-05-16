@@ -1,0 +1,131 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/uber/tokens.css
+ *
+ * Structured token bindings for the "Uber" brand — bold black-and-white,
+ * pill-shaped everything, tight urban energy.
+ *
+ * Brand identity in three sentences:
+ *   1. Pure black (#000000) and pure white (#ffffff) — not near-black or
+ *      off-white; the stark duality IS Uber; no warmth, no tint, no mid-tone
+ *      grays in the UI chrome (only #4b4b4b secondary and #afafaf tertiary).
+ *   2. UberMove (proprietary geometric sans) at 700 for all headings — bold
+ *      as a billboard; UberMoveText at 400–500 for body/UI; two fonts with
+ *      strict roles; no decorative type treatment whatsoever.
+ *   3. Pill-shaped everything: 999px radius on all buttons, chips, and nav
+ *      items — unmistakably Uber; whisper-soft shadows (0.12–0.16 opacity)
+ *      for the bare minimum card lift; gradient-free, flat color blocks.
+ *
+ * Schema decisions:
+ *   - --bg: #ffffff; --surface: #ffffff (cards defined by shadow, not color).
+ *   - --surface-warm: #f8f8f8 (thread panels / hover state — barely there).
+ *   - --fg: #000000 (true black); --fg-2: #000000 (same).
+ *   - --muted: #4b4b4b (body gray — secondary text); --meta: #afafaf.
+ *   - --border: #000000 (functional only — inputs); --border-soft: none.
+ *   - --accent: #000000 (black IS the primary CTA color in B&W system).
+ *   - --accent-on: #ffffff; --accent-hover: #e2e2e2 (hover gray on white).
+ *   - --tracking-display: normal (no letter-spacing — functional typography).
+ *   - --leading-tight: 1.23 (52px display hero line-height).
+ *   - h2 (36px) → 1.22; h3 (24px) → 1.33 per DESIGN.md type table.
+ *   - --radius-sm: 999px (full pill for all CTAs per brand identity).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --surface:      #ffffff;             /* cards defined by shadow, not color */
+  --surface-warm: #f8f8f8;            /* hover bg / slightly elevated surface */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #000000;                     /* true black — uncompromising */
+  --fg-2: #000000;                     /* same; no secondary ink tier */
+  --muted: #4b4b4b;                    /* body gray — secondary text */
+  --meta:  #afafaf;                    /* muted gray — tertiary, footer links */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  /* Borders are functional, not decorative. Inputs only. */
+  --border:      #000000;             /* input border — the only visible border */
+  --border-soft: rgba(0, 0, 0, 0.1); /* chip/card separation */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  /* In a pure B&W system, black IS the primary CTA. */
+  --accent:        #000000;           /* Uber Black — primary CTA */
+  --accent-on:     #ffffff;
+  --accent-hover:  #e2e2e2;           /* hover gray — white button hover */
+  --accent-active: rgba(0, 0, 0, 0.08); /* inset shadow pressed state */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "UberMove", "UberMoveText", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:    "UberMoveText", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * UberMove headlines: 52px display → 20px small heading (all weight 700).
+   * UberMoveText body: 16px standard → 12px micro.
+   * Schema spine maps the key stops. */
+  --text-xs:   12px;                  /* micro — fine print, legal */
+  --text-sm:   14px;                  /* caption — metadata, descriptions */
+  --text-base: 16px;                  /* body — standard body text */
+  --text-lg:   18px;                  /* nav / UI large — navigation links */
+  --text-xl:   24px;                  /* sub-heading */
+  --text-2xl:  32px;                  /* card title */
+  --text-3xl:  36px;                  /* section heading */
+  --text-4xl:  52px;                  /* display / hero — billboard */
+
+  /* Leading + tracking.
+   * --leading-tight=1.23: 52px display hero rhythm (tight/punchy).
+   * h2 (36px) → 1.22; h3 (24px) → 1.33 per DESIGN.md.
+   * No letter-spacing — "functional typography" (DESIGN.md §3). */
+  --leading-body:     1.50;
+  --leading-tight:    1.23;
+  --tracking-display: normal;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 8px base unit per DESIGN.md §Spacing System. Compact, efficient. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — efficient, not airy per DESIGN.md §Whitespace. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* Full pill 999px for all buttons and chips — non-negotiable.
+     8px for content cards; 12px for featured containers. */
+  --radius-sm:   999px;               /* full pill — all CTAs */
+  --radius-md:   8px;                 /* content cards */
+  --radius-lg:   12px;                /* featured containers */
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Whisper-soft — bare minimum lift, never dramatic. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border-soft);
+  --elev-raised: rgba(0, 0, 0, 0.12) 0px 4px 16px 0px;
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Inset white ring — the Uber focus signature. */
+  --focus-ring: rgb(255, 255, 255) 0px 0px 0px 2px inset;
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1136px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

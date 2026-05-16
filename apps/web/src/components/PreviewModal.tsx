@@ -2,17 +2,42 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
+import { Icon } from './Icon';
 
 export interface PreviewView {
   id: string;
   label: string;
-  // Null means "still loading" — modal renders the loading affordance.
-  // Undefined means "not yet requested" — parent should react to onView and
-  // begin a fetch. Both states keep the iframe blank.
-  html: string | null | undefined;
+  // Null means "still loading", undefined means "not yet requested".
+  // Both states keep the iframe blank. The parent should react to
+  // onView and begin a fetch.
+  // Optional only when the view is a custom ReactNode stage —
+  // see `custom` below.
+  html?: string | null | undefined;
+  // When set, the modal renders an error affordance with a Retry
+  // button that re-fires onView for this view id, instead of sitting
+  // at the loading state forever. Issue #860.
+  error?: string | null;
+  // Set when the underlying skill ships no HTML preview at all (its
+  // `od.preview.type` is `image`, `markdown`, etc.). The modal renders
+  // a calm "no shipped preview" placeholder instead of the loading or
+  // error states — fetching `/api/skills/:id/example` for those skills
+  // returns 404 today and the resulting "Couldn't load this example."
+  // copy is misleading. `kind` carries the raw preview-type token so
+  // copy can be shaped per kind ("markdown document", "image asset",
+  // …). Mutually exclusive with `html` and `error`. Issue #897.
+  unavailable?: { kind: string } | null;
   // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
   // print-all-slides behavior survive the sandboxed export path.
   deck?: boolean;
+  // Render an arbitrary ReactNode in the stage instead of building a
+  // sandboxed iframe — used by the plugin media detail variant so
+  // image / video / audio previews share the same modal chrome
+  // (header / tabs / actions / sidebar / fullscreen) as the existing
+  // HTML and design-system surfaces. When set, the export share
+  // menu is hidden for this view (no document to export) and the
+  // fullscreen toggle still applies via the modal's own
+  // `ds-modal-fullscreen` class.
+  custom?: ReactNode;
 }
 
 export interface PreviewSidebar {
@@ -32,6 +57,21 @@ export interface PreviewSidebar {
   // can prime a fresh fetch — e.g. swapping between design systems while the
   // DESIGN.md panel stays open.
   contentKey?: string | number;
+}
+
+// Optional accent CTA rendered on the left side of the action row,
+// before Sidebar/Fullscreen/Share. Used by the plugin detail
+// wrappers to surface a "Use plugin" action without having to fork
+// the whole modal layout. Stays optional so existing callers
+// (DesignSystemPreviewModal, ExamplesTab) can keep their current
+// chrome unchanged.
+export interface PreviewPrimaryAction {
+  label: string;
+  onClick: () => void;
+  busy?: boolean;
+  busyLabel?: string;
+  disabled?: boolean;
+  testId?: string;
 }
 
 interface Props {
@@ -57,6 +97,15 @@ interface Props {
   // into a half-broken responsive breakpoint. Defaults to 1280 — wide
   // enough that desktop-shaped showcases keep their intended layout.
   designWidth?: number;
+  // Accent CTA rendered before the ghost actions (Sidebar / Fullscreen /
+  // Share / Close). Plugin detail wrappers use this to expose "Use plugin".
+  primaryAction?: PreviewPrimaryAction;
+  // Optional extra controls rendered after Share and before the Close
+  // button — used by plugin detail wrappers to surface the
+  // PluginShareMenu (copy install command / share link / etc.) so the
+  // affordance reads consistently across HTML / design-system / media
+  // variants.
+  headerExtras?: ReactNode;
 }
 
 // A full-screen overlay that renders an iframe of arbitrary HTML, with an
@@ -73,6 +122,8 @@ export function PreviewModal({
   onClose,
   sidebar,
   designWidth = 1280,
+  primaryAction,
+  headerExtras,
 }: Props) {
   const t = useT();
   const initial = initialViewId && views.some((v) => v.id === initialViewId)
@@ -199,8 +250,12 @@ export function PreviewModal({
   }, []);
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];
+  const activeCustom = activeView?.custom ?? null;
   const activeHtml = activeView?.html ?? null;
+  const activeError = activeView?.error ?? null;
+  const activeUnavailable = activeView?.unavailable ?? null;
   const activeDeck = activeView?.deck ?? false;
+  const isCustomView = activeCustom !== null && activeCustom !== undefined;
   const srcDoc = useMemo(
     () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck }) : ''),
     [activeHtml, activeDeck],
@@ -254,122 +309,147 @@ export function PreviewModal({
     <div className="ds-modal-backdrop" role="dialog" aria-modal="true" aria-label={`${title} preview`}>
       <div className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}>
         <header className="ds-modal-header">
-          <div className="ds-modal-title-block">
-            <div className="ds-modal-title">{title}</div>
-            {subtitle ? <div className="ds-modal-subtitle">{subtitle}</div> : null}
-          </div>
-          {showTabs ? (
-            <div className="ds-modal-tabs" role="tablist">
-              {views.map((v) => (
-                <button
-                  key={v.id}
-                  role="tab"
-                  aria-selected={activeId === v.id}
-                  className={`ds-modal-tab ${activeId === v.id ? 'active' : ''}`}
-                  onClick={() => setActiveId(v.id)}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <span aria-hidden="true" />
-          )}
-          <div className="ds-modal-actions">
-            {sidebar ? (
-              <button
-                className={`ghost ${sidebarOpen ? 'is-active' : ''}`}
-                onClick={() => setSidebarOpen((v) => !v)}
-                aria-pressed={sidebarOpen}
-                title={sidebar.label}
-              >
-                {sidebar.label}
-              </button>
-            ) : null}
-            <button
-              className="ghost"
-              onClick={fullscreen ? exitFullscreen : enterFullscreen}
-              title={
-                fullscreen
-                  ? t('common.exitFullscreen')
-                  : t('common.fullscreen')
-              }
-            >
-              {fullscreen ? t('preview.exit') : t('preview.fullscreen')}
-            </button>
-            <div className="share-menu" ref={shareRef}>
-              <button
-                className="ghost"
-                aria-haspopup="menu"
-                aria-expanded={shareOpen}
-                onClick={() => setShareOpen((v) => !v)}
-                disabled={!activeHtml}
-              >
-                {t('preview.shareMenu')}
-              </button>
-              {shareOpen ? (
-                <div className="share-menu-popover" role="menu">
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareOpen(false);
-                      if (activeHtml) exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
-                    }}
-                  >
-                    <span className="share-menu-icon">📄</span>
-                    <span>{t('common.exportPdf')}</span>
-                  </button>
-                  <div className="share-menu-divider" />
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareOpen(false);
-                      if (activeHtml) exportAsZip(activeHtml, exportTitle);
-                    }}
-                  >
-                    <span className="share-menu-icon">🗜</span>
-                    <span>{t('common.exportZip')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareOpen(false);
-                      if (activeHtml) exportAsHtml(activeHtml, exportTitle);
-                    }}
-                  >
-                    <span className="share-menu-icon">🌐</span>
-                    <span>{t('common.exportHtml')}</span>
-                  </button>
-                  <div className="share-menu-divider" />
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareOpen(false);
-                      openInNewTab();
-                    }}
-                  >
-                    <span className="share-menu-icon">↗</span>
-                    <span>{t('preview.openInNewTab')}</span>
-                  </button>
-                </div>
+          <div className="ds-modal-header-top">
+            <div className="ds-modal-title-block">
+              <div className="ds-modal-title">{title}</div>
+              {subtitle ? (
+                <div className="ds-modal-subtitle">{subtitle}</div>
               ) : null}
             </div>
             <button
-              className="ghost"
+              type="button"
+              className="ds-modal-close"
               onClick={onClose}
               title={t('preview.closeTitle')}
               aria-label={t('common.close')}
             >
-              ✕
+              <Icon name="close" size={14} />
             </button>
+          </div>
+          <div className="ds-modal-header-toolbar">
+            {showTabs ? (
+              <div className="ds-modal-tabs" role="tablist">
+                {views.map((v) => (
+                  <button
+                    key={v.id}
+                    role="tab"
+                    aria-selected={activeId === v.id}
+                    className={`ds-modal-tab ${activeId === v.id ? 'active' : ''}`}
+                    onClick={() => setActiveId(v.id)}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="ds-modal-actions">
+              {primaryAction ? (
+                <button
+                  type="button"
+                  className="ds-modal-primary-action"
+                  onClick={primaryAction.onClick}
+                  disabled={primaryAction.disabled || primaryAction.busy}
+                  aria-busy={primaryAction.busy ? 'true' : undefined}
+                  {...(primaryAction.testId
+                    ? { 'data-testid': primaryAction.testId }
+                    : {})}
+                >
+                  {primaryAction.busy
+                    ? primaryAction.busyLabel ?? primaryAction.label
+                    : primaryAction.label}
+                </button>
+              ) : null}
+              {sidebar ? (
+                <button
+                  className={`ghost ${sidebarOpen ? 'is-active' : ''}`}
+                  onClick={() => setSidebarOpen((v) => !v)}
+                  aria-pressed={sidebarOpen}
+                  title={sidebar.label}
+                >
+                  {sidebar.label}
+                </button>
+              ) : null}
+              <button
+                className="ghost"
+                onClick={fullscreen ? exitFullscreen : enterFullscreen}
+                title={
+                  fullscreen
+                    ? t('common.exitFullscreen')
+                    : t('common.fullscreen')
+                }
+              >
+                {fullscreen ? t('preview.exit') : t('preview.fullscreen')}
+              </button>
+              {isCustomView ? null : (
+                <div className="share-menu" ref={shareRef}>
+                  <button
+                    className="ghost"
+                    aria-haspopup="menu"
+                    aria-expanded={shareOpen}
+                    onClick={() => setShareOpen((v) => !v)}
+                    disabled={!activeHtml}
+                  >
+                    {t('preview.shareMenu')}
+                  </button>
+                  {shareOpen ? (
+                    <div className="share-menu-popover" role="menu">
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setShareOpen(false);
+                          if (activeHtml)
+                            exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
+                        }}
+                      >
+                        <span className="share-menu-icon">📄</span>
+                        <span>{t('common.exportPdf')}</span>
+                      </button>
+                      <div className="share-menu-divider" />
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setShareOpen(false);
+                          if (activeHtml) exportAsZip(activeHtml, exportTitle);
+                        }}
+                      >
+                        <span className="share-menu-icon">🗜</span>
+                        <span>{t('common.exportZip')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setShareOpen(false);
+                          if (activeHtml) exportAsHtml(activeHtml, exportTitle);
+                        }}
+                      >
+                        <span className="share-menu-icon">🌐</span>
+                        <span>{t('common.exportHtml')}</span>
+                      </button>
+                      <div className="share-menu-divider" />
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setShareOpen(false);
+                          openInNewTab();
+                        }}
+                      >
+                        <span className="share-menu-icon">↗</span>
+                        <span>{t('preview.openInNewTab')}</span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {headerExtras}
+            </div>
           </div>
         </header>
         <div
@@ -377,7 +457,56 @@ export function PreviewModal({
           ref={stageRef}
         >
           <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
-            {activeHtml === null || activeHtml === undefined ? (
+            {isCustomView ? (
+              // Caller-rendered ReactNode (e.g. plugin media player).
+              // The modal still owns chrome (header, sidebar toggle,
+              // fullscreen, close) so every plugin variant shares the
+              // same layout language.
+              <div className="ds-modal-stage-custom">{activeCustom}</div>
+            ) : activeUnavailable ? (
+              // Skills declared as `image` / `markdown` / etc. ship no
+              // HTML preview, so the daemon's `/example` endpoint would
+              // 404 into the generic "Couldn't load this example." copy
+              // — misleading, since nothing failed: there's just no
+              // preview to render. Show a calm placeholder pointing the
+              // user at "Use this prompt" instead. Issue #897.
+              <div
+                className="ds-modal-empty ds-modal-unavailable"
+                data-testid="preview-unavailable"
+              >
+                <div className="ds-modal-unavailable-title">
+                  {t('preview.unavailableTitle')}
+                </div>
+                <div className="ds-modal-unavailable-body">
+                  {t('preview.unavailableBody', {
+                    kind: activeUnavailable.kind || 'preview',
+                  })}
+                </div>
+              </div>
+            ) : activeError ? (
+              // Distinct error state so a fetch failure stops looking
+              // like an indefinite "Loading…". The Retry button re-fires
+              // onView for this view id; the caller is responsible for
+              // clearing the error state and re-running the fetch.
+              // Issue #860.
+              <div className="ds-modal-empty ds-modal-error">
+                <div className="ds-modal-error-title">
+                  {t('preview.errorTitle')}
+                </div>
+                <div className="ds-modal-error-body">
+                  {t('preview.errorBody')}
+                </div>
+                {onView && activeView ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => onView(activeView.id)}
+                  >
+                    {t('preview.retry')}
+                  </button>
+                ) : null}
+              </div>
+            ) : activeHtml === null || activeHtml === undefined ? (
               <div className="ds-modal-empty">
                 {t('preview.loading', {
                   label:
@@ -389,7 +518,7 @@ export function PreviewModal({
                 <iframe
                   key={activeView?.id ?? 'view'}
                   title={`${title} ${activeView?.label ?? ''}`}
-                  sandbox="allow-scripts"
+                  sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                   srcDoc={srcDoc}
                 />
               </div>

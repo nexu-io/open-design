@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.4.1",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -33,18 +33,23 @@
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "next": "^16.2.4",
-    "openai": "^6.35.0",
+    "lucide-react": "^1.14.0",
+    "next": "^16.2.5",
+    "openai": "^6.36.0",
+    "posthog-js": "^1.205.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^28.0.1",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "jsdom": "^29.1.0",
+    "jsdom": "29.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   },

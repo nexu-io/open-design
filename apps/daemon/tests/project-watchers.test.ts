@@ -1,26 +1,39 @@
-// @ts-nocheck
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
+import type { FSWatcher } from 'chokidar';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   _activeWatcherCount,
   _resetForTests,
   subscribe,
+  type ProjectWatchEvent,
+  type ProjectWatcherOptions,
 } from '../src/project-watchers.js';
 
+type WatcherFactoryOptions = Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>;
+
+function createMockWatcher(): FSWatcher {
+  const watcher = new EventEmitter() as EventEmitter & { close: () => Promise<void> };
+  watcher.close = async () => { factoryCloses++; };
+  return watcher as unknown as FSWatcher;
+}
+
 function fakeFactory() {
-  return (dir, _opts) => ({
+  return (dir: string, _opts: WatcherFactoryOptions) => ({
     dir,
-    watcher: { close: async () => { factoryCloses++; } },
+    watcher: createMockWatcher(),
     ready: Promise.resolve(),
-    subscribers: new Set(),
+    subscribers: new Set<(evt: ProjectWatchEvent) => void>(),
     closing: null,
   });
 }
 
 let factoryCloses = 0;
+
+const FAST_WATCH_OPTIONS: ProjectWatcherOptions = { awaitWriteFinish: false };
 
 afterEach(async () => {
   await _resetForTests();
@@ -34,8 +47,11 @@ async function makeProjectsRoot() {
   return { root, projectId };
 }
 
-function waitFor(predicate, { timeout = 2000, interval = 25 } = {}) {
-  return new Promise((resolve, reject) => {
+function waitFor(
+  predicate: () => boolean,
+  { timeout = 2000, interval = 25 }: { timeout?: number; interval?: number } = {},
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const started = Date.now();
     const tick = () => {
       try {
@@ -48,6 +64,10 @@ function waitFor(predicate, { timeout = 2000, interval = 25 } = {}) {
     };
     tick();
   });
+}
+
+function assertWatcher(watcher: FSWatcher | undefined): asserts watcher is FSWatcher {
+  expect(watcher).toBeDefined();
 }
 
 describe('project-watchers (refcounting)', () => {
@@ -107,8 +127,8 @@ describe('project-watchers (refcounting)', () => {
 describe('project-watchers (real chokidar)', () => {
   it('emits file-changed events on add / change / unlink', async () => {
     const { root, projectId } = await makeProjectsRoot();
-    const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -139,8 +159,8 @@ describe('project-watchers (real chokidar)', () => {
     const projectId = 'proj-' + Math.random().toString(36).slice(2, 10);
     await mkdir(path.join(projectsRoot, projectId, 'prototype'), { recursive: true });
 
-    const events = [];
-    const sub = subscribe(projectsRoot, projectId, (e) => events.push(e));
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(projectsRoot, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -158,8 +178,8 @@ describe('project-watchers (real chokidar)', () => {
 
   it('ignores files inside .od/ and node_modules/', async () => {
     const { root, projectId } = await makeProjectsRoot();
-    const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
@@ -183,8 +203,8 @@ describe('project-watchers (real chokidar)', () => {
 
   it('ignores files inside Python venv and cache dirs', async () => {
     const { root, projectId } = await makeProjectsRoot();
-    const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     const ignoredDirs = ['.venv', 'venv', '__pycache__', '.mypy_cache', '.pytest_cache', '.tox', '.ruff_cache'];
@@ -214,13 +234,14 @@ describe('project-watchers (real chokidar)', () => {
     // exceptions and could crash the daemon — taking down all routes.
     const { _internalWatcherForTests } = await import('../src/project-watchers.js');
     const { root, projectId } = await makeProjectsRoot();
-    const events = [];
-    const sub = subscribe(root, projectId, (e) => events.push(e));
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(root, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {
       const watcher = _internalWatcherForTests(root, projectId);
       expect(watcher).toBeDefined();
+      assertWatcher(watcher);
       // The listener must be registered — listenerCount > 0 proves it.
       expect(watcher.listenerCount('error')).toBeGreaterThan(0);
 
@@ -266,8 +287,8 @@ describe('project-watchers (chokidar options)', () => {
       throw err;
     }
 
-    const events = [];
-    const sub = subscribe(dataRoot, projectId, (e) => events.push(e));
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(dataRoot, projectId, (e) => events.push(e), FAST_WATCH_OPTIONS);
     await sub.ready;
 
     try {

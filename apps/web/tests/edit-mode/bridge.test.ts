@@ -66,4 +66,81 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain('if (!isSourceMappable(nodes[i])) continue;');
     expect(bridge).toContain('if (isPrimaryTarget(el)) return el;');
   });
+
+  it('acks live preview style patches by id and version', () => {
+    const bridge = buildManualEditBridge(true);
+
+    expect(bridge).toContain("type: 'od-edit-preview-style-applied'");
+    expect(bridge).toContain('version: Number(version) || 0, ok: true');
+    expect(bridge).toContain("ok: false, error: 'Target not found'");
+  });
+
+  it('moves the runtime selected marker between selected targets', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+        <p data-od-id="body">Body</p>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]')!;
+    const body = dom.window.document.querySelector('[data-od-id="body"]')!;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-selected-target', id: 'title' },
+    }));
+    expect(title.getAttribute('data-od-edit-selected')).toBe('true');
+    expect(body.hasAttribute('data-od-edit-selected')).toBe(false);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-selected-target', id: 'body' },
+    }));
+    expect(title.hasAttribute('data-od-edit-selected')).toBe(false);
+    expect(body.getAttribute('data-od-edit-selected')).toBe('true');
+
+    dom.window.close();
+  });
+
+  it('clears runtime selected markers for null selection and edit-mode exit', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+        <p data-od-id="body" data-od-edit-selected="true">Body</p>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const body = dom.window.document.querySelector('[data-od-id="body"]')!;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-selected-target', id: null },
+    }));
+    expect(body.hasAttribute('data-od-edit-selected')).toBe(false);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-selected-target', id: 'body' },
+    }));
+    expect(body.getAttribute('data-od-edit-selected')).toBe('true');
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-mode', enabled: false },
+    }));
+    expect(body.hasAttribute('data-od-edit-selected')).toBe(false);
+
+    dom.window.close();
+  });
+
+  it('keeps runtime selection marker out of source-shaped target data', () => {
+    const bridge = buildManualEditBridge(true);
+
+    expect(bridge).toContain("attr.name === 'data-od-edit-selected'");
+    expect(bridge).toContain('replace(/\\sdata-od-edit-selected="[^"]*"/g, \'\')');
+    expect(bridge).toContain('[data-od-edit-selected]');
+  });
+
+  it('marks flex/grid targets as layout containers', () => {
+    const bridge = buildManualEditBridge(true);
+
+    expect(bridge).toContain('isLayoutContainer: isLayoutContainer(el)');
+    expect(bridge).toContain("display.indexOf('flex') >= 0 || display.indexOf('grid') >= 0");
+  });
 });

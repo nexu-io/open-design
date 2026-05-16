@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-hyperframes-product-reveal-minimal",
+  "title": "HyperFrames: 5-Second Minimal Product Reveal",
+  "version": "0.1.0",
+  "description": "A 5-second HyperFrames composition for a high-end product reveal — dark canvas, single warm accent, slow push-in title card, kinetic kicker line, restrained motion. The agent renders MP4 from HTML+GSAP via puppeteer; no stock footage needed.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "HeyGen",
+    "url": "https://x.com/HeyGen/status/2044827454460871072"
+  },
+  "homepage": "https://github.com/heygen-com/hyperframes",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "hyperframes",
+    "product",
+    "minimal",
+    "title-card"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a 5-second HyperFrames composition (1920×1080, 30fps) for a minimal product reveal. The brief is restraint: one product, one accent color, no clutter.\n\nVisual identity: dark canvas #0b0b0f, warm rust accent #ffb76b, off-white text #f5f1ea, secondary slate #7da4ff used only on a single hairline rule. Display face: \"Editorial New\" or fallback \"Times Now\" at 140px for the brand wordmark; body in \"Inter\" 22px tracked +2%; tabular-nums on any digits.\n\nScene 1 (0–2.0s) — empty stage with a single hairline rule entering from the left at 0.2s, easing power3.out, 0.8s duration. At 0.6s a small caps kicker label \"NEW · MAY 2026\" fades in below the rule, x-offset 24px → 0, opacity 0 → 1, ease power2.out, 0.5s.\n\nScene 2 (2.0–4.2s) — the brand wordmark slides up from y=80 to y=0 with opacity 0→1 over 0.7s ease expo.out, staggered 80ms per character via gsap.from with each glyph wrapped in a span. Behind it a soft 540px radial glow #ffb76b at 12% opacity pulses once (scale 1 → 1.04 → 1, 1.6s ease sine.inOut). At 3.4s a one-line tagline (max 56 chars) rises in from y=24 over 0.5s.\n\nScene 3 (4.2–5.0s) — final hold. No exit animations on any element — the composition simply ends on the hero frame. The hairline rule extends another 80px on a 0.4s ease power2.out for a final breath.\n\nNon-negotiables (HyperFrames contract): all timelines paused: true, registered to window.__timelines[\"main\"]; deterministic only, no Math.random or Date.now; entrance-only animations (no opacity-to-0 exits); root <div> carries data-composition-id, data-width=\"1920\", data-height=\"1080\", data-duration=\"5\".\n\nDeliverable: index.html plus hyperframes.json + meta.json scaffold from `npx hyperframes init --example blank`. Render via daemon dispatch. Output a single descriptive .mp4 in the project root (e.g. `product-reveal-minimal.mp4`).",
+        "zh-CN": "使用这个插件完成以下任务：Build a 5-second HyperFrames composition (1920×1080, 30fps) for a minimal product reveal. The brief is restraint: one product, one accent color, no clutter.\n\nVisual identity: dark canvas #0b0b0f, warm rust accent #ffb76b, off-white text #f5f1ea, secondary slate #7da4ff used only on a single hairline rule. Display face: \"Editorial New\" or fallback \"Times Now\" at 140px for the brand wordmark; body in \"Inter\" 22px tracked +2%; tabular-nums on any digits.\n\nScene 1 (0–2.0s) — empty stage with a single hairline rule entering from the left at 0.2s, easing power3.out, 0.8s duration. At 0.6s a small caps kicker label \"NEW · MAY 2026\" fades in below the rule, x-offset 24px → 0, opacity 0 → 1, ease power2.out, 0.5s.\n\nScene 2 (2.0–4.2s) — the brand wordmark slides up from y=80 to y=0 with opacity 0→1 over 0.7s ease expo.out, staggered 80ms per character via gsap.from with each glyph wrapped in a span. Behind it a soft 540px radial glow #ffb76b at 12% opacity pulses once (scale 1 → 1.04 → 1, 1.6s ease sine.inOut). At 3.4s a one-line tagline (max 56 chars) rises in from y=24 over 0.5s.\n\nScene 3 (4.2–5.0s) — final hold. No exit animations on any element — the composition simply ends on the hero frame. The hairline rule extends another 80px on a 0.4s ease power2.out for a final breath.\n\nNon-negotiables (HyperFrames contract): all timelines paused: true, registered to window.__timelines[\"main\"]; deterministic only, no Math.random or Date.now; entrance-only animations (no opacity-to-0 exits); root <div> carries data-composition-id, data-width=\"1920\", data-height=\"1080\", data-duration=\"5\".\n\nDeliverable: index.html plus hyperframes.json + meta.json scaffold from `npx hyperframes init --example blank`. Render via daemon dispatch. Output a single descriptive .mp4 in the project root (e.g. `product-reveal-minimal.mp4`)."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "hyperframes-html"
+        ],
+        "default": "hyperframes-html"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

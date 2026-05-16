@@ -20,12 +20,13 @@ interface ParsedOptions {
   connectorId?: string;
   toolName?: string;
   inputPath?: string;
+  useCase?: 'personal_daily_digest';
   format: 'compact' | 'json';
   help: boolean;
 }
 
 const CONNECTORS_USAGE = `Usage:
-  od tools connectors list [--format compact]
+  od tools connectors list [--use-case personal_daily_digest] [--format compact]
   od tools connectors execute --connector <id> --tool <name> --input input.json
 
 Environment:
@@ -35,7 +36,7 @@ Environment:
   OD_TOOL_TOKEN   Bearer token injected into agent runs
 
 Agent runtime invocation:
-  "$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact
+  "$OD_NODE_BIN" "$OD_BIN" tools connectors list --use-case personal_daily_digest --format compact
 `;
 
 function writeJson(value: unknown, stream: NodeJS.WriteStream = process.stdout): void {
@@ -73,6 +74,10 @@ function parseOptions(args: string[]): ParsedOptions | { error: string } {
       const value = rest[++index];
       if (value !== 'compact' && value !== 'json') return { error: '--format must be compact or json' };
       options.format = value;
+    } else if (arg === '--use-case') {
+      const value = rest[++index];
+      if (value !== 'personal_daily_digest') return { error: '--use-case must be personal_daily_digest' };
+      options.useCase = value;
     } else if (arg === '-h' || arg === '--help') {
       options.help = true;
     } else {
@@ -105,7 +110,9 @@ function toolToken(): string | { error: string } {
 
 function endpoint(baseUrl: URL, pathname: string): string {
   const url = new URL(baseUrl.toString());
-  url.pathname = `${url.pathname}${pathname}`.replace(/\/+/gu, '/');
+  const [pathPart, searchPart] = pathname.split('?');
+  url.pathname = `${url.pathname}${pathPart ?? ''}`.replace(/\/+/gu, '/');
+  url.search = searchPart === undefined ? '' : `?${searchPart}`;
   return url.toString();
 }
 
@@ -157,6 +164,7 @@ function compactTool(value: unknown): unknown {
     name: tool.name,
     description: tool.description,
     safety: tool.safety,
+    curation: tool.curation,
     inputSchema: tool.inputSchemaJson ?? tool.inputSchema,
   };
 }
@@ -256,8 +264,9 @@ export async function runConnectorsToolCli(args: string[]): Promise<ToolCliResul
 
   try {
     if (options.command === 'list') {
+      const listPath = options.useCase ? `/api/tools/connectors/list?useCase=${encodeURIComponent(options.useCase)}` : '/api/tools/connectors/list';
       return await printApiResult(
-        await requestJson(baseUrl, token, '/api/tools/connectors/list', { method: 'GET' }),
+        await requestJson(baseUrl, token, listPath, { method: 'GET' }),
         options.format === 'compact' ? compactList : (body) => body,
       );
     }

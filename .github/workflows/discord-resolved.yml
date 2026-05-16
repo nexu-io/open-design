@@ -40,7 +40,7 @@ jobs:
   notify:
     # state_reason "completed" excludes "not planned" closures.
     # We further require an actual merged-PR linkage in the script below.
-    if: github.event.issue.state_reason == 'completed'
+    if: github.repository == 'nexu-io/open-design' && github.event.issue.state_reason == 'completed'
     runs-on: ubuntu-latest
     steps:
       - name: Find the merged PR that closed this issue

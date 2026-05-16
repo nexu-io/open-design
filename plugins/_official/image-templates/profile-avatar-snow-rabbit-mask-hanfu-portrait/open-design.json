@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-snow-rabbit-mask-hanfu-portrait",
+  "title": "Profile / Avatar - Snow Rabbit Mask Hanfu Portrait",
+  "version": "0.1.0",
+  "description": "This prompt generates a cinematic winter fantasy portrait of a masked woman in a rabbit-themed white Hanfu, ideal for elegant character art and atmospheric AI showcase imagery.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-1"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic",
+    "fantasy",
+    "nature"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453211026_n5y31f_HG_dAB7aoAAZg6K.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A serene winter fantasy portrait of a woman standing outdoors in softly falling snow, framed from about mid-thigh upward, wearing an elegant traditional Hanfu-inspired robe in white and black. Her face is fully covered by a smooth white rabbit mask with upright pink-lined ears, small black eye openings, and a minimal cute expression. She has very long straight silver-white hair flowing past her waist, with delicate white floral and branch-like hair ornaments on both sides. Her robe is bright white with subtle embroidered silver detailing on the chest and shoulders, very wide draping sleeves, black trim along the collar and sleeve edges, and a fitted black waist sash tied at the front with tasseled cords and a snowflake-like ornament. The garment features visible rabbit motifs: 4 illustrated white rabbits in total, with 2 large rabbits near the outer lower sleeves, 1 small hopping rabbit on the lower black skirt panel, and 1 seated rabbit on the front lower skirt panel. The atmosphere is quiet, ethereal, and cinematic, with a cold blue-gray palette, shallow depth of field, and soft natural winter light. In the background, place blurred snow-covered traditional East Asian buildings and distant steep mountains, creating a misty alpine temple setting. Add gentle snowfall across the entire image, ultra-detailed fabric texture, soft volumetric haze, and a refined dreamlike gpt-image-2 aesthetic.",
+        "zh-CN": "使用这个插件完成以下任务：A serene winter fantasy portrait of a woman standing outdoors in softly falling snow, framed from about mid-thigh upward, wearing an elegant traditional Hanfu-inspired robe in white and black. Her face is fully covered by a smooth white rabbit mask with upright pink-lined ears, small black eye openings, and a minimal cute expression. She has very long straight silver-white hair flowing past her waist, with delicate white floral and branch-like hair ornaments on both sides. Her robe is bright white with subtle embroidered silver detailing on the chest and shoulders, very wide draping sleeves, black trim along the collar and sleeve edges, and a fitted black waist sash tied at the front with tasseled cords and a snowflake-like ornament. The garment features visible rabbit motifs: 4 illustrated white rabbits in total, with 2 large rabbits near the outer lower sleeves, 1 small hopping rabbit on the lower black skirt panel, and 1 seated rabbit on the front lower skirt panel. The atmosphere is quiet, ethereal, and cinematic, with a cold blue-gray palette, shallow depth of field, and soft natural winter light. In the background, place blurred snow-covered traditional East Asian buildings and distant steep mountains, creating a misty alpine temple setting. Add gentle snowfall across the entire image, ultra-detailed fabric texture, soft volumetric haze, and a refined dreamlike gpt-image-2 aesthetic."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-last30days",
+  "title": "Last30days",
+  "version": "0.1.0",
+  "description": "Recent community and social trend research over the last 30 days. Use when\nthe brief asks what people are saying now, recent sentiment, community\nreactions, social proof, launch reaction, trend scan, or last-30-days context.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/last30days",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "last-30-days",
+    "last30days",
+    "recent-sentiment",
+    "community-reaction",
+    "what-people-are-saying",
+    "trend-scan",
+    "social-research",
+    "30",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "markdown",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Recent community and social trend research over the last 30 days. Use when the brief asks what people are saying now, recent sentiment, community reactions, social proof, launch reaction, trend scan, or last-30-days context.",
+        "zh-CN": "使用这个插件完成以下任务：Recent community and social trend research over the last 30 days. Use when the brief asks what people are saying now, recent sentiment, community reactions, social proof, launch reaction, trend scan, or last-30-days context."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./references/save-html-brief.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

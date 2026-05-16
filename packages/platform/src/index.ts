@@ -2,7 +2,7 @@ import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:chil
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 export type CommandInvocation = {
@@ -429,6 +429,17 @@ export type WellKnownUserToolchainOptions = {
   env?: NodeJS.ProcessEnv;
 };
 
+function resolveUserScopedHome(raw: string | undefined, home: string): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (value.length === 0) return null;
+  if (value === "~") return home;
+  if (value.startsWith("~/") || value.startsWith("~\\")) {
+    return join(home, value.slice(2));
+  }
+  return isAbsolute(value) ? value : null;
+}
+
 // Single source of truth for "user-level CLI install locations the daemon
 // must search even when launched with a minimal PATH". GUI launchers
 // (macOS .app bundles, Linux .desktop files) typically inherit a stripped
@@ -445,6 +456,14 @@ export function wellKnownUserToolchainBins(
   const includeSystemBins = options.includeSystemBins ?? process.platform !== "win32";
   const env = options.env ?? process.env;
   const dirs: string[] = [];
+  // Vite+ global installs expose CLI shims from VP_HOME/bin (default
+  // ~/.vite-plus/bin). An explicit VP_HOME is the most specific signal for
+  // vp-managed shims, so it wins over other global package-manager prefixes
+  // when a CLI name exists in multiple stores.
+  const vpHome = resolveUserScopedHome(env.VP_HOME, home);
+  if (vpHome) {
+    dirs.push(join(vpHome, "bin"));
+  }
   // The user's *explicit* npm prefix outranks every conventional
   // location below — including `~/.local/bin`. The env var is the
   // user's current npm configuration, so a binary installed via
@@ -469,6 +488,7 @@ export function wellKnownUserToolchainBins(
   }
   dirs.push(
     join(home, ".local", "bin"),
+    join(home, ".vite-plus", "bin"),
     join(home, ".opencode", "bin"),
     join(home, ".bun", "bin"),
     join(home, ".volta", "bin"),
@@ -504,6 +524,10 @@ export function wellKnownUserToolchainBins(
       root: join(home, ".local", "share", "fnm", "node-versions"),
       segments: ["installation", "bin"],
     },
+    {
+      root: join(home, ".fnm", "node-versions"),
+      segments: ["installation", "bin"],
+    },
   ]) {
     for (const dir of existingChildBinDirs(installRoot.root, installRoot.segments)) {
       dirs.push(dir);
@@ -520,10 +544,38 @@ function existingChildBinDirs(root: string, segments: string[]): string[] {
   } catch {
     return out;
   }
-  for (const entry of entries) {
+  for (const entry of sortVersionedDirEntries(entries)) {
     if (!entry.isDirectory()) continue;
     const candidate = join(root, entry.name, ...segments);
     if (existsSync(candidate)) out.push(candidate);
   }
   return out;
+}
+
+type SemverParts = [major: number, minor: number, patch: number];
+
+function sortVersionedDirEntries(entries: import("node:fs").Dirent<string>[]): import("node:fs").Dirent<string>[] {
+  return [...entries].sort((left, right) => compareVersionLikeDirNames(left.name, right.name));
+}
+
+function compareVersionLikeDirNames(left: string, right: string): number {
+  const leftSemver = parseVersionLikeDirName(left);
+  const rightSemver = parseVersionLikeDirName(right);
+  if (leftSemver && rightSemver) {
+    for (let index = 0; index < leftSemver.length; index += 1) {
+      const difference = rightSemver[index] - leftSemver[index];
+      if (difference !== 0) return difference;
+    }
+  } else if (leftSemver) {
+    return -1;
+  } else if (rightSemver) {
+    return 1;
+  }
+  return left.localeCompare(right);
+}
+
+function parseVersionLikeDirName(name: string): SemverParts | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(name);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }

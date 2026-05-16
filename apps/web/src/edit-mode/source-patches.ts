@@ -1,4 +1,4 @@
-import { emptyManualEditStyles, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
+import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
 
 export interface ManualEditPatchResult {
   ok: boolean;
@@ -77,19 +77,10 @@ export function readManualEditStyles(source: string, id: string): ManualEditStyl
   const el = doc ? findEditableElement(doc, id) : null;
   if (!el) return emptyManualEditStyles();
   const style = (el as HTMLElement).style;
-  return {
-    color: style.color,
-    backgroundColor: style.backgroundColor,
-    fontSize: style.fontSize,
-    fontWeight: style.fontWeight,
-    textAlign: style.textAlign,
-    padding: style.padding,
-    margin: style.margin,
-    borderRadius: style.borderRadius,
-    border: style.border,
-    width: style.width,
-    minHeight: style.minHeight,
-  };
+  return MANUAL_EDIT_STYLE_PROPS.reduce<ManualEditStyles>((acc, key) => {
+    acc[key] = (style[key as unknown as keyof CSSStyleDeclaration] as string | undefined) ?? '';
+    return acc;
+  }, {} as ManualEditStyles);
 }
 
 export function readManualEditAttributes(source: string, id: string): Record<string, string> {
@@ -122,11 +113,11 @@ function parseSource(source: string): Document | null {
 }
 
 function serializeSource(doc: Document, originalSource: string): string {
-  if (!isFullHtmlDocument(originalSource)) return doc.body.innerHTML;
+  if (!isManualEditFullHtmlDocument(originalSource)) return doc.body.innerHTML;
   return `<!doctype html>\n${doc.documentElement.outerHTML}`;
 }
 
-function isFullHtmlDocument(source: string): boolean {
+export function isManualEditFullHtmlDocument(source: string): boolean {
   const normalized = firstSourceToken(source).slice(0, 32).toLowerCase();
   return normalized.startsWith('<!doctype') || normalized.startsWith('<html');
 }
@@ -153,9 +144,11 @@ function inferKind(el: Element): 'text' | 'link' | 'image' | 'container' {
 }
 
 function findEditableElement(doc: Document, id: string): Element | null {
+  if (id === '__body__') return doc.body;
   return (
     doc.querySelector(`[data-od-id="${cssEscape(id)}"]`) ??
     doc.querySelector(`[data-od-runtime-id="${cssEscape(id)}"]`) ??
+    doc.querySelector(`[data-od-source-path="${cssEscape(id)}"]`) ??
     findElementByPath(doc, id)
   );
 }

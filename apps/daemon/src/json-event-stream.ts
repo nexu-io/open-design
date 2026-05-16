@@ -1,5 +1,30 @@
-// @ts-nocheck
-function safeParseJson(value) {
+type JsonObject = Record<string, unknown>;
+type StreamEvent = Record<string, unknown>;
+type StreamEventHandler = (event: StreamEvent) => void;
+type ParserKind = string;
+
+type ParserState = {
+  cursorTextSoFar: string;
+  openCodeToolUses: Set<string>;
+  codexToolUses: Set<string>;
+  codexErrorEmitted: boolean;
+  codexPreviousEventWasAgentMessage: boolean;
+  codexLastAgentMessageEndedWithNewline: boolean;
+};
+
+type Usage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  thought_tokens?: number;
+  cached_read_tokens?: number;
+  cached_write_tokens?: number;
+};
+
+function isRecord(value: unknown): value is JsonObject {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function safeParseJson(value: unknown): unknown {
   if (value == null) return null;
   if (typeof value === 'object') return value;
   if (typeof value !== 'string') return null;
@@ -10,7 +35,7 @@ function safeParseJson(value) {
   }
 }
 
-function stringifyContent(value) {
+function stringifyContent(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value == null) return '';
   try {
@@ -20,22 +45,48 @@ function stringifyContent(value) {
   }
 }
 
-function formatOpenCodeUsage(tokens) {
-  if (!tokens || typeof tokens !== 'object') return null;
-  const usage = {};
+function extractErrorMessage(value: unknown, fallback: string): string {
+  if (typeof value === 'string') {
+    const parsed = safeParseJson(value);
+    if (parsed && typeof parsed === 'object') {
+      return extractErrorMessage(parsed, value);
+    }
+    return value;
+  }
+  if (isRecord(value)) {
+    if (typeof value.detail === 'string' && value.detail) return value.detail;
+    if (typeof value.message === 'string' && value.message) {
+      return extractErrorMessage(value.message, value.message);
+    }
+    if (typeof value.error === 'string' && value.error) return value.error;
+    if (value.error && typeof value.error === 'object') {
+      return extractErrorMessage(value.error, fallback);
+    }
+    if (value.data && typeof value.data === 'object') {
+      const dataMessage = extractErrorMessage(value.data, '');
+      if (dataMessage) return dataMessage;
+    }
+    if (typeof value.name === 'string' && value.name) return value.name;
+  }
+  return fallback;
+}
+
+function formatOpenCodeUsage(tokens: unknown): Usage | null {
+  if (!isRecord(tokens)) return null;
+  const usage: Usage = {};
   if (typeof tokens.input === 'number') usage.input_tokens = tokens.input;
   if (typeof tokens.output === 'number') usage.output_tokens = tokens.output;
   if (typeof tokens.reasoning === 'number') usage.thought_tokens = tokens.reasoning;
-  if (tokens.cache && typeof tokens.cache === 'object') {
+  if (isRecord(tokens.cache)) {
     if (typeof tokens.cache.read === 'number') usage.cached_read_tokens = tokens.cache.read;
     if (typeof tokens.cache.write === 'number') usage.cached_write_tokens = tokens.cache.write;
   }
   return Object.keys(usage).length > 0 ? usage : null;
 }
 
-function handleOpenCodeEvent(obj, onEvent, state) {
-  if (!obj || typeof obj !== 'object') return false;
-  const part = obj.part && typeof obj.part === 'object' ? obj.part : {};
+function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
+  if (!isRecord(obj)) return false;
+  const part = isRecord(obj.part) ? obj.part : {};
 
   if (obj.type === 'step_start') {
     onEvent({ type: 'status', label: 'running' });
@@ -48,7 +99,7 @@ function handleOpenCodeEvent(obj, onEvent, state) {
   }
 
   if (obj.type === 'tool_use' && typeof part.tool === 'string' && typeof part.callID === 'string') {
-    const statePart = part.state && typeof part.state === 'object' ? part.state : null;
+    const statePart = isRecord(part.state) ? part.state : null;
     const key = `${obj.sessionID || 'session'}:${part.callID}`;
     if (!state.openCodeToolUses.has(key)) {
       state.openCodeToolUses.add(key);
@@ -92,12 +143,12 @@ function handleOpenCodeEvent(obj, onEvent, state) {
     // success while the user actually got nothing back. See issue #691.
     //
     // Shape mirrors the qoder-stream contract (`{type, message, raw}`) so
-    // the daemon's existing error-handling path (server.ts:4156-4168)
-    // recognises it without further wiring.
-    const message =
-      (obj.error && typeof obj.error === 'object' && obj.error.data?.message) ||
-      (obj.error && typeof obj.error === 'object' && obj.error.name) ||
-      'OpenCode error';
+    // the daemon's existing error-handling path recognises it without
+    // further wiring.
+    const message = extractErrorMessage(
+      obj.error ?? obj.message,
+      'OpenCode error',
+    );
     onEvent({ type: 'error', message, raw: stringifyContent(obj) });
     return true;
   }
@@ -105,8 +156,8 @@ function handleOpenCodeEvent(obj, onEvent, state) {
   return false;
 }
 
-function handleGeminiEvent(obj, onEvent) {
-  if (!obj || typeof obj !== 'object') return false;
+function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
+  if (!isRecord(obj)) return false;
 
   if (obj.type === 'init') {
     onEvent({
@@ -127,8 +178,8 @@ function handleGeminiEvent(obj, onEvent) {
     return true;
   }
 
-  if (obj.type === 'result' && obj.stats && typeof obj.stats === 'object') {
-    const usage = {};
+  if (obj.type === 'result' && isRecord(obj.stats)) {
+    const usage: Usage = {};
     if (typeof obj.stats.input_tokens === 'number') usage.input_tokens = obj.stats.input_tokens;
     if (typeof obj.stats.output_tokens === 'number') usage.output_tokens = obj.stats.output_tokens;
     if (typeof obj.stats.cached === 'number') usage.cached_read_tokens = obj.stats.cached;
@@ -143,15 +194,16 @@ function handleGeminiEvent(obj, onEvent) {
   return false;
 }
 
-function extractCursorText(message) {
-  const blocks = Array.isArray(message?.content) ? message.content : [];
+function extractCursorText(message: unknown): string {
+  const content = isRecord(message) ? message.content : undefined;
+  const blocks = Array.isArray(content) ? content : [];
   return blocks
-    .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
+    .filter((block): block is { type: 'text'; text: string } => isRecord(block) && block.type === 'text' && typeof block.text === 'string')
     .map((block) => block.text)
     .join('');
 }
 
-function emitCursorTextDelta(text, onEvent, state) {
+function emitCursorTextDelta(text: string, onEvent: StreamEventHandler, state: ParserState): void {
   if (!state.cursorTextSoFar) {
     state.cursorTextSoFar = text;
     onEvent({ type: 'text_delta', delta: text });
@@ -170,8 +222,8 @@ function emitCursorTextDelta(text, onEvent, state) {
   onEvent({ type: 'text_delta', delta: text });
 }
 
-function handleCursorEvent(obj, onEvent, state) {
-  if (!obj || typeof obj !== 'object') return false;
+function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
+  if (!isRecord(obj)) return false;
 
   if (obj.type === 'system' && obj.subtype === 'init') {
     onEvent({
@@ -193,8 +245,8 @@ function handleCursorEvent(obj, onEvent, state) {
     return true;
   }
 
-  if (obj.type === 'result' && obj.usage && typeof obj.usage === 'object') {
-    const usage = {};
+  if (obj.type === 'result' && isRecord(obj.usage)) {
+    const usage: Usage = {};
     if (typeof obj.usage.inputTokens === 'number') usage.input_tokens = obj.usage.inputTokens;
     if (typeof obj.usage.outputTokens === 'number') usage.output_tokens = obj.usage.outputTokens;
     if (typeof obj.usage.cacheReadTokens === 'number') {
@@ -214,8 +266,37 @@ function handleCursorEvent(obj, onEvent, state) {
   return false;
 }
 
-function handleCodexEvent(obj, onEvent, state) {
-  if (!obj || typeof obj !== 'object') return false;
+function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
+  if (!isRecord(obj)) return false;
+
+if (obj.type === 'error') {
+  const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
+  // Reconnecting events are recoverable — treat as status warning, not fatal
+  if (
+    typeof message === 'string' &&
+    message.includes('Reconnecting...') &&
+    message.includes('timeout waiting for child process to exit')
+  ) {
+    onEvent({ type: 'status', label: message });
+    return true;
+  }
+  if (!state.codexErrorEmitted) {
+    state.codexErrorEmitted = true;
+    onEvent({ type: 'error', message });
+  }
+  return true;
+}
+
+  if (obj.type === 'turn.failed') {
+    if (!state.codexErrorEmitted) {
+      state.codexErrorEmitted = true;
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.error ?? obj.message, 'Codex turn failed'),
+      });
+    }
+    return true;
+  }
 
   if (obj.type === 'thread.started') {
     onEvent({ type: 'status', label: 'initializing' });
@@ -223,13 +304,17 @@ function handleCodexEvent(obj, onEvent, state) {
   }
 
   if (obj.type === 'turn.started') {
+    state.codexPreviousEventWasAgentMessage = false;
+    state.codexLastAgentMessageEndedWithNewline = false;
     onEvent({ type: 'status', label: 'running' });
     return true;
   }
 
-  if (obj.type === 'item.started' && obj.item && typeof obj.item === 'object') {
+  if (obj.type === 'item.started' && isRecord(obj.item)) {
     const item = obj.item;
     if (item.type === 'command_execution' && typeof item.id === 'string') {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
       if (!state.codexToolUses.has(item.id)) {
         state.codexToolUses.add(item.id);
         onEvent({
@@ -245,9 +330,11 @@ function handleCodexEvent(obj, onEvent, state) {
     }
   }
 
-  if (obj.type === 'item.completed' && obj.item && typeof obj.item === 'object') {
+  if (obj.type === 'item.completed' && isRecord(obj.item)) {
     const item = obj.item;
     if (item.type === 'command_execution' && typeof item.id === 'string') {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
       if (!state.codexToolUses.has(item.id)) {
         state.codexToolUses.add(item.id);
         onEvent({
@@ -271,18 +358,25 @@ function handleCodexEvent(obj, onEvent, state) {
 
   if (
     obj.type === 'item.completed' &&
-    obj.item &&
-    typeof obj.item === 'object' &&
+    isRecord(obj.item) &&
     obj.item.type === 'agent_message' &&
     typeof obj.item.text === 'string' &&
     obj.item.text.length > 0
   ) {
-    onEvent({ type: 'text_delta', delta: obj.item.text });
+    const text = obj.item.text;
+    const needsBoundary =
+      state.codexPreviousEventWasAgentMessage &&
+      !state.codexLastAgentMessageEndedWithNewline &&
+      !text.startsWith('\n');
+    const delta = needsBoundary ? `\n${text}` : text;
+    onEvent({ type: 'text_delta', delta });
+    state.codexPreviousEventWasAgentMessage = true;
+    state.codexLastAgentMessageEndedWithNewline = text.endsWith('\n');
     return true;
   }
 
-  if (obj.type === 'turn.completed' && obj.usage && typeof obj.usage === 'object') {
-    const usage = {};
+  if (obj.type === 'turn.completed' && isRecord(obj.usage)) {
+    const usage: Usage = {};
     if (typeof obj.usage.input_tokens === 'number') usage.input_tokens = obj.usage.input_tokens;
     if (typeof obj.usage.output_tokens === 'number') usage.output_tokens = obj.usage.output_tokens;
     if (typeof obj.usage.cached_input_tokens === 'number') {
@@ -295,16 +389,19 @@ function handleCodexEvent(obj, onEvent, state) {
   return false;
 }
 
-export function createJsonEventStreamHandler(kind, onEvent) {
+export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEventHandler) {
   let buffer = '';
-  const state = {
+  const state: ParserState = {
     cursorTextSoFar: '',
-    openCodeToolUses: new Set(),
-    codexToolUses: new Set(),
+    openCodeToolUses: new Set<string>(),
+    codexToolUses: new Set<string>(),
+    codexErrorEmitted: false,
+    codexPreviousEventWasAgentMessage: false,
+    codexLastAgentMessageEndedWithNewline: false,
   };
 
-  function handleLine(line) {
-    let obj;
+  function handleLine(line: string): void {
+    let obj: unknown;
     try {
       obj = JSON.parse(line);
     } catch {
@@ -320,7 +417,7 @@ export function createJsonEventStreamHandler(kind, onEvent) {
     onEvent({ type: 'raw', line });
   }
 
-  function feed(chunk) {
+  function feed(chunk: string): void {
     buffer += chunk;
     let nl;
     while ((nl = buffer.indexOf('\n')) !== -1) {
@@ -331,7 +428,7 @@ export function createJsonEventStreamHandler(kind, onEvent) {
     }
   }
 
-  function flush() {
+  function flush(): void {
     const rem = buffer.trim();
     buffer = '';
     if (!rem) return;

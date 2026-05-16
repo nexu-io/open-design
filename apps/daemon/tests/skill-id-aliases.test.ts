@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,7 +17,7 @@ import {
 // saved against the old id. These tests pin the alias map and the lookup
 // helper that every server-side resolver must go through.
 
-let skillsRoot;
+let skillsRoot: string;
 
 beforeAll(async () => {
   skillsRoot = await mkdtemp(path.join(tmpdir(), 'od-skills-aliases-'));
@@ -90,7 +89,7 @@ describe('findSkillById', () => {
   it('resolves a project saved with the old editorial-collage id to the renamed skill', async () => {
     const skills = await listSkills(skillsRoot);
     const skill = findSkillById(skills, 'editorial-collage');
-    expect(skill).toBeDefined();
+    if (!skill) throw new Error('editorial-collage skill not found');
     expect(skill.id).toBe('open-design-landing');
     expect(skill.body).toContain('body');
   });
@@ -98,7 +97,7 @@ describe('findSkillById', () => {
   it('resolves a project saved with the old editorial-collage-deck id to the renamed deck skill', async () => {
     const skills = await listSkills(skillsRoot);
     const skill = findSkillById(skills, 'editorial-collage-deck');
-    expect(skill).toBeDefined();
+    if (!skill) throw new Error('editorial-collage-deck skill not found');
     expect(skill.id).toBe('open-design-landing-deck');
   });
 

@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-block-frame",
+  "name": "BlockFrame",
+  "tagline": "Neobrutalist deck with pastel-neon color blocks and chunky black borders.",
+  "mood": [
+    "bold",
+    "playful",
+    "graphic",
+    "fresh"
+  ],
+  "occasion": [
+    "creative agency pitch",
+    "indie SaaS launch",
+    "designer portfolio",
+    "brand redesign",
+    "modern startup deck"
+  ],
+  "tone": [
+    "confident",
+    "graphic",
+    "pop",
+    "design-led"
+  ],
+  "formality": "medium-low",
+  "density": "high",
+  "palette": {
+    "pink": "#FE90E8",
+    "blue": "#C0F7FE",
+    "green": "#99E885",
+    "yellow": "#F7CB46",
+    "cream": "#FFDC8B",
+    "black": "#000000",
+    "offwhite": "#FFFDF5",
+    "description": "off-white background with neon pastel blocks (hot pink, sky blue, lime green, golden yellow) framed in heavy black borders"
+  },
+  "typography": {
+    "display": "Space Grotesk",
+    "body": "Inter",
+    "style": "geometric sans display + neutral body, used in heavy weights for a poster-like feel"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel pop-graphic and design-led: indie SaaS launches, agency credentials, creative reviews, brand redesigns. Also a strong unexpected pick for tech, finance, or research when the speaker wants to land as confident and contemporary rather than buttoned-up.",
+  "avoid_for": "Contexts that require quiet institutional restraint or traditional weight (regulated disclosures, formal legal briefs).",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/block-frame"
+}

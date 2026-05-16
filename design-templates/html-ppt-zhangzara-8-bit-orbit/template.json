@@ -1,0 +1,48 @@
+{
+  "slug": "zhangzara-8-bit-orbit",
+  "name": "8-Bit Orbit",
+  "tagline": "Pixel-art neon arcade aesthetic on a deep navy void.",
+  "mood": [
+    "retro-tech",
+    "playful",
+    "cyberpunk",
+    "energetic"
+  ],
+  "occasion": [
+    "gaming pitch",
+    "hackathon demo",
+    "web3 / crypto deck",
+    "indie product launch",
+    "developer tools",
+    "synthwave brand"
+  ],
+  "tone": [
+    "geeky",
+    "neon",
+    "rebellious",
+    "sci-fi"
+  ],
+  "formality": "low",
+  "density": "medium",
+  "palette": {
+    "neon_pink": "#F0A6CA",
+    "neon_cyan": "#5EDCF4",
+    "neon_yellow": "#F4D03F",
+    "deep_navy": "#0F1B3D",
+    "void": "#0A0E27",
+    "lavender": "#E2D5F2",
+    "description": "deep navy/black void with neon pink, cyan, and yellow pops; pixel art accents and CRT-monitor energy"
+  },
+  "typography": {
+    "display": "Tektur",
+    "body": "Chakra Petch",
+    "mono": "Space Mono",
+    "style": "boxy display sans paired with technical mono, all unmistakably digital and pixel-flavored"
+  },
+  "scheme": "dark",
+  "best_for": "Anything that should feel like a CRT screen at 2am: cyberpunk, gaming, web3, indie dev tools, hackathon demos. Just as good for a tech talk that wants to lean into nostalgic-digital craft, a synthwave brand deck, or a creative review that wants to feel like a console.",
+  "avoid_for": "Contexts where the dark neon palette would actively work against the message — quiet institutional finance disclosures, healthcare patient-facing materials, traditional luxury.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page nav dots and slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/8-bit-orbit"
+}

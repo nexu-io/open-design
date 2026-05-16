@@ -1,7 +1,22 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
+import {
+  checkDesignSystemA1RequiredTokens,
+  checkDesignSystemA2DefaultsParity,
+  checkDesignSystemA2RequiredTokens,
+  checkDesignSystemBSlotRequiredTokens,
+  checkDesignSystemTokenFixtureSync,
+  checkDesignSystemUnknownTokens,
+} from "./check-tokens-fixture-sync.ts";
+import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
+
 const repoRoot = path.resolve(import.meta.dirname, "..");
+const allowedE2eScripts = new Set([
+  "e2e/scripts/playwright.ts",
+  "e2e/scripts/release-smoke.ts",
+]);
 
 type GuardCheck = {
   name: string;
@@ -36,8 +51,11 @@ const residualSkippedDirectories = new Set([
 const residualAllowedExactPaths = new Set([
   // esbuild config entrypoints are executed directly by Node before package
   // dist output exists.
+  "packages/agui-adapter/esbuild.config.mjs",
   "packages/contracts/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
+  "packages/plugin-runtime/esbuild.config.mjs",
+  "packages/registry-protocol/esbuild.config.mjs",
   "packages/sidecar/esbuild.config.mjs",
   "packages/sidecar-proto/esbuild.config.mjs",
   // Maintainer utility scripts ported from the media branch. They are
@@ -47,6 +65,8 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
+  "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
@@ -55,9 +75,11 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
+  "tools/pr/bin/tools-pr.mjs",
+  "tools/pr/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
-  // electron-builder hook path; CJS compatibility entry used by tools-pack mac builds.
-  "tools/pack/resources/mac/web-standalone-after-pack.cjs",
+  // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
+  "tools/pack/resources/web-standalone-after-pack.cjs",
 ]);
 
 const residualAllowedPathPrefixes = [
@@ -73,17 +95,35 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/reports/playwright-html-report/",
   "e2e/ui/reports/test-results/",
   "e2e/ui/test-results/",
-  // Vendored upstream HyperFrames skill helper scripts.
-  "skills/hyperframes/scripts/",
-  // Vendored upstream html-ppt skill runtime assets (lewislulu/html-ppt-skill).
-  "skills/html-ppt/assets/",
+  // Vendored upstream HyperFrames helper scripts (design template).
+  "design-templates/hyperframes/scripts/",
+  // Vendored upstream Last30Days runtime helper used by the engine (design template).
+  "design-templates/last30days/scripts/lib/vendor/",
+  // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
+  "design-templates/html-ppt/assets/",
   "test-results/",
   "vendor/",
 ];
 
+const residualAllowedPathPatterns: RegExp[] = [
+  // Vendored upstream Zara template runtimes — one design template per template,
+  // name prefix `html-ppt-zhangzara-` (zarazhangrui/beautiful-html-templates).
+  // Only the vendored deck-stage runtime asset is allowlisted; any other
+  // JavaScript under these design-template directories must still be converted
+  // to TypeScript or explicitly listed in `residualAllowedExactPaths`.
+  /^design-templates\/html-ppt-zhangzara-[^/]+\/assets\/deck-stage\.js$/,
+  // Bundled example/skill plugins copy the upstream skill's `assets/`
+  // and `references/` directories verbatim so the daemon's preview
+  // surface can render the baked HTML without staging detours. Those
+  // assets are vendored runtime, never project-owned code, and must
+  // not be retypecasted to TypeScript.
+  /^plugins\/_official\/examples\/[^/]+\/(assets|references)\/.+$/,
+];
+
 function isResidualAllowedPath(repositoryPath: string): boolean {
   if (residualAllowedExactPaths.has(repositoryPath)) return true;
-  return residualAllowedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+  if (residualAllowedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix))) return true;
+  return residualAllowedPathPatterns.some((pattern) => pattern.test(repositoryPath));
 }
 
 function isResidualSkippedDirectoryName(directoryName: string): boolean {
@@ -211,7 +251,12 @@ async function checkTestLayout(): Promise<boolean> {
 
 const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
 const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
-const e2eAllowedScripts = ["test", "typecheck"];
+const e2eAllowedScripts = [
+  "test",
+  "test:ui:critical",
+  "test:ui:extended",
+  "typecheck",
+];
 
 async function collectRepositoryFiles(directory: string, skippedDirectoryNames = new Set<string>()): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -292,13 +337,13 @@ async function checkE2eLayout(): Promise<boolean> {
     }
 
     if (repositoryPath.startsWith("e2e/scripts/")) {
-      if (repositoryPath !== "e2e/scripts/playwright.ts") {
-        violations.push(`${repositoryPath} -> e2e scripts currently allow only scripts/playwright.ts`);
+      if (!allowedE2eScripts.has(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e scripts must be an approved package-owned entrypoint`);
       }
       continue;
     }
 
-    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or scripts/playwright.ts`);
+    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or approved scripts`);
   }
 
   if (violations.length > 0) {
@@ -338,11 +383,334 @@ async function checkWebTestLayout(): Promise<boolean> {
   return true;
 }
 
+const toolsRootAllowlist = new Map<string, "directory" | "file">([
+  // Keep top-level tools intentionally small. `tools/launcher` was an incoming
+  // Windows shim experiment from PR #683 and is not an active repo boundary.
+  ["AGENTS.md", "file"],
+  ["dev", "directory"],
+  ["pack", "directory"],
+  ["pr", "directory"],
+]);
+
+async function checkToolsLayout(): Promise<boolean> {
+  const toolsRoot = path.join(repoRoot, "tools");
+  const entries = await readdir(toolsRoot, { withFileTypes: true });
+  const seen = new Set<string>();
+  const violations: string[] = [];
+
+  for (const entry of entries) {
+    const expected = toolsRootAllowlist.get(entry.name);
+    const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
+
+    if (expected == null) {
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and pr/`);
+      continue;
+    }
+
+    seen.add(entry.name);
+    if (expected === "directory" && !entry.isDirectory()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name}/ to be a directory`);
+    }
+    if (expected === "file" && !entry.isFile()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name} to be a file`);
+    }
+  }
+
+  for (const [entryName, expected] of toolsRootAllowlist) {
+    if (!seen.has(entryName)) {
+      violations.push(`tools/${entryName}${expected === "directory" ? "/" : ""} -> required tools boundary is missing`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Tools layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Tools layout check passed: tools/ top-level entries match the active boundary allowlist.");
+  return true;
+}
+
+const stylePolicySkippedDirectories = new Set([
+  ".next",
+  ".od-data",
+  "dist",
+  "node_modules",
+  "out",
+  "reports",
+  "test-results",
+]);
+
+const stylePolicySourcePrefixes = ["apps/web/app/", "apps/web/src/"];
+const stylePolicyHardcodedColorEnforcedPrefixes = ["scripts/guard-style-policy-fixtures/"];
+const stylePolicyCheckedDirectoryPrefixes = [
+  ...new Set([...stylePolicySourcePrefixes, ...stylePolicyHardcodedColorEnforcedPrefixes]),
+];
+const stylePolicyExtensions = new Set([".css", ".ts", ".tsx"]);
+const tailwindDefaultColorNames = [
+  "slate",
+  "gray",
+  "zinc",
+  "neutral",
+  "stone",
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
+  "white",
+  "black",
+].join("|");
+const tailwindDefaultPaletteClassPrefixes = [
+  "bg",
+  "text",
+  "border(?:-(?:x|y|s|e|t|r|b|l))?",
+  "divide",
+  "placeholder",
+  "marker",
+  "from",
+  "via",
+  "to",
+  "ring(?:-offset)?",
+  "outline",
+  "decoration",
+  "(?:inset-|text-|drop-)?shadow",
+  "accent",
+  "caret",
+  "fill",
+  "stroke",
+].join("|");
+const defaultTailwindPaletteClassPattern = new RegExp(
+  `\\b(?:${tailwindDefaultPaletteClassPrefixes})-(?:${tailwindDefaultColorNames})(?:-\\d{2,3})?\\b`,
+  "g",
+);
+
+const hardcodedColorPattern = new RegExp(
+  `#[0-9a-fA-F]{3,8}\\b|rgba?\\([^)]*\\)|hsla?\\([^)]*\\)|(?<quote>['"])\\s*(?<named>${realNamedColors.join("|")}|transparent|currentColor|currentcolor|inherit|initial|unset|revert)\\s*\\k<quote>`,
+  "g",
+);
+
+type StylePolicyAllowlistEntry = {
+  pathPattern: RegExp;
+  valuePattern: RegExp;
+  reason: string;
+};
+
+const hardcodedColorAllowlist: StylePolicyAllowlistEntry[] = [
+  {
+    pathPattern: /^apps\/web\/src\/index\.css$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "global token definitions, shadows, overlays, and retained migration inventory live in the CSS source of truth",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PaletteTweaks|PetSettings|SettingsDialog)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "brand accents, user accent choices, and legacy token fallbacks are classified as Phase 1 migration inventory",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:SketchEditor|SketchPreview|NewProjectPanel)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|['\"](?:none|currentColor|currentcolor|transparent)['\"])$/,
+    reason: "sketch/canvas data and SVG illustrations keep narrow hardcoded color exceptions until their migration slice",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:FileViewer|ManualEditPanel)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "user-authored file, inspect, and editable style colors are handled by the file/viewer migration slice",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:MemorySection|MemoryModelInline|MemoryToast)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "memory UI legacy color fallbacks are classified as Phase 1 migration inventory",
+  },
+  {
+    pathPattern: /^apps\/web\/tests\//,
+    valuePattern: /.*/,
+    reason: "tests and fixtures may assert rejected colors explicitly",
+  },
+];
+
+type StylePolicyViolation = {
+  filePath: string;
+  lineNumber: number;
+  match: string;
+  reason: string;
+};
+
+function lineNumberForIndex(source: string, index: number): number {
+  return source.slice(0, index).split("\n").length;
+}
+
+function isStylePolicySource(repositoryPath: string): boolean {
+  return stylePolicySourcePrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+}
+
+function isHardcodedColorEnforcedPath(repositoryPath: string): boolean {
+  return stylePolicyHardcodedColorEnforcedPrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+}
+
+function isHardcodedColorAllowlisted(repositoryPath: string, match: string): boolean {
+  const normalizedMatch = match.trim();
+  const unquotedMatch = normalizedMatch.replace(/^['"]|['"]$/g, "");
+  if (cssWideAndSpecialColorKeywords.has(unquotedMatch.toLowerCase())) return true;
+
+  return hardcodedColorAllowlist.some(
+    (entry) => entry.pathPattern.test(repositoryPath) && entry.valuePattern.test(normalizedMatch),
+  );
+}
+
+function addStylePolicyViolation(
+  violations: StylePolicyViolation[],
+  repositoryPath: string,
+  source: string,
+  index: number,
+  match: string,
+  reason: string,
+): void {
+  violations.push({
+    filePath: repositoryPath,
+    lineNumber: lineNumberForIndex(source, index),
+    match,
+    reason,
+  });
+}
+
+function collectStylePolicyViolationsFromSource(repositoryPath: string, source: string): StylePolicyViolation[] {
+  const violations: StylePolicyViolation[] = [];
+
+  if (isStylePolicySource(repositoryPath)) {
+    for (const match of source.matchAll(defaultTailwindPaletteClassPattern)) {
+      violations.push({
+        filePath: repositoryPath,
+        lineNumber: lineNumberForIndex(source, match.index ?? 0),
+        match: match[0],
+        reason: "default Tailwind palette classes must use Open Design token utilities instead",
+      });
+    }
+  }
+
+  if (isStylePolicySource(repositoryPath) || isHardcodedColorEnforcedPath(repositoryPath)) {
+    if (repositoryPath.endsWith(".css") && isHardcodedColorEnforcedPath(repositoryPath)) {
+      for (const match of collectCssHardcodedColorMatches(source)) {
+        const value = match.value;
+        if (value === undefined || isHardcodedColorAllowlisted(repositoryPath, value)) continue;
+
+        addStylePolicyViolation(
+          violations,
+          repositoryPath,
+          source,
+          match.index,
+          value,
+          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+        );
+      }
+    } else {
+      for (const match of source.matchAll(hardcodedColorPattern)) {
+        const value = match[0];
+        if (isHardcodedColorAllowlisted(repositoryPath, value)) continue;
+        if (!isHardcodedColorEnforcedPath(repositoryPath)) continue;
+
+        addStylePolicyViolation(
+          violations,
+          repositoryPath,
+          source,
+          match.index ?? 0,
+          value,
+          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+async function collectStylePolicyViolations(directory: string): Promise<StylePolicyViolation[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const violations: StylePolicyViolation[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (stylePolicySkippedDirectories.has(entry.name)) continue;
+      violations.push(...(await collectStylePolicyViolations(fullPath)));
+      continue;
+    }
+
+    if (!entry.isFile() || !stylePolicyExtensions.has(path.extname(entry.name))) continue;
+
+    const repositoryPath = toRepositoryPath(fullPath);
+    if (!isStylePolicySource(repositoryPath) && !isHardcodedColorEnforcedPath(repositoryPath)) continue;
+
+    violations.push(...collectStylePolicyViolationsFromSource(repositoryPath, await readFile(fullPath, "utf8")));
+  }
+
+  return violations;
+}
+
+async function repositoryDirectoryExists(repositoryPath: string): Promise<boolean> {
+  const parentPath = path.join(repoRoot, path.dirname(repositoryPath));
+  const directoryName = path.basename(repositoryPath);
+  const entries = await readdir(parentPath, { withFileTypes: true });
+
+  return entries.some((entry) => entry.name === directoryName && entry.isDirectory());
+}
+
+async function collectStylePolicyViolationsFromCheckedPaths(): Promise<StylePolicyViolation[]> {
+  const violations: StylePolicyViolation[] = [];
+
+  for (const repositoryPrefix of stylePolicyCheckedDirectoryPrefixes) {
+    const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
+    if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
+
+    violations.push(...(await collectStylePolicyViolations(path.join(repoRoot, repositoryDirectory))));
+  }
+
+  return violations;
+}
+
+async function checkStylePolicy(): Promise<boolean> {
+  const violations = await collectStylePolicyViolationsFromCheckedPaths();
+
+  if (violations.length > 0) {
+    console.error("Style policy violations found:");
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.match}\` -> ${violation.reason}`);
+    }
+    console.error("Use Open Design token utilities/CSS variables or add a narrow allowlist entry with a reason.");
+    return false;
+  }
+
+  console.log("Style policy check passed: Tailwind palette classes and enforced hardcoded UI colors stay token-first.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
+  { name: "tools layout", run: checkToolsLayout },
+  { name: "style policy", run: checkStylePolicy },
+  { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
+  { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },
+  { name: "design system A2 required tokens", run: checkDesignSystemA2RequiredTokens },
+  { name: "design system B-slot required tokens", run: checkDesignSystemBSlotRequiredTokens },
+  { name: "design system unknown token allowlist", run: checkDesignSystemUnknownTokens },
+  { name: "design system A2 defaults parity", run: checkDesignSystemA2DefaultsParity },
+  { name: "design system flag parity", run: checkDesignSystemFlagParity },
 ];
 
 const results: boolean[] = [];

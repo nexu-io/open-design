@@ -1,0 +1,54 @@
+{
+  "slug": "zhangzara-daisy-days",
+  "name": "Daisy Days",
+  "tagline": "Cheerful pastel deck with hand-drawn daisies, stars, and rainbows. Friendly, soft, and warm.",
+  "mood": [
+    "cheerful",
+    "playful",
+    "warm",
+    "sunny",
+    "wholesome"
+  ],
+  "occasion": [
+    "education / classroom",
+    "kids product launch",
+    "wellness program",
+    "community workshop",
+    "creator portfolio (craft / illustration)",
+    "team kickoff",
+    "wedding / baby shower planning"
+  ],
+  "tone": [
+    "friendly",
+    "soft",
+    "encouraging",
+    "approachable",
+    "lighthearted"
+  ],
+  "formality": "low",
+  "density": "medium",
+  "palette": {
+    "cream": "#F5F0E6",
+    "turquoise": "#7ECDC0",
+    "soft_pink": "#F7C8D4",
+    "butter": "#FDE68A",
+    "mint": "#A8E6CF",
+    "lavender": "#D4A5E8",
+    "peach": "#FFCBA4",
+    "sky": "#A8D8F0",
+    "coral": "#F8635F",
+    "ink": "#2D2D2D",
+    "description": "warm cream base with a full pastel rainbow (mint, lavender, peach, sky, soft pink, butter, turquoise, coral) and ink-black 3px outlines plus chunky 6px offset shadows"
+  },
+  "typography": {
+    "display": "Fredoka One",
+    "body": "Quicksand",
+    "style": "rounded sans display + friendly geometric sans body; warm and informal"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel friendly, soft, and joyful: educational content, kids and family, wellness programs, community workshops, creator portfolios for craft / illustration. Also lovely for an unexpected playful internal kickoff, a wedding planning deck, or any moment where warmth is the message — including across tech or business contexts.",
+  "avoid_for": "Contexts where the audience explicitly expects authority and precision — the hand-drawn pastel SVG decorations are the opposite of buttoned-up.",
+  "slide_count": 10,
+  "navigation": "scroll-snap with on-page nav dots and slide counter, plus arrow-key fallback",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/daisy-days"
+}

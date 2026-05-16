@@ -1,4 +1,4 @@
-import type { JsonValue } from './common';
+import type { JsonValue } from './common.js';
 
 export const API_ERROR_CODES = [
   // Generic HTTP/API failures.
@@ -11,13 +11,26 @@ export const API_ERROR_CODES = [
   'UNSUPPORTED_MEDIA_TYPE',
   'VALIDATION_FAILED',
   'AGENT_UNAVAILABLE',
+  'AGENT_AUTH_REQUIRED',
   'AGENT_EXECUTION_FAILED',
   'AGENT_PROMPT_TOO_LARGE',
   'PROJECT_NOT_FOUND',
   'FILE_NOT_FOUND',
   'ARTIFACT_NOT_FOUND',
+  // The agent emitted a new artifact whose body is dramatically smaller than
+  // a prior artifact sharing the same metadata.identifier. Almost always means
+  // the agent shipped a placeholder ("see other-file.html in this project",
+  // a bare filename string, an empty fallback page) instead of the full
+  // document. Configurable via OD_ARTIFACT_STUB_GUARD (reject|warn|off).
+  'ARTIFACT_REGRESSION',
   'UPSTREAM_UNAVAILABLE',
   'RATE_LIMITED',
+  // PR #974 round-4: desktop-paired daemon received an import request
+  // but the desktop main process has not yet registered its HMAC secret
+  // over sidecar IPC (startup race or daemon-restart-mid-session). The
+  // client should retry shortly; the desktop runtime will re-register
+  // on its existing retry schedule.
+  'DESKTOP_AUTH_PENDING',
   // Agent-facing tool endpoint authorization failures.
   'TOOL_TOKEN_MISSING',
   'TOOL_TOKEN_INVALID',

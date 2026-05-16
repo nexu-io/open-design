@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-vampire-alley-fight-sequence",
+  "title": "Cinematic vampire alley fight sequence",
+  "version": "0.1.0",
+  "description": "A comprehensive action prompt for a short film scene involving dynamic camera movements and high-speed combat in a neon-lit alley.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Cortex Visual ・ AI Movies",
+    "url": "https://x.com/Cortex__Visual/status/2049070872426688714"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "cyberpunk"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e665ecf343c35d97dd64e3b930a96fa5/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e665ecf343c35d97dd64e3b930a96fa5/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Draev stands in the center of the neon-lit alley, surrounded by multiple vampires positioned on rooftops and street level.\n\nThe vampires attack simultaneously.\nDraev reacts instantly with superhuman speed.\n\nHe dodges the first attacker with a fast sidestep and counters with a brutal punch, sending the vampire crashing into a wall.\n\nSecond vampire lunges from above Draev jumps unnaturally high, grabs him mid-air, and slams him into the ground.\n\nImpact creates a small shockwave on the wet street.\nThe defeated vampire rapidly disintegrates into ash and particles.\n\nCamera moves dynamically:\nstarts frontal wide shot transitions into fast tracking side movement then switches to over-the-shoulder following Draev More vampires rush in.\n\nDraev performs a fast acrobatic kick hitting two enemies at once.\n\nOne vampire is thrown into neon signs, sparks and electricity burst.\n\nAnother gets grabbed by the throat — Draev lifts him with one hand and crushes him, turning him into ash.\nRain reacts to movement, splashes intensify with impacts.\n\nFinal moment:\nDraev stands still in the center, surrounded by falling ash, breathing slightly, eyes glowing red.\nRemaining vampires hesitate, stepping back in fear. No music",
+        "zh-CN": "使用这个插件完成以下任务：Draev stands in the center of the neon-lit alley, surrounded by multiple vampires positioned on rooftops and street level.\n\nThe vampires attack simultaneously.\nDraev reacts instantly with superhuman speed.\n\nHe dodges the first attacker with a fast sidestep and counters with a brutal punch, sending the vampire crashing into a wall.\n\nSecond vampire lunges from above Draev jumps unnaturally high, grabs him mid-air, and slams him into the ground.\n\nImpact creates a small shockwave on the wet street.\nThe defeated vampire rapidly disintegrates into ash and particles.\n\nCamera moves dynamically:\nstarts frontal wide shot transitions into fast tracking side movement then switches to over-the-shoulder following Draev More vampires rush in.\n\nDraev performs a fast acrobatic kick hitting two enemies at once.\n\nOne vampire is thrown into neon signs, sparks and electricity burst.\n\nAnother gets grabbed by the throat — Draev lifts him with one hand and crushes him, turning him into ash.\nRain reacts to movement, splashes intensify with impacts.\n\nFinal moment:\nDraev stands still in the center, surrounded by falling ash, breathing slightly, eyes glowing red.\nRemaining vampires hesitate, stepping back in fear. No music"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

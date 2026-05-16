@@ -5,6 +5,7 @@ import { Icon } from './Icon';
 import { renderModelOptions } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { isMacPlatform } from '../utils/platform';
 
 interface Props {
   config: AppConfig;
@@ -265,6 +266,7 @@ export function AvatarMenu({
               <Icon name="settings" size={14} />
             </span>
             <span>{t('avatar.settings')}</span>
+            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
           </button>
           {onBack ? (
             <button

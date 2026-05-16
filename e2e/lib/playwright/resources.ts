@@ -1,6 +1,6 @@
 import { playwrightUiScenarios } from '../../resources/playwright.ts';
 
-export type ScenarioKind = 'prototype' | 'deck' | 'template' | 'workspace';
+export type ScenarioKind = 'prototype' | 'deck' | 'hyperframes' | 'template' | 'workspace';
 
 export interface MockArtifactScenario {
   identifier: string;
@@ -33,12 +33,17 @@ export interface UiScenario {
     | 'deck-pagination-next-prev-correctness'
     | 'deck-pagination-per-file-isolated'
     | 'uploaded-image-renders-in-preview'
-    | 'python-source-preview';
+    | 'python-source-preview'
+    | 'plugin-create-import'
+    | 'home-rail-generation';
   automated: boolean;
   description: string;
   create: {
     projectName: string;
     tab?: 'prototype' | 'deck' | 'template' | 'other';
+    railChip?: 'prototype' | 'deck' | 'hyperframes';
+    expectedProjectKind?: 'prototype' | 'deck' | 'video';
+    expectedPluginId?: 'example-web-prototype' | 'example-simple-deck' | 'example-hyperframes';
   };
   prompt: string;
   secondaryPrompt?: string;

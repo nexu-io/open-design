@@ -1,0 +1,208 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-waitlist-page",
+  "title": "Waitlist Page",
+  "version": "0.1.0",
+  "description": "Minimal pre-launch landing with email capture, brand logo, and optional decorative layer.\nReads DESIGN.md for colors, typography, and layout rules.\nBest for: product launches, beta signups, early access programs, indie projects.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/waitlist-page",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "desktop",
+    "waitlist-page",
+    "coming-soon-page",
+    "pre-launch-landing-page",
+    "email-capture-page",
+    "launch-page"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a waitlist page for a design tool — clean, minimal, with a custom logo and one call-to-action.",
+        "zh-CN": "使用这个插件完成以下任务：Make a waitlist page for a design tool — clean, minimal, with a custom logo and one call-to-action."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Waitlist Page"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "product_name",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "tagline",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "bg_expression",
+        "type": "string",
+        "description": "CSS color expression for background (e.g., '#FDE8DF' or 'rgba(...)').",
+        "required": true
+      },
+      {
+        "name": "fg_expression",
+        "type": "string",
+        "description": "CSS color expression for text and primary shapes (e.g., '#1A1410' or 'rgba(...)').",
+        "required": true
+      },
+      {
+        "name": "accent_expression",
+        "type": "string",
+        "description": "CSS color expression for brand badge and highlights.",
+        "required": true
+      },
+      {
+        "name": "deco_expression",
+        "type": "string",
+        "description": "CSS color expression for decoration primary.",
+        "required": true
+      },
+      {
+        "name": "stripe_expression",
+        "type": "string",
+        "description": "CSS color expression for accent stripe.",
+        "required": true
+      },
+      {
+        "name": "border_expression",
+        "type": "string",
+        "description": "CSS color expression for input borders (e.g., 'rgba(100,50,30,0.38)' or 'color-mix(in srgb, var(--fg) 38%, transparent)'). Must be valid CSS.",
+        "required": true
+      },
+      {
+        "name": "success_expression",
+        "type": "string",
+        "description": "CSS color expression for success message. Defaults to #2D6A4F if not in DESIGN.md.",
+        "required": true
+      },
+      {
+        "name": "btn_label_expression",
+        "type": "string",
+        "description": "CSS color expression for button label text (e.g., 'rgba(255,255,255,1)' or '#fff'). Ensure WCAG AA contrast.",
+        "required": true
+      },
+      {
+        "name": "ticker_bg_expression",
+        "type": "string",
+        "description": "CSS color expression for ticker background (e.g., 'rgba(0,0,0,0.9)'). Must be valid CSS.",
+        "required": true
+      },
+      {
+        "name": "ticker_fg_expression",
+        "type": "string",
+        "description": "CSS color expression for ticker text (e.g., 'rgba(255,255,255,0.9)'). Ensure contrast.",
+        "required": true
+      },
+      {
+        "name": "deco_stroke_expression",
+        "type": "string",
+        "description": "CSS color expression for SVG strokes (e.g., 'rgba(0,0,0,0.12)'). Typically a muted foreground or neutral.",
+        "required": true
+      },
+      {
+        "name": "logo_shadow_expression",
+        "type": "string",
+        "description": "CSS color expression for logo container shadow (e.g., 'rgba(0,0,0,0.08)'). Typically a subtle foreground shade.",
+        "required": true
+      },
+      {
+        "name": "logo_fg_expression",
+        "type": "string",
+        "description": "CSS color expression for logo text/initials (e.g., 'rgba(255,255,255,1)' or '#fff'). Ensure contrast against accent.",
+        "required": true
+      },
+      {
+        "name": "logo_mark",
+        "type": "string",
+        "description": "Text initials are HTML-escaped by default. Inline SVG is allowed only after strict allowlist-based sanitization (removing scripts, event handlers, foreignObject, and external references); unsafe input falls back to escaped text.",
+        "required": false
+      },
+      {
+        "name": "display_font_url",
+        "type": "string",
+        "description": "Display font name with spaces encoded as '+' (e.g., 'Syne', 'DM+Sans'). Used in Google Fonts URL.",
+        "required": true
+      },
+      {
+        "name": "display_font_css",
+        "type": "string",
+        "description": "Display font name as it appears in CSS (e.g., 'Syne', 'DM Sans'). Already quoted if needed; no extra quotes in template.",
+        "required": true
+      },
+      {
+        "name": "body_font_url",
+        "type": "string",
+        "description": "Body font name with spaces encoded as '+' (e.g., 'DM+Sans', 'IBM+Plex+Serif'). Used in Google Fonts URL.",
+        "required": true
+      },
+      {
+        "name": "body_font_css",
+        "type": "string",
+        "description": "Body font name as it appears in CSS (e.g., 'DM Sans', 'IBM Plex Serif'). Already quoted if needed; no extra quotes in template.",
+        "required": true
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

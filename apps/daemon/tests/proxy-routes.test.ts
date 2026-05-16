@@ -55,6 +55,7 @@ describe('API proxy routes', () => {
       'https://api.example.com/v1/chat/completions',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer sk-test' }),
+        redirect: 'error',
       }),
     );
   });
@@ -178,7 +179,34 @@ describe('API proxy routes', () => {
       'http://localhost:11434/v1/chat/completions',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer sk-local' }),
+        redirect: 'error',
       }),
+    );
+  });
+
+  it('allows IPv4-mapped loopback API base URLs for local OpenAI-compatible providers', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'http://[::ffff:127.0.0.1]:11434/v1',
+        apiKey: 'sk-local',
+        model: 'llama-local',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.text()).resolves.toContain('event: end');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'http://[::ffff:7f00:1]:11434/v1/chat/completions',
     );
   });
 
@@ -191,6 +219,35 @@ describe('API proxy routes', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         baseUrl: 'http://192.168.1.50:11434/v1',
+        apiKey: 'sk-private',
+        model: 'private-model',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    await expect(res.text()).resolves.toContain('Internal IPs blocked');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'http://0.0.0.0:11434/v1',
+    'http://100.64.0.1:11434/v1',
+    'http://169.254.169.254/latest/meta-data',
+    'http://224.0.0.1:11434/v1',
+    'http://[::]/v1',
+    'http://[::ffff:192.168.1.50]:11434/v1',
+    'http://[fd00::1]:11434/v1',
+    'http://[fe80::1]:11434/v1',
+  ])('blocks local and private API base URL form %s before proxying', async (privateBaseUrl) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: privateBaseUrl,
         apiKey: 'sk-private',
         model: 'private-model',
         messages: [{ role: 'user', content: 'hello' }],
@@ -248,6 +305,139 @@ describe('API proxy routes', () => {
       'https://resource.openai.azure.com/openai/deployments/deployment-one/chat/completions?api-version=2024-10-21',
     );
     expect(upstreamInit?.headers).toMatchObject({ 'api-key': 'azure-key' });
+    expect(upstreamInit?.redirect).toBe('error');
+  });
+
+  it.each([
+    ['anthropic', 'https://api.anthropic.com/v1/messages'],
+    ['openai', 'https://api.openai.com/v1/chat/completions'],
+    [
+      'azure',
+      'https://resource.openai.azure.com/openai/deployments/model-one/chat/completions?api-version=2024-10-21',
+    ],
+    [
+      'google',
+      'https://generativelanguage.googleapis.com/v1beta/models/model-one:streamGenerateContent?alt=sse',
+    ],
+  ])('disables upstream redirects for %s proxy requests', async (provider, expectedUrl) => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url === expectedUrl && init?.redirect === 'error') {
+        return Promise.reject(new TypeError('fetch failed: redirect blocked'));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const requestBody: Record<string, unknown> = {
+      baseUrl:
+        provider === 'azure'
+          ? 'https://resource.openai.azure.com'
+          : provider === 'google'
+            ? 'https://generativelanguage.googleapis.com'
+            : provider === 'anthropic'
+              ? 'https://api.anthropic.com'
+              : 'https://api.openai.com',
+      apiKey: `${provider}-key`,
+      model: 'model-one',
+      messages: [{ role: 'user', content: 'hello' }],
+    };
+    if (provider === 'azure') requestBody.apiVersion = '2024-10-21';
+
+    const res = await realFetch(`${baseUrl}/api/proxy/${provider}/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    const text = await res.text();
+    expect(text).toContain('event: error');
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(expectedUrl);
+    expect(upstreamInit?.redirect).toBe('error');
+  });
+
+  it('keeps the default Azure api-version for deployment URLs when the field is blank', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://resource.openai.azure.com/openai/deployments/deployment-one/chat/completions?api-version=2024-10-21',
+    );
+  });
+
+  it('omits Azure api-version for OpenAI-compatible v1 paths when the field is blank', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deployment-one',
+    });
+  });
+
+  it('removes copied Azure api-version query params for OpenAI-compatible v1 paths when the field is blank', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl:
+          'https://resource.services.ai.azure.com/api/projects/project/openai/v1?api-version=2024-10-21',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
   });
 
   it('surfaces Gemini safety blocks as proxy errors', async () => {
@@ -292,9 +482,95 @@ describe('API proxy routes', () => {
     });
 
     const [, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(upstreamInit?.redirect).toBe('error');
     expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
       generationConfig: { maxOutputTokens: 1234 },
     });
+  });
+
+  // Regression for PR #1176: the Ollama proxy fetch must also set
+  // `redirect: 'error'`. Without it, a validated public host could
+  // 3xx the daemon to a private/internal URL and slip past the
+  // resolved-IP SSRF check that runs *before* the fetch.
+  it('forwards redirect:error on the Ollama proxy upstream fetch', async () => {
+    const ndjsonResponse = new Response(
+      new TextEncoder().encode('{"done":true}\n'),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/x-ndjson' },
+      },
+    );
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(ndjsonResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/ollama/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://ollama.example.com',
+        apiKey: 'ollama-key',
+        model: 'llama3',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe('https://ollama.example.com/api/chat');
+    expect(upstreamInit?.redirect).toBe('error');
+  });
+
+  // Plan §3.A4 / spec §11.8 (e2e-7): the API-fallback proxy paths must
+  // never carry plugin context. The web sidecar's fallback mode bypasses
+  // the daemon snapshot bus, so any pluginId / appliedPluginSnapshotId in
+  // the body short-circuits with 409 PLUGIN_REQUIRES_DAEMON. This is the
+  // behavioral anchor for e2e-7 and is exercised against every proxy entry.
+  describe('API fallback rejects plugin runs', () => {
+    const proxies = [
+      '/api/proxy/anthropic/stream',
+      '/api/proxy/openai/stream',
+      '/api/proxy/azure/stream',
+      '/api/proxy/google/stream',
+    ];
+
+    for (const path of proxies) {
+      it(`rejects pluginId on ${path} with 409 PLUGIN_REQUIRES_DAEMON`, async () => {
+        const res = await realFetch(`${baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            model: 'gpt-test',
+            messages: [{ role: 'user', content: 'hello' }],
+            pluginId: 'sample-plugin',
+          }),
+        });
+        expect(res.status).toBe(409);
+        const body = (await res.json()) as { error?: { code?: string } };
+        expect(body?.error?.code).toBe('PLUGIN_REQUIRES_DAEMON');
+      });
+
+      it(`rejects appliedPluginSnapshotId on ${path}`, async () => {
+        const res = await realFetch(`${baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            model: 'gpt-test',
+            messages: [{ role: 'user', content: 'hello' }],
+            appliedPluginSnapshotId: '00000000-0000-0000-0000-000000000000',
+          }),
+        });
+        expect(res.status).toBe(409);
+        const body = (await res.json()) as { error?: { code?: string } };
+        expect(body?.error?.code).toBe('PLUGIN_REQUIRES_DAEMON');
+      });
+    }
   });
 });
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -54,6 +54,13 @@ const IMAGE_TEMPLATE = {
     author: 'Open Design QA',
   },
 };
+
+async function readSavedConfig(page: Page) {
+  return page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, STORAGE_KEY);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -112,8 +119,9 @@ test('prompt template retry preserves the edited body in project metadata', asyn
     });
   });
 
-  await page.goto('/');
-  await page.getByTestId('new-project-tab-image').click();
+  await gotoEntryHome(page);
+  await page.getByTestId('new-project-tab-media').click();
+  await page.getByTestId('new-project-media-surface-image').click();
   await page.getByTestId('new-project-name').fill('Prompt template retry metadata');
 
   await page.getByTestId('prompt-template-trigger').click();
@@ -130,7 +138,14 @@ test('prompt template retry preserves the edited body in project metadata', asyn
   await page.getByTestId('prompt-template-body').fill(
     'Edited QA prompt: bold poster, one hero product, crisp headline.',
   );
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  const createResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith('/api/projects') &&
+    response.request().method() === 'POST',
+  );
   await page.getByTestId('create-project').click();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok(), await createResponse.text()).toBeTruthy();
 
   const project = await fetchCurrentProject(page);
   expect(project.metadata?.promptTemplate).toMatchObject({
@@ -143,46 +158,175 @@ test('prompt template retry preserves the edited body in project metadata', asyn
 
 test('live artifact empty connector CTA opens the gated connector setup path', async ({ page }) => {
   await routeConnectors(page, []);
+  await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
 
-  await page.goto('/');
+  await gotoEntryHome(page);
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
 
+  // The empty CTA now opens Integrations → Connectors directly. The Composio
+  // API key field sits at the top of the section; the catalog (and its gate)
+  // sits below it.
   await page.getByTestId('new-project-connectors-empty').click();
-  await expect(page.getByTestId('entry-tab-connectors')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('new-project-modal')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByPlaceholder('Paste Composio API key')).toBeVisible();
   await expect(page.getByTestId('connector-gate')).toBeVisible();
-
-  await page.getByTestId('connector-gate-action').click();
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole('heading', { name: 'Connectors' })).toBeVisible();
-  await expect(settingsDialog.getByPlaceholder('Paste Composio API key')).toBeVisible();
+  await expect(page.getByTestId('connectors-search-input')).toBeDisabled();
 });
 
 test('connectors search supports empty results and keyboard-closeable details', async ({ page }) => {
   await routeConnectors(page, CONNECTORS);
+  await routeComposioConfig(page, { configured: true, apiKeyTail: '1234' });
+  await page.addInitScript((key) => {
+    const next = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: 'mock',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: {},
+      composio: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+      },
+    };
+    window.localStorage.setItem(key, JSON.stringify(next));
+  }, STORAGE_KEY);
 
   await page.goto('/');
-  await page.getByTestId('entry-tab-connectors').click();
-  await expect(page.getByTestId('connector-grid-wrap')).toBeVisible();
+  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
+  await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
 
-  const search = page.getByTestId('connectors-search-input');
+  const search = settingsDialog.getByTestId('connectors-search-input');
   await search.fill('git');
-  await expect(connectorCard(page, 'github')).toBeVisible();
-  await expect(connectorCard(page, 'slack')).toHaveCount(0);
+  await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
+  await expect(connectorCard(settingsDialog, 'slack')).toHaveCount(0);
 
   await search.fill('missing connector');
-  await expect(page.getByTestId('connectors-empty')).toBeVisible();
-  await search.press('Escape');
-  await expect(page.getByTestId('connectors-empty')).toHaveCount(0);
-  await expect(connectorCard(page, 'github')).toBeVisible();
-  await expect(connectorCard(page, 'slack')).toBeVisible();
+  await expect(settingsDialog.getByTestId('connectors-empty')).toBeVisible();
+  await settingsDialog.getByTestId('connectors-search-clear').click();
+  await expect(settingsDialog.getByTestId('connectors-empty')).toHaveCount(0);
+  await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
+  await expect(connectorCard(settingsDialog, 'slack')).toBeVisible();
 
-  await connectorCard(page, 'github').click();
+  await connectorCard(settingsDialog, 'github').focus();
+  await connectorCard(settingsDialog, 'github').press('Enter');
   await expect(page.getByTestId('connector-drawer')).toBeVisible();
   await expect(page.getByTestId('connector-drawer')).toContainText('List issues');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('connector-drawer')).toHaveCount(0);
+});
+
+test('saving a Composio key from Settings unlocks the connectors gate immediately', async ({ page }) => {
+  const { accountLabel: _unusedAccountLabel, ...slackConnector } = CONNECTORS[1]!;
+  await routeConnectors(page, [
+    {
+      ...CONNECTORS[0]!,
+      status: 'available',
+      auth: { provider: 'composio', configured: false },
+    },
+    {
+      ...slackConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: false },
+    },
+  ]);
+
+  let savedComposioBody: unknown = null;
+  await page.route('**/api/connectors/composio/config', async (route) => {
+    savedComposioBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, json: { config: null } });
+      return;
+    }
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+
+  await page.goto('/');
+  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
+  await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();
+
+  await settingsDialog.getByPlaceholder('Paste Composio API key').fill('cmp-secret-1234');
+  await settingsDialog.getByRole('button', { name: 'Save key', exact: true }).click();
+
+  expect(savedComposioBody).toEqual({ apiKey: 'cmp-secret-1234' });
+  await expect(settingsDialog.getByTestId('connectors-search-input')).toBeEnabled();
+  await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
+
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    composio: {
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '1234',
+    },
+  });
+  const savedConfig = await readSavedConfig(page);
+  expect(savedConfig?.composio).toMatchObject({
+    apiKey: '',
+    apiKeyConfigured: true,
+    apiKeyTail: '1234',
+  });
+});
+
+test('typing a draft replacement Composio key does not trigger global autosave', async ({ page }) => {
+  await routeConnectors(page, CONNECTORS);
+  await routeComposioConfig(page, { configured: true, apiKeyTail: '1234' });
+  await page.addInitScript((key) => {
+    const next = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: 'mock',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: {},
+      composio: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+      },
+    };
+    window.localStorage.setItem(key, JSON.stringify(next));
+  }, STORAGE_KEY);
+
+  const appConfigPersistBodies: unknown[] = [];
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, json: { config: null } });
+      return;
+    }
+    appConfigPersistBodies.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+
+  await page.goto('/');
+  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
+  await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  await expect(settingsDialog.getByText('Saved · ••••1234')).toBeVisible();
+
+  const appConfigPersistCountBeforeDraftEdit = appConfigPersistBodies.length;
+
+  const replacementInput = settingsDialog.getByPlaceholder('Paste a new key to replace the saved one');
+  await replacementInput.fill('cmp-draft-secret-9999');
+  await expect(settingsDialog.getByRole('button', { name: 'Save key', exact: true })).toBeEnabled();
+
+  await page.waitForTimeout(900);
+  expect(appConfigPersistBodies).toHaveLength(appConfigPersistCountBeforeDraftEdit);
+  await expect(settingsDialog.locator('.settings-autosave')).not.toContainText(/Saving|All changes saved/);
 });
 
 async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
@@ -211,8 +355,44 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
   });
 }
 
-function connectorCard(page: Page, id: string) {
-  return page.locator(`article.connector-card[data-connector-id="${id}"]`);
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
+async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
+  const settingsButton = page.getByRole('button', { name: /open settings/i });
+  await settingsButton.click();
+  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+  await expect(settingsMenu).toBeVisible();
+  await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+
+  const settingsDialog = page.getByRole('dialog');
+  await expect(settingsDialog).toBeVisible();
+  if (sectionName) {
+    await settingsDialog.getByRole('button', { name: sectionName }).click();
+  }
+  return settingsDialog;
+}
+
+async function routeComposioConfig(
+  page: Page,
+  config: { configured: boolean; apiKeyTail?: string },
+) {
+  await page.route('**/api/connectors/composio/config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: config });
+      return;
+    }
+
+    await route.fulfill({ json: { ok: true } });
+  });
+}
+
+function connectorCard(scope: Page | Locator, id: string) {
+  return scope.locator(`article.connector-card[data-connector-id="${id}"]`);
 }
 
 async function fetchCurrentProject(page: Page) {

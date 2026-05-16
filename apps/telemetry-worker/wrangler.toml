@@ -1,0 +1,25 @@
+name = "open-design-telemetry-relay"
+account_id = "64ad4569ffd912432d6b86d5656484c4"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+workers_dev = false
+routes = [
+  { pattern = "telemetry.open-design.ai", custom_domain = true }
+]
+
+[vars]
+LANGFUSE_BASE_URL = "https://us.cloud.langfuse.com"
+
+[[ratelimits]]
+name = "TELEMETRY_CLIENT_RATE_LIMITER"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
+[[ratelimits]]
+name = "TELEMETRY_IP_RATE_LIMITER"
+namespace_id = "1002"
+  [ratelimits.simple]
+  limit = 600
+  period = 60

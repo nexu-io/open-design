@@ -1,21 +1,24 @@
 import type http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  promises as fsp,
   realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   composeLiveInstructionPrompt,
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
+  resolveResearchCommandContract,
   startServer,
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
@@ -24,6 +27,34 @@ import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 function symlinkDir(target: string, link: string): void {
   symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+}
+
+async function withFakeAgent<T>(
+  binName: string,
+  script: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const dir = await fsp.mkdtemp(join(tmpdir(), 'od-chat-route-bin-'));
+  const oldPath = process.env.PATH;
+  try {
+    if (process.platform === 'win32') {
+      const runner = join(dir, `${binName}-test-runner.cjs`);
+      await fsp.writeFile(runner, script);
+      await fsp.writeFile(
+        join(dir, `${binName}.cmd`),
+        `@echo off\r\nnode "${runner}" %*\r\n`,
+      );
+    } else {
+      const bin = join(dir, binName);
+      await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+      await fsp.chmod(bin, 0o755);
+    }
+    process.env.PATH = `${dir}${delimiter}${oldPath ?? ''}`;
+    return await run();
+  } finally {
+    process.env.PATH = oldPath;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
 }
 
 describe('/api/chat', () => {
@@ -84,52 +115,277 @@ describe('/api/chat', () => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
+  it('marks json stream runs failed when an error frame exits with code 0', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({
+  type: 'error',
+  error: { message: 'model not found: fake-opencode-model' },
+}));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('AGENT_EXECUTION_FAILED');
+        expect(body).toContain('model not found: fake-opencode-model');
+        expect(body).toContain('"status":"failed"');
+        expect(body).not.toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ conversationId: string | null; status: string; exitCode: number | null }>;
+        };
+
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          conversationId,
+          status: 'failed',
+          exitCode: 0,
+        });
+      },
+    );
+  });
+
+  it('classifies Cursor Agent authentication stderr as a typed run error', async () => {
+    await withFakeAgent(
+      'cursor-agent',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+console.error("Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.");
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'cursor-agent',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).toContain('cursor-agent login');
+        expect(eventsBody).toContain('cursor-agent status');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('classifies Cursor Agent Not logged in stderr as a typed run error', async () => {
+    await withFakeAgent(
+      'cursor-agent',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+console.error('Not logged in');
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'cursor-agent',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).toContain('cursor-agent login');
+        expect(eventsBody).toContain('cursor-agent status');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('classifies Cursor Agent stdout auth text as a typed run error', async () => {
+    await withFakeAgent(
+      'cursor-agent',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+console.log('ConnectError: [unauthenticated]');
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'cursor-agent',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).toContain('cursor-agent login');
+        expect(eventsBody).toContain('cursor-agent status');
+        expect(eventsBody).not.toContain('AGENT_EXECUTION_FAILED');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('classifies Cursor Agent stdout error payloads as typed auth failures', async () => {
+    const cursorErrorLine = JSON.stringify({
+      type: 'error',
+      message: 'Error: [unauthenticated] Error',
+    });
+    await withFakeAgent(
+      'cursor-agent',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+console.log(${JSON.stringify(cursorErrorLine)});
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'cursor-agent',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).toContain('cursor-agent login');
+        expect(eventsBody).toContain('cursor-agent status');
+        expect(eventsBody).not.toContain('AGENT_EXECUTION_FAILED');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'od-qoder-bin-'));
-    tempDirs.push(binDir);
-    const qoderBin = join(binDir, 'qodercli');
     const qoderErrorLine = JSON.stringify({
       type: 'assistant',
       message: { content: [] },
       error: { message: 'Qoder authentication expired' },
     });
-    writeFileSync(
-      qoderBin,
-      `#!/bin/sh\nprintf '%s\\n' '${qoderErrorLine}'\nexit 0\n`,
-      'utf8',
+    await withFakeAgent(
+      'qodercli',
+      `console.log(${JSON.stringify(qoderErrorLine)});\nprocess.exit(0);\n`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'qoder',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('Qoder authentication expired');
+        expect(eventsBody).not.toContain('event: agent\\ndata: {"type":"error"');
+        expect(statusBody.status).toBe('failed');
+      },
     );
-    chmodSync(qoderBin, 0o755);
-    process.env.PATH = binDir;
-
-    const createResponse = await fetch(`${baseUrl}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agentId: 'qoder',
-        message: 'hello',
-      }),
-    });
-    expect(createResponse.status).toBe(202);
-    const { runId } = await createResponse.json() as { runId: string };
-
-    const eventsController = new AbortController();
-    const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-      signal: eventsController.signal,
-    });
-    const eventsBody = await readSseUntil(eventsResponse, 'event: error');
-    eventsController.abort();
-    const statusBody = await waitForRunStatus(baseUrl, runId);
-
-    expect(eventsBody).toContain('event: error');
-    expect(eventsBody).toContain('Qoder authentication expired');
-    expect(eventsBody).not.toContain('event: agent\\ndata: {"type":"error"');
-    expect(statusBody.status).toBe('failed');
   });
 
   it('fails Qoder runs when the result reports is_error with exit code 0', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'od-qoder-bin-'));
-    tempDirs.push(binDir);
-    const qoderBin = join(binDir, 'qodercli');
     const qoderResultLine = JSON.stringify({
       type: 'result',
       subtype: 'error',
@@ -142,39 +398,305 @@ describe('/api/chat', () => {
         output_tokens: 1,
       },
     });
-    writeFileSync(
-      qoderBin,
-      `#!/bin/sh\nprintf '%s\\n' '${qoderResultLine}'\nexit 0\n`,
-      'utf8',
+    await withFakeAgent(
+      'qodercli',
+      `console.log(${JSON.stringify(qoderResultLine)});\nprocess.exit(0);\n`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'qoder',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('"type":"usage"');
+        expect(eventsBody).toContain('"isError":true');
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('Qoder run failed: tool_use_failed');
+        expect(statusBody.status).toBe('failed');
+      },
     );
-    chmodSync(qoderBin, 0o755);
-    process.env.PATH = binDir;
+  });
 
-    const createResponse = await fetch(`${baseUrl}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agentId: 'qoder',
-        message: 'hello',
-      }),
-    });
-    expect(createResponse.status).toBe(202);
-    const { runId } = await createResponse.json() as { runId: string };
+  it('fails stalled json-stream runs after the inactivity timeout elapses', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'step_start' }));
+process.on('SIGTERM', () => process.exit(143));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
 
-    const eventsController = new AbortController();
-    const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-      signal: eventsController.signal,
-    });
-    const eventsBody = await readSseUntil(eventsResponse, 'event: error');
-    eventsController.abort();
-    const statusBody = await waitForRunStatus(baseUrl, runId);
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
 
-    expect(eventsBody).toContain('event: agent');
-    expect(eventsBody).toContain('"type":"usage"');
-    expect(eventsBody).toContain('"isError":true');
-    expect(eventsBody).toContain('event: error');
-    expect(eventsBody).toContain('Qoder run failed: tool_use_failed');
-    expect(statusBody.status).toBe('failed');
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('keeps Claude stream runs alive while structured output is still flowing', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '1800';
+    try {
+      await withFakeAgent(
+        'claude',
+        `
+const lines = [
+  JSON.stringify({ type: 'stream_event', event: { type: 'message_start', message: { id: 'msg-1' }, ttft_ms: 10 } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello ' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'world' } } }),
+  JSON.stringify({ type: 'stream_event', event: { type: 'content_block_stop', index: 0 } }),
+  JSON.stringify({ type: 'result', usage: { input_tokens: 1, output_tokens: 2 }, duration_ms: 700, stop_reason: 'end_turn' }),
+];
+let index = 0;
+const timer = setInterval(() => {
+  if (index >= lines.length) {
+    clearInterval(timer);
+    process.exit(0);
+    return;
+  }
+  console.log(lines[index++]);
+}, 400);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'claude',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('surfaces Claude auth diagnostics through the SSE error channel', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.error(JSON.stringify({ apiKeySource: 'none', error_status: 401 }));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('/login');
+        expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+setTimeout(() => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'done' } }));
+  process.exit(0);
+}, 50);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('marks stalled runs failed even when the child ignores SIGTERM', async () => {
+    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'step_start' }));
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('Agent stalled without emitting any new output');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+});
+
+describe('daemon run creation during shutdown', () => {
+  it('rejects new run creation while shutdown cleanup is still in flight', async () => {
+    const previousGrace = process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+    process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = '100';
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+      shutdown: () => Promise<void>;
+    };
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const activeResponse = await fetch(`${started.url}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'hello' }),
+          });
+          expect(activeResponse.status).toBe(202);
+          const { runId } = await activeResponse.json() as { runId: string };
+          await waitForRunStatus(started.url, runId, (status) => status === 'running');
+
+          const shutdownPromise = started.shutdown();
+
+          const runResponse = await fetch(`${started.url}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'late run' }),
+          });
+          const chatResponse = await fetch(`${started.url}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: 'opencode', message: 'late chat' }),
+          });
+
+          expect(runResponse.status).toBe(503);
+          expect(chatResponse.status).toBe(503);
+          await shutdownPromise;
+        },
+      );
+    } finally {
+      if (previousGrace == null) {
+        delete process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+      } else {
+        process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = previousGrace;
+      }
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
   });
 });
 
@@ -191,14 +713,18 @@ async function readSseUntil(response: Response, marker: string): Promise<string>
   return body;
 }
 
-async function waitForRunStatus(baseUrl: string, runId: string): Promise<{ status: string }> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+async function waitForRunStatus(
+  baseUrl: string,
+  runId: string,
+  done: (status: string) => boolean = (status) => status !== 'queued' && status !== 'running',
+): Promise<{ status: string }> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
     const statusBody = await statusResponse.json() as { status: string };
-    if (statusBody.status !== 'queued' && statusBody.status !== 'running') return statusBody;
+    if (done(statusBody.status)) return statusBody;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('run did not finish');
+  throw new Error('run did not reach expected status');
 }
 
 describe('chat prompt helpers', () => {
@@ -225,6 +751,17 @@ describe('chat prompt helpers', () => {
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
   });
 
+  it('defaults enabled research without an explicit query to the current message', () => {
+    const prompt = resolveResearchCommandContract(
+      { enabled: true },
+      'EV market 2025 trends',
+    );
+
+    expect(prompt).toContain('Canonical query for this run:');
+    expect(prompt).toContain('EV market 2025 trends');
+    expect(prompt).toContain('the first tool action must be the research command');
+  });
+
   it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {
     expect(
       resolveCodexGeneratedImagesDir(
@@ -233,7 +770,7 @@ describe('chat prompt helpers', () => {
         { CODEX_HOME: '/tmp/custom-codex-home' },
         '/home/tester',
       ),
-    ).toBe('/tmp/custom-codex-home/generated_images');
+    ).toBe(resolve('/tmp/custom-codex-home/generated_images'));
 
     expect(
       resolveCodexGeneratedImagesDir(

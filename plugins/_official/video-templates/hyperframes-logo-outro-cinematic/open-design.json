@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-hyperframes-logo-outro-cinematic",
+  "title": "HyperFrames: 4-Second Cinematic Logo Outro",
+  "version": "0.1.0",
+  "description": "A 4-second 16:9 logo outro — piece-by-piece wordmark assembly with bloom, shimmer sweep across the final lockup, soft grain overlay, single-line CTA. Built on the HyperFrames `logo-outro`, `shimmer-sweep`, and `grain-overlay` blocks.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/logo-outro"
+  },
+  "homepage": "https://github.com/heygen-com/hyperframes",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "branding",
+    "hyperframes",
+    "logo",
+    "outro",
+    "endcard"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a 4-second HyperFrames logo outro (1920×1080, 30fps) for a brand end-card. Pull `npx hyperframes add logo-outro`, `npx hyperframes add shimmer-sweep`, and `npx hyperframes add grain-overlay`.\n\nVisual identity: deep ink #07070a, single jewel accent #f0c14b, off-white #f7f3e8, secondary mauve #b8a3c8 used only on a 1px hairline rule. Display: \"General Sans\" 200px for the wordmark; body \"Inter\" 24px tracked +6% small caps for the CTA line.\n\nLayer structure:\n• Track 0: full-bleed background. Solid #07070a with a centered radial glow #f0c14b at 14% opacity, 720px diameter, sized by the bloom on landing.\n• Track 1: grain-overlay block at 8% opacity, full duration.\n• Track 2: logo-outro block in the center. Override the wordmark text via a slot to the user's brand name (default: \"OPEN DESIGN\").\n• Track 3: shimmer-sweep block running across the wordmark once, starting at 2.0s, lasting 0.8s.\n• Track 4: CTA line (one of: \"open-design.dev\", \"github.com/nexu-io/open-design\") at y=72%, fades in at 2.6s.\n\nAnimation (4s total):\n• 0–0.3s — empty stage, grain ramps from 0 → 8% opacity.\n• 0.3–1.7s — logo-outro built-in choreography: each glyph piece flies in from random offsets (use the block's seeded variant — DO NOT rewrite with Math.random) and assembles, ease expo.out, 1.4s.\n• 1.7–2.0s — radial glow pulses scale 0.96 → 1.04 → 1, 1.2s ease sine.inOut, simulating a bloom hit.\n• 2.0–2.8s — shimmer-sweep slides across the assembled wordmark using its built-in CSS gradient mask.\n• 2.6–3.4s — CTA line rises from y=20→0, opacity 0→1 ease power3.out 0.7s.\n• 3.4–4.0s — final hold, grain continues, no exits.\n\nNon-negotiables: deterministic only — use the block's built-in seed; no `repeat: -1` (calculate explicit cycle count from duration if you keep grain animated); entrance-only; all timelines paused:true; root data-duration=4. Run lint and validate (contrast on the CTA line must clear 4.5:1 against the dark canvas).\n\nOutput: `logo-outro-4s.mp4`.",
+        "zh-CN": "使用这个插件完成以下任务：Build a 4-second HyperFrames logo outro (1920×1080, 30fps) for a brand end-card. Pull `npx hyperframes add logo-outro`, `npx hyperframes add shimmer-sweep`, and `npx hyperframes add grain-overlay`.\n\nVisual identity: deep ink #07070a, single jewel accent #f0c14b, off-white #f7f3e8, secondary mauve #b8a3c8 used only on a 1px hairline rule. Display: \"General Sans\" 200px for the wordmark; body \"Inter\" 24px tracked +6% small caps for the CTA line.\n\nLayer structure:\n• Track 0: full-bleed background. Solid #07070a with a centered radial glow #f0c14b at 14% opacity, 720px diameter, sized by the bloom on landing.\n• Track 1: grain-overlay block at 8% opacity, full duration.\n• Track 2: logo-outro block in the center. Override the wordmark text via a slot to the user's brand name (default: \"OPEN DESIGN\").\n• Track 3: shimmer-sweep block running across the wordmark once, starting at 2.0s, lasting 0.8s.\n• Track 4: CTA line (one of: \"open-design.dev\", \"github.com/nexu-io/open-design\") at y=72%, fades in at 2.6s.\n\nAnimation (4s total):\n• 0–0.3s — empty stage, grain ramps from 0 → 8% opacity.\n• 0.3–1.7s — logo-outro built-in choreography: each glyph piece flies in from random offsets (use the block's seeded variant — DO NOT rewrite with Math.random) and assembles, ease expo.out, 1.4s.\n• 1.7–2.0s — radial glow pulses scale 0.96 → 1.04 → 1, 1.2s ease sine.inOut, simulating a bloom hit.\n• 2.0–2.8s — shimmer-sweep slides across the assembled wordmark using its built-in CSS gradient mask.\n• 2.6–3.4s — CTA line rises from y=20→0, opacity 0→1 ease power3.out 0.7s.\n• 3.4–4.0s — final hold, grain continues, no exits.\n\nNon-negotiables: deterministic only — use the block's built-in seed; no `repeat: -1` (calculate explicit cycle count from duration if you keep grain animated); entrance-only; all timelines paused:true; root data-duration=4. Run lint and validate (contrast on the CTA line must clear 4.5:1 against the dark canvas).\n\nOutput: `logo-outro-4s.mp4`."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "hyperframes-html"
+        ],
+        "default": "hyperframes-html"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

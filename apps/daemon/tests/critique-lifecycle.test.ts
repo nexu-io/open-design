@@ -1,15 +1,16 @@
 /**
- * Regression tests for round 3 review feedback on PR #481:
+ * Regression tests for round 3 review feedback on PR #481, plus the
+ * Phase 6.2 artifact-extraction expansion:
  *   - A signal-terminated child (e.g. SIGTERM from /api/runs/:id/cancel)
  *     finalizes the critique row as 'interrupted', not 'below_threshold'.
  *     The synthetic ship event for the best-so-far round carries
  *     status='interrupted' so transcripts and SSE clients see the real cause.
- *   - artifactPath persisted with the row stays null on shipped runs until a
- *     future phase actually writes the SHIP <ARTIFACT> body to disk. The
- *     transcript still records the ship event so consumers can find the run.
+ *   - Shipped runs now persist the SHIP <ARTIFACT> body to disk and pin
+ *     the absolute path on the row, so the artifact endpoint can stream
+ *     the bytes the agent shipped (CDATA wrapper stripped).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,7 +126,7 @@ describe('orchestrator lifecycle (PR #481 round 3 review)', () => {
     expect(result.composite!).toBeGreaterThan(8.0);
   });
 
-  it('shipped run persists artifactPath=null until artifact extraction lands', async () => {
+  it('shipped run persists the SHIP <ARTIFACT> body to disk and pins the absolute path on the row', async () => {
     const { bus } = makeBus();
     const artifactDir = join(tmpDir, 'no-artifact');
 
@@ -165,8 +166,15 @@ describe('orchestrator lifecycle (PR #481 round 3 review)', () => {
     });
 
     expect(result.status).toBe('shipped');
-    expect(result.artifactPath).toBeNull();
+    expect(result.artifactPath).toBeTruthy();
+    expect(result.artifactPath!.endsWith('artifact.html')).toBe(true);
+
     const row = getCritiqueRun(db, 'r-shipped');
-    expect(row?.artifactPath).toBeNull();
+    expect(row?.artifactPath).toBe(result.artifactPath);
+
+    // The bytes on disk are exactly what the agent shipped, with the
+    // CDATA wrapper from the SHIP <ARTIFACT> stripped.
+    expect(existsSync(result.artifactPath!)).toBe(true);
+    expect(readFileSync(result.artifactPath!, 'utf8')).toBe('<html><body>final</body></html>');
   });
 });

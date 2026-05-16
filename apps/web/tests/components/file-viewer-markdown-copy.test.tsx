@@ -73,7 +73,7 @@ describe('FileViewer markdown code block copy', () => {
   });
 
   it('copies fenced code blocks from the markdown preview', async () => {
-    const { container } = render(<FileViewer projectId="project-1" file={baseFile()} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={baseFile()} />);
 
     await waitFor(() => {
       expect(container.querySelector('.markdown-code-copy')).toBeTruthy();
@@ -97,7 +97,7 @@ describe('FileViewer markdown code block copy', () => {
 
   it('copies empty fenced code blocks instead of treating the button as broken', async () => {
     mockedFetchProjectFileText.mockResolvedValue('```ts\n```');
-    const { container } = render(<FileViewer projectId="project-1" file={baseFile()} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={baseFile()} />);
 
     await waitFor(() => {
       expect(container.querySelector('.markdown-code-copy')).toBeTruthy();
@@ -117,7 +117,7 @@ describe('FileViewer markdown code block copy', () => {
       value: vi.fn().mockReturnValue(true),
     });
     const execCommandSpy = vi.mocked(document.execCommand);
-    const { container } = render(<FileViewer projectId="project-1" file={baseFile()} />);
+    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={baseFile()} />);
 
     await waitFor(() => {
       expect(container.querySelector('.markdown-code-copy')).toBeTruthy();

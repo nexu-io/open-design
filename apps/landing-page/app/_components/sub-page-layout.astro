@@ -1,0 +1,93 @@
+---
+/*
+ * Shared shell for every sub-page outside of `/` (Skills, Systems,
+ * Craft, Templates and their detail pages).
+ *
+ * The homepage (`/`) intentionally does NOT use this layout — its
+ * chrome (rails, topbar, full hero, mega-word footer) stays in
+ * lockstep with `skills/open-design-landing/example.html`. This
+ * layout is the lighter sibling: same Atelier Zero tokens, same
+ * sticky nav, but no editorial side rails or hero, and a compact
+ * footer focused on the site map.
+ *
+ * Every sub-page passes `title`, `description`, `active` (nav
+ * highlight) and an optional `jsonLd`. Catalog counts are read from
+ * `getCatalogCounts()` so the nav badges stay live.
+ */
+import '../globals.css';
+import '../sub-pages.css';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import HeaderEnhancer from './header-enhancer.astro';
+import { Header, type HeaderProps } from './header';
+import SiteFooter from './site-footer.astro';
+import Topbar from './topbar.astro';
+import { heroImage } from '../image-assets';
+import { getCatalogCounts } from '../_lib/catalog';
+import { getGithubRepoMeta } from '../_lib/github';
+
+export interface Props {
+  title: string;
+  description: string;
+  active?: HeaderProps['active'];
+  ogImage?: string;
+  jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
+}
+
+const { title, description, active = 'home', ogImage, jsonLd } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const og = ogImage ?? heroImage;
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const headerHtml = renderToStaticMarkup(
+  Header({ active, counts, github, brandHref: '/' }) as ReturnType<typeof createElement>,
+);
+const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#efe7d2" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Open Design" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={og} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={og} />
+
+    {ldArray.map((data) => (
+      <script is:inline type="application/ld+json" set:html={JSON.stringify(data)} />
+    ))}
+  </head>
+  <body class="sub-page">
+    <div class="shell">
+      <Topbar github={github} />
+      {/* Same React-rendered Header used by the homepage. SSR'd here
+       * so we have one nav implementation that handles active state. */}
+      <Fragment set:html={headerHtml} />
+
+      <main class="sub-main container">
+        <slot />
+      </main>
+
+      <SiteFooter counts={counts} />
+    </div>
+
+    <HeaderEnhancer />
+  </body>
+</html>
