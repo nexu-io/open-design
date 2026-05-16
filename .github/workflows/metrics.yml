@@ -28,7 +28,9 @@ jobs:
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
           repositories: open-design
+          permission-administration: read
           permission-contents: write
+          permission-issues: read
           permission-pull-requests: write
 
       - name: Generate GitHub repository metrics
