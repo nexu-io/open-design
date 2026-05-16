@@ -193,6 +193,34 @@ function emptyForm(): FormState {
   };
 }
 
+function formFromRoutine(routine: Routine): FormState {
+  const base = emptyForm();
+  const schedule = routine.schedule;
+  if (schedule.kind === 'hourly') {
+    base.kind = 'hourly';
+    base.minute = schedule.minute;
+  } else if (schedule.kind === 'weekly') {
+    base.kind = 'weekly';
+    base.weekday = schedule.weekday;
+    base.time = schedule.time;
+    base.timezone = schedule.timezone;
+  } else {
+    base.kind = schedule.kind;
+    base.time = schedule.time;
+    base.timezone = schedule.timezone;
+  }
+  if (routine.target.mode === 'reuse') {
+    base.mode = 'reuse';
+    base.projectId = routine.target.projectId;
+  } else {
+    base.mode = 'create_each_run';
+    base.projectId = '';
+  }
+  base.name = routine.name;
+  base.prompt = routine.prompt;
+  return base;
+}
+
 function buildSchedule(form: FormState): RoutineSchedule {
   if (form.kind === 'hourly') {
     return { kind: 'hourly', minute: form.minute };
@@ -382,6 +410,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -450,16 +479,22 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
         target,
         enabled: true,
       };
-      const res = await fetch('/api/routines', {
-        method: 'POST',
+      const isEdit = editingId !== null;
+      const url = isEdit ? `/api/routines/${editingId}` : '/api/routines';
+      const payload = isEdit
+        ? { name: body.name, prompt: body.prompt, schedule: body.schedule, target: body.target }
+        : body;
+      const res = await fetch(url, {
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `create failed: ${res.status}`);
+        throw new Error(j.error || `${isEdit ? 'update' : 'create'} failed: ${res.status}`);
       }
       setShowForm(false);
+      setEditingId(null);
       setForm(emptyForm());
       void refresh();
     } catch (err) {
@@ -629,13 +664,16 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
               className="btn"
               onClick={() => {
                 setShowForm(false);
+                setEditingId(null);
                 setForm(emptyForm());
               }}
             >
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create'}
+              {editingId
+                ? submitting ? 'Saving…' : 'Save'
+                : submitting ? 'Creating…' : 'Create'}
             </button>
           </div>
         </form>
@@ -691,6 +729,18 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       disabled={isBusy}
                     >
                       Run now
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setForm(formFromRoutine(r));
+                        setEditingId(r.id);
+                        setShowForm(true);
+                      }}
+                      disabled={isBusy}
+                    >
+                      Edit
                     </button>
                     <button
                       type="button"
