@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "filesystem": { "command": "node", "args": ["/abs/fs-server.js"] },
+    "remote-sse":  { "url": "https://example.com/sse", "type": "sse" },
+    "remote-http": { "url": "https://example.com/http", "type": "http" },
+    "weird":       { "foo": "bar" }
+  }
+}
