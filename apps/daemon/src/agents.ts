@@ -1005,7 +1005,7 @@ export function buildLiveArtifactsMcpServersForAgent(def, { enabled = true, comm
       name: 'open-design-live-artifacts',
       command,
       args: [...argsPrefix, 'mcp', 'live-artifacts'],
-      env: [],
+      env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }],
     },
   ];
 }
