@@ -928,6 +928,7 @@ export interface Dict {
   'chat.new': string;
   'chat.emptyConversations': string;
   'chat.deleteConversation': string;
+  'chat.renameConversationLabel': string;
   'chat.deleteConversationConfirm': string;
   'chat.untitledConversation': string;
   'chat.startTitle': string;

@@ -510,6 +510,65 @@ export function ChatPane({
 
   const activeConversation =
     conversations.find((c) => c.id === activeConversationId) ?? null;
+  const activeConversationMissing = !activeConversation;
+  const activeConversationTitle =
+    activeConversation
+      ? activeConversation.title || t('chat.untitledConversation')
+      : t('chat.conversationsHeading');
+  const activeConversationRenameLabel = activeConversation
+    ? t('chat.renameConversationLabel', { title: activeConversationTitle })
+    : '';
+  const titleEditClosedRef = useRef(false);
+  const [editingActiveTitle, setEditingActiveTitle] = useState(false);
+  const [activeTitleDraft, setActiveTitleDraft] = useState('');
+
+  useEffect(() => {
+    if (editingActiveTitle) return;
+    setActiveTitleDraft(activeConversation?.title ?? '');
+  }, [activeConversation?.title, editingActiveTitle]);
+
+  // Switching conversations should always close the inline editor so the
+  // old draft cannot leak into the next conversation.
+  useEffect(() => {
+    titleEditClosedRef.current = true;
+    setEditingActiveTitle(false);
+  }, [activeConversationId]);
+
+  // The selected id can stay stable while the record temporarily vanishes
+  // during a reload; cancel the editor in that case as well.
+  useEffect(() => {
+    if (!activeConversationMissing) return;
+    titleEditClosedRef.current = true;
+    setEditingActiveTitle(false);
+  }, [activeConversationMissing]);
+
+  function beginActiveTitleRename() {
+    if (!activeConversation || !onRenameConversation) return;
+    titleEditClosedRef.current = false;
+    setActiveTitleDraft(activeConversation.title ?? '');
+    setEditingActiveTitle(true);
+  }
+
+  function commitActiveTitleRename() {
+    if (titleEditClosedRef.current) return;
+    titleEditClosedRef.current = true;
+    if (activeConversation && onRenameConversation) {
+      const nextTitle = normalizeConversationRename(
+        activeConversation.title,
+        activeTitleDraft,
+      );
+      if (nextTitle !== null) {
+        onRenameConversation(activeConversation.id, nextTitle);
+      }
+    }
+    setEditingActiveTitle(false);
+  }
+
+  function cancelActiveTitleRename() {
+    titleEditClosedRef.current = true;
+    setActiveTitleDraft(activeConversation?.title ?? '');
+    setEditingActiveTitle(false);
+  }
 
   function jumpToBottom() {
     const el = logRef.current;
@@ -520,6 +579,49 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-header">
+        <div className="chat-active-conversation">
+          {editingActiveTitle && activeConversation && onRenameConversation ? (
+            <input
+              autoFocus
+              className="chat-active-conversation-input"
+              data-testid="chat-active-conversation-rename-input"
+              aria-label={activeConversationRenameLabel}
+              value={activeTitleDraft}
+              onChange={(e) => setActiveTitleDraft(e.target.value)}
+              onBlur={commitActiveTitleRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitActiveTitleRename();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelActiveTitleRename();
+                }
+              }}
+            />
+          ) : (
+            <>
+              <span
+                className="chat-active-conversation-title"
+                data-testid="chat-active-conversation-title"
+                title={activeConversationTitle}
+              >
+                {activeConversationTitle}
+              </span>
+              {activeConversation && onRenameConversation ? (
+                <button
+                  type="button"
+                  className="chat-active-conversation-rename"
+                  aria-label={activeConversationRenameLabel}
+                  title={t('common.rename')}
+                  onClick={beginActiveTitleRename}
+                >
+                  <Icon name="pencil" size={13} />
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
         <div className="chat-header-actions">
           <div
             className={`chat-history-wrap${showConvList ? ' open' : ''}`}
@@ -883,8 +985,35 @@ function ConversationRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(conversation.title ?? '');
+  const titleEditClosedRef = useRef(false);
   const displayTitle =
     conversation.title || t('chat.untitledConversation');
+
+  function beginConversationRename() {
+    if (!onRename) return;
+    titleEditClosedRef.current = false;
+    setDraft(conversation.title ?? '');
+    setEditing(true);
+  }
+
+  function commitConversationRename() {
+    if (titleEditClosedRef.current) return;
+    titleEditClosedRef.current = true;
+    if (onRename) {
+      const nextTitle = normalizeConversationRename(conversation.title, draft);
+      if (nextTitle !== null) {
+        onRename(conversation.id, nextTitle);
+      }
+    }
+    setEditing(false);
+  }
+
+  function cancelConversationRename() {
+    titleEditClosedRef.current = true;
+    setDraft(conversation.title ?? '');
+    setEditing(false);
+  }
+
   return (
     <div
       className={`chat-conv-item${active ? ' active' : ''}`}
@@ -896,16 +1025,14 @@ function ConversationRow({
           className="chat-conv-rename-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            onRename(conversation.id, draft);
-            setEditing(false);
-          }}
+          onBlur={commitConversationRename}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              onRename(conversation.id, draft);
-              setEditing(false);
+              e.preventDefault();
+              commitConversationRename();
             } else if (e.key === 'Escape') {
-              setEditing(false);
+              e.preventDefault();
+              cancelConversationRename();
             }
           }}
           style={{ flex: 1, padding: '2px 6px', fontSize: 12 }}
@@ -917,11 +1044,7 @@ function ConversationRow({
           data-testid={`conversation-select-${conversation.id}`}
           style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}
           onClick={onSelect}
-          onDoubleClick={() => {
-            if (!onRename) return;
-            setDraft(conversation.title ?? '');
-            setEditing(true);
-          }}
+          onDoubleClick={beginConversationRename}
         >
           {displayTitle}
         </button>
@@ -945,6 +1068,15 @@ function ConversationRow({
       </button>
     </div>
   );
+}
+
+function normalizeConversationRename(
+  currentTitle: string | null | undefined,
+  draft: string,
+): string | null {
+  const current = (currentTitle ?? '').trim();
+  const next = draft.trim();
+  return next === current ? null : next;
 }
 
 function UserMessage({
