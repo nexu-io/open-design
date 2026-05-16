@@ -1368,7 +1368,7 @@ export function ProjectView({
             true,
           );
           completedReattachRunsRef.current.add(runId);
-          void Promise.allSettled([saved]).then(() => onProjectsRefresh());
+          void saved.then(() => onProjectsRefresh());
           continue;
         }
         updateMessageById(
