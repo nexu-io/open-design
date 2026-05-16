@@ -246,7 +246,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         label: 'Or: ask the daemon for the snippet tailored to your install',
         language: 'bash',
-        body: 'curl -s http://127.0.0.1:7456/api/mcp/install-info | jq',
+        body: 'curl -s -H "Authorization: Bearer $OD_API_KEY" \\\n  http://127.0.0.1:7456/api/mcp/install-info | jq',
       },
       {
         label: 'Live-artifacts MCP variant (read & refresh dashboards)',
@@ -270,7 +270,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'your scripts. Streaming endpoints (chat turns, project runs) emit ' +
       'Server-Sent Events with the contract types in `@open-design/contracts`.',
     bullets: [
-      '`GET /api/health` — daemon liveness.',
+      '`GET /api/health` — daemon liveness (no auth required).',
+      'All other endpoints require `Authorization: Bearer <key>` when the daemon is network-exposed. Generate a key in Settings → Network.',
       '`GET /api/skills` and `GET /api/design-systems` — available registries.',
       '`GET /api/projects` and `POST /api/projects` — list and create projects (POST returns the project + first conversation).',
       '`GET /api/projects/:id/chat` — SSE stream of agent events for a conversation.',
@@ -279,15 +280,24 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
     snippets: [
       {
+        label: 'Set your API key (required when network-exposed)',
+        language: 'bash',
+        body: 'export OD_API_KEY="<paste-from-settings-network>"\n# Then use -H "Authorization: Bearer $OD_API_KEY" with every request',
+      },
+      {
         label: 'List installed skills (the agent will use these as templates)',
         language: 'bash',
-        body: 'curl -s http://127.0.0.1:7456/api/skills | jq \'.skills[0]\'',
+        body:
+          'curl -s \\\n' +
+          '  -H "Authorization: Bearer $OD_API_KEY" \\\n' +
+          "  http://127.0.0.1:7456/api/skills | jq '.skills[0]'",
       },
       {
         label: 'Create a project from a prompt (full server-side flow)',
         language: 'bash',
         body:
           'curl -s -X POST http://127.0.0.1:7456/api/projects \\\n' +
+          '  -H "Authorization: Bearer $OD_API_KEY" \\\n' +
           "  -H 'content-type: application/json' \\\n" +
           "  -d '{\n" +
           '    "name": "Hermes test run",\n' +
@@ -301,14 +311,18 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         label: 'Stream a chat turn (SSE — each line is JSON-Lines compatible)',
         language: 'bash',
         body:
-          "curl -N \\\n  -H 'accept: text/event-stream' \\\n" +
+          "curl -N \\\n" +
+          '  -H "Authorization: Bearer $OD_API_KEY" \\\n' +
+          "  -H 'accept: text/event-stream' \\\n" +
           '  http://127.0.0.1:7456/api/projects/<projectId>/chat?conversationId=<convId>',
       },
     ],
     footer:
       'Pure TypeScript types for every request/response live in ' +
       '`@open-design/contracts` — import them in your script for full ' +
-      'autocomplete without wiring a generator.',
+      'autocomplete without wiring a generator. ' +
+      'The `Authorization: Bearer` header is only needed when the daemon ' +
+      'is bound to a non-loopback address (Settings → Network).',
   },
   {
     id: 'skills',
