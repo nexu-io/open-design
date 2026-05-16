@@ -87,6 +87,7 @@ import {
   targetFromSnapshot,
   type PreviewCommentSnapshot,
 } from '../comments';
+import { removePodMember } from '../lib/pod-members';
 import type {
   ChatCommentAttachment,
   PreviewComment,
@@ -1826,7 +1827,7 @@ function FileActions({
   );
 }
 
-function BoardComposerPopover({
+export function BoardComposerPopover({
   target,
   existing,
   draft,
@@ -1838,6 +1839,7 @@ function BoardComposerPopover({
   onSaveComment,
   onSendBatch,
   onRemove,
+  onRemoveMember,
   sending,
   t,
 }: {
@@ -1852,6 +1854,7 @@ function BoardComposerPopover({
   onSaveComment: () => void | Promise<void>;
   onSendBatch: () => void | Promise<void>;
   onRemove: (commentId: string) => void | Promise<void>;
+  onRemoveMember: (elementId: string) => void;
   sending: boolean;
   t: TranslateFn;
 }) {
@@ -1904,6 +1907,15 @@ function BoardComposerPopover({
             {podMembers.slice(0, 6).map((member) => (
               <span key={member.elementId} className="board-pod-chip">
                 {summarizeMember(member)}
+                <button
+                  type="button"
+                  className="board-pod-chip-remove"
+                  onClick={() => onRemoveMember(member.elementId)}
+                  aria-label={t('chat.comments.remove')}
+                  title={t('chat.comments.remove')}
+                >
+                  ×
+                </button>
               </span>
             ))}
           </div>
@@ -6099,6 +6111,13 @@ function HtmlViewer({
                   if (!onRemovePreviewComment) return;
                   await onRemovePreviewComment(commentId);
                   clearBoardComposer();
+                }}
+                onRemoveMember={(elementId) => {
+                  setActiveCommentTarget((current) => {
+                    if (!current || !current.podMembers) return current;
+                    const nextMembers = removePodMember(current.podMembers, elementId);
+                    return { ...current, podMembers: nextMembers, memberCount: nextMembers.length };
+                  });
                 }}
                 sending={sendingBoardBatch || streaming}
                 t={t}
