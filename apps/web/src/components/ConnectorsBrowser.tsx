@@ -911,6 +911,7 @@ export function ConnectorsBrowser({
             >
               <p className="connector-panel-alert-copy" role="status">
                 <strong title={alert.connectorName}>{alert.connectorName}</strong>
+                <span className="sr-only">: </span>
                 <span title={alert.message}>{alert.message}</span>
               </p>
               <button

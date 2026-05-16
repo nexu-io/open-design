@@ -382,6 +382,7 @@ describe('ConnectorsBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('notion'));
     const alert = await screen.findByRole('status');
+    expect(alert.textContent).toContain('Notion: Composio provider is not configured');
     const alertRow = alert.closest('.connector-panel-alert');
     expect(alertRow).not.toBeNull();
 
@@ -490,6 +491,7 @@ describe('ConnectorsBrowser', () => {
 
     await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('github'));
     const alert = await screen.findByRole('status');
+    expect(alert.textContent).toContain('GitHub: Composio provider is not configured');
     expect(alert.textContent).toContain('GitHub');
     expect(alert.textContent).toContain('Composio provider is not configured');
     expect(alert.closest('.connector-grid')).toBeNull();
@@ -535,7 +537,7 @@ describe('ConnectorsBrowser', () => {
     expect(alert.querySelector('strong')?.getAttribute('title')).toBe(
       'GitHub Enterprise Connector With A Very Long Display Name',
     );
-    const message = alert.querySelector('span');
+    const message = alert.querySelector('span[title]');
     expect(message?.getAttribute('title')).toBe(longError);
     const alertRow = alert.closest('.connector-panel-alert');
     expect(alertRow).not.toBeNull();
