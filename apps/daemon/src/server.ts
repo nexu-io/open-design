@@ -4127,7 +4127,7 @@ export async function startServer({
 
   app.get('/api/skills', async (_req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listSkills(SKILL_ROOTS);
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
@@ -4143,7 +4143,7 @@ export async function startServer({
 
   app.get('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listSkills(SKILL_ROOTS);
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
