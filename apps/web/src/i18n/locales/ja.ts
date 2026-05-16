@@ -116,6 +116,7 @@ export const ja: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI では、このフィールドが /openai/deployments/<model> のデプロイ名として使われます。Azure で作成したデプロイ名を入力してください。',
   'settings.apiVersion': 'API バージョン',
+  'settings.byokImageModel': '画像生成モデル',
   'settings.maxTokens': '最大トークン（任意）',
   'settings.maxTokensHint':
     '応答長の上限。各モデルにチューニング済みのデフォルト値があります（プレースホルダーに表示）。空のままにすればそれを使用し、数値を入力すれば上書きされます。',

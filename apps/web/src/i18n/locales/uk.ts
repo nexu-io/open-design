@@ -117,6 +117,7 @@ export const uk: Dict = {
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI це поле використовується як назва розгортання в /openai/deployments/<model>. Введіть назву розгортання, створену в Azure.',
   'settings.apiVersion': 'Версія API',
+  'settings.byokImageModel': 'Модель генерації зображень',
   'settings.maxTokens': 'Макс. токенів (необов\'язково)',
   'settings.maxTokensHint':
     'Обмеження на довжину відповіді. Кожна модель має налаштовану за замовчуванням (показано в заповнювачі); залиште поле порожнім, щоб використовувати її, або введіть число, щоб переопрацювати.',

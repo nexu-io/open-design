@@ -116,6 +116,7 @@ export const tr: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI icin bu alan /openai/deployments/<model> icindeki dagitim adi olarak kullanilir. Azureda olusturdugunuz dagitim adini girin.',
   'settings.apiVersion': 'API sürümü',
+  'settings.byokImageModel': 'Görüntü oluşturma modeli',
   'settings.maxTokens': 'Maks. token (isteğe bağlı)',
   'settings.maxTokensHint':
     'Yanıt uzunluğu sınırı. Her modelin ayarlanmış bir varsayılanı vardır (yer tutucuda görünür); kullanmak için boş bırakın, üzerine yazmak için bir sayı girin.',

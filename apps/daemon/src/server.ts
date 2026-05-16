@@ -5041,6 +5041,7 @@ export async function startServer({
     db,
     design,
     http: httpDeps,
+    paths: pathDeps,
     chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,

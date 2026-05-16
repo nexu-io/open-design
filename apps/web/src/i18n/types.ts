@@ -149,6 +149,7 @@ export interface Dict {
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
+  'settings.byokImageModel': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
   'settings.getStarted': string;

@@ -116,6 +116,7 @@ export const ru: Dict = {
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI это поле используется как имя развертывания в /openai/deployments/<model>. Укажите имя развертывания, созданного в Azure.',
   'settings.apiVersion': 'Версия API',
+  'settings.byokImageModel': 'Модель генерации изображений',
   'settings.maxTokens': 'Макс. токенов (опционально)',
   'settings.maxTokensHint':
     'Ограничение длины ответа. У каждой модели свой настроенный дефолт (виден в плейсхолдере); оставьте поле пустым, чтобы использовать его, или введите число, чтобы переопределить.',

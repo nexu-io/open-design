@@ -116,6 +116,7 @@ export const de: Dict = {
   'settings.azureDeploymentModelHint':
     'Fuer Azure OpenAI wird dieses Feld als Deployment-Name in /openai/deployments/<model> verwendet. Geben Sie den in Azure angelegten Deployment-Namen ein.',
   'settings.apiVersion': 'API-Version',
+  'settings.byokImageModel': 'Bilderzeugungsmodell',
   'settings.maxTokens': 'Max. Tokens (optional)',
   'settings.maxTokensHint':
     'Obergrenze für die Antwortlänge. Jedes Modell hat einen abgestimmten Standardwert (im Platzhalter sichtbar); leer lassen, um ihn zu verwenden, oder eine Zahl eingeben, um ihn zu überschreiben.',

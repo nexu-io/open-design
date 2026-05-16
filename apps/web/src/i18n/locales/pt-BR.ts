@@ -116,6 +116,7 @@ export const ptBR: Dict = {
   'settings.azureDeploymentModelHint':
     'No Azure OpenAI, este campo e usado como nome do deployment em /openai/deployments/<model>. Informe o nome do deployment criado no Azure.',
   'settings.apiVersion': 'Versão da API',
+  'settings.byokImageModel': 'Modelo de geração de imagens',
   'settings.maxTokens': 'Tokens máx. (opcional)',
   'settings.maxTokensHint':
     'Limite para o comprimento da resposta. Cada modelo tem um valor padrão ajustado (visível no placeholder); deixe em branco para usá-lo ou insira um número para substituí-lo.',

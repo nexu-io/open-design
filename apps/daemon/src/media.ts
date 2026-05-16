@@ -514,6 +514,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'image') {
+      const result = await renderSenseAudioImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fishaudio' && surface === 'audio') {
       const result = await renderFishAudioTTS(ctx, credentials);
       bytes = result.bytes;
@@ -1941,6 +1946,119 @@ async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfi
     bytes,
     providerNote: `senseaudio/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: SenseAudio image — POST /v1/image/sync (synchronous text-to-image).
+//
+// Docs: https://docs.senseaudio.cn/guides/image/overview
+//   * Models: senseaudio-image-2.0-260319 (multi-aspect), senseaudio-image-1.0-260319
+//     (standard), doubao-seedream-5-0-260128 (hi-res). The wire `model` field
+//     accepts the catalog id directly so no alias map is needed.
+//   * Body: { model, prompt (≤2000 chars), size (WxH, required when no
+//     reference), reference (URL or data URI, optional), seed (optional int) }.
+//   * Response: { url: string } pointing at the rendered PNG; we fetch it
+//     once to materialise bytes the dispatcher can write to disk.
+//   * Auth: Authorization: Bearer <API_KEY>; shares the senseaudio provider
+//     slot with the TTS path (OD_SENSEAUDIO_API_KEY / SENSEAUDIO_API_KEY).
+// We default to the /sync endpoint because the chat runtime already streams
+// progress and a single round-trip keeps the dispatcher contract identical
+// to OpenAI / Volcengine image. Switching to /v1/image/async + GET
+// /v1/image/pending is a future option if the upstream model latency
+// outgrows the daemon's request timeout.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_IMAGE_PROMPT_LIMIT = 2000;
+
+function senseAudioImageSize(aspect?: string): string {
+  if (aspect === '16:9') return '1664x936';
+  if (aspect === '9:16') return '936x1664';
+  if (aspect === '4:3') return '1280x960';
+  if (aspect === '3:4') return '960x1280';
+  return '1024x1024';
+}
+
+async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+  // SenseAudio rejects >2000-char prompts with a 4xx; trim defensively so a
+  // verbose agent plan doesn't dead-end the generation. The truncated tail
+  // surfaces in providerNote so the user sees what was actually sent.
+  const prompt =
+    promptRaw.length > SENSEAUDIO_IMAGE_PROMPT_LIMIT
+      ? promptRaw.slice(0, SENSEAUDIO_IMAGE_PROMPT_LIMIT)
+      : promptRaw;
+  const size = senseAudioImageSize(ctx.aspect);
+  const reference = ctx.imageRef?.dataUrl;
+
+  const body: Record<string, unknown> = {
+    model: ctx.wireModel,
+    prompt,
+    size,
+  };
+  if (reference) {
+    // When a reference image is supplied the API documents `size` as
+    // optional; we still send it so the output dimensions stay
+    // deterministic across t2i / i2i runs of the same project.
+    body.reference = reference;
+  }
+
+  const resp = await fetch(`${baseUrl}/v1/image/sync`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`senseaudio image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`senseaudio image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // Mirror the TTS base_resp envelope check: HTTP 200 can still encode an
+  // upstream logical failure. The image API uses the same shape on the
+  // failure path documented for /v1/image/pending (status=failed +
+  // error_message), so surface either source verbatim.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `senseaudio image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  if (typeof data?.error_message === 'string' && data.error_message) {
+    throw new Error(`senseaudio image api error: ${data.error_message}`);
+  }
+  const url = typeof data?.url === 'string' ? data.url : '';
+  if (!url) {
+    throw new Error('senseaudio image response missing url');
+  }
+  const imgResp = await fetch(url);
+  if (!imgResp.ok) {
+    throw new Error(`senseaudio image fetch ${imgResp.status}`);
+  }
+  const bytes = Buffer.from(await imgResp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('senseaudio image fetch returned zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${ctx.wireModel} · ${size}${reference ? ' · i2i' : ''} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
   };
 }
 

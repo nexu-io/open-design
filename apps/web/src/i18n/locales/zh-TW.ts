@@ -115,6 +115,7 @@ export const zhTW: Dict = {
   'settings.azureDeploymentModelHint':
     '對於 Azure OpenAI，此欄位會作為 /openai/deployments/<model> 中的部署名稱使用。請填入你在 Azure 中建立的部署名稱。',
   'settings.apiVersion': 'API 版本',
+  'settings.byokImageModel': '圖片生成模型',
   'settings.maxTokens': '最大 tokens（可選）',
   'settings.maxTokensHint':
     '回應長度上限。每個 model 有調過的預設值（在 placeholder 顯示），留空即使用，輸入數字則覆蓋。',

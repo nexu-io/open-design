@@ -3,6 +3,22 @@ import type { AppConfig, ChatMessage } from '../types';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
 
+/**
+ * Optional per-request context that some protocols thread into the
+ * proxy body. Today only the senseaudio proxy reads these fields:
+ *  - `projectId` lets the `generate_image` tool write into the active
+ *    project's folder instead of a daemon-global cache.
+ *  - `byokImageModel` is the user's BYOK Settings default for the
+ *    image tool. The LLM can still override per-call via the tool's
+ *    `model` arg; this is just the fallback when it omits one.
+ * Other protocols ignore unknown body fields, so callers are free to
+ * pass this for every protocol.
+ */
+export interface ProxyContext {
+  projectId?: string;
+  byokImageModel?: string;
+}
+
 export async function streamProxyEndpoint(
   endpoint: string,
   cfg: AppConfig,
@@ -10,6 +26,7 @@ export async function streamProxyEndpoint(
   history: ChatMessage[],
   signal: AbortSignal,
   handlers: StreamHandlers,
+  context?: ProxyContext,
 ): Promise<void> {
   if (!cfg.apiKey) {
     handlers.onError(new Error('Missing API key — open Settings and paste one in.'));
@@ -30,6 +47,10 @@ export async function streamProxyEndpoint(
         messages: history.map((m) => ({ role: m.role, content: m.content })),
         maxTokens: effectiveMaxTokens(cfg),
         apiVersion: cfg.apiVersion,
+        ...(context?.projectId ? { projectId: context.projectId } : {}),
+        ...(context?.byokImageModel
+          ? { byokImageModel: context.byokImageModel }
+          : {}),
       }),
       signal,
     });

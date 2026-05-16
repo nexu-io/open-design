@@ -13,6 +13,7 @@ import {
   trackStudioClickChatComposer,
   trackStudioViewChatPanel,
 } from '../analytics/events';
+import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
@@ -86,6 +87,14 @@ interface Props {
   researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
+  // SenseAudio BYOK image-model picker shown above the textarea. Hidden
+  // when the active chat protocol is anything other than 'senseaudio',
+  // so the composer stays clean for every other BYOK tab. The state
+  // owner is ProjectView (per-session, reset on refresh); ChatComposer
+  // is a fully controlled select.
+  byokApiProtocol?: AppConfig['apiProtocol'];
+  byokImageModel?: string;
+  onChangeByokImageModel?: (model: string) => void;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -136,6 +145,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       researchAvailable = false,
       projectMetadata,
       onProjectMetadataChange,
+      byokApiProtocol,
+      byokImageModel,
+      onChangeByokImageModel,
     },
     ref
   ) {
@@ -941,6 +953,53 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onRemove={removeCommentAttachment}
               t={t}
             />
+          ) : null}
+          {byokApiProtocol === 'senseaudio' && onChangeByokImageModel ? (
+            <div
+              className="composer-byok-image-model"
+              data-testid="composer-byok-image-model"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 8px',
+                fontSize: 12,
+                color: 'var(--text-muted, #888)',
+              }}
+            >
+              <Icon name="image" size={13} />
+              <label
+                htmlFor="composer-byok-image-model-select"
+                style={{ flexShrink: 0 }}
+              >
+                {t('settings.byokImageModel')}
+              </label>
+              <select
+                id="composer-byok-image-model-select"
+                value={byokImageModel ?? ''}
+                onChange={(e) => onChangeByokImageModel(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border, #444)',
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  color: 'inherit',
+                  fontSize: 12,
+                }}
+              >
+                <option value="">
+                  {(IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
+                    ?? 'senseaudio-image-2.0') + ' (default)'}
+                </option>
+                {IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
+                  (m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
           ) : null}
           <div className="composer-input-wrap">
             <textarea

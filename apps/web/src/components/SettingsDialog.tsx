@@ -68,7 +68,7 @@ import type {
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import { fetchConnectors, fetchDesignTemplates } from '../providers/registry';
-import { MEDIA_PROVIDERS } from '../media/models';
+import { IMAGE_MODELS, MEDIA_PROVIDERS } from '../media/models';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
 import { PetSettings } from './pet/PetSettings';
@@ -427,6 +427,7 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     model: config.model,
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    byokImageModel: config.byokImageModel ?? '',
   };
 }
 
@@ -443,6 +444,11 @@ function applyApiProtocolConfig(
     model: apiConfig.model,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
+    // byokImageModel is SenseAudio-only — flipping to another BYOK tab
+    // shouldn't carry a SenseAudio image-model choice into, say, the
+    // OpenAI form. Mirrors the apiVersion guarding above.
+    byokImageModel:
+      protocol === 'senseaudio' ? (apiConfig.byokImageModel ?? '') : '',
   };
 }
 
@@ -2638,6 +2644,34 @@ export function SettingsDialog({
                     placeholder="2024-10-21"
                     onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
                   />
+                </label>
+              ) : null}
+              {apiProtocol === 'senseaudio' ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.byokImageModel')}</span>
+                  <select
+                    value={cfg.byokImageModel ?? ''}
+                    onChange={(e) =>
+                      updateApiConfig({ byokImageModel: e.target.value })
+                    }
+                  >
+                    {/* Default-empty option resolves to the registry default
+                        on the daemon side (senseaudio-image-2.0-260319 today).
+                        Listing it explicitly lets the picker show what the
+                        unconfigured state actually means. */}
+                    <option value="">
+                      {IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
+                        ?? 'senseaudio-image-2.0'}
+                      {' (default)'}
+                    </option>
+                    {IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
+                      (m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
                 </label>
               ) : null}
               <p className="hint">{t('settings.apiHint')}</p>

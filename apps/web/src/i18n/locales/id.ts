@@ -115,6 +115,7 @@ export const id: Dict = {
   'settings.azureDeploymentModelHint':
     'Untuk Azure OpenAI, field ini digunakan sebagai nama deployment di /openai/deployments/<model>. Masukkan nama deployment yang kamu buat di Azure.',
   'settings.apiVersion': 'Versi API',
+  'settings.byokImageModel': 'Model pembuatan gambar',
   'settings.maxTokens': 'Token maks (opsional)',
   'settings.maxTokensHint':
     'Batas panjang respons. Setiap model punya default sendiri; kosongkan untuk memakainya, atau isi angka untuk menimpa.',
