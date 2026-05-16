@@ -23,6 +23,7 @@ import {
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
+import { registerClaudeCodeRoutes } from './claude-code/routes.js';
 import { findSkillById, listSkills } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
@@ -1845,6 +1846,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       res.status(500).json({ error: String(err) });
     }
   });
+
+  registerClaudeCodeRoutes(app);
 
   app.get('/api/skills/:id', async (req, res) => {
     try {

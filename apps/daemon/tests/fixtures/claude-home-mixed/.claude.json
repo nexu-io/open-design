@@ -1,0 +1,1 @@
+{ "mcpServers": { "alpha": { "command": "node", "args": ["/x.js"] }, "zulu": { "url": "https://x/sse", "type": "sse" } } }

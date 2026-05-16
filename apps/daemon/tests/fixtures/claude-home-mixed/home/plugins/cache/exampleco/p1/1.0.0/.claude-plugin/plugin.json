@@ -1,0 +1,1 @@
+{ "name": "p1", "version": "1.0.0", "mcpServers": { "beta": { "command": "node", "args": ["/y.js"] } } }
