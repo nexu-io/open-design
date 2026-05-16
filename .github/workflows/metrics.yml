@@ -12,9 +12,7 @@ on:
       - .github/workflows/metrics.yml
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   metrics:
@@ -22,6 +20,17 @@ jobs:
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
+      - name: Generate Open Design bot token
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Generate GitHub repository metrics
         uses: lowlighter/metrics@latest
         with:
@@ -29,11 +38,10 @@ jobs:
           # Requires manual review to merge. If metrics unchanged, no PR is created.
           filename: docs/assets/github-metrics.svg
 
-          # Auth: METRICS_TOKEN must be a fine-grained PAT or GitHub App token that
-          # can create pull requests in this repository. GITHUB_TOKEN is kept only
-          # as a read/render fallback because many orgs disallow PR creation from it.
-          token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
-          committer_token: ${{ secrets.METRICS_TOKEN }}
+          # Auth: use the Open Design GitHub App so generated commits and pull
+          # requests come from open-design-bot[bot] and trigger normal PR CI.
+          token: ${{ steps.open-design-bot-token.outputs.token }}
+          committer_token: ${{ steps.open-design-bot-token.outputs.token }}
           committer_message: Update ${filename}
           output_action: pull-request
           output_condition: data-changed
@@ -69,34 +77,3 @@ jobs:
 
           config_timezone: Asia/Shanghai
           config_display: large
-
-      - name: Trigger CI for metrics PR branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          METRICS_PR_TITLE: 'Auto-generated metrics for run #${{ github.run_id }}'
-        run: |
-          set -euo pipefail
-          METRICS_BRANCH="metrics-run-${{ github.run_id }}"
-
-          if ! gh api "repos/${{ github.repository }}/branches/$METRICS_BRANCH" >/dev/null 2>&1; then
-            echo "No metrics branch created for run ${{ github.run_id }}; skipping CI dispatch"
-            exit 0
-          fi
-
-          METRICS_PR_VIEW="$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --state open \
-            --head "$METRICS_BRANCH" \
-            --base main \
-            --limit 1 \
-            --json number,title,baseRefName,headRefName \
-            --jq 'if length == 0 then "" else .[0] | [.number, .title, .baseRefName, .headRefName] | @tsv end')"
-
-          IFS=$'\t' read -r METRICS_PR_NUMBER METRICS_PR_FOUND_TITLE METRICS_PR_BASE METRICS_PR_BRANCH <<< "$METRICS_PR_VIEW"
-
-          if [ -z "$METRICS_PR_NUMBER" ] || [ "$METRICS_PR_FOUND_TITLE" != "$METRICS_PR_TITLE" ] || [ "$METRICS_PR_BASE" != 'main' ] || [ "$METRICS_PR_BRANCH" != "$METRICS_BRANCH" ]; then
-            echo "Expected an open metrics PR for branch '$METRICS_BRANCH' targeting main" >&2
-            exit 1
-          fi
-
-          gh workflow run ci.yml --repo "${{ github.repository }}" --ref "$METRICS_BRANCH"
