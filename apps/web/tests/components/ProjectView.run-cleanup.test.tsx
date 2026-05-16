@@ -24,6 +24,7 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
+const streamMessage = vi.fn();
 const saveMessage = vi.fn();
 const createConversation = vi.fn();
 const patchConversation = vi.fn();
@@ -36,7 +37,7 @@ vi.mock('../../src/i18n', () => ({
 }));
 
 vi.mock('../../src/providers/anthropic', () => ({
-  streamMessage: vi.fn(),
+  streamMessage: (...args: unknown[]) => streamMessage(...args),
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
@@ -1112,6 +1113,244 @@ describe('ProjectView daemon cleanup', () => {
 
     if (pendingResolvers.length === 0) {
       throw new Error('Expected failed assistant saveMessage to be invoked');
+    }
+    for (const resolve of pendingResolvers.splice(0)) resolve();
+
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
+
+  // Regression for issue #731: the Designs home card status was set to
+  // "Completed" before the assistant message's terminal runStatus was
+  // persisted. If the user navigated home in that window, listProjects
+  // re-read the still-active row and the card disagreed with the detail
+  // page. The fix: handleSend's onDone success path must await the
+  // terminal-status persist before invoking onProjectsRefresh.
+  it('delays projects refresh in new-run handlers.onDone success path until terminal saveMessage resolves', async () => {
+    const onProjectsRefresh = vi.fn();
+    let capturedHandlers:
+      | { onDone?: (text?: string) => void; onRunCreated?: (runId: string) => void }
+      | null = null;
+
+    const pendingResolvers: Array<() => void> = [];
+    saveMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pendingResolvers.push(resolve);
+        }),
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        handlers: { onDone?: (text?: string) => void };
+        onRunCreated?: (runId: string) => void;
+      }) => {
+        capturedHandlers = { onDone: options.handlers.onDone, onRunCreated: options.onRunCreated };
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(capturedChatPaneProps.current).not.toBeNull());
+    const props = capturedChatPaneProps.current as Record<string, unknown> | null;
+    if (!props || typeof props.onSend !== 'function') {
+      throw new Error('Expected ChatPane onSend to be available');
+    }
+
+    await (props.onSend as (
+      prompt: string,
+      attachments: unknown[],
+      commentAttachments: unknown[],
+    ) => Promise<void>)('hello', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const handlers = capturedHandlers as
+      | { onDone?: (text?: string) => void; onRunCreated?: (runId: string) => void }
+      | null;
+    if (!handlers?.onDone || !handlers.onRunCreated) {
+      throw new Error('Expected streamViaDaemon to capture handlers.onDone and onRunCreated');
+    }
+
+    // Pin a runId so the assistant row is a real (non-phantom) write and
+    // the terminal-status persist actually reaches saveMessage.
+    handlers.onRunCreated('run-success-xyz');
+
+    // Drain any saveMessage resolvers queued by the initial send / onRunCreated
+    // so we only observe the resolvers produced by the terminal persist.
+    while (pendingResolvers.length > 0) {
+      const resolver = pendingResolvers.shift();
+      resolver?.();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    onProjectsRefresh.mockClear();
+    saveMessage.mockClear();
+
+    handlers.onDone('hello world');
+
+    // saveMessage for the terminal succeeded status is still pending — the
+    // projects refresh must wait. If the success path called
+    // onProjectsRefresh() synchronously (regression), the home card would
+    // be re-read before the row's runStatus settled and the card status
+    // would drift from the detail page.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(saveMessage).toHaveBeenCalled();
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+
+    if (pendingResolvers.length === 0) {
+      throw new Error('Expected terminal saveMessage to be invoked');
+    }
+    for (const resolve of pendingResolvers.splice(0)) resolve();
+
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
+
+  // Sister regression for issue #731: the API-mode empty-response branch
+  // marks the assistant message as failed but used to fire
+  // onProjectsRefresh synchronously, before the failed runStatus row was
+  // persisted. The home card then showed the prior state (often
+  // "succeeded") instead of the empty-response failure visible in the
+  // detail view.
+  it('delays projects refresh in API empty-response onDone path until terminal saveMessage resolves', async () => {
+    const onProjectsRefresh = vi.fn();
+    let capturedHandlers: { onDone?: (text?: string) => void } | null = null;
+
+    const pendingResolvers: Array<() => void> = [];
+    saveMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pendingResolvers.push(resolve);
+        }),
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamMessage.mockImplementation(
+      async (
+        _cfg: unknown,
+        _system: string,
+        _history: unknown,
+        _signal: AbortSignal,
+        handlers: { onDone?: (text?: string) => void },
+      ) => {
+        capturedHandlers = handlers;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{
+          mode: 'api',
+          apiProtocol: 'openai',
+          apiKey: 'sk-test',
+          baseUrl: 'https://api.example.com',
+          model: 'test-model',
+          notifications: undefined,
+          agentModels: {},
+        } as never}
+        agents={[]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(capturedChatPaneProps.current).not.toBeNull());
+    const props = capturedChatPaneProps.current as Record<string, unknown> | null;
+    if (!props || typeof props.onSend !== 'function') {
+      throw new Error('Expected ChatPane onSend to be available');
+    }
+
+    await (props.onSend as (
+      prompt: string,
+      attachments: unknown[],
+      commentAttachments: unknown[],
+    ) => Promise<void>)('hello', [], []);
+
+    await waitFor(() => expect(streamMessage).toHaveBeenCalledTimes(1));
+    const handlers = capturedHandlers as { onDone?: (text?: string) => void } | null;
+    if (!handlers?.onDone) {
+      throw new Error('Expected streamMessage to capture handlers.onDone');
+    }
+
+    // Drain any saveMessage resolvers queued by the initial send so we
+    // only observe the resolvers produced by the terminal persist.
+    while (pendingResolvers.length > 0) {
+      const resolver = pendingResolvers.shift();
+      resolver?.();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    onProjectsRefresh.mockClear();
+    saveMessage.mockClear();
+
+    // Empty provider response: handlers.onDone with no streamed text and no
+    // artifact triggers the emptyApiResponse branch.
+    handlers.onDone('');
+
+    // saveMessage for the terminal failed status is still pending — the
+    // projects refresh must wait.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(saveMessage).toHaveBeenCalled();
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+
+    if (pendingResolvers.length === 0) {
+      throw new Error('Expected terminal saveMessage to be invoked');
     }
     for (const resolve of pendingResolvers.splice(0)) resolve();
 

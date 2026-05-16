@@ -1795,7 +1795,7 @@ export function ProjectView({
           if (emptyApiResponse) {
             const endedAt = Date.now();
             const diagnostic = t('assistant.emptyResponseMessage');
-            updateMessageById(
+            const persisted = updateMessageById(
               assistantId,
               (prev) => ({
                 ...prev,
@@ -1817,19 +1817,24 @@ export function ProjectView({
             clearStreamingMarker(runConversationId);
             updateConversationLatestRun('failed', endedAt);
             void refreshProjectFiles();
-            onProjectsRefresh();
+            void persisted.then(() => onProjectsRefresh());
             return;
           }
           const endedAt = Date.now();
           let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
-          updateAssistant((prev) => {
-            finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
-            return {
-              ...prev,
-              endedAt,
-              runStatus: finalRunStatus,
-            };
-          });
+          const saved = updateMessageById(
+            assistantId,
+            (prev) => {
+              finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
+              return {
+                ...prev,
+                endedAt,
+                runStatus: finalRunStatus,
+              };
+            },
+            true,
+            { telemetryFinalized: true },
+          );
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'needs_review');
           }
@@ -1847,20 +1852,28 @@ export function ProjectView({
           // refresh signal) so we can diff against the pre-turn snapshot
           // and attach the new files to the assistant message as download
           // chips.
-          void refreshProjectFiles().then((nextFiles) => {
-            const produced = nextFiles.filter((f) => !beforeFileNames.has(f.name));
-            setMessages((curr) => {
-              const updated = curr.map((m) =>
-                m.id === assistantId
-                  ? { ...m, producedFiles: produced }
-                  : m,
-              );
-              const finalized = updated.find((m) => m.id === assistantId);
-              if (finalized) persistMessage(finalized, { telemetryFinalized: true });
-              return updated;
+          const produced = refreshProjectFiles().then((nextFiles) => {
+            const producedFiles = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+            return new Promise<void>((resolve, reject) => {
+              setMessages((curr) => {
+                const updated = curr.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, producedFiles }
+                    : m,
+                );
+                const finalized = updated.find((m) => m.id === assistantId);
+                if (finalized && !isPhantomDaemonRunMessage(finalized) && activeConversationId) {
+                  Promise.resolve(
+                    saveMessage(project.id, activeConversationId, finalized, { telemetryFinalized: true }),
+                  ).then(resolve, reject);
+                } else {
+                  resolve();
+                }
+                return updated;
+              });
             });
           });
-          onProjectsRefresh();
+          void Promise.allSettled([saved, produced]).then(() => onProjectsRefresh());
         },
         onError: (err: Error) => {
           const endedAt = Date.now();
