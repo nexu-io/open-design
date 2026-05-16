@@ -1472,7 +1472,7 @@ export function ProjectView({
               reattachCancelControllersRef.current.delete(runId);
               clearActiveRunRefs(reattachConversationId, controller, cancelController);
               clearStreamingMarker(reattachConversationId);
-              persistNow({ telemetryFinalized: true });
+              persisted = persistNow({ telemetryFinalized: true });
             }
             if (isTerminalRunStatus(runStatus)) {
               void Promise.allSettled([saved, persisted]).then(() => onProjectsRefresh());
@@ -1859,22 +1859,24 @@ export function ProjectView({
           cancelSendTextBuffer();
           setError(err.message);
           appendAssistantErrorEvent(assistantId, err.message);
-          updateAssistant((prev) => ({
-            ...prev,
-            endedAt,
-            runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
-              ? 'failed'
-              : prev.runStatus,
-          }));
+          const persisted = updateMessageById(
+            assistantId,
+            (prev) => ({
+              ...prev,
+              endedAt,
+              runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
+                ? 'failed'
+                : prev.runStatus,
+            }),
+            true,
+            { telemetryFinalized: true },
+          );
           if (commentAttachments.length > 0) {
             void patchAttachedStatuses(commentAttachments, 'failed');
           }
           clearActiveRunRefs(runConversationId, controller, cancelController);
           clearStreamingMarker(runConversationId);
           updateConversationLatestRun('failed', endedAt);
-          let persisted: Promise<void> = Promise.resolve();
-          const finalized = messagesRef.current.find((m) => m.id === assistantId);
-          if (finalized) persisted = persistMessage(finalized, { telemetryFinalized: true });
           void refreshProjectFiles();
           void persisted.then(() => onProjectsRefresh());
         },

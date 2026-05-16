@@ -897,4 +897,225 @@ describe('ProjectView daemon cleanup', () => {
 
     view.unmount();
   });
+
+  it('delays projects refresh in reattach onRunStatus("canceled") until saveMessage resolves', async () => {
+    const onProjectsRefresh = vi.fn();
+    let capturedOnRunStatus: ((status: string) => void) | null = null;
+
+    const pendingResolvers: Array<() => void> = [];
+    saveMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pendingResolvers.push(resolve);
+        }),
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        content: 'working',
+        createdAt: Date.now(),
+        runId: 'run-cancel',
+        runStatus: 'running',
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-cancel',
+      status: 'running',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockImplementation(async (options: { onRunStatus?: (status: string) => void }) => {
+      capturedOnRunStatus = options.onRunStatus ?? null;
+      return new Promise<void>(() => {});
+    });
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    const onRunStatus = capturedOnRunStatus as ((status: string) => void) | null;
+    if (!onRunStatus) throw new Error('Expected reattach onRunStatus handler to be captured');
+
+    // Drain any saveMessage resolvers queued by mount so we only observe the
+    // resolvers produced by the terminal canceled persist.
+    while (pendingResolvers.length > 0) {
+      const resolver = pendingResolvers.shift();
+      resolver?.();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    onProjectsRefresh.mockClear();
+    saveMessage.mockClear();
+
+    onRunStatus('canceled');
+
+    // saveMessage for the canceled terminal status is still pending — the
+    // projects refresh must wait. If persistNow's promise were dropped (the
+    // regression: `persistNow(...)` without assigning to `persisted`),
+    // Promise.allSettled would only see the synchronous updateMessageById
+    // promise and the refresh would fire before persistence settles.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(saveMessage).toHaveBeenCalled();
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+
+    if (pendingResolvers.length === 0) {
+      throw new Error('Expected canceled saveMessage to be invoked');
+    }
+    for (const resolve of pendingResolvers.splice(0)) resolve();
+
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
+
+  it('persists a failed assistant snapshot when new-run handlers.onError fires while saveMessage is pending', async () => {
+    const onProjectsRefresh = vi.fn();
+    let capturedHandlers:
+      | { onError?: (err: Error) => void; onRunCreated?: (runId: string) => void }
+      | null = null;
+
+    const pendingResolvers: Array<() => void> = [];
+    const savedSnapshots: Array<Record<string, unknown>> = [];
+    saveMessage.mockImplementation(
+      (_projectId: string, _conversationId: string, msg: Record<string, unknown>) => {
+        savedSnapshots.push(msg);
+        return new Promise<void>((resolve) => {
+          pendingResolvers.push(resolve);
+        });
+      },
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        handlers: { onError?: (err: Error) => void };
+        onRunCreated?: (runId: string) => void;
+      }) => {
+        capturedHandlers = { onError: options.handlers.onError, onRunCreated: options.onRunCreated };
+        return new Promise<void>(() => {});
+      },
+    );
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(capturedChatPaneProps.current).not.toBeNull());
+    const props = capturedChatPaneProps.current as Record<string, unknown> | null;
+    if (!props || typeof props.onSend !== 'function') {
+      throw new Error('Expected ChatPane onSend to be available');
+    }
+
+    await (props.onSend as (
+      prompt: string,
+      attachments: unknown[],
+      commentAttachments: unknown[],
+    ) => Promise<void>)('hello', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const handlers = capturedHandlers as
+      | { onError?: (err: Error) => void; onRunCreated?: (runId: string) => void }
+      | null;
+    if (!handlers?.onError || !handlers.onRunCreated) {
+      throw new Error('Expected streamViaDaemon to capture handlers.onError and onRunCreated');
+    }
+
+    // Simulate the daemon registering a runId before the failure — this puts
+    // the assistant into a state where prev.runId is set so the onError branch
+    // flips runStatus to 'failed' (matching the production code path).
+    handlers.onRunCreated('run-new-err');
+
+    // Drain any saveMessage resolvers queued by the initial send so we only
+    // observe the snapshot produced by the terminal onError persist.
+    while (pendingResolvers.length > 0) {
+      const resolver = pendingResolvers.shift();
+      resolver?.();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    onProjectsRefresh.mockClear();
+    saveMessage.mockClear();
+    savedSnapshots.length = 0;
+
+    handlers.onError(new Error('ACP response timed out after 180000ms'));
+
+    // saveMessage for the failed assistant snapshot is still pending — the
+    // projects refresh must wait until persistence settles, and the persisted
+    // record must reflect the failed runStatus (not the prior 'running' /
+    // 'queued' snapshot the old updateAssistant + messagesRef.find path
+    // would have captured before React applied the setMessages update).
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(saveMessage).toHaveBeenCalled();
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+    const failedSnapshot = savedSnapshots.find((m) => m.runStatus === 'failed');
+    expect(failedSnapshot).toBeTruthy();
+
+    if (pendingResolvers.length === 0) {
+      throw new Error('Expected failed assistant saveMessage to be invoked');
+    }
+    for (const resolve of pendingResolvers.splice(0)) resolve();
+
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
 });
