@@ -88,6 +88,7 @@ const ENV_KEYS: Record<string, string[]> = {
   grok: ['OD_GROK_API_KEY', 'XAI_API_KEY'],
   nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   imagerouter: ['OD_IMAGEROUTER_API_KEY', 'IMAGEROUTER_API_KEY'],
+  openrouter: ['OD_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
   'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
