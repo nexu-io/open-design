@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { effectivePeerFromReq } from "./proxy-trust.js";
 
 /**
  * Creates an IP allowlist middleware. When `allowedHosts` is non-empty and
@@ -23,7 +24,7 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
   const entries = allowedHosts.map(parseEntry);
 
   return (req: Request, res: Response, next: NextFunction) => {
-    const clientIp = req.socket.remoteAddress ?? "";
+    const clientIp = effectivePeerFromReq(req);
 
     if (isLoopback(clientIp)) return next();
 

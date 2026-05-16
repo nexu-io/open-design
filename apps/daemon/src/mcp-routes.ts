@@ -391,10 +391,17 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
 }
 
-function getPublicBaseUrl(_req?: any) {
+function getPublicBaseUrl(req?: any) {
   const env = process.env.OD_PUBLIC_BASE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
+  }
+  // When no explicit base URL is configured, derive from the request host.
+  // This ensures LAN/Tailscale users get correct OAuth redirects instead of
+  // being sent back to localhost.
+  if (req?.headers?.host) {
+    const proto = req.headers['x-forwarded-proto'] ?? req.protocol ?? 'http';
+    return `${proto}://${req.headers.host}`;
   }
   const port = process.env.OD_PORT ?? '7456';
   return `http://127.0.0.1:${port}`;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createIpAllowlistMiddleware } from '../src/ip-allowlist.js';
 
 function mockReq(remoteAddress: string) {
-  return { socket: { remoteAddress } } as any;
+  return { socket: { remoteAddress }, headers: {} } as any;
 }
 
 function mockRes() {

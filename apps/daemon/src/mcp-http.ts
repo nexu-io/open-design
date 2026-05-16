@@ -45,10 +45,17 @@ async function ensureServer(daemonUrl: string): Promise<StreamableHTTPServerTran
   return initPromise;
 }
 
-export function createMcpHttpHandler(daemonUrl: string) {
+/**
+ * Creates a request handler for the streamable HTTP MCP endpoint.
+ *
+ * Accepts a reactive ref `{ current: string }` so the daemon URL is
+ * resolved on every request — the listener may not have bound yet at
+ * handler-creation time (e.g. port 0 or saved-config port).
+ */
+export function createMcpHttpHandler(daemonUrlRef: { current: string }) {
   return async (req: Request, res: Response) => {
     try {
-      const t = await ensureServer(daemonUrl);
+      const t = await ensureServer(daemonUrlRef.current);
       const authStore: Record<string, string> = {};
       const authHeader = req.headers.authorization;
       if (authHeader) authStore.Authorization = authHeader;

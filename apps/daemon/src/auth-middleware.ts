@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { effectivePeerFromReq } from "./proxy-trust.js";
 
 export interface AuthMiddlewareOptions {
   enabledRef: { value: boolean };
@@ -49,7 +50,7 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
 
     // No keys configured — allow localhost, block everyone else.
     if (!options.enabledRef.value) {
-      const ip = req.socket.remoteAddress ?? "";
+      const ip = effectivePeerFromReq(req);
       if (options.isLocalPeer(ip)) return next();
       return rejectRequest(req, res, "No API keys configured — access from localhost only");
     }
