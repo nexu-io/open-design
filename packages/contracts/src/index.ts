@@ -4,6 +4,7 @@ export * from './tasks';
 export * from './api/app-config';
 export * from './api/artifacts';
 export * from './api/chat';
+export * from './api/claude-code';
 export * from './api/connectors';
 export * from './api/comments';
 export * from './api/files';
