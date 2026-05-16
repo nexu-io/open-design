@@ -1904,20 +1904,26 @@ function BoardComposerPopover({
         <div className="board-pod-summary">
           <strong>{t('chat.comments.capturedItems', { n: target.memberCount || podMembers.length })}</strong>
           <div className="board-pod-members">
-            {podMembers.map((member) => (
-              <span key={member.elementId} className="board-pod-chip">
-                {summarizeMember(member)}
-                <button
-                  type="button"
-                  className="board-pod-chip-remove"
-                  title={t('chat.comments.removePodMember')}
-                  aria-label={t('chat.comments.removePodMember')}
-                  onClick={() => onRemovePodMember(member.elementId)}
-                >
-                  <Icon name="close" size={10} />
-                </button>
-              </span>
-            ))}
+            {podMembers.map((member) => {
+              const memberSummary = summarizeMember(member);
+              const removeLabel = t('chat.comments.removePodMemberAria', {
+                member: describeMemberForAssistiveLabel(member),
+              });
+              return (
+                <span key={member.elementId} className="board-pod-chip">
+                  {memberSummary}
+                  <button
+                    type="button"
+                    className="board-pod-chip-remove"
+                    title={removeLabel}
+                    aria-label={removeLabel}
+                    onClick={() => onRemovePodMember(member.elementId)}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -2834,6 +2840,13 @@ function summarizeMember(member: PreviewCommentMember): string {
     return `${member.label || member.elementId} · ${trimmed}`;
   }
   return member.label || member.elementId;
+}
+
+function describeMemberForAssistiveLabel(member: PreviewCommentMember): string {
+  const identity = member.label || member.elementId;
+  const text = String(member.text || '').trim();
+  const elementId = member.elementId && member.elementId !== identity ? ` (${member.elementId})` : '';
+  return text ? `${identity}${elementId} · ${text}` : `${identity}${elementId}`;
 }
 
 function CommentPreviewOverlays({

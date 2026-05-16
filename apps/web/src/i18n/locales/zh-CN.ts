@@ -657,6 +657,7 @@ export const zhCN: Dict = {
   'chat.comments.addSend': '添加并发送',
   'chat.comments.updateSend': '更新并发送',
   'chat.comments.removePodMember': '移除捕获组件',
+  'chat.comments.removePodMemberAria': '移除捕获组件：{member}',
   'chat.comments.removeAttachment': '移除评论附件',
   'chat.comments.removeAttachmentAria': '移除 {name} 的评论附件',
   'chat.comments.comment': '评论',

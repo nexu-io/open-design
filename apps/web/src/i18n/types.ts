@@ -927,6 +927,7 @@ export interface Dict {
   'chat.comments.removeAttachment': string;
   'chat.comments.removeAttachmentAria': string;
   'chat.comments.removePodMember': string;
+  'chat.comments.removePodMemberAria': string;
   'chat.comments.comment': string;
   'chat.comments.sendToChat': string;
   'chat.comments.sending': string;

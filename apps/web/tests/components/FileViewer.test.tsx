@@ -1250,6 +1250,68 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Do not resurrect this note')).toBeNull();
   });
 
+  it('labels pod member remove buttons with the member summary', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main><button data-od-id="cta">Start</button></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'pod-1',
+        selector: '[data-od-id="hero"], [data-od-id="cta"]',
+        label: '2 captured items',
+        text: 'Hero Start',
+        position: { x: 8, y: 12, width: 180, height: 96 },
+        htmlHint: '<main data-od-id="hero">Hero</main><button data-od-id="cta">Start</button>',
+        selectionKind: 'pod',
+        memberCount: 2,
+        podMembers: [
+          {
+            filePath: 'preview.html',
+            elementId: 'hero',
+            selector: '[data-od-id="hero"]',
+            label: 'Hero',
+            text: 'Hero title',
+            position: { x: 8, y: 12, width: 120, height: 48 },
+            htmlHint: '<main data-od-id="hero">Hero</main>',
+          },
+          {
+            filePath: 'preview.html',
+            elementId: 'cta',
+            selector: '[data-od-id="cta"]',
+            label: 'Primary CTA',
+            text: 'Start',
+            position: { x: 8, y: 68, width: 80, height: 32 },
+            htmlHint: '<button data-od-id="cta">Start</button>',
+          },
+        ],
+      },
+    }));
+
+    const heroRemoveButton = await screen.findByRole('button', {
+      name: 'Remove captured component: Hero (hero) · Hero title',
+    });
+    const ctaRemoveButton = screen.getByRole('button', {
+      name: 'Remove captured component: Primary CTA (cta) · Start',
+    });
+    expect(heroRemoveButton.getAttribute('title')).toBe(
+      'Remove captured component: Hero (hero) · Hero title',
+    );
+    expect(ctaRemoveButton.getAttribute('title')).toBe(
+      'Remove captured component: Primary CTA (cta) · Start',
+    );
+  });
+
   it('closes an open saved-comment composer when that comment leaves the open state', async () => {
     const openComment: PreviewComment = {
       id: 'comment-status-transition',
