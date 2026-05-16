@@ -4537,7 +4537,7 @@ export async function startServer({
   const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
   if (!isLoopbackHostname(effectiveHost) && apiToken.length === 0) {
     throw new Error(
-      `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
+      `OD_BIND_HOST=${effectiveHost} requires OD_API_TOKEN to be set. ` +
       `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
       `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
     );
@@ -5250,7 +5250,7 @@ export async function startServer({
 
   // ── Network config & API key management ────────────────────
   app.get('/api/network-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'network config is only available from localhost' });
       return;
     }
@@ -5266,7 +5266,7 @@ export async function startServer({
   });
 
   app.put('/api/network-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'network config changes are only available from localhost' });
       return;
     }
@@ -5299,7 +5299,7 @@ export async function startServer({
   });
 
   app.post('/api/restart', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'restart is only available from localhost' });
       return;
     }
@@ -5313,7 +5313,7 @@ export async function startServer({
   });
 
   app.get('/api/auth/keys', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
       return;
     }
@@ -5322,7 +5322,7 @@ export async function startServer({
   });
 
   app.post('/api/auth/keys', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
       return;
     }
@@ -5334,7 +5334,7 @@ export async function startServer({
   });
 
   app.delete('/api/auth/keys/:id', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
       return;
     }
@@ -5352,7 +5352,7 @@ export async function startServer({
   // ── MCP key management (AES-256-GCM encrypted, UI-retrievable) ──
 
   app.get('/api/mcp-keys', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -5361,7 +5361,7 @@ export async function startServer({
   });
 
   app.post('/api/mcp-keys', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -5381,7 +5381,7 @@ export async function startServer({
   });
 
   app.get('/api/mcp-keys/:id', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -5394,7 +5394,7 @@ export async function startServer({
   });
 
   app.delete('/api/mcp-keys/:id', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -6098,7 +6098,7 @@ export async function startServer({
     sendLiveArtifactRouteError,
     createSseResponse,
     requireLocalDaemonRequest,
-    isLocalSameOrigin,
+    isLocalSameOrigin: (req: any, port?: any) => isLocalSameOrigin(req, port ?? resolvedPort, undefined, effectiveHost),
     resolvedPortRef,
   };
   const pathDeps = {
@@ -10588,7 +10588,7 @@ export async function startServer({
   });
 
   app.get('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10602,7 +10602,7 @@ export async function startServer({
   });
 
   app.put('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10617,7 +10617,7 @@ export async function startServer({
   });
 
   app.get('/api/orbit/status', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10630,7 +10630,7 @@ export async function startServer({
   });
 
   app.post('/api/orbit/run', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10644,7 +10644,7 @@ export async function startServer({
   });
 
   app.post('/api/system/open-external', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10682,8 +10682,97 @@ export async function startServer({
     }
   });
 
+  app.post('/api/projects/:id/media/generate', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
+      return res.status(403).json({
+        error:
+          'cross-origin request rejected: media generation is restricted to the local UI / CLI',
+      });
+    }
+
+    try {
+      const projectId = req.params.id;
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+
+      const taskId = randomUUID();
+      const task = createMediaTask(db, taskId, projectId, {
+        surface: req.body?.surface,
+        model: req.body?.model,
+      });
+      console.error(
+        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
+          `surface=${req.body?.surface} ` +
+          `image=${req.body?.image ? 'yes' : 'no'} ` +
+          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
+      );
+
+      task.status = 'running';
+      persistMediaTask(db, task);
+      generateMedia({
+        projectRoot: PROJECT_ROOT,
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        surface: req.body?.surface,
+        model: req.body?.model,
+        prompt: req.body?.prompt,
+        output: req.body?.output,
+        aspect: req.body?.aspect,
+        length:
+          typeof req.body?.length === 'number' ? req.body.length : undefined,
+        duration:
+          typeof req.body?.duration === 'number'
+            ? req.body.duration
+            : undefined,
+        voice: req.body?.voice,
+        audioKind: req.body?.audioKind,
+        language: typeof req.body?.language === 'string' ? req.body.language : undefined,
+        compositionDir: req.body?.compositionDir,
+        image: req.body?.image,
+        onProgress: (line) => appendTaskProgress(db, task, line),
+      })
+        .then((meta) => {
+          task.status = 'done';
+          task.file = meta;
+          task.endedAt = Date.now();
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
+          console.error(
+            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
+              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+          );
+        })
+        .catch((err) => {
+          task.status = 'failed';
+          task.error = {
+            message: String(err && err.message ? err.message : err),
+            status: typeof err?.status === 'number' ? err.status : 400,
+            code: err?.code,
+          };
+          task.endedAt = Date.now();
+          persistMediaTask(db, task);
+          notifyTaskWaiters(db, task);
+          console.error(
+            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
+              `message=${(task.error.message || '').slice(0, 240)}`,
+          );
+        });
+
+      res.status(202).json({
+        taskId,
+        status: task.status,
+        startedAt: task.startedAt,
+      });
+    } catch (err) {
+      const status = typeof err?.status === 'number' ? err.status : 400;
+      const code = err?.code;
+      const body = { error: String(err && err.message ? err.message : err) };
+      if (code) body.code = code;
+      res.status(status).json(body);
+    }
+  });
   app.post('/api/research/search', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({
         error:
           'cross-origin request rejected: research search is restricted to the local UI / CLI',
@@ -10719,7 +10808,7 @@ export async function startServer({
   });
 
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
@@ -10758,7 +10847,7 @@ export async function startServer({
   });
 
   app.get('/api/projects/:id/media/tasks', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
