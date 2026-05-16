@@ -635,8 +635,8 @@ describe('NewProjectPanel design system defaults', () => {
 });
 
 describe('NewProjectPanel folder import feedback', () => {
-  it('shows an error when manual folder import resolves as failed', async () => {
-    const onImportFolder = vi.fn().mockResolvedValue(false);
+  it('shows an error when manual folder import rejects with a daemon message', async () => {
+    const onImportFolder = vi.fn().mockRejectedValue(new Error('folder not found'));
 
     render(
       <NewProjectPanel
@@ -657,7 +657,7 @@ describe('NewProjectPanel folder import feedback', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
 
     expect(onImportFolder).toHaveBeenCalledWith('/missing/project');
-    expect(await screen.findByText('Open folder failed: /missing/project')).toBeTruthy();
+    expect(await screen.findByText('folder not found')).toBeTruthy();
   });
 });
 
