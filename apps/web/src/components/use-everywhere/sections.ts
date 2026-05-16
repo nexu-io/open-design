@@ -208,10 +208,12 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'Auto-discovers the live daemon URL via the local IPC status socket when launched as a sidecar.',
       'Falls back to `--daemon-url http://127.0.0.1:<port>` for plain installs so the MCP process always finds a running daemon.',
       'Pins `OD_DATA_DIR` so the spawned MCP process writes to the same place the daemon already uses (avoids EPERM in packaged macOS app bundles).',
+      '`OD_MCP_TOKEN` is required when the daemon is network-exposed with authentication enabled (Settings → Network). Generate an MCP key in Settings → Network, then add it to the `env` block.',
+      'Env var interpolation varies by client — Cursor and Claude Code support `${OD_MCP_TOKEN}`, VS Code-based agents (Copilot Chat, Cline) use `${env:OD_MCP_TOKEN}`. See your client\'s MCP docs for the exact syntax.',
     ],
     snippets: [
       {
-        label: 'Generic MCP client config (works in Cursor, Claude Code, Codex, …)',
+        label: 'Generic MCP client config (Cursor, Claude Code, Codex, …)',
         language: 'json',
         body:
           '{\n' +
@@ -219,10 +221,27 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           '    "open-design": {\n' +
           '      "command": "od",\n' +
           '      "args": ["mcp", "--daemon-url", "http://127.0.0.1:7456"],\n' +
-          '      "env": { "OD_DATA_DIR": "~/.open-design" }\n' +
+          '      "env": { "OD_MCP_TOKEN": "${OD_MCP_TOKEN}" }\n' +
           '    }\n' +
           '  }\n' +
           '}',
+      },
+      {
+        label: 'Env var interpolation by client',
+        language: 'text',
+        body:
+          'Cursor, Claude Code, Codex  → "${OD_MCP_TOKEN}"\n' +
+          'VS Code, Cline, Windsurf    → "${env:OD_MCP_TOKEN}"\n' +
+          'Antigravity, OpenCode       → set OD_MCP_TOKEN in shell (~/.zshrc)\n' +
+          '\n' +
+          'Config file locations:\n' +
+          '  Cursor   → .cursor/mcp.json (project) or ~/.cursor/mcp.json (global)\n' +
+          '  Claude   → claude_desktop_config.json (Claude app) or Claude Code settings\n' +
+          '  VS Code  → Settings → MCP servers (GUI)\n' +
+          '  Antigravity → ~/.antigravity/antigravity/config.json\n' +
+          '\n' +
+          'OD_MCP_TOKEN is only needed when the daemon has authentication enabled.\n' +
+          'Generate a key in Settings → Network → MCP keys.',
       },
       {
         label: 'Or: ask the daemon for the snippet tailored to your install',
@@ -236,7 +255,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
     ],
     footer:
-      'In the Open Design app, open Settings → Integrations to copy a ' +
+      'In the Open Design app, open Settings → Network to generate an MCP key, ' +
+      'then add it to your client config. Open Settings → Integrations to copy a ' +
       'client-specific install command (Cursor, Claude Code, Antigravity, ' +
       'VS Code) instead of editing JSON by hand.',
   },
