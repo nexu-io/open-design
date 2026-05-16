@@ -213,6 +213,34 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     expect(body.error.code).toBe('UPSTREAM_UNAVAILABLE');
   });
 
+  it('400 BAD_REQUEST when upstream rejects the request shape (Anthropic 400 invalid_request_error)', async () => {
+    // An upstream 400 is deterministic caller input (unknown model, bad
+    // maxTokens) — it must not be remapped to a 502 that invites pointless
+    // retries and hides which field is wrong. The echoed key also exercises
+    // the redacted-details path nettee asked the 400 branch to preserve.
+    const echoedKey = 'sk-leaky-400';
+    mockAnthropicResponse(
+      400,
+      JSON.stringify({
+        error: {
+          type: 'invalid_request_error',
+          message: `model: unknown model (key ${echoedKey})`,
+        },
+      }),
+    );
+
+    const res = await postHandoff(PROJECT_ID, {
+      apiKey: echoedKey,
+      model: 'claude-not-a-real-model',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('BAD_REQUEST');
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain(echoedKey); // inbound key redacted
+    expect(serialized).toContain('invalid_request_error'); // upstream detail surfaced
+  });
+
   it('502 UPSTREAM_UNAVAILABLE when upstream returns non-JSON body', async () => {
     mockAnthropicResponse(200, '<html>not json</html>', 'text/html');
 

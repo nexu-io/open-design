@@ -9,11 +9,12 @@ export interface RegisterHandoffRoutesDeps
  * prompt the next conversation can send so a fresh chat can resume the
  * work without replaying the full transcript.
  *
- * The validation block and error-mapping shape mirror
- * `import-export-routes.ts::registerFinalizeRoutes` since the BYOK
- * payload, upstream call, and `FinalizeUpstreamError` mapping are
- * shared. Handoff has no lockfile (synthesis is read-only — concurrent
- * calls are safe), so the 409 CONFLICT branch is omitted here.
+ * The validation block and BYOK upstream call mirror
+ * `import-export-routes.ts::registerFinalizeRoutes`. Error mapping is
+ * largely shared but diverges deliberately in two places: handoff maps
+ * `TranscriptExportLockedError` to 409 CONFLICT (the transcript-export
+ * lock is acquired transitively, not a handoff lockfile of its own), and
+ * it maps an upstream 400 to the caller's 400 BAD_REQUEST rather than 502.
  */
 export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDeps) {
   const { db } = ctx;
@@ -113,6 +114,14 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
         }
         if (err.status === 429) {
           return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+        }
+        // An upstream 400 is a deterministic request-shape error (unknown
+        // model, invalid maxTokens, malformed body) — caller input, not a
+        // transient outage. Surface it as the caller's own BAD_REQUEST with
+        // the redacted upstream detail so they fix the offending field
+        // rather than retrying a 502.
+        if (err.status === 400) {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message, init);
         }
         return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
       }
