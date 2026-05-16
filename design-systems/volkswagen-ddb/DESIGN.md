@@ -102,7 +102,7 @@ The system carries a single warm accent â€” a muted, mid-century yellow-ochre â€
 ### Forms & Inputs
 - 1px solid `#c8c8c5` border, no border-radius
 - Focus: border becomes 2px solid Ink Black
-- Label: 12px Futura weight 500 ALL CAPS, above input, 8px gap
+- Label: 12px Futura weight 500, sentence case, above input, 8px gap
 - Placeholder: Mid Gray (`#8a8a87`)
 - Error: 1px solid Ink Black + small inline Futura 12px error text below
 
