@@ -3,6 +3,8 @@
 > Category: Automotive / Mid-Century Modern
 > The Doyle Dane Bernbach Volkswagen campaign (1959–1970s). Radical honesty, radical whitespace.
 
+Independent interpretive system inspired by historical Volkswagen × DDB advertising constraints; not affiliated with Volkswagen or Doyle Dane Bernbach.
+
 ## 1. Visual Theme & Atmosphere
 
 The Volkswagen DDB design language is one of the most studied visual systems in advertising history — and it is defined almost entirely by what it removes. Where competitors filled pages with chrome, tailfins, and aspirational fantasy, DDB's campaigns for Volkswagen placed a small, imperfect car against an ocean of white and let the copy do the work. "Think Small." "Lemon." "It's ugly, but it gets you there." The aesthetic is so spare it feels modern today, 60 years later.
@@ -68,7 +70,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 
 ### Principles
 - **Never shout**: The largest headline weight is Demibold (500). Heavy weights are never used in display contexts — authority comes from restraint.
-- **Sentence case always**: Headlines, buttons that are labels, navigation items — all sentence case. The only ALL CAPS usage is short button CTAs (≤4 words).
+- **Sentence case for editorial text**: Headlines, section headings, body labels, and descriptive copy use sentence case. Short button CTAs and compact navigation items may use ALL CAPS with tracking.
 - **Dense body, generous leading**: Body copy at 14px / line-height 1.65 creates long, readable columns that respect the reader. This is copy-forward design.
 - **Size contrast is subtle**: The ratio between headline (28px) and body (14px) is exactly 2:1 — enough hierarchy without visual aggression.
 - **One typeface**: Futura handles every role. No display/body split. Unity through weight and size variation alone.
@@ -148,7 +150,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 - Keep all corners sharp (0px radius) — rectangular geometry is the system signature
 - Use the product image small, centred, surrounded by generous whitespace
 - Write honest copy — the visual system is designed to frame truth, not spectacle
-- Use sentence case for all headings and labels (except short ALL CAPS buttons)
+- Use sentence case for editorial headings and labels; reserve ALL CAPS for short button CTAs and compact navigation items
 - Restrict Ochre Yellow to one element per composition maximum
 - Prefer Off-White Paper (`#f5f4ef`) backgrounds over clinical pure white
 - Use 1.65 line-height for body text — the copy demands to be read, not scanned
@@ -179,7 +181,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 - Navigation: horizontal → stacked (no hamburger icon if possible — a text "Menu" link is more DDB)
 - Images: maintain float/centre positioning at all sizes
 - Two-column layouts: stack to single column below 768px (copy above image)
-- Typography: body stays 14px desktop/tablet, scales to 15px mobile for thumb readability
+- Typography: body stays 14px desktop/tablet, scales to 16px mobile for thumb readability
 - Headlines: 28–36px desktop → 22–26px mobile — proportional reduction, never dramatic
 
 ## 9. Agent Prompt Guide
@@ -204,7 +206,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 2. Whitespace is structural — if a layout feels too empty, it is correct
 3. Product image is small by design — the silence around it is the point
 4. Futura weight ceiling is Demibold (500) for display — never heavier
-5. Sentence case everywhere except short ALL CAPS button CTAs
+5. Sentence case for editorial text; short button CTAs and compact navigation items may use ALL CAPS
 6. One colour accent (Ochre Yellow) maximum per composition
 7. No shadows, no gradients, no decorative rules or ornaments
 8. Copy is the second visual element — give it room to breathe at 1.65 line-height
