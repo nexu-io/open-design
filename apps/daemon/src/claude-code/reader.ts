@@ -149,3 +149,41 @@ export function readUserSkills(home: string): ClaudeCodeSkill[] {
   }
   return out;
 }
+
+function findSkillMdFiles(root: string, maxDepth: number): string[] {
+  const out: string[] = [];
+  const walk = (dir: string, depth: number): void => {
+    if (depth > maxDepth) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isFile() && entry.name === 'SKILL.md') {
+        out.push(full);
+      } else if (
+        entry.isDirectory() &&
+        entry.name !== '.claude-plugin' &&
+        entry.name !== 'node_modules'
+      ) {
+        walk(full, depth + 1);
+      }
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+
+export function readPluginSkills(home: string): ClaudeCodeSkill[] {
+  const out: ClaudeCodeSkill[] = [];
+  for (const { pluginName, pluginVersion, versionDir } of readPluginManifests(home)) {
+    for (const skillMd of findSkillMdFiles(versionDir, 4)) {
+      const skill = readSkillFile(skillMd, 'plugin', { pluginName, pluginVersion });
+      if (skill) out.push(skill);
+    }
+  }
+  return out;
+}

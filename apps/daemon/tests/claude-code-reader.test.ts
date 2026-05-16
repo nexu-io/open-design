@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   detectAvailability,
   readPluginMcpServers,
+  readPluginSkills,
   readUserMcpServers,
   readUserSkills,
 } from '../src/claude-code/reader.js';
@@ -120,5 +121,24 @@ describe('readUserSkills', () => {
 
   it('returns [] when ~/.claude/skills does not exist', () => {
     expect(readUserSkills(path.join(FIXTURES, 'claude-home-empty'))).toEqual([]);
+  });
+});
+
+describe('readPluginSkills', () => {
+  it('finds SKILL.md files under plugin cache and attributes plugin name/version', () => {
+    const home = path.join(FIXTURES, 'claude-home-plugin-skills', 'home');
+    const skills = readPluginSkills(home);
+    const ids = skills.map((s) => s.id).sort();
+    expect(ids).toContain('brainstorming');
+    expect(ids).toContain('research');
+
+    const b = skills.find((s) => s.id === 'brainstorming')!;
+    expect(b.source).toBe('plugin');
+    expect(b.pluginName).toBe('skills-pack');
+    expect(b.pluginVersion).toBe('2.0.0');
+  });
+
+  it('returns [] when no plugin cache exists', () => {
+    expect(readPluginSkills(path.join(FIXTURES, 'claude-home-empty'))).toEqual([]);
   });
 });
