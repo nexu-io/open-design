@@ -126,7 +126,7 @@ describe('senseaudio image generation', () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const urlStr = String(input);
       if (urlStr === `${TEST_SENSEAUDIO_BASE_URL}/v1/image/sync`) {
-        expect(JSON.parse(String(init?.body)).size).toBe('1664x936');
+        expect(JSON.parse(String(init?.body)).size).toBe('1280x720');
         return buildOkResponse();
       }
       return buildImageFetchResponse(TEST_IMAGE_BYTES);

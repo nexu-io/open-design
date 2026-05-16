@@ -247,7 +247,7 @@ describe('executeGenerateImage', () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/v1/image/sync')) {
-        expect(JSON.parse(String(init?.body)).size).toBe('1664x936');
+        expect(JSON.parse(String(init?.body)).size).toBe('1280x720');
         return new Response(
           JSON.stringify({ url: 'https://cdn.example.test/wide.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },

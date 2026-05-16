@@ -66,18 +66,19 @@ const SENSEAUDIO_VIDEO_MAX_POLLS = 120;
 // 5 s. 6 polls = ~30 s between progress lines.
 const SENSEAUDIO_VIDEO_PROGRESS_LOG_EVERY = 6;
 
-// Mirrors the size table used by renderSenseAudioImage in media.ts. We
-// duplicate the table here rather than importing the renderer so the
-// BYOK tool surface stays decoupled from the media dispatcher's
-// project/file-writing concerns — and so a future BYOK provider that
-// isn't senseaudio (DeepSeek, MiniMax) can pick its own size mapping
-// without monkey-patching media.ts.
+// SenseAudio's image gateway rejects non-standard pixel sizes with a 400
+// `参数错误：size` (verified against logs from a failed call on
+// 2026-05-16). We stick to common 16-multiple HD / SD sizes that the
+// gateway is known to accept: 1024×1024 for square, 1280×720 / 720×1280
+// for widescreen / portrait, 1024×768 / 768×1024 for the 4:3 family.
+// The table is duplicated in renderSenseAudioImage (media.ts) for the
+// CLI-agent path so both surfaces stay in sync.
 const ASPECT_TO_SIZE: Record<string, string> = {
   '1:1': '1024x1024',
-  '16:9': '1664x936',
-  '9:16': '936x1664',
-  '4:3': '1280x960',
-  '3:4': '960x1280',
+  '16:9': '1280x720',
+  '9:16': '720x1280',
+  '4:3': '1024x768',
+  '3:4': '768x1024',
 };
 
 /**

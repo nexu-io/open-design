@@ -1971,11 +1971,14 @@ async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfi
 
 const SENSEAUDIO_IMAGE_PROMPT_LIMIT = 2000;
 
+// SenseAudio's image gateway rejects non-standard pixel sizes with a 400
+// `参数错误：size`. Keep this table in sync with byok-tools.ts's
+// ASPECT_TO_SIZE — both paths hit the same /v1/image/sync endpoint.
 function senseAudioImageSize(aspect?: string): string {
-  if (aspect === '16:9') return '1664x936';
-  if (aspect === '9:16') return '936x1664';
-  if (aspect === '4:3') return '1280x960';
-  if (aspect === '3:4') return '960x1280';
+  if (aspect === '16:9') return '1280x720';
+  if (aspect === '9:16') return '720x1280';
+  if (aspect === '4:3') return '1024x768';
+  if (aspect === '3:4') return '768x1024';
   return '1024x1024';
 }
 
