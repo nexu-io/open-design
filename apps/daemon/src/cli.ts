@@ -3013,9 +3013,25 @@ publish from a frozen run snapshot rather than the live installed copy.`);
     const resp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}`);
     if (resp.ok) {
       const row = await resp.json();
+      // The daemon's plugin row carries a stored `version` plus the full
+      // manifest. For project-local plugins (`generated-plugin/`, snapshots,
+      // freshly imported folders) the stored `version` is `'0.0.0'` until
+      // the registry handshake runs, but the manifest's `version` is the
+      // real value the author wrote. Mirror `plugins/marketplaces.ts:298,328`
+      // and prefer the manifest version when the stored row reads as the
+      // pre-handshake sentinel. Closes #1765.
+      const storedVersion = typeof row.version === 'string' && row.version.length > 0
+        ? row.version
+        : null;
+      const manifestVersion = typeof row.manifest?.version === 'string' && row.manifest.version.length > 0
+        ? row.manifest.version
+        : null;
+      const resolvedVersion = (storedVersion && storedVersion !== '0.0.0')
+        ? storedVersion
+        : (manifestVersion ?? storedVersion ?? '0.0.0');
       meta = {
         pluginId:          row.id ?? id,
-        pluginVersion:     row.version ?? '0.0.0',
+        pluginVersion:     resolvedVersion,
         ...(row.title              ? { pluginTitle: row.title }                       : {}),
         ...(row.manifest?.description ? { pluginDescription: row.manifest.description } : {}),
       };
