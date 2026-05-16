@@ -351,9 +351,16 @@ const AGENT_CLI_ENV_FIELDS = [
   },
   {
     agentId: 'codex',
+    envKey: 'CODEX_API_KEY',
+    labelKey: 'settings.cliEnvCodexApiKey',
+    placeholder: 'Paste CODEX_API_KEY',
+    secret: true,
+  },
+  {
+    agentId: 'codex',
     envKey: 'OPENAI_API_KEY',
     labelKey: 'settings.cliEnvCodexApiKey',
-    placeholder: 'Paste proxy API key',
+    placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
 ] as const;
