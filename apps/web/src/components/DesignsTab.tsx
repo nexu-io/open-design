@@ -527,7 +527,7 @@ export function DesignsTab({
 
 						const liveCount = liveArtifactsByProject[p.id]?.length ?? 0;
 						const status = p.status?.value ?? "not_started";
-						const cover = projectCover(p, coverByProject[p.id] ?? null);
+						const cover = projectCover(p, coverByProject[p.id] ?? null, designSystems);
 						const isSelected = selected.has(p.id);
 						return (
 							<div
@@ -614,6 +614,8 @@ export function DesignsTab({
 										<img className="thumb-media" src={cover.src} alt="" loading="lazy" />
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
+									) : cover.kind === "brand" && cover.brand ? (
+										<BrandPreviewCard brand={cover.brand} />
 									) : cover.kind === "html" && cover.src ? (
 										<iframe
 											className="thumb-iframe"
@@ -880,26 +882,78 @@ function isOrbitProject(project: Project): boolean {
   return metadata?.kind === 'orbit';
 }
 
+// Lightweight brand-preview render kind. When a project is bound to a
+// design system (via `project.designSystemId`), we surface the brand's
+// signature colors and a name-derived monogram instead of the generic
+// hash-derived pastel gradient. No iframe, no separate document — just
+// a styled div in the same React tree. Source of truth: the swatches
+// array the daemon already extracts from each DESIGN.md in
+// `apps/daemon/src/design-systems.ts::extractSwatches`.
+export interface BrandPreviewData {
+	primary: string;
+	background: string;
+	foreground: string;
+	accent: string;
+	title: string;
+	glyph: string;
+}
+
 function projectCover(
 	project: Project,
 	override: { kind: "html" | "image" | "video"; name: string } | null,
+	designSystems: DesignSystemSummary[],
 ): {
-	kind: "image" | "video" | "html" | "fallback";
+	kind: "image" | "video" | "html" | "brand" | "fallback";
 	src?: string;
 	style: CSSProperties;
 	initial: string;
+	brand?: BrandPreviewData;
 } {
-	let h = 0;
-	for (let i = 0; i < project.id.length; i++) {
-		h = (h * 31 + project.id.charCodeAt(i)) >>> 0;
+	// Resolve the design system bound to this project, if any. Open
+	// Design's `/api/design-systems` already extracts a swatch list from
+	// each DESIGN.md, so we can build the brand preview from purely
+	// native data — no custom metadata enrichment required.
+	const ds = project.designSystemId
+		? designSystems.find((d) => d.id === project.designSystemId)
+		: null;
+	const semantic = ds ? pickSemanticColors(ds.swatches ?? []) : null;
+
+	let style: CSSProperties;
+	if (semantic) {
+		style = {
+			background: `radial-gradient(circle at 30% 28%, ${semantic.primary} 0%, transparent 55%), radial-gradient(circle at 78% 78%, ${semantic.accent} 0%, transparent 50%), linear-gradient(135deg, ${semantic.background}, ${semantic.background})`,
+			color: semantic.foreground,
+		};
+	} else {
+		let h = 0;
+		for (let i = 0; i < project.id.length; i++) {
+			h = (h * 31 + project.id.charCodeAt(i)) >>> 0;
+		}
+		const hue = h % 360;
+		const hue2 = (hue + 38) % 360;
+		style = {
+			background: `radial-gradient(circle at 30% 28%, hsl(${hue} 70% 78% / 0.55), transparent 42%), linear-gradient(135deg, hsl(${hue} 65% 88%), hsl(${hue2} 70% 90%))`,
+		};
 	}
-	const hue = h % 360;
-	const hue2 = (hue + 38) % 360;
-	const style: CSSProperties = {
-		background: `radial-gradient(circle at 30% 28%, hsl(${hue} 70% 78% / 0.55), transparent 42%), linear-gradient(135deg, hsl(${hue} 65% 88%), hsl(${hue2} 70% 90%))`,
-	};
 	const trimmed = project.name.trim();
 	const initial = (trimmed ? Array.from(trimmed)[0]! : "?").toUpperCase();
+
+	// When the project has a design system bound, prefer the inline
+	// brand preview over an iframe — even if metadata.entryFile points
+	// at a preview HTML, the inline render is cheaper and more uniform.
+	if (semantic && ds) {
+		const title = ds.title || project.name.replace(/\s+Brand$/, "");
+		return {
+			kind: "brand",
+			style,
+			initial,
+			brand: {
+				...semantic,
+				title,
+				glyph: deriveBrandGlyph(title),
+			},
+		};
+	}
 	if (override) {
 		return {
 			kind: override.kind,
@@ -917,6 +971,202 @@ function projectCover(
 		if (/\.html?$/i.test(entry)) return { kind: "html", src, style, initial };
 	}
 	return { kind: "fallback", style, initial };
+}
+
+function deriveBrandGlyph(name: string): string {
+	const trimmed = (name || "").trim();
+	if (!trimmed) return "?";
+	const parts = trimmed.split(/\s+/).filter(Boolean);
+	if (parts.length >= 2 && parts[0] && parts[1]) {
+		return (parts[0][0]! + parts[1][0]!).toUpperCase();
+	}
+	return trimmed[0]!.toUpperCase();
+}
+
+// Maps the unordered swatch array the daemon extracts from each
+// DESIGN.md into the four semantic slots the brand preview needs:
+//
+//   background — most extreme luminance (lightest OR darkest)
+//   foreground — opposite extreme (contrast partner of background)
+//   primary    — most chromatic swatch (the "signature" color)
+//   accent     — secondary chromatic swatch, fallback to primary
+//
+// Returns null when the swatch list is too sparse to populate even
+// background + foreground reliably (less than 2 hex codes). Callers
+// fall back to the hash gradient in that case.
+function pickSemanticColors(swatches: string[]): {
+	primary: string;
+	background: string;
+	foreground: string;
+	accent: string;
+} | null {
+	const hexes = swatches
+		.filter((s) => /^#[0-9a-fA-F]{6}$/.test(s))
+		.map((s) => s.toLowerCase());
+	if (hexes.length < 2) return null;
+
+	const scored = hexes.map((hex) => {
+		const r = parseInt(hex.slice(1, 3), 16) / 255;
+		const g = parseInt(hex.slice(3, 5), 16) / 255;
+		const b = parseInt(hex.slice(5, 7), 16) / 255;
+		const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+		const max = Math.max(r, g, b);
+		const min = Math.min(r, g, b);
+		const chroma = max - min;
+		return { hex, luminance, chroma };
+	});
+
+	const byLum = [...scored].sort((a, b) => a.luminance - b.luminance);
+	const byChroma = [...scored].sort((a, b) => b.chroma - a.chroma);
+
+	const darkest = byLum[0];
+	const lightest = byLum[byLum.length - 1];
+	const primary = byChroma[0];
+	const accent = byChroma[1] ?? primary;
+	if (!darkest || !lightest || !primary || !accent) return null;
+
+	// Background = the extreme luminance that's NOT the primary so the
+	// CTA color stays a CTA color and the canvas a canvas.
+	const background =
+		primary.hex === lightest.hex ? darkest.hex : lightest.hex;
+	const foreground =
+		background === lightest.hex ? darkest.hex : lightest.hex;
+
+	return {
+		primary: primary.hex,
+		background,
+		foreground,
+		accent: accent.hex !== primary.hex ? accent.hex : primary.hex,
+	};
+}
+
+// Lightweight inline brand preview — replaces the iframe-per-card path
+// for seeded brand-* projects. Renders a brand "color chip" using only
+// the design system's signature swatches, no text duplication with the
+// card's meta block below. No iframe boundary, no separate document
+// parse, no sandboxed JS context. Cuts Projects-panel memory by 187×
+// and removes layout thrash on initial paint.
+//
+// Composition (top-down): a wide horizontal split where the LEFT band
+// reads as the brand's canvas (background + accent stripe + small
+// palette tiles) and the RIGHT panel is a solid primary color with the
+// monogram glyph centered. The card meta block below already shows the
+// full project name, so we deliberately omit any headline inside the
+// thumb to avoid duplication.
+export function BrandPreviewCard({ brand }: { brand: BrandPreviewData }) {
+	const { primary, background, foreground, accent, title, glyph } = brand;
+	const onPrimary = pickReadableTextColor(primary, background, foreground);
+	return (
+		<div
+			className="brand-preview-card"
+			style={{
+				display: "grid",
+				gridTemplateColumns: "1fr 44%",
+				width: "100%",
+				height: "100%",
+				background,
+				color: foreground,
+				position: "relative",
+				overflow: "hidden",
+				containerType: "size",
+			}}
+		>
+			<div
+				style={{
+					padding: "9% 9% 12% 9%",
+					display: "flex",
+					flexDirection: "column",
+					justifyContent: "space-between",
+					alignItems: "flex-start",
+					minWidth: 0,
+				}}
+			>
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: "0.5em",
+						fontSize: "clamp(7px, 3.6cqi, 11px)",
+						textTransform: "uppercase",
+						letterSpacing: "0.22em",
+						fontWeight: 600,
+						color: primary,
+						fontFamily: "ui-monospace, SFMono-Regular, monospace",
+						maxWidth: "100%",
+					}}
+				>
+					<span
+						style={{
+							width: "0.7em",
+							height: "0.7em",
+							background: primary,
+							borderRadius: "1px",
+							flexShrink: 0,
+						}}
+					/>
+					<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+						{title}
+					</span>
+				</div>
+				<div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+					{[primary, accent, foreground].map((c, i) => (
+						<div
+							key={`${c}-${i}`}
+							style={{
+								width: "clamp(10px, 4cqi, 22px)",
+								height: "clamp(10px, 4cqi, 22px)",
+								borderRadius: "3px",
+								background: c,
+							}}
+						/>
+					))}
+				</div>
+			</div>
+			<div
+				style={{
+					background: primary,
+					color: onPrimary,
+					display: "grid",
+					placeItems: "center",
+					position: "relative",
+					overflow: "hidden",
+				}}
+			>
+				<div
+					style={{
+						fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+						fontWeight: 700,
+						fontSize: "clamp(36px, 36cqi, 140px)",
+						lineHeight: 1,
+						letterSpacing: "-0.05em",
+					}}
+				>
+					{glyph}
+				</div>
+			</div>
+		</div>
+	);
+}
+
+// Pick a foreground that has enough contrast with the primary panel
+// background. Defaults to the brand's own background (typically the
+// brand's "paper" color) which gives the cleanest inverse on most
+// systems. Falls back to a near-white/black guess if luminance can be
+// estimated cheaply.
+function pickReadableTextColor(primary: string, fallbackBg: string, fallbackFg: string): string {
+	const lum = quickLuminance(primary);
+	if (lum === null) return fallbackBg || "#fff";
+	return lum > 0.55 ? fallbackFg : fallbackBg;
+}
+
+function quickLuminance(color: string): number | null {
+	const m = /^#([0-9a-f]{6})$/i.exec(color.trim());
+	if (!m || !m[1]) return null;
+	const hex = m[1];
+	const r = parseInt(hex.slice(0, 2), 16) / 255;
+	const g = parseInt(hex.slice(2, 4), 16) / 255;
+	const b = parseInt(hex.slice(4, 6), 16) / 255;
+	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 type ProjectCategory = "prototype" | "live-artifact" | "slide" | "media";

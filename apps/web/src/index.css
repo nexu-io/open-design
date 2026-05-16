@@ -8474,13 +8474,26 @@ button.connector-action.is-loading {
 }
 .project-thumb-image,
 .project-thumb-video,
-.project-thumb-html {
+.project-thumb-html,
+.project-thumb-brand {
   background: var(--bg-subtle);
 }
 .project-thumb-image .project-thumb-glyph,
 .project-thumb-video .project-thumb-glyph,
-.project-thumb-html .project-thumb-glyph {
+.project-thumb-html .project-thumb-glyph,
+.project-thumb-brand .project-thumb-glyph {
   display: none;
+}
+/* Brand preview is a CSS-only inline div (BrandPreviewCard) — no iframe,
+   no separate document, no sandbox. Fills the thumb absolutely so it
+   replaces the parent's hash/swatch gradient with the brand-faithful
+   layout (eyebrow · headline · swatches · primary panel + glyph). */
+.design-card-thumb .brand-preview-card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 .project-thumb-glyph {
   width: 46px;
