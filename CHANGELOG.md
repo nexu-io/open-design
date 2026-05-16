@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Docs: clarify that packaged macOS support includes a verified Intel x64 ZIP path on Monterey, and document the Finder `PATH` caveat for packaged CLI detection. Fixes [#327](https://github.com/nexu-io/open-design/issues/327).
+
 ## [0.7.0] - 2026-05-12
 
 A memory-plus-UI release: **auto-memory store** carries agent context across runs and projects, **Critique Theater advances to Phase 7** (state machine + replay) with daemon-side **Phase 6.2** artifact extraction, **HyperFrames** lands **HTML-in-Canvas** end-to-end, and the web UI gets a **top-to-bottom Designs tab redesign**, **in-context preview comments**, a **unified Media tab**, and a **tweaks palette with HSL hue-shift recoloring**. Plus **responsive design handoff** outputs, **install/uninstall skills & design systems in-app**, **HTTP 206 range requests** for video/audio, **scheduled routines** for unattended agent runs, **macOS Intel (x64) builds**, an official **Nix flake**, four new design systems (hud, loom, trading-terminal, WeChat), and an `agent-browser` skill. 107 merged PRs since 0.6.0.
