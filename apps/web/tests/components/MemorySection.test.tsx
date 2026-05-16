@@ -515,12 +515,23 @@ describe('MemorySection', () => {
     renderMemorySection();
 
     const card = (await screen.findByText('Project scope')).closest('.library-card') as HTMLElement;
-    fireEvent.click(within(card).getByTitle('Preview'));
+    const previewButton = within(card).getByTitle('Preview');
+    const deleteButton = within(card).getByTitle('Delete');
+    fireEvent.click(previewButton);
 
     await screen.findByText('Keep memory actions clear');
-    const closeIconPaths = card.querySelectorAll('path[d="M18 6 6 18"]');
+    const previewIcon = previewButton.querySelector('svg');
+    const deleteIcon = deleteButton.querySelector('svg');
+    const previewPaths = Array.from(
+      previewIcon?.querySelectorAll('path') ?? [],
+    ).map((path) => path.getAttribute('d'));
+    const deletePaths = Array.from(
+      deleteIcon?.querySelectorAll('path') ?? [],
+    ).map((path) => path.getAttribute('d'));
 
-    expect(closeIconPaths).toHaveLength(1);
+    expect(previewIcon).toBeTruthy();
+    expect(deleteIcon).toBeTruthy();
+    expect(previewPaths).not.toEqual(deletePaths);
   });
 
   it('deletes an existing memory entry from the list', async () => {

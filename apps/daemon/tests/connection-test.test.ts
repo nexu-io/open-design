@@ -1276,6 +1276,54 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
     );
   });
 
+  it('wraps Claude connection smoke prompts as stream-json stdin', async () => {
+    await withFakeClaude(
+      `
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    const line = input.trim();
+    const parsed = JSON.parse(line);
+    const content = parsed?.message?.content;
+    if (
+      parsed.type !== 'user' ||
+      parsed.message?.role !== 'user' ||
+      !Array.isArray(content) ||
+      content[0]?.type !== 'text' ||
+      content[0]?.text !== 'Reply with only: ok'
+    ) {
+      console.error('unexpected stdin payload: ' + line);
+      process.exit(1);
+    }
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+      },
+    );
+  });
+
   it('returns Claude /login guidance when the spawned CLI cannot authenticate', async () => {
     await withFakeClaude(
       `console.error(JSON.stringify({ apiKeySource: 'none', error_status: 401 })); process.exit(1);`,

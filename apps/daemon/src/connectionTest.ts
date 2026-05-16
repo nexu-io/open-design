@@ -41,6 +41,7 @@ import {
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
+import type { RuntimeAgentDef } from './runtimes/types.js';
 import {
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
@@ -175,6 +176,23 @@ const SAMPLE_MAX_CHARS = 120;
 // before producing a visible `ok`.
 const PROVIDER_MAX_TOKENS = 100;
 const SMOKE_PROMPT = 'Reply with only: ok';
+
+function formatPromptForAgentStdin(
+  def: Pick<RuntimeAgentDef, 'promptInputFormat'>,
+  prompt: string,
+): string {
+  const promptInputFormat = def.promptInputFormat ?? 'text';
+  if (promptInputFormat === 'stream-json') {
+    return `${JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: prompt }],
+      },
+    })}\n`;
+  }
+  return prompt;
+}
 
 function codexExecutableGuidance(
   agentId: string,
@@ -1398,7 +1416,7 @@ async function testAgentConnectionInternal(
           });
         }
       });
-      child.stdin.end(SMOKE_PROMPT, 'utf8');
+      child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), 'utf8');
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
       timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
