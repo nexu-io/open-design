@@ -5233,6 +5233,13 @@ export async function startServer({
 
   if (fs.existsSync(STATIC_DIR)) {
     app.use(express.static(STATIC_DIR));
+    const indexHtml = path.join(STATIC_DIR, 'index.html');
+    if (fs.existsSync(indexHtml)) {
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(indexHtml);
+      });
+    }
   }
 
   app.get('/api/health', async (_req, res) => {
