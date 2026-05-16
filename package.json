@@ -40,6 +40,10 @@
       "better-sqlite3",
       "electron",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "fast-uri": "3.1.2",
+      "devalue": "5.8.1"
+    }
   }
 }
