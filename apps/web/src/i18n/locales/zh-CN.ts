@@ -797,6 +797,12 @@ export const zhCN: Dict = {
   'designFiles.refresh': '刷新',
   'designFiles.delete': '删除',
   'designFiles.searchPlaceholder': '搜索文件…',
+  // TODO(i18n): translate to zh-CN
+  'designFiles.searchNoMatches': 'No files match "{query}"',
+  // TODO(i18n): translate to zh-CN
+  'designFiles.searchClearAria': 'Clear search',
+  // TODO(i18n): translate to zh-CN
+  'designFiles.searchClear': 'Clear',
   'designFiles.up': '上一级',
   'designFiles.back': '返回',
   'designFiles.crumbs': '项目',

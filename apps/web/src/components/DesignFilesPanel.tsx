@@ -78,6 +78,9 @@ export function DesignFilesPanel({
   onPluginFolderAgentAction,
 }: Props) {
   const t = useT();
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
@@ -111,19 +114,26 @@ export function DesignFilesPanel({
     });
   }, [files, sortKey, sortDir]);
 
+  const trimmedQuery = query.trim();
+  const filteredFiles = useMemo(() => {
+    if (!trimmedQuery) return sortedFiles;
+    const needle = trimmedQuery.toLowerCase();
+    return sortedFiles.filter((f) => f.name.toLowerCase().includes(needle));
+  }, [sortedFiles, trimmedQuery]);
+
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number | 'all'>(30);
 
-  const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
-  const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
+  const effectivePageSize = pageSize === 'all' ? Math.max(1, filteredFiles.length) : pageSize;
+  const totalPages = Math.max(1, Math.ceil(filteredFiles.length / effectivePageSize));
   const safePage = Math.min(page, totalPages - 1);
   const pageFiles = useMemo(
     () =>
-      sortedFiles.slice(
+      filteredFiles.slice(
         safePage * effectivePageSize,
         (safePage + 1) * effectivePageSize,
       ),
-    [effectivePageSize, safePage, sortedFiles],
+    [effectivePageSize, safePage, filteredFiles],
   );
   const modifiedGroups = useMemo(() => {
     const groups: Record<ModifiedSection, ProjectFile[]> = {
@@ -142,14 +152,18 @@ export function DesignFilesPanel({
   const visibleModifiedSections = MODIFIED_SECTION_ORDER.filter(
     (section) => modifiedGroups[section].length > 0,
   );
-  const rangeStart = safePage * effectivePageSize + 1;
-  const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
+  const rangeStart = filteredFiles.length === 0 ? 0 : safePage * effectivePageSize + 1;
+  const rangeEnd = Math.min((safePage + 1) * effectivePageSize, filteredFiles.length);
   const allPageSelected = pageFiles.every((f) => selected.has(f.name));
   const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
 
   useEffect(() => {
     setPage(0);
   }, [pageSize]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [trimmedQuery]);
 
   useEffect(() => {
     if (Number.isFinite(totalPages)) setPage((p) => Math.min(p, totalPages - 1));
@@ -192,6 +206,21 @@ export function DesignFilesPanel({
     () => files.find((f) => f.name === preview) ?? null,
     [preview, files],
   );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+        const panel = panelRef.current;
+        if (!panel) return;
+        if (!panel.contains(document.activeElement)) return;
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     if (!menuPos) return;
@@ -252,7 +281,7 @@ export function DesignFilesPanel({
   }
 
   function selectAllFiles() {
-    setSelected(new Set(sortedFiles.map((f) => f.name)));
+    setSelected(new Set(filteredFiles.map((f) => f.name)));
   }
 
   function clearSelection() {
@@ -602,7 +631,11 @@ export function DesignFilesPanel({
   }
 
   return (
-    <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
+    <div
+      className={`df-panel ${preview ? '' : 'no-preview'}`}
+      ref={panelRef}
+      tabIndex={-1}
+    >
       <div className="df-main">
         <div className="df-head">
           <button
@@ -616,6 +649,40 @@ export function DesignFilesPanel({
             <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
           </button>
           <span className="crumbs">{t('designFiles.crumbs')}</span>
+          {files.length > 0 ? (
+            <div className="df-search" role="search">
+              <Icon name="search" size={13} />
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="df-search-input"
+                data-testid="design-files-search"
+                value={query}
+                placeholder={t('designFiles.searchPlaceholder')}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && query) {
+                    e.preventDefault();
+                    setQuery('');
+                  }
+                }}
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className="df-search-clear"
+                  data-testid="design-files-search-clear"
+                  aria-label={t('designFiles.searchClearAria')}
+                  onClick={() => {
+                    setQuery('');
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {selected.size > 0 ? (
             <div className="df-actions">
               <button
@@ -844,12 +911,12 @@ export function DesignFilesPanel({
                       </select>
                     </label>
                     <span className="df-page-info">
-                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
+                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: filteredFiles.length })}
                     </span>
                     <div className="df-select-bar">
-                      {selected.size < sortedFiles.length ? (
+                      {filteredFiles.length > 0 && selected.size < filteredFiles.length ? (
                         <button type="button" className="df-select-all" onClick={selectAllFiles}>
-                          {t('designFiles.selectAll', { n: sortedFiles.length })}
+                          {t('designFiles.selectAll', { n: filteredFiles.length })}
                         </button>
                       ) : null}
                       {selected.size > 0 ? (
@@ -932,11 +999,28 @@ export function DesignFilesPanel({
                       </tr>
                     </thead>
                     <tbody>
-                      {groupMode === 'modified'
-                        ? renderModifiedSections()
-                        : groupMode === 'kind'
-                          ? renderKindSections()
-                          : pageFiles.map(renderFileRow)}
+                      {trimmedQuery && filteredFiles.length === 0 ? (
+                        <tr className="df-empty-match-row" data-testid="design-files-search-empty">
+                          <td colSpan={6}>
+                            <span className="df-empty-match-text">
+                              {t('designFiles.searchNoMatches', { query: trimmedQuery })}
+                            </span>
+                            <button
+                              type="button"
+                              className="df-empty-match-clear"
+                              onClick={() => setQuery('')}
+                            >
+                              {t('designFiles.searchClear')}
+                            </button>
+                          </td>
+                        </tr>
+                      ) : groupMode === 'modified' ? (
+                        renderModifiedSections()
+                      ) : groupMode === 'kind' ? (
+                        renderKindSections()
+                      ) : (
+                        pageFiles.map(renderFileRow)
+                      )}
                     </tbody>
                   </table>
                   <div className="df-pagination df-pagination-center">
@@ -970,7 +1054,7 @@ export function DesignFilesPanel({
                       {t('designFiles.next')}
                     </button>
                     <span className="df-page-info">
-                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
+                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: filteredFiles.length })}
                     </span>
                   </div>
                 </>

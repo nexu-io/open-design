@@ -9301,6 +9301,64 @@ button.connector-action.is-loading {
 .df-head .df-actions button:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
 .df-head .df-actions button.danger { color: var(--red); }
 .df-head .df-actions button.danger:hover:not(:disabled) { background: var(--red-bg); color: var(--red); }
+.df-head .df-search {
+  margin-left: 12px;
+  flex: 1 1 auto;
+  max-width: 360px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.df-head .df-search:focus-within {
+  border-color: var(--border-strong, var(--text-muted));
+  color: var(--text);
+}
+.df-head .df-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+.df-head .df-search-input::placeholder {
+  color: var(--text-faint, var(--text-muted));
+}
+.df-head .df-search-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.df-head .df-search-clear:hover { background: var(--bg-subtle); color: var(--text); }
+.df-empty-match-row td {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.df-empty-match-text { margin-right: 12px; }
+.df-empty-match-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.df-empty-match-clear:hover { background: var(--bg-subtle); }
 
 .df-body {
   flex: 1;

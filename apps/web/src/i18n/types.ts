@@ -1073,6 +1073,9 @@ export interface Dict {
   'designFiles.refresh': string;
   'designFiles.delete': string;
   'designFiles.searchPlaceholder': string;
+  'designFiles.searchNoMatches': string;
+  'designFiles.searchClearAria': string;
+  'designFiles.searchClear': string;
   'designFiles.up': string;
   'designFiles.back': string;
   'designFiles.crumbs': string;
