@@ -2670,6 +2670,7 @@ function CommentPreviewOverlays({
   comments,
   liveTargets,
   hoveredTarget,
+  hoveredPodMemberId,
   activeTarget,
   boardTool,
   scale,
@@ -2679,6 +2680,7 @@ function CommentPreviewOverlays({
   comments: PreviewComment[];
   liveTargets: Map<string, PreviewCommentSnapshot>;
   hoveredTarget: PreviewCommentSnapshot | null;
+  hoveredPodMemberId: string | null;
   activeTarget: PreviewCommentSnapshot | null;
   boardTool: BoardTool;
   scale: number;
@@ -2729,6 +2731,7 @@ function CommentPreviewOverlays({
           snapshot={targetOverlay}
           scale={scale}
           selected={Boolean(activeTarget)}
+          hoveredMemberId={hoveredPodMemberId}
         />
       ) : null}
       {boardTool === 'pod' && strokePoints.length > 1 ? (
@@ -2746,10 +2749,12 @@ function CommentTargetOverlay({
   snapshot,
   scale,
   selected,
+  hoveredMemberId,
 }: {
   snapshot: PreviewCommentSnapshot;
   scale: number;
   selected: boolean;
+  hoveredMemberId?: string | null;
 }) {
   const displayMembers = podDisplayMembers(snapshot);
   if (displayMembers.length > 0) {
@@ -2774,10 +2779,11 @@ function CommentTargetOverlay({
             '--comment-overlay-ring': `rgba(22, 119, 255, ${overlayWeight.ringOpacity})`,
             '--comment-overlay-border': `rgba(22, 119, 255, ${overlayWeight.outlineOpacity})`,
           };
+          const isHoverFocused = hoveredMemberId === member.elementId;
           return (
             <div
               key={`${member.elementId}-${index}`}
-              className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}`}
+              className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}${isHoverFocused ? ' is-hover-focused' : ''}`}
               style={overlayStyle}
               data-testid="comment-target-overlay"
             >
@@ -3638,6 +3644,7 @@ function HtmlViewer({
   );
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  const [hoveredPodMemberId, setHoveredPodMemberId] = useState<string | null>(null);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
@@ -5148,6 +5155,7 @@ function HtmlViewer({
   function clearBoardComposer() {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
+    setHoveredPodMemberId(null);
     setActivePreviewCommentId(null);
     setCommentDraft('');
     setQueuedBoardNotes([]);
@@ -5959,6 +5967,7 @@ function HtmlViewer({
                 comments={boardMode ? visibleSideComments : []}
                 liveTargets={liveCommentTargets}
                 hoveredTarget={hoveredCommentTarget}
+                hoveredPodMemberId={hoveredPodMemberId}
                 activeTarget={activeCommentTarget}
                 boardTool={boardTool}
                 scale={overlayPreviewScale}
@@ -6015,7 +6024,9 @@ function HtmlViewer({
                     if (shouldClose) clearBoardComposer();
                     return next;
                   });
+                  setHoveredPodMemberId((current) => (current === elementId ? null : current));
                 }}
+                onHoverMember={setHoveredPodMemberId}
                 sending={sendingBoardBatch || streaming}
                 t={t}
               />

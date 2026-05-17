@@ -10872,6 +10872,11 @@ button.connector-action.is-loading {
 .comment-target-overlay.selected {
   border-width: 2px;
 }
+.comment-target-overlay--member.is-hover-focused {
+  outline: 2px solid rgba(22, 119, 255, 0.95);
+  outline-offset: 2px;
+  z-index: 2;
+}
 .comment-target-overlay-label {
   position: absolute;
   width: 1px;
