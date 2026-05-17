@@ -552,6 +552,91 @@ describe('ConnectorsBrowser', () => {
     ).toHaveProperty('github');
   });
 
+  it('auto-cancels stuck pending authorization on focus once the daemon authorization window has expired', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const startMs = new Date('2026-05-17T10:00:00.000Z').getTime();
+    vi.setSystemTime(startMs);
+
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'available' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: new Date(startMs + 5 * 60 * 1000).toISOString(),
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(availableConnector);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    vi.setSystemTime(startMs + 10 * 60 * 1000);
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
+    await screen.findByRole('button', { name: 'Connect' });
+    expect(
+      JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
+    ).not.toHaveProperty('github');
+
+    vi.useRealTimers();
+  });
+
+  it('marks the auto-cancel as failed when the daemon /authorization/cancel returns null after the authorization expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const startMs = new Date('2026-05-17T10:00:00.000Z').getTime();
+    vi.setSystemTime(startMs);
+
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'available' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: new Date(startMs + 5 * 60 * 1000).toISOString(),
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    vi.setSystemTime(startMs + 10 * 60 * 1000);
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
+    expect(await screen.findByText("Couldn't cancel authorization. Try again.")).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
   it('does not auto-cancel pending authorization on focus when the daemon already reports the connector as connected', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,

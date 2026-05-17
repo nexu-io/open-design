@@ -582,13 +582,13 @@ export function ConnectorsBrowser({
   }, [connectorAuthorizationPending]);
 
   const cancelStaleAuthorizations = useCallback(async (
+    pendingBeforeReload: ConnectorAuthorizationPendingState,
     statuses: ConnectorStatusResponse['statuses'],
     nowMs = Date.now(),
   ) => {
-    const pending = connectorAuthorizationPendingRef.current;
-    const stuck = Object.keys(pending).filter((connectorId) => {
+    const stuck = Object.keys(pendingBeforeReload).filter((connectorId) => {
       if (statuses[connectorId]?.status === 'connected') return false;
-      const expiresAt = pending[connectorId]?.expiresAt;
+      const expiresAt = pendingBeforeReload[connectorId]?.expiresAt;
       if (!expiresAt) return false;
       const expiresAtMs = Date.parse(expiresAt);
       return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
@@ -705,8 +705,9 @@ export function ConnectorsBrowser({
   // card recovers to its default state instead of staying stuck loading.
   useEffect(() => {
     async function onFocus() {
+      const pendingBeforeReload = connectorAuthorizationPendingRef.current;
       const statuses = await reloadConnectorStatuses();
-      await cancelStaleAuthorizations(statuses);
+      await cancelStaleAuthorizations(pendingBeforeReload, statuses);
     }
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
