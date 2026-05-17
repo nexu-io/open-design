@@ -269,6 +269,17 @@ export function SettingsDialog({
       }
     };
   }, [initial.theme]);
+
+  // Prevent the page beneath from scrolling while the dialog is open —
+  // otherwise the page's scrollbar and the dialog's internal scrollbar
+  // sit side by side on the right edge.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
   const [showApiKey, setShowApiKey] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
@@ -1974,47 +1985,78 @@ function ClaudeCodeListSection({
   }>;
 }) {
   return (
-    <div style={{ marginTop: 20 }}>
+    <div
+      style={{
+        marginTop: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-start',
+        alignItems: 'stretch',
+        gap: 10,
+        minWidth: 0,
+      }}
+    >
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 8,
+          gap: 8,
         }}
       >
-        <p
+        <h4
           style={{
             margin: 0,
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            fontSize: 13,
             fontWeight: 600,
+            color: 'var(--text)',
           }}
         >
           {title}
-        </p>
+        </h4>
         <button
           type="button"
           className="ghost"
           onClick={onRefresh}
-          style={{ padding: '2px 8px', fontSize: 12 }}
+          style={{
+            width: 22,
+            height: 22,
+            padding: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
           aria-label={`Refresh ${title}`}
         >
           <Icon name="refresh" size={12} />
         </button>
       </div>
       {!loaded ? (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            padding: '12px 0',
+          }}
+        >
           Loading…
         </p>
       ) : items.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            padding: '12px 0',
+          }}
+        >
           {emptyHelp}
         </p>
       ) : (
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', minWidth: 0 }}>
           {items.map((item) => (
             <li
               key={item.key}
@@ -2023,6 +2065,8 @@ function ClaudeCodeListSection({
                 borderBottom: '1px solid var(--border)',
                 fontSize: 13,
                 lineHeight: 1.4,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
               }}
             >
               <div
@@ -2031,12 +2075,15 @@ function ClaudeCodeListSection({
                   alignItems: 'center',
                   gap: 8,
                   flexWrap: 'wrap',
+                  minWidth: 0,
                 }}
               >
                 <span
                   style={{
                     fontFamily:
                       'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                    overflowWrap: 'anywhere',
+                    minWidth: 0,
                   }}
                 >
                   {item.primary}
@@ -2050,13 +2097,19 @@ function ClaudeCodeListSection({
                     border: '1px solid var(--border)',
                     color: 'var(--text-muted)',
                     textTransform: 'lowercase',
+                    flexShrink: 0,
                   }}
                 >
                   {item.source}
                 </span>
                 {item.pluginLabel ? (
                   <span
-                    style={{ fontSize: 11, color: 'var(--text-muted)' }}
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      overflowWrap: 'anywhere',
+                      minWidth: 0,
+                    }}
                   >
                     {item.pluginLabel}
                   </span>
@@ -2068,11 +2121,8 @@ function ClaudeCodeListSection({
                     marginTop: 2,
                     fontSize: 12,
                     color: 'var(--text-muted)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    overflowWrap: 'anywhere',
                   }}
-                  title={item.description}
                 >
                   {item.description}
                 </div>

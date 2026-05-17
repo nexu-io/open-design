@@ -1056,7 +1056,7 @@ code {
   .modal-settings { max-height: 90vh; }
 }
 .modal-settings .modal-body {
-  overflow-y: auto;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -1109,6 +1109,8 @@ code {
   padding: 22px 12px;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
+  overflow-y: auto;
+  min-height: 0;
 }
 .settings-nav-item {
   width: 100%;
