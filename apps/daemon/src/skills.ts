@@ -88,7 +88,10 @@ export interface SkillInfo {
    * tiers (project override, env override, phase default) decide.
    */
   critiquePolicy: SkillCritiquePolicy;
+  /** Skill body with preamble already prepended (for direct consumption). */
   body: string;
+  /** Original SKILL.md content without preamble (for runtime alias rewrite). */
+  rawBody: string;
   dir: string;
 }
 
@@ -195,6 +198,7 @@ export async function listSkills(
             : "html";
         const description =
           typeof data.description === "string" ? data.description : "";
+        const rawBody = body;
         const parentBody = hasAttachments
           ? withSkillRootPreamble(body, dir)
           : body;
@@ -234,6 +238,7 @@ export async function listSkills(
           aggregatesExamples,
           critiquePolicy: normalizeCritiquePolicy(data.od?.critique?.policy),
           body: parentBody,
+          rawBody,
           dir,
         });
 
@@ -281,6 +286,7 @@ export async function listSkills(
             // the parent describes. Without this, picking a derived card
             // would compose an empty system prompt.
             body: parentBody,
+            rawBody,
             dir,
           });
         }
@@ -394,9 +400,13 @@ export function splitDerivedSkillId(id: unknown): DerivedSkillIdParts | null {
 //
 // Authoring guidance lives in the preamble itself so an agent can pick
 // the right form on its own without daemon-side feature detection.
-function withSkillRootPreamble(body: string, dir: string): string {
+export function withSkillRootPreamble(
+  body: string,
+  dir: string,
+  folderName?: string,
+): string {
   const referencedFiles = collectReferencedSideFiles(body);
-  const folder = path.basename(dir);
+  const folder = folderName ?? path.basename(dir);
   const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
   const exampleFile = referencedFiles[0];
   const relativeGuidance = exampleFile

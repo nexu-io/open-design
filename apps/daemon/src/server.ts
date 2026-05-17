@@ -4,7 +4,7 @@ import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -56,7 +56,7 @@ export {
   signDesktopImportToken,
   verifyDesktopImportToken,
 } from './desktop-auth.js';
-import { findSkillById, listSkills, splitDerivedSkillId } from './skills.js';
+import { findSkillById, listSkills, splitDerivedSkillId, withSkillRootPreamble, type SkillInfo } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
@@ -623,11 +623,93 @@ export function validateCodexGeneratedImagesDir(
   }
 }
 
+/**
+ * Resolve ad-hoc (@-mention) skill ids to their on-disk directories.
+ *
+ * Returns an array of `{ id, dir }` pairs, one per unique resolved skill,
+ * deduplicated by resolved directory path so that aliases pointing to the
+ * same folder do not double-stage.
+ *
+ * Exported so daemon tests can exercise the full
+ * skillIds → resolved dirs chain without spinning up an HTTP server.
+ */
+export function collectAdHocSkillDirs(
+  skillIds: unknown,
+  effectiveSkillId: string | null | undefined,
+  allSkills: SkillInfo[],
+): Array<{ id: string; dir: string }> {
+  const ids = Array.isArray(skillIds)
+    ? skillIds
+        .map((s: unknown) => (typeof s === 'string' ? s.trim() : ''))
+        .filter(Boolean)
+        .filter((id: string) => id !== effectiveSkillId)
+    : [];
+  if (ids.length === 0) return [];
+
+  const seenId = new Set(effectiveSkillId ? [effectiveSkillId] : []);
+  // Seed seenDir with the active skill's resolved dir so an alias in
+  // skillIds that resolves to the same directory is also excluded.
+  const seenDir = new Set<string>();
+  if (effectiveSkillId) {
+    const active = findSkillById(allSkills, effectiveSkillId);
+    if (active?.dir) seenDir.add(active.dir);
+  }
+  const result: Array<{ id: string; dir: string }> = [];
+
+  for (const id of ids) {
+    if (seenId.has(id)) continue;
+    seenId.add(id);
+    const skill = findSkillById(allSkills, id);
+    if (!skill?.dir) continue;
+    if (seenDir.has(skill.dir)) continue;
+    seenDir.add(skill.dir);
+    result.push({ id: skill.id, dir: skill.dir });
+  }
+
+  return result;
+}
+
+/**
+ * Assign collision-safe staged aliases to resolved ad-hoc skills.
+ *
+ * Every ad-hoc skill receives a deterministic alias of the form
+ * `<basename>-<hash>` where hash is the first 7 hex chars of the MD5 of the
+ * full dir path. This guarantees:
+ *   1. The same folder always gets the same alias regardless of input order.
+ *   2. Two skills with the same basename but different dirs never collide.
+ *   3. Ad-hoc skills never overwrite the project-level active skill copy.
+ */
+export function resolveAdHocSkillsWithAliases(
+  resolved: Array<{ id: string; dir: string }>,
+): Array<{ id: string; dir: string; alias: string }> {
+  return resolved.map(({ id, dir }) => {
+    const basename = path.basename(dir);
+    // Deterministic hash suffix so the same folder always gets the same alias
+    // regardless of input order or concurrent turns.
+    const hash = createHash('md5').update(dir).digest('hex').slice(0, 7);
+    const alias = `${basename}-${hash}`;
+    return { id, dir, alias };
+  });
+}
+
+/**
+ * Derive `skillMode` from a single ad-hoc @-mention skill when no project
+ * skill is active. Returns `undefined` for multi-skill or empty cases.
+ */
+export function resolveAdHocSkillMode(
+  resolved: Array<{ id: string; dir: string }>,
+  allSkills: SkillInfo[],
+): string | undefined {
+  if (resolved.length !== 1) return undefined;
+  return findSkillById(allSkills, resolved[0].id)?.mode;
+}
+
 export function resolveChatExtraAllowedDirs({
   agentId,
   skillsDir,
   designSystemsDir,
   linkedDirs = [],
+  adHocSkillDirs = [],
   codexGeneratedImagesDir,
   existsSync = fs.existsSync,
 }: {
@@ -635,17 +717,26 @@ export function resolveChatExtraAllowedDirs({
   skillsDir?: string | null;
   designSystemsDir?: string | null;
   linkedDirs?: Array<string | null | undefined>;
+  /**
+   * Ad-hoc (@-mention) skill directories. Always reachable regardless of
+   * agentId because the user explicitly summoned the skill for this turn;
+   * the Codex branch below would otherwise drop them along with the rest
+   * of `linkedDirs`, leaving user-installed ad-hoc skill side files
+   * unreadable on projectless Codex runs.
+   */
+  adHocSkillDirs?: Array<string | null | undefined>;
   codexGeneratedImagesDir?: string | null;
   existsSync?: (path: string) => boolean;
 }): string[] {
   const isCodex =
     typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
   const candidates = isCodex
-    ? [codexGeneratedImagesDir]
+    ? [codexGeneratedImagesDir, ...(Array.isArray(adHocSkillDirs) ? adHocSkillDirs : [])]
     : [
         skillsDir,
         designSystemsDir,
         ...(Array.isArray(linkedDirs) ? linkedDirs : []),
+        ...(Array.isArray(adHocSkillDirs) ? adHocSkillDirs : []),
       ];
   return Array.from(
     new Set(
@@ -4067,7 +4158,7 @@ export async function startServer({
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
-        skills: skills.map(({ body, dir: _dir, ...rest }) => ({
+        skills: skills.map(({ body, dir: _dir, rawBody: _rawBody, ...rest }) => ({
           ...rest,
           hasBody: typeof body === 'string' && body.length > 0,
         })),
@@ -4082,7 +4173,7 @@ export async function startServer({
       const skills = await listSkills(SKILLS_DIR);
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
-      const { dir: _dir, ...serializable } = skill;
+      const { dir: _dir, rawBody: _rawBody, ...serializable } = skill;
       res.json(serializable);
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -7580,6 +7671,7 @@ export async function startServer({
     agentId,
     projectId,
     skillId,
+    skillIds,
     designSystemId,
     streamFormat,
     connectedExternalMcp,
@@ -7654,6 +7746,48 @@ export async function startServer({
         console.warn(
           `[plugins] pluginSkillBody load failed: ${err?.message ?? err}`,
         );
+      }
+    }
+
+    // Per-turn skills picked via the composer's @-mention popover. They
+    // never persist on the project — we just append their bodies after the
+    // primary skill so the agent sees one combined block this turn.
+    let adHocSkillDirs: Array<{ id: string; dir: string; alias: string }> = [];
+    if (Array.isArray(skillIds) && skillIds.length > 0) {
+      const allSkills = await listAllSkillLikeEntries();
+      const resolved = collectAdHocSkillDirs(skillIds, effectiveSkillId, allSkills);
+      adHocSkillDirs = resolveAdHocSkillsWithAliases(resolved);
+
+      const blocks = [];
+      const baseBody = skillBody && skillBody.trim().length > 0 ? skillBody : '';
+      for (const { id, dir, alias } of adHocSkillDirs) {
+        const extra = findSkillById(allSkills, id);
+        if (!extra) continue;
+        if (Array.isArray(extra.craftRequires)) {
+          for (const c of extra.craftRequires) {
+            if (!skillCraftRequires.includes(c)) skillCraftRequires.push(c);
+          }
+        }
+        const bodyWithAlias = withSkillRootPreamble(
+          extra.rawBody ?? extra.body,
+          dir,
+          alias,
+        );
+        blocks.push(
+          `\n\n---\n\n## Composed skill — ${extra.name || id}\n\n${bodyWithAlias.trim()}`
+        );
+      }
+      if (blocks.length > 0) {
+        skillBody = baseBody + blocks.join('');
+        if (!skillName) {
+          skillName = adHocSkillDirs.length === 1
+            ? findSkillById(allSkills, adHocSkillDirs[0].id)?.name ?? null
+            : 'composed';
+        }
+        // When no project skill is active, propagate the single ad-hoc skill's mode
+        if (!skillMode) {
+          skillMode = resolveAdHocSkillMode(adHocSkillDirs, allSkills);
+        }
       }
     }
 
@@ -7918,7 +8052,7 @@ export async function startServer({
     // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
     // the same panel-eligibility decision down to the spawn-path
     // orchestrator gate so prompt and orchestrator stay in lockstep.
-    return { prompt, activeSkillDir, critiqueShouldRun };
+    return { prompt, activeSkillDir, adHocSkillDirs, critiqueShouldRun };
   };
 
   // Plan §3.I1 / §3.D / spec §10.1: fire the pipeline schedule on a
@@ -8008,6 +8142,7 @@ export async function startServer({
       assistantMessageId,
       clientRequestId,
       skillId,
+      skillIds,
       designSystemId,
       attachments = [],
       commentAttachments = [],
@@ -8252,11 +8387,12 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
-    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
+    const { prompt: daemonSystemPrompt, activeSkillDir, adHocSkillDirs, critiqueShouldRun } =
       await composeDaemonSystemPrompt({
         agentId,
         projectId,
         skillId,
+        skillIds,
         designSystemId,
         streamFormat: def?.streamFormat ?? 'plain',
         connectedExternalMcp,
@@ -8306,6 +8442,29 @@ export async function startServer({
         );
       }
     }
+    // Stage each ad-hoc (@-mention) skill directory so its side files
+    // (assets/, references/, example.html) are reachable via cwd-relative
+    // paths, just like the project-level activeSkillDir above. Each skill
+    // carries a collision-safe `alias` (computed by
+    // `resolveAdHocSkillsWithAliases`) that is already consistent with the
+    // preamble regenerated in `composeDaemonSystemPrompt`, so the relative
+    // path advertised to the agent matches the on-disk staged copy.
+    if (cwd && adHocSkillDirs.length > 0) {
+      for (const { dir, id, alias } of adHocSkillDirs) {
+        if (dir === activeSkillDir) continue;
+        const result = await stageActiveSkill(
+          cwd,
+          alias,
+          dir,
+          (msg) => console.warn(msg),
+        );
+        if (!result.staged) {
+          console.warn(
+            `[od] ad-hoc skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+          );
+        }
+      }
+    }
     // Resolve the agent's effective working directory once and use it
     // everywhere the agent could read it (buildArgs runtimeContext, spawn
     // cwd, ACP session new). Falling back to PROJECT_ROOT — rather than
@@ -8331,6 +8490,13 @@ export async function startServer({
       skillsDir: SKILLS_DIR,
       designSystemsDir: DESIGN_SYSTEMS_DIR,
       linkedDirs,
+      // Pass ad-hoc skill dirs through the dedicated channel so they
+      // remain reachable on Codex runs (whose branch in
+      // `resolveChatExtraAllowedDirs` drops `linkedDirs` entirely) and
+      // on projectless runs (where `cwd` is null, the stage loop above
+      // is skipped, and the agent must reach side files via absolute
+      // paths under `extraAllowedDirs`).
+      adHocSkillDirs: adHocSkillDirs.map((r) => r.dir),
       codexGeneratedImagesDir,
     });
     const codexImagegenOverride = resolveGrantedCodexImagegenOverride({

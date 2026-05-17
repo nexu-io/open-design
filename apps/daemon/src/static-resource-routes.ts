@@ -72,7 +72,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
-        skills: skills.map(({ body, dir: _dir, ...rest }) => ({
+        skills: skills.map(({ body, dir: _dir, rawBody: _rawBody, ...rest }) => ({
           ...rest,
           hasBody: typeof body === 'string' && body.length > 0,
         })),
@@ -87,7 +87,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
-      const { dir: _dir, ...serializable } = skill;
+      const { dir: _dir, rawBody: _rawBody, ...serializable } = skill;
       res.json(serializable);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
@@ -102,7 +102,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       const templates = await listAllDesignTemplates();
       res.json({
-        designTemplates: templates.map(({ body, dir: _dir, ...rest }) => ({
+        designTemplates: templates.map(({ body, dir: _dir, rawBody: _rawBody, ...rest }) => ({
           ...rest,
           hasBody: typeof body === 'string' && body.length > 0,
         })),
@@ -117,7 +117,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const templates = await listAllDesignTemplates();
       const template = findSkillById(templates, req.params.id);
       if (!template) return res.status(404).json({ error: 'design template not found' });
-      const { dir: _dir, ...serializable } = template;
+      const { dir: _dir, rawBody: _rawBody, ...serializable } = template;
       res.json(serializable);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
@@ -140,7 +140,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           'imported skill was not found in catalog',
         );
       }
-      const { dir: _dir, body: _body, ...serializable } = skill;
+      const { dir: _dir, body: _body, rawBody: _rawBody, ...serializable } = skill;
       res.status(201).json({
         skill: {
           ...serializable,
@@ -183,7 +183,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           'updated skill was not found in catalog',
         );
       }
-      const { dir: _dir, body: _body, ...serializable } = updated;
+      const { dir: _dir, body: _body, rawBody: _rawBody, ...serializable } = updated;
       res.json({
         skill: {
           ...serializable,
