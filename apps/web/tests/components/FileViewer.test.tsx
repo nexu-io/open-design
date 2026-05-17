@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -429,6 +429,69 @@ describe('FileViewer SVG artifacts', () => {
       expect(activations.at(-1)?.html).toContain('__odArtifactBootCount');
       expect(activations.at(-1)?.html).toContain('data-od-selection-bridge');
     });
+  });
+
+  it('uses the next file URL immediately when switching URL-loaded HTML previews', () => {
+    const first = baseFile({
+      name: 'first.html',
+      path: 'first.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'First',
+        entry: 'first.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const second = {
+      ...first,
+      name: 'second.html',
+      path: 'second.html',
+      artifactManifest: {
+        ...first.artifactManifest!,
+        title: 'Second',
+        entry: 'second.html',
+      },
+    };
+    const observedCommittedSrcs: Array<string | null> = [];
+
+    function Switcher() {
+      const [file, setFile] = useState<ProjectFile>(first);
+      const hostRef = useRef<HTMLDivElement | null>(null);
+      useLayoutEffect(() => {
+        observedCommittedSrcs.push(
+          hostRef.current
+            ?.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]')
+            ?.getAttribute('src') ?? null,
+        );
+      });
+      return (
+        <div ref={hostRef}>
+          <button type="button" onClick={() => setFile(second)}>Switch file</button>
+          <FileViewer projectId="project-1" projectKind="prototype" file={file}
+            liveHtml="<html><body>preview</body></html>"
+          />
+        </div>
+      );
+    }
+
+    const { container } = render(<Switcher />);
+    const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
+    const initialFrame = getFrame();
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
+
+    const observationsBeforeSwitch = observedCommittedSrcs.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
+
+    const nextFrame = getFrame();
+    expect(nextFrame).toBe(initialFrame);
+    expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0',
+    );
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {

@@ -3907,6 +3907,12 @@ function HtmlViewer({
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
+  const activePreviewSrcUrl = (
+    previewSrcUrl === basePreviewSrcUrl ||
+    previewSrcUrl.startsWith(`${basePreviewSrcUrl}&`)
+  )
+    ? previewSrcUrl
+    : basePreviewSrcUrl;
   useEffect(() => {
     setPreviewSrcUrl(basePreviewSrcUrl);
   }, [basePreviewSrcUrl]);
@@ -3961,7 +3967,7 @@ function HtmlViewer({
   }, [useUrlLoadPreview]);
   const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
-  const urlTransportSrc = useUrlLoadPreview ? previewSrcUrl : 'about:blank';
+  const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     const win = target?.contentWindow;
     if (!win || !srcDoc || useUrlLoadPreview || !useLazySrcDocTransport) return false;
@@ -6185,7 +6191,7 @@ function HtmlViewer({
               title="present"
               sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
-              src={previewSrcUrl}
+              src={activePreviewSrcUrl}
             />
           ) : (
             <iframe
