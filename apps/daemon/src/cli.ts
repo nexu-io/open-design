@@ -288,6 +288,9 @@ startServer({ port, host, returnServer: true }).then((started) => {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  process.on('unhandledRejection', (reason, _promise) => {
+    console.error('[od] unhandled rejection:', reason);
+  });
   console.log(`[od] listening on ${url}`);
   if (open) {
     openBrowser(url);
@@ -4286,6 +4289,9 @@ async function runDaemonStart(flags) {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  process.on('unhandledRejection', (reason, _promise) => {
+    console.error('[od] unhandled rejection:', reason);
+  });
   console.log(`[od] listening on ${url} (${headless ? 'headless' : 'desktop'})`);
   if (!headless) {
     const opener = process.platform === 'darwin' ? 'open'

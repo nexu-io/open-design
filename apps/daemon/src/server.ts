@@ -231,7 +231,6 @@ import {
   resolveProjectDir,
   sanitizeName,
   searchProjectFiles,
-  resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
 } from './projects.js';
