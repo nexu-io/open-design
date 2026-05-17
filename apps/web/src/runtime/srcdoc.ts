@@ -192,6 +192,10 @@ function injectPaletteBridge(
   var SAVED = '__odPaletteSaved__';
   var MIN_SAT = 0.08;
   var WALK_LIMIT = 12000;
+  var STYLE_RULE_LIMIT = 5000;
+  var ROOT_SELECTOR = /(^|,)\\s*(:root|html|body|:host)\\s*($|,)/;
+  var varApplied = Object.create(null);
+  var probeEl = null;
   function parseRgb(s){
     var str = String(s||'').trim();
     if (!str || str === 'transparent' || str === 'none') return null;
@@ -246,7 +250,65 @@ function injectPaletteBridge(
     var sat = Math.max(hsl.s, palette.satFloor * 0.7);
     return hslStr(palette.hue, sat, hsl.l);
   }
+  function normalizeColor(value){
+    var raw = String(value||'').trim();
+    if (!raw) return null;
+    var direct = parseRgb(raw);
+    if (direct) return direct;
+    if (raw.indexOf('var(') === 0 || raw.indexOf('--') === 0) return null;
+    if (!probeEl){
+      probeEl = document.createElement('div');
+      probeEl.style.display = 'none';
+      (document.body || document.documentElement).appendChild(probeEl);
+    }
+    probeEl.style.color = '';
+    try { probeEl.style.color = raw; } catch (_){ return null; }
+    if (!probeEl.style.color) return null;
+    return parseRgb(probeEl.style.color);
+  }
+  function isRootSelector(selector){
+    return !!selector && ROOT_SELECTOR.test(String(selector));
+  }
+  function forEachStyleRule(rules, visit, budget){
+    if (!rules || !budget.left) return;
+    for (var i=0; i<rules.length && budget.left>0; i++){
+      var rule = rules[i];
+      budget.left--;
+      if (rule.selectorText && rule.style && isRootSelector(rule.selectorText)) visit(rule);
+      if (rule.cssRules && rule.cssRules.length) forEachStyleRule(rule.cssRules, visit, budget);
+    }
+  }
+  function applyVarTint(palette){
+    var sheets = document.styleSheets;
+    if (!sheets || !sheets.length) return;
+    var budget = { left: STYLE_RULE_LIMIT };
+    for (var i=0; i<sheets.length; i++){
+      var sheet = sheets[i];
+      var rules = null;
+      try { rules = sheet.cssRules; } catch (_){ continue; }
+      forEachStyleRule(rules, function(rule){
+        var decl = rule.style;
+        for (var j=0; j<decl.length; j++){
+          var name = decl[j];
+          if (name.indexOf('--') !== 0) continue;
+          var raw = decl.getPropertyValue(name);
+          var color = normalizeColor(raw);
+          var hsl = chromatic(color);
+          if (!hsl) continue;
+          document.documentElement.style.setProperty(name, shift(hsl, palette));
+          varApplied[name] = true;
+        }
+      }, budget);
+    }
+  }
+  function restoreVars(){
+    for (var name in varApplied){
+      document.documentElement.style.setProperty(name, '');
+    }
+    varApplied = Object.create(null);
+  }
   function restoreAll(){
+    restoreVars();
     var nodes = document.querySelectorAll('['+ATTR+']');
     for (var i=0;i<nodes.length;i++){
       var el = nodes[i], saved = el[SAVED];
@@ -264,6 +326,7 @@ function injectPaletteBridge(
   function applyTint(id){
     var palette = PALETTES[id];
     if (!palette) return;
+    applyVarTint(palette);
     var all = document.body ? document.body.querySelectorAll('*') : [];
     for (var i=0; i<all.length && i<WALK_LIMIT; i++){
       var el = all[i], cs = getComputedStyle(el), saved = {}, changed = false;
