@@ -6116,6 +6116,10 @@ function HtmlViewer({
                   setActiveCommentTarget((current) => {
                     if (!current || !current.podMembers) return current;
                     const nextMembers = removePodMember(current.podMembers, elementId);
+                    if (nextMembers.length === 0) {
+                      clearBoardComposer();
+                      return null;
+                    }
                     return { ...current, podMembers: nextMembers, memberCount: nextMembers.length };
                   });
                 }}
