@@ -5397,11 +5397,6 @@ a.avatar-item:visited {
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
-  /* Hard-stop at top/bottom: disable both scroll chaining and the element's
-     own rubber-band. The body's parents are transparent up to the gray
-     `--bg`, so any rubber-band travel briefly exposes that gray above/below
-     the white card. `none` removes the rubber-band entirely. */
-  overscroll-behavior: none;
 }
 .newproj-title {
   margin: 0;
