@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-cyberpunk-anime-portrait-with-neon-face-text",
+  "title": "Profile / Avatar - Cyberpunk Anime Portrait with Neon Face Text",
+  "version": "0.1.0",
+  "description": "A stylish neon-soaked anime portrait for posters, social media art, or futuristic branding visuals.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Anifun AI",
+    "url": "https://x.com/Anifun_AI/status/2049393871642345834#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "anime",
+    "cinematic",
+    "cyberpunk"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A dramatic cyberpunk anime close-up portrait of a white-haired young man in side profile facing right, with spiky silver hair, pale skin, and a black blindfold covering his eyes. He wears a high-collar dark coat and stands in a neon-lit futuristic city at night. Bright electric-blue glowing text is projected across the side of his face, reading exactly {argument name=\"face text\" default=\"GPT IMAGE 2\"} in three stacked lines. The mood is cool, mysterious, and high-energy, with deep black shadows, saturated blue and violet lighting, reflective highlights on the skin and hair, and a cinematic anime look reminiscent of modern supernatural action series. The background is a blurred urban street with dense vertical neon signs and holographic billboards; include 1 large vertical sign on the right with Japanese characters, plus at least 6 additional smaller glowing signs scattered in the distance. Use strong rim lighting, soft bloom, shallow depth of field, high contrast, ultra-detailed digital illustration, and a sleek sci-fi atmosphere.",
+        "zh-CN": "使用这个插件完成以下任务：A dramatic cyberpunk anime close-up portrait of a white-haired young man in side profile facing right, with spiky silver hair, pale skin, and a black blindfold covering his eyes. He wears a high-collar dark coat and stands in a neon-lit futuristic city at night. Bright electric-blue glowing text is projected across the side of his face, reading exactly {argument name=\"face text\" default=\"GPT IMAGE 2\"} in three stacked lines. The mood is cool, mysterious, and high-energy, with deep black shadows, saturated blue and violet lighting, reflective highlights on the skin and hair, and a cinematic anime look reminiscent of modern supernatural action series. The background is a blurred urban street with dense vertical neon signs and holographic billboards; include 1 large vertical sign on the right with Japanese characters, plus at least 6 additional smaller glowing signs scattered in the distance. Use strong rim lighting, soft bloom, shallow depth of field, high contrast, ultra-detailed digital illustration, and a sleek sci-fi atmosphere."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

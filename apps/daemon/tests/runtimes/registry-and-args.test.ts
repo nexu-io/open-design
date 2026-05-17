@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, withPlatform, writeFileSync,
+  AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 
 test('AGENT_DEFS ids are unique', () => {
@@ -138,22 +138,24 @@ test('codex model picker includes current OpenAI choices in priority order', asy
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {
-    const codexBin = join(dir, 'codex');
-    writeFileSync(
-      codexBin,
-      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
-    );
-    chmodSync(codexBin, 0o755);
-    process.env.OD_AGENT_HOME = dir;
-    process.env.PATH = dir;
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
 
-    const agents = await detectAgents();
-    const detected = agents.find((agent) => agent.id === 'codex');
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
 
-    assert.ok(detected);
-    assert.equal(detected.available, true);
-    assert.equal(detected.version, 'codex 1.0.0');
-    assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.version, 'codex 1.0.0');
+      assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -122,6 +122,11 @@ type ProjectMetadata = {
       url?: string | null;
     } | null;
   } | null;
+  contextPlugins?: Array<{
+    id?: string | null;
+    title?: string | null;
+    description?: string | null;
+  }> | null;
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 type AudioVoiceOption = {
@@ -136,6 +141,20 @@ export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
 This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+
+const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
+
+---
+
+## Active design system visual direction
+
+Active design system exception: the active design system is the visual direction for this project. Use its DESIGN.md palette, typography, spacing, component rules, and theme tokens as the source of truth for color and mood.
+
+- Do not ask the user to pick a separate theme color, visual direction, palette, typography mood, or direction card.
+- Do not emit a direction question-form, a \`direction-cards\` picker, or any visual-direction card while an active design system is present.
+- If an earlier discovery answer asks to "Pick a direction for me", treat that as already satisfied by the active design system and continue with the plan.
+- When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
+`;
 
 export interface ComposeInput {
   agentId?: string | null | undefined;
@@ -221,6 +240,19 @@ export interface ComposeInput {
   // confuses the user.
   connectedExternalMcp?: ReadonlyArray<{ id: string; label?: string | undefined }>
     | undefined;
+  // Optional `## Active plugin` / `## Plugin inputs` block. The daemon's
+  // plugin module renders this from an AppliedPluginSnapshot; we splice
+  // it in after the active skill so the plugin description sits next to
+  // its companion skill body in the prompt. Pass undefined when no
+  // plugin is bound to the run.
+  pluginBlock?: string | undefined;
+  // Plan §3.L2 / spec §23.4 — pre-rendered `## Active stage: <id>`
+  // blocks (one per pipeline stage active for the run). The daemon's
+  // pipeline runner builds these from `loadAtomBodies()` +
+  // `renderActiveStageBlock()` when the OD_BUNDLED_ATOM_PROMPTS env
+  // flag is set; otherwise this stays undefined and the prompt
+  // composer's hard-coded constants keep their precedence (back-compat).
+  activeStageBlocks?: ReadonlyArray<string> | undefined;
   // Free-form instructions the user set at the global (user-level)
   // settings panel. Injected after personal memory and before the
   // project-level instructions.
@@ -251,6 +283,8 @@ export function composeSystemPrompt({
   critiqueBrand,
   critiqueSkill,
   connectedExternalMcp,
+  pluginBlock,
+  activeStageBlocks,
   streamFormat,
   userInstructions,
   projectInstructions,
@@ -260,6 +294,7 @@ export function composeSystemPrompt({
   // checklist + critique before <artifact>) win precedence over softer
   // wording later in the official base prompt.
   const parts: string[] = [];
+  const activeDesignSystemBody = designSystemBody?.trim();
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -303,9 +338,9 @@ export function composeSystemPrompt({
     );
   }
 
-  if (designSystemBody && designSystemBody.trim().length > 0) {
+  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(
-      `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${designSystemBody.trim()}`,
+      `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
   }
 
@@ -347,6 +382,24 @@ export function composeSystemPrompt({
     );
   }
 
+  if (pluginBlock && pluginBlock.trim().length > 0) {
+    parts.push(pluginBlock);
+  }
+
+  // Plan §3.L2 / spec §23.4 — splice per-stage atom blocks immediately
+  // after the active plugin block. Empty entries are skipped so a
+  // pipeline whose stages don't resolve any bundled atom bodies
+  // produces zero extra prompt mass. The active-skill body above
+  // remains the precedence carrier; these blocks add the stage-by-
+  // stage atom guidance that spec §23.3.2 calls out.
+  if (Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
+    for (const block of activeStageBlocks) {
+      if (typeof block === 'string' && block.trim().length > 0) {
+        parts.push(block);
+      }
+    }
+  }
+
   const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
   if (metaBlock) parts.push(metaBlock);
 
@@ -367,10 +420,24 @@ export function composeSystemPrompt({
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
   const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
+  const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
+  } else if (isFreeformProject && !hasSkillSeed) {
+    // Freeform / kind=other projects skip the kind picker entirely and
+    // land here. If the user's brief is a deck/keynote/slides ("讲解",
+    // "presentation", "make a deck"), the agent used to invent its own
+    // scale-to-fit + slide visibility + nav script from scratch and
+    // shipped subtle CSS specificity bugs (per-slide layout classes
+    // overriding `.slide { display:none }`). Inject the same framework
+    // here, prefixed with a one-line conditional so the agent only
+    // adopts it when the brief actually is a deck — otherwise the
+    // directive is read as background reference and ignored.
+    parts.push(
+      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
+    );
   }
 
   const isMediaSurface =
@@ -409,8 +476,25 @@ export function composeSystemPrompt({
     parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 
+  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+    parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
+  }
+
   const mcpDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
   if (mcpDirective) parts.push(mcpDirective);
+
+  // Claude only: nudge the model toward the `AskUserQuestion` tool for
+  // mid-conversation clarifications. Without this hint Claude tends to fall
+  // back to a markdown bulleted list of options, which the chat UI cannot
+  // turn into clickable buttons. Discovery (turn 1) is still owned by the
+  // `<question-form>` flow defined in DISCOVERY_AND_PHILOSOPHY; this only
+  // covers follow-ups where the next action depends on a small set of
+  // choices the user can pick quickly.
+  if (agentId === 'claude') {
+    parts.push(
+      "\n\n---\n\n## Clarifying questions\n\nWhen you need a mid-conversation clarification AND the natural answer is one of a small finite set of choices (2-4 options per question), call the `AskUserQuestion` tool instead of writing a bulleted list in markdown. The host chat renders the tool call as inline choice buttons; a markdown list renders as plain text and forces the user to type a reply. Skip the tool when the answer is naturally free-form text, when the answer needs more than ~4 options, or when you only have one yes/no choice to ask. First-turn discovery still uses the `<question-form id=\"discovery\">` workflow described earlier; `AskUserQuestion` is for follow-ups only.\n\n**When you call `AskUserQuestion`, that tool call is the entire response.** Do NOT also write the same questions or options as markdown text alongside it, do NOT add a trailing prose paragraph like \"what sounds right?\", do NOT hedge by listing the options twice. Emit the tool call and stop generating tokens. The host is waiting on the tool's `tool_result` and will resume your turn the moment the user answers. Anything you write before, between, or after the tool call in the same message just duplicates what the card already shows and confuses the user.",
+    );
+  }
 
   return parts.join('');
 }
@@ -760,6 +844,25 @@ function renderMetadataBlock(
     lines.push(
       `- **inspirationDesignSystemIds**: ${metadata.inspirationDesignSystemIds.join(', ')} — the user picked these systems as *additional* inspiration alongside the primary one. Borrow palette accents, typographic personality, or component patterns from them; don't replace the primary system's tokens.`,
     );
+  }
+
+  if (Array.isArray(metadata.contextPlugins) && metadata.contextPlugins.length > 0) {
+    lines.push('');
+    lines.push('### @ plugin context');
+    lines.push(
+      'The user selected these plugins as additive context via @ mentions. Treat them as requested references to combine with the brief; only the explicit active plugin block, if present, is the executable/pinned plugin snapshot.',
+    );
+    for (const plugin of metadata.contextPlugins) {
+      const id = typeof plugin.id === 'string' ? plugin.id : '';
+      const title = typeof plugin.title === 'string' && plugin.title.trim().length > 0
+        ? plugin.title.trim()
+        : id;
+      if (!id && !title) continue;
+      const description = typeof plugin.description === 'string' && plugin.description.trim().length > 0
+        ? ` — ${plugin.description.trim()}`
+        : '';
+      lines.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
+    }
   }
 
   // Curated prompt template reference for image/video projects. Inlined

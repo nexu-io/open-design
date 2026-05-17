@@ -1451,6 +1451,72 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
   }
 }
 
+// Fetch the sandboxed HTML preview the daemon serves for a plugin.
+// Mirrors fetchSkillExample's discriminated result so the modal can
+// surface a Retry button instead of staying stuck at "Loading…" when
+// a plugin ships no preview entry or the asset is missing on disk.
+export async function fetchPluginPreviewHtml(
+  id: string,
+): Promise<SkillExampleResult> {
+  try {
+    const resp = await fetch(
+      `/api/plugins/${encodeURIComponent(id)}/preview`,
+    );
+    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    return { html: await resp.text() };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'network error';
+    return { error: message };
+  }
+}
+
+// Fetch a single example output by stem (matches the basename of the
+// `od.useCase.exampleOutputs[].path` minus its extension).
+export async function fetchPluginExampleHtml(
+  pluginId: string,
+  stem: string,
+): Promise<SkillExampleResult> {
+  try {
+    const resp = await fetch(
+      `/api/plugins/${encodeURIComponent(pluginId)}/example/${encodeURIComponent(stem)}`,
+    );
+    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    return { html: await resp.text() };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'network error';
+    return { error: message };
+  }
+}
+
+// Fetch a raw text asset shipped inside a plugin (DESIGN.md,
+// SKILL.md, README.md, etc.). Returns null on any error so the
+// caller can fall back to a placeholder; callers that need a
+// distinguishable failure should switch to the discriminated
+// SkillExampleResult shape used by the HTML helpers above.
+export async function fetchPluginAssetText(
+  pluginId: string,
+  relpath: string,
+): Promise<string | null> {
+  try {
+    const resp = await fetch(
+      `/api/plugins/${encodeURIComponent(pluginId)}/asset/${encodePluginAssetPath(relpath)}`,
+    );
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
+function encodePluginAssetPath(relpath: string): string {
+  return relpath
+    .replace(/^\.\//, '')
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+}
+
 export async function installSkill(
   input: InstallInput,
 ): Promise<{ skill: SkillSummary } | { error: string }> {

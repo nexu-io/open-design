@@ -1,0 +1,325 @@
+---
+import '../../globals.css';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Header } from '../../_components/header';
+import { getCatalogCounts } from '../../_lib/catalog';
+import { getPublicPlugins, getRegistryCounts } from '../../plugin-registry';
+
+const plugins = getPublicPlugins();
+const counts = getRegistryCounts(plugins);
+const catalogCounts = await getCatalogCounts();
+const previewCount = plugins.filter((plugin) => plugin.preview).length;
+const surfaceCount = new Set(
+  plugins.map((plugin) => plugin.mode ?? plugin.surface ?? plugin.visualKind),
+).size;
+const featuredPlugins = plugins
+  .filter((plugin) =>
+    Boolean(plugin.preview) ||
+    plugin.visualKind === 'deck' ||
+    plugin.visualKind === 'image' ||
+    plugin.visualKind === 'video',
+  )
+  .slice(0, 3);
+const showcasePlugins =
+  featuredPlugins.length >= 3 ? featuredPlugins : plugins.slice(0, 3);
+const site = Astro.site ?? new URL('https://open-design.ai');
+const canonical = new URL('/plugins/', site).toString();
+const title = 'Open Design Plugins — Official and community registries';
+const description = `Browse ${counts.all} Open Design plugins from official and community registries. Search installable agent-native design workflows with stable vendor/plugin IDs.`;
+const headerHtml = renderToStaticMarkup(
+  createElement(Header, { counts: catalogCounts, brandHref: '/' }),
+);
+const itemListJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'Open Design Plugin Registry',
+  description,
+  url: canonical,
+  numberOfItems: counts.all,
+  itemListElement: plugins.slice(0, 120).map((plugin, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    url: new URL(plugin.detailHref, site).toString(),
+    name: plugin.title,
+    description: plugin.description,
+  })),
+};
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Open Design',
+      item: new URL('/', site).toString(),
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Plugins',
+      item: canonical,
+    },
+  ],
+};
+
+const displayKind = (plugin: (typeof plugins)[number]) =>
+  plugin.mode ?? plugin.surface ?? plugin.visualKind;
+
+const primaryMeta = (plugin: (typeof plugins)[number]) =>
+  [displayKind(plugin), plugin.preview?.label]
+    .filter(Boolean)
+    .join(' · ');
+---
+
+<!doctype html>
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <title>{title}</title>
+    <meta name='description' content={description} />
+    <meta name='robots' content='index,follow' />
+    <link rel='canonical' href={canonical} />
+    <meta property='og:type' content='website' />
+    <meta property='og:site_name' content='Open Design' />
+    <meta property='og:title' content={title} />
+    <meta property='og:description' content={description} />
+    <meta property='og:url' content={canonical} />
+    <meta name='twitter:card' content='summary_large_image' />
+    <meta name='twitter:title' content={title} />
+    <meta name='twitter:description' content={description} />
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(itemListJsonLd)}></script>
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)}></script>
+  </head>
+  <body>
+    <div class='side-rail right' aria-hidden='true'>
+      <span class='rail-text'>Open Design Registry · Official · Community</span>
+    </div>
+    <div class='side-rail left' aria-hidden='true'>
+      <span class='rail-text'>vendor/plugin-name · marketplace.json</span>
+    </div>
+
+    <div class='shell plugin-shell'>
+      <div class='topbar'>
+        <div class='container topbar-inner'>
+          <span><b>OD / REGISTRY</b>&nbsp;·&nbsp;Public index</span>
+          <span class='mid'>
+            <span>Official · Community · Self-hosted</span>
+            <span>GitHub-backed today · database-ready later</span>
+          </span>
+          <span class='right'>
+            <a class='topbar-link' href='https://github.com/nexu-io/open-design/tree/main/plugins/registry' target='_blank' rel='noreferrer noopener'>
+              Source JSON
+            </a>
+          </span>
+        </div>
+      </div>
+
+      <Fragment set:html={headerHtml} />
+
+      <main id='top' class='plugin-directory'>
+        <section class='plugin-hero'>
+          <div class='container plugin-hero__grid'>
+            <div>
+              <span class='label'>Plugin Registry · public ecosystem</span>
+              <h1>Browse agent-native design plugins with live previews.</h1>
+              <p>
+                Discover installable workflows, decks, image templates, design
+                systems, and atomic capabilities. Each entry keeps a stable
+                vendor/plugin ID, clear provenance, and a visual cue so browsing
+                the registry feels closer to choosing a creative tool than reading
+                a manifest dump.
+              </p>
+              <div class='plugin-hero__actions'>
+                <a class='btn btn-primary' href='#registry-results'>
+                  Browse registry
+                </a>
+                <a class='btn btn-ghost' href='https://raw.githubusercontent.com/nexu-io/open-design/main/plugins/registry/community/open-design-marketplace.json' target='_blank' rel='noreferrer noopener'>
+                  Community marketplace.json
+                </a>
+              </div>
+            </div>
+            <aside class='plugin-hero__panel' aria-label='Registry preview'>
+              <div class='plugin-showcase__head'>
+                <span>Registry preview</span>
+                <strong>{counts.all}</strong>
+                <small>installable entries</small>
+              </div>
+              <div class='plugin-showcase__list'>
+                {showcasePlugins.map((plugin, index) => (
+                  <a
+                    class={`plugin-showcase-item plugin-showcase-item--${plugin.visualKind}`}
+                    href={plugin.detailHref}
+                  >
+                    <span class='plugin-showcase-item__visual' aria-hidden='true'>
+                      {plugin.preview?.poster ? (
+                        <img src={plugin.preview.poster} alt='' loading='lazy' />
+                      ) : (
+                        <>
+                          <span />
+                          <span />
+                          <span />
+                        </>
+                      )}
+                    </span>
+                    <span class='plugin-showcase-item__copy'>
+                      <small>0{index + 1} · {displayKind(plugin)}</small>
+                      <strong>{plugin.title}</strong>
+                      <em>{plugin.id}</em>
+                    </span>
+                  </a>
+                ))}
+              </div>
+              <dl class='plugin-hero__stats'>
+                <div>
+                  <dt>{counts.official}</dt>
+                  <dd>official</dd>
+                </div>
+                <div>
+                  <dt>{previewCount}</dt>
+                  <dd>with preview</dd>
+                </div>
+                <div>
+                  <dt>{surfaceCount}</dt>
+                  <dd>surfaces</dd>
+                </div>
+              </dl>
+            </aside>
+          </div>
+        </section>
+
+        <section class='plugin-registry-section' id='registry-results'>
+          <div class='container'>
+            <div class='plugin-toolbar' data-plugin-toolbar>
+              <div>
+                <span class='label'>Available from sources</span>
+                <h2>Registry entries</h2>
+              </div>
+              <label class='plugin-search'>
+                <span class='sr-only'>Search plugins</span>
+                <input data-plugin-search type='search' placeholder='Search plugins, workflows, vendors...' autocomplete='off' />
+              </label>
+            </div>
+
+            <div class='plugin-filter-row' aria-label='Registry filters'>
+              <button class='plugin-filter is-active' type='button' data-plugin-filter='all' aria-pressed='true'>
+                All <span>{counts.all}</span>
+              </button>
+              <button class='plugin-filter' type='button' data-plugin-filter='official' aria-pressed='false'>
+                Official <span>{counts.official}</span>
+              </button>
+              <button class='plugin-filter' type='button' data-plugin-filter='community' aria-pressed='false'>
+                Community <span>{counts.community}</span>
+              </button>
+            </div>
+
+            <p class='plugin-result-count'>
+              <span data-plugin-visible-count>{counts.all}</span> visible plugins
+            </p>
+
+            <div class='plugin-card-grid'>
+              {plugins.map((plugin) => (
+                <article
+                  class='plugin-card'
+                  data-plugin-card
+                  data-registry={plugin.registryId}
+                  data-search={plugin.searchText}
+                >
+                  <a
+                    class={`plugin-card__preview plugin-card__preview--${plugin.visualKind}`}
+                    href={plugin.detailHref}
+                    aria-label={`Open ${plugin.title} details`}
+                  >
+                    {plugin.preview?.poster ? (
+                      <img src={plugin.preview.poster} alt='' loading='lazy' />
+                    ) : (
+                      <span class='plugin-card__mock' aria-hidden='true'>
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    )}
+                    <span class='plugin-card__preview-label'>
+                      {primaryMeta(plugin)}
+                    </span>
+                  </a>
+                  <div class='plugin-card__meta'>
+                    <span class={`plugin-badge plugin-badge--${plugin.registryId}`}>
+                      {plugin.registryName}
+                    </span>
+                    <span>{plugin.version}</span>
+                  </div>
+                  <h3>
+                    <a href={plugin.detailHref}>{plugin.title}</a>
+                  </h3>
+                  <code>{plugin.id}</code>
+                  <p>{plugin.description}</p>
+                  <div class='plugin-tags'>
+                    {plugin.tags.slice(0, 5).map((tag) => <span>{tag}</span>)}
+                    {plugin.capabilities.slice(0, 3).map((capability) => (
+                      <span>{capability}</span>
+                    ))}
+                  </div>
+                  <div class='plugin-card__footer'>
+                    <a href={plugin.detailHref}>Details</a>
+                    <span>{plugin.trust}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script is:inline>
+      const searchInput = document.querySelector('[data-plugin-search]');
+      const cards = Array.from(document.querySelectorAll('[data-plugin-card]'));
+      const filterButtons = Array.from(document.querySelectorAll('[data-plugin-filter]'));
+      const visibleCount = document.querySelector('[data-plugin-visible-count]');
+      let activeFilter = 'all';
+
+      const applyFilters = () => {
+        const query = String(searchInput?.value ?? '').trim().toLowerCase();
+        let total = 0;
+        for (const card of cards) {
+          const matchesFilter = activeFilter === 'all' || card.dataset.registry === activeFilter;
+          const matchesSearch = !query || String(card.dataset.search ?? '').includes(query);
+          const visible = matchesFilter && matchesSearch;
+          card.hidden = !visible;
+          if (visible) total += 1;
+        }
+        if (visibleCount) {
+          visibleCount.textContent = String(total);
+        }
+      };
+
+      searchInput?.addEventListener('input', applyFilters);
+      for (const button of filterButtons) {
+        button.addEventListener('click', () => {
+          activeFilter = button.dataset.pluginFilter ?? 'all';
+          for (const item of filterButtons) {
+            const selected = item === button;
+            item.classList.toggle('is-active', selected);
+            item.setAttribute('aria-pressed', String(selected));
+          }
+          applyFilters();
+        });
+      }
+
+      fetch('https://api.github.com/repos/nexu-io/open-design')
+        .then((response) => response.ok ? response.json() : undefined)
+        .then((repo) => {
+          const count = Number(repo?.stargazers_count);
+          if (!Number.isFinite(count)) return;
+          const formatted = count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count);
+          document.querySelectorAll('[data-github-stars]').forEach((node) => {
+            node.textContent = formatted;
+          });
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

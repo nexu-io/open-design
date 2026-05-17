@@ -42,7 +42,6 @@ describe("win standalone prebundle policy", () => {
 
   it("excludes internal packages replaced by win standalone prebundles", () => {
     for (const packageName of [
-      "@open-design/contracts",
       "@open-design/daemon",
       "@open-design/desktop",
       "@open-design/packaged",
@@ -58,6 +57,12 @@ describe("win standalone prebundle policy", () => {
         }),
       ).toBe(false);
     }
+    expect(
+      shouldInstallInternalPackageForWinPrebundle({
+        packageName: "@open-design/contracts",
+        webOutputMode: "standalone",
+      }),
+    ).toBe(true);
   });
 
   it("documents the explicit code-level bundle boundaries", () => {

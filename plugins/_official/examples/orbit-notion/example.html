@@ -1,0 +1,529 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head><script>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+})();</script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>📒 Notion · 昨日 3 条与你相关</title>
+  <style>
+    :root {
+      --notion-black: #37352F;
+      --notion-gray-text: #787774;
+      --notion-gray-bg: #F1F1EF;
+      --notion-gray-border: #E3E2E0;
+      --notion-gray-light: #F7F6F3;
+      --notion-gray-cover: #E9E5E0;
+      --notion-white: #FFFFFF;
+      --notion-blue: #2383E2;
+      --notion-blue-bg: #D3E5EF;
+      --notion-blue-text: #24548A;
+      --notion-green: #4DAB60;
+      --notion-green-bg: #DBEDDB;
+      --notion-green-text: #1D6B2D;
+      --notion-orange-bg: #FADEC9;
+      --notion-orange-text: #93531D;
+      --notion-yellow-bg: #FDE68A;
+      --notion-callout-bg: #F1F1EF;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Helvetica, 'Apple Color Emoji', Arial, sans-serif, 'Segoe UI Emoji', 'Segoe UI Symbol';
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--notion-black);
+      background: var(--notion-white);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* — pseudo sidebar — */
+    .page-wrapper {
+      display: flex;
+      min-height: 100vh;
+    }
+    .sidebar-hint {
+      width: 4px;
+      background: var(--notion-gray-border);
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .main-area {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* — breadcrumb — */
+    .breadcrumb {
+      padding: 10px 96px;
+      font-size: 14px;
+      color: var(--notion-gray-text);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--notion-gray-border);
+      background: var(--notion-white);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .breadcrumb span { opacity: 0.5; }
+    .breadcrumb a {
+      color: var(--notion-gray-text);
+      text-decoration: none;
+    }
+    .breadcrumb a:hover { color: var(--notion-black); }
+
+    /* — cover — */
+    .cover {
+      height: 220px;
+      position: relative;
+      background:
+        /* vignette */
+        radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(15,10,5,0.45) 100%),
+        /* warm golden light from upper-left */
+        radial-gradient(ellipse at 25% 20%, rgba(180,140,70,0.35) 0%, transparent 60%),
+        /* deep shadow pocket lower-right */
+        radial-gradient(ellipse at 80% 85%, rgba(30,15,10,0.5) 0%, transparent 50%),
+        /* subtle warm highlight center */
+        radial-gradient(ellipse at 55% 40%, rgba(160,110,60,0.25) 0%, transparent 45%),
+        /* base: deep Renaissance brown-black */
+        linear-gradient(160deg, #3a2a1a 0%, #2a1c10 30%, #1e140c 55%, #2c1e14 80%, #3a2818 100%);
+      background-size: 100% 100%;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        /* craquelure-like texture */
+        repeating-linear-gradient(
+          135deg,
+          transparent 0px, transparent 18px,
+          rgba(120,90,50,0.04) 18px, rgba(120,90,50,0.04) 19px
+        ),
+        repeating-linear-gradient(
+          45deg,
+          transparent 0px, transparent 24px,
+          rgba(80,55,30,0.03) 24px, rgba(80,55,30,0.03) 25px
+        );
+      pointer-events: none;
+    }
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        /* gold-leaf accent streak */
+        linear-gradient(100deg,
+          transparent 20%,
+          rgba(195,160,80,0.08) 35%,
+          rgba(210,175,90,0.12) 42%,
+          rgba(195,160,80,0.06) 50%,
+          transparent 65%
+        );
+      pointer-events: none;
+    }
+
+    /* — page body — */
+    .page-content {
+      max-width: 900px;
+      padding: 60px 96px 80px;
+    }
+
+    /* — title — */
+    .page-title {
+      font-size: 40px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+      color: var(--notion-black);
+    }
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--notion-gray-text);
+      margin-bottom: 32px;
+    }
+
+    /* — divider — */
+    .notion-divider {
+      border: none;
+      border-top: 1px solid var(--notion-gray-border);
+      margin: 24px 0;
+    }
+
+    /* — headings — */
+    .notion-h2 {
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.3;
+      margin: 32px 0 8px;
+      color: var(--notion-black);
+    }
+    .notion-h2 .emoji-anchor {
+      margin-right: 6px;
+    }
+
+    /* — bullet list — */
+    .notion-bullet-list {
+      list-style: none;
+      padding-left: 2px;
+    }
+    .notion-bullet-list li {
+      position: relative;
+      padding: 3px 0 3px 24px;
+      font-size: 16px;
+      line-height: 1.65;
+    }
+    .notion-bullet-list li::before {
+      content: "•";
+      position: absolute;
+      left: 6px;
+      color: var(--notion-black);
+    }
+    .notion-bullet-list .page-link {
+      text-decoration: underline;
+      text-decoration-color: var(--notion-gray-border);
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+    .notion-bullet-list .page-link:hover {
+      background: var(--notion-gray-bg);
+      border-radius: 3px;
+    }
+    .notion-bullet-list .meta {
+      color: var(--notion-gray-text);
+      font-size: 14px;
+      margin-left: 4px;
+    }
+    .notion-bullet-list .person {
+      color: var(--notion-black);
+      font-weight: 500;
+    }
+
+    /* — callout — */
+    .notion-callout {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px 16px 16px 12px;
+      background: var(--notion-callout-bg);
+      border-radius: 4px;
+      margin: 16px 0;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .notion-callout .callout-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+      line-height: 1.4;
+    }
+
+    /* — toggle — */
+    .notion-toggle {
+      margin: 12px 0;
+    }
+    .notion-toggle summary {
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1.65;
+      padding: 3px 0 3px 4px;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+      border-radius: 3px;
+    }
+    .notion-toggle summary:hover {
+      background: var(--notion-gray-bg);
+    }
+    .notion-toggle summary::-webkit-details-marker { display: none; }
+    .notion-toggle summary::before {
+      content: "▶";
+      font-size: 10px;
+      color: var(--notion-gray-text);
+      transition: transform 0.15s;
+      flex-shrink: 0;
+      width: 20px;
+      text-align: center;
+    }
+    .notion-toggle[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .notion-toggle .toggle-content {
+      padding: 4px 0 4px 26px;
+      color: var(--notion-gray-text);
+      font-size: 15px;
+    }
+
+    /* — table (database view) — */
+    .notion-table-wrap {
+      margin: 12px 0 24px;
+      border: 1px solid var(--notion-gray-border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .notion-table-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--notion-black);
+      border-bottom: 1px solid var(--notion-gray-border);
+      background: var(--notion-white);
+    }
+    .notion-table-header .db-icon { font-size: 14px; }
+    .notion-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .notion-table th {
+      text-align: left;
+      padding: 6px 12px;
+      font-weight: 400;
+      color: var(--notion-gray-text);
+      border-bottom: 1px solid var(--notion-gray-border);
+      background: var(--notion-gray-light);
+      font-size: 12px;
+    }
+    .notion-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--notion-gray-border);
+      vertical-align: middle;
+    }
+    .notion-table tr:last-child td {
+      border-bottom: none;
+    }
+    .notion-table .cell-title {
+      font-weight: 500;
+      color: var(--notion-black);
+    }
+    .notion-table .cell-title .open-icon {
+      font-size: 12px;
+      color: var(--notion-gray-text);
+      margin-left: 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .notion-table tr:hover .cell-title .open-icon {
+      opacity: 1;
+    }
+
+    /* — tags — */
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+    .tag-blue {
+      background: var(--notion-blue-bg);
+      color: var(--notion-blue-text);
+    }
+    .tag-green {
+      background: var(--notion-green-bg);
+      color: var(--notion-green-text);
+    }
+
+    /* — at mention inline — */
+    .mention {
+      background: rgba(35, 131, 226, 0.1);
+      color: var(--notion-blue);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    /* — responsive — */
+    @media (max-width: 768px) {
+      .breadcrumb, .page-content { padding-left: 24px; padding-right: 24px; }
+
+      .page-title { font-size: 30px; }
+      .notion-table-wrap { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <!-- pseudo sidebar -->
+    <div class="sidebar-hint"></div>
+
+    <div class="main-area">
+      <!-- breadcrumb -->
+      <div class="breadcrumb">
+        <a href="#">Open Orbit</a>
+        <span>/</span>
+        <a href="#">早安简报</a>
+        <span>/</span>
+        <span style="color: var(--notion-black);">5 月 6 日</span>
+      </div>
+
+      <!-- cover -->
+      <div class="cover">
+
+      </div>
+
+      <!-- page content -->
+      <div class="page-content" data-od-id="page-body">
+        <h1 class="page-title" data-od-id="headline">📒 Notion · 昨日 3 条与你相关</h1>
+        <p class="page-subtitle">2026-05-06 早安，Eli · 由 Open Orbit 自动生成</p>
+
+        <hr class="notion-divider" />
+
+        <!-- callout -->
+        <div class="notion-callout" data-od-id="callout">
+          <span class="callout-icon">💡</span>
+          <div>今日简报仅包含 <strong>Notion</strong> 连接器的变更。共 3 条通知，其中 1 条 @ 提到了你。</div>
+        </div>
+
+        <!-- 文档变更 -->
+        <h2 class="notion-h2"><span class="emoji-anchor">📝</span>文档变更</h2>
+        <ul class="notion-bullet-list" data-od-id="doc-changes">
+          <li>
+            <span class="page-link">《Q3 OKR》</span>
+            <span class="person">Marie</span> 编辑了 2 段
+            <span class="meta">· 22:14</span>
+          </li>
+          <li>
+            <span class="page-link">《Onboarding 文档》</span>
+            <span class="person">Bob</span> 新建
+            <span class="meta">· 19:08</span>
+          </li>
+        </ul>
+
+        <hr class="notion-divider" />
+
+        <!-- 评论 / @ 提及 -->
+        <h2 class="notion-h2"><span class="emoji-anchor">💬</span>评论 / @ 提及</h2>
+        <ul class="notion-bullet-list" data-od-id="mentions">
+          <li>
+            <span class="page-link">团队周报</span>
+            <span class="person">Lily</span> 在「设计进度」段落 <span class="mention">@你</span>
+            <span class="meta">· 16:30</span>
+          </li>
+          <li>
+            <span class="page-link">Q3 OKR</span>
+            <span class="person">Bob</span> 留言「这一段需要你确认」
+            <span class="meta">· 22:18</span>
+          </li>
+        </ul>
+
+        <hr class="notion-divider" />
+
+        <!-- 数据库变更 -->
+        <h2 class="notion-h2"><span class="emoji-anchor">🗄️</span>数据库变更</h2>
+
+        <div class="notion-table-wrap" data-od-id="db-table">
+          <div class="notion-table-header">
+            <span class="db-icon">📊</span> 项目追踪
+          </div>
+          <table class="notion-table">
+            <thead>
+              <tr>
+                <th style="width: 40%;">名称</th>
+                <th style="width: 20%;">状态</th>
+                <th style="width: 20%;">更新人</th>
+                <th style="width: 20%;">时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <span class="cell-title">Login v2 设计追踪<span class="open-icon">↗</span></span>
+                </td>
+                <td><span class="tag tag-blue">In Progress</span></td>
+                <td>Marie</td>
+                <td style="color: var(--notion-gray-text);">21:00</td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="cell-title">API 文档 v2<span class="open-icon">↗</span></span>
+                </td>
+                <td><span class="tag tag-green">Done</span></td>
+                <td>Bob</td>
+                <td style="color: var(--notion-gray-text);">17:45</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- toggle -->
+        <details class="notion-toggle">
+          <summary>📎 查看原始变更记录</summary>
+          <div class="toggle-content">
+            共 5 条 Notion API 事件，已折叠。点击上方展开查看完整日志。
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Make every Notion page-link / database row open the matching page on
+  // notion.so. Uses a slug derived from the visible title.
+  function slugify(s) {
+    return (s || '').replace(/《|》/g, '').trim().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}-]/gu, '');
+  }
+  function notionUrl(title) {
+    return 'https://www.notion.so/nexu/' + slugify(title);
+  }
+  document.querySelectorAll('.page-link').forEach(span => {
+    const url = notionUrl(span.textContent);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.cssText = 'color:inherit;text-decoration:none;border-bottom:1px solid var(--notion-gray-border);';
+    a.addEventListener('mouseenter', () => a.style.borderBottomColor = 'var(--notion-blue)');
+    a.addEventListener('mouseleave', () => a.style.borderBottomColor = 'var(--notion-gray-border)');
+    while (span.firstChild) a.appendChild(span.firstChild);
+    span.appendChild(a);
+  });
+  document.querySelectorAll('.notion-table tbody tr').forEach(row => {
+    const title = row.querySelector('.cell-title')?.childNodes[0]?.textContent;
+    if (!title) return;
+    const url = notionUrl(title);
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => window.open(url, '_blank', 'noopener,noreferrer'));
+    row.addEventListener('mouseenter', () => row.style.background = 'var(--notion-gray-light)');
+    row.addEventListener('mouseleave', () => row.style.background = '');
+  });
+</script>
+</body>
+</html>

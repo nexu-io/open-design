@@ -25,7 +25,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 
 - Do not hand-build `--od-stamp-*` args; use `createProcessStampArgs` with `OPEN_DESIGN_SIDECAR_CONTRACT`.
 - Do not use port numbers in data/log/runtime/cache path decisions. Namespace decides paths; ports are only transient transports.
-- Release artifacts keep canonical app identity (`Open Design.app` on mac, `Open Design.exe` inside the Windows installer); local tools-pack installs may use namespace-scoped install paths only as a developer multi-instance validation convention.
+- Public release artifacts must use channel-specific app identity: stable uses `Open Design.app`, beta uses `Open Design Beta.app`, and preview uses `Open Design Preview.app` on mac. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
 - Use `--portable` for public/release artifacts so packaged config does not bake local tools-pack runtime roots from the build machine.
 - Pack resource files used by electron-builder belong under `tools/pack/resources/`; do not point pack logic at Downloads, web public assets, docs assets, or other app-owned resource paths.

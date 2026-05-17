@@ -1,0 +1,130 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/notion/tokens.css
+ *
+ * Structured token bindings for the "Notion" brand — the all-in-one
+ * workspace's warm minimalism translated into the shared schema.
+ *
+ * Brand identity in three sentences:
+ *   1. Warm neutrals throughout — grays carry yellow-brown undertones
+ *      (#f6f5f4, #31302e, #615d59, #a39e98); pure white canvas with
+ *      near-black text (rgba(0,0,0,0.95)) that softens imperceptibly.
+ *   2. NotionInter (modified Inter) with aggressive negative
+ *      letter-spacing at display sizes (-2.125px at 64px), four
+ *      weights (400/500/600/700), OpenType "lnum"+"locl" at display.
+ *   3. Whisper borders (1px rgba(0,0,0,0.1)) and multi-layer shadows
+ *      with sub-0.05 opacity — depth felt rather than seen.
+ *
+ * Schema decisions:
+ *   - --bg binds to pure white; --surface to warm white (#f6f5f4).
+ *   - --surface-warm aliases --surface (same warm white tier).
+ *   - --fg binds to rgba(0,0,0,0.95) — the signature near-black.
+ *   - --fg-2 binds to #31302e (warm dark) for headings on surfaces.
+ *   - --accent is Notion Blue (#0075de) — the only saturated color.
+ *   - --tracking-display: -0.033em (-2.125px / 64px normalized).
+ *   - --elev-raised is the 4-layer multi-layer card shadow with max
+ *     opacity 0.04 — felt-not-seen Notion depth.
+ *   - --radius-sm: 4px (buttons/inputs); --radius-md: 8px (cards).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --surface:      #f6f5f4;               /* warm white — section alternation */
+  --surface-warm: var(--surface);        /* aliases to warm white tier */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   rgba(0, 0, 0, 0.95);           /* near-black — primary text */
+  --fg-2: #31302e;                       /* warm dark — headings on surfaces */
+  --muted: #615d59;                      /* warm gray 500 — secondary text */
+  --meta:  #a39e98;                      /* warm gray 300 — placeholder/captions */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(0, 0, 0, 0.1);    /* whisper border — standard */
+  --border-soft: rgba(0, 0, 0, 0.06);  /* subtler row dividers */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #0075de;             /* Notion Blue — links, primary CTAs */
+  --accent-on:     #ffffff;
+  --accent-hover:  #005bab;             /* Active Blue — pressed state */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #1aae39;                   /* Notion green — confirmation */
+  --warn:    #dd5b00;                   /* Notion orange — warning */
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "NotionInter", "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body:    "NotionInter", "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Notion's display range 64px→12px; the 8 schema slots map to the
+   * spine. 54px secondary-hero sits between --text-4xl and --text-3xl
+   * and appears inline in components.html where needed. */
+  --text-xs:   12px;                    /* badge / micro label */
+  --text-sm:   14px;                    /* caption / footer */
+  --text-base: 16px;                    /* body */
+  --text-lg:   20px;                    /* body large — introductions */
+  --text-xl:   26px;                    /* sub-heading */
+  --text-2xl:  40px;                    /* sub-heading large */
+  --text-3xl:  48px;                    /* section heading */
+  --text-4xl:  64px;                    /* display hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: max compression at 64px display.
+   * h2 (48px) → 1.00; h3 (40px) → 1.50 per DESIGN.md §Typography.
+   * --tracking-display: -0.033em = -2.125px / 64px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.00;
+  --tracking-display: -0.033em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Responsive Behavior. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* Micro 4px for buttons/inputs; standard 12px for cards; pill for
+     badges. --radius-md maps to 8px (small cards, containers). */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Multi-layer stack: individual opacity never > 0.04.
+     Depth felt rather than seen — the Notion shadow philosophy. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.04) 0px 4px 18px,
+    rgba(0, 0, 0, 0.027) 0px 2px 7.85px,
+    rgba(0, 0, 0, 0.02) 0px 0.8px 2.93px,
+    rgba(0, 0, 0, 0.01) 0px 0.175px 1.04px;
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* 2px solid outline + shadow reinforcement per DESIGN.md §8. */
+  --focus-ring: 0 0 0 3px rgba(9, 127, 232, 0.3);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}

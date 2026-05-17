@@ -9,10 +9,15 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
+import SiteFooter from '../../_components/site-footer.astro';
+import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
+import { getGithubRepoMeta } from '../../_lib/github';
 import '../../globals.css';
+import '../../sub-pages.css';
 
 export async function getStaticPaths() {
   const posts = await getCollection('blog');
@@ -27,9 +32,11 @@ const { Content } = await render(post);
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 
 const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
   createElement<HeaderProps>(Header, {
     counts,
+    github,
     brandHref: '/',
     active: 'blog',
   }),
@@ -58,9 +65,11 @@ const fmtDate = (d: Date) =>
     />
   </head>
   <body>
-    <Fragment set:html={headerHtml} />
+    <div class='shell'>
+      <Topbar github={github} />
+      <Fragment set:html={headerHtml} />
 
-    <main class='post-shell'>
+      <main class='post-shell'>
       <article class='post'>
         <div class='container'>
           <a class='post-back' href='/blog/'>← Back to Blog</a>
@@ -96,12 +105,19 @@ const fmtDate = (d: Date) =>
           </div>
         </div>
       </article>
-    </main>
+      </main>
+      <SiteFooter counts={counts} />
+    </div>
+
+    <HeaderEnhancer />
 
     <style>
       .post-shell {
         position: relative;
         z-index: 2;
+      }
+      .post-shell + .sub-footer {
+        margin-top: 0;
       }
       .post {
         padding: 88px 0 96px;

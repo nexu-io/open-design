@@ -14,15 +14,21 @@ import {
   fetchConnectorStatuses,
 } from '../../src/providers/registry';
 
-vi.mock('../../src/providers/registry', () => ({
-  cancelConnectorAuthorization: vi.fn(),
-  connectConnector: vi.fn(),
-  disconnectConnector: vi.fn(),
-  fetchConnectorDetail: vi.fn(),
-  fetchConnectorDiscovery: vi.fn(),
-  fetchConnectors: vi.fn(),
-  fetchConnectorStatuses: vi.fn(),
-}));
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    cancelConnectorAuthorization: vi.fn(),
+    connectConnector: vi.fn(),
+    disconnectConnector: vi.fn(),
+    fetchConnectorDetail: vi.fn(),
+    fetchConnectorDiscovery: vi.fn(),
+    fetchConnectors: vi.fn(),
+    fetchConnectorStatuses: vi.fn(),
+  };
+});
 
 const configuredComposioConnector: ConnectorDetail = {
   id: 'github',
@@ -686,5 +692,77 @@ describe('ConnectorsBrowser', () => {
     expect(
       JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
     ).not.toHaveProperty('github');
+  });
+
+  it('does not auto-cancel pending authorization on focus while the daemon authorization window is still valid', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'available' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: '2099-05-08T10:00:00.000Z',
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(availableConnector);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelConnectorAuthorization).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    expect(
+      JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
+    ).toHaveProperty('github');
+  });
+
+  it('does not auto-cancel pending authorization on focus when the daemon already reports the connector as connected', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'connected' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: '2099-05-08T10:00:00.000Z',
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(availableConnector);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelConnectorAuthorization).not.toHaveBeenCalled();
   });
 });

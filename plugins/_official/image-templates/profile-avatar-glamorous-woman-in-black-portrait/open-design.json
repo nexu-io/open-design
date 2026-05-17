@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-glamorous-woman-in-black-portrait",
+  "title": "Profile / Avatar - Glamorous Woman in Black Portrait",
+  "version": "0.1.0",
+  "description": "This prompt generates a photorealistic luxury-style portrait of an elegant woman in a plunging black outfit, ideal for fashion editorial or beauty imagery.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "LJ",
+    "url": "https://x.com/XLOOP37/status/2048976490575155202#reversed-1"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A photorealistic half-body portrait of an elegant glamorous woman indoors, framed vertically from the upper chest to just above the head, standing slightly angled toward the camera with a poised, confident presence. She has {argument name=\"hair color\" default=\"dark brown\"} long loose wavy hair with a soft tousled texture, warm lightly tanned skin, and a slender neck and shoulders. She wears a fitted black long-sleeve dress or top with a very deep plunging V neckline in finely pleated fabric, creating a sleek sensual evening look, plus 1 delicate gold chain necklace with 1 small round pendant resting at the base of her neck. Use flattering warm ambient lighting, soft shadows, shallow depth of field, and a luxurious modern interior background with creamy beige walls, a blurred warm lamp glow on the left, and a bright window or doorway edge on the right. The mood is refined, feminine, and high-end, like a fashion editorial portrait of {argument name=\"subject\" default=\"a beautiful woman\"}, shot with realistic skin texture, subtle natural makeup, cinematic bokeh, and premium lifestyle photography styling.",
+        "zh-CN": "使用这个插件完成以下任务：A photorealistic half-body portrait of an elegant glamorous woman indoors, framed vertically from the upper chest to just above the head, standing slightly angled toward the camera with a poised, confident presence. She has {argument name=\"hair color\" default=\"dark brown\"} long loose wavy hair with a soft tousled texture, warm lightly tanned skin, and a slender neck and shoulders. She wears a fitted black long-sleeve dress or top with a very deep plunging V neckline in finely pleated fabric, creating a sleek sensual evening look, plus 1 delicate gold chain necklace with 1 small round pendant resting at the base of her neck. Use flattering warm ambient lighting, soft shadows, shallow depth of field, and a luxurious modern interior background with creamy beige walls, a blurred warm lamp glow on the left, and a bright window or doorway edge on the right. The mood is refined, feminine, and high-end, like a fashion editorial portrait of {argument name=\"subject\" default=\"a beautiful woman\"}, shot with realistic skin texture, subtle natural makeup, cinematic bokeh, and premium lifestyle photography styling."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

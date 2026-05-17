@@ -590,6 +590,52 @@ export function ConnectorsBrowser({
     return statuses;
   }, []);
 
+  const connectorAuthorizationPendingRef = useRef(connectorAuthorizationPending);
+  useEffect(() => {
+    connectorAuthorizationPendingRef.current = connectorAuthorizationPending;
+  }, [connectorAuthorizationPending]);
+
+  const cancelStaleAuthorizations = useCallback(async (
+    statuses: ConnectorStatusResponse['statuses'],
+    nowMs = Date.now(),
+  ) => {
+    const pending = connectorAuthorizationPendingRef.current;
+    const stuck = Object.keys(pending).filter((connectorId) => {
+      if (statuses[connectorId]?.status === 'connected') return false;
+      const expiresAt = pending[connectorId]?.expiresAt;
+      if (!expiresAt) return false;
+      const expiresAtMs = Date.parse(expiresAt);
+      return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+    });
+    if (stuck.length === 0) return;
+    await Promise.allSettled(stuck.map(async (connectorId) => {
+      let connector: ConnectorDetail | null = null;
+      try {
+        connector = await cancelConnectorAuthorizationRequest(connectorId);
+      } catch {
+        connector = null;
+      }
+      if (!connector) {
+        setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
+        return;
+      }
+      updateConnector(connector);
+      setConnectorAuthorizationCancelFailed((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationError((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+    }));
+  }, []);
+
   useEffect(() => {
     saveConnectorAuthorizationPending(connectorAuthorizationPending);
   }, [connectorAuthorizationPending]);
@@ -667,14 +713,18 @@ export function ConnectorsBrowser({
   }, [reloadConnectorStatuses]);
 
   // System-browser auth flows have no opener to post back to; refresh
-  // whenever the window regains focus so the UI catches up silently.
+  // whenever the window regains focus so the UI catches up silently. If a
+  // pending authorization is still not connected after the refresh, the
+  // user closed the auth flow without completing it — auto-cancel so the
+  // card recovers to its default state instead of staying stuck loading.
   useEffect(() => {
-    function onFocus() {
-      void reloadConnectorStatuses();
+    async function onFocus() {
+      const statuses = await reloadConnectorStatuses();
+      await cancelStaleAuthorizations(statuses);
     }
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [reloadConnectorStatuses]);
+  }, [reloadConnectorStatuses, cancelStaleAuthorizations]);
 
   // The local Composio API-key state is authoritative for masking. Cached
   // connector auth can be stale immediately after the user clears the key.

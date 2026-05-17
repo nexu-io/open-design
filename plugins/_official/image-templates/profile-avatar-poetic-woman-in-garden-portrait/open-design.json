@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-poetic-woman-in-garden-portrait",
+  "title": "Profile / Avatar - Poetic Woman in Garden Portrait",
+  "version": "0.1.0",
+  "description": "This prompt generates a realistic editorial-style portrait of a bookish young woman in a sunlit garden, ideal for lifestyle photography, literary branding, or elegant character imagery.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "LJ",
+    "url": "https://x.com/XLOOP37/status/2048976490575155202#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453183422_nu32e1_HG9s-kFbMAACMYA.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A realistic outdoor portrait of a thoughtful, naturally beautiful young woman standing on a garden path in soft golden-hour light. She is framed from about mid-thigh upward, centered in the image, facing the camera with a relaxed upright posture. She has {argument name=\"hair color\" default=\"dark brown\"} long, voluminous, loosely curly hair with a slightly tousled texture, falling around her shoulders. Dress her in an oversized cream-white knit sweater with long sleeves and dark high-waisted loose trousers or a flowing skirt-like bottom in deep navy or black. A pair of thin round eyeglasses hangs from the neckline of the sweater. In one hand she holds a sharpened yellow pencil, and in the other she carries an open sketchbook or notebook with slightly worn pages, suggesting she is writing, sketching, or observing nature. The mood should feel literary, artistic, intelligent, and understated rather than glamorous. Place her in a lush garden with 1 visible stone pathway, abundant soft greenery, and blurred flowers in the foreground and background. Use shallow depth of field with creamy bokeh, warm sunlight filtering through trees behind her, and gentle natural highlights on her hair and sweater. The image should look like a candid editorial photograph, highly realistic, soft and tasteful, with muted natural colors, subtle texture, and an atmosphere of calm, cultured beauty. Vertical composition, 4:5 portrait orientation.",
+        "zh-CN": "使用这个插件完成以下任务：A realistic outdoor portrait of a thoughtful, naturally beautiful young woman standing on a garden path in soft golden-hour light. She is framed from about mid-thigh upward, centered in the image, facing the camera with a relaxed upright posture. She has {argument name=\"hair color\" default=\"dark brown\"} long, voluminous, loosely curly hair with a slightly tousled texture, falling around her shoulders. Dress her in an oversized cream-white knit sweater with long sleeves and dark high-waisted loose trousers or a flowing skirt-like bottom in deep navy or black. A pair of thin round eyeglasses hangs from the neckline of the sweater. In one hand she holds a sharpened yellow pencil, and in the other she carries an open sketchbook or notebook with slightly worn pages, suggesting she is writing, sketching, or observing nature. The mood should feel literary, artistic, intelligent, and understated rather than glamorous. Place her in a lush garden with 1 visible stone pathway, abundant soft greenery, and blurred flowers in the foreground and background. Use shallow depth of field with creamy bokeh, warm sunlight filtering through trees behind her, and gentle natural highlights on her hair and sweater. The image should look like a candid editorial photograph, highly realistic, soft and tasteful, with muted natural colors, subtle texture, and an atmosphere of calm, cultured beauty. Vertical composition, 4:5 portrait orientation."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

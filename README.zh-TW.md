@@ -1,5 +1,14 @@
 # Open Design
 
+> [!IMPORTANT]
+> ### 🔥 `0.8.0-preview` 已發佈。設計的舊世界，到此為止。
+>
+> 開源、agent-native 的 Claude Design / Figma 替代品 —— 上線兩週，40k stars 在身，且仍在加速。**剩下的路，需要你和我們一起推完。**
+>
+> **正在 `main` 分支飛速迭代中** —— 0.8.0 是 Open Design 的下一階段。提一個 PR、扔一個想法、報一個 bug —— 你帶來的，就是這場運動接下來的樣子。
+>
+> → [**讀公告 · 下載安裝包 · 加入這場運動**](https://github.com/nexu-io/open-design/discussions/1727) · 可與你現有的 0.7 並行安裝。
+
 > **[Claude Design][cd] 的開源替代品。** 本地優先、可部署到 Vercel、每一層都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自動檢測（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是設計引擎，由 **31 個可組合 Skills** 和 **72 套品牌級 Design System** 驅動。一個都沒裝？還有 OpenAI 相容的 BYOK 代理 `/api/proxy/stream` 備援，同一條 loop，少一次 spawn 而已。
 
 <p align="center">
@@ -18,11 +27,13 @@
 
 <p align="center">
   <a href="https://open-design.ai/"><img alt="下載客戶端" src="https://img.shields.io/badge/%E4%B8%8B%E8%BC%89-%E5%AE%A2%E6%88%B6%E7%AB%AF-ff6b35?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#支援的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
-  <a href="#內建-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
+  <a href="#內建-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-加入-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
+  <a href="https://x.com/nexudotio"><img alt="Follow @nexudotio on X" src="https://img.shields.io/badge/follow-%40nexudotio-1DA1F2?style=flat-square&logo=x&logoColor=white" /></a>
   <a href="QUICKSTART.zh-TW.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
@@ -52,9 +63,10 @@ OD 站在四個開源專案的肩膀上：
 | | 你拿到的 |
 |---|---|
 | **Coding-agent CLI（16 套）** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI —— 在 `PATH` 上自動檢測，picker 一鍵切換 |
-| **BYOK 備援** | OpenAI 相容代理 `/api/proxy/stream` —— 填 `baseUrl` + `apiKey` + `model`，任意 vendor（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、自託管 vLLM，或任何 OpenAI 相容的 provider）都能直接當引擎用。daemon 邊界拒絕 loopback / link-local / RFC1918 防 SSRF。 |
-| **內建 design system** | **72 套** —— 2 套手寫起手 + 70 套從 [`awesome-design-md`][acd2] 匯入的產品系統（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
+| **BYOK 備援** | 協定專用 API 代理 `/api/proxy/{anthropic,openai,azure,google}/stream` —— 填 `baseUrl` + `apiKey` + `model`，選擇 Anthropic / OpenAI / Azure OpenAI / Google Gemini，daemon 將 SSE 正規化回同一條 chat stream。daemon 邊界拒絕內部 IP / SSRF。 |
+| **內建 design system** | **129 套** —— 2 套手寫起手 + 70 套從 [`awesome-design-md`][acd2] 匯入的產品系統（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…），加上 57 套從 [`awesome-design-skills`][ads] 直接收錄到 `design-systems/` 下的 design skill |
 | **內建 skill** | **31 個** —— 27 個 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 個 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分組：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
+| **媒體生成** | Image · video · audio surface 與設計迴圈並行。**gpt-image-2**（Azure / OpenAI）用於海報、頭像、資訊圖表、插畫地圖 · **Seedance 2.0**（ByteDance）用於電影級 15 秒 text-to-video 和 image-to-video · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）用於 HTML→MP4 動態圖形（產品展示、動態排版、資料圖表、社群浮水印、logo 結尾）。**93 條**可一鍵複刻的 prompt gallery —— 43 條 gpt-image-2 + 39 條 Seedance + 11 條 HyperFrames —— 收錄在 [`prompt-templates/`](prompt-templates/) 下，附預覽縮圖與來源標註。與寫 code 同一個 chat 介面；生成真實的 `.mp4` / `.png` 晶片寫入專案 workspace。 |
 | **視覺方向** | 5 套精選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental），每套自帶 OKLch 色票 + 字型堆疊（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **裝置外殼** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome —— 畫素級精確，跨 skill 共享，統一在 [`assets/frames/`](assets/frames/) |
 | **Agent 執行時** | 本地 daemon 在你的專案目錄裡 spawn CLI —— agent 擁有真實的 `Read` / `Write` / `Bash` / `WebFetch`，作用在真實磁碟上；每個 adapter 都有 Windows `ENAMETOOLONG` 備援（stdin / 臨時 prompt 檔案） |
@@ -66,6 +78,7 @@ OD 站在四個開源專案的肩膀上：
 | **License** | Apache-2.0 |
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
+[ads]: https://github.com/bergside/awesome-design-skills
 
 ## 效果展示
 
@@ -305,6 +318,54 @@ DISCOVERY 指令         （turn-1 表單、turn-2 品牌分支、TodoWrite、�
 - **[open-design.ai](https://open-design.ai/)** —— 官方下載頁
 - **[GitHub releases](https://github.com/nexu-io/open-design/releases)**
 
+### 用 Docker 執行
+
+不需在本機安裝 Node.js 或 pnpm 就能跑 Open Design。
+
+#### 環境需求
+
+* Docker Desktop
+* Docker Compose v2
+
+驗證 Docker：
+
+```bash id="70jv9o"
+docker compose version
+```
+
+#### 啟動 Open Design
+
+```bash id="m9w43w"
+git clone https://github.com/nexu-io/open-design.git
+cd open-design/deploy
+docker compose up -d
+```
+
+在瀏覽器開啟：
+
+```text id="4s4xeh"
+http://localhost:7456
+```
+
+#### 常用指令
+
+```bash id="gl95kp"
+# 查看 log
+docker compose logs -f
+
+# 重啟容器
+docker compose restart
+
+# 停止容器
+docker compose down
+
+# 拉取最新映像檔
+docker compose pull
+docker compose up -d
+```
+
+進階 Docker 設定與環境變數請參閱 [`QUICKSTART.zh-TW.md`](QUICKSTART.zh-TW.md)。
+
 ### 從原始碼執行
 
 ```bash
@@ -318,6 +379,8 @@ pnpm tools-dev run web
 ```
 
 環境要求：Node `~24`，pnpm `10.33.x`。`nvm` / `fnm` 只是可選輔助工具，不是專案必需步驟；如果使用它們，先執行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`，再執行 `pnpm install`。
+
+Windows 使用者可參考 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) 了解原生安裝路徑與一個小型雙擊啟動器。
 
 桌面版/後臺啟動、固定埠重啟，以及 media 生成派發器檢查（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）見 [`QUICKSTART.zh-TW.md`](QUICKSTART.zh-TW.md)。
 
@@ -345,7 +408,147 @@ Daemon 在倉庫根下維護一個隱藏目錄，裡面所有內容都已 gitign
 |---|---|
 | 看一眼裡面有啥 | `ls -la .od && sqlite3 .od/app.sqlite '.tables'` |
 | 完全清空，從零再來 | `pnpm tools-dev stop`，再 `rm -rf .od`，然後重新 `pnpm tools-dev run web` |
-| 換到別的位置 | 暫不支援 —— 路徑是相對倉庫根寫死的 |
+| 換到別的位置 | `OD_DATA_DIR=<絕對或相對路徑> pnpm tools-dev run web` —— daemon 會解析 `~/` 並將相對路徑錨定在 repo 根。`OD_MEDIA_CONFIG_DIR=<dir>` 可單獨覆寫 `media-config.json` 的位置，適合想把 credentials 放在獨立目錄的場景。 |
+
+#### 將 pre-desktop-app 的 `.od/` 遷移到已安裝的 Desktop app
+
+如果你先在 repo 裡跑過、後來才裝打包好的 Desktop app，兩個 writer 指向不同的根：
+
+- Repo dev-server（`pnpm tools-dev start web`）寫入 `<repo-root>/.od/`。
+- 已安裝的 Desktop app 寫入 `<appData>/Open Design/namespaces/<channel>/data/`，其中 `<appData>` 是 Electron 的 per-OS app-data 基礎路徑（`app.getPath("userData")` 回傳值中 `Open Design` 之前的部分）。channel 後綴是**平臺特定的** —— release workflow 會附加 `-win`/`-linux`：
+
+  | 平臺 | `<appData>`（Electron `appData` 基礎路徑） | Stable channel | Beta channel |
+  |---|---|---|---|
+  | macOS | `~/Library/Application Support` | `release-stable` | `release-beta` |
+  | Windows | `%APPDATA%`（= `%USERPROFILE%\AppData\Roaming`） | `release-stable-win` | `release-beta-win` |
+  | Linux | `$XDG_CONFIG_HOME`（預設 `~/.config`） | `release-stable-linux` | `release-beta-linux` |
+
+  實際路徑範例：
+  - macOS beta：`~/Library/Application Support/Open Design/namespaces/release-beta/data/`
+  - Windows beta：`%APPDATA%\Open Design\namespaces\release-beta-win\data\`
+  - Linux beta：`~/.config/Open Design/namespaces/release-beta-linux/data/`
+
+  如果不確定，檢查 packaged daemon 啟動後的 log，裡面會輸出解析後的 `daemonDataRoot`。
+
+> **⚠️ 請在乾淨狀態下進行。** Migration 是**取代**（不是合併）Desktop app 的 data dir。兩個 writer 都必須完全停止後才能複製 —— 結束 Desktop app **且** 停止 repo dev-server。SQLite-WAL 兩邊都要乾淨 flush；如果任一 daemon 仍在執行，它可能在快照中途寫入 SQLite/WAL 頁或專案/artifact 檔案，導致 staged copy 不一致。如果 Desktop app 中已有你想保留的專案，請先決定哪一邊是 authoritative。
+
+##### 方案 A：透過 `OD_LEGACY_DATA_DIR` 一鍵自動遷移
+
+適用於 Desktop app 的 `data/` 還是空的場景，這通常是升級後剛遇到 [#710](https://github.com/nexu-io/open-design/issues/710) 的典型狀態。先結束 Desktop app（讓它的 daemon 不再佔用 `app.sqlite`），再用 `OD_LEGACY_DATA_DIR` 指向舊 repo `.od/` 來重新啟動。Daemon 會把你的 payload staging 到隔壁 tmp 目錄，成功後才 promote 進 `data/`；任何失敗都會移除 staging 目錄，下次啟動重新嘗試。
+
+Daemon 在以下情況會拒絕並顯示啟動錯誤：
+
+- `OD_LEGACY_DATA_DIR` 指向的路徑中沒有 `app.sqlite`（打錯字、來源已刪除、路徑錯誤）
+- Desktop 的 `data/` 已經包含 `app.sqlite`、`projects/`、`artifacts/`、`media-config.json` 等 —— SQLite/WAL 配對和專案樹無法安全交錯，daemon 拒絕合併而非靜默損毀任一方。如果 Desktop 已啟動過並播種了自己的 `data/`，請使用方案 B。
+
+成功後會寫入 `.migrated-from` 標記，後續啟動不再執行。
+
+先結束 Desktop app，再用這個環境變數重新啟動。啟動器必須把變數放進 **app 程序**的環境變數，而不是只放在執行 `open` / `xdg-open` 的 shell 裡。
+
+**macOS**（LaunchServices 不會繼承 shell env，請直接執行二進位）：
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" \
+  "/Applications/Open Design.app/Contents/MacOS/Open Design"
+```
+
+如果想走 Dock 啟動，先用 `launchctl` 設好變數再開：
+
+```bash
+launchctl setenv OD_LEGACY_DATA_DIR "/path/to/old/repo/.od"
+open "/Applications/Open Design.app"
+# 看到 migration log 行出現後：
+launchctl unsetenv OD_LEGACY_DATA_DIR
+```
+
+**Linux**（直接執行二進位以確保 env var 確實傳入）：
+
+```bash
+OD_LEGACY_DATA_DIR="/path/to/old/repo/.od" /path/to/open-design
+# （例如你啟動過的 AppImage，或 /opt 下解壓出來的二進位）
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+$env:OD_LEGACY_DATA_DIR="C:\path\to\old\repo\.od"
+& "$env:LOCALAPPDATA\Programs\Open Design\Open Design.exe"
+```
+
+Daemon log 會記錄 `[od-migrate] migration complete: copied N entries (...)`。首次啟動後即可清除環境變數；`.migrated-from` 標記會阻止後續重複遷移。
+
+##### 方案 B：手動複製
+
+當方案 A 不適用時（Desktop 已有自己的資料，且你明確想取代它），用來將現有專案、SQLite、artifacts 和 `media-config.json` 帶到 Desktop app。
+
+**macOS / Linux（bash）：**
+
+```bash
+set -euo pipefail
+# 1. 兩個 writer 都必須停止。
+#    - 結束 Desktop app（macOS Cmd+Q，Linux File → Exit）。
+#    - 停止 repo dev-server：在 repo 根執行 `pnpm tools-dev stop`。
+# 2. 把 REPO 和 APP_DATA 設成你的實際路徑；下面是 macOS + beta 範例。
+REPO="/path/to/open-design"
+APP_DATA="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data"
+
+# 3. Preflight：看看 Desktop app 目前已有哪些東西。
+ls "$APP_DATA/projects" 2>/dev/null && echo "Desktop 已有專案，請確認這是取代而非合併。"
+
+# 4. 先 staging 到隔壁目錄，再原子交換。`set -e` 加上
+#    明確的 rsync exit code 檢查，確保非零複製在中途就中止，
+#    不會讓 Desktop data dir 處於半填充狀態。
+STAGE="${APP_DATA}.staged-$(date +%F-%H%M)"
+mkdir -p "$STAGE"
+rsync -a --exclude='backup-*' "$REPO/.od/" "$STAGE/" || { echo "rsync 失敗，中止交換"; exit 1; }
+
+# 5. 備份 Desktop 目前資料，再把 staged copy promote 到位。
+mv "$APP_DATA" "${APP_DATA}.fresh-baseline-$(date +%F-%H%M)"
+mv "$STAGE" "$APP_DATA"
+
+# 6. 重新啟動 Desktop app。Daemon 啟動時會套用 forward schema 變更。
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+$ErrorActionPreference = 'Stop'
+# 1. 兩個 writer 都必須停止。
+#    - 結束 Desktop app（File > Exit）。
+#    - 停止 repo dev-server：在 repo 根執行 `pnpm tools-dev stop`。
+# 2. 把 $Repo 和 $AppData 設成你的實際路徑；下面是 stable channel 範例。
+$Repo    = 'C:\path\to\open-design'
+$AppData = Join-Path $env:APPDATA 'Open Design\namespaces\release-stable-win\data'
+
+# 3. Preflight：看看 Desktop app 目前已有哪些東西。
+if (Test-Path (Join-Path $AppData 'projects')) {
+  Write-Host 'Desktop 已有專案，請確認這是取代而非合併。'
+}
+
+# 4. 先 staging 到隔壁目錄。Robocopy /MIR 將來源鏡像到 staging，
+#    exit code >= 8 才是真正的錯誤（0..7 是成功/資訊），所以明確防護後才 promote。
+$Stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
+$Stage = "$AppData.staged-$Stamp"
+robocopy "$Repo\.od" $Stage /MIR /XD 'backup-*' | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy 失敗 (exit $LASTEXITCODE)，中止交換" }
+
+# 5. 備份 Desktop 目前資料，再把 staged copy promote 到位。
+if (Test-Path $AppData) { Rename-Item $AppData "$AppData.fresh-baseline-$Stamp" }
+Rename-Item $Stage $AppData
+
+# 6. 重新啟動 Desktop app。Daemon 啟動時會套用 forward schema 變更。
+```
+
+重新啟動後若發現任何異常，刪除 `$APP_DATA`（Windows 為 `$AppData`）並將 `.fresh-baseline-*` 目錄改回原名即可還原。
+
+> **⚠️ Schema migration 是 forward-only。** Daemon 啟動時會套用 `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` 變更；沒有版本 guard。遷移後**不要**用更舊的 repo checkout 開啟同一個 data dir —— 不支援的欄位或行為 mismatch 可能導致 workspace 不一致。首次啟動新版 app 前，先備份 `app.sqlite*`。
+
+> **⚠️ 進階：repo dev-server 與 Desktop app 共用同一個 data dir。** 透過 `OD_DATA_DIR` 讓兩邊指向同一個目錄是可行的，但**一次只能跑一邊**。Daemon 在 WAL 模式下開啟 `app.sqlite`，並對 `projects/` 和 `artifacts/` 下的檔案進行不協調寫入；同時跑兩個 writer 可能損毀 SQLite 或 clobber artifact。務必先結束 Desktop app 再啟動 dev-server，先停止 dev-server 再開啟 Desktop app：
+>
+> ```bash
+> OD_DATA_DIR="$HOME/Library/Application Support/Open Design/namespaces/release-beta/data" \
+>   pnpm tools-dev start web
+> ```
 
 完整檔案地圖、指令碼、排錯 → [`QUICKSTART.zh-TW.md`](QUICKSTART.zh-TW.md)。
 
@@ -405,6 +608,26 @@ pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
 
 固定埠重啟、背景啟動、完整排錯 → [`QUICKSTART.zh-TW.md`](QUICKSTART.zh-TW.md)。
 
+## Nix
+
+repo 根目錄已發布一個 flake。個人開發者推薦走 Home Manager；也暴露了 NixOS module 供共享/伺服器安裝使用。完整表面（data dir、secrets、`webFrontend` vs. 自己帶 server、`OD_DAEMON_URL`）請參閱 [`nix/README.md`](nix/README.md)。
+
+```nix
+# Home Manager
+inputs.open-design.url = "github:nexu-io/open-design";
+# then: imports = [ inputs.open-design.homeManagerModules.default ];
+```
+
+```bash
+nix run github:nexu-io/open-design       # 不安裝就直接啟動 daemon（`od`）
+```
+
+開發者也有 Nix dev shell 可用，且可搭配 `direnv`：
+
+```bash
+nix develop   # 帶有開發 Open Design 所需相依套件的 dev shell
+```
+
 ## 從 coding agent 端使用 Open Design
 
 Open Design 內建一個 stdio MCP server。把它接進 Claude Code、Codex、Cursor、VS Code、Antigravity、Zed、Windsurf，或任何相容 MCP 的 client，另一個 repo 裡的 agent 就能直接讀取你本機 Open Design 專案裡的檔案。整個 export-then-attach 迴圈被取代掉。當 agent 呼叫 `search_files`、`get_file`、`get_artifact` 沒帶 project 參數時，MCP 預設指向你 Open Design 當下開著的那個專案（與檔案）—— 所以 *「在我的 app 裡蓋這個」*、*「對齊這套樣式」* 這類提示直接就能用。
@@ -425,7 +648,7 @@ open-design/
 ├── README.de.md                   ← Deutsch
 ├── README.zh-CN.md                ← 简体中文
 ├── README.zh-TW.md                ← 本檔案
-├── QUICKSTART.md                  ← 跑 / 構建 / 部署
+├── QUICKSTART.zh-TW.md                  ← 跑 / 構建 / 部署
 ├── package.json                   ← 單 bin: od
 │
 ├── apps/
@@ -755,6 +978,10 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 這是一個早期實現 —— 閉環（檢測 → 選 skill + design system → 對話 → 解析 `<artifact>` → 預覽 → 儲存）已經端到端跑通。提示詞堆疊和 skill 庫是價值最重的部分，目前已穩定。元件級 UI 仍在每天迭代。
 
+## 保持關注
+
+在 X 上追蹤 **[@nexudotio](https://x.com/nexudotio)** 取得 release notes、新 skill、新 design system，以及偶爾的幕後 thread 透露接下來要出什麼。Discord 是聊天用的，X 是發布里程碑用的 —— 兩個連結都在上面的 badge 裡。
+
 ## 給我們點個 Star
 
 <p align="center">
@@ -778,7 +1005,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 感謝每一位讓 Open Design 變得更好的朋友 —— 無論是寫程式碼、修文檔、提 issue、加 skill 還是加 design system，每一次真實貢獻都會被記住。下面這面牆是最直觀的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-13" alt="Open Design 貢獻者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-17" alt="Open Design 貢獻者" />
 </a>
 
 第一次提 PR？歡迎從 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 標籤起步。
@@ -795,9 +1022,9 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-13" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-17" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-17" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-17" />
   </picture>
 </a>
 
