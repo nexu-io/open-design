@@ -375,6 +375,39 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
+  it('keeps the main preview visible while the HTML source fetch is still pending', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const raw = deferredResponse();
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/page.html') {
+        return raw.promise;
+      }
+      return Promise.resolve(new Response('[]', {
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+
   it('keeps inactive HTML preview transports mounted without booting the artifact', async () => {
     const file = baseFile({
       name: 'page.html',
@@ -553,7 +586,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   });
 
-  it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
+  it('URL-loads deck previews by default for browser-fidelity rendering', () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -577,13 +610,13 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     expect(markup).toContain('data-testid="artifact-preview-frame"');
-    expect(markup).toContain('data-od-render-mode="srcdoc"');
-    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
-    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
+    expect(markup).toContain('data-od-render-mode="url-load"');
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
+    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
-  it('falls back to srcDoc when the HTML body looks deck-shaped even without an isDeck hint', () => {
+  it('URL-loads inferred deck previews by default for browser-fidelity rendering', () => {
     const file = baseFile({
       name: 'inferred.html',
       path: 'inferred.html',
@@ -605,12 +638,12 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    expect(markup).toContain('data-od-render-mode="srcdoc"');
-    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
-    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
+    expect(markup).toContain('data-od-render-mode="url-load"');
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
+    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
   });
 
-  it('hides preview-only toolbar controls when switching an HTML deck to source view', async () => {
+  it('keeps deck previews on the browser-fidelity URL path when toggling source and preview', async () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -636,9 +669,11 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    expect(container.querySelector('.deck-nav')).toBeTruthy();
+    expect(container.querySelector('.deck-nav')).toBeNull();
     expect(container.querySelector('.palette-tweaks-anchor')).toBeTruthy();
     expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
+    const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(previewFrame.getAttribute('data-od-render-mode')).toBe('url-load');
 
     fireEvent.click(screen.getByRole('button', { name: /^source$/i }));
 
@@ -651,6 +686,17 @@ describe('FileViewer SVG artifacts', () => {
       expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
       expect(screen.getByRole('button', { name: /zoom out/i })).toBeTruthy();
       expect(screen.getByRole('button', { name: /zoom in/i })).toBeTruthy();
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(previewFrame);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^preview$/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.deck-nav')).toBeNull();
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(previewFrame);
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(container.querySelector('.palette-tweaks-anchor')).toBeTruthy();
+      expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
     });
   });
 

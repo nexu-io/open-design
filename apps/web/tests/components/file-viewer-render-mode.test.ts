@@ -14,8 +14,8 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview(base)).toBe(true);
   });
 
-  it('falls back to srcDoc when the file is a deck (deck bridge required)', () => {
-    expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true })).toBe(false);
+  it('keeps URL-load for decks until a host-only bridge is actually needed', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true })).toBe(true);
   });
 
   it('falls back to srcDoc when comment mode is active without an artifact-owned bridge', () => {

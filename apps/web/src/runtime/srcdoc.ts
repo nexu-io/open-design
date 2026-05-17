@@ -1285,7 +1285,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
-  var didRestoreInitialSlide = initialSlideIndex <= 0;
+  var didRestoreInitialSlide = false;
   function slides(){
     // Structured selectors first so decorative .slide markup in non-deck
     // pages (icons, badges, code samples) is not counted as deck slides;
@@ -1426,7 +1426,11 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       scrollGo(target);
       return;
     }
-    if (canSetActive(list) && setActive(target)) return;
+    // Always dispatch keyboard events for sequential navigation so that
+    // JS-driven decks (GSAP timelines, class-toggle with keyboard listeners)
+    // can run their own animation logic. setActive is intentionally NOT used
+    // here — toggling the active class directly bypasses GSAP reveal
+    // animations and leaves slide content invisible.
     if (action === 'next') dispatchKey('ArrowRight');
     else if (action === 'prev') dispatchKey('ArrowLeft');
     else if (action === 'first') dispatchKey('Home');
@@ -1478,18 +1482,6 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (data.action === 'go' && typeof data.index === 'number') gotoIndex(data.index);
     else go(data.action);
   });
-  function ownDeckButton(id, action){
-    var btn = document.getElementById(id);
-    if (!btn || btn.__odDeckOwned) return;
-    btn.__odDeckOwned = true;
-    btn.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      go(action);
-    }, true);
-  }
-  ownDeckButton('deck-prev', 'prev');
-  ownDeckButton('deck-next', 'next');
   // Report once on load and on every scroll-end so the host stays in sync.
   window.addEventListener('load', function(){ setTimeout(restoreInitialSlide, 200); });
   document.addEventListener('scroll', function(){

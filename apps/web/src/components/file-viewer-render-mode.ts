@@ -23,7 +23,7 @@
 export interface UrlLoadDecision {
   /** Whether the viewer is showing the rendered preview vs. the raw source. */
   mode: 'preview' | 'source';
-  /** Treat as a slide deck — needs the deck postMessage bridge. */
+  /** Treat as a slide deck. Host slide controls still require the srcdoc bridge. */
   isDeck: boolean;
   /** Comment mode is active. Needs either srcDoc injection or an artifact-owned URL-load bridge. */
   commentMode: boolean;
@@ -49,7 +49,6 @@ export interface UrlLoadDecision {
  */
 export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   if (d.mode !== 'preview') return false;
-  if (d.isDeck) return false;
   if (d.commentMode && !d.urlModeBridge) return false;
   // Inspect needs the selection bridge injected via buildSrcdoc; a raw
   // URL-loaded iframe has no listener to apply per-element overrides.

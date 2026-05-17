@@ -3891,8 +3891,12 @@ function HtmlViewer({
     () => source != null && htmlNeedsSandboxShim(source),
     [source],
   );
+  // The preview transport should reflect preview-only requirements, not the
+  // currently visible tab. Switching to Source must not tear down / rewire the
+  // iframe stack, or browser-loaded HTML decks can fail on the second boot when
+  // the user returns to Preview.
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
-    mode,
+    mode: 'preview',
     isDeck: effectiveDeck,
     commentMode: boardMode || drawClickSelectionMode,
     editMode: manualEditMode,
@@ -3902,6 +3906,11 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
   });
+  // Preview should not block on `fetchProjectFileText()`. While the HTML
+  // source is still loading (or failed to load), keep the directly URL-
+  // loaded iframe active so users can still see the artifact. Once source
+  // arrives, switch to the final render mode and enable srcDoc-only bridges.
+  const previewUsesUrlTransport = source === null || useUrlLoadPreview;
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
     [projectId, file.name, file.mtime, reloadKey],
@@ -3917,21 +3926,21 @@ function HtmlViewer({
     setPreviewSrcUrl(basePreviewSrcUrl);
   }, [basePreviewSrcUrl]);
   useEffect(() => {
-    iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
-  }, [useUrlLoadPreview]);
+    iframeRef.current = previewUsesUrlTransport ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
+  }, [previewUsesUrlTransport]);
 
   useEffect(() => {
     if (filesRefreshKey === 0) return;
     const nextSrc = `${basePreviewSrcUrl}&fr=${filesRefreshKey}`;
     const timeout = window.setTimeout(() => {
-      if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
+      if (previewUsesUrlTransport && urlPreviewIframeRef.current?.contentWindow) {
         urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
       } else {
         setPreviewSrcUrl(nextSrc);
       }
     }, 180);
     return () => window.clearTimeout(timeout);
-  }, [basePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview]);
+  }, [basePreviewSrcUrl, filesRefreshKey, previewUsesUrlTransport]);
 
   useEffect(() => {
     setInlinedSource(null);
@@ -3959,25 +3968,25 @@ function HtmlViewer({
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
-  const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
+  const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(previewUsesUrlTransport);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
-  const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
+  const wasUrlLoadPreviewRef = useRef(previewUsesUrlTransport);
   useEffect(() => {
-    if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
-  }, [useUrlLoadPreview]);
-  const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
+    if (previewUsesUrlTransport) setHasLazySrcDocTransport(true);
+  }, [previewUsesUrlTransport]);
+  const useLazySrcDocTransport = previewUsesUrlTransport || hasLazySrcDocTransport;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
-  const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
+  const urlTransportSrc = previewUsesUrlTransport ? previewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     const win = target?.contentWindow;
-    if (!win || !srcDoc || useUrlLoadPreview || !useLazySrcDocTransport) return false;
+    if (!win || !srcDoc || previewUsesUrlTransport || !useLazySrcDocTransport) return false;
     if (activatedSrcDocTransportHtmlRef.current === srcDoc) return false;
     win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
-  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  }, [previewUsesUrlTransport, srcDoc, useLazySrcDocTransport]);
   useEffect(() => {
-    if (useUrlLoadPreview) {
+    if (previewUsesUrlTransport) {
       activatedSrcDocTransportHtmlRef.current = null;
       if (!wasUrlLoadPreviewRef.current) {
         setSrcDocTransportResetKey((key) => key + 1);
@@ -3987,7 +3996,7 @@ function HtmlViewer({
     }
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
-  }, [activateSrcDocTransport, useUrlLoadPreview]);
+  }, [activateSrcDocTransport, previewUsesUrlTransport]);
   useEffect(() => {
     restorePreviewScrollPosition();
   }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
@@ -4817,7 +4826,7 @@ function HtmlViewer({
   // Keyboard nav on the host, so the user can press ←/→ even when focus
   // is on the chat composer or any other host control.
   useEffect(() => {
-    if (!effectiveDeck || mode !== 'preview') return;
+    if (!effectiveDeck || mode !== 'preview' || previewUsesUrlTransport) return;
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target) {
@@ -4840,7 +4849,7 @@ function HtmlViewer({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveDeck, mode]);
+  }, [effectiveDeck, mode, previewUsesUrlTransport]);
 
   useEffect(() => {
     if (!presentMenuOpen) return;
@@ -5334,7 +5343,7 @@ function HtmlViewer({
               {t('fileViewer.source')}
             </button>
           </div>
-          {showPreviewToolbarControls && effectiveDeck ? (
+          {showPreviewToolbarControls && effectiveDeck && source !== null && !previewUsesUrlTransport ? (
             <span
               className="deck-nav"
               role="group"
@@ -5750,7 +5759,7 @@ function HtmlViewer({
                     <span className="share-menu-icon"><Icon name="file" size={14} /></span>
                     <span>{t('fileViewer.exportMd')}</span>
                   </button>
-                  {!useUrlLoadPreview ? (
+                  {!previewUsesUrlTransport ? (
                     <button
                       type="button"
                       className="share-menu-item"
@@ -5843,13 +5852,12 @@ function HtmlViewer({
           ) : null}
         </>)}
       <div className="viewer-body" ref={previewBodyRef}>
-        {source === null ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : mode === 'preview' ? (
-          <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
-          >
+        <div
+          className={`${manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
+          style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
+          hidden={mode !== 'preview'}
+          aria-hidden={mode !== 'preview'}
+        >
             {manualEditMode ? (
               <ManualEditPanel
                 targets={manualEditTargets}
@@ -5905,40 +5913,40 @@ function HtmlViewer({
                   <div className="artifact-preview-transport-stack">
                     <iframe
                       ref={urlPreviewIframeRef}
-                      data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
+                      data-testid={previewUsesUrlTransport ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
                       data-od-render-mode="url-load"
-                      data-od-active={useUrlLoadPreview ? 'true' : 'false'}
-                      aria-hidden={useUrlLoadPreview ? undefined : true}
-                      tabIndex={useUrlLoadPreview ? 0 : -1}
+                      data-od-active={previewUsesUrlTransport ? 'true' : 'false'}
+                      aria-hidden={previewUsesUrlTransport ? undefined : true}
+                      tabIndex={previewUsesUrlTransport ? 0 : -1}
                       title={file.name}
                       sandbox="allow-scripts allow-downloads"
                       src={urlTransportSrc}
                       onLoad={() => {
                         const frame = urlPreviewIframeRef.current;
-                        if (useUrlLoadPreview) iframeRef.current = frame;
+                        if (previewUsesUrlTransport) iframeRef.current = frame;
                         dcViewportRestoreAtRef.current = Date.now();
                         frame?.contentWindow?.postMessage({
                           type: '__dc_set_viewport',
                           ...dcViewportRef.current,
                         }, '*');
                         syncBridgeModes(frame);
-                        if (useUrlLoadPreview) restorePreviewScrollPosition();
+                        if (previewUsesUrlTransport) restorePreviewScrollPosition();
                       }}
                     />
                     <iframe
                       key={srcDocTransportResetKey}
                       ref={srcDocPreviewIframeRef}
-                      data-testid={useUrlLoadPreview ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
+                      data-testid={previewUsesUrlTransport ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
                       data-od-render-mode="srcdoc"
-                      data-od-active={useUrlLoadPreview ? 'false' : 'true'}
-                      aria-hidden={useUrlLoadPreview ? true : undefined}
-                      tabIndex={useUrlLoadPreview ? -1 : 0}
+                      data-od-active={previewUsesUrlTransport ? 'false' : 'true'}
+                      aria-hidden={previewUsesUrlTransport ? true : undefined}
+                      tabIndex={previewUsesUrlTransport ? -1 : 0}
                       title={file.name}
                       sandbox="allow-scripts allow-downloads"
                       srcDoc={srcDocTransportContent}
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
-                        if (!useUrlLoadPreview) iframeRef.current = frame;
+                        if (!previewUsesUrlTransport) iframeRef.current = frame;
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();
                         frame?.contentWindow?.postMessage({
@@ -5947,7 +5955,7 @@ function HtmlViewer({
                         }, '*');
                         replayInspectOverridesToIframe(frame);
                         syncBridgeModes(frame);
-                        if (!useUrlLoadPreview) restorePreviewScrollPosition();
+                        if (!previewUsesUrlTransport) restorePreviewScrollPosition();
                       }}
                     />
                   </div>
@@ -6169,6 +6177,8 @@ function HtmlViewer({
               </div>
             ) : null}
           </div>
+        {mode === 'preview' ? null : source === null ? (
+          <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : (
           <pre className="viewer-source">{source}</pre>
         )}

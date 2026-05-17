@@ -52,6 +52,43 @@ describe('buildSrcdoc', () => {
     expect(canSetActive).not.toContain('findActiveByVisibility');
   });
 
+  it('go() always dispatches keyboard events instead of calling setActive directly', () => {
+    // go() drives sequential navigation (next/prev/first/last). It must
+    // always dispatch synthetic keyboard events so that JS-driven decks
+    // (GSAP timelines, class-toggle decks with keyboard listeners) can run
+    // their own animation logic. If go() used setActive() directly it would
+    // only toggle the active CSS class, bypassing GSAP reveal animations
+    // and leaving slide content invisible.
+    const srcdoc = buildSrcdoc(
+      '<section class="slide active">One</section><section class="slide">Two</section>',
+      { deck: true }
+    );
+
+    const goFn = srcdoc.match(/function go\(action\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
+
+    // keyboard dispatch must be present
+    expect(goFn).toContain("dispatchKey('ArrowRight')");
+    expect(goFn).toContain("dispatchKey('ArrowLeft')");
+    // setActive must NOT be used as the navigation driver in go()
+    expect(goFn).not.toContain('setActive(');
+  });
+
+  it('does not intercept native deck button clicks', () => {
+    // The bridge must not capture #deck-prev / #deck-next button clicks via
+    // stopImmediatePropagation. Doing so converts click semantics to keyboard
+    // semantics — decks where a button click reveals one element but a key
+    // press reveals two would misbehave: both actions would advance by two.
+    // Native button handlers run unmodified; the host toolbar drives
+    // navigation via od:slide postMessages instead.
+    const srcdoc = buildSrcdoc(
+      '<section class="slide active">One</section><section class="slide">Two</section>',
+      { deck: true }
+    );
+
+    expect(srcdoc).not.toContain('ownDeckButton');
+    expect(srcdoc).not.toContain('stopImmediatePropagation');
+  });
+
   it('injects the selection bridge for comment mode', () => {
     const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
       commentBridge: true,
