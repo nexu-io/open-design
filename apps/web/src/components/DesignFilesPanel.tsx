@@ -196,6 +196,26 @@ export function DesignFilesPanel({
     setPage(0);
   }, [kindFilter]);
 
+  // Drop any selected files that fall outside the active filter. Without
+  // this, bulk delete / download would silently operate on rows the user
+  // can no longer see — particularly dangerous for destructive deletes.
+  // We keep the empty-filter branch a no-op so clearing the filter
+  // doesn't disturb existing selections.
+  useEffect(() => {
+    if (kindFilter.size === 0) return;
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filteredFiles.map((f) => f.name));
+      const next = new Set<string>();
+      let changed = false;
+      for (const name of prev) {
+        if (visible.has(name)) next.add(name);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filteredFiles, kindFilter]);
+
   // Outside-click + escape to close the filter popover. Stops short of a
   // full focus trap because the popover hosts only checkboxes plus a
   // small clear button; the existing tab order through them is fine.
