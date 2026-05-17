@@ -350,6 +350,34 @@ test('cursor stream skips model_call_id replay to avoid duplicate content', () =
   ]);
 });
 
+test('cursor stream emits missing suffix from model_call_id replay when chunks are dropped', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Only partial fragments arrive — the last chunk is dropped
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // " world" chunk was dropped / never received
+    // Full replay arrives with model_call_id — should emit the missing suffix
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+  ]);
+});
+
 test('codex json stream emits status text and usage events', () => {
   const { events, handler } = collectEvents('codex');
 

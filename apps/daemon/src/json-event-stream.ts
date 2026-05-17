@@ -236,10 +236,21 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
 
   if (obj.type === 'assistant' && obj.message) {
     // Cursor sends a final assistant message with `model_call_id` that
-    // replays the full accumulated text for the turn. Since the
-    // incremental deltas have already been emitted, skip this replay
-    // to avoid duplicating content in the persisted message.
-    if (typeof obj.model_call_id === 'string') return true;
+    // replays the full accumulated text for the turn. If all incremental
+    // deltas arrived, the replay content equals `cursorTextSoFar` and
+    // emitCursorTextDelta will deduplicate it. If a streamed chunk was
+    // dropped, the replay may contain a suffix that was never emitted —
+    // emit only that missing suffix to keep the persisted message complete
+    // without duplicating the content that was already sent.
+    if (typeof obj.model_call_id === 'string') {
+      const text = extractCursorText(obj.message);
+      if (text && text.length > state.cursorTextSoFar.length && state.cursorTextSoFar.length > 0) {
+        const suffix = text.slice(state.cursorTextSoFar.length);
+        if (suffix) onEvent({ type: 'text_delta', delta: suffix });
+        state.cursorTextSoFar = text;
+      }
+      return true;
+    }
     const text = extractCursorText(obj.message);
     if (!text) return false;
     emitCursorTextDelta(text, onEvent, state);
