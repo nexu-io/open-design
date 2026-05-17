@@ -1071,8 +1071,72 @@ export function retrieveForInjection(
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Stage 10b — Polarity re-check after category trimming.
+  //
+  // Stage 7 enforces NEGATIVE_BUDGET_RATIO against the post-cap set. Stage 9
+  // can then trim positives (over-represented categories), which lowers the
+  // positive count and may push the negative ratio above the ceiling. Without
+  // this re-check, a profile capped at 50% negatives in Stage 7 can land at
+  // 60%+ after category trimming.
+  //
+  // We trim weakest negatives only (no backfill — the overflow pool was
+  // already consumed by Stages 8 and 10). MIN_NEG_FLOOR still applies.
+  // ---------------------------------------------------------------------------
+  {
+    const negsAfterCat = prefs.filter((p) => p.polarity === "negative");
+    const posAfterCat = prefs.filter((p) => p.polarity === "positive");
+    if (negsAfterCat.length > 0) {
+      const ratio = NEGATIVE_BUDGET_RATIO / (1 - NEGATIVE_BUDGET_RATIO);
+      const maxAllowedNegs = Math.max(
+        MIN_NEG_FLOOR,
+        Math.floor(ratio * posAfterCat.length),
+      );
+      if (negsAfterCat.length > maxAllowedNegs) {
+        const negsSorted = [...negsAfterCat].sort(
+          (a, b) => (b._effective_priority ?? 0) - (a._effective_priority ?? 0),
+        );
+        const trimmed = negsSorted.slice(maxAllowedNegs);
+        const trimmedIds = new Set(trimmed.map((p) => p.id));
+        prefs = prefs.filter((p) => !trimmedIds.has(p.id));
+        diagnostics.push({
+          type: "diversity_ceiling_applied",
+          negative_count_before: negsAfterCat.length,
+          negative_count_after: maxAllowedNegs,
+          max_negative_slots: maxAllowedNegs,
+          ratio: NEGATIVE_BUDGET_RATIO,
+          trimmed_patterns: trimmed.map((p) => p.pattern),
+          trace: `Diversity re-check after category trim: ${negsAfterCat.length} negatives capped to ${maxAllowedNegs} (post-category ${(NEGATIVE_BUDGET_RATIO * 100).toFixed(0)}% ratio)`,
+        });
+      }
+    }
+  }
+
   // Stage 11 — Token-budget enforcement
+  //
+  // Walk the ranked set and keep adding patterns until the token estimate
+  // would exceed TOKEN_BUDGET. The budget includes the [MEMORY CONTEXT]
+  // header overhead and, when project overrides are present, a worst-case
+  // reservation for the "Project override:" line so it cannot push the
+  // final block over budget.
+  //
+  // The override-line cost is non-trivial because override patterns appear
+  // TWICE in the rendered block: once in their polarity line and once in
+  // the override line. Stage 11's per-pattern accounting only counts the
+  // first occurrence, so the second has to be reserved up-front.
   let tokenCount = 20; // overhead for [MEMORY CONTEXT] header + line prefixes
+
+  let overrideLineReserve = 0;
+  if (project_id && projectPrefs.length > 0) {
+    // Wrapper text: "Project override: " + " active (project_id)"
+    overrideLineReserve = 12 + Math.ceil(project_id.length / CHARS_PER_TOKEN);
+    // Each override pattern duplicated in the override line plus a separator
+    for (const p of projectPrefs) {
+      overrideLineReserve += Math.ceil(p.pattern.length / CHARS_PER_TOKEN) + 1;
+    }
+  }
+  tokenCount += overrideLineReserve;
+
   const budgeted: RankedPreference[] = [];
   for (const p of prefs) {
     const patternTokens = Math.ceil(p.pattern.length / CHARS_PER_TOKEN);
@@ -1096,6 +1160,40 @@ export function retrieveForInjection(
   for (const p of budgeted) delete p._effective_priority;
   for (const p of prefs) delete p._effective_priority;
 
+  // Stage 11b — Final polarity check against the BUDGETED set.
+  //
+  // Stage 11 drops records based on token cost without regard for polarity,
+  // so it can drop a positive and leave the ratio violated. Mirror Stage 10b
+  // logic against the budgeted set (no backfill here — overflow is exhausted).
+  const budgetedNegs = budgeted.filter((p) => p.polarity === "negative");
+  const budgetedPos = budgeted.filter((p) => p.polarity === "positive");
+  if (budgetedNegs.length > 0) {
+    const ratio = NEGATIVE_BUDGET_RATIO / (1 - NEGATIVE_BUDGET_RATIO);
+    const maxAllowedNegs = Math.max(
+      MIN_NEG_FLOOR,
+      Math.floor(ratio * budgetedPos.length),
+    );
+    if (budgetedNegs.length > maxAllowedNegs) {
+      const negsSorted = [...budgetedNegs].sort(
+        (a, b) => b.signal_strength - a.signal_strength,
+      );
+      const trimmed = negsSorted.slice(maxAllowedNegs);
+      const trimmedIds = new Set(trimmed.map((p) => p.id));
+      for (let i = budgeted.length - 1; i >= 0; i--) {
+        if (trimmedIds.has(budgeted[i]!.id)) budgeted.splice(i, 1);
+      }
+      diagnostics.push({
+        type: "diversity_ceiling_applied",
+        negative_count_before: budgetedNegs.length,
+        negative_count_after: maxAllowedNegs,
+        max_negative_slots: maxAllowedNegs,
+        ratio: NEGATIVE_BUDGET_RATIO,
+        trimmed_patterns: trimmed.map((p) => p.pattern),
+        trace: `Diversity re-check after token budget: ${budgetedNegs.length} negatives capped to ${maxAllowedNegs} (final ${(NEGATIVE_BUDGET_RATIO * 100).toFixed(0)}% ratio)`,
+      });
+    }
+  }
+
   const positives = budgeted
     .filter((p): p is Preference => p.polarity === "positive")
     .sort((a, b) => b.signal_strength - a.signal_strength);
@@ -1104,13 +1202,12 @@ export function retrieveForInjection(
     .filter((p): p is Preference => p.polarity === "negative")
     .sort((a, b) => b.signal_strength - a.signal_strength);
 
-  const overrides = projectPrefs.filter(
-    (p) =>
-      p.signal_strength >= INJECTION_THRESHOLD &&
-      p.polarity_status === "stable" &&
-      (!preference_types ||
-        preference_types.some((t) => p.preference_type.startsWith(t))),
-  );
+  // Derive projectOverrides from records that actually survived all stages.
+  // Previously this was a fresh filter over projectPrefs that ignored hard
+  // cap / diversity ceilings / token budget, so buildPromptBlock could emit a
+  // "Project override:" line listing patterns that were not actually injected.
+  const budgetedIds = new Set(budgeted.map((p) => p.id));
+  const overrides = projectPrefs.filter((p) => budgetedIds.has(p.id));
 
   return { positives, negatives, projectOverrides: overrides, diagnostics };
 }

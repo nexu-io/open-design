@@ -577,4 +577,65 @@ describe("category diversity quota", () => {
       /not a valid ISO date string/,
     );
   });
+
+  it("ADV-34: polarity ratio holds after category trimming (regression)", () => {
+    // Stage 9 trims over-represented positive categories, which lowers the
+    // positive count and could push the negative ratio above 50%.
+    // Without the Stage 10b re-check, retrieval would emit a 60%+ negative
+    // prompt despite Stage 7 having capped at 50% earlier.
+    //
+    // 6 layout positives (all same type → category will trim to 3) +
+    // 5 negatives in distinct types. After Stage 7: ratio holds.
+    // After Stage 9: only 3 positives remain, ratio is now 5/(3+5) = 62.5%.
+    // Stage 10b must re-trim negatives back to 3.
+    for (let i = 0; i < 6; i++) {
+      buildToInjectable({ pattern: `lp_${i}`, preference_type: "layout" });
+    }
+    for (let i = 0; i < 5; i++) {
+      buildToInjectable({ pattern: `n_${i}`, preference_type: `tn_${i}`, polarity: "negative" });
+    }
+
+    const retrieved = store.retrieveForInjection(USER, {});
+    const total = retrieved.positives.length + retrieved.negatives.length;
+    expect(total).toBeGreaterThan(0);
+    expect(retrieved.negatives.length).toBeLessThanOrEqual(
+      Math.max(store.MIN_NEG_FLOOR, Math.ceil(total * store.NEGATIVE_BUDGET_RATIO)),
+    );
+  });
+
+  it("ADV-35: project-scoped prompt block stays within token budget (regression)", () => {
+    // Build many global patterns + many project-override patterns. The
+    // override line in the prompt block would previously be appended after
+    // Stage 11's per-pattern token budget had already been exhausted,
+    // pushing the rendered block past TOKEN_BUDGET.
+    for (let i = 0; i < 9; i++) {
+      buildToInjectable({
+        pattern: `global_pattern_${i}_long`,
+        preference_type: `gtp_${i}`,
+      });
+    }
+    for (let i = 0; i < 6; i++) {
+      buildToInjectable({
+        pattern: `override_${i}`,
+        preference_type: `otp_${i}`,
+        scope: "project",
+        project_id: "proj_budget",
+      });
+    }
+
+    const retrieved = store.retrieveForInjection(USER, { project_id: "proj_budget" });
+    const block = store.buildPromptBlock(retrieved, "proj_budget");
+    const estimatedTokens = Math.ceil(block.length / store.CHARS_PER_TOKEN);
+
+    expect(estimatedTokens).toBeLessThanOrEqual(store.TOKEN_BUDGET);
+
+    // Every override pattern listed in the block must also be in the budgeted set
+    const budgetedPatterns = new Set([
+      ...retrieved.positives.map((p) => p.pattern),
+      ...retrieved.negatives.map((p) => p.pattern),
+    ]);
+    for (const override of retrieved.projectOverrides) {
+      expect(budgetedPatterns.has(override.pattern)).toBe(true);
+    }
+  });
 });
