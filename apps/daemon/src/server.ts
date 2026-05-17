@@ -1394,7 +1394,14 @@ export function createAgentRuntimeEnv(
   // was launched with a full path to node and the directory was not on PATH.
   const nodeBinDir = path.dirname(nodeBin);
   if (nodeBinDir) {
-    const existingPath = typeof env.PATH === 'string' ? env.PATH : '';
+    // On Windows, process.env spreads with the search path under 'Path' rather
+    // than 'PATH'. Locate the key case-insensitively so we read and write the
+    // same entry that child_process.spawn consults. If we blindly write a new
+    // 'PATH' key alongside an existing 'Path', Node's case-insensitive env
+    // de-duplication on Windows lets the new key win — dropping all inherited
+    // directories (git, npm, agent shims, etc.) from the child's search path.
+    const pathKey = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+    const existingPath = typeof env[pathKey] === 'string' ? (env[pathKey] as string) : '';
     const parts = existingPath.split(path.delimiter).filter((p) => p.length > 0);
     const normalize = (p: string) => p.replace(/[/\\]+$/, '');
     const normalizedDir = normalize(nodeBinDir);
@@ -1405,7 +1412,7 @@ export function createAgentRuntimeEnv(
         : n === normalizedDir;
     });
     if (!alreadyIncluded) {
-      env.PATH = [nodeBinDir, ...parts].join(path.delimiter);
+      env[pathKey] = [nodeBinDir, ...parts].join(path.delimiter);
     }
   }
 

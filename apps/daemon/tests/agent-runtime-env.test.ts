@@ -43,6 +43,24 @@ describe('agent runtime tool environment', () => {
     expect(env.PATH).toBe(`/opt/node${path.delimiter}/bin`);
   });
 
+  it('updates the existing path key in place when the base env uses Windows-style Path casing', () => {
+    // Windows GUI launches commonly spread process.env where the search path is
+    // stored under 'Path' rather than 'PATH'. The function must read and update
+    // that same key so child_process.spawn (which de-duplicates env keys
+    // case-insensitively on Windows) does not discard the inherited directories.
+    const env = createAgentRuntimeEnv(
+      { Path: `/usr/local/bin` },
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/node/node',
+    );
+
+    // The original 'Path' key must be updated with the prepended node dir.
+    expect(env.Path).toBe(`/opt/node${path.delimiter}/usr/local/bin`);
+    // A competing uppercase 'PATH' key must NOT be created alongside it.
+    expect(env.PATH).toBeUndefined();
+  });
+
   it('does not leak stale inherited tool tokens when no run token was minted', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', OD_TOOL_TOKEN: 'stale-token' },
