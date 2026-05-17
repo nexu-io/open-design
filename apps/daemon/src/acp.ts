@@ -507,10 +507,20 @@ export function attachAcpSession({
     }
   };
 
-  const recoverFromModelSelectionError = () => {
+  const recoverFromModelSelectionError = (errorCode?: unknown, errorMessage?: string) => {
+    const requestedModel = model;
     setModelRequestId = null;
     activeModel = activeModel || 'default';
     send('agent', { type: 'status', label: 'model', model: activeModel });
+    const codeHint = typeof errorCode === 'number' ? ` (error ${errorCode})` : '';
+    const detail = errorMessage ? `: ${errorMessage}` : '';
+    const warningMsg =
+      `Model "${requestedModel}" could not be set${codeHint}${detail}. ` +
+      `Using CLI default "${activeModel}" instead.`;
+    // Surface the warning as a status event the frontend already renders.
+    send('agent', { type: 'status', label: 'model_selection_failed', detail: warningMsg });
+    // Also emit to stderr so `pnpm tools-dev logs` captures it.
+    console.warn(`[acp] ${warningMsg}`);
     sendPrompt();
   };
 
@@ -536,7 +546,8 @@ export function attachAcpSession({
         modelSelectionErrorIsRecoverable(error?.code) &&
         promptRequestId === null
       ) {
-        recoverFromModelSelectionError();
+        const errMsg = typeof error?.message === 'string' ? error.message : undefined;
+        recoverFromModelSelectionError(error?.code, errMsg);
         return;
       }
       if (error?.code === -32603 && obj.id !== expectedId) {

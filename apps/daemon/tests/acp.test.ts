@@ -253,6 +253,75 @@ function agentModelStatuses(events: Array<{ event: string; payload: unknown }>):
     .map((entry) => (entry.payload as { model?: unknown }).model);
 }
 
+test('attachAcpSession emits model_selection_failed warning when set_model returns a recoverable error', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'claude-opus-4-7-max',
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  // initialize → success
+  writeAcpResult(child, 1, {});
+  // session/new → success with a default model
+  writeAcpResult(child, 2, {
+    sessionId: 'session-1',
+    models: { currentModelId: 'swe-1-6-fast', availableModels: [] },
+  });
+  // session/set_model → -32602 error (method not supported)
+  child.stdout.write(`${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 3,
+    error: { code: -32602, message: 'Model selection not supported' },
+  })}\n`);
+
+  // Should emit model status fallback AND a warning event
+  const statusEvents = events.filter((e) => {
+    const p = e.payload as { type?: string; label?: string };
+    return e.event === 'agent' && p.type === 'status';
+  });
+  const warningEvent = statusEvents.find(
+    (e) => (e.payload as { label?: string }).label === 'model_selection_failed',
+  );
+  assert.ok(warningEvent, 'should emit a model_selection_failed status event');
+  const warningPayload = warningEvent.payload as { detail?: string };
+  assert.ok(
+    warningPayload.detail?.includes('claude-opus-4-7-max'),
+    'warning should mention the requested model',
+  );
+  assert.ok(
+    warningPayload.detail?.includes('swe-1-6-fast'),
+    'warning should mention the fallback model',
+  );
+  assert.ok(
+    warningPayload.detail?.includes('-32602'),
+    'warning should include the error code',
+  );
+
+  // Should have logged to stderr
+  assert.ok(warnSpy.mock.calls.length > 0, 'should log warning to console');
+  assert.ok(
+    String(warnSpy.mock.calls[0][0]).includes('claude-opus-4-7-max'),
+    'console warning should mention requested model',
+  );
+
+  warnSpy.mockRestore();
+
+  // Should still proceed with sendPrompt (session/prompt is the next RPC)
+  const requests = parseRpcWrites(writes);
+  const promptRequest = requests.find((entry) => entry.method === 'session/prompt');
+  assert.ok(promptRequest, 'should still send the prompt after recovery');
+});
+
 test('attachAcpSession force-terminates the child after a clean prompt completion if it does not exit on stdin.end()', async () => {
   vi.useFakeTimers();
   try {
