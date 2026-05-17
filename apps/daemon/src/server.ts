@@ -9976,6 +9976,17 @@ export async function startServer({
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await design.analytics.shutdown();
     };
+    if (fs.existsSync(STATIC_DIR)) {
+      const spaIndex = path.join(STATIC_DIR, 'index.html');
+      app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/artifacts/') && !req.path.startsWith('/frames/')) {
+          res.sendFile(spaIndex);
+        } else {
+          next();
+        }
+      });
+    }
+
     let server;
     try {
       server = app.listen(port, host, () => {
