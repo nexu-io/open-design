@@ -514,7 +514,7 @@ describe('ConnectorsBrowser', () => {
     ).not.toHaveProperty('github');
   });
 
-  it('recovers a stuck pending connector when the auth flow is cancelled and the window regains focus', async () => {
+  it('does not auto-cancel pending authorization on focus while the daemon authorization window is still valid', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,
       status: 'available',
@@ -543,12 +543,13 @@ describe('ConnectorsBrowser', () => {
 
     fireEvent(window, new Event('focus'));
 
-    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy());
-    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelConnectorAuthorization).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
     expect(
       JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
-    ).not.toHaveProperty('github');
+    ).toHaveProperty('github');
   });
 
   it('does not auto-cancel pending authorization on focus when the daemon already reports the connector as connected', async () => {

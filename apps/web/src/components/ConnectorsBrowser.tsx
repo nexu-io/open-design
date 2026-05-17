@@ -581,20 +581,44 @@ export function ConnectorsBrowser({
     connectorAuthorizationPendingRef.current = connectorAuthorizationPending;
   }, [connectorAuthorizationPending]);
 
-  const cancelStaleAuthorizations = useCallback(async (statuses: ConnectorStatusResponse['statuses']) => {
+  const cancelStaleAuthorizations = useCallback(async (
+    statuses: ConnectorStatusResponse['statuses'],
+    nowMs = Date.now(),
+  ) => {
     const pending = connectorAuthorizationPendingRef.current;
-    const stuck = Object.keys(pending).filter((connectorId) => statuses[connectorId]?.status !== 'connected');
+    const stuck = Object.keys(pending).filter((connectorId) => {
+      if (statuses[connectorId]?.status === 'connected') return false;
+      const expiresAt = pending[connectorId]?.expiresAt;
+      if (!expiresAt) return false;
+      const expiresAtMs = Date.parse(expiresAt);
+      return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+    });
     if (stuck.length === 0) return;
     await Promise.allSettled(stuck.map(async (connectorId) => {
-      const connector = await cancelConnectorAuthorizationRequest(connectorId);
-      if (connector) updateConnector(connector);
-      setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+      let connector: ConnectorDetail | null = null;
+      try {
+        connector = await cancelConnectorAuthorizationRequest(connectorId);
+      } catch {
+        connector = null;
+      }
+      if (!connector) {
+        setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
+        return;
+      }
+      updateConnector(connector);
+      setConnectorAuthorizationCancelFailed((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
       setConnectorAuthorizationError((curr) => {
         if (curr[connectorId] === undefined) return curr;
         const next = { ...curr };
         delete next[connectorId];
         return next;
       });
+      setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
     }));
   }, []);
 
