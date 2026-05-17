@@ -8,8 +8,12 @@ Führen Sie das vollständige Produkt lokal aus.
 
 - **Node.js:** `~24` (Node 24.x). Das Repository erzwingt dies über `package.json#engines`.
 - **pnpm:** `10.33.x`. Das Repository pinnt `pnpm@10.33.2` über `packageManager`; verwenden Sie Corepack, damit automatisch die gepinnte Version gewählt wird.
-- **OS:** macOS, Linux und WSL2 sind die primären Pfade. Windows nativ sollte für die meisten Abläufe funktionieren, WSL2 ist aber die sicherere Basis.
-- **Optionale lokale Agent-CLI:** Claude Code, Codex, Gemini CLI, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI usw. Wenn keine installiert ist, verwenden Sie den BYOK-API-Modus in den Einstellungen.
+- **OS:** macOS, Linux und WSL2 sind die primären Pfade. Windows nativ wird unterstützt; lesen Sie [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) für häufige Setup-Probleme.
+- **Optionale lokale Agent-CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI, etc. Wenn keine installiert ist, verwenden Sie den BYOK-API-Modus in den Einstellungen.
+
+### Lokale Agent-CLI und PATH
+
+Der Daemon scannt Ihr **`PATH`** (plus gängige Benutzer-Toolchain-Verzeichnisse). Wenn Sie eine CLI mit **`npm install -g`** oder **Homebrew** installieren und Open Design sie immer noch als *nicht installiert* anzeigt, startet die GUI möglicherweise mit einem minimalen `PATH`, das Ihr globales npm- oder Homebrew-`bin`-Verzeichnis nicht enthält (häufig auf macOS, wenn die App nicht aus einer vollständigen Login-Shell gestartet wird). Stellen Sie sicher, dass das Verzeichnis der ausführbaren Datei im `PATH` für den Prozess liegt, der den Daemon ausführt, und verwenden Sie dann **Rescan** in **Settings → Execution mode**.
 
 `nvm` / `fnm` sind optionale Komfortwerkzeuge, keine Voraussetzung für das Projektsetup. Wenn Sie eines davon verwenden, installieren/selektieren Sie Node 24 vor pnpm:
 
@@ -30,6 +34,129 @@ corepack enable
 corepack pnpm --version   # sollte 10.33.2 ausgeben
 ```
 
+## Docker Setup
+
+Führen Sie Open Design in einer vollständig containerisierten Umgebung aus, ohne Node.js oder pnpm lokal zu installieren.
+
+### Anforderungen
+
+* Docker Desktop
+* Docker Compose v2
+
+Überprüfen Sie, ob Docker korrekt installiert ist:
+
+```bash
+docker compose version
+```
+
+---
+
+## Open Design starten
+
+Aus dem Repository-Root:
+
+```bash
+cd deploy
+docker compose up -d
+```
+
+Öffnen Sie die App in Ihrem Browser:
+
+```text
+http://localhost:7456
+```
+
+Der erste Start kann einige Sekunden dauern, während Docker das neueste Image herunterlädt.
+
+---
+
+## Häufige Docker-Befehle
+
+### Logs anzeigen
+
+```bash
+docker compose logs -f
+```
+
+### Container neu starten
+
+```bash
+docker compose restart
+```
+
+### Container stoppen
+
+```bash
+docker compose down
+```
+
+### Neuestes Image herunterladen
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Alle lokalen App-Daten entfernen
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Umgebungskonfiguration
+
+Erstellen Sie eine `deploy/.env`-Datei, um die Standardkonfiguration zu überschreiben:
+
+```env
+# Port, der auf dem Host exponiert wird
+OPEN_DESIGN_PORT=7456
+
+# Container-Speicherlimit
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# Erlaubte CORS-Ursprünge
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker-Image-Tag
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+```
+
+---
+
+## Persistenter Speicher
+
+Open Design speichert Projekte und SQLite-Daten in einem Docker-Volume:
+
+```text
+open_design_data
+```
+
+Das Volume wird gemountet nach:
+
+```text
+/app/.od
+```
+
+Daten bleiben über Container-Neustarts und Image-Updates hinweg bestehen.
+
+Überprüfen Sie das Volume:
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## Hinweise
+
+* Der Docker-Modus ist ideal für Mitwirkende, die keine lokale Node.js- oder pnpm-Einrichtung wünschen.
+* Der Container exponiert den Produktions-Daemon-Build direkt auf Port `7456`.
+* Für Entwicklungsworkflows und erweiterte lokale Einrichtung lesen Sie den Rest dieser Schnellstartanleitung.
+
+---
+
 ## One-shot (Dev-Modus)
 
 ```bash
@@ -45,7 +172,7 @@ Für die Desktop-Shell und alle verwalteten Sidecars im Hintergrund:
 pnpm tools-dev # startet daemon + web + desktop im Hintergrund
 ```
 
-Beim ersten Laden erkennt die App Ihre installierte Code-Agent-CLI (Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen), wählt sie automatisch und nutzt standardmäßig den `web-prototype` Skill sowie das `Neutral Modern` Design System. Geben Sie einen Prompt ein und klicken Sie auf **Senden**. Der Agent streamt in den linken Bereich; das `<artifact>` Tag wird herausgeparst und das HTML rechts live gerendert. Nach Abschluss können Sie das Artifact mit **Auf Datenträger speichern** unter `./.od/artifacts/<timestamp>-<slug>/index.html` speichern.
+Beim ersten Laden erkennt die App Ihre installierte Code-Agent-CLI (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI), wählt sie automatisch und nutzt standardmäßig den `web-prototype` Skill sowie das `Neutral Modern` Design System. Geben Sie einen Prompt ein und klicken Sie auf **Senden**. Der Agent streamt in den linken Bereich; das `<artifact>` Tag wird herausgeparst und das HTML rechts live gerendert. Nach Abschluss können Sie das Artifact mit **Auf Datenträger speichern** unter `./.od/artifacts/<timestamp>-<slug>/index.html` speichern.
 
 Das Dropdown **Designsystem** enthält 71 integrierte Systeme: 2 handgeschriebene Starter (Neutral Modern, Warm Editorial) und 69 Produktsysteme, importiert aus [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md), gruppiert nach Kategorie (AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive). Wählen Sie eines aus, um jeden Prototyp in der Ästhetik dieser Marke zu gestalten.
 
@@ -215,7 +342,7 @@ open-design/
 ## Fehlerbehebung
 
 - **"no agents found on PATH"** — installieren Sie eine davon: `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Alternativ wechseln Sie in der oberen Leiste zu "Anthropic API · BYOK" und fügen in **Einstellungen** einen Key ein.
-- **daemon 500 on /api/chat** — prüfen Sie das daemon-Terminal und den stderr-Auszug; meist hat die CLI ihre Argumente abgelehnt. Unterschiedliche CLIs haben unterschiedliche argv-Formen; siehe `apps/daemon/src/agents.ts` `buildArgs`, falls Sie nachjustieren müssen.
+- **daemon 500 on /api/chat** — prüfen Sie das daemon-Terminal und den stderr-Auszug; meist hat die CLI ihre Argumente abgelehnt. Unterschiedliche CLIs haben unterschiedliche argv-Formen; sehen Sie `apps/daemon/src/agents.ts` `buildArgs`, falls Sie nachjustieren müssen.
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — führen Sie die Media Dispatcher Checks oben aus. Setzen Sie keine alte CLI-Session fort; öffnen Sie das Projekt aus der Open Design App neu, damit der daemon frische `OD_*` Variablen injiziert.
 - **Codex lädt zu viel Plugin-Kontext** — starten Sie Open Design mit `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`, damit vom daemon gestartete Codex-Prozesse mit `--disable plugins` laufen.
 - **artifact never renders** — das Modell hat Text ohne `<artifact>` Wrapper erzeugt. Prüfen Sie, ob der System Prompt ankommt (daemon log), und wechseln Sie ggf. zu einem stärkeren Modell oder strengeren Skill.
