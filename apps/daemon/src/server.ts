@@ -1395,9 +1395,17 @@ export function createAgentRuntimeEnv(
   const nodeBinDir = path.dirname(nodeBin);
   if (nodeBinDir) {
     const existingPath = typeof env.PATH === 'string' ? env.PATH : '';
-    const parts = existingPath.split(path.delimiter).filter((p) => p.length > 0);
-    if (!parts.includes(nodeBinDir)) {
-      env.PATH = [nodeBinDir, ...parts].join(path.delimiter);
+    const seenPathParts = new Set();
+    const parts = [nodeBinDir, ...existingPath.split(path.delimiter)]
+      .filter((p) => p.length > 0)
+      .filter((p) => {
+        const key = process.platform === 'win32' ? p.toLowerCase() : p;
+        if (seenPathParts.has(key)) return false;
+        seenPathParts.add(key);
+        return true;
+      });
+    if (parts.length > 0) {
+      env.PATH = parts.join(path.delimiter);
     }
   }
 
@@ -1408,6 +1416,10 @@ export function createAgentRuntimeEnv(
   }
 
   return env;
+}
+
+function isBenignStdinClosedError(err): boolean {
+  return err?.code === 'EPIPE' || err?.code === 'EOF' || err?.message === 'write EOF';
 }
 
 export function createAgentRuntimeToolPrompt(
@@ -8802,7 +8814,7 @@ export async function startServer({
           // the same condition via UV_EOF. Both mean the child exited before
           // reading stdin — the process exit/close handlers already route
           // the underlying failure to SSE via stderr, so swallow these here.
-          if (err.code !== 'EPIPE' && err.code !== 'EOF' && err.message !== 'write EOF') {
+          if (!isBenignStdinClosedError(err)) {
             send(
               'error',
               createSseErrorPayload(
@@ -9368,7 +9380,7 @@ export async function startServer({
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
           // stderr / exit handlers.
-          if (err && err.code !== 'EPIPE') throw err;
+          if (!isBenignStdinClosedError(err)) throw err;
         }
         run.stdinOpen = true;
       } else {
