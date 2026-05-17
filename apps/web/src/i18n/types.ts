@@ -1102,6 +1102,9 @@ export interface Dict {
   'designFiles.groupBy': string;
   'designFiles.groupByKind': string;
   'designFiles.groupByModified': string;
+  'designFiles.filterBy': string;
+  'designFiles.filterClear': string;
+  'designFiles.filterCount': string;
   'designFiles.expandGroup': string;
   'designFiles.collapseGroup': string;
   'designFiles.sectionPages': string;

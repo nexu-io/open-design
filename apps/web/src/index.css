@@ -9369,8 +9369,14 @@ button.connector-action.is-loading {
   display: flex;
   flex-direction: column;
 }
-.df-group-toggle {
+.df-toolbar-row {
   margin: 0 20px 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.df-group-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -9401,6 +9407,143 @@ button.connector-action.is-loading {
   background: var(--bg-subtle);
   border-color: var(--border);
   color: var(--text);
+}
+
+/* Filter-by-kind dropdown. Lives in the .df-toolbar-row alongside the
+   group-by toggle. Trigger is a button with a count badge when active;
+   popover is a single-column checkbox list of available kinds. */
+.df-kind-filter {
+  position: relative;
+  display: inline-flex;
+}
+.df-kind-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.df-kind-filter-trigger:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.df-kind-filter-trigger.active {
+  background: var(--bg-subtle);
+  border-color: var(--selected, var(--border));
+  color: var(--text);
+}
+.df-kind-filter-trigger-label {
+  white-space: nowrap;
+}
+.df-kind-filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--selected, var(--accent, var(--text)));
+  color: var(--bg-panel);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+.df-kind-filter-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(220px, 100%);
+  max-height: min(360px, calc(100vh - 96px));
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+.df-kind-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.df-kind-filter-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.df-kind-filter-clear:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.df-kind-filter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.df-kind-filter-list li + li {
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.df-kind-filter-item {
+  display: grid;
+  grid-template-columns: 18px 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  border-radius: 4px;
+}
+.df-kind-filter-item:hover {
+  background: var(--bg-subtle);
+}
+.df-kind-filter-item input[type='checkbox'] {
+  margin: 0;
+  cursor: pointer;
+}
+.df-kind-filter-glyph {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: center;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.df-kind-filter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.df-kind-filter-itemcount {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .df-section { display: flex; flex-direction: column; gap: 0; }
 .df-section + .df-section { margin-top: 6px; }
