@@ -292,6 +292,64 @@ test('cursor stream de-duplicates cumulative timestamped assistant chunks', () =
   ]);
 });
 
+test('cursor stream skips model_call_id replay to avoid duplicate content', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Cursor sends incremental deltas as independent fragments, then a
+  // final assistant message with model_call_id that replays the full
+  // accumulated text. The replay must be skipped to avoid duplication.
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
+    }) +
+    '\n' +
+    // Full replay with model_call_id — should be skipped
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n' +
+    // New turn starts with fresh incremental deltas
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 4,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 5,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' turn' }] },
+    }) +
+    '\n' +
+    // Full replay of second turn — should also be skipped
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 6,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
 test('codex json stream emits status text and usage events', () => {
   const { events, handler } = collectEvents('codex');
 

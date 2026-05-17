@@ -235,12 +235,13 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
   }
 
   if (obj.type === 'assistant' && obj.message) {
+    // Cursor sends a final assistant message with `model_call_id` that
+    // replays the full accumulated text for the turn. Since the
+    // incremental deltas have already been emitted, skip this replay
+    // to avoid duplicating content in the persisted message.
+    if (typeof obj.model_call_id === 'string') return true;
     const text = extractCursorText(obj.message);
     if (!text) return false;
-    if (typeof obj.timestamp_ms === 'number') {
-      emitCursorTextDelta(text, onEvent, state);
-      return true;
-    }
     emitCursorTextDelta(text, onEvent, state);
     return true;
   }
