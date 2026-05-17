@@ -94,7 +94,7 @@ export function BoardComposerPopover({
         <div className="board-pod-summary">
           <strong>{t('chat.comments.capturedItems', { n: target.memberCount || podMembers.length })}</strong>
           <div className="board-pod-members">
-            {podMembers.slice(0, 6).map((member) => (
+            {podMembers.map((member) => (
               <span key={member.elementId} className="board-pod-chip">
                 {summarizeMember(member)}
                 <button

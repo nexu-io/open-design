@@ -76,4 +76,12 @@ describe('BoardComposerPopover captured-component removal', () => {
     expect(onRemoveMember).toHaveBeenCalledTimes(1);
     expect(onRemoveMember).toHaveBeenCalledWith('alpha');
   });
+
+  it('renders every captured chip so members beyond the sixth stay reachable', () => {
+    const members = Array.from({ length: 10 }, (_, i) => member(`m${i}`, `Member ${i}`));
+    renderPopover({ target: podTarget(members), onRemoveMember: () => {} });
+
+    expect(document.querySelectorAll('.board-pod-chip')).toHaveLength(10);
+    expect(screen.queryByText('Member 9')).not.toBeNull();
+  });
 });

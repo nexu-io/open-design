@@ -10899,6 +10899,8 @@ button.connector-action.is-loading {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
 }
 .board-pod-chip {
   display: inline-flex;
