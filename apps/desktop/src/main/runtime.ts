@@ -1,13 +1,18 @@
+import { execFile } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
 import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
+import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -853,6 +858,18 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const validated = await validateExistingDirectory(resolved.context.resolvedDir);
     if (!validated.ok) return `open-path: ${validated.reason}`;
     try {
+      if (release().toLowerCase().includes("microsoft")) {
+        try {
+          const { stdout } = await execFileAsync("wslpath", ["-w", validated.resolved]);
+          const windowsPath = stdout.trim();
+          if (windowsPath.length > 0) {
+            await execFileAsync("explorer.exe", [windowsPath]);
+            return "";
+          }
+        } catch {
+          // Fall through to Electron's default opener for non-standard WSL setups.
+        }
+      }
       return await shell.openPath(validated.resolved);
     } catch (err) {
       return err instanceof Error ? err.message : String(err);
