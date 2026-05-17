@@ -9056,7 +9056,7 @@ export async function startServer({
         if (authFailure?.status === 'missing') {
           send('error', createSseErrorPayload(
             'AGENT_AUTH_REQUIRED',
-            cursorAuthGuidance(),
+            authFailure.message ?? cursorAuthGuidance(),
             { retryable: true },
           ));
           return;
@@ -9246,15 +9246,20 @@ export async function startServer({
       }
       if (
         code !== 0 &&
-        !run.cancelRequested &&
-        classifyAgentAuthFailure(agentId, `${agentStderrTail}\n${agentStdoutTail}`)?.status === 'missing'
+        !run.cancelRequested
       ) {
-        send('error', createSseErrorPayload(
-          'AGENT_AUTH_REQUIRED',
-          cursorAuthGuidance(),
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+        const authFailure = classifyAgentAuthFailure(
+          agentId,
+          `${agentStderrTail}\n${agentStdoutTail}`,
+        );
+        if (authFailure?.status === 'missing') {
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? cursorAuthGuidance(),
+            { retryable: true },
+          ));
+          return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+        }
       }
       // Empty-output guard: a clean `code === 0` exit on a stream we are
       // tracking, with no error frame and no substantive event, means the

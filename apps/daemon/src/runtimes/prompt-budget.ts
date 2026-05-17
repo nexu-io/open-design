@@ -1,5 +1,21 @@
 import type { RuntimeAgentDef, RuntimePromptBudgetError } from './types.js';
 
+function promptArgvBudgetMessage(
+  def: RuntimeAgentDef,
+  bytes: number,
+): string {
+  if (def.id === 'deepseek') {
+    return (
+      `${def.name} currently accepts prompts only as a command-line argument, and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
+      'Reduce the selected skills/design-system context or conversation length, or use DeepSeek through an API/provider model connection for large contexts. Pick a stdin-capable adapter when the prompt must include large local context.'
+    );
+  }
+  return (
+    `${def.name} requires the prompt as a command-line argument and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
+    'Reduce the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.'
+  );
+}
+
 export function checkPromptArgvBudget(
   def: RuntimeAgentDef | null | undefined,
   composed: unknown,
@@ -12,9 +28,7 @@ export function checkPromptArgvBudget(
   if (bytes <= def.maxPromptArgBytes) return null;
   return {
     code: 'AGENT_PROMPT_TOO_LARGE',
-    message:
-      `${def.name} requires the prompt as a command-line argument and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
-      'Reduce the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.',
+    message: promptArgvBudgetMessage(def, bytes),
     bytes,
     limit: def.maxPromptArgBytes,
   };

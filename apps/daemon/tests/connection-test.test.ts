@@ -98,6 +98,10 @@ async function withFakeCursorAgent<T>(script: string, run: () => Promise<T>): Pr
   return withFakeAgent('cursor-agent', script, run);
 }
 
+async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('deepseek', script, run);
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1746,6 +1750,31 @@ process.exit(1);
           agentName: 'Cursor Agent',
           detail: expect.stringContaining('cursor-agent status'),
         });
+      },
+    );
+  });
+
+  it('classifies DeepSeek TUI config guidance from stderr as missing auth', async () => {
+    await withFakeDeepSeek(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('deepseek 0.3.0-test');
+  process.exit(0);
+}
+console.error('KEY=<your-key> deepseek --api-key <your-key>');
+console.error('api_key = "<your-key>" in ~/.deepseek/config.toml');
+process.exit(0);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'deepseek' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+          agentName: 'DeepSeek TUI',
+          detail: expect.stringContaining('~/.deepseek/config.toml'),
+        });
+        expect(result.detail).toContain('DEEPSEEK_API_KEY');
       },
     );
   });
