@@ -523,7 +523,10 @@ export interface Dict {
   'entry.navNewProject': string;
   'entry.navHome': string;
   'entry.navProjects': string;
+  'entry.navAutomations': string;
+  'entry.navPlugins': string;
   'entry.navDesignSystems': string;
+  'entry.navIntegrations': string;
   // Bottom-of-rail help menu
   'entry.helpAria': string;
   'entry.helpMenuAria': string;
