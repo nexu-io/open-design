@@ -56,7 +56,7 @@ interface Props {
 	onOpen: (id: string) => void;
 	onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
 	onDelete: (id: string) => void;
-	onRename: (id: string, name: string) => void;
+	onRename?: (id: string, name: string) => void;
 }
 
 export function DesignsTab({
@@ -296,7 +296,7 @@ export function DesignsTab({
 		if (!renameTarget) return;
 		const trimmed = renameInput.trim();
 		if (trimmed && trimmed !== renameTarget.original) {
-			onRename(renameTarget.id, trimmed);
+			onRename?.(renameTarget.id, trimmed);
 		}
 		setRenameTarget(null);
 		setRenameInput("");

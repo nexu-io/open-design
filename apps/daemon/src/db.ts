@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';
+import { migratePlugins } from './plugins/persistence.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -260,6 +261,7 @@ function migrate(db: SqliteDb): void {
   }
   migrateCritique(db);
   migrateMediaTasks(db);
+  migratePlugins(db);
 }
 
 // ---------- deployments ----------
@@ -422,6 +424,7 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   design_system_id AS designSystemId,
   pending_prompt AS pendingPrompt,
   metadata_json AS metadataJson,
+  applied_plugin_snapshot_id AS appliedPluginSnapshotId,
   custom_instructions AS customInstructions,
   created_at AS createdAt,
   updated_at AS updatedAt`;
@@ -575,6 +578,7 @@ function normalizeProject(row: DbRow) {
     designSystemId: row.designSystemId,
     pendingPrompt: row.pendingPrompt ?? undefined,
     metadata,
+    appliedPluginSnapshotId: row.appliedPluginSnapshotId ?? undefined,
     customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),

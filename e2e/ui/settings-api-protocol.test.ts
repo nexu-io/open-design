@@ -2,6 +2,35 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+
+test.describe.configure({ timeout: 30_000 });
+
+async function waitForLoadingToClear(page: Page) {
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+  }
+  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+}
+
+async function openSettingsDialogFromEntry(page: Page) {
+  await waitForLoadingToClear(page);
+  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
 
 async function openExecutionSettings(
   page: Page,
@@ -18,9 +47,8 @@ async function openExecutionSettings(
     await route.fulfill({ status: 503, body: 'offline' });
   });
 
-  await page.goto('/');
-  await page.getByTitle('Execution mode').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await gotoEntryHome(page);
+  await openSettingsDialogFromEntry(page);
 }
 
 async function readSavedConfig(page: Page) {
@@ -56,9 +84,8 @@ async function openExecutionSettingsWithAgents(
     await route.fulfill({ json: { agents } });
   });
 
-  await page.goto('/');
-  await page.getByTitle('Execution mode').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await gotoEntryHome(page);
+  await openSettingsDialogFromEntry(page);
 }
 
 test('legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
@@ -185,8 +212,7 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
     apiProviderBaseUrl: 'https://api.deepseek.com',
   });
 
-  await page.getByTitle('Execution mode').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue('1');
@@ -351,8 +377,8 @@ test('saving Local CLI updates the entry status pill with the selected agent', a
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const executionPill = page.getByTitle('Execution mode');
-  await expect(executionPill).toContainText('Local CLI');
+  const executionPill = page.locator('.inline-switcher__chip');
+  await expect(executionPill).toContainText(/Local CLI|本机 CLI/i);
   await expect(executionPill).toContainText('Codex CLI');
-  await expect(executionPill).toContainText('0.80.0');
+  await expect(executionPill).toContainText('default');
 });

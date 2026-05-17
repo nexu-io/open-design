@@ -1,0 +1,147 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hyperframes",
+  "title": "Hyperframes",
+  "version": "0.1.1",
+  "description": "Create video compositions, animations, title cards, overlays, captions, voiceovers, audio-reactive visuals, and scene transitions in HyperFrames HTML. Use when asked to build any HTML-based video content, add captions or subtitles synced to audio, generate text-to-speech narration, create audio-reactive animation (beat sync, glow, pulse driven by music), add animated text highlighting (marker sweeps, hand-drawn circles, burst lines, scribble, sketchout), or add transitions between scenes (crossfades, wipes, reveals, shader transitions). Covers composition authoring, timing, media, and the full video production workflow. For CLI commands (init, lint, preview, render, transcribe, tts) see the hyperframes-cli skill.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/hyperframes",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "video-composition",
+    "interactive-video",
+    "captions",
+    "tts-video",
+    "kinetic-typography",
+    "html-in-canvas",
+    "drawelementimage",
+    "html-shader",
+    "vfx-iphone-device",
+    "vfx-liquid-glass",
+    "vfx-portal"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a {{duration}}-second {{format}} HyperFrames composition for {{subject}}. Aspect: {{aspect}}. Visual style: {{style}}. Audio/captions: {{audioPlan}}. Use the HyperFrames HTML workflow, deterministic timelines, and the referenced motion guides.",
+        "zh-CN": "使用这个插件完成以下任务：为 {{subject}} 创建一个 {{duration}} 秒的 {{format}} HyperFrames 作品。画幅：{{aspect}}。视觉风格：{{style}}。音频/字幕：{{audioPlan}}。使用 HyperFrames HTML 工作流、确定性时间线和引用的运动指南。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "format",
+        "label": "Format",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product reveal",
+          "captioned short",
+          "logo outro",
+          "audio-reactive visual",
+          "scene transition sequence"
+        ],
+        "default": "product reveal"
+      },
+      {
+        "name": "subject",
+        "label": "Subject",
+        "type": "string",
+        "required": true,
+        "placeholder": "a premium AI note-taking app",
+        "default": "a polished product concept"
+      },
+      {
+        "name": "duration",
+        "label": "Duration",
+        "type": "number",
+        "required": true,
+        "default": 5
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "required": true,
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "style",
+        "label": "Style",
+        "type": "string",
+        "placeholder": "minimal premium, soft side light, restrained motion",
+        "default": "minimal premium motion"
+      },
+      {
+        "name": "audioPlan",
+        "label": "Audio/captions",
+        "type": "string",
+        "placeholder": "muted, TTS narration, captions from transcript",
+        "default": "no audio or captions unless requested"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./references/audio-reactive.md",
+        "./references/captions.md",
+        "./references/css-patterns.md",
+        "./references/dynamic-techniques.md",
+        "./references/html-in-canvas.md",
+        "./references/motion-principles.md",
+        "./references/transcript-guide.md",
+        "./references/transitions.md",
+        "./references/tts.md",
+        "./references/typography.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

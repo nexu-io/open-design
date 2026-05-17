@@ -81,6 +81,12 @@ COPY --chown=open-design:open-design craft ./craft
 COPY --chown=open-design:open-design prompt-templates ./prompt-templates
 COPY --chown=open-design:open-design assets/frames ./assets/frames
 COPY --chown=open-design:open-design assets/community-pets ./assets/community-pets
+# Plan §3.J4 / spec §23.3.5 — bundled atom plugins registered on
+# daemon boot. The directory contains `plugins/_official/atoms/<atom>/`
+# pairs (SKILL.md + open-design.json); registerBundledPlugins() walks
+# it on startup so the container ships with first-party atoms reachable
+# via the same registry path third-party plugins use.
+COPY --chown=open-design:open-design plugins/_official ./plugins/_official
 
 RUN mkdir -p /app/.od && \
     chown -R open-design:open-design /app

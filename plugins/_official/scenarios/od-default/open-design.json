@@ -1,0 +1,137 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-default",
+  "title": "Default design router",
+  "version": "0.1.0",
+  "description": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-default",
+  "tags": [
+    "scenario",
+    "first-party",
+    "default",
+    "router",
+    "hidden"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "default-router",
+    "mode": "scenario",
+    "hidden": true,
+    "pipeline": {
+      "stages": [
+        {
+          "id": "task-type",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "direction-picker",
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "media-image",
+            "media-video",
+            "media-audio",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "genui": {
+      "surfaces": [
+        {
+          "id": "task-type",
+          "kind": "choice",
+          "persist": "conversation",
+          "trigger": {
+            "stageId": "task-type",
+            "atom": "discovery-question-form"
+          },
+          "prompt": "What type of design task should this free-form prompt create?",
+          "schema": {
+            "type": "object",
+            "required": [
+              "taskType"
+            ],
+            "properties": {
+              "taskType": {
+                "type": "string",
+                "title": "Task type",
+                "enum": [
+                  "prototype",
+                  "live-artifact",
+                  "deck",
+                  "image",
+                  "video",
+                  "hyperframes",
+                  "audio",
+                  "other"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "pipeline:*",
+      "genui:choice",
+      "media:image",
+      "media:video",
+      "media:audio",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Route a free-form Home prompt by asking the task type first, then continue through the matching design workflow.",
+        "zh-CN": "先询问自由输入属于哪一类设计任务，然后进入匹配的设计工作流。"
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "text",
+        "required": false,
+        "label": "User prompt",
+        "placeholder": "Describe what you want to design"
+      }
+    ]
+  }
+}

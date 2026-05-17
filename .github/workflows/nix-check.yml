@@ -2,6 +2,8 @@ name: nix-check
 
 on:
   push:
+    branches:
+      - main
     paths-ignore:
       - '**/*.md'
       - '**/*.mdx'
@@ -43,6 +45,9 @@ on:
       - .github/ISSUE_TEMPLATE/**
       - .github/PULL_REQUEST_TEMPLATE.md
       - .github/CODEOWNERS
+
+permissions:
+  contents: read
 
 jobs:
   build:

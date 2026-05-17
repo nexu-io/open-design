@@ -56,6 +56,7 @@ import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
+  fetchAppliedPluginSnapshot,
   getTemplate,
   listConversations,
   listMessages,
@@ -66,6 +67,7 @@ import {
   saveTabs,
   type SaveMessageOptions,
 } from '../state/projects';
+import type { AppliedPluginSnapshot } from '@open-design/contracts';
 import type {
   AgentEvent,
   AgentInfo,
@@ -104,8 +106,11 @@ import {
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
+import {
+  buildPluginFolderAgentActionPrompt,
+  type PluginFolderAgentAction,
+} from './design-files/pluginFolderActions';
 import { CenteredLoader } from './Loading';
-import { ProjectActionsToolbar } from './ProjectActionsToolbar';
 import { Toast } from './Toast';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -225,6 +230,50 @@ function saveChatPanelWidth(width: number): void {
   }
 }
 
+function autoSendFirstMessageKey(projectId: string): string {
+  return `od:auto-send-first:${projectId}`;
+}
+
+function autoSendAttachmentsKey(projectId: string): string {
+  return `od:auto-send-attachments:${projectId}`;
+}
+
+function readAutoSendAttachments(projectId: string): ChatAttachment[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.sessionStorage.getItem(autoSendAttachmentsKey(projectId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isStoredChatAttachment);
+  } catch {
+    return [];
+  }
+}
+
+function clearAutoSendSession(projectId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(autoSendFirstMessageKey(projectId));
+    window.sessionStorage.removeItem(autoSendAttachmentsKey(projectId));
+  } catch {
+    /* ignore */
+  }
+}
+
+function isStoredChatAttachment(value: unknown): value is ChatAttachment {
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.path === 'string' &&
+    record.path.length > 0 &&
+    typeof record.name === 'string' &&
+    record.name.length > 0 &&
+    (record.kind === 'image' || record.kind === 'file') &&
+    (record.size === undefined || typeof record.size === 'number')
+  );
+}
+
 function appendLiveArtifactEventItem(
   prev: LiveArtifactEventItem[],
   event: LiveArtifactEventItem['event'],
@@ -306,6 +355,14 @@ export function ProjectView({
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // True once the initial DB read for the active conversation has settled.
+  // Auto-send gates on this so it can't fire before listMessages resolves and
+  // race-clobber the freshly-pushed user + assistant placeholder. Without
+  // this, the auto-send writes [user, assistant] into state, then the still
+  // in-flight listMessages PUT response arrives, runs setMessages(list), and
+  // wipes both — leaving the daemon's run with no client-side message to
+  // attach the runId to.
+  const [messagesInitialized, setMessagesInitialized] = useState(false);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -515,7 +572,10 @@ export function ProjectView({
   // active id. Falls through to a no-op for stale / missing routes so
   // the default picker above keeps its result.
   useEffect(() => {
-    if (!routeConversationId) return;
+    if (!routeConversationId) {
+      lastSeenRouteConversationIdRef.current = null;
+      return;
+    }
     if (conversations.length === 0) return;
     if (routeConversationId === activeConversationId) return;
     // When the route still points at the conversation this view last
@@ -525,8 +585,11 @@ export function ProjectView({
     // route here would fight that sync and remount ChatPane in a loop,
     // so only react to a genuinely external navigation.
     if (routeConversationId === lastSyncedConversationIdRef.current) return;
+    if (lastSeenRouteConversationIdRef.current === routeConversationId) return;
+    lastSeenRouteConversationIdRef.current = routeConversationId;
     const match = conversations.find((c) => c.id === routeConversationId);
-    if (match) setActiveConversationId(match.id);
+    if (!match) return;
+    setActiveConversationId(routeConversationId);
   }, [routeConversationId, conversations, activeConversationId]);
 
   useEffect(() => {
@@ -539,6 +602,7 @@ export function ProjectView({
   useEffect(() => {
     if (!activeConversationId) {
       setMessages([]);
+      setMessagesInitialized(false);
       setPreviewComments([]);
       setAttachedComments([]);
       setMessagesConversationId(null);
@@ -549,6 +613,9 @@ export function ProjectView({
       setStreamingConversationId(null);
       return;
     }
+    // Reset the initialized flag so auto-send waits for the new
+    // conversation's DB read to settle before checking messages.length.
+    setMessagesInitialized(false);
     let cancelled = false;
     setMessages([]);
     setPreviewComments([]);
@@ -572,6 +639,7 @@ export function ProjectView({
         ]);
         if (cancelled) return;
         setMessages(list);
+        setMessagesInitialized(true);
         setPreviewComments(comments);
         setAttachedComments([]);
         setArtifact(null);
@@ -860,6 +928,7 @@ export function ProjectView({
   // target lost that update because the early-return saw `target` unchanged
   // and skipped the navigate (lefarcen P1 on PR #1508).
   const lastSyncedRouteKeyRef = useRef<string | null>(null);
+  const lastSeenRouteConversationIdRef = useRef<string | null>(null);
   useEffect(() => {
     const target = openTabsState.active && (
       openTabsState.tabs.includes(openTabsState.active)
@@ -1016,6 +1085,15 @@ export function ProjectView({
   const persistMessage = useCallback(
     (m: ChatMessage, options?: SaveMessageOptions) => {
       if (!activeConversationId) return;
+      // Source-level guard against the "Working 24m+ / Waiting for first
+      // output" UI: never write a daemon assistant row that is still
+      // queued/running but has no runId. Until POST /api/runs returns the
+      // runId, the message is purely in-flight on the client; persisting it
+      // here creates a row that nothing can ever reattach to (daemon never
+      // saw the runId, client lost the response). Once onRunCreated assigns
+      // a runId — or the run finishes terminally — this guard lets the row
+      // through normally.
+      if (isPhantomDaemonRunMessage(m)) return;
       void saveMessage(project.id, activeConversationId, m, options);
     },
     [project.id, activeConversationId],
@@ -1026,7 +1104,9 @@ export function ProjectView({
       if (!activeConversationId) return;
       setMessages((curr) => {
         const found = curr.find((m) => m.id === messageId);
-        if (found) void saveMessage(project.id, activeConversationId, found, options);
+        if (found && !isPhantomDaemonRunMessage(found)) {
+          void saveMessage(project.id, activeConversationId, found, options);
+        }
         return curr;
       });
     },
@@ -1048,7 +1128,11 @@ export function ProjectView({
           saved = updated;
           return updated;
         });
-        if (persist && saved && activeConversationId) {
+        // Same phantom guard as persistMessage: skip writes for a daemon
+        // assistant row that is still in-flight (active runStatus, no runId).
+        // The runId-arriving update from onRunCreated passes through because
+        // the updater sets runId before this check runs.
+        if (persist && saved && activeConversationId && !isPhantomDaemonRunMessage(saved)) {
           void saveMessage(project.id, activeConversationId, saved, persistOptions);
         }
         return next;
@@ -1224,7 +1308,25 @@ export function ProjectView({
         if (!isActiveRunStatus(message.runStatus)) continue;
         const fallbackRun = !message.runId ? activeByMessage.get(message.id) : null;
         const runId = message.runId ?? fallbackRun?.id;
-        if (!runId) continue;
+        // Self-heal phantom 'running' rows: when the message has no runId
+        // and the daemon has no active run mapped to it, the original send
+        // POST was lost (daemon restart mid-flight, the user navigated
+        // away before /api/runs returned, or a network blip). Leaving the
+        // message as 'running' is what produces the "Waiting for first
+        // output — Working 24m+" UI the user reported. Mark it failed so
+        // the composer is interactive again and the user can re-send.
+        if (!runId) {
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...prev,
+              runStatus: 'failed',
+              endedAt: prev.endedAt ?? Date.now(),
+            }),
+            true,
+          );
+          continue;
+        }
         if (reattachControllersRef.current.has(runId)) continue;
         if (completedReattachRunsRef.current.has(runId)) continue;
 
@@ -1497,6 +1599,12 @@ export function ProjectView({
       savedArtifactRef.current = null;
       onTouchProject();
       persistMessage(userMsg);
+      // Intentionally do NOT persist `assistantMsg` here. In daemon mode it
+      // starts as runStatus='running' with no runId, which the source-level
+      // guard treats as a phantom — the first DB write happens inside
+      // `onRunCreated` (below) once POST /api/runs returns a runId. In API
+      // mode there is no runStatus, and the buffered text path will persist
+      // as soon as the first delta lands.
       persistMessage(assistantMsg);
       if (commentAttachments.length > 0) {
         void patchAttachedStatuses(commentAttachments, 'applying');
@@ -2041,6 +2149,15 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
+  const handlePluginFolderAgentAction = useCallback(
+    (relativePath: string, action: PluginFolderAgentAction) => {
+      if (currentConversationActionDisabled) return;
+      const prompt = buildPluginFolderAgentActionPrompt(relativePath, action);
+      void handleSend(prompt, [], []);
+    },
+    [currentConversationActionDisabled, handleSend],
+  );
+
   const handleExportAsPptx = useCallback(
     (fileName: string) => {
       if (currentConversationActionDisabled) return;
@@ -2435,16 +2552,44 @@ export function ProjectView({
   // project-scoped snapshot survives the conversation-id remount, while the
   // persisted pendingPrompt is cleared so refreshes and later entries do not
   // re-seed the composer.
+  //
+  // PluginLoopHome auto-send case: when the project was created with
+  // `autoSendFirstMessage`, app.tsx left a sessionStorage flag telling us
+  // to fire the prompt as a real user message immediately. We must NOT
+  // seed initialDraft in that case — otherwise the textarea echoes the
+  // prompt while it is also streaming as the first user message. The ref
+  // captures the prompt independently so downstream effects can still
+  // dispatch the auto-send without going through initialDraft.
+  const autoSendSeedRef = useRef<string | null>(null);
+  const autoSendAttachmentsRef = useRef<ChatAttachment[] | null>(null);
+  const autoSendFirstMessageRef = useRef(false);
+  if (autoSendSeedRef.current === null) {
+    let isAutoSend = false;
+    try {
+      isAutoSend = Boolean(
+        window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)),
+      );
+    } catch {
+      /* sessionStorage may be unavailable; treat as manual flow. */
+    }
+    autoSendFirstMessageRef.current = isAutoSend;
+    autoSendSeedRef.current = isAutoSend ? (project.pendingPrompt ?? '') : '';
+    autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
+  }
   const [initialDraft, setInitialDraft] = useState<
     { projectId: string; value: string } | undefined
   >(
-    project.pendingPrompt
-      ? { projectId: project.id, value: project.pendingPrompt }
-      : undefined,
+    autoSendSeedRef.current || !project.pendingPrompt
+      ? undefined
+      : { projectId: project.id, value: project.pendingPrompt },
   );
   useEffect(() => {
     const pendingPrompt = project.pendingPrompt;
     if (!pendingPrompt) return;
+    if (autoSendFirstMessageRef.current) {
+      onClearPendingPrompt();
+      return;
+    }
     setInitialDraft((current) =>
       current?.projectId === project.id
         ? current
@@ -2519,6 +2664,41 @@ export function ProjectView({
     terminalLauncher,
   ]);
 
+  // Defensive: if the conversation already has messages once they
+  // hydrate, the pendingPrompt that seeded the composer is stale (the
+  // user sent it earlier but onClearPendingPrompt did not get a chance
+  // to patch the server before the page reloaded). Drop the seed so the
+  // textarea does not echo a prompt the user already submitted.
+  useEffect(() => {
+    if (initialDraft && messages.length > 0) {
+      setInitialDraft(undefined);
+    }
+  }, [initialDraft, messages.length]);
+
+  // §8.4 — when the project was created with a plugin pinned (the
+  // PluginLoopHome → POST /api/projects path), fetch the immutable
+  // snapshot once so ChatPane can render the active plugin as a
+  // context chip on user messages instead of re-rendering the inline
+  // plugin rail. Re-fetches when the pinned id changes; cancelled if
+  // the project switches away mid-flight to avoid setState-on-unmount.
+  const [activePluginSnapshot, setActivePluginSnapshot] =
+    useState<AppliedPluginSnapshot | null>(null);
+  useEffect(() => {
+    const snapshotId = project.appliedPluginSnapshotId;
+    if (!snapshotId) {
+      setActivePluginSnapshot(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchAppliedPluginSnapshot(snapshotId).then((snap) => {
+      if (cancelled) return;
+      setActivePluginSnapshot(snap);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.appliedPluginSnapshotId]);
+
   // Lift finalize errors into the shared project-actions toast so the
   // user sees both the daemon's category message and any upstream
   // detail (per #450 verification commitment).
@@ -2549,6 +2729,64 @@ export function ProjectView({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [designMdState.exists, handleContinueInCli]);
 
+  // PluginLoopHome auto-send: when the user submits on Home, app.tsx
+  // sets `sessionStorage['od:auto-send-first:<projectId>']` and routes
+  // through createProject. Once the conversation id resolves and the
+  // composer is mounted, fire handleSend(pendingPrompt) exactly once so
+  // the user lands inside a running pipeline without an extra click.
+  // We gate on `messages.length === 0` so a refresh after the run is
+  // mid-flight never double-fires; the sessionStorage flag is cleared
+  // immediately after the first dispatch.
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current) return;
+    if (!activeConversationId) return;
+    // Wait for the initial listMessages DB read to land. Without this gate
+    // the auto-send fires before the in-flight DB response, which then
+    // arrives with `setMessages([])` and wipes the freshly-pushed user +
+    // assistant placeholder out of React state — leaving the daemon's run
+    // with no in-memory message to attach the runId to.
+    if (!messagesInitialized) return;
+    if (streaming) return;
+    if (messages.length > 0) return;
+    let flag: string | null = null;
+    try {
+      flag = window.sessionStorage.getItem(autoSendFirstMessageKey(project.id));
+    } catch {
+      flag = null;
+    }
+    if (!flag) return;
+    // Prefer the seed captured at mount (autoSendSeedRef) — it survives
+    // even after onClearPendingPrompt wipes project.pendingPrompt on the
+    // server. Fall back to the live values for any edge case where the
+    // ref was not populated (e.g. sessionStorage error path).
+    const seed = (
+      autoSendSeedRef.current ||
+      (initialDraft?.projectId === project.id ? initialDraft.value : '') ||
+      project.pendingPrompt ||
+      ''
+    ).trim();
+    const attachments = autoSendAttachmentsRef.current ?? [];
+    if (!seed && attachments.length === 0) {
+      autoSentRef.current = true;
+      clearAutoSendSession(project.id);
+      return;
+    }
+    autoSentRef.current = true;
+    clearAutoSendSession(project.id);
+    autoSendAttachmentsRef.current = [];
+    void handleSend(seed, attachments, []);
+  }, [
+    activeConversationId,
+    messagesInitialized,
+    streaming,
+    messages.length,
+    project.id,
+    initialDraft,
+    project.pendingPrompt,
+    handleSend,
+  ]);
+
   // Wire the Critique Theater drop-in mount into the project workspace.
   // The hook reads the M1 Settings toggle out of the existing
   // `open-design:config` localStorage blob and stays in sync with the
@@ -2570,6 +2808,7 @@ export function ProjectView({
         enabled={critiqueTheaterEnabled}
       />
       <AppChromeHeader
+        showTrafficSpace={false}
         onBack={onBack}
         backLabel={t('project.backToProjects')}
         actions={(
@@ -2646,14 +2885,9 @@ export function ProjectView({
           </div>
         </div>
       )}
-      <ProjectActionsToolbar
-        designMdState={designMdState}
-        finalizeStatus={finalize.status}
-        onFinalize={handleFinalize}
-        onCancelFinalize={handleCancelFinalize}
-        onContinueInCli={handleContinueInCli}
-        hidden={workspaceFocused}
-      />
+      {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
+          toolbar from project header. Restore from cf1cd9bb if product
+          wants the Finalize + Continue-in-CLI buttons back in the chrome. */}
       <div
         ref={splitRef}
         className={[
@@ -2679,6 +2913,7 @@ export function ProjectView({
               error={conversationLoadError ?? error ?? audioVoiceOptionsError}
               projectId={project.id}
               projectFiles={projectFiles}
+              hasActiveDesignSystem={!!project.designSystemId}
               projectFileNames={projectFileNames}
               skills={skills}
               onEnsureProject={handleEnsureProject}
@@ -2690,6 +2925,7 @@ export function ProjectView({
               onSend={handleSend}
               onStop={handleStop}
               onRequestOpenFile={requestOpenFile}
+              onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
                 if (currentConversationActionDisabled) return;
@@ -2715,6 +2951,11 @@ export function ProjectView({
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
               }}
+              currentSkillId={project.skillId}
+              onProjectSkillChange={(skillId) => {
+                onProjectChange({ ...project, skillId });
+              }}
+              activePluginSnapshot={activePluginSnapshot}
               onCollapse={() => setWorkspaceFocused(true)}
             />
           ) : (
@@ -2759,6 +3000,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onPluginFolderAgentAction={handlePluginFolderAgentAction}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
         />
@@ -2798,6 +3040,21 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+// A daemon assistant message that is "queued/running" but has no runId yet
+// is in-flight on the client: POST /api/runs has not returned. Persisting it
+// in this state creates a phantom DB row that the reattach loop can never
+// recover (the daemon either never saw the request or the response was lost),
+// which is what produced the "Working 24m+" stuck UI. Treat the in-flight
+// window as ephemeral and only write to DB once a runId pins the row to a
+// real daemon run — or once the run reaches a terminal state.
+function isPhantomDaemonRunMessage(m: ChatMessage): boolean {
+  return (
+    m.role === 'assistant' &&
+    isActiveRunStatus(m.runStatus) &&
+    !m.runId
+  );
 }
 
 function isStoppableAssistantMessage(message: ChatMessage): boolean {

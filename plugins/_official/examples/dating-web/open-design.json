@@ -1,0 +1,88 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-dating-web",
+  "title": "Dating Web",
+  "version": "0.1.0",
+  "description": "A consumer-feeling dating / matchmaking dashboard — left rail navigation,\nticker bar of community signals, headline KPIs, a 30-day mutual-matches\nbar chart, and a match-rate trend block. Editorial typography, restrained\naccent. Use when the brief asks for a \"dating site\", \"matchmaking\",\n\"community dashboard\", \"social network dashboard\", or any consumer\nproduct where the data is the story.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/dating-web",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "personal",
+    "web",
+    "desktop",
+    "dating-app",
+    "dating-site",
+    "matchmaking",
+    "social-dashboard",
+    "community-dashboard",
+    "consumer-dashboard",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design ‘mutuals’ — a dating site for X posters. Daily digest dashboard with stats, mutual-matches bar chart, and a community ticker.",
+        "zh-CN": "使用这个插件完成以下任务：Design ‘mutuals’ — a dating site for X posters. Daily digest dashboard with stats, mutual-matches bar chart, and a community ticker."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Dating Web"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

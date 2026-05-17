@@ -1,0 +1,33 @@
+# Spec §15.5 — Google Cloud override.
+#
+# Persistence:
+#   - Filestore for /data/od when replicaCount > 1; otherwise pd-balanced
+#     is fine for a single-pod deployment.
+#   - pd-balanced for /data/config.
+#
+# Secrets:
+#   - Wire to Google Secret Manager via External Secrets Operator
+#     (`generators.gcpsm`) or the kubernetes-external-secrets controller.
+#
+# Ingress:
+#   - GKE's GCLB ingress (`kubernetes.io/ingress.class: gce`).
+
+persistence:
+  enabled: true
+  data:
+    storageClass: filestore-csi
+    size: 50Gi
+  config:
+    storageClass: pd-balanced
+    size: 1Gi
+
+ingress:
+  enabled: true
+  className: gce
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: od-static
+  hosts:
+    - host: od.example.com
+      paths:
+        - path: /
+          pathType: Prefix

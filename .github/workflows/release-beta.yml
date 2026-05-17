@@ -190,7 +190,7 @@ jobs:
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
           source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/builder/mac-arm64/Open Design.app/Contents/Frameworks/Electron Framework.framework"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/builder/mac-arm64/Open Design Beta.app/Contents/Frameworks/Electron Framework.framework"
 
           dump_framework() {
             local label="$1"
@@ -376,7 +376,7 @@ jobs:
         id: win_tools_pack_cache_key
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/contracts/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"

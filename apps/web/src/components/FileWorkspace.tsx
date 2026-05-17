@@ -28,6 +28,7 @@ import {
   type ProjectFile,
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
+import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
@@ -61,6 +62,10 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onPluginFolderAgentAction?: (
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
 }
@@ -97,6 +102,7 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onPluginFolderAgentAction,
   focusMode = false,
   onFocusModeChange,
 }: Props) {
@@ -760,6 +766,7 @@ export function FileWorkspace({
             onNewSketch={startNewSketch}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
+            onPluginFolderAgentAction={onPluginFolderAgentAction}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (

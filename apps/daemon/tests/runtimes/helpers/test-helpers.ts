@@ -84,6 +84,7 @@ export const pi = requireAgent('pi');
 export const deepseek = requireAgent('deepseek');
 export const gemini = requireAgent('gemini');
 export const qoder = requireAgent('qoder');
+export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
 export const deepseekMaxPromptArgBytes = (() => {
   assert.ok(

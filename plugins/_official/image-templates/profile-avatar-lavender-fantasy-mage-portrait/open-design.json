@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-lavender-fantasy-mage-portrait",
+  "title": "Profile / Avatar - Lavender Fantasy Mage Portrait",
+  "version": "0.1.0",
+  "description": "This prompt generates a polished anime-style fantasy portrait of an elegant mage princess with glossy blonde hair, purple flowers, and ornate crystal attire, ideal for character art or magical illustr",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "美和",
+    "url": "https://x.com/tokikageyomikag/status/2049200427842064715#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "anime",
+    "cinematic",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453212320_egzd24_HHA47W2aIAEKWQz.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A highly detailed anime fantasy portrait of a beautiful young woman mage in a luminous flower garden at a castle. She is shown from about the waist up in a vertical composition, holding an ornate staff topped with a large faceted purple crystal in her right hand. Her face is obscured, but the rest of her design is elegant and refined. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair, long and silky with a smooth glossy finish, soft flowing strands, delicate highlights, and no frizz or messy dryness; the hair is partially braided on one side and decorated with 3 large purple flowers and fine gold filigree hair ornaments. She wears a {argument name=\"dress color\" default=\"lavender and white\"} fantasy gown with off-shoulder ruffled sleeves, translucent fabric, layered chiffon, intricate gold trim, embroidered details, and 3 visible purple gemstones set into the outfit and jewelry at the collar, chest, and waist. Add a jeweled choker-like collar and elegant arm details with gold chains. The background is a dreamy palace courtyard with purple blossoms, flowering vines, stone arches, and distant castle spires, filled with glowing particles and drifting petals. Use strong warm backlighting mixed with soft pastel ambient light, sparkling highlights, rim light through the hair, ethereal bloom, and a romantic magical atmosphere. Color palette focused on lavender, violet, soft pink, pearl white, and gold. Ultra-detailed, polished anime illustration, delicate linework, glossy fabric reflections, cinematic depth of field, premium fantasy card art aesthetic.",
+        "zh-CN": "使用这个插件完成以下任务：A highly detailed anime fantasy portrait of a beautiful young woman mage in a luminous flower garden at a castle. She is shown from about the waist up in a vertical composition, holding an ornate staff topped with a large faceted purple crystal in her right hand. Her face is obscured, but the rest of her design is elegant and refined. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair, long and silky with a smooth glossy finish, soft flowing strands, delicate highlights, and no frizz or messy dryness; the hair is partially braided on one side and decorated with 3 large purple flowers and fine gold filigree hair ornaments. She wears a {argument name=\"dress color\" default=\"lavender and white\"} fantasy gown with off-shoulder ruffled sleeves, translucent fabric, layered chiffon, intricate gold trim, embroidered details, and 3 visible purple gemstones set into the outfit and jewelry at the collar, chest, and waist. Add a jeweled choker-like collar and elegant arm details with gold chains. The background is a dreamy palace courtyard with purple blossoms, flowering vines, stone arches, and distant castle spires, filled with glowing particles and drifting petals. Use strong warm backlighting mixed with soft pastel ambient light, sparkling highlights, rim light through the hair, ethereal bloom, and a romantic magical atmosphere. Color palette focused on lavender, violet, soft pink, pearl white, and gold. Ultra-detailed, polished anime illustration, delicate linework, glossy fabric reflections, cinematic depth of field, premium fantasy card art aesthetic."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

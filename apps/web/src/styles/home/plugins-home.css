@@ -1,0 +1,989 @@
+/* ============================================================
+   Plugins home section — gallery layout.
+
+   The gallery now renders large preview tiles (image / video /
+   sandboxed HTML / design-system patch) instead of text-only
+   cards, so the home view reads more like a Lovart-style
+   inspiration board. The faceted filter row above the grid is
+   unchanged; only the card visuals + grid sizing changed.
+   ============================================================ */
+.plugins-home {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.plugins-home__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.plugins-home__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.plugins-home__subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.plugins-home__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+.plugins-home__count {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__head-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.plugins-home__search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 220px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  transition: border-color 120ms ease, background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.plugins-home__search:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.plugins-home__search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+/* The bare <input> below picks up the global `input { ... }` rule
+   from index.css (border, radius-sm, padding, and a rectangular
+   focus box-shadow). We override every property the parent pill
+   already provides so the focus halo only paints once, on the
+   pill-shaped container, and the input renders flush inside it. */
+.plugins-home__search-input,
+.plugins-home__search-input:focus {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 6px 28px;
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  box-shadow: none;
+  border-radius: 999px;
+  font-family: inherit;
+}
+.plugins-home__search-input::placeholder {
+  color: var(--text-faint);
+}
+.plugins-home__search-input::-webkit-search-cancel-button,
+.plugins-home__search-input::-webkit-search-decoration {
+  appearance: none;
+  display: none;
+}
+/* Reset the global `button { ... }` defaults (padding 6/12, border,
+   radius-sm) so the 18×18 hit target actually fits the icon glyph
+   instead of clipping it down to zero. */
+.plugins-home__search-clear {
+  position: absolute;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.plugins-home__search-clear:hover {
+  background: var(--border-soft, var(--border));
+  border-color: transparent;
+  color: var(--text);
+}
+.plugins-home__search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+@media (max-width: 720px) {
+  .plugins-home__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .plugins-home__head-tools {
+    justify-content: space-between;
+  }
+  .plugins-home__search {
+    width: 100%;
+  }
+}
+.plugins-home__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.plugins-home__empty code {
+  font-size: 12px;
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ============================================================
+   Faceted filter — single curated workflow bar. The Featured chip
+   lives in a smaller mode strip above the row so it reads as
+   orthogonal to the category selection it overrides.
+   ============================================================ */
+.plugins-home__mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+.plugins-home__mode-total {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+.plugins-home__chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.plugins-home__chip-count {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__chip--featured {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+.plugins-home__chip--featured.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.plugins-home__chip--featured.is-active .plugins-home__chip-count {
+  color: white;
+  opacity: 0.85;
+}
+
+.plugins-home__linkbtn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.plugins-home__linkbtn:hover {
+  color: var(--text);
+}
+
+.plugins-home__facets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Pin the Scenario row (and the optional advanced panel below it)
+     directly under the sticky topbar so the category bar stays
+     reachable while the plugin grid scrolls underneath -- mirrors
+     the Lovart-style category bar. The opaque background keeps
+     scrolling tiles cleanly clipped behind the strip. The
+     --entry-topbar-h variable is defined on .entry-main--scroll. */
+  position: sticky;
+  top: var(--entry-topbar-h, 56px);
+  z-index: 5;
+  background: var(--bg);
+}
+.plugins-home__facet-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: start;
+  gap: 12px;
+}
+.plugins-home__facet-row--inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.plugins-home__facet-row--sub {
+  padding-top: 0;
+  opacity: 0.92;
+}
+.plugins-home__facet-row--inline .plugins-home__facet-pills {
+  flex: 1;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  /* Hide horizontal scrollbar on WebKit while keeping wheel/drag scroll. */
+  scrollbar-color: var(--border-strong) transparent;
+}
+.plugins-home__facet-row--inline .plugins-home__facet-pills::-webkit-scrollbar {
+  height: 0;
+}
+.plugins-home__facet-row--inline .plugins-home__pill {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+.plugins-home__facet-label {
+  padding-top: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__facet-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plugins-home__pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+.plugins-home__pill:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.plugins-home__pill.is-active {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg-panel);
+}
+.plugins-home__pill.is-active .plugins-home__pill-count {
+  color: var(--bg-panel);
+  opacity: 0.8;
+}
+.plugins-home__pill-count {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__pill--all {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent);
+}
+.plugins-home__pill--all.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.plugins-home__pill--all.is-active .plugins-home__pill-count {
+  color: white;
+  opacity: 0.85;
+}
+.plugins-home__pill--sub-all {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.plugins-home__empty--filtered {
+  border-style: solid;
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 720px) {
+  .plugins-home__facet-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .plugins-home__facet-row--inline {
+    flex-direction: row;
+    align-items: center;
+  }
+  .plugins-home__facet-label {
+    padding-top: 0;
+  }
+}
+
+/* ============================================================
+   Card grid — fluid columns sized so a 1440px home view fits
+   four to five tiles per row on desktop, while still falling back
+   to two-up on tablet and one-up on phones.
+   ============================================================ */
+.plugins-home__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+@media (min-width: 1100px) {
+  .plugins-home__grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+}
+@media (min-width: 1400px) {
+  .plugins-home__grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+.plugins-home__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 160ms ease,
+    transform 160ms ease;
+  isolation: isolate;
+}
+
+.plugins-home__card--contribute {
+  min-height: 240px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 42%, var(--border));
+  background:
+    radial-gradient(circle at 18% 18%, var(--accent-tint), transparent 36%),
+    var(--bg-panel);
+}
+.plugins-home__contribute-inner {
+  display: flex;
+  min-height: inherit;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+.plugins-home__contribute-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+}
+.plugins-home__contribute-inner h3 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.plugins-home__contribute-inner p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.plugins-home__contribute-template {
+  margin-top: 10px !important;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
+  color: var(--text) !important;
+}
+.plugins-home__card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.08));
+  transform: translateY(-2px);
+}
+.plugins-home__card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.plugins-home__card.is-featured {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+/* ---------- Hero preview surface ---------- */
+.plugins-home__preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.plugins-home__preview--design,
+.plugins-home__preview--text {
+  background: transparent;
+}
+
+/* Image / video */
+.plugins-home__media {
+  position: absolute;
+  inset: 0;
+}
+.plugins-home__media-img,
+.plugins-home__media-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.plugins-home__media-video {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.plugins-home__media-skeleton {
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%) 0 0 / 200% 100%,
+    var(--bg-subtle);
+  animation: plugins-home-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes plugins-home-shimmer {
+  to {
+    background-position: -200% 0, 0 0;
+  }
+}
+.plugins-home__media-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Sandboxed HTML iframe — scaled-down "thumbnail" of a real page */
+.plugins-home__html {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+}
+.plugins-home__html-frame {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+.plugins-home__html-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1440px;
+  height: 1080px;
+  border: 0;
+  transform: scale(0.22);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.plugins-home__html-skeleton {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugins-home__html-skeleton span {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--bg-subtle), var(--border-soft), var(--bg-subtle));
+  background-size: 200% 100%;
+  animation: plugins-home-shimmer 1.6s ease-in-out infinite;
+}
+.plugins-home__html-skeleton span:nth-child(1) { width: 70%; }
+.plugins-home__html-skeleton span:nth-child(2) { width: 90%; }
+.plugins-home__html-skeleton span:nth-child(3) { width: 55%; }
+.plugins-home__html-chrome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.plugins-home__html-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.plugins-home__html-dot:nth-child(1) { background: #ff5f57; }
+.plugins-home__html-dot:nth-child(2) { background: #febc2e; }
+.plugins-home__html-dot:nth-child(3) { background: #28c840; }
+.plugins-home__html-url {
+  margin-left: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reachability-fallback tile — rendered when /api/plugins/<id>/preview
+   returns non-2xx. Mirrors the iframe card chrome (mac dots + url
+   strip) so the row keeps a uniform rhythm, but pretends the iframe
+   is a glyph patch so the tile never paints empty white. */
+.plugins-home__html--fallback {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--serif);
+}
+.plugins-home__html-fallback-glyph {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 96px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  font-weight: 600;
+}
+.plugins-home__html--fallback .plugins-home__html-chrome {
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(255, 255, 255, 0.78);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Design-system showcase tile */
+.plugins-home__design {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px 18px 14px;
+  font-family: var(--serif);
+  overflow: hidden;
+}
+.plugins-home__design--showcase {
+  display: block;
+  padding: 0;
+  background: var(--bg-panel);
+  font-family: inherit;
+}
+.plugins-home__design::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 60%, rgba(0, 0, 0, 0.18));
+  pointer-events: none;
+}
+.plugins-home__design--showcase::before {
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.18) 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+}
+.plugins-home__design-showcase {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.plugins-home__design-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 960px;
+  border: 0;
+  transform: scale(0.24);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.plugins-home__design-headline {
+  position: relative;
+  font-size: 18px;
+  line-height: 1.18;
+  font-weight: 500;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+.plugins-home__design-headline strong {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.plugins-home__design-specimen {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  font-size: 26px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
+  z-index: 1;
+}
+.plugins-home__design-swatches {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  z-index: 1;
+}
+.plugins-home__design-swatches span {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Text fallback */
+.plugins-home__text-surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--bg-subtle) 100%);
+}
+.plugins-home__text-glyph {
+  font-family: var(--serif);
+  font-size: 56px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Hover overlay (mask) ----------
+   The overlay floats over the preview surface on hover/focus,
+   surfacing description, tags, and primary actions without
+   stealing the resting state. Mirrors the lightbox-style
+   reveal Lovart and similar galleries use.
+   --------------------------------------------------------- */
+.plugins-home__card-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.0) 0%, rgba(0, 0, 0, 0.42) 55%, rgba(0, 0, 0, 0.78) 100%);
+  color: white;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+  z-index: 3;
+}
+.plugins-home__card:hover .plugins-home__card-overlay,
+.plugins-home__card:focus-within .plugins-home__card-overlay,
+.plugins-home__card--shareable .plugins-home__card-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.plugins-home__card-overlay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plugins-home__overlay-featured {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.plugins-home__card-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+.plugins-home__overlay-title {
+  font-weight: 600;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugins-home__overlay-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+.plugins-home__overlay-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plugins-home__overlay-tag {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.plugins-home__overlay-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.plugins-home__overlay-actions-main,
+.plugins-home__share-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.plugins-home__share-actions {
+  width: 100%;
+}
+
+/* ---------- Resting metadata foot ----------
+   Always visible at the bottom of the card, showing title +
+   trust pill. The overlay's matching info supersedes this on
+   hover — keeping the foot small means cards still answer
+   "what is this?" before any pointer motion.
+   --------------------------------------------------------- */
+.plugins-home__card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 10px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+.plugins-home__card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.plugins-home__card-featured-mark {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+/* Trust pill — mirrors the project view styling. */
+.plugins-home__trust {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  text-transform: capitalize;
+  flex: 0 0 auto;
+}
+.plugins-home__trust.trust-bundled {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+.plugins-home__trust.trust-trusted {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.plugins-home__trust.trust-restricted {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+/* Inside the overlay the trust pill needs glassy chrome to read
+   over the dark gradient. */
+.plugins-home__card-overlay .plugins-home__trust {
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Card action buttons — overlay variant */
+.plugins-home__action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+}
+.plugins-home__action--compact {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 8px;
+}
+.plugins-home__action--compact span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugins-home__use-menu {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.plugins-home__use-menu.has-options .plugins-home__use-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.plugins-home__use-toggle {
+  flex: 0 0 34px;
+  padding-inline: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: rgba(17, 17, 17, 0.16);
+}
+.plugins-home__use-menu-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 5px);
+  z-index: 8;
+  min-width: min(180px, 100%);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.96);
+  color: #111;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+.plugins-home__use-menu-item {
+  appearance: none;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.plugins-home__use-menu-item:hover,
+.plugins-home__use-menu-item:focus-visible {
+  background: rgba(17, 17, 17, 0.08);
+  outline: none;
+}
+.plugins-home__action--primary {
+  flex: 1;
+  background: white;
+  color: #111;
+  border: 1px solid white;
+}
+.plugins-home__action--primary:hover:not(:disabled) {
+  background: #f3f3f3;
+  border-color: #f3f3f3;
+}
+.plugins-home__use-menu .plugins-home__use-toggle {
+  flex: 0 0 34px;
+}
+.plugins-home__action--primary:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.plugins-home__action--secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.plugins-home__action--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.48);
+}
+.plugins-home__action--secondary:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* Touch/coarse-pointer fallback — overlays should be visible
+   without hover so phone/tablet users can still see metadata. */
+@media (hover: none) {
+  .plugins-home__card-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

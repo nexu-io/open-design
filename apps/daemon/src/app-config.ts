@@ -16,6 +16,49 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
+// Plugin-system env knobs. See docs/plans/plugins-implementation.md F6 / F9.
+// Phase 1 only reads them; the GC worker that enforces snapshot expiry lands
+// in Phase 5. Centralized here to keep daemon modules from sprinkling magic
+// numbers across the codebase.
+export interface PluginEnvKnobs {
+  // Hard ceiling on devloop iterations per stage (spec §10.2).
+  maxDevloopIterations: number;
+  // Days before an unreferenced applied_plugin_snapshots row expires. A
+  // value of 0 means "keep forever" (operators can opt out of GC entirely).
+  snapshotUnreferencedTtlDays: number;
+  // Optional cap on how long even a referenced snapshot stays around once
+  // its run/conversation/project is terminal. Default unset -> unlimited.
+  snapshotRetentionDays: number | null;
+  // GC worker tick interval. Phase 5 reads this; Phase 1 just exposes the
+  // knob through `od config get` so operators can plan ahead.
+  snapshotGcIntervalMs: number;
+}
+
+function intFromEnv(key: string, fallback: number): number {
+  const raw = process.env[key];
+  if (typeof raw !== 'string' || raw.trim().length === 0) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.floor(parsed);
+}
+
+function nullableIntFromEnv(key: string): number | null {
+  const raw = process.env[key];
+  if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+}
+
+export function readPluginEnvKnobs(): PluginEnvKnobs {
+  return {
+    maxDevloopIterations:        intFromEnv('OD_MAX_DEVLOOP_ITERATIONS', 10),
+    snapshotUnreferencedTtlDays: intFromEnv('OD_SNAPSHOT_UNREFERENCED_TTL_DAYS', 30),
+    snapshotRetentionDays:       nullableIntFromEnv('OD_SNAPSHOT_RETENTION_DAYS'),
+    snapshotGcIntervalMs:        intFromEnv('OD_SNAPSHOT_GC_INTERVAL_MS', 6 * 60 * 60 * 1000),
+  };
+}
+
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;

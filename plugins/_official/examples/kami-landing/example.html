@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<meta name='viewport' content='width=device-width, initial-scale=1' />
+<title>Open Design — Designing intelligence on warm paper.</title>
+<meta name='description' content='Open Design as a kami one-pager. Warm parchment canvas, ink-blue accent, serif at one weight, no italic, no cool grays.' />
+<link rel='preconnect' href='https://fonts.googleapis.com' />
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin />
+<link href='https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet' />
+<style>
+/*
+ * kami (紙 / 纸) — canonical one-pager stylesheet.
+ *
+ * SINGLE SOURCE OF TRUTH for the kami-landing skill's visual system.
+ * Tokens, type rules, and the "ten invariants" are defined by
+ * design-systems/kami/DESIGN.md. Do not invent new tokens here;
+ * extend the design system first.
+ *
+ * Typeface choice: Source Serif 4 (Charter family) is the EN default
+ * because Charter itself is not Google-hosted. The fallback chain
+ * resolves to Charter on macOS and to Georgia / Palatino elsewhere.
+ */
+
+:root {
+  /* ----- Surface ----- */
+  --parchment: #f5f4ed;
+  --ivory: #faf9f5;
+  --warm-sand: #e8e6dc;
+
+  /* ----- Brand (single chromatic accent) ----- */
+  --brand: #1B365D;
+  --brand-light: #2D5A8A;
+
+  /* ----- Text (four levels — no fifth) ----- */
+  --near-black: #141413;
+  --dark-warm: #3d3d3a;
+  --olive: #504e49;
+  --stone: #6b6a64;
+
+  /* ----- Border ----- */
+  --border: #e8e6dc;
+  --border-soft: #e5e3d8;
+
+  /* ----- Tag tints (solid hex, NEVER rgba) ----- */
+  --tag-08: #EEF2F7;
+  --tag-14: #E4ECF5;
+  --tag-22: #D0DCE9;
+  --tag-30: #D6E1EE;
+
+  /* ----- Type stacks ----- */
+  --serif: 'Source Serif 4', Charter, Georgia, Palatino, 'Times New Roman', serif;
+  --sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, Monaco, monospace;
+
+  /* ----- Motion ----- */
+  --whisper: 0 4px 24px rgba(0, 0, 0, 0.05);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--parchment); color: var(--near-black); }
+body {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga', 'calt';
+}
+strong { font-weight: 500; }
+img { max-width: 100%; display: block; }
+a { color: var(--brand); text-decoration: none; border-bottom: 1px solid currentColor; }
+a:hover { color: var(--brand-light); }
+
+.shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 88px 64px 120px;
+  position: relative;
+}
+
+/* ---------- eyebrow strip (top meta) ---------- */
+.eyebrow-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--stone);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+  margin-bottom: 88px;
+}
+.eyebrow-row .lang {
+  display: inline-flex;
+  gap: 16px;
+}
+.eyebrow-row .lang a {
+  color: var(--stone);
+  border-bottom: none;
+}
+.eyebrow-row .lang a.active { color: var(--brand); }
+.eyebrow-row .meta {
+  display: inline-flex;
+  gap: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow-row .meta b { color: var(--near-black); font-weight: 500; }
+
+/* ---------- hero ---------- */
+.hero {
+  display: grid;
+  grid-template-columns: 1.45fr 0.55fr;
+  gap: 64px;
+  align-items: end;
+  margin-bottom: 96px;
+}
+.hero-copy h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(60px, 7.4vw, 106px);
+  line-height: 1.05;
+  letter-spacing: -1.2px;
+  color: var(--near-black);
+  margin-bottom: 28px;
+}
+.hero-copy h1 .ink { color: var(--brand); }
+.hero-copy .tagline {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--olive);
+  max-width: 38ch;
+}
+.hero-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-end;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--stone);
+  text-transform: uppercase;
+}
+.hero-tokens .row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--ivory);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-variant-numeric: tabular-nums;
+}
+.hero-tokens .row b {
+  color: var(--brand);
+  font-weight: 500;
+  font-family: var(--serif);
+  font-size: 14px;
+}
+.hero-tokens .row span { font-family: var(--sans); }
+
+/* ---------- manifesto (pull paragraph + signature) ---------- */
+.manifesto {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 44px 0 40px;
+  margin-bottom: 88px;
+  display: grid;
+  grid-template-columns: 1fr 1.85fr;
+  gap: 56px;
+  align-items: start;
+}
+.manifesto .label {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--stone);
+}
+.manifesto .body {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 1.65;
+  letter-spacing: 0.05em;
+  color: var(--olive);
+  border-left: 2px solid var(--brand);
+  padding: 4px 0 4px 24px;
+}
+.manifesto .body strong { color: var(--near-black); font-weight: 500; }
+.manifesto .signature {
+  margin-top: 22px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--dark-warm);
+  display: inline-flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.manifesto .signature span { color: var(--stone); }
+
+/* ---------- metrics row ---------- */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 88px;
+}
+.metric {
+  padding: 28px 22px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-right: 1px solid var(--border-soft);
+}
+.metric:last-child { border-right: 0; }
+.metric .value {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 1;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.metric .label {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--near-black);
+  margin-top: 8px;
+}
+.metric .sub {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--olive);
+  line-height: 1.5;
+  max-width: 28ch;
+}
+
+/* ---------- chapters ---------- */
+.chapters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 72px;
+  margin-bottom: 96px;
+}
+.chapter {
+  display: grid;
+  grid-template-columns: 1fr 2.6fr;
+  gap: 56px;
+  align-items: start;
+}
+.chapter .head { display: flex; flex-direction: column; gap: 14px; }
+.chapter .num {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--brand);
+  letter-spacing: 0.4px;
+  font-variant-numeric: tabular-nums;
+}
+.chapter .title {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--near-black);
+  letter-spacing: 0.4px;
+}
+.chapter .lede {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--olive);
+  line-height: 1.5;
+  max-width: 30ch;
+}
+.chapter .body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.chapter .body p {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--dark-warm);
+  line-height: 1.55;
+  max-width: 62ch;
+}
+.chapter .body p strong { color: var(--near-black); font-weight: 500; }
+.chapter .body code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--brand);
+  background: var(--tag-08);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.chapter ul.dash {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chapter ul.dash li {
+  position: relative;
+  padding-left: 16px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--dark-warm);
+  line-height: 1.55;
+}
+.chapter ul.dash li::before {
+  content: '\2013';
+  position: absolute;
+  left: 0;
+  color: var(--brand);
+}
+
+/* ---------- chapter aside (pull-out card) ---------- */
+.chapter-aside {
+  background: var(--ivory);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 22px 22px 20px;
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: box-shadow 0.2s;
+}
+.chapter-aside:hover { box-shadow: var(--whisper); }
+.chapter-aside .a-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--stone);
+}
+.chapter-aside .a-body {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--near-black);
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--parchment);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 12px 14px;
+  line-height: 1.65;
+}
+.chapter-aside .a-body .k { color: var(--brand); }
+.chapter-aside .a-body .c { color: var(--stone); }
+
+/* ---------- tag system ---------- */
+.tag {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 2px;
+  color: var(--brand);
+  background: var(--tag-08);
+  letter-spacing: 0.4px;
+}
+.tag.standard { background: var(--tag-14); padding: 2px 8px; border-radius: 4px; }
+.tag.brush {
+  background: linear-gradient(to right, #D6E1EE, #E4ECF5 70%, #EEF2F7);
+}
+.tag-row { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- footer ---------- */
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 56px;
+  display: grid;
+  grid-template-columns: 1.4fr 0.85fr 0.85fr 0.9fr;
+  gap: 48px;
+  align-items: start;
+}
+.footer .kicker {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 56px;
+  line-height: 1.05;
+  letter-spacing: -0.6px;
+  color: var(--near-black);
+  margin-bottom: 14px;
+}
+.footer .kicker .ink { color: var(--brand); }
+.footer .colophon {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--olive);
+  max-width: 32ch;
+  line-height: 1.55;
+}
+.footer .col h4 {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--stone);
+  margin-bottom: 16px;
+}
+.footer .col ul { list-style: none; padding: 0; margin: 0; }
+.footer .col li {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--dark-warm);
+  margin-bottom: 8px;
+}
+.footer .col li a { color: var(--dark-warm); border-bottom: none; }
+.footer .col li a:hover { color: var(--brand); }
+.footer .col li small {
+  display: block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--stone);
+  letter-spacing: 0.4px;
+  margin-top: 1px;
+}
+
+.legal {
+  margin-top: 56px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--stone);
+  letter-spacing: 0.4px;
+  font-variant-numeric: tabular-nums;
+}
+.legal b { color: var(--near-black); font-weight: 500; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1080px) {
+  .shell { padding: 64px 48px 96px; }
+  .hero { grid-template-columns: 1fr; gap: 36px; align-items: start; }
+  .hero-tokens { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .manifesto { grid-template-columns: 1fr; gap: 22px; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .metric:nth-child(2n) { border-right: 0; }
+  .metric:nth-child(-n+2) { border-bottom: 1px solid var(--border-soft); }
+  .chapter { grid-template-columns: 1fr; gap: 22px; }
+  .footer { grid-template-columns: 1fr 1fr; gap: 36px; }
+  .footer .kicker { font-size: 44px; }
+}
+@media (max-width: 640px) {
+  .shell { padding: 48px 24px 72px; }
+  .hero-copy h1 { font-size: 46px; line-height: 1.08; letter-spacing: -0.6px; }
+  .hero-copy .tagline { font-size: 17px; }
+  .metrics { grid-template-columns: 1fr; }
+  .metric { border-right: 0; border-bottom: 1px solid var(--border-soft); }
+  .metric:last-child { border-bottom: 0; }
+  .footer { grid-template-columns: 1fr; gap: 28px; }
+  .footer .kicker { font-size: 36px; }
+  .chapter .body p { font-size: 13.5px; }
+  .legal { flex-direction: column; gap: 10px; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<main class='shell'>
+
+  <!-- ============ EYEBROW ROW ============ -->
+  <div class='eyebrow-row' data-od-id='eyebrow-row'>
+    <div class='lang'>
+      <a href='#' class='active'>EN</a>
+      <a href='#'>中文</a>
+      <a href='#'>日本語</a>
+    </div>
+    <div class='meta'>
+      <span><b>Vol. 01</b> · Issue Nº 26</span>
+      <span><b>v0.2.0</b></span>
+      <span>Apache-2.0</span>
+      <span>MMXXVI</span>
+    </div>
+  </div>
+
+  <!-- ============ HERO ============ -->
+  <section class='hero' data-od-id='hero'>
+    <div class='hero-copy'>
+      <h1>Designing intelligence on warm <span class='ink'>paper</span>.</h1>
+      <p class='tagline'>The open-source studio for editorial documents, white papers, and one-pagers — typeset by your own coding agent.</p>
+    </div>
+    <div class='hero-tokens'>
+      <span class='row'><b>31</b> <span>Skills</span></span>
+      <span class='row'><b>72</b> <span>Systems</span></span>
+      <span class='row'><b>12</b> <span>Agents · BYOK</span></span>
+    </div>
+  </section>
+
+  <!-- ============ MANIFESTO ============ -->
+  <section class='manifesto' data-od-id='manifesto'>
+    <span class='label'>Manifesto · Nº 01</span>
+    <div>
+      <p class='body'>
+        We treat your existing coding agent as a <strong>creative collaborator</strong>, not a black box. Open Design gives it 31 composable skills and 72 brand-grade design systems, then steps out of the way. The output is a real file — not a prompt — that you can hand to a client tomorrow.
+      </p>
+      <div class='signature'>
+        — Open Design Studio
+        <span>Berlin · Open · Earth · 52.5200° N · 13.4050° E</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ METRICS ============ -->
+  <section class='metrics' data-od-id='metrics'>
+    <div class='metric'>
+      <div class='value'>31</div>
+      <div class='label'>Skills</div>
+      <div class='sub'>file-based, shippable today, drop-in compatible with Claude Code.</div>
+    </div>
+    <div class='metric'>
+      <div class='value'>72</div>
+      <div class='label'>Design systems</div>
+      <div class='sub'>portable DESIGN.md tokens — Linear, Vercel, Stripe, Apple, kami…</div>
+    </div>
+    <div class='metric'>
+      <div class='value'>12</div>
+      <div class='label'>Agent CLIs</div>
+      <div class='sub'>auto-detected on your $PATH; switch backends in one keystroke.</div>
+    </div>
+    <div class='metric'>
+      <div class='value'>3</div>
+      <div class='label'>Commands</div>
+      <div class='sub'>from <code>git clone</code> to first artifact, locally and offline.</div>
+    </div>
+  </section>
+
+  <!-- ============ CHAPTERS ============ -->
+  <section class='chapters' data-od-id='chapters'>
+
+    <article class='chapter' data-od-id='chapter-01'>
+      <div class='head'>
+        <p class='num'>01</p>
+        <h2 class='title'>What it is</h2>
+        <p class='lede'>A local-first design studio for the agent you already trust.</p>
+      </div>
+      <div class='body'>
+        <p>
+          Open Design is the <strong>open-source alternative to Anthropic's Claude Design</strong>. It runs on your laptop. Your agent reads a folder of <code>SKILL.md</code> files and a folder of <code>DESIGN.md</code> systems, then produces real files — landing pages, decks, white papers, one-pagers, mobile prototypes, dashboards.
+        </p>
+        <p>
+          Skills supply behavior. Systems supply taste. Adapters bridge agents. <strong>BYOK respects your wallet.</strong> Every output is portable HTML or Markdown — no proprietary file format, no vendor lock-in.
+        </p>
+        <ul class='dash'>
+          <li>Files, not opaque prompts — every skill is a folder of Markdown.</li>
+          <li>Deterministic visual directions, not random generation.</li>
+          <li>Sandboxed iframe preview, real <code>cwd</code>, exportable artifacts.</li>
+        </ul>
+        <div class='chapter-aside'>
+          <div class='a-label'>Three commands · 30 seconds</div>
+          <pre class='a-body'><span class="c"># Clone, install, launch the local daemon.</span>
+git clone <span class="k">https://github.com/nexu-io/open-design</span>
+pnpm install
+pnpm tools-dev</pre>
+        </div>
+      </div>
+    </article>
+
+    <article class='chapter' data-od-id='chapter-02'>
+      <div class='head'>
+        <p class='num'>02</p>
+        <h2 class='title'>How it feels</h2>
+        <p class='lede'>Editorial discipline, not chat-window improvisation.</p>
+      </div>
+      <div class='body'>
+        <p>
+          A new project starts with a 30-second question form: brand, audience, scale, language. The agent picks one of five visual directions in OKLch, locks the type stack, and writes the artifact to disk. <strong>You can read every file it touched.</strong>
+        </p>
+        <p>
+          Every iteration is reviewed in a sandboxed iframe preview, with comment-mode anchors on every editable element so you can give targeted feedback instead of restating the whole brief. Re-runs are deterministic — same brief, same output.
+        </p>
+        <p>
+          The result is the difference between <em class='tag standard'>looks AI</em> and <em class='tag standard'>looks shipped</em>. <span class='tag brush'>One brush tag per page</span> by convention; everything else stays solid hex.
+        </p>
+      </div>
+    </article>
+
+    <article class='chapter' data-od-id='chapter-03'>
+      <div class='head'>
+        <p class='num'>03</p>
+        <h2 class='title'>What ships next</h2>
+        <p class='lede'>Q2 2026 — packaging, multi-tenant tokens, daemon hardening.</p>
+      </div>
+      <div class='body'>
+        <p>
+          The roadmap is public. Three threads we're pulling on right now:
+        </p>
+        <ul class='dash'>
+          <li><strong>Packaged desktop builds</strong> — signed Mac, Windows NSIS, Linux AppImage, all sourced from <code>tools-pack</code>.</li>
+          <li><strong>Multi-tenant brand tokens</strong> — one running daemon, many tenants; <code>OD_DATA_DIR</code> and <code>OD_MEDIA_CONFIG_DIR</code> already laid the groundwork.</li>
+          <li><strong>Daemon-side artifact persistence</strong> — every render is a file on disk under <code>.od/artifacts/</code> with a stable SHA, so design history survives every agent restart.</li>
+        </ul>
+        <p>
+          Nothing in this list requires a paid plan. <strong>Open Design will stay Apache-2.0 forever</strong>; the studio earns by selling brand-grade design systems, not by gating the runtime.
+        </p>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class='footer' data-od-id='footer'>
+    <div>
+      <h2 class='kicker'>Open <span class='ink'>Design.</span></h2>
+      <p class='colophon'>
+        Designed and shipped on warm paper from Berlin · Open · Earth. Apache-2.0 licensed for any use, commercial or not.
+      </p>
+    </div>
+    <div class='col'>
+      <h4>Source</h4>
+      <ul>
+        <li><a href='#'>github.com/nexu-io</a><small>/open-design</small></li>
+        <li><a href='#'>Releases<small>v0.2.0 · MMXXVI</small></a></li>
+        <li><a href='#'>Issues<small>open · 23</small></a></li>
+      </ul>
+    </div>
+    <div class='col'>
+      <h4>Skills</h4>
+      <ul>
+        <li><a href='#'>kami-landing<small>this page</small></a></li>
+        <li><a href='#'>kami-deck<small>slide companion</small></a></li>
+        <li><a href='#'>open-design-landing<small>brand marketing</small></a></li>
+      </ul>
+    </div>
+    <div class='col'>
+      <h4>Studio</h4>
+      <ul>
+        <li><a href='#'>Manifesto<small>v0.2.0 · 2.4k chars</small></a></li>
+        <li><a href='#'>Roadmap<small>Q2 / Q3 2026</small></a></li>
+        <li><a href='#'>Contact<small>open an issue</small></a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <div class='legal'>
+    <span><b>Open Design</b> · Apache-2.0 · MMXXVI</span>
+    <span>Composed in kami · 紙 · 纸 · paper-first</span>
+  </div>
+
+</main>
+</body>
+</html>

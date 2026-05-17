@@ -484,6 +484,408 @@ code {
   grid-row: 3;
 }
 
+.workspace-shell {
+  height: 100vh;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 40px minmax(0, 1fr);
+  background: var(--bg-app);
+}
+.workspace-shell__body {
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-shell__body > .app,
+.workspace-shell__body > .entry-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-tabs-chrome.app-chrome-header {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 8px 0 12px;
+  gap: 0;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-panel) 80%, transparent) inset;
+  user-select: none;
+  -webkit-app-region: drag;
+  overflow: visible;
+  position: relative;
+  z-index: 120;
+}
+.workspace-tabs-chrome .workspace-tabs-traffic {
+  margin-right: calc(var(--app-chrome-traffic-margin) + 8px);
+}
+.workspace-tabs-new-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+  transition: background 100ms ease, color 100ms ease;
+}
+.workspace-tabs-new-btn:hover {
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
+  color: var(--text);
+}
+.workspace-tabs-drag {
+  flex: 1 1 auto;
+  min-width: 12px;
+  align-self: stretch;
+  -webkit-app-region: drag;
+}
+.workspace-tabs-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-icon-btn:hover:not(:disabled),
+.workspace-tabs-icon-btn.is-active {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--bg-panel) 78%, var(--bg-subtle));
+  border-color: var(--border);
+}
+.workspace-tabs-strip {
+  align-self: stretch;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding-left: 0;
+  overflow: visible;
+  contain: layout style;
+  -webkit-app-region: no-drag;
+}
+.workspace-tab {
+  position: relative;
+  height: 26px;
+  min-width: 76px;
+  max-width: 136px;
+  flex: 1 1 124px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  overflow: hidden;
+  contain: layout style;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.workspace-tab + .workspace-tab::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.workspace-tab:hover {
+  background: color-mix(in srgb, var(--bg-panel) 64%, transparent);
+  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+  color: var(--text);
+}
+.workspace-tab.is-active {
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--border-strong) 52%, transparent);
+  color: var(--text-strong);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.workspace-tab:hover::before,
+.workspace-tab.is-active::before {
+  opacity: 0;
+}
+.workspace-tab__main {
+  min-width: 0;
+  height: 100%;
+  padding: 0 2px 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  text-align: left;
+}
+.workspace-tab__main:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.workspace-tab__icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  opacity: 0.74;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.workspace-tab__icon svg,
+.workspace-tab__close svg,
+.workspace-tabs-icon-btn svg {
+  display: block;
+  flex: none;
+}
+.workspace-tab__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 520;
+  letter-spacing: 0;
+}
+.workspace-tab__close {
+  width: 16px;
+  height: 16px;
+  margin-right: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  flex: 0 0 auto;
+}
+.workspace-tab:hover .workspace-tab__close,
+.workspace-tab.is-active .workspace-tab__close {
+  opacity: 1;
+}
+.workspace-tab__close:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.workspace-tab--overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 26px;
+  min-width: auto;
+  max-width: none;
+  padding: 0 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 540;
+}
+.workspace-tabs-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  margin-left: 3px;
+  z-index: 35;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(620px, calc(100vh - 72px));
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 130;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-popover,
+.workspace-tabs-popover * {
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-search {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid var(--selected);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text-muted);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+.workspace-tabs-search input {
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+}
+.workspace-tabs-search input:focus {
+  border: 0;
+  box-shadow: none;
+}
+.workspace-tabs-popover__section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 5px 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.workspace-tabs-list {
+  min-height: 0;
+  max-height: 500px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  contain: layout style paint;
+}
+.workspace-tabs-list__item {
+  min-height: 34px;
+  border-radius: 7px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  contain: layout style;
+}
+.workspace-tabs-list__item:hover,
+.workspace-tabs-list__item.is-active {
+  background: color-mix(in srgb, var(--selected) 9%, var(--bg-subtle));
+}
+.workspace-tabs-list__main {
+  min-width: 0;
+  height: 34px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+}
+.workspace-tabs-list__main:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.workspace-tabs-list__icon {
+  width: 17px;
+  height: 17px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.workspace-tabs-list__icon svg,
+.workspace-tabs-list__close svg,
+.workspace-tabs-search svg {
+  display: block;
+  flex: none;
+}
+.workspace-tabs-list__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.workspace-tabs-list__title,
+.workspace-tabs-list__meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-tabs-list__title {
+  color: var(--text-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.workspace-tabs-list__meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.workspace-tabs-list__close {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.workspace-tabs-list__close:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+.workspace-tabs-empty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+@media (max-width: 720px) {
+  .workspace-tabs-chrome.app-chrome-header {
+    padding-right: 6px;
+  }
+  .workspace-tab {
+    min-width: 40px;
+    max-width: 44px;
+    flex-basis: 44px;
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+  .workspace-tab__main {
+    justify-content: center;
+    padding: 0;
+  }
+  .workspace-tab__label,
+  .workspace-tab__close,
+  .workspace-tab--overflow {
+    display: none;
+  }
+}
+
 .app-chrome-header {
   --app-chrome-traffic-space: 0px;
   --app-chrome-traffic-margin: 0px; /* Set to 8px on macOS */
@@ -499,45 +901,9 @@ code {
 .app-chrome-traffic-space {
   width: var(--app-chrome-traffic-space);
   flex: 0 0 var(--app-chrome-traffic-space);
-  /* Add extra spacing after the traffic light controls on macOS to prevent
-     the window controls from crowding the brand logo. The daemon sets both
-     --app-chrome-traffic-space (80px) and --app-chrome-traffic-margin (8px)
-     on macOS, while other platforms keep both at 0px. */
+  /* Add extra spacing after the traffic light controls on macOS so project
+     navigation starts after the native window controls. */
   margin-right: var(--app-chrome-traffic-margin);
-}
-.app-chrome-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex-shrink: 0;
-}
-.app-chrome-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  overflow: visible;
-  flex-shrink: 0;
-}
-.app-chrome-mark .brand-mark-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  padding: 0;
-  user-select: none;
-  -webkit-user-drag: none;
-}
-.app-chrome-name {
-  color: var(--text-strong);
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
 }
 .app-chrome-back,
 .settings-icon-btn {
@@ -1009,6 +1375,7 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 10px;
   font-size: 12.5px;
   text-align: left;
@@ -1017,10 +1384,26 @@ code {
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text);
+  text-decoration: none;
 }
 .avatar-item:hover { background: var(--bg-subtle); }
+/* `<a>` items inside the popover need explicit color + decoration
+   resets — the user-agent stylesheet otherwise paints them blue
+   and underlined, which reads as misalignment next to the button
+   rows that share the same `.avatar-item` class. */
+a.avatar-item,
+a.avatar-item:visited {
+  color: var(--text);
+}
 .avatar-item .avatar-item-icon {
-  width: 18px; text-align: center; color: var(--text-muted); flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 .avatar-item .avatar-item-meta {
   margin-left: auto;
@@ -1105,6 +1488,8 @@ code {
   grid-template-columns: 460px 8px minmax(400px, 1fr);
   min-height: 0;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .split.is-resizing-chat {
   cursor: col-resize;
@@ -1292,6 +1677,58 @@ code {
   line-height: 1.45;
   box-shadow: var(--shadow-xs);
 }
+.msg-plugin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1;
+  color: var(--text-muted);
+  max-width: 100%;
+}
+.msg-plugin-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+.msg-plugin-chip__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msg-plugin-chip__kind {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.msg-plugin-chip__title {
+  color: var(--text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msg-plugin-chip__version,
+.msg-plugin-chip__task {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.msg-plugin-chip__task {
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+}
 
 /* Wrapper for user bubble + copy button */
 .msg.user .user-text-wrap {
@@ -1407,7 +1844,64 @@ code {
   resize: vertical;
 }
 .composer textarea:focus { outline: none; box-shadow: none; }
-.composer-input-wrap { position: relative; }
+.composer-input-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.composer-textarea-layer {
+  position: relative;
+  min-height: 60px;
+}
+.composer-input-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  min-height: 60px;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  line-height: normal;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.composer-input-overlay-inner {
+  min-height: 100%;
+  padding: 4px;
+  transform: translateY(calc(-1 * var(--composer-input-scroll, 0px)));
+}
+.composer-input-wrap.has-mention-overlay textarea {
+  color: transparent;
+  caret-color: var(--text);
+}
+.composer-input-wrap.has-mention-overlay textarea::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: transparent;
+}
+.composer-inline-mention {
+  display: inline;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  color: color-mix(in srgb, var(--accent) 62%, var(--text));
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  vertical-align: baseline;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: inherit;
+}
 .composer-row {
   display: flex;
   align-items: center;
@@ -1725,18 +2219,69 @@ code {
 
 /* -------- Mention popover ------------------------------------------- */
 .mention-popover {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  margin-bottom: 4px;
-  max-height: 220px;
-  overflow-y: auto;
+  order: -1;
+  flex: 0 0 clamp(248px, 38vh, 320px);
+  min-height: 248px;
+  max-height: 320px;
+  margin: 0 0 6px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
-  z-index: 10;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.mention-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 42px;
+  padding: 6px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mention-tabs::-webkit-scrollbar {
+  display: none;
+}
+.mention-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.mention-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.mention-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 3px 0;
+}
+.mention-empty {
+  padding: 14px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.45;
 }
 .mention-item {
   display: flex;
@@ -1748,8 +2293,46 @@ code {
   font-size: 12px;
   text-align: left;
   gap: 8px;
+  color: var(--text);
+  min-height: 32px;
 }
 .mention-item:hover { background: var(--bg-subtle); border-color: transparent; }
+.mention-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 4px 8px 2px;
+}
+.mention-section-label + .mention-section-label,
+.mention-item + .mention-section-label {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.mention-item--plugin {
+  align-items: flex-start;
+}
+.mention-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.mention-item-body strong {
+  font-weight: 500;
+  font-size: 12px;
+}
+.mention-meta--desc {
+  white-space: normal;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .mention-item code {
   flex: 1;
   font-size: 11px;
@@ -4426,6 +5009,24 @@ code {
   color: var(--text-muted);
 }
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
+.agent-model-select-wrap {
+  position: relative;
+}
+.agent-model-select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+  padding-right: 28px;
+  width: 100%;
+}
+.agent-model-select-chevron {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  pointer-events: none;
+}
 .agent-cli-env {
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
@@ -4612,10 +5213,13 @@ code {
   min-height: 0;
   background: var(--bg);
 }
+/* Note: `.entry-shell--no-header` and the rest of the entry-view
+   redesign live in `src/styles/home/`. Keeping that bundle out of
+   this file makes upstream `index.css` rebases easier. */
 
 .entry {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: var(--entry-rail-width, 64px) 1fr;
   height: 100%;
   min-height: 0;
   background: var(--bg);
@@ -7539,7 +8143,7 @@ button.connector-action.is-loading {
   font-weight: 500;
   white-space: nowrap;
 }
-.subtab-pill button:hover:not(.active) { background: rgba(255,255,255,0.6); border-color: transparent; color: var(--text); }
+.subtab-pill button:hover:not(.active) { background: var(--bg-muted); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
   background: var(--bg-panel);
   color: var(--text);
@@ -8404,20 +9008,15 @@ button.connector-action.is-loading {
 
 @media (max-width: 900px) {
   .entry {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 56px 1fr !important;
     height: 100%;
     min-height: 0;
   }
-  .entry-side {
-    width: 100% !important;
-    min-width: 0;
-    max-width: none;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-  .entry-side-resizer { display: none; }
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
+  /* Note: home-redesign breakpoints (entry-nav-rail, entry-main__inner,
+     home-hero__title) live in the per-component files under
+     `src/styles/home/` to keep upstream `index.css` rebases narrow. */
 }
 
 /* ============================================================
@@ -8508,7 +9107,17 @@ button.connector-action.is-loading {
   font-size: 13px;
   color: var(--text-muted);
   width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   text-align: center;
+}
+.ws-tab .tab-icon svg,
+.ws-tab-close svg {
+  display: block;
+  flex: none;
 }
 .ws-tab.active .tab-icon { color: var(--text); }
 .ws-tab-label {
@@ -8995,6 +9604,64 @@ button.connector-action.is-loading {
 }
 .df-row-live-artifact {
   grid-template-columns: 36px minmax(0, 1fr) auto;
+}
+.df-row-plugin-folder {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+  cursor: default;
+}
+.df-row-folder-main {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.df-plugin-install {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+.df-plugin-install:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.df-plugin-install:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.df-plugin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.df-inline-notice {
+  margin: 0 20px 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
 }
 .df-row:hover { background: var(--bg-subtle); }
 .df-row.active { background: var(--blue-bg); color: var(--text); }
@@ -11820,6 +12487,316 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   padding: 3px 9px;
 }
 
+.plugin-action-panel {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+  box-shadow: var(--shadow-xs);
+}
+.plugin-action-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+.plugin-action-panel__icon {
+  width: 25px;
+  height: 25px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.plugin-action-panel__title {
+  font-weight: 650;
+  font-size: 13px;
+  color: var(--text);
+}
+.plugin-action-panel__subtitle {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.plugin-action-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+.plugin-action-panel__list .plugin-action-card:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+.plugin-action-card__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.plugin-action-card__folder-icon {
+  width: 23px;
+  height: 23px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.plugin-action-card__copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 8px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.plugin-action-card__path {
+  max-width: 220px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-action-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.plugin-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.plugin-action-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-action-button:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+.plugin-action-button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.plugin-action-button--primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(0.98);
+}
+.plugin-action-card__notice {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+/* "Files this turn" summary — derived from Read/Write/Edit tool_use events
+   so users can scan every file the agent touched without expanding tool-
+   group disclosures. Compact pill while streaming, full list once done. */
+.file-ops {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.file-ops.is-streaming {
+  border-style: dashed;
+  background: var(--bg-subtle);
+}
+.file-ops-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  min-width: 0;
+}
+.file-ops-toggle:hover { background: var(--bg-subtle); }
+.file-ops-icon { display: inline-flex; color: var(--text-muted); }
+.file-ops-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.file-ops-summary-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.file-ops-count {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.file-ops.is-streaming .file-ops-count {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
+}
+.file-ops-chev { display: inline-flex; color: var(--text-muted); }
+.file-ops-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.file-ops-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.file-ops-row:hover { background: var(--bg-subtle); }
+.file-ops-row--running { color: var(--text); }
+.file-ops-row--error { color: var(--text); }
+.file-ops-row-badges { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.file-ops-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.file-ops-badge-count {
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.file-ops-badge--read {
+  color: color-mix(in oklab, var(--accent) 80%, var(--text));
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
+}
+.file-ops-badge--write {
+  color: #2e7d32;
+  border-color: color-mix(in oklab, #2e7d32 35%, var(--border));
+  background: color-mix(in oklab, #2e7d32 8%, var(--bg-subtle));
+}
+.file-ops-badge--edit {
+  color: #b26500;
+  border-color: color-mix(in oklab, #b26500 35%, var(--border));
+  background: color-mix(in oklab, #b26500 8%, var(--bg-subtle));
+}
+.file-ops-row-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: transparent;
+  padding: 0;
+}
+.file-ops-row-count {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.file-ops-row-status {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.file-ops-row-status--running {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.file-ops-row-status--error {
+  color: #c0392b;
+  background: color-mix(in oklab, #c0392b 12%, transparent);
+}
+.file-ops-row-open {
+  font-size: 11px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.file-ops-row-open:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .op-bash .op-command,
 .op-bash .op-output {
   margin: 0;
@@ -13178,36 +14155,59 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   max-width: none;
   border-radius: 0;
 }
+/* Two-row header: title row keeps the title/subtitle + close together at
+   the top; toolbar row hosts tabs (left) and the action cluster (right).
+   This split lets the title breathe even when the toolbar carries a busy
+   set of controls (Use plugin + sidebar + Fullscreen + Share + plugin
+   share + ...), and keeps the close button anchored in its expected
+   top-right corner. */
 .ds-modal-header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
 }
+.ds-modal-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.ds-modal-header-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .ds-modal-title-block {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .ds-modal-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-strong, var(--text));
 }
 .ds-modal-subtitle {
   font-size: 12px;
   color: var(--text-muted);
-  white-space: nowrap;
+  line-height: 1.5;
+  /* Allow up to two lines for long descriptions (e.g. Chinese plugin
+     subtitles) instead of clipping at the first word — keeps the
+     vertical footprint bounded but readable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 60ch;
+  word-break: break-word;
 }
 .ds-modal-tabs {
   display: inline-flex;
@@ -13216,6 +14216,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: 999px;
   padding: 3px;
   gap: 2px;
+  flex-shrink: 0;
 }
 .ds-modal-tab {
   background: transparent;
@@ -13238,6 +14239,16 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   align-items: center;
   gap: 8px;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+/* Keep individual action labels (Use plugin / DESIGN.md / Fullscreen /
+   Share / etc.) on a single line; the toolbar row itself can wrap to a
+   second visual line only at very narrow widths via flex-wrap above. */
+.ds-modal-actions > button,
+.ds-modal-actions .share-menu > button {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .ds-modal-stage {
   flex: 1;
@@ -13319,6 +14330,140 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler {
   height: 100vh;
 }
+
+/* Custom (non-iframe) stage container — used by the plugin media
+   detail variant so image / video / audio plugins share the
+   same modal chrome (header, sidebar toggle, fullscreen, share)
+   as HTML and design-system plugins. The container fills the
+   stage frame and centers its child media element. */
+.ds-modal-stage-custom {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: var(--bg-subtle, #f6f5f1);
+}
+.plugin-media-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+  min-height: 0;
+}
+.plugin-media-stage__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.plugin-media-stage__image,
+.plugin-media-stage__video,
+.plugin-media-stage__audio-poster {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16);
+  background: white;
+}
+.plugin-media-stage__video {
+  width: auto;
+  height: auto;
+}
+.plugin-media-stage__audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+  max-width: 480px;
+}
+.plugin-media-stage__audio-poster {
+  width: 320px;
+  height: 320px;
+  object-fit: cover;
+}
+.plugin-media-stage__audio-glyph {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 18%, transparent),
+    color-mix(in srgb, var(--accent) 4%, transparent)
+  );
+  color: var(--accent);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+}
+.plugin-media-stage__audio-player {
+  width: 100%;
+}
+
+/* Sidebar prompt block — top of the right pane, mirrors the
+   PROMPT BODY card in the previous bespoke media modal so users
+   still get the prompt + copy affordance, just inside the
+   unified PreviewModal chrome. */
+.plugin-media-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.plugin-media-sidebar__prompt {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--surface-1, var(--bg-panel));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-media-sidebar__prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.plugin-media-sidebar__prompt-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.plugin-media-sidebar__prompt-copy {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.plugin-media-sidebar__prompt-copy:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.plugin-media-sidebar__prompt-body {
+  margin: 0;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+}
 .ds-modal-empty {
   position: absolute;
   inset: 0;
@@ -13353,6 +14498,71 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: var(--accent-tint);
   color: var(--accent);
   border-color: var(--accent);
+}
+/* Accent CTA used by plugin detail wrappers to surface a "Use plugin"
+   action without forking the whole modal layout. Sits before the
+   ghost actions, mirroring the accent button used in NewProjectModal
+   so the affordance reads consistently across surfaces. */
+.ds-modal-primary-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    transform 120ms ease;
+}
+.ds-modal-primary-action:hover:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+  border-color: var(--accent-strong, var(--accent));
+}
+.ds-modal-primary-action:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.ds-modal-primary-action:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+/* Dedicated icon-button shape for the modal close affordance. Matches the
+   visual language used by plugin-media-detail__close and
+   new-project-modal__close so every modal closes with the same control. */
+.ds-modal-close {
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 120ms ease, color 120ms ease,
+    border-color 120ms ease;
+}
+.ds-modal-close svg {
+  display: block;
+  width: 14px !important;
+  height: 14px !important;
+  stroke-width: 1.9;
+}
+.ds-modal-close:hover,
+.ds-modal-close:focus-visible {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
 }
 
 /* DESIGN.md side panel — monospace source view with light syntax tints,
@@ -13421,8 +14631,8 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 @media (max-width: 760px) {
   .ds-modal-backdrop { padding: 0; }
   .ds-modal { border-radius: 0; }
-  .ds-modal-header { grid-template-columns: 1fr; gap: 8px; }
-  .ds-modal-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .ds-modal-header { gap: 10px; padding: 12px 14px; }
+  .ds-modal-actions { justify-content: flex-start; }
   .ds-modal-stage { flex-direction: column; }
   .ds-modal-stage.has-sidebar .ds-modal-stage-iframe { flex: 1 1 50%; }
   .ds-modal-sidebar {
@@ -13516,7 +14726,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   gap: 6px;
   align-items: center;
 }
-.filter-pill:hover { border-color: var(--border-strong); color: var(--text); }
+button.filter-pill:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
 /*
   Selected filter pill — quiet "I am the chosen one" treatment, NOT a CTA.
   Earlier the active pill borrowed the full `--accent` fill, which read as
@@ -13532,7 +14746,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text);
   font-weight: 600;
 }
-.filter-pill.active:hover {
+button.filter-pill.active:hover:not(:disabled) {
   background: var(--bg-muted);
   border-color: var(--border-strong);
   color: var(--text);
@@ -13540,6 +14754,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .filter-pill-count {
   font-size: 11px;
   opacity: 0.7;
+}
+button.filter-pill:hover:not(:disabled) .filter-pill-count,
+.filter-pill.active .filter-pill-count {
+  color: currentColor;
+  opacity: 0.9;
 }
 .example-card-actions {
   display: flex;
@@ -15619,224 +16838,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ============================================================
-   Pet — discovery surfaces (right rail, welcome teaser, composer)
+   Pet — discovery surfaces (welcome teaser, composer)
    ============================================================ */
-
-/* Right-side rail in the entry view. Renders as a third grid column
-   (the entry's gridTemplateColumns is set inline to `… 1fr auto`). */
-.pet-rail {
-  width: 232px;
-  border-left: 1px solid var(--border);
-  background: var(--bg-panel);
-  padding: 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-}
-.pet-rail.collapsed {
-  width: 36px;
-  padding: 18px 4px;
-  align-items: center;
-}
-.pet-rail-toggle {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 4px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  cursor: pointer;
-  width: 100%;
-}
-.pet-rail-toggle:hover {
-  background: var(--bg-muted);
-  color: var(--text);
-}
-.pet-rail-toggle-glyph {
-  font-size: 18px;
-  line-height: 1;
-}
-.pet-rail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.pet-rail-head-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.pet-rail-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text);
-}
-.pet-rail-title strong {
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.pet-rail-collapse {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  color: var(--text);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-.pet-rail-collapse > svg {
-  flex-shrink: 0;
-}
-.pet-rail-collapse:hover {
-  background: var(--bg-muted);
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-.pet-rail-collapse:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(201, 100, 66, 0.32);
-  border-color: var(--accent);
-}
-.pet-rail-hint {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  margin: 0;
-  line-height: 1.45;
-}
-.pet-rail-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.pet-rail-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 11px;
-  background: var(--accent-tint);
-  color: var(--accent-strong);
-  border: 1px solid var(--accent);
-  cursor: pointer;
-}
-.pet-rail-fresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 11px;
-  background: var(--accent-tint);
-  color: var(--accent-strong);
-  border: 1px dashed var(--accent);
-}
-.pet-rail-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.pet-rail-item {
-  --pet-accent: var(--accent);
-  display: grid;
-  grid-template-columns: 32px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  border: 1px solid transparent;
-  cursor: pointer;
-  text-align: left;
-  color: var(--text);
-}
-.pet-rail-item:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-}
-.pet-rail-item.active {
-  border-color: var(--pet-accent);
-  background: color-mix(in srgb, var(--pet-accent) 8%, transparent);
-}
-.pet-rail-item.custom {
-  border-style: dashed;
-  border-color: var(--border-strong);
-}
-.pet-rail-item.custom.active {
-  border-style: solid;
-  border-color: var(--pet-accent);
-}
-.pet-rail-item-glyph {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  font-size: 18px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--pet-accent) 14%, transparent);
-}
-.pet-rail-item-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.pet-rail-item-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pet-rail-item-flavor {
-  font-size: 10.5px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pet-rail-customize {
-  margin-top: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-.pet-rail-customize:hover {
-  background: var(--bg-muted);
-  color: var(--text);
-  border-color: var(--border-strong);
-}
-
-/* Hide the rail on small viewports so it does not crowd the main column. */
-@media (max-width: 1100px) {
-  .pet-rail:not(.collapsed) {
-    display: none;
-  }
-}
 
 /* ----- Welcome dialog teaser ----- */
 .welcome-pet-teaser {
@@ -16041,22 +17044,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-subtle);
   color: var(--text);
 }
-.composer-tools-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: var(--accent);
-  color: white;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 14px;
-  text-align: center;
-  pointer-events: none;
-}
 .composer-tools-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -16075,7 +17062,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .composer-tools-tabs {
   display: flex;
   align-items: stretch;
-  gap: 0;
+  gap: 4px;
   padding: 4px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--bg-subtle);
@@ -16085,11 +17072,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 4px;
+  gap: 5px;
+  min-height: 30px;
+  padding: 6px 6px;
   font-size: 11.5px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
@@ -16100,22 +17088,24 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .composer-tools-tab.active {
   background: var(--bg-panel);
   color: var(--text);
+  border-color: var(--border);
   box-shadow: var(--shadow-xs);
 }
-.composer-tools-tab-count {
-  font-size: 10px;
-  background: var(--accent);
-  color: white;
-  border-radius: 7px;
-  padding: 0 4px;
-  min-width: 14px;
-  height: 14px;
-  line-height: 14px;
-  text-align: center;
-}
 .composer-tools-tab-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
   font-size: 13px;
   line-height: 1;
+  flex: 0 0 auto;
+}
+.composer-tools-tab > svg,
+[role='tab'] > svg {
+  display: block;
+  flex: none;
+  align-self: center;
 }
 .composer-tools-content {
   display: flex;
@@ -16124,6 +17114,66 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   padding: 6px;
   max-height: 360px;
   overflow-y: auto;
+}
+.composer-tools-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px 6px;
+}
+.composer-tools-segments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.composer-tools-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  min-width: 0;
+}
+.composer-tools-segment:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+.composer-tools-segment.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  border-color: var(--border);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+.composer-tools-segment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-tools-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+}
+.composer-tools-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .composer-tools-empty {
   padding: 14px 10px;
@@ -16136,6 +17186,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.composer-tools-section-label {
+  padding: 4px 6px 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .composer-tools-row {
   display: inline-flex;
@@ -16155,6 +17212,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-subtle);
   color: var(--text);
 }
+.composer-tools-row.active {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
 .composer-tools-row-body {
   display: inline-flex;
   align-items: baseline;
@@ -16170,6 +17231,68 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 10.5px;
   color: var(--text-faint);
   text-transform: lowercase;
+}
+/* Plugins panel — each row is a horizontal split: the main button
+   applies the plugin, the side button opens the details modal. */
+.composer-tools-row--plugin {
+  padding: 0;
+  gap: 0;
+}
+.composer-tools-row--plugin .composer-tools-row-body {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.composer-tools-row--plugin .composer-tools-row-meta {
+  text-transform: none;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.composer-tools-row-main {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  min-width: 0;
+}
+.composer-tools-row-main:hover {
+  background: var(--bg-subtle);
+}
+.composer-tools-row-main:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.composer-tools-row-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.composer-tools-row-side:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.composer-tools-row-pending {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-left: auto;
 }
 .composer-tools-row-action {
   border-top: 1px solid var(--border-soft);
@@ -16823,7 +17946,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 [dir="rtl"] .icon-only svg[data-lucide="chevron-right"],
 [dir="rtl"] .icon-only svg[data-lucide="arrow-left"],
 [dir="rtl"] .icon-only svg[data-lucide="arrow-right"],
-[dir="rtl"] .pet-rail-collapse svg,
 [dir="rtl"] .welcome-pet-teaser svg {
   transform: scaleX(-1);
 }
@@ -19000,6 +20122,935 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   text-decoration-thickness: 2px;
 }
 
+/* PluginLoopHome — the minimum-closed-loop Home entry: a single prompt
+   textarea + plugin grid with "Use example query" affordance. Replaces
+   the tabbed NewProjectPanel on Home until the plugin-first UX matures. */
+.plugin-loop-home {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  padding: 18px;
+  box-shadow: var(--shadow-xs);
+}
+.plugin-loop-home__hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugin-loop-home__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-loop-home__subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.plugin-loop-home__subtitle kbd {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-subtle);
+}
+.plugin-loop-home__active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.plugin-loop-home__active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.plugin-loop-home__active-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.plugin-loop-home__active-clear {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+.plugin-loop-home__active-clear:hover {
+  color: var(--text);
+}
+.plugin-loop-home__context-summary {
+  color: var(--text-muted);
+}
+.plugin-loop-home__input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-loop-home__input {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+}
+.plugin-loop-home__input:focus {
+  outline: 2px solid var(--accent-subtle, var(--accent));
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.plugin-loop-home__submit {
+  align-self: flex-end;
+  appearance: none;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plugin-loop-home__submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.plugin-loop-home__error {
+  color: var(--danger, #c33);
+  font-size: 12px;
+}
+.plugin-loop-home__rail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+.plugin-loop-home__rail-count {
+  font-variant-numeric: tabular-nums;
+}
+.plugin-loop-home__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.plugin-loop-home__empty {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 8px 0;
+}
+.plugin-loop-home__empty code {
+  font-size: 11.5px;
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.plugin-loop-home__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 12px;
+  background: var(--bg);
+  font-size: 12.5px;
+}
+.plugin-loop-home__card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.plugin-loop-home__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.plugin-loop-home__card-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-loop-home__card-trust {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+.plugin-loop-home__card-trust.trust-bundled {
+  background: rgba(0, 120, 200, 0.08);
+  color: rgb(0, 100, 170);
+}
+.plugin-loop-home__card-trust.trust-trusted {
+  background: rgba(0, 160, 80, 0.1);
+  color: rgb(0, 110, 60);
+}
+.plugin-loop-home__card-trust.trust-restricted {
+  background: rgba(200, 120, 0, 0.1);
+  color: rgb(160, 90, 0);
+}
+.plugin-loop-home__card-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.plugin-loop-home__card-meta {
+  display: flex;
+  gap: 4px;
+  color: var(--text-faint, var(--text-muted));
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+/* Author + source byline — sits between meta chips and the action
+   row, gives every card a visible attribution + clickable source
+   link without the user having to open the details modal. */
+.plugin-loop-home__card-byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.plugin-loop-home__card-byline-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.plugin-loop-home__card-byline-author > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plugin-loop-home__card-byline-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 6px);
+  max-width: 100%;
+}
+.plugin-loop-home__card-byline-source > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+}
+.plugin-loop-home__card-byline-source:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+.plugin-loop-home__card-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.plugin-loop-home__card-avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.plugin-loop-home__card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  align-items: stretch;
+}
+.plugin-loop-home__card-action {
+  appearance: none;
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.plugin-loop-home__card-action:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-loop-home__card-action:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+/* Secondary card affordance — opens the manifest inspector modal so
+   users can preview query/context/workflow before applying. Kept
+   compact (icon + short label) so the primary "Use plugin" CTA still
+   wins the visual weight contest inside each card. */
+.plugin-loop-home__card-details {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  cursor: pointer;
+}
+.plugin-loop-home__card-details:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-loop-home__card-details:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* PluginDetailsModal — manifest inspector launched from each card on
+   PluginLoopHome. Single-scroll layout with sticky header + footer so
+   long manifests (workflow stages, context bundles, surfaces) remain
+   navigable without losing the apply CTA. Sized smaller than the
+   ds-modal preview (no iframe stage) so it reads as an inspector
+   rather than a fullscreen surface. */
+.plugin-details-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 920;
+  background: rgba(28, 27, 26, 0.42);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.plugin-details-modal {
+  width: 100%;
+  max-width: 920px;
+  max-height: calc(100vh - 64px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.plugin-details-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, var(--bg-panel)) 0%,
+    var(--bg-panel) 100%
+  );
+}
+.plugin-details-modal__head-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-details-modal__head-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--text);
+}
+.plugin-details-modal__trust {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  text-transform: capitalize;
+  font-weight: 500;
+}
+.plugin-details-modal__trust.trust-bundled {
+  background: rgba(0, 120, 200, 0.08);
+  color: rgb(0, 100, 170);
+}
+.plugin-details-modal__trust.trust-trusted {
+  background: rgba(0, 160, 80, 0.1);
+  color: rgb(0, 110, 60);
+}
+.plugin-details-modal__trust.trust-restricted {
+  background: rgba(200, 120, 0, 0.1);
+  color: rgb(160, 90, 0);
+}
+.plugin-details-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.plugin-details-modal__meta-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 4px;
+}
+.plugin-details-modal__tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.plugin-details-modal__close {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm, 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.plugin-details-modal__close svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+.plugin-details-modal__close:hover,
+.plugin-details-modal__close:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* Promoted author byline — sits inside the modal head so the maker
+   reads as a co-equal first impression alongside the plugin name.
+   Larger avatar (44px) than the in-body author block had so it
+   anchors the row even when no name string is provided. */
+.plugin-details-modal__byline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 6px 10px 6px 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  align-self: flex-start;
+  max-width: 100%;
+}
+.plugin-details-modal__byline .plugin-details-modal__avatar {
+  width: 28px;
+  height: 28px;
+}
+.plugin-details-modal__byline-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.plugin-details-modal__byline-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.plugin-details-modal__byline-prefix {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.plugin-details-modal__byline .plugin-details-modal__author-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.plugin-details-modal__byline-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.plugin-details-modal__byline-links .plugin-details-modal__ext-link {
+  padding: 2px 6px;
+  font-size: 11.5px;
+}
+
+/* Preview hero — promotes the manifest's `od.useCase.exampleOutputs`
+   to a glanceable iframe so reviewers see what the plugin actually
+   produces before reading the workflow stages. The browser-chrome
+   shell (traffic lights + URL pill) signals "this is a sandboxed
+   live render" without us needing extra copy. */
+.plugin-details-modal__hero {
+  margin: 16px 0 4px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent-tint) 70%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-panel) 100%);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plugin-details-modal__hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-strong);
+}
+.plugin-details-modal__hero-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.plugin-details-modal__hero-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__hero-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, color 120ms ease;
+}
+.plugin-details-modal__hero-tab:hover {
+  color: var(--text);
+}
+.plugin-details-modal__hero-tab.is-active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.plugin-details-modal__hero-frame {
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.plugin-details-modal__hero-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-subtle) 100%);
+  border-bottom: 1px solid var(--border);
+}
+.plugin-details-modal__hero-light {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+.plugin-details-modal__hero-light.is-red    { background: #ff5f57; }
+.plugin-details-modal__hero-light.is-yellow { background: #febc2e; margin-left: -2px; }
+.plugin-details-modal__hero-light.is-green  { background: #28c840; margin-left: -2px; }
+.plugin-details-modal__hero-url {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 12px;
+  margin: 0 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 0;
+}
+.plugin-details-modal__hero-url > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.plugin-details-modal__hero-popout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.plugin-details-modal__hero-popout:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+.plugin-details-modal__hero-iframe {
+  border: none;
+  width: 100%;
+  height: 380px;
+  background: #ffffff;
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .plugin-details-modal__hero-iframe {
+    height: 280px;
+  }
+}
+
+.plugin-details-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 20px 20px;
+}
+.plugin-details-modal__section {
+  padding: 16px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.plugin-details-modal__section:last-child {
+  border-bottom: none;
+}
+.plugin-details-modal__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.plugin-details-modal__section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-details-modal__section-count {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.plugin-details-modal__section-action {
+  display: inline-flex;
+  align-items: center;
+}
+.plugin-details-modal__section-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.plugin-details-modal__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugin-details-modal__description {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.plugin-details-modal__chip-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.plugin-details-modal__chip-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.plugin-details-modal__query {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+}
+.plugin-details-modal__inputs,
+.plugin-details-modal__surfaces,
+.plugin-details-modal__connectors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-details-modal__input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.plugin-details-modal__input-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__input-head code {
+  font-size: 12.5px;
+  color: var(--text);
+}
+.plugin-details-modal__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.plugin-details-modal__badge.is-required {
+  background: rgba(200, 60, 60, 0.1);
+  color: rgb(160, 40, 40);
+}
+.plugin-details-modal__badge.is-type {
+  background: rgba(0, 120, 200, 0.08);
+  color: rgb(0, 100, 170);
+}
+.plugin-details-modal__badge.is-primary {
+  background: rgba(0, 160, 80, 0.1);
+  color: rgb(0, 110, 60);
+  margin-left: 6px;
+}
+.plugin-details-modal__badge.is-repeat {
+  background: rgba(120, 80, 200, 0.1);
+  color: rgb(90, 60, 160);
+}
+.plugin-details-modal__badge.is-failure {
+  background: rgba(200, 120, 0, 0.1);
+  color: rgb(160, 90, 0);
+}
+.plugin-details-modal__badge.is-required {
+  background: rgba(200, 60, 60, 0.1);
+  color: rgb(160, 40, 40);
+}
+.plugin-details-modal__badge.is-optional {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.plugin-details-modal__muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.plugin-details-modal__small {
+  font-size: 11.5px;
+}
+.plugin-details-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plugin-details-modal__chips--inline {
+  margin-top: 2px;
+}
+.plugin-details-modal__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.plugin-details-modal__chip--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+.plugin-details-modal__context {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plugin-details-modal__ctx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.plugin-details-modal__ctx-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.plugin-details-modal__ctx-count {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  background: var(--bg-subtle);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.plugin-details-modal__stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  counter-reset: stage;
+}
+.plugin-details-modal__stage {
+  position: relative;
+  padding: 10px 12px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-details-modal__stage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__stage-num {
 /* Settings → Skills (functional) row stack.
    Mirrors the External MCP servers panel: a vertical list of
    collapsible rows. Each row's header is always visible; SKILL.md
@@ -19174,6 +21225,923 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   justify-content: center;
   width: 22px;
   height: 22px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.plugin-details-modal__stage-id {
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.plugin-details-modal__stage-atoms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plugin-details-modal__atom {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.plugin-details-modal__atom.is-cap {
+  background: rgba(120, 80, 200, 0.06);
+  color: rgb(90, 60, 160);
+  border-color: rgba(120, 80, 200, 0.18);
+}
+.plugin-details-modal__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plugin-details-modal__surface {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plugin-details-modal__surface-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__surface-prompt {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+.plugin-details-modal__connector-group + .plugin-details-modal__connector-group {
+  margin-top: 12px;
+}
+.plugin-details-modal__sub-title {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-details-modal__connector {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__source {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  row-gap: 4px;
+  column-gap: 12px;
+  font-size: 12px;
+}
+.plugin-details-modal__source > div {
+  display: contents;
+}
+.plugin-details-modal__source dt {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.plugin-details-modal__source dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-details-modal__source-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.plugin-details-modal__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.plugin-details-modal__avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.plugin-details-modal__ext-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 6px);
+  max-width: 100%;
+}
+.plugin-details-modal__ext-link > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+.plugin-details-modal__ext-link:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.plugin-details-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.plugin-details-modal__secondary {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.plugin-details-modal__secondary:hover {
+  border-color: var(--text-muted);
+}
+.plugin-details-modal__primary {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plugin-details-modal__primary:hover:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+  border-color: var(--accent-strong, var(--accent));
+}
+.plugin-details-modal__primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.plugin-share-confirm__panel {
+  max-width: 720px;
+}
+.plugin-share-confirm .plugin-details-modal__foot {
+  padding: 16px 24px 22px;
+}
+.plugin-share-confirm__steps {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.plugin-share-confirm__steps li + li {
+  margin-top: 5px;
+}
+.plugin-share-confirm__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.plugin-share-confirm__facts > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+}
+.plugin-share-confirm__facts dt {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.plugin-share-confirm__facts dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.plugin-share-confirm__facts code {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .plugin-share-confirm__facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Plugin info pane — adapter for embedding the manifest-driven meta
+   sections inside narrow contexts (PreviewModal sidebar, design-system
+   sidebar). Tightens padding, shrinks chip type, and wraps long file
+   paths so the section list reads cleanly in a 320–540px column. */
+.plugin-info-pane {
+  padding: 16px 18px 24px;
+  background: var(--bg-panel);
+}
+.plugin-info-pane .plugin-meta-sections {
+  display: block;
+}
+.plugin-info-pane .plugin-meta-sections.is-compact {
+  font-size: 12px;
+}
+.plugin-info-pane .plugin-details-modal__section {
+  padding: 12px 0;
+}
+.plugin-info-pane .plugin-details-modal__section-title {
+  font-size: 11.5px;
+}
+.plugin-info-pane .plugin-details-modal__section-hint {
+  font-size: 11.5px;
+}
+.plugin-info-pane .plugin-details-modal__source {
+  grid-template-columns: 84px 1fr;
+  font-size: 11.5px;
+  gap: 6px 10px;
+}
+.plugin-info-pane .plugin-details-modal__source dd code {
+  word-break: break-all;
+}
+.plugin-info-pane .plugin-details-modal__chip,
+.plugin-info-pane .plugin-details-modal__atom {
+  font-size: 11px;
+}
+/* Compact byline — drop the capsule shape so the author block can
+   shrink, wrap, and stack inside narrow PreviewModal sidebars
+   (~320–400px) without overflowing the pane or breaking the rounded
+   pill into a stretched ellipse. The name + links wrap onto separate
+   lines when there isn't room, the links lose their border-left
+   separator (stacks vertically), and long author / handle strings
+   ellipsis-truncate against the available column width. */
+.plugin-info-pane .plugin-details-modal__byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.plugin-info-pane .plugin-details-modal__byline-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.plugin-info-pane .plugin-details-modal__byline-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.plugin-info-pane .plugin-details-modal__byline .plugin-details-modal__author-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-info-pane .plugin-details-modal__byline-links {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding-left: 0;
+  border-left: 0;
+}
+.plugin-info-pane .plugin-details-modal__byline-links .plugin-details-modal__ext-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Design-system sidebar keeps the plugin inspector first, then exposes
+   DESIGN.md as a secondary spec section. This makes design systems read
+   like first-class plugins instead of a special DESIGN.md-only viewer. */
+.plugin-design-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.plugin-design-sidebar__spec {
+  border-top: 1px dashed var(--border);
+  padding: 14px 18px 24px;
+  background: var(--bg-panel);
+}
+.plugin-design-sidebar__spec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.plugin-design-sidebar__spec-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.plugin-design-sidebar__spec-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.plugin-design-sidebar__spec > .design-spec-pre,
+.plugin-design-sidebar__spec > .design-spec-empty {
+  margin: 0;
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Plugin info heading — the badge-style header shown by the
+   PluginMetaSections component when a `heading` prop is provided.
+   Used by media / example / design-system variants so the manifest
+   block carries a clear "Plugin info" label, mirroring how the
+   scenario fallback uses the modal title for the same purpose. */
+.plugin-meta-sections__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 0 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-meta-sections__heading h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-strong, var(--text));
+  letter-spacing: -0.005em;
+}
+.plugin-meta-sections__heading-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.plugin-meta-sections__trust {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-2, color-mix(in srgb, var(--text) 6%, transparent));
+}
+.plugin-meta-sections__trust.trust-trusted,
+.plugin-meta-sections__trust.trust-bundled {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.plugin-meta-sections__trust.trust-restricted {
+  color: var(--warn, #b16500);
+  background: color-mix(in srgb, var(--warn, #b16500) 14%, transparent);
+}
+.plugin-meta-sections.is-compact .plugin-meta-sections__heading {
+  padding: 2px 0 10px;
+}
+.plugin-meta-sections.is-compact .plugin-meta-sections__heading h3 {
+  font-size: 12.5px;
+}
+
+@media (max-width: 640px) {
+  .plugin-details-modal-backdrop {
+    padding: 0;
+  }
+  .plugin-details-modal {
+    max-width: none;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+}
+
+/* ==================================================================
+   Plugin detail — premium chrome
+   ------------------------------------------------------------------
+   Shared visual language for the four detail variants:
+   - Smooth scale-in entry (used by every detail backdrop + modal)
+   - Trust-tinted byline strip (PluginByline) reused across surfaces
+   - Share popover (PluginShareMenu) reused across surfaces
+   - Cinematic media detail layout
+   The goal: detail modals feel like curated content viewers users
+   want to share, not like internal admin inspectors.
+   ================================================================== */
+
+@keyframes plugin-detail-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes plugin-detail-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.plugin-details-modal-backdrop,
+.ds-modal-backdrop,
+.prompt-template-modal-backdrop {
+  animation: plugin-detail-fade 160ms ease-out;
+}
+.plugin-details-modal,
+.ds-modal,
+.prompt-template-modal {
+  animation: plugin-detail-rise 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.plugin-details-modal__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* PluginShareMenu — popover trigger that doubles as a regular ghost
+   pill in the PreviewModal action row, or a softer brand chip when
+   it stands alone next to the close button on a detail modal. */
+.plugin-share-menu {
+  position: relative;
+  display: inline-flex;
+}
+.plugin-share-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease,
+    border-color 120ms ease;
+}
+.plugin-share-trigger--solo {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.plugin-share-trigger--solo:hover,
+.plugin-share-trigger--solo[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-share-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 220px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: plugin-detail-rise 140ms ease-out;
+}
+.plugin-share-popover__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plugin-share-popover__divider {
+  height: 1px;
+  margin: 4px 4px;
+  background: var(--border);
+  opacity: 0.6;
+}
+.plugin-share-item {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+.plugin-share-item:hover,
+.plugin-share-item:focus-visible {
+  background: var(--bg-subtle);
+  outline: none;
+}
+
+/* PluginByline — author avatar + name + trust tier + version chip,
+   shared by media + scenario variants, lives just under the modal
+   title bar. The compact variant collapses the secondary link row
+   when used inside dark/gradient headers. */
+.plugin-byline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.plugin-byline--compact {
+  padding: 8px 16px;
+  border-bottom: none;
+  background: transparent;
+}
+.plugin-byline__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  overflow: hidden;
+  object-fit: cover;
+}
+.plugin-byline__avatar--fallback {
+  background: linear-gradient(
+    135deg,
+    var(--accent-tint) 0%,
+    var(--bg-subtle) 100%
+  );
+  color: var(--accent);
+}
+.plugin-byline__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.plugin-byline__primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugin-byline__by {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  text-transform: lowercase;
+}
+.plugin-byline__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-byline__trust {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.plugin-byline__trust.trust-bundled {
+  background: rgba(0, 120, 200, 0.1);
+  color: rgb(0, 100, 170);
+}
+.plugin-byline__trust.trust-trusted {
+  background: rgba(0, 160, 80, 0.12);
+  color: rgb(0, 110, 60);
+}
+.plugin-byline__trust.trust-restricted {
+  background: rgba(200, 120, 0, 0.12);
+  color: rgb(160, 90, 0);
+}
+.plugin-byline__version {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugin-byline__secondary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plugin-byline__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+.plugin-byline__link:hover {
+  color: var(--accent);
+}
+
+/* Plugins section composite — wraps InlinePluginsRail + ContextChipStrip +
+   PluginInputsForm. Mounted above ChatComposer (strip variant). The
+   NewProjectPanel mount has been removed: that flow now binds the
+   default scenario plugin transparently at create time, so the wide
+   variant has no remaining host. */
+.plugins-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugins-section__active {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+/* Strip rail — single-row horizontal scroller, intended for the
+   ChatComposer mount where vertical space is precious. Cards collapse
+   to compact pills (title only). */
+.inline-plugins-rail--strip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding: 2px 0 6px;
+  max-height: 44px;
+}
+.inline-plugins-rail--strip::-webkit-scrollbar {
+  height: 6px;
+}
+.inline-plugins-rail--strip::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.inline-plugins-rail--strip .inline-plugins-rail__card {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.inline-plugins-rail--strip .inline-plugins-rail__card:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.inline-plugins-rail--strip .inline-plugins-rail__card:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.inline-plugins-rail--strip .inline-plugins-rail__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+/* Description + trust are hidden inside the strip rail — they live
+   in the marketplace detail page. Keeping the strip compact is the
+   only way the chat history stays visible. */
+.inline-plugins-rail--strip .inline-plugins-rail__desc,
+.inline-plugins-rail--strip .inline-plugins-rail__trust {
+  display: none;
+}
+
+.inline-plugins-rail__error {
+  flex: 0 0 100%;
+  font-size: 11.5px;
+  color: var(--danger, #c33);
+}
+
+/* Context chip strip — small pill list of typed context items the
+   active plugin contributed. Sits inside `.plugins-section__active`. */
+.context-chip-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+.context-chip-strip__empty {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.context-chip-strip__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 0;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text);
+  max-width: 240px;
+}
+/* Per-kind accent stripe — keeps the chip recognisable at a glance
+   without leaning on color-only differentiation (the icon does most
+   of the work). Uses border-left for skill, design-system, etc. */
+.context-chip-strip__chip[data-kind='skill'] {
+  border-left: 3px solid var(--accent, #6e7bff);
+}
+.context-chip-strip__chip[data-kind='design-system'] {
+  border-left: 3px solid #d6a648;
+}
+.context-chip-strip__chip[data-kind='craft'] {
+  border-left: 3px solid #6dbf6d;
+}
+.context-chip-strip__chip[data-kind='asset'] {
+  border-left: 3px solid #8a8a8a;
+}
+.context-chip-strip__chip[data-kind='mcp'] {
+  border-left: 3px solid #c47bd9;
+}
+.context-chip-strip__chip[data-kind='claude-plugin'] {
+  border-left: 3px solid #d97757;
+}
+.context-chip-strip__chip[data-kind='atom'] {
+  border-left: 3px solid #5fb8d1;
+}
+.context-chip-strip__chip[data-kind='plugin'] {
+  border-left: 3px solid var(--accent, #6e7bff);
+}
+.context-chip-strip__body {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  text-align: left;
+  border-radius: 999px;
+  min-width: 0;
+}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body {
+  cursor: pointer;
+}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+.context-chip-strip__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body:hover
+  .context-chip-strip__icon {
+  color: var(--accent, var(--text));
+}
+.context-chip-strip__kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.context-chip-strip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-chip-strip__remove {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.context-chip-strip__remove:hover {
+  color: var(--text);
+}
+
+/* Plugin inputs form — appears when the active plugin declares
+   `od.inputs[]`. Compact stacked label/input pairs. */
+.plugin-inputs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-inputs-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.plugin-inputs-form__label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.plugin-inputs-form__required {
+  color: var(--danger, #c33);
+  margin-left: 2px;
+}
+.plugin-inputs-form__input {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+}
+.plugin-inputs-form__input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+.plugin-inputs-form__input--textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+
+/* ============================================================
+   Note: the entry-view home redesign (left rail, centered hero,
+   recent projects strip, plugins-home section, new-project modal)
+   lives in `src/styles/home/`. Imported from `app/layout.tsx`
+   alongside this file so upstream `index.css` rebases stay narrow.
+   ============================================================ */
   color: var(--text-faint);
   transition: transform 160ms ease, color 120ms ease;
   flex-shrink: 0;

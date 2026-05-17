@@ -21,6 +21,17 @@ export function createChatRunService({
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      // Plan §3.A1 / spec §11.5. The applied plugin snapshot id pins
+      // every prompt fragment and tool gate to a frozen view so replay
+      // is byte-equal across plugin upgrades. Runs are in-memory in
+      // v1 — the id lives on the run object plus on the
+      // `applied_plugin_snapshots` row (FK back via run_id).
+      appliedPluginSnapshotId:
+        typeof meta.appliedPluginSnapshotId === 'string' && meta.appliedPluginSnapshotId
+          ? meta.appliedPluginSnapshotId
+          : null,
+      pluginId:
+        typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -62,6 +73,8 @@ export function createChatRunService({
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
     agentId: run.agentId,
+    appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
+    pluginId: run.pluginId ?? null,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,

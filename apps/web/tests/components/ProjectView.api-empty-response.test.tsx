@@ -285,12 +285,13 @@ describe('ProjectView API empty response handling', () => {
     expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound');
   });
 
-  it('keeps project action entry points visible above the workspace', async () => {
+  it('renders the workspace without the removed project action toolbar', async () => {
     renderProjectView();
 
-    expect(screen.getByRole('toolbar', { name: 'Project actions' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Finalize design package' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Continue in CLI' })).toBeTruthy();
+    expect(screen.getByTestId('file-workspace')).toBeTruthy();
+    expect(screen.queryByRole('toolbar', { name: 'Project actions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Finalize design package' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue in CLI' })).toBeNull();
   });
 
   it('marks attached saved comments as failed when an API completion has no output', async () => {

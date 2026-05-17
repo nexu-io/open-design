@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-fashion-editorial-collage",
+  "title": "Social Media Post - Fashion Editorial Collage",
+  "version": "0.1.0",
+  "description": "A highly detailed 2x2 photo collage prompt for fashion editorial shots, focusing on consistent styling, specific lighting, and facial features from a reference photo.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Sydney",
+    "url": "https://x.com/XSydneyFan/status/2049178971653484720"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "portrait",
+    "cinematic",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453119180_2300fp_HHAlV58a8AA3CWq.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in an elegant soft updo with loose wavy strands framing the face, realistic beauty fashion editorial, refined natural glam makeup, defined eyes, soft matte skin, wearing a sleek black spaghetti-strap dress with sheer smoky-black opera gloves draped over the arms, delicate gold necklace, minimalist warm beige studio backdrop, golden hour sunlight streaming through blinds creating vertical shadow lines across face and body, luxurious cinematic atmosphere, no text, no watermark. Top left panel: close-up frontal portrait, arms folded softly forward, direct intense gaze, lips slightly parted, dramatic light stripes across face and shoulders. Top right panel: playful beauty pose, chin resting on sheer gloved hand, head tilted slightly, soft smile, elegant posture, sunlight bands across cheek. Bottom left panel: fashion portrait, both gloved hands gently placed beneath chin, poised symmetrical pose, calm expression, refined editorial mood. Bottom right panel: side-profile portrait, one gloved hand touching jawline, eyes looking away, graceful neckline emphasized, sophisticated silhouette. Consistent styling across all four panels, clean balanced collage grid, seamless composition, soft shadows, glowing highlights, ultra-detailed sheer fabric texture, realistic anatomy, cinematic depth, premium magazine campaign quality. Camera settings: full-frame mirrorless camera, 85mm lens for close portraits, 50mm lens for wider framing, f/2.0, ISO 100, 1/200s. Aspect ratio: 4:5. Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in a polished low updo with loose wavy strands framing the face, realistic high-fashion studio editorial, elegant confident expression, refined natural glam makeup, wearing a crisp white oversized button-up blouse, loose black necktie, fitted black mini skirt, sheer black tights, black pointed high heels, modern monochrome styling, minimalist gray studio backdrop, oversized industrial floor fan as a stylish prop, clean luxury campaign aesthetic, no text, no watermark. Top left panel: seated portrait on modern white chair, body angled sideways, chin resting lightly on hand, composed gaze, relaxed sophisticated posture. Top right panel: standing full-body pose walking forward, holding one black heel in hand, confident stride, blouse slightly loose, long legs emphasized. Bottom left panel: crouched centered pose, hands on hips, direct eye contact, strong editorial attitude, industrial fan behind subject. Bottom right panel: seated side pose on edge of fan base, one leg crossed forward, hand resting on thigh, elegant posture, subtle smile. Consistent styling across all four panels, clean balanced collage grid, seamless composition, soft studio shadows, crisp highlights, realistic anatomy, detailed fabric texture, premium magazine campaign quality, cinematic depth, sharp focus. Camera settings: full-frame mirrorless camera, 85mm lens for portraits, 50mm lens for full-body shots, f/2.8, ISO 100, 1/200s. Aspect ratio: 4:5. Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in a sleek polished low bun with soft wavy face-framing strands, realistic luxury fashion editorial, bold glamorous makeup with smoky eyes and sculpted skin, wearing an oversized tailored black blazer over a fitted black bodysuit, sheer black floral lace tights, large gold hoop earrings, sophisticated monochrome styling, dark charcoal seamless studio backdrop, dramatic moody lighting, high-end magazine campaign aesthetic, no text, no watermark. Top left panel: seated floor pose with knees drawn upward, arms wrapped loosely around legs, head tilted toward shoulder, intense direct gaze, elegant attitude. Top right panel: fashion pose seated on floor, one knee raised and one leg extended, one hand resting on knee, strong posture, commanding editorial presence. Bottom left panel: close beauty portrait, chin resting on hand, knee in foreground, luminous skin, confident eyes, refined expression. Bottom right panel: seated stool pose, legs apart in a powerful stance, hands resting between knees, blazer draped sharply, bold runway-inspired confidence. Consistent styling across all four panels, clean balanced collage grid, seamless composition, crisp highlights, rich shadows, ultra-detailed lace texture, realistic anatomy, cinematic depth, sharp focus, premium luxury magazine quality. Camera settings: full-frame mirrorless camera, 85mm lens for portraits, 50mm lens for seated full-body shots, f/2.5, ISO 100, 1/200s. Aspect ratio: 4:5. Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in a tousled textured bob-inspired wave look, realistic cinematic fashion editorial, moody sensual atmosphere, natural luminous skin, soft smoky makeup, muted rose lips, wearing an oversized ivory white blazer with matching loose trousers, partially off-shoulder styling revealing bare shoulders and back, minimalist dark room interior, dramatic narrow window light casting bold geometric shadows on walls and body, deep contrast, luxury magazine aesthetic, no text, no watermark. Top left panel: standing portrait in near darkness, body partly illuminated by a sharp beam of light, hands adjusting blazer lapel, intense side gaze, strong shadow silhouette behind her. Top right panel: seated on floor with knees drawn up, one arm resting on knee, other hand touching forehead, contemplative expression, warm shaft of sunlight across face and legs. Bottom left panel: back-facing shoulder portrait, blazer slipping off one shoulder, head turned toward camera, tousled hair framing face, sensual dramatic mood. Bottom right panel: expressive motion pose, body leaning backward, one arm lifted across forehead, blazer flowing with movement, sculptural shadow shapes on wall. Consistent styling across all four panels, clean balanced collage grid, seamless composition, cinematic depth, rich shadows, subtle highlights, realistic anatomy, detailed fabric texture, editorial storytelling quality, sharp focus with soft atmospheric edges. Camera settings: full-frame mirrorless camera, 85mm lens for portraits, 50mm lens for wider poses, f/2.0, ISO 200, 1/160s. Aspect ratio: 4:5.",
+        "zh-CN": "使用这个插件完成以下任务：Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in an elegant soft updo with loose wavy strands framing the face, realistic beauty fashion editorial, refined natural glam makeup, defined eyes, soft matte skin, wearing a sleek black spaghetti-strap dress with sheer smoky-black opera gloves draped over the arms, delicate gold necklace, minimalist warm beige studio backdrop, golden hour sunlight streaming through blinds creating vertical shadow lines across face and body, luxurious cinematic atmosphere, no text, no watermark. Top left panel: close-up frontal portrait, arms folded softly forward, direct intense gaze, lips slightly parted, dramatic light stripes across face and shoulders. Top right panel: playful beauty pose, chin resting on sheer gloved hand, head tilted slightly, soft smile, elegant posture, sunlight bands across cheek. Bottom left panel: fashion portrait, both gloved hands gently placed beneath chin, poised symmetrical pose, calm expression, refined editorial mood. Bottom right panel: side-profile portrait, one gloved hand touching jawline, eyes looking away, graceful neckline emphasized, sophisticated silhouette. Consistent styling across all four panels, clean balanced collage grid, seamless composition, soft shadows, glowing highlights, ultra-detailed sheer fabric texture, realistic anatomy, cinematic depth, premium magazine campaign quality. Camera settings: full-frame mirrorless camera, 85mm lens for close portraits, 50mm lens for wider framing, f/2.0, ISO 100, 1/200s. Aspect ratio: 4:5. Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in a polished low updo with loose wavy strands framing the face, realistic high-fashion studio editorial, elegant confident expression, refined natural glam makeup, wearing a crisp white oversized button-up blouse, loose black necktie, fitted black mini skirt, sheer black tights, black pointed high heels, modern monochrome styling, minimalist gray studio backdrop, oversized industrial floor fan as a stylish prop, clean luxury campaign aesthetic, no text, no watermark. Top left panel: seated portrait on modern white chair, body angled sideways, chin resting lightly on hand, composed gaze, relaxed sophisticated posture. Top right panel: standing full-body pose walking forward, holding one black heel in hand, confident stride, blouse slightly loose, long legs emphasized. Bottom left panel: crouched centered pose, hands on hips, direct eye contact, strong editorial attitude, industrial fan behind subject. Bottom right panel: seated side pose on edge of fan base, one leg crossed forward, hand resting on thigh, elegant posture, subtle smile. Consistent styling across all four panels, clean balanced collage grid, seamless composition, soft studio shadows, crisp highlights, realistic anatomy, detailed fabric texture, premium magazine campaign quality, cinematic depth, sharp focus. Camera settings: full-frame mirrorless camera, 85mm lens for portraits, 50mm lens for full-body shots, f/2.8, ISO 100, 1/200s. Aspect ratio: 4:5. Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in a sleek polished low bun with soft wavy face-framing strands, realistic luxury fashion editorial, bold glamorous makeup with smoky eyes and sculpted skin, wearing an oversized tailored black blazer over a fitted black bodysuit, sheer black floral lace tights, large gold hoop earrings, sophisticated monochrome styling, dark charcoal seamless studio backdrop, dramatic moody lighting, high-end magazine campaign aesthetic, no text, no watermark. Top left panel: seated floor pose with knees drawn upward, arms wrapped loosely around legs, head tilted toward shoulder, intense direct gaze, elegant attitude. Top right panel: fashion pose seated on floor, one knee raised and one leg extended, one hand resting on knee, strong posture, commanding editorial presence. Bottom left panel: close beauty portrait, chin resting on hand, knee in foreground, luminous skin, confident eyes, refined expression. Bottom right panel: seated stool pose, legs apart in a powerful stance, hands resting between knees, blazer draped sharply, bold runway-inspired confidence. Consistent styling across all four panels, clean balanced collage grid, seamless composition, crisp highlights, rich shadows, ultra-detailed lace texture, realistic anatomy, cinematic depth, sharp focus, premium luxury magazine quality. Camera settings: full-frame mirrorless camera, 85mm lens for portraits, 50mm lens for seated full-body shots, f/2.5, ISO 100, 1/200s. Aspect ratio: 4:5. Use facial feature of attached photo. 2x2 photo collage of the same woman with long black wavy hair styled in a tousled textured bob-inspired wave look, realistic cinematic fashion editorial, moody sensual atmosphere, natural luminous skin, soft smoky makeup, muted rose lips, wearing an oversized ivory white blazer with matching loose trousers, partially off-shoulder styling revealing bare shoulders and back, minimalist dark room interior, dramatic narrow window light casting bold geometric shadows on walls and body, deep contrast, luxury magazine aesthetic, no text, no watermark. Top left panel: standing portrait in near darkness, body partly illuminated by a sharp beam of light, hands adjusting blazer lapel, intense side gaze, strong shadow silhouette behind her. Top right panel: seated on floor with knees drawn up, one arm resting on knee, other hand touching forehead, contemplative expression, warm shaft of sunlight across face and legs. Bottom left panel: back-facing shoulder portrait, blazer slipping off one shoulder, head turned toward camera, tousled hair framing face, sensual dramatic mood. Bottom right panel: expressive motion pose, body leaning backward, one arm lifted across forehead, blazer flowing with movement, sculptural shadow shapes on wall. Consistent styling across all four panels, clean balanced collage grid, seamless composition, cinematic depth, rich shadows, subtle highlights, realistic anatomy, detailed fabric texture, editorial storytelling quality, sharp focus with soft atmospheric edges. Camera settings: full-frame mirrorless camera, 85mm lens for portraits, 50mm lens for wider poses, f/2.0, ISO 200, 1/160s. Aspect ratio: 4:5."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

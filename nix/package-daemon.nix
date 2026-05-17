@@ -32,10 +32,9 @@
 #   see flake.nix for the override and how to bump the hash when
 #   `packageManager` advances.
 #
-# Workspace siblings the daemon depends on (contracts, sidecar-proto,
-# sidecar, platform) are built in dependency order before the daemon
-# itself; tsc emits each package's dist/, which is what the daemon
-# resolves at runtime via pnpm's symlinked node_modules.
+# Workspace siblings the daemon depends on are built in dependency order
+# before the daemon itself; tsc emits each package's dist/, which is what
+# the daemon resolves at runtime via pnpm's symlinked node_modules.
 let
   pname = "open-design-daemon";
   version = (lib.importJSON ../package.json).version;
@@ -44,7 +43,7 @@ let
   # `nix build .#daemon` will fail with the expected hash printed; copy
   # that into `pnpmDepsHash` below. Bump it whenever pnpm-lock.yaml
   # changes.
-  pnpmDepsHash = "sha256-6+k8Fgq8Eskwe5S8e/5MgmS3I1Mil9x69aqcz/UpnXw=";
+  pnpmDepsHash = "sha256-lROdH5HgKFf3R7DYGbc8n/GrmINwLbfVwC4Xp7SrHN4=";
   # pnpmDepsHash = lib.fakeHash;
 in
   stdenv.mkDerivation (finalAttrs: {
@@ -136,6 +135,9 @@ in
 
       for target in \
         packages/contracts \
+        packages/registry-protocol \
+        packages/agui-adapter \
+        packages/plugin-runtime \
         packages/sidecar-proto \
         packages/sidecar \
         packages/platform \

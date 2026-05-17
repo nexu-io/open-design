@@ -483,6 +483,8 @@ function resolveInstallIdentity(value: string): { displayName: string; namespace
   const namespaceToken = value.replace(/[^A-Za-z0-9._-]+/g, '-');
   const displayName = /(^|[-_.])beta($|[-_.])/i.test(value)
     ? 'Open Design Beta'
+    : /(^|[-_.])preview($|[-_.])/i.test(value)
+      ? 'Open Design Preview'
     : value === 'default'
       ? 'Open Design'
       : `Open Design ${namespaceToken}`;

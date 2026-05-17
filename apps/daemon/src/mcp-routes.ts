@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import fs from 'node:fs';
-import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
@@ -42,27 +42,16 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
     // In sidecar mode the snippet omits --daemon-url and the spawned
-    // `od mcp` discovers the live URL via the IPC status socket on
+    // `od mcp` discovers the live URL via the concrete IPC endpoint on
     // every spawn, so the client config survives ephemeral-port
-    // restarts. We also propagate OD_SIDECAR_NAMESPACE (and IPC_BASE
-    // when overridden) so a non-default namespace daemon stays
-    // reachable - the MCP client does not inherit the daemon's env,
-    // so without this the spawned `od mcp` would probe the default
-    // namespace socket and miss. For direct `od` / `od --port X`
-    // launches there is no IPC socket; the helper bakes --daemon-url
-    // so custom ports keep working.
+    // restarts. For direct `od` / `od --port X` launches there is no
+    // IPC socket; the helper bakes --daemon-url so custom ports keep
+    // working.
     const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
     if (isSidecarMode) {
-      const ns = process.env[SIDECAR_ENV.NAMESPACE];
-      if (ns != null && ns !== SIDECAR_DEFAULTS.namespace) {
-        sidecarEnv[SIDECAR_ENV.NAMESPACE] = ns;
-      }
-      const ipcBase = process.env[SIDECAR_ENV.IPC_BASE];
-      if (ipcBase != null && ipcBase.length > 0) {
-        sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
-      }
+      sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
     }
     const payload = buildMcpInstallPayload({
       cliPath,

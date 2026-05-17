@@ -48,7 +48,8 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(wrapped) : wrapped;
+  const withOdIds = annotateMissingOdIds(wrapped);
+  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
@@ -308,7 +309,7 @@ function annotateManualEditSourcePaths(doc: string): string {
   try {
     const parsed = new DOMParser().parseFromString(doc, 'text/html');
     parsed.body.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR).forEach((el) => {
-      if (el.hasAttribute('data-od-id')) return;
+      if (el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)) return;
       const path = sourcePathForElement(el);
       if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
     });
@@ -333,6 +334,49 @@ function sourcePathForElement(el: Element): string {
 function serializeHtmlDocument(doc: Document): string {
   const doctype = doc.doctype ? '<!doctype html>\n' : '';
   return `${doctype}${doc.documentElement.outerHTML}`;
+}
+
+/**
+ * Auto-annotate structural HTML elements that lack `data-od-id` or
+ * `data-screen-label` so that the selection bridge (Picker / Pods /
+ * Tweaks) can target them. This fixes imported designs whose HTML was
+ * generated outside of Open Design and therefore carries no OD-specific
+ * annotations.
+ */
+function annotateMissingOdIds(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  try {
+    const parsed = new DOMParser().parseFromString(doc, 'text/html');
+    // Only target divs that are direct children of semantic containers or body;
+    // deeply nested layout divs (e.g. flex/grid wrappers) create noise in the
+    // selection bridge without adding meaningful pickable targets.
+    const selector = [
+      'section', 'article', 'header', 'footer', 'nav', 'main', 'aside',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'button', 'a', '[id]',
+      'body > div[class]', 'body > div[id]',
+      'section > div[class]', 'section > div[id]',
+      'article > div[class]', 'article > div[id]',
+      'main > div[class]', 'main > div[id]',
+      'header > div[class]', 'header > div[id]',
+      'footer > div[class]', 'footer > div[id]',
+      'nav > div[class]', 'nav > div[id]',
+      'aside > div[class]', 'aside > div[id]',
+      '[id] > div[class]', '[id] > div[id]',
+    ].join(', ');
+    const skipTags = new Set(['script', 'style', 'template', 'noscript', 'iframe', 'object', 'embed']);
+    let fallbackIndex = 0;
+    parsed.body.querySelectorAll(selector).forEach((el) => {
+      if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return;
+      const tag = el.tagName.toLowerCase();
+      if (skipTags.has(tag)) return;
+      const path = sourcePathForElement(el);
+      el.setAttribute('data-od-id', path || `od-${tag}-${fallbackIndex++}`);
+    });
+    return serializeHtmlDocument(parsed);
+  } catch {
+    return doc;
+  }
 }
 
 function injectManualEditBridge(doc: string): string {

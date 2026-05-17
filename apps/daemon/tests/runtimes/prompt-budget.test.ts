@@ -74,7 +74,7 @@ test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prom
   assert.equal(flagged.bytes, deepseekMaxPromptArgBytes + 1);
   assert.match(flagged.message, /DeepSeek/);
   assert.match(flagged.message, /command-line argument/);
-  assert.match(flagged.message, /stdin support/);
+  assert.match(flagged.message, /stdin-capable adapter/);
 
   // Normal-sized prompts must not trip the guard; the chat happy path
   // depends on this returning null so it can proceed to spawn.
@@ -94,6 +94,17 @@ test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prom
   const cjkFlagged = checkPromptArgvBudget(deepseek, cjkOversized);
   assert.ok(cjkFlagged, 'byte-counted UTF-8 prompts must also trip the guard');
   assert.equal(cjkFlagged.code, 'AGENT_PROMPT_TOO_LARGE');
+});
+
+test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts', () => {
+  const oversized = 'x'.repeat(deepseekMaxPromptArgBytes + 1);
+  const flagged = checkPromptArgvBudget(deepseek, oversized);
+
+  assert.ok(flagged, 'oversized DeepSeek prompts must return a diagnostic');
+  assert.match(flagged.message, /DeepSeek TUI/);
+  assert.match(flagged.message, /currently accepts prompts only as a command-line argument/);
+  assert.match(flagged.message, /API\/provider model connection/);
+  assert.match(flagged.message, /stdin-capable adapter/);
 });
 
 // Adapters that ship the prompt over stdin (every other code agent

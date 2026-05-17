@@ -1,0 +1,92 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-open-design-landing-deck",
+  "title": "Open Design Landing Deck",
+  "version": "0.1.0",
+  "description": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/open-design-landing-deck",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "slide-deck",
+    "untitled",
+    "pitch-deck",
+    "keynote",
+    "editorial-slides",
+    "atelier-zero-deck",
+    "open-design-deck",
+    "open-design-landing-deck"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "featured": 2,
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with bra",
+        "zh-CN": "使用这个插件完成以下任务：Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with bra"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Open Design Landing Deck"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "typographic-rhythm",
+        "pixel-discipline"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

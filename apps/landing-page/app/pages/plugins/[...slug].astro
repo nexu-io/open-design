@@ -1,0 +1,332 @@
+---
+import '../../globals.css';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Header } from '../../_components/header';
+import { getCatalogCounts } from '../../_lib/catalog';
+import type { PublicPluginEntry } from '../../plugin-registry';
+import { getPublicPlugins } from '../../plugin-registry';
+
+export function getStaticPaths() {
+  return getPublicPlugins().map((plugin) => ({
+    params: { slug: plugin.slug },
+    props: { plugin },
+  }));
+}
+
+const { plugin } = Astro.props as { plugin: PublicPluginEntry };
+const site = Astro.site ?? new URL('https://open-design.ai');
+const canonical = new URL(plugin.detailHref, site).toString();
+const title = `${plugin.title} — Open Design Plugin`;
+const description = `${plugin.description} Install with ${plugin.installCommand}.`;
+const catalogCounts = await getCatalogCounts();
+const headerHtml = renderToStaticMarkup(
+  createElement(Header, { counts: catalogCounts, brandHref: '/' }),
+);
+const related = getPublicPlugins()
+  .filter((item) => item.id !== plugin.id && item.registryId === plugin.registryId)
+  .slice(0, 6);
+const previewLabel = plugin.preview?.frameHref
+  ? 'Interactive preview'
+  : plugin.preview?.poster
+    ? plugin.preview.label
+    : `${plugin.visualKind} preview`;
+const detailLinks = [
+  {
+    href: plugin.registryUrl,
+    label: 'Marketplace JSON',
+  },
+  plugin.sourceUrl
+    ? {
+        href: plugin.sourceUrl,
+        label: 'Source repository',
+      }
+    : undefined,
+  plugin.homepage && plugin.homepage !== plugin.sourceUrl
+    ? {
+        href: plugin.homepage,
+        label: 'Homepage',
+      }
+    : undefined,
+].filter((item): item is { href: string; label: string } => Boolean(item));
+const factRows = [
+  ['Plugin ID', plugin.id],
+  ['Version', plugin.version],
+  ['Registry', plugin.registryName],
+  ['Mode', plugin.mode ?? plugin.surface ?? plugin.visualKind],
+  ['License', plugin.license ?? 'Not specified'],
+  plugin.publisher ? ['Publisher', plugin.publisher] : undefined,
+].filter((item): item is [string, string] => Boolean(item));
+const pluginJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: plugin.title,
+  alternateName: plugin.id,
+  description: plugin.description,
+  applicationCategory: 'DesignApplication',
+  operatingSystem: 'macOS, Windows, Linux',
+  softwareVersion: plugin.version,
+  url: canonical,
+  installUrl: plugin.sourceUrl,
+  codeRepository: plugin.sourceUrl,
+  license: plugin.license,
+  author: plugin.publisher
+    ? {
+        '@type': 'Organization',
+        name: plugin.publisher,
+      }
+    : {
+        '@type': 'Organization',
+        name: 'Open Design',
+      },
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Open Design',
+    url: new URL('/', site).toString(),
+  },
+};
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Open Design',
+      item: new URL('/', site).toString(),
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Plugins',
+      item: new URL('/plugins/', site).toString(),
+    },
+    {
+      '@type': 'ListItem',
+      position: 3,
+      name: plugin.title,
+      item: canonical,
+    },
+  ],
+};
+---
+
+<!doctype html>
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <title>{title}</title>
+    <meta name='description' content={description} />
+    <meta name='robots' content={plugin.yanked ? 'noindex,follow' : 'index,follow'} />
+    <link rel='canonical' href={canonical} />
+    <meta property='og:type' content='article' />
+    <meta property='og:site_name' content='Open Design' />
+    <meta property='og:title' content={title} />
+    <meta property='og:description' content={description} />
+    <meta property='og:url' content={canonical} />
+    <meta name='twitter:card' content='summary_large_image' />
+    <meta name='twitter:title' content={title} />
+    <meta name='twitter:description' content={description} />
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(pluginJsonLd)}></script>
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)}></script>
+  </head>
+  <body>
+    <div class='side-rail right' aria-hidden='true'>
+      <span class='rail-text'>Open Design Plugin · {plugin.id}</span>
+    </div>
+    <div class='side-rail left' aria-hidden='true'>
+      <span class='rail-text'>{plugin.registryName} · {plugin.trust}</span>
+    </div>
+
+    <div class='shell plugin-shell'>
+      <div class='topbar'>
+        <div class='container topbar-inner'>
+          <span><b>OD / PLUGIN</b>&nbsp;·&nbsp;{plugin.registryName}</span>
+          <span class='mid'>
+            <span>{plugin.id}</span>
+            <span>{plugin.version}</span>
+          </span>
+          <span class='right'>
+            <a class='topbar-link' href='/plugins/'>All plugins</a>
+          </span>
+        </div>
+      </div>
+
+      <Fragment set:html={headerHtml} />
+
+      <main id='top' class='plugin-detail'>
+        <section class='plugin-detail-hero'>
+          <div class='container plugin-detail-hero__grid'>
+            <div>
+              <a class='plugin-back-link' href='/plugins/'>Registry</a>
+              <div class='plugin-detail__badges'>
+                <span class={`plugin-badge plugin-badge--${plugin.registryId}`}>
+                  {plugin.registryName}
+                </span>
+                <span>{plugin.trust}</span>
+                {plugin.deprecated && <span>Deprecated</span>}
+                {plugin.yanked && <span>Yanked</span>}
+              </div>
+              <h1>{plugin.title}</h1>
+              <p>{plugin.description}</p>
+              <div class='plugin-detail__commands'>
+                <div>
+                  <span>Install from registry</span>
+                  <code>{plugin.installCommand}</code>
+                </div>
+                <button type='button' data-copy-command={plugin.installCommand}>
+                  Copy
+                </button>
+              </div>
+            </div>
+            <aside class='plugin-detail-side' aria-label='Plugin preview and facts'>
+              <div class={`plugin-detail-preview plugin-detail-preview--${plugin.visualKind}`}>
+                <div class='plugin-detail-preview__head'>
+                  <span>{previewLabel}</span>
+                  <small>{plugin.preview?.type ?? plugin.visualKind}</small>
+                </div>
+                <div class='plugin-detail-preview__frame'>
+                  {plugin.preview?.frameHref ? (
+                    <iframe
+                      src={plugin.preview.frameHref}
+                      title={`${plugin.title} preview`}
+                      loading='lazy'
+                      sandbox='allow-scripts allow-same-origin'
+                    ></iframe>
+                  ) : plugin.preview?.poster ? (
+                    <img src={plugin.preview.poster} alt='' loading='lazy' />
+                  ) : (
+                    <div class='plugin-detail-preview__mock' aria-hidden='true'>
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div class='plugin-detail__facts'>
+                <dl>
+                  {factRows.map(([label, value]) => (
+                    <div>
+                      <dt>{label}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class='plugin-detail-section'>
+          <div class='container plugin-detail-grid'>
+            <div class='plugin-detail-panel'>
+              <span class='label'>How it resolves</span>
+              <h2>Registry provenance</h2>
+              <p>
+                This entry is discovered from a marketplace catalog and resolves
+                to the transport source below. The product can group it by source
+                while the CLI keeps the install target stable through the
+                vendor/plugin-name ID.
+              </p>
+              <div class='plugin-source-list'>
+                {detailLinks.map((link) => (
+                  <a href={link.href} target='_blank' rel='noreferrer noopener'>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <div class='plugin-detail-panel'>
+              <span class='label'>Capabilities</span>
+              <h2>Workflow surface</h2>
+              <div class='plugin-tags plugin-tags--large'>
+                {plugin.tags.map((tag) => <span>{tag}</span>)}
+                {plugin.capabilities.map((capability) => <span>{capability}</span>)}
+                {plugin.mode && <span>{plugin.mode}</span>}
+                {plugin.taskKind && <span>{plugin.taskKind}</span>}
+              </div>
+              <div class='plugin-detail__commands compact'>
+                <div>
+                  <span>Direct source fallback</span>
+                  <code>{plugin.directInstallCommand}</code>
+                </div>
+              </div>
+            </div>
+
+            {plugin.exampleQuery && (
+              <div class='plugin-detail-panel plugin-detail-panel--wide'>
+                <span class='label'>Example prompt</span>
+                <h2>How people use it</h2>
+                <p>
+                  The registry entry includes a ready-to-run prompt seed so the
+                  plugin can be evaluated without guessing its expected workflow.
+                </p>
+                <pre class='plugin-example-query'>{plugin.exampleQuery}</pre>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {related.length > 0 && (
+          <section class='plugin-detail-section plugin-related'>
+            <div class='container'>
+              <div class='section-header'>
+                <span class='label'>More from {plugin.registryName}</span>
+                <h2>Related plugins</h2>
+              </div>
+              <div class='plugin-card-grid compact'>
+                {related.map((item) => (
+                  <article class='plugin-card'>
+                    <div class='plugin-card__meta'>
+                      <span class={`plugin-badge plugin-badge--${item.registryId}`}>
+                        {item.registryName}
+                      </span>
+                      <span>{item.version}</span>
+                    </div>
+                    <h3>
+                      <a href={item.detailHref}>{item.title}</a>
+                    </h3>
+                    <code>{item.id}</code>
+                    <p>{item.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+
+    <script is:inline>
+      document.querySelectorAll('[data-copy-command]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const command = button.getAttribute('data-copy-command') ?? '';
+          try {
+            await navigator.clipboard.writeText(command);
+            button.textContent = 'Copied';
+            window.setTimeout(() => {
+              button.textContent = 'Copy';
+            }, 1400);
+          } catch {
+            button.textContent = 'Select';
+          }
+        });
+      });
+
+      fetch('https://api.github.com/repos/nexu-io/open-design')
+        .then((response) => response.ok ? response.json() : undefined)
+        .then((repo) => {
+          const count = Number(repo?.stargazers_count);
+          if (!Number.isFinite(count)) return;
+          const formatted = count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count);
+          document.querySelectorAll('[data-github-stars]').forEach((node) => {
+            node.textContent = formatted;
+          });
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

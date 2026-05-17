@@ -96,11 +96,22 @@ export const DECK_SKELETON_HTML = `<!doctype html>
     .slide {
       position: absolute;
       inset: 0;
-      display: none;
-      flex-direction: column;
       overflow: hidden;
     }
-    .slide.active { display: flex; }
+    /* Visibility toggle hardened with :not(.active) + !important so cascade
+       order can't break it. The previous \`.slide { display:none }\` rule
+       lost the cascade whenever a per-slide variant class (e.g.
+       \`.s-cold { display:grid }\`) was declared after it on the same
+       element — every slide silently became visible at once. The
+       \`!important\` is a belt-and-suspenders against agent code that adds
+       \`!important\` on variant classes too. */
+    .slide:not(.active) { display: none !important; }
+    /* The active default uses :where() so it has zero specificity. Per-slide
+       variant classes like \`.s-cold { display:grid }\` or
+       \`.s-magazine { display:block }\` can override the default flex layout
+       just by declaring \`display\` — no need for the variant to be more
+       specific. The hide rule above still wins for inactive slides. */
+    :where(.slide.active) { display: flex; flex-direction: column; }
 
     /* Chrome — counter + prev/next live outside the scaled stage so they
        don't shrink with it. Do not relocate them inside .deck-stage. */
@@ -349,7 +360,7 @@ These are the failure patterns we just spent days debugging. Each one looks "equ
 - ❌ Don't use \`document.addEventListener('keydown', …)\` alone. Inside an iframe, focus is sometimes on window. The framework adds capture-phase listeners on **both** targets — replacing this with a single listener silently swallows arrow keys.
 - ❌ Don't replace the localStorage key, the slide-visibility toggle (\`.slide.active\`), or the counter element IDs (\`#deck-cur\`, \`#deck-total\`, \`#deck-prev\`, \`#deck-next\`). The framework reads them by ID.
 - ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so they stay legible at any viewport size.
-- ❌ Don't redefine \`.slide { display: ... }\` in your per-deck styles. The framework uses \`display: none\` / \`display: flex\` to toggle slides; overriding it breaks navigation.
+- ❌ Don't redefine \`.slide\`, \`.slide.active\`, or \`.slide:not(.active)\` directly. The framework owns the visibility toggle through those exact selectors. If you want a non-flex layout on a slide, **add a variant class to the same \`<section class="slide …">\` element** (e.g. \`.s-cold\`, \`.s-magazine\`) and declare \`display: grid\` / \`display: block\` on the variant. The framework's active default is wrapped in \`:where(...)\` so it has zero specificity — your variant always wins for the active slide. Variant classes do NOT need to be more specific than \`.slide.active\`. (The inactive-hide rule still wins because it uses \`:not(.active) { display: none !important; }\`.)
 - ❌ Don't strip or "tidy" the \`@media print\` block. It is how Share → PDF stitches every slide into a multi-page document. Without it, PDF export collapses to a single screenshot.
 
 ## Why this matters (so you can judge edge cases)
@@ -363,6 +374,36 @@ If the user asks for something the framework genuinely doesn't support (vertical
 Each \`<section class="slide" data-screen-label="NN Title">\` is one slide rendered onto the 1920×1080 canvas. Inside the section, lay out content with your own \`SLOT: per-deck styles\` classes. Slide labels are 1-indexed (\`01 Title\`, \`02 Problem\`…). The first slide gets \`class="slide active"\`; the others just \`class="slide"\`.
 
 Real copy only — no lorem ipsum, no invented metrics, no generic emoji icon rows. If you don't have a value, leave a short honest placeholder.
+
+## Density and overflow discipline (the #1 cause of ugly decks)
+
+Even with the visibility toggle working, slides go ugly when content overflows the 1920×1080 canvas. Specific failure modes that ship today:
+
+- ❌ Title slides with a display headline ≥ 160px **plus** a multi-line subtitle/deck paragraph **plus** an absolutely-positioned \`.footer\` at \`bottom: ~56px\`. The flow content grows downward, the absolute footer occupies the bottom band, and the two collide in the last ~100px of the slide.
+- ❌ Stat slides with three numbers + three captions + a footer. Split into three stat slides — the framework counts slides for you, more slides cost nothing.
+- ❌ "Magazine spread" attempts that pack masthead + display headline + body grid + sidebar + absolute footer all into a single 1080px slide.
+
+Rules — non-negotiable:
+
+1. **Display headlines on cover/title slides: max ~140px font-size, max 8 words, max 3 lines.** If the headline doesn't fit those bounds, the slide is the wrong shape — split it, don't shrink the font and pack more in.
+2. **Reserve a footer safe-zone.** If you use \`.footer { position: absolute; bottom: Npx; }\`, flow content above the footer must stop at least 80px before \`1080 − footer_height − N\`. Practically: don't let flow content extend into the bottom 200px of the slide. Easiest enforcement: make the slide's main content area its own \`<div style="height: 760px;">\` (or \`max-height\`), and the footer absolute below it.
+3. **Body slides: ≤ 3 paragraphs, ≤ 56ch lead text width, ≤ 12 words per line.**
+4. **One idea per slide.** Two ideas = two slides.
+
+## Pre-emit self-check — run this BEFORE writing the \`<artifact>\` tag
+
+For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
+
+- [ ] Does the slide's content fit inside the canvas without clipping or overflowing the bottom?
+- [ ] If there's an absolutely-positioned footer/header, does flow content stop before the footer's reserved band? (See Rule 2 above.)
+- [ ] Is the display headline ≤ 140px and ≤ 8 words?
+- [ ] Does the slide carry ≤ one big idea? (No mashed-together masthead + display headline + subtitle + absolute footer + sidebar.)
+
+If any answer is "no", redesign the slide BEFORE emitting. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
+
+## Prefer the simple-deck skill's layout vocabulary when reachable
+
+If \`plugins/_official/examples/simple-deck/assets/template.html\` and its \`references/layouts.md\` are readable from the project workspace, **prefer those layouts over inventing your own**. The simple-deck skill ships eight paste-ready slide skeletons (cover, body, big-stat, three-point row, pipeline, dark quote, before/after, closing) with tested type scales, density rules, and a P0/P1/P2 checklist. Re-inventing those layouts is the source of most density / overflow bugs the framework can't catch.
 
 ## Canonical skeleton (this is exactly what the file you write looks like)
 
