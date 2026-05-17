@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { createAgentRuntimeEnv, createAgentRuntimeToolPrompt } from '../src/server.js';
@@ -12,11 +14,33 @@ describe('agent runtime tool environment', () => {
     );
 
     expect(env).toMatchObject({
-      PATH: '/bin',
+      PATH: `/opt/open-design/bin${path.delimiter}/bin`,
       OD_DAEMON_URL: 'http://127.0.0.1:7456',
       OD_NODE_BIN: '/opt/open-design/bin/node',
       OD_TOOL_TOKEN: 'fresh-token',
     });
+  });
+
+  it('prepends node binary directory to PATH when not already present', () => {
+    const env = createAgentRuntimeEnv(
+      { PATH: '/bin' },
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/node/node',
+    );
+
+    expect(env.PATH).toBe(`/opt/node${path.delimiter}/bin`);
+  });
+
+  it('does not duplicate node binary directory when already present in PATH', () => {
+    const env = createAgentRuntimeEnv(
+      { PATH: `/opt/node${path.delimiter}/bin` },
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/node/node',
+    );
+
+    expect(env.PATH).toBe(`/opt/node${path.delimiter}/bin`);
   });
 
   it('does not leak stale inherited tool tokens when no run token was minted', () => {

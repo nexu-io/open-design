@@ -1396,7 +1396,15 @@ export function createAgentRuntimeEnv(
   if (nodeBinDir) {
     const existingPath = typeof env.PATH === 'string' ? env.PATH : '';
     const parts = existingPath.split(path.delimiter).filter((p) => p.length > 0);
-    if (!parts.includes(nodeBinDir)) {
+    const normalize = (p: string) => p.replace(/[/\\]+$/, '');
+    const normalizedDir = normalize(nodeBinDir);
+    const alreadyIncluded = parts.some((p) => {
+      const n = normalize(p);
+      return process.platform === 'win32'
+        ? n.toLowerCase() === normalizedDir.toLowerCase()
+        : n === normalizedDir;
+    });
+    if (!alreadyIncluded) {
       env.PATH = [nodeBinDir, ...parts].join(path.delimiter);
     }
   }
