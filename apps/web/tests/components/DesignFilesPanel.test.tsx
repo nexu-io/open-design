@@ -376,6 +376,40 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(getPageInfo(container)).toContain('31–60 of 500');
   });
 
+  it('applies kind filters before pagination and page info', () => {
+    const files = generateFiles(45);
+    const { container } = renderPanel(files);
+
+    fireEvent.click(getPageBtns(container)[1]!);
+    expect(getPageInfo(container)).toContain('31–45 of 45');
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Filter by kind' }));
+    const dialog = within(container).getByRole('dialog', { name: 'Filter by kind' });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /HTML page/i }));
+
+    expect(getPageInfo(container)).toContain('1–8 of 8');
+    expect(container.querySelectorAll('.df-file-row').length).toBe(8);
+    expect(within(container).getByTestId('design-file-row-file-43.html')).toBeTruthy();
+    expect(within(container).queryByTestId('design-file-row-file-45.sketch.json')).toBeNull();
+  });
+
+  it('clears kind filters and restores the unfiltered pagination state', () => {
+    const files = generateFiles(45);
+    const { container } = renderPanel(files);
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Filter by kind' }));
+    const dialog = within(container).getByRole('dialog', { name: 'Filter by kind' });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /HTML page/i }));
+    expect(getPageInfo(container)).toContain('1–8 of 8');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear' }));
+
+    expect(getPageInfo(container)).toContain('1–30 of 45');
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
+    expect(within(container).getByTestId('design-file-row-file-1.html')).toBeTruthy();
+    expect(within(container).queryByTestId('design-file-row-file-43.html')).toBeNull();
+  });
+
   it('keeps the bulk toolbar focused on the all-files action instead of duplicating page select', () => {
     const { container } = renderPanel(generateFiles(3));
 
