@@ -829,8 +829,8 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['d3', 'd3.js', 'interactive chart', 'data visualization', 'editorial chart'],
     mode: 'prototype',
     category: 'diagrams',
-    upstream: 'https://github.com/chrisvoncsefalvay/d3-claude-skill',
-    attribution: 'Curated from @chrisvoncsefalvay.',
+    upstream: 'https://github.com/jiannanya/snow-d3/',
+    attribution: 'Curated from @jiannanya.',
   },
   {
     id: 'hand-drawn-diagrams',

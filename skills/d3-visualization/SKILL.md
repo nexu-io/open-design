@@ -11,12 +11,12 @@ triggers:
 od:
   mode: prototype
   category: diagrams
-  upstream: "https://github.com/chrisvoncsefalvay/d3-claude-skill"
+  upstream: "https://github.com/jiannanya/snow-d3/"
 ---
 
 # d3-visualization
 
-> Curated from @chrisvoncsefalvay.
+> Curated from @jiannanya.
 
 ## What it does
 
@@ -24,7 +24,7 @@ Teaches the agent to produce D3 charts and interactive data visualizations. Usef
 
 ## Source
 
-- Upstream: https://github.com/chrisvoncsefalvay/d3-claude-skill
+- Upstream: https://github.com/jiannanya/snow-d3/
 - Category: `diagrams`
 
 ## How to use
@@ -36,7 +36,7 @@ bundle into your active agent's skills directory:
 
 ```bash
 # Inspect the upstream README for exact paths
-open https://github.com/chrisvoncsefalvay/d3-claude-skill
+open https://github.com/jiannanya/snow-d3/
 ```
 
 Then ask the agent to invoke this skill by name (`d3-visualization`) or with
