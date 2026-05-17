@@ -712,11 +712,17 @@ code {
   -webkit-app-region: no-drag;
 }
 .workspace-tabs-popover {
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
+  /* Anchored to the viewport, not to .workspace-tabs-actions, because the
+     actions group sits next to the tab strip on the left side of the chrome
+     header — not the right. `position: absolute; right: 0` against that
+     narrow inline-flex container made the 380px popover hang off the left
+     edge of the window. Fixed positioning keeps it inside the viewport
+     regardless of where the actions group lands as tabs accumulate. */
+  position: fixed;
+  top: calc(var(--workspace-tabs-chrome-height, 38px) + 7px);
+  right: max(10px, env(safe-area-inset-right));
   width: min(380px, calc(100vw - 24px));
-  max-height: min(620px, calc(100vh - 72px));
+  max-height: min(620px, calc(100vh - var(--workspace-tabs-chrome-height, 38px) - 24px));
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
