@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { createAgentRuntimeEnv, createAgentRuntimeToolPrompt } from '../src/server.js';
+import { applyAgentLaunchEnv } from '../src/runtimes/launch.js';
 
 describe('agent runtime tool environment', () => {
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {
@@ -95,5 +96,43 @@ describe('agent runtime tool environment', () => {
     expect(prompt).toContain('Daemon URL: `http://127.0.0.1:7456`');
     expect(prompt).toContain('`OD_TOOL_TOKEN` is not available');
     expect(prompt).not.toContain('Bearer');
+  });
+});
+
+describe('applyAgentLaunchEnv', () => {
+  it('returns env unchanged when childPathPrepend is empty', () => {
+    const base = { Path: 'C:\\Windows\\system32', OTHER: 'val' };
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: [] });
+    expect(result).toBe(base);
+  });
+
+  it('prepends childPathPrepend entries to PATH when key is uppercase', () => {
+    const base = { PATH: '/usr/bin' };
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/copilot'] });
+    expect(result.PATH).toBe(`/opt/copilot${path.delimiter}/usr/bin`);
+    expect(result['Path']).toBeUndefined();
+  });
+
+  it('uses the existing Windows-style Path key instead of adding a competing PATH key', () => {
+    // This is the Windows GUI regression: env.PATH is undefined when the actual
+    // key is 'Path'.  The old code created a fresh PATH = just childPathPrepend,
+    // discarding the system paths and the node directory prepended by
+    // createAgentRuntimeEnv, which caused '"node" is not recognized' errors.
+    const base = { Path: 'C:\\Program Files\\nodejs;C:\\Windows\\system32' };
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['C:\\Users\\user\\AppData\\Roaming\\npm'] });
+
+    // The existing 'Path' key must be updated in place.
+    expect(result.Path).toBe(
+      `C:\\Users\\user\\AppData\\Roaming\\npm${path.delimiter}C:\\Program Files\\nodejs${path.delimiter}C:\\Windows\\system32`,
+    );
+    // A competing uppercase 'PATH' key must NOT be created.
+    expect(result.PATH).toBeUndefined();
+  });
+
+  it('deduplicates entries already present in Path', () => {
+    const existing = 'C:\\opt\\bin;C:\\Windows\\system32';
+    const base = { Path: existing };
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['C:\\opt\\bin'] });
+    expect(result.Path).toBe(existing);
   });
 });

@@ -41,11 +41,17 @@ export function applyAgentLaunchEnv(
   launch: Pick<AgentLaunchResolution, 'childPathPrepend'>,
 ): NodeJS.ProcessEnv {
   if (launch.childPathPrepend.length === 0) return env;
-  const existing = typeof env.PATH === 'string' ? env.PATH : '';
-  const PATH = [...launch.childPathPrepend, ...existing.split(delimiter)]
+  // Case-insensitive key lookup — Windows uses 'Path', not 'PATH'.
+  // Using env.PATH directly would be undefined on Windows, yielding a
+  // one-entry PATH that contains only childPathPrepend and discards all
+  // system paths (including the node binary dir).  Find the actual key
+  // name so we update in place rather than adding a conflicting duplicate.
+  const pathKey = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+  const existing = typeof env[pathKey] === 'string' ? (env[pathKey] as string) : '';
+  const merged = [...launch.childPathPrepend, ...existing.split(delimiter)]
     .filter((entry, index, entries) => entry.length > 0 && entries.indexOf(entry) === index)
     .join(delimiter);
-  return { ...env, PATH };
+  return { ...env, [pathKey]: merged };
 }
 
 function tryResolveCodexNativeBinary(wrapperPath: string): {
