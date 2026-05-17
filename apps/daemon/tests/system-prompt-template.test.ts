@@ -199,6 +199,16 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('Reference prompt template');
   });
 
+  it('non-media dispatch hint includes fal-ai/* passthrough instruction', () => {
+    const out = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+    });
+
+    expect(out).toContain('## Media generation (if asked)');
+    expect(out).toContain('fal-ai/*');
+    expect(out).toContain('pass it through as-is without substitution');
+  });
+
   it('renders without source attribution when the source field is missing', () => {
     const { source: _omit, ...withoutSource } = baseSummary;
     const out = composeSystemPrompt({
