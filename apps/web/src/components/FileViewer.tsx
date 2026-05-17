@@ -1914,7 +1914,7 @@ export function BoardComposerPopover({
                   aria-label={t('chat.comments.remove')}
                   title={t('chat.comments.remove')}
                 >
-                  ×
+                  <Icon name="close" size={10} />
                 </button>
               </span>
             ))}

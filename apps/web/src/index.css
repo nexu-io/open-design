@@ -10901,12 +10901,38 @@ button.connector-action.is-loading {
   gap: 6px;
 }
 .board-pod-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 7px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 11px;
+}
+.board-pod-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1), color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.board-pod-chip:hover .board-pod-chip-remove,
+.board-pod-chip-remove:focus-visible {
+  opacity: 1;
+}
+.board-pod-chip-remove:hover,
+.board-pod-chip-remove:focus-visible {
+  color: var(--text-default, var(--text-strong));
 }
 .board-note-list {
   display: grid;
