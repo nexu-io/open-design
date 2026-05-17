@@ -473,16 +473,9 @@ export function effectivePreviewScale(
   previewScale: number,
   canvasSize?: PreviewCanvasSize,
 ) {
-  if (viewport === 'desktop') return previewScale;
-  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport);
-  if (!preset?.width || !preset.height || !canvasSize?.width || !canvasSize.height) return previewScale;
-  const canvasPadding = 48;
-  const availableWidth = Math.max(1, canvasSize.width - canvasPadding);
-  const availableHeight = Math.max(1, canvasSize.height - canvasPadding);
-  const fitScale = Math.min(1, availableWidth / preset.width, availableHeight / preset.height);
-  // Allow user to zoom beyond the fit-to-canvas scale for detailed inspection
-  // Only apply fitScale as a minimum when user zoom is below 100%
-  return previewScale >= 1 ? previewScale : Math.min(previewScale, fitScale);
+  void viewport;
+  void canvasSize;
+  return previewScale;
 }
 
 function previewScaleShellStyle(

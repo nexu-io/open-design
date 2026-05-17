@@ -71,9 +71,10 @@ describe('FileViewer preview scale', () => {
     expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
   });
 
-  it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
-    expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
-    expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  it('uses the requested zoom for mobile and tablet preview overlays', () => {
+    expect(effectivePreviewScale('mobile', 0.75, { width: 390, height: 844 })).toBe(0.75);
+    expect(effectivePreviewScale('mobile', 1.5, { width: 390, height: 844 })).toBe(1.5);
+    expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBe(1.25);
   });
 });
 
