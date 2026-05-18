@@ -74,6 +74,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "featured": 0.10
   }
 }

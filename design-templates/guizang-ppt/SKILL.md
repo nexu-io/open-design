@@ -19,7 +19,6 @@ triggers:
 od:
   mode: deck
   scenario: marketing
-  featured: 0.02
   default_for: deck
   upstream: "https://github.com/op7418/guizang-ppt-skill"
   preview:

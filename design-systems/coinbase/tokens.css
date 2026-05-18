@@ -1,0 +1,257 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/coinbase/tokens.css
+ *
+ * Structured token bindings for "Inspired by Coinbase" — the consumer
+ * crypto exchange dressed in singular Coinbase Blue, near-black product
+ * surfaces, and the 56px pill CTAs that make the brand instantly
+ * recognisable. Mainstream-friendly fintech polish: white canvas,
+ * one functional accent, restrained type, generous radii.
+ *
+ * Agents generating a Coinbase-flavored artifact should paste the
+ * `:root { … }` block verbatim into the first `<style>` of the artifact,
+ * then reference every value through `var(--name)` — never re-author the
+ * brand blue inline.
+ *
+ * Schema notes (Coinbase binds the shared schema in seven brand-
+ * specific ways — see `#Coinbase N` tags inline for each decision):
+ *
+ *   #Coinbase 1  — `--surface` is the cool-gray `#eef0f3` from
+ *                  DESIGN.md §2 — the secondary button background and
+ *                  panel surface. It carries a barely-perceptible blue
+ *                  tint that ties it to Coinbase Blue without competing.
+ *                  `--surface-warm` aliases `var(--surface)` because the
+ *                  brand has no warm tier at all (cool palette only).
+ *
+ *   #Coinbase 2  — Single foreground tier: Near Black (`#0a0b0d`).
+ *                  DESIGN.md §1 calls out the alternating dark / light
+ *                  section model, but text within either section uses
+ *                  one weight. `--fg-2` aliases `--fg` because Coinbase
+ *                  does not differentiate a "subhead" gray. `--muted`
+ *                  is the muted blue-gray `#5b616e` from DESIGN.md §2,
+ *                  used for captions and secondary copy; `--meta`
+ *                  aliases `--muted`.
+ *
+ *   #Coinbase 3  — `--border` is `rgba(91, 97, 110, 0.2)` — the exact
+ *                  20% Muted Blue value DESIGN.md §2 names. Binding the
+ *                  border to an alpha (not a solid hex) lets the same
+ *                  value paint over white surfaces AND the cool-gray
+ *                  `--surface` without re-tinting per context.
+ *                  `--border-soft` aliases — DESIGN.md describes no
+ *                  separate row-separator weight.
+ *
+ *   #Coinbase 4  — `--accent` is Coinbase Blue (`#0052ff`). Per
+ *                  DESIGN.md §7 Don't list, blue is "functional only,
+ *                  never decorative" — the ≤2-accent-uses-per-screen
+ *                  lint is doubly important on this brand. `--accent-hover`
+ *                  binds to the explicit `#578bfa` (light hover blue
+ *                  from DESIGN.md §4) and `--accent-active` binds to
+ *                  `#0667d0` (the documented Link Blue, repurposed as
+ *                  the deeper pressed state). Coinbase Blue is too
+ *                  saturated for a black-mix formula to produce the
+ *                  same shifts — use the brand's own values.
+ *
+ *   #Coinbase 5  — Type scale tops out at 80px (`--text-4xl`).
+ *                  DESIGN.md §3 puts Display Hero at 80px / weight 400
+ *                  with `line-height: 1.00`. The 64px and 52px display
+ *                  tiers from DESIGN.md slot into `--text-3xl` /
+ *                  intermediate; smaller marketing tiers (Caption 14px,
+ *                  Small 13px) bind to `--text-sm` with the 13px micro-
+ *                  tier inlined per-component where used.
+ *
+ *   #Coinbase 6  — `--leading-tight` is `1.00` — the ultra-tight
+ *                  display rhythm DESIGN.md §1 calls out as a key
+ *                  characteristic. Body reading stays at `1.5`; the
+ *                  18px body / 1.56 ratio from DESIGN.md §3 is
+ *                  expressible as `--leading-body: 1.5` rounded for
+ *                  the schema's single body lh.
+ *
+ *   #Coinbase 7  — `--focus-ring` is a sharp 2px solid ring at
+ *                  `var(--fg)` — DESIGN.md §4 specifies "Focus: 2px
+ *                  solid black outline" on every interactive element.
+ *                  We reproduce that as a `box-shadow` so the ring sits
+ *                  outside the element without affecting layout. This
+ *                  differs from the schema default (3px alpha glow at
+ *                  --accent) because Coinbase's focus is mechanical,
+ *                  not atmospheric.
+ *
+ * Brand-specific extensions (Layer C):
+ *   None. The 56px pill-CTA radius from DESIGN.md §4 is *component-
+ *   specific* (only primary CTAs use it) and lives inline in
+ *   components.html rather than as a new token; promoting it would
+ *   force every other brand to declare a matching slot.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — #Coinbase 1) ────────────────────────────
+   * White canvas, cool-gray panel surface. The `--surface` tint is
+   * the same `#eef0f3` Coinbase uses behind secondary buttons — it
+   * carries just enough blue cast to feel of-a-piece with the brand
+   * accent without competing with it. No warm tier exists; the
+   * alias keeps cross-brand components resolvable. */
+  --bg:           #ffffff;
+  --surface:      #eef0f3;        /* Cool Gray — secondary surface, panels */
+  --surface-warm: var(--surface); /* alias — Coinbase has no warm tier */
+
+  /* ─── Foreground ramp (2 tiers — #Coinbase 2) ────────────────────
+   * Near Black (`#0a0b0d`) carries every heading and body line —
+   * Coinbase's product surfaces invert to this color on dark
+   * sections (DESIGN.md §1). Muted Blue (`#5b616e`) is the caption /
+   * placeholder tier. No third or fourth tier — both B-slots alias. */
+  --fg:    #0a0b0d;               /* Near Black — text, dark section bg */
+  --fg-2:  var(--fg);              /* alias — single text weight throughout */
+  --muted: #5b616e;               /* Muted Blue — captions, secondary copy */
+  --meta:  var(--muted);          /* alias — no separate metadata tier */
+
+  /* ─── Border (1 tier — #Coinbase 3) ──────────────────────────────
+   * DESIGN.md §2 names the border explicitly: 20% Muted Blue.
+   * Binding to an alpha (not a solid hex) lets the same value paint
+   * over white AND the cool-gray surface without re-tinting per
+   * context. `--border-soft` aliases — Coinbase has one border
+   * weight for everything. */
+  --border:      rgba(91, 97, 110, 0.2);  /* Muted Blue @ 20% — DESIGN.md §2 */
+  --border-soft: var(--border);            /* alias — one border weight */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Coinbase Blue — the singular brand accent. Used for CTA borders,
+   * focus accents, link text. Hard cap of ≤2 visible uses per screen
+   * (lint enforced) is doubly important here because DESIGN.md §7
+   * forbids decorative use: "Don't use the blue decoratively — it's
+   * functional only". */
+  --accent:        #0052ff;       /* Coinbase Blue — brand mark */
+  --accent-on:     #ffffff;       /* white label on saturated blue */
+  --accent-hover:  #578bfa;       /* light hover blue — DESIGN.md §4 */
+  --accent-active: #0667d0;       /* deeper pressed — Link Blue, DESIGN.md §2 */
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Standard semantic colors. DESIGN.md does not redefine success /
+   * warn / danger; Coinbase's product UI uses them at the schema
+   * defaults so the financial-status palette stays distinct from the
+   * brand-blue moment. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography — fonts ─────────────────────────────────────────
+   * Coinbase's four-font proprietary family (Display, Sans, Text,
+   * Icons) reduces to two stacks here: display headlines use
+   * CoinbaseDisplay; everything else uses CoinbaseText / Sans. Both
+   * stacks degrade through Inter (the closest open-source match) to
+   * system sans so artifacts render legibly without the licensed
+   * faces. CoinbaseIcons is an icon font, not a text face, and is
+   * not bound to a schema slot. */
+  --font-display:
+    "CoinbaseDisplay", "Coinbase Display",
+    "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Arial, sans-serif;
+  --font-body:
+    "CoinbaseText", "CoinbaseSans", "Coinbase Sans",
+    "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono",
+    Menlo, Monaco, Consolas, monospace;
+
+  /* ─── Typography — type scale (#Coinbase 5) ─────────────────────
+   * Direct mapping of DESIGN.md §3: 12 / 14 / 16 / 18 / 32 / 36 /
+   * 52 / 80. Display Hero hits 80px (the full marketing scale);
+   * Section Heading 36px and Card Title 32px sit a step apart for
+   * visual gear-shifting. The 13px tag size from DESIGN.md is a
+   * one-off micro tier and is inlined per-component. */
+  --text-xs:   12px;              /* extra small — tags, dense labels */
+  --text-sm:   14px;              /* caption, small UI */
+  --text-base: 16px;              /* body small, button, navigation */
+  --text-lg:   18px;              /* feature title, body reading */
+  --text-xl:   32px;              /* card title */
+  --text-2xl:  36px;              /* section heading */
+  --text-3xl:  52px;              /* display third tier */
+  --text-4xl:  80px;              /* display hero — full scale */
+
+  /* ─── Typography — leading & tracking (#Coinbase 6) ─────────────
+   * `--leading-tight` is 1.00 — DESIGN.md §1 lists "1.00 line-height
+   * on display headings — ultra-tight" as a defining characteristic.
+   * `--leading-body` is 1.5 (the body reading rhythm). Tracking
+   * compresses subtly at display sizes; CoinbaseDisplay is already
+   * tightly drawn, so -0.01em is enough — bigger negative tracking
+   * would over-collapse the wordmark. */
+  --leading-body:     1.5;
+  --leading-tight:    1.0;        /* ultra-tight — display headings */
+  --tracking-display: -0.01em;    /* subtle compression at hero scale */
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. The schema's
+   * 4/8/12/16/20/24/32/48 ladder covers Coinbase's rhythm; the
+   * sub-tier 1/3/5/6/10/15/25 fine-grain values from DESIGN.md are
+   * inlined where they appear (chart axes, button micro-padding). */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ─────────────────────────────────────────────
+   * Generous vertical breathing room desktop-side so the 80px
+   * display hero has air above and below. Tightens to 64px on
+   * tablet, 40px on phone. */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 4–8 (small), 12–16 (standard),
+   * 24–32 (large), 40 (XL), 56 (pill CTAs), 100000 (full). The
+   * schema's four tiers map to: 8 (functional), 16 (cards), 32
+   * (feature containers), 9999 (badges / avatars). The 56px pill-
+   * CTA radius is component-specific (primary buttons only) and
+   * lives inline in components.html rather than as a new token. */
+  --radius-sm:   8px;             /* inputs, chips, small cards */
+  --radius-md:   16px;            /* cards, panels */
+  --radius-lg:   32px;            /* feature containers, hero panels */
+  --radius-pill: 9999px;          /* badges, avatars, full pill */
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * DESIGN.md §6: "Minimal shadow system — depth from color contrast
+   * between dark/light sections." The cascade is intentionally quiet:
+   *
+   *   --elev-flat    no shadow (page surface, text blocks)
+   *   --elev-ring    hairline 1px ring (cards on white)
+   *   --elev-raised  the lightest possible drop — used sparingly on
+   *                  floating panels / dropdowns. Depth on Coinbase
+   *                  comes from the dark / light section contrast,
+   *                  not from elevation per element. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 1px 2px color-mix(in oklab, var(--fg), transparent 92%);
+
+  /* ─── Focus ring (#Coinbase 7) ──────────────────────────────────
+   * DESIGN.md §4 specifies "Focus: 2px solid black outline" on
+   * every interactive element. We reproduce that as a 2px solid
+   * box-shadow at `var(--fg)` so the ring sits outside the element
+   * without shifting layout. This is sharper and more mechanical
+   * than the schema's atmospheric glow — by design. */
+  --focus-ring: 0 0 0 2px var(--fg);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Standard durations + standard easing. Coinbase's surface motion
+   * is restrained — buttons transition background on hover but
+   * never transform; the brand voice is precision, not bounce. */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1280px max content width — DESIGN.md §8 breakpoints climb to
+   * 1600px, but the body content centers at 1280 with the marketing
+   * imagery bleeding wider. Gutters: 24 → 16 → 16. */
+  --container-max:            1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

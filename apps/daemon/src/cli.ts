@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { startServer } from './server.js';
+import { runDaemonCliStartup } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
+import { runArtifactsCli } from './artifacts-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
-import { openBrowser } from './browser-open.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 
 const argv = process.argv.slice(2);
@@ -171,6 +171,7 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
   research: runResearch,
@@ -232,67 +233,7 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
       process.exitCode = 1;
     });
 } else {
-// Default: daemon mode.
-let port = Number(process.env.OD_PORT) || 7456;
-let host = process.env.OD_BIND_HOST || '127.0.0.1';
-let open = true;
-
-for (let i = 0; i < argv.length; i++) {
-  const a = argv[i];
-  if (a === '-p' || a === '--port') {
-    port = Number(argv[++i]);
-  } else if (a === '--host') {
-    host = argv[++i];
-  } else if (a === '--no-open') {
-    open = false;
-  } else if (a === '-h' || a === '--help') {
-    printRootHelp();
-    process.exit(0);
-  }
-}
-
-startServer({ port, host, returnServer: true }).then((started) => {
-  const { url, server, shutdown } = started;
-  const closeTimeoutMs = 5_000;
-  const closeServer = () => new Promise((resolve) => {
-    let resolved = false;
-    const resolveOnce = () => {
-      if (resolved) return;
-      resolved = true;
-      resolve();
-    };
-    const idleTimer = setTimeout(() => {
-      server.closeIdleConnections?.();
-    }, Math.min(1_000, closeTimeoutMs));
-    const hardTimer = setTimeout(() => {
-      server.closeAllConnections?.();
-      resolveOnce();
-    }, closeTimeoutMs);
-    idleTimer.unref?.();
-    hardTimer.unref?.();
-    server.close(() => resolveOnce());
-  }).finally(() => {
-    server.closeIdleConnections?.();
-  });
-  let shuttingDown = false;
-  const stop = () => {
-    if (shuttingDown) {
-      process.exit(0);
-    }
-    shuttingDown = true;
-    const closePromise = closeServer();
-    const shutdownPromise = Promise.resolve().then(() => shutdown?.());
-    void Promise.resolve()
-      .then(() => Promise.allSettled([shutdownPromise, closePromise]))
-      .finally(() => process.exit(0));
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-  console.log(`[od] listening on ${url}`);
-  if (open) {
-    openBrowser(url);
-  }
-});
+  await runDaemonCliStartup(argv, { printHelp: printRootHelp });
 }
 
 function printRootHelp() {
@@ -302,6 +243,9 @@ function printRootHelp() {
 
   od tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.
+
+  od artifacts create --name <path> --input <file> [--project <id-or-name>]
+      Create a normal project artifact through the local daemon.
 
   od tools connectors <list|execute> [options]
       Discover and execute configured connectors.
@@ -327,11 +271,11 @@ function printRootHelp() {
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
 
   od mcp [--daemon-url <url>]
-      Run a stdio MCP server that proxies read-only tool calls to a
+      Run a stdio MCP server that proxies project tool calls to a
       running Open Design daemon. Wire it into a coding agent
       (Claude Code, Cursor, VS Code, Zed, Windsurf) in another repo
-      to pull files from a local Open Design project without
-      exporting a zip.
+      to pull files from a local Open Design project and create
+      project-scoped artifacts without exporting a zip.
 
 Options:
   --port <n>       Port to listen on (default: 7456, env: OD_PORT).
@@ -407,6 +351,11 @@ async function runResearchSearch(rawArgs) {
     process.exit(4);
   }
   process.stdout.write(`${await resp.text()}\n`);
+}
+
+async function runArtifacts(args) {
+  const { exitCode } = await runArtifactsCli(args);
+  process.exit(exitCode);
 }
 
 function printResearchHelp() {
@@ -807,10 +756,11 @@ async function runMcp(args) {
 function printMcpHelp() {
   console.log(`Usage: od mcp [--daemon-url <url>]
 
-Run a stdio MCP (Model Context Protocol) server that proxies read-only
+Run a stdio MCP (Model Context Protocol) server that proxies project
 tool calls to a running Open Design daemon. Wire it into a coding agent
 in another repo so the agent can pull files from a local Open Design
-project without exporting a zip every iteration.
+project and create project-scoped artifacts without exporting a zip
+every iteration.
 
 Options:
   --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
@@ -831,17 +781,18 @@ Tools exposed:
   get_file([project, path])      file contents (textual mimes only for now)
   search_files(query[, project]) literal substring search across textual files
   list_files([project])          project files + artifactManifest sidecars
+  create_artifact(name, content) create one normal artifact entry file
 
 When project is omitted, get_artifact / get_project / get_file /
-search_files / list_files default to the project the user has open in
-Open Design; get_artifact and get_file additionally default to the
-active file. The response stamps usedActiveContext so callers can see
-which project/file got resolved.
+search_files / list_files / create_artifact default to the project the
+user has open in Open Design; get_artifact and get_file additionally
+default to the active file. The response stamps usedActiveContext so
+callers can see which project/file got resolved.
 
 For the copy-paste, per-client snippet (with absolute paths resolved
 for your machine, plus a one-click deeplink for Cursor), open Settings
-→ MCP server in the Open Design app. Read-only by design; the daemon
-must be running locally for tool calls to succeed.`);
+→ MCP server in the Open Design app. The daemon must be running locally
+for tool calls to succeed.`);
 }
 
 // ---------------------------------------------------------------------------

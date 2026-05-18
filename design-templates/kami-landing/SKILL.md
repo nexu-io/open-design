@@ -23,7 +23,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: marketing
-  featured: 0.05
   audience: founders, design studios, OSS maintainers, researchers
   tone: editorial, restrained, print-first
   scale: viewport-anchored long-form single page

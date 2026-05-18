@@ -350,6 +350,7 @@ export function EntryView({
       onImportClaudeDesign={onImportClaudeDesign}
       onImportFigma={onImportFigma}
       {...(onImportFolder ? { onImportFolder } : {})}
+      {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
       onOpenProject={onOpenProject}
       onOpenLiveArtifact={onOpenLiveArtifact}
       onDeleteProject={onDeleteProject}

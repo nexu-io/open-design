@@ -1,0 +1,63 @@
+/* design-systems/enterprise/tokens.css
+ * Structured token bindings for Enterprise.
+ * enterprise governance surface with deep navy text, restrained blue, and durable admin patterns.
+ */
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-warm: #eef2f7;
+  --fg: #0f172a;
+  --fg-2: #334155;
+  --muted: #64748b;
+  --meta: #1d4ed8;
+  --border: #d8dee8;
+  --border-soft: #edf1f6;
+  --accent: #1d4ed8;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 34px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.52;
+  --leading-tight: 1.08;
+  --tracking-display: -0.018em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 20px 52px rgba(15, 23, 42, 0.10);
+  --focus-ring: 0 0 0 4px rgba(29, 78, 216, 0.22);
+  --motion-fast: 150ms;
+  --motion-base: 230ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1240px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

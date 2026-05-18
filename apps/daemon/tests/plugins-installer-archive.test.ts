@@ -169,6 +169,77 @@ describe('archive installer', () => {
     expect(row).toEqual({ source_kind: 'github', source });
   });
 
+  it.each([
+    [403, 'Forbidden', '{"message":"API rate limit exceeded for 127.0.0.1"}'],
+    [429, 'Too Many Requests', 'too many requests'],
+  ])('falls back to codeload when GitHub contents returns %i for a plugin subpath', async (status, statusText, body) => {
+    const tarball = await buildFixtureTarball({
+      rootPrefix: 'open-design-main',
+      pluginSubpath: 'plugins/community/import-smoke-test',
+    });
+    const urlsSeen: string[] = [];
+    const contentsUrl =
+      'https://api.github.com/repos/nexu-io/open-design/contents/plugins/community/import-smoke-test?ref=main';
+    const tarballUrl = 'https://codeload.github.com/nexu-io/open-design/tar.gz/main';
+    const fetcher: ArchiveFetcher = async (u) => {
+      urlsSeen.push(u);
+      if (u === contentsUrl) {
+        return makeResponse(body, status, statusText);
+      }
+      if (u === tarballUrl) return makeResponse(tarball);
+      return makeResponse('not found', 404, 'Not Found');
+    };
+
+    let success = false;
+    let error: string | undefined;
+    const source = 'github:nexu-io/open-design@main/plugins/community/import-smoke-test';
+    for await (const ev of installPlugin(db, {
+      source,
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher,
+    })) {
+      if (ev.kind === 'success') success = true;
+      if (ev.kind === 'error') error = ev.message;
+    }
+
+    if (!success) {
+      throw new Error(`install failed: ${error}`);
+    }
+    expect(urlsSeen).toEqual([contentsUrl, tarballUrl]);
+    const row = db.prepare(`SELECT source_kind, source FROM installed_plugins WHERE id = 'sample-plugin'`).get();
+    expect(row).toEqual({ source_kind: 'github', source });
+  });
+
+  it('reports both GitHub contents and codeload URLs when subpath fallback fails', async () => {
+    const urlsSeen: string[] = [];
+    const contentsUrl =
+      'https://api.github.com/repos/nexu-io/open-design/contents/plugins/community/import-smoke-test?ref=main';
+    const tarballUrl = 'https://codeload.github.com/nexu-io/open-design/tar.gz/main';
+    const fetcher: ArchiveFetcher = async (u) => {
+      urlsSeen.push(u);
+      if (u === contentsUrl) {
+        return makeResponse('too many requests', 429, 'Too Many Requests');
+      }
+      if (u === tarballUrl) return makeResponse('server unavailable', 503, 'Service Unavailable');
+      return makeResponse('not found', 404, 'Not Found');
+    };
+
+    let error: string | undefined;
+    const source = 'github:nexu-io/open-design@main/plugins/community/import-smoke-test';
+    for await (const ev of installPlugin(db, {
+      source,
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher,
+    })) {
+      if (ev.kind === 'error') error = ev.message;
+    }
+
+    expect(urlsSeen).toEqual([contentsUrl, tarballUrl]);
+    expect(error).toContain('GitHub install failed');
+    expect(error).toContain('Fetch failed: 503 Service Unavailable');
+    expect(error).toContain(`Tried GitHub fetch URL(s): ${contentsUrl}, ${tarballUrl}`);
+  });
+
   it('extracts a https://*.tgz source (records source_kind=url)', async () => {
     const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-1.0.0' });
     let success = false;

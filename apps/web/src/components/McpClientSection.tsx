@@ -63,9 +63,50 @@ function genLocalId(): string {
   return `mcp-row-${NEXT_LOCAL_ID++}`;
 }
 
+function isLoopbackMcpUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false;
+  try {
+    const host = new URL(rawUrl)
+      .hostname
+      .replace(/^\[|\]$/g, '')
+      .toLowerCase()
+      .replace(/\.+$/g, '');
+    if (host === 'localhost' || host === '::1') return true;
+    if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
+    return /^::ffff:127(?:\.\d{1,3}){3}$/i.test(host);
+  } catch {
+    return false;
+  }
+}
+
+function inferMcpAuthMode(url: string | undefined): NonNullable<McpServerConfig['authMode']> {
+  return isLoopbackMcpUrl(url) ? 'none' : 'oauth';
+}
+
+function effectiveMcpAuthMode(
+  row: Pick<McpServerConfig, 'transport' | 'url' | 'authMode'>,
+): NonNullable<McpServerConfig['authMode']> {
+  if (row.transport !== 'http' && row.transport !== 'sse') return 'none';
+  return row.authMode ?? inferMcpAuthMode(row.url);
+}
+
+function authModeAfterUrlChange(
+  row: Pick<McpServerConfig, 'url' | 'authMode'>,
+  nextUrl: string,
+): NonNullable<McpServerConfig['authMode']> {
+  const previousInferred = inferMcpAuthMode(row.url);
+  if (!row.authMode || row.authMode === previousInferred) {
+    return inferMcpAuthMode(nextUrl);
+  }
+  return row.authMode;
+}
+
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
   return servers.map((s) => ({
     ...s,
+    ...(s.transport === 'http' || s.transport === 'sse'
+      ? { authMode: effectiveMcpAuthMode(s) }
+      : {}),
     _envText: s.env ? mapToText(s.env) : '',
     _headersText: s.headers ? mapToText(s.headers) : '',
     _localId: genLocalId(),
@@ -109,6 +150,7 @@ function rowsToServers(rows: DraftRow[]): McpServerConfig[] {
       const env = textToMap(r._envText);
       if (env) out.env = env;
     } else {
+      out.authMode = effectiveMcpAuthMode(r);
       if (r.url) out.url = r.url;
       const headers = textToMap(r._headersText);
       if (headers) out.headers = headers;
@@ -132,6 +174,9 @@ function rowFromTemplate(
     templateId: tpl.id,
     transport: tpl.transport,
     enabled: true,
+    ...(tpl.transport === 'http' || tpl.transport === 'sse'
+      ? { authMode: tpl.authMode ?? inferMcpAuthMode(tpl.url) }
+      : {}),
     command: tpl.command,
     args: tpl.args ? [...tpl.args] : undefined,
     url: tpl.url,
@@ -647,6 +692,7 @@ interface RowProps {
 
 function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMoveDown }: RowProps) {
   const isHttpLike = row.transport === 'http' || row.transport === 'sse';
+  const usesManagedOAuth = isHttpLike && effectiveMcpAuthMode(row) === 'oauth';
   const [expanded, setExpanded] = useState<boolean>(false);
   const summaryTitle = row.label?.trim() || row.id || 'Unnamed MCP server';
   const [showMcpExample, setShowMcpExample] = useState<boolean>(false);
@@ -766,12 +812,26 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : null}
 
           {isHttpLike && !row._isNew && row.id ? (
-            <McpOAuthControl serverId={row.id} />
+            usesManagedOAuth ? (
+              <McpOAuthControl serverId={row.id} />
+            ) : (
+              <div className="mcp-oauth-hint hint">
+                <strong>No managed OAuth.</strong> Open Design will use this
+                server as configured. Add headers below if the server needs a
+                token.
+              </div>
+            )
           ) : null}
-          {isHttpLike && row._isNew ? (
+          {isHttpLike && row._isNew && usesManagedOAuth ? (
             <div className="mcp-oauth-hint hint">
               Save first, then click <strong>Connect</strong> to grant Open Design
               access via the provider's OAuth flow.
+            </div>
+          ) : null}
+          {isHttpLike && row._isNew && !usesManagedOAuth ? (
+            <div className="mcp-oauth-hint hint">
+              <strong>No managed OAuth.</strong> Save this server and Open Design
+              will use it directly.
             </div>
           ) : null}
 
@@ -789,9 +849,15 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
               <span className="mcp-row-field-label">Transport</span>
               <select
                 value={row.transport}
-                onChange={(e) =>
-                  onChange({ transport: e.target.value as DraftRow['transport'] })
-                }
+                onChange={(e) => {
+                  const transport = e.target.value as DraftRow['transport'];
+                  onChange({
+                    transport,
+                    ...(transport === 'http' || transport === 'sse'
+                      ? { authMode: row.authMode ?? inferMcpAuthMode(row.url) }
+                      : { authMode: undefined }),
+                  });
+                }}
               >
                 <option value="stdio">stdio</option>
                 <option value="sse">SSE</option>
@@ -843,12 +909,29 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : (
             <>
               <label className="mcp-row-field mcp-row-field-stack">
+                <span className="mcp-row-field-label">OAuth mode</span>
+                <select
+                  value={effectiveMcpAuthMode(row)}
+                  onChange={(e) =>
+                    onChange({
+                      authMode: e.target.value as NonNullable<McpServerConfig['authMode']>,
+                    })
+                  }
+                >
+                  <option value="none">No managed OAuth</option>
+                  <option value="oauth">Managed OAuth</option>
+                </select>
+              </label>
+              <label className="mcp-row-field mcp-row-field-stack">
                 <span className="mcp-row-field-label">URL</span>
                 <input
                   type="text"
                   value={row.url ?? ''}
                   placeholder="https://mcp.higgsfield.ai/mcp"
-                  onChange={(e) => onChange({ url: e.target.value })}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    onChange({ url, authMode: authModeAfterUrlChange(row, url) });
+                  }}
                   spellCheck={false}
                 />
               </label>

@@ -12,6 +12,7 @@ import {
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
+import { TrustBadge } from './TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../runtime/plugin-source';
 
 export interface PluginLoopSubmit {
@@ -237,11 +238,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
               >
                 <div className="plugin-loop-home__card-head">
                   <span className="plugin-loop-home__card-title">{p.title}</span>
-                  <span
-                    className={`plugin-loop-home__card-trust trust-${p.trust}`}
-                  >
-                    {p.trust}
-                  </span>
+                  <TrustBadge trust={p.trust} />
                 </div>
                 {p.manifest?.description ? (
                   <div className="plugin-loop-home__card-desc">

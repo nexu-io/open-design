@@ -37,7 +37,6 @@
     "platform": "desktop",
     "scenario": "finance",
     "surface": "web",
-    "featured": 10,
     "preview": {
       "type": "html",
       "entry": "./example.html"

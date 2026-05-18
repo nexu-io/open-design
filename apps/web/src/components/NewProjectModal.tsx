@@ -18,7 +18,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { Icon } from './Icon';
-import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
+import { NewProjectPanel, type CreateInput, type CreateTab } from './NewProjectPanel';
 
 interface Props {
   open: boolean;
@@ -47,6 +47,7 @@ interface Props {
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
   onClose: () => void;
+  initialTab?: CreateTab;
 }
 
 export function NewProjectModal({
@@ -66,6 +67,7 @@ export function NewProjectModal({
   onImportFolder,
   onOpenConnectorsTab,
   onClose,
+  initialTab,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
@@ -138,6 +140,7 @@ export function NewProjectModal({
             {...(onImportFigma ? { onImportFigma } : {})}
             {...(onImportFolder ? { onImportFolder } : {})}
             {...(onOpenConnectorsTab ? { onOpenConnectorsTab } : {})}
+            {...(initialTab ? { initialTab } : {})}
           />
         </div>
       </div>

@@ -17,7 +17,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: finance
-  featured: 10
   preview:
     type: html
     entry: index.html

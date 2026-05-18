@@ -30,6 +30,7 @@ export function BoardComposerPopover({
   onSendBatch,
   onRemove,
   onRemoveMember,
+  onHoverMember,
   sending,
   t,
 }: {
@@ -45,6 +46,7 @@ export function BoardComposerPopover({
   onSendBatch: () => void | Promise<void>;
   onRemove: (commentId: string) => void | Promise<void>;
   onRemoveMember: (elementId: string) => void;
+  onHoverMember?: (elementId: string | null) => void;
   sending: boolean;
   t: TranslateFn;
 }) {
@@ -95,12 +97,25 @@ export function BoardComposerPopover({
           <strong>{t('chat.comments.capturedItems', { n: target.memberCount || podMembers.length })}</strong>
           <div className="board-pod-members">
             {podMembers.map((member) => (
-              <span key={member.elementId} className="board-pod-chip">
+              <span
+                key={member.elementId}
+                className="board-pod-chip"
+                onPointerEnter={(e) => {
+                  if (e.pointerType && e.pointerType !== 'mouse') return;
+                  onHoverMember?.(member.elementId);
+                }}
+                onPointerLeave={(e) => {
+                  if (e.pointerType && e.pointerType !== 'mouse') return;
+                  onHoverMember?.(null);
+                }}
+              >
                 {summarizeMember(member)}
                 <button
                   type="button"
                   className="board-pod-chip-remove"
                   onClick={() => onRemoveMember(member.elementId)}
+                  onFocus={() => onHoverMember?.(member.elementId)}
+                  onBlur={() => onHoverMember?.(null)}
                   aria-label={t('chat.comments.remove')}
                   title={t('chat.comments.remove')}
                 >

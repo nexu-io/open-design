@@ -27,6 +27,7 @@ import {
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
+import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
 import type { PluginUseAction } from './plugins-home/useActions';
 
@@ -478,9 +479,7 @@ function PluginShareConfirmModal({
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
               <h2 className="plugin-details-modal__title">{actionTitle}</h2>
-              <span className="plugin-details-modal__trust trust-bundled">
-                Action plugin
-              </span>
+              <TrustBadge trust="official" label="Action plugin" />
             </div>
             <div className="plugin-details-modal__meta">
               <span>{details.eyebrow}</span>
@@ -542,7 +541,9 @@ function PluginShareConfirmModal({
               </div>
               <div>
                 <dt>Trust</dt>
-                <dd>{sourceRecord.trust}</dd>
+                <dd>
+                  <TrustBadge trust={sourceRecord.trust} />
+                </dd>
               </div>
             </dl>
           </section>
@@ -740,9 +741,7 @@ function AvailablePluginsPanel({
                 <div className="plugins-view__available-main">
                   <div className="plugins-view__row-title">
                     <span>{title}</span>
-                    <span className={`plugins-view__trust trust-${plugin.marketplace.trust}`}>
-                      {plugin.marketplace.trust}
-                    </span>
+                    <TrustBadge trust={plugin.marketplace.trust} />
                   </div>
                   {plugin.entry.description ? <p>{plugin.entry.description}</p> : null}
                   <div className="plugins-view__meta">
@@ -795,8 +794,6 @@ function AvailablePluginDetailsModal({
 }) {
   const title = plugin.entry.title ?? plugin.entry.name;
   const sourceName = plugin.marketplace.manifest.name ?? plugin.marketplace.url;
-  const trustClass =
-    plugin.marketplace.trust === 'official' ? 'bundled' : plugin.marketplace.trust;
   const publisher = plugin.entry.publisher;
   const publisherLabel =
     publisher?.id ?? publisher?.github ?? publisher?.url ?? null;
@@ -824,9 +821,7 @@ function AvailablePluginDetailsModal({
               >
                 {title}
               </h2>
-              <span className={`plugin-details-modal__trust trust-${trustClass}`}>
-                {plugin.marketplace.trust}
-              </span>
+              <TrustBadge trust={plugin.marketplace.trust} />
             </div>
             <div className="plugin-details-modal__meta">
               <span>{plugin.entry.name}</span>
@@ -1055,7 +1050,7 @@ function SourcesPanel({
                   {marketplace.url}
                 </a>
                 <div className="plugins-view__meta">
-                  <span>{marketplace.trust}</span>
+                  <TrustBadge trust={marketplace.trust} />
                   <span>{marketplace.manifest.plugins?.length ?? 0} plugins</span>
                   {marketplace.version ? <span>catalog v{marketplace.version}</span> : null}
                 </div>
