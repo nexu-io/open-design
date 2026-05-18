@@ -135,6 +135,11 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       if (!server.url) {
         return res.status(400).json({ error: 'server has no URL configured' });
       }
+      if (server.authMode === 'none') {
+        return res
+          .status(400)
+          .json({ error: 'server is configured for no managed OAuth' });
+      }
       const redirectUri = mcpOAuthCallbackUrl(req);
       console.log(
         `[mcp-oauth] start serverId=${serverId} url=${server.url} redirect=${redirectUri}`,

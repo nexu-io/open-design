@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   defaultScenarioPluginIdForKind,
   type ConnectorDetail,
+  type ImportFolderResponse,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
 import { LOCALE_LABEL, LOCALES, useI18n, useT, type Locale } from '../i18n';
@@ -30,6 +31,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -49,13 +51,14 @@ import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
-import type { CreateInput } from './NewProjectPanel';
+import type { CreateInput, CreateTab } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from '../state/projects';
 import { TasksView } from './TasksView';
+import { Toast } from './Toast';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -218,6 +221,7 @@ interface Props {
   ) => Promise<PluginShareProjectOutcome>;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -268,6 +272,7 @@ export function EntryShell({
   onCreatePluginShareProject,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
@@ -289,6 +294,13 @@ export function EntryShell({
   const [languageExpanded, setLanguageExpanded] = useState(false);
   const [appearanceExpanded, setAppearanceExpanded] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectInitialTab, setNewProjectInitialTab] =
+    useState<CreateTab>('prototype');
+  const [folderImportError, setFolderImportError] = useState<{
+    message: string;
+    details?: string;
+  } | null>(null);
+  const [chipImporting, setChipImporting] = useState(false);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
@@ -330,6 +342,11 @@ export function EntryShell({
   function openIntegrationTab(tab: IntegrationTab) {
     setIntegrationTab(tab);
     changeView('integrations');
+  }
+
+  function openNewProject(tab: CreateTab = 'prototype') {
+    setNewProjectInitialTab(tab);
+    setNewProjectOpen(true);
   }
 
   const previewSystem = useMemo(
@@ -406,12 +423,32 @@ export function EntryShell({
   // project. Browser-only shells fall back to the existing modal
   // path so the user can paste a baseDir.
   async function handleChipFolderImport() {
+    if (chipImporting) return;
     // PR #974 trust boundary: the renderer cannot pick a folder directly
     // anymore — the bridge exposes `pickAndImport` instead (atomic
     // pick + HMAC-gated import). On the web (no electronAPI) or when
     // the bridge is older, fall back to opening the New Project modal
     // so the user can paste a baseDir manually.
-    setNewProjectOpen(true);
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.electronAPI?.pickAndImport === 'function' &&
+      onImportFolderResponse
+    ) {
+      setChipImporting(true);
+      try {
+        const result = await window.electronAPI.pickAndImport();
+        if (!result || ('canceled' in result && result.canceled === true)) return;
+        if (result.ok === true) {
+          await onImportFolderResponse(result.response);
+          return;
+        }
+        setFolderImportError(formatPickAndImportFailure(result));
+      } finally {
+        setChipImporting(false);
+      }
+      return;
+    }
+    openNewProject('prototype');
   }
 
   // Dismiss the avatar dropdown on outside-click / Escape so it
@@ -667,7 +704,7 @@ export function EntryShell({
         <EntryNavRail
           view={view}
           onViewChange={changeView}
-          onNewProject={() => setNewProjectOpen(true)}
+          onNewProject={() => openNewProject()}
         />
         <main className="entry-main entry-main--scroll">
           <div className="entry-main__topbar">
@@ -722,8 +759,7 @@ export function EntryShell({
                   // existing modal-based create flow still owns the
                   // template picker UI. Future tabs (e.g. live-artifact
                   // import) can reuse the same callback.
-                  void tab;
-                  setNewProjectOpen(true);
+                  openNewProject(tab);
                 }}
                 promptHandoff={homePromptHandoff}
                 skills={skills}
@@ -799,6 +835,7 @@ export function EntryShell({
       ) : null}
       <NewProjectModal
         open={newProjectOpen}
+        initialTab={newProjectInitialTab}
         skills={skills}
         designSystems={designSystems}
         defaultDesignSystemId={defaultDesignSystemId}
@@ -816,6 +853,14 @@ export function EntryShell({
         }}
         onClose={() => setNewProjectOpen(false)}
       />
+      {folderImportError ? (
+        <Toast
+          message={folderImportError.message}
+          details={folderImportError.details ?? null}
+          role="alert"
+          onDismiss={() => setFolderImportError(null)}
+        />
+      ) : null}
     </div>
   );
 }

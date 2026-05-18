@@ -200,12 +200,18 @@ type InspectStyleSnapshot = {
   lineHeight?: string;
 };
 
+type InspectClickedDescendant = {
+  label: string;
+  text: string;
+};
+
 type InspectTarget = {
   elementId: string;
   selector: string;
   label: string;
   text: string;
   style: InspectStyleSnapshot;
+  clickedDescendant?: InspectClickedDescendant;
 };
 
 const MAX_CACHED_SLIDE_STATES = 64;
@@ -2103,6 +2109,22 @@ function InspectPanel({
         </button>
       </header>
 
+      {target.clickedDescendant ? (
+        <div className="inspect-ancestor-notice" data-testid="inspect-ancestor-notice">
+          <div className="inspect-ancestor-notice-icon" aria-hidden>
+            i
+          </div>
+          <div className="inspect-ancestor-notice-text">
+            You clicked <strong>{target.clickedDescendant.label}</strong>
+            {target.clickedDescendant.text
+              ? ` ("${target.clickedDescendant.text.slice(0, 40)}${target.clickedDescendant.text.length > 40 ? '...' : ''}")`
+              : ''}
+            , but it has no <code>data-od-id</code> annotation. Editing{' '}
+            <strong>{target.label || target.elementId}</strong> instead, the nearest annotated ancestor.
+          </div>
+        </div>
+      ) : null}
+
       <section className="inspect-section">
         <div className="inspect-section-label">Colors</div>
         <div className="inspect-row">
@@ -2670,6 +2692,7 @@ function CommentPreviewOverlays({
   comments,
   liveTargets,
   hoveredTarget,
+  hoveredPodMemberId,
   activeTarget,
   boardTool,
   scale,
@@ -2679,6 +2702,7 @@ function CommentPreviewOverlays({
   comments: PreviewComment[];
   liveTargets: Map<string, PreviewCommentSnapshot>;
   hoveredTarget: PreviewCommentSnapshot | null;
+  hoveredPodMemberId: string | null;
   activeTarget: PreviewCommentSnapshot | null;
   boardTool: BoardTool;
   scale: number;
@@ -2729,6 +2753,7 @@ function CommentPreviewOverlays({
           snapshot={targetOverlay}
           scale={scale}
           selected={Boolean(activeTarget)}
+          hoveredMemberId={hoveredPodMemberId}
         />
       ) : null}
       {boardTool === 'pod' && strokePoints.length > 1 ? (
@@ -2742,14 +2767,16 @@ function CommentPreviewOverlays({
   );
 }
 
-function CommentTargetOverlay({
+export function CommentTargetOverlay({
   snapshot,
   scale,
   selected,
+  hoveredMemberId,
 }: {
   snapshot: PreviewCommentSnapshot;
   scale: number;
   selected: boolean;
+  hoveredMemberId?: string | null;
 }) {
   const displayMembers = podDisplayMembers(snapshot);
   if (displayMembers.length > 0) {
@@ -2774,10 +2801,11 @@ function CommentTargetOverlay({
             '--comment-overlay-ring': `rgba(22, 119, 255, ${overlayWeight.ringOpacity})`,
             '--comment-overlay-border': `rgba(22, 119, 255, ${overlayWeight.outlineOpacity})`,
           };
+          const isHoverFocused = hoveredMemberId === member.elementId;
           return (
             <div
               key={`${member.elementId}-${index}`}
-              className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}`}
+              className={`comment-target-overlay comment-target-overlay--member${selected ? ' selected' : ''}${isHoverFocused ? ' is-hover-focused' : ''}`}
               style={overlayStyle}
               data-testid="comment-target-overlay"
             >
@@ -2788,6 +2816,9 @@ function CommentTargetOverlay({
       </>
     );
   }
+  // Non-member fallback: single-element snapshots have no per-member chips,
+  // so the hover-focus channel never reaches this branch — no is-hover-focused
+  // class needed here.
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
   return (
     <div
@@ -3638,6 +3669,7 @@ function HtmlViewer({
   );
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  const [hoveredPodMemberId, setHoveredPodMemberId] = useState<string | null>(null);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
@@ -4705,16 +4737,32 @@ function HtmlViewer({
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as
-        | { type?: string; elementId?: string; selector?: string; label?: string; text?: string; style?: InspectStyleSnapshot }
+        | {
+            type?: string;
+            elementId?: string;
+            selector?: string;
+            label?: string;
+            text?: string;
+            style?: InspectStyleSnapshot;
+            clickedDescendant?: Partial<InspectClickedDescendant>;
+          }
         | null;
       if (!data || data.type !== 'od:comment-target') return;
       if (!data.elementId || !data.selector) return;
+      const clickedDescendant =
+        data.clickedDescendant && typeof data.clickedDescendant === 'object'
+          ? {
+              label: String(data.clickedDescendant.label || ''),
+              text: String(data.clickedDescendant.text || ''),
+            }
+          : null;
       setActiveInspectTarget({
         elementId: String(data.elementId),
         selector: String(data.selector),
         label: String(data.label || ''),
         text: String(data.text || ''),
         style: data.style && typeof data.style === 'object' ? data.style : {},
+        ...(clickedDescendant ? { clickedDescendant } : {}),
       });
       setInspectError(null);
       setInspectSavedAt(null);
@@ -5148,6 +5196,7 @@ function HtmlViewer({
   function clearBoardComposer() {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
+    setHoveredPodMemberId(null);
     setActivePreviewCommentId(null);
     setCommentDraft('');
     setQueuedBoardNotes([]);
@@ -5959,6 +6008,7 @@ function HtmlViewer({
                 comments={boardMode ? visibleSideComments : []}
                 liveTargets={liveCommentTargets}
                 hoveredTarget={hoveredCommentTarget}
+                hoveredPodMemberId={hoveredPodMemberId}
                 activeTarget={activeCommentTarget}
                 boardTool={boardTool}
                 scale={overlayPreviewScale}
@@ -6015,7 +6065,9 @@ function HtmlViewer({
                     if (shouldClose) clearBoardComposer();
                     return next;
                   });
+                  setHoveredPodMemberId((current) => (current === elementId ? null : current));
                 }}
+                onHoverMember={setHoveredPodMemberId}
                 sending={sendingBoardBatch || streaming}
                 t={t}
               />

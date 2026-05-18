@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
+import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
@@ -372,6 +373,7 @@ export function ProjectView({
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
@@ -812,9 +814,14 @@ export function ProjectView({
 
   const refreshProjectFiles = useCallback(async (): Promise<ProjectFile[]> => {
     const next = await fetchProjectFiles(project.id);
+    projectFilesRef.current = next;
     setProjectFiles(next);
     return next;
   }, [project.id]);
+
+  useEffect(() => {
+    projectFilesRef.current = projectFiles;
+  }, [projectFiles]);
 
   const refreshLiveArtifacts = useCallback(async (): Promise<LiveArtifactSummary[]> => {
     const next = await fetchLiveArtifacts(project.id);
@@ -1820,7 +1827,7 @@ export function ProjectView({
           // up as a real tab (not just the synthetic "live" stream).
           setArtifact((prev) => {
             if (!prev || !prev.html) return prev;
-            void persistArtifact(prev);
+            void refreshProjectFiles().then((nextFiles) => persistArtifact(prev, nextFiles));
             return prev;
           });
           // Refetch the file list directly (rather than just bumping the
@@ -2044,13 +2051,37 @@ export function ProjectView({
   );
 
   const persistArtifact = useCallback(
-    async (art: Artifact) => {
+    async (art: Artifact, projectFilesSnapshot?: ProjectFile[]) => {
       const baseName = (art.identifier || art.title || 'artifact')
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 60) || 'artifact';
       const ext = artifactExtensionFor(art);
+      // Pick a name that doesn't collide with an existing project file.
+      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
+      // so prior artifacts aren't silently overwritten.
+      const currentProjectFiles = projectFilesSnapshot ?? projectFilesRef.current;
+      const existing = new Set(currentProjectFiles.map((f) => f.name));
+      let fileName = `${baseName}${ext}`;
+      let n = 2;
+      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
+        fileName = `${baseName}-${n}${ext}`;
+        n += 1;
+      }
+      if (ext === '.html') {
+        const pointerTarget = resolveHtmlPointerArtifactTarget({
+          content: art.html,
+          candidateFileName: fileName,
+          projectFiles: currentProjectFiles,
+        });
+        if (pointerTarget) {
+          if (savedArtifactRef.current === pointerTarget) return;
+          savedArtifactRef.current = pointerTarget;
+          requestOpenFile(pointerTarget);
+          return;
+        }
+      }
       // Pre-write structural gate for HTML artifacts (#50, #1143). Reject
       // bodies that obviously aren't a complete document — usually a one-line
       // prose summary the model emitted inside `<artifact type="text/html">`
@@ -2062,16 +2093,6 @@ export function ProjectView({
           setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
           return;
         }
-      }
-      // Pick a name that doesn't collide with an existing project file.
-      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
-      // so prior artifacts aren't silently overwritten.
-      const existing = new Set(projectFiles.map((f) => f.name));
-      let fileName = `${baseName}${ext}`;
-      let n = 2;
-      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
-        fileName = `${baseName}-${n}${ext}`;
-        n += 1;
       }
       if (savedArtifactRef.current === fileName) return;
       savedArtifactRef.current = fileName;
@@ -2133,7 +2154,7 @@ export function ProjectView({
         );
       }
     },
-    [project.id, projectFiles, requestOpenFile],
+    [project.id, project.designSystemId, project.skillId, requestOpenFile],
   );
 
   const handleContinueRemainingTasks = useCallback(
@@ -2615,11 +2636,16 @@ export function ProjectView({
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
   const handleFinalize = useCallback(() => {
+    const protocol = config.apiProtocol ?? 'anthropic';
     void finalize.trigger({
+      protocol,
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       model: config.model,
       maxTokens: effectiveMaxTokens(config),
+      ...(protocol === 'azure' && config.apiVersion?.trim()
+        ? { apiVersion: config.apiVersion.trim() }
+        : {}),
     }).then((result) => {
       if (result) void designMdState.refresh();
     });

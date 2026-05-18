@@ -25,7 +25,6 @@ import {
 } from './EntryView';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
-import { Toast } from './Toast';
 
 const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
 const CONNECTOR_AUTH_PENDING_STORAGE_KEY = 'od-connectors-authorization-pending';
@@ -317,6 +316,21 @@ export function clearConnectorAuthorizationErrorsForConnected(
   return mutated ? next : errors;
 }
 
+export function clearConnectorAuthorizationCancelFailuresForConnected(
+  failures: Record<string, boolean>,
+  statuses: ConnectorStatusResponse['statuses'],
+): Record<string, boolean> {
+  let mutated = false;
+  const next = { ...failures };
+  for (const [connectorId, status] of Object.entries(statuses)) {
+    if (status.status === 'connected' && next[connectorId] !== undefined) {
+      delete next[connectorId];
+      mutated = true;
+    }
+  }
+  return mutated ? next : failures;
+}
+
 export function clearConnectorAuthorizationPending(
   pending: ConnectorAuthorizationPendingState,
   connectorId: string,
@@ -557,7 +571,6 @@ export function ConnectorsBrowser({
   const [connectorAuthorizationPending, setConnectorAuthorizationPending] = useState<ConnectorAuthorizationPendingState>(() => loadConnectorAuthorizationPending());
   const [connectorAuthorizationCancelFailed, setConnectorAuthorizationCancelFailed] = useState<Record<string, boolean>>({});
   const [connectorAuthorizationError, setConnectorAuthorizationError] = useState<Record<string, string>>({});
-  const [connectErrorToast, setConnectErrorToast] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const [toolPreviewLoadingIds, setToolPreviewLoadingIds] = useState<Record<string, boolean>>({});
   const [toolPreviewFetchedIds, setToolPreviewFetchedIds] = useState<Record<string, boolean>>({});
@@ -573,6 +586,7 @@ export function ConnectorsBrowser({
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
     setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
     setConnectorAuthorizationError((curr) => clearConnectorAuthorizationErrorsForConnected(curr, statuses));
+    setConnectorAuthorizationCancelFailed((curr) => clearConnectorAuthorizationCancelFailuresForConnected(curr, statuses));
     return statuses;
   }, []);
 
@@ -736,6 +750,24 @@ export function ConnectorsBrowser({
 
   const hasQuery = filter.trim().length > 0;
   const hasNoResults = hasQuery && filteredConnectors.length === 0;
+  const connectorPanelAlerts = useMemo(() => {
+    const alerts: Array<{ connectorId: string; connectorName: string; message: string }> = [];
+    for (const connector of connectors) {
+      if (connector.id === detailConnectorId) continue;
+      const message = connectorAuthorizationError[connector.id];
+      if (message) {
+        alerts.push({ connectorId: connector.id, connectorName: connector.name, message });
+      }
+      if (connectorAuthorizationCancelFailed[connector.id]) {
+        alerts.push({
+          connectorId: connector.id,
+          connectorName: connector.name,
+          message: AUTHORIZATION_CANCEL_FAILED_MESSAGE,
+        });
+      }
+    }
+    return alerts;
+  }, [connectorAuthorizationCancelFailed, connectorAuthorizationError, connectors, detailConnectorId]);
 
   function updateConnector(next: ConnectorDetail | null) {
     if (!next) return;
@@ -764,7 +796,6 @@ export function ConnectorsBrowser({
         const result = await connectConnector(connectorId);
         updateConnector(result.connector);
         if (result.connector && !result.error) {
-          setConnectErrorToast(null);
           setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
             connector: result.connector!,
             ...(result.auth === undefined ? {} : { auth: result.auth }),
@@ -772,7 +803,7 @@ export function ConnectorsBrowser({
         } else {
           setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
           if (result.error) {
-            setConnectErrorToast(result.error);
+            setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
           }
         }
       } else {
@@ -865,20 +896,17 @@ export function ConnectorsBrowser({
       setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
       return;
     }
+    try {
+      const statuses = await reloadConnectorStatuses();
+      if (statuses[connectorId]?.status === 'connected') return;
+    } catch {
+      // Keep the local failure visible when the status refresh itself fails.
+    }
     setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
   }
 
   return (
     <div className="tab-panel connectors-panel connectors-panel-embedded">
-      {connectErrorToast ? (
-        <div className="connectors-toast-anchor">
-          <Toast
-            message={connectErrorToast}
-            role="alert"
-            onDismiss={() => setConnectErrorToast(null)}
-          />
-        </div>
-      ) : null}
       <div className="tab-panel-toolbar">
         <div className="toolbar-left connectors-heading">
           <div>
@@ -947,6 +975,32 @@ export function ConnectorsBrowser({
           </div>
         </div>
       </div>
+      {connectorPanelAlerts.length > 0 ? (
+        <div className="connector-panel-alerts">
+          {connectorPanelAlerts.map((alert) => (
+            <div
+              key={`${alert.connectorId}:${alert.message}`}
+              className="connector-panel-alert"
+              title={`${alert.connectorName}: ${alert.message}`}
+            >
+              <p className="connector-panel-alert-copy" role="status">
+                <strong title={alert.connectorName}>{alert.connectorName}</strong>
+                <span className="sr-only">: </span>
+                <span title={alert.message}>{alert.message}</span>
+              </p>
+              <button
+                type="button"
+                className="icon-only connector-panel-alert-action"
+                aria-label={t('connectors.openDetailsAria', { name: alert.connectorName })}
+                title={t('connectors.openDetailsAria', { name: alert.connectorName })}
+                onClick={() => openConnectorDetails(alert.connectorId)}
+              >
+                <Icon name="external-link" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {loading ? (
         <CenteredLoader label={t('common.loading')} />
       ) : (
@@ -992,8 +1046,6 @@ export function ConnectorsBrowser({
                       : null
                   }
                   authorizationPending={connectorAuthorizationPending[connector.id]}
-                  authorizationCancelFailed={connectorAuthorizationCancelFailed[connector.id] === true}
-                  authorizationError={connectorAuthorizationError[connector.id] ?? null}
                   toolsLoading={toolsLoading}
                   toolsLoaded={toolsLoaded}
                   logoTheme={logoTheme}
@@ -1059,8 +1111,6 @@ function ConnectorCard({
   disabled = false,
   pendingAction,
   authorizationPending,
-  authorizationCancelFailed,
-  authorizationError,
   toolsLoading: _toolsLoading,
   toolsLoaded,
   logoTheme,
@@ -1073,8 +1123,6 @@ function ConnectorCard({
   disabled?: boolean;
   pendingAction: 'connect' | 'disconnect' | null;
   authorizationPending?: ConnectorAuthorizationPending;
-  authorizationCancelFailed: boolean;
-  authorizationError: string | null;
   toolsLoading: boolean;
   toolsLoaded: boolean;
   logoTheme: 'light' | 'dark';
@@ -1237,11 +1285,6 @@ function ConnectorCard({
           ) : null}
         </div>
       </div>
-      {authorizationCancelFailed ? (
-        <p className="connector-authorization-hint connector-authorization-error" role="alert">
-          {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
-        </p>
-      ) : null}
     </article>
   );
 }
@@ -1401,6 +1444,11 @@ function ConnectorDetailDrawer({
                 </p>
               ) : null}
             </section>
+          ) : null}
+          {authorizationError ? (
+            <p className="connector-authorization-hint connector-authorization-error" role="alert">
+              {authorizationError}
+            </p>
           ) : null}
           {authorizationCancelFailed ? (
             <p className="connector-authorization-hint connector-authorization-error" role="alert">
