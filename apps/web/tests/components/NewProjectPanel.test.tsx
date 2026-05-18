@@ -661,6 +661,46 @@ describe('NewProjectPanel folder import feedback', () => {
   });
 });
 
+describe('NewProjectPanel Figma import tab', () => {
+  it('uploads .fig through the import callback from the Import tab', async () => {
+    const onImportFigma = vi.fn().mockResolvedValue(undefined);
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        onImportFigma={onImportFigma}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Figma DS Import' },
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Design System' }));
+
+    const fileInput = document.querySelector('input[type="file"][accept=".fig"]') as HTMLInputElement;
+    const file = new File(['fig payload'], 'design-system.fig', { type: 'application/octet-stream' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import from Figma' }));
+
+    expect(onImportFigma).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file,
+        name: 'Figma DS Import',
+        designSystemIntent: 'create',
+        designSystemBrief: expect.objectContaining({
+          questionnaireEnabled: false,
+          advancedGeneration: true,
+        }),
+      }),
+    );
+  });
+});
+
 describe('NewProjectPanel template deletion', () => {
   beforeEach(() => {
     globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;

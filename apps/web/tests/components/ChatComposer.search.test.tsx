@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
+import { importProjectFigmaFile } from '../../src/providers/registry';
 import { uploadProjectFiles } from '../../src/providers/registry';
 import type { ChatAttachment, ChatCommentAttachment } from '../../src/types';
 
@@ -17,17 +18,163 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     uploadProjectFiles: vi.fn(),
+    importProjectFigmaFile: vi.fn(),
   };
 });
 
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
+const mockedImportProjectFigmaFile = vi.mocked(importProjectFigmaFile);
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mockedImportProjectFigmaFile.mockResolvedValue({
+    ok: true,
+    manifestPath: 'figma/demo/manifest.json',
+    generatedFiles: ['figma/demo/manifest.json', 'figma/demo/tokens.json', 'figma/demo/raw.json'],
+    detection: { embeddedFileId: null, contentSha256: 'abc', fileName: 'design.fig', byteSize: 3 },
+    importId: 'demo',
+    importVersion: 1,
+  });
 });
 
 describe('ChatComposer /search command', () => {
+  it('enables the Upload .fig file import action', async () => {
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Import' }));
+
+    const importFig = screen.getByRole('menuitem', { name: 'Upload .fig file' });
+    expect(importFig).toBeTruthy();
+    expect((importFig as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('uploads and stages a .fig file via the import action using the existing upload path', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'design.fig', name: 'design.fig', kind: 'file', size: 42 }],
+      failed: [],
+    });
+    mockedImportProjectFigmaFile.mockResolvedValue({
+      ok: true,
+      manifestPath: 'figma/demo/manifest.json',
+      generatedFiles: ['figma/demo/manifest.json', 'figma/demo/tokens.json', 'figma/demo/raw.json'],
+      detection: { embeddedFileId: null, contentSha256: 'abc', fileName: 'design.fig', byteSize: 3 },
+      importId: 'demo',
+      importVersion: 1,
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-fig-file-input'), {
+      target: { files: [new File(['fig'], 'design.fig', { type: 'application/octet-stream' })] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith(
+      'project-1',
+      [expect.objectContaining({ name: 'design.fig' })],
+    );
+    await waitFor(() =>
+      expect(mockedImportProjectFigmaFile).toHaveBeenCalledWith('project-1', 'design.fig', undefined),
+    );
+    expect(screen.getByText('design.fig')).toBeTruthy();
+    expect(screen.getByText('manifest.json')).toBeTruthy();
+    expect(screen.getByText('tokens.json')).toBeTruthy();
+  });
+
+  it('shows existing upload failure messaging for .fig upload failures', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [],
+      failed: [{ name: 'broken.fig', error: 'upload failed (415)' }],
+      error: 'upload failed (415)',
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-fig-file-input'), {
+      target: { files: [new File(['fig'], 'broken.fig', { type: 'application/octet-stream' })] },
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Attachment upload failed for 1 file(s) (upload failed (415)).'),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('prompts for re-import decisions and supports create-version/update-generated', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'design.fig', name: 'design.fig', kind: 'file', size: 42 }],
+      failed: [],
+    });
+    mockedImportProjectFigmaFile
+      .mockResolvedValueOnce({
+        error: 'reimport decision required',
+        reimport: {
+          code: 'FIGMA_REIMPORT_DECISION_REQUIRED',
+          existingImportId: 'fig-abcd',
+          existingImportVersion: 3,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        manifestPath: 'figma/fig-abcd-v4/manifest.json',
+        generatedFiles: ['figma/fig-abcd-v4/manifest.json', 'figma/fig-abcd-v4/tokens.json'],
+        detection: { embeddedFileId: null, contentSha256: 'abc', fileName: 'design.fig', byteSize: 3 },
+        importId: 'fig-abcd-v4',
+        importVersion: 1,
+      });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-fig-file-input'), {
+      target: { files: [new File(['fig'], 'design.fig', { type: 'application/octet-stream' })] },
+    });
+
+    await waitFor(() => expect(screen.getByText('Re-import detected')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Create new version' }));
+    await waitFor(() =>
+      expect(mockedImportProjectFigmaFile).toHaveBeenLastCalledWith('project-1', 'design.fig', 'create_version'),
+    );
+  });
+
   it('sends staged file attachments even when the text draft is empty', async () => {
     const onSend = vi.fn();
     mockedUploadProjectFiles.mockResolvedValue({

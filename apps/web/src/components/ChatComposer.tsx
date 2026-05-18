@@ -13,7 +13,7 @@ import {
   trackStudioClickChatComposer,
   trackStudioViewChatPanel,
 } from '../analytics/events';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
+import { importProjectFigmaFile, projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
@@ -130,6 +130,8 @@ interface Props {
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
   focus: () => void;
+  /** Stage project files for the next message (paths must exist in projectFiles). */
+  stageProjectFiles: (paths: string[]) => void;
 }
 
 export interface ChatSendMeta {
@@ -223,6 +225,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [slashIndex, setSlashIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
+    const [figmaDecisionPrompt, setFigmaDecisionPrompt] = useState<{
+      sourcePath: string;
+      existingImportId: string;
+      existingImportVersion: number;
+    } | null>(null);
     // External MCP servers configured by the user. Fetched lazily on mount;
     // shown in the slash-command palette so `/mcp <id>` inserts a hint into
     // the prompt that nudges the model to use that server's tools.
@@ -243,6 +250,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [toolsOpen, setToolsOpen] = useState(false);
     const [toolsTab, setToolsTab] = useState<ToolsTab>('plugins');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const figFileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -612,8 +620,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         focus: () => {
           textareaRef.current?.focus();
         },
+        stageProjectFiles: (paths: string[]) => {
+          const known = new Set(projectFiles.map((f) => f.name));
+          const nextPaths = paths.filter((p) => known.has(p));
+          if (!nextPaths.length) return;
+          setStaged((current) => {
+            const seen = new Set(current.map((a) => a.path));
+            const added = nextPaths
+              .filter((p) => !seen.has(p))
+              .map((p) => ({ path: p, name: p.split('/').pop() ?? p, kind: 'file' as const }));
+            return added.length ? [...current, ...added] : current;
+          });
+          setDraft((current) => {
+            const tokens = nextPaths.map((p) => inlineMentionToken(p)).join(' ');
+            const trimmed = current.trim();
+            const missing = nextPaths.filter((p) => !trimmed.includes(inlineMentionToken(p)));
+            if (!missing.length) return current;
+            const insert = missing.map((p) => inlineMentionToken(p)).join(' ');
+            return trimmed ? `${trimmed} ${insert}` : insert;
+          });
+          requestAnimationFrame(() => textareaRef.current?.focus());
+        },
       }),
-      []
+      [projectFiles],
     );
 
     function reset() {
@@ -674,6 +703,69 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               : `Attachment upload failed for ${failedCount} file(s)${detail}.`,
           );
           console.warn('Some attachments failed to upload', result.failed);
+        }
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    async function importFigmaFromAttachment(attachment: ChatAttachment, decision?: 'create_version' | 'update_generated') {
+      if (!projectId) return;
+      const result = await importProjectFigmaFile(projectId, attachment.path, decision);
+      if (!('error' in result)) {
+        const generated = result.generatedFiles.map((filePath) => ({
+          path: filePath,
+          name: filePath.split('/').pop() || filePath,
+          kind: looksLikeImage(filePath) ? ('image' as const) : ('file' as const),
+        }));
+        if (generated.length > 0) {
+          setStaged((prev) => {
+            const known = new Set(prev.map((item) => item.path));
+            const next = [...prev];
+            for (const item of generated) {
+              if (!known.has(item.path)) {
+                known.add(item.path);
+                next.push(item);
+              }
+            }
+            return next;
+          });
+        }
+        setFigmaDecisionPrompt(null);
+        return;
+      }
+      if (result.reimport) {
+        setFigmaDecisionPrompt({
+          sourcePath: attachment.path,
+          existingImportId: result.reimport.existingImportId,
+          existingImportVersion: result.reimport.existingImportVersion,
+        });
+        return;
+      }
+      setUploadError(result.error);
+    }
+
+    async function uploadFigmaFiles(files: File[]) {
+      if (files.length === 0) return;
+      const id = await ensureProject();
+      if (!id) return;
+      setUploading(true);
+      setUploadError(null);
+      try {
+        const result = await uploadProjectFiles(id, files);
+        if (result.uploaded.length > 0) {
+          setStaged((s) => [...s, ...result.uploaded]);
+          await importFigmaFromAttachment(result.uploaded[0]!);
+        }
+        if (result.failed.length > 0) {
+          const failedCount = result.failed.length;
+          const uploadedCount = result.uploaded.length;
+          const detail = result.error ? ` (${result.error})` : '';
+          setUploadError(
+            uploadedCount > 0
+              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.`
+              : `Attachment upload failed for ${failedCount} file(s)${detail}.`,
+          );
         }
       } finally {
         setUploading(false);
@@ -1248,6 +1340,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 e.target.value = '';
               }}
             />
+            <input
+              ref={figFileInputRef}
+              data-testid="chat-fig-file-input"
+              type="file"
+              accept=".fig"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                void uploadFigmaFiles(files);
+                e.target.value = '';
+              }}
+            />
             <div className="composer-tools-wrap">
               <button
                 ref={toolsTriggerRef}
@@ -1372,6 +1476,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     {toolsTab === 'import' ? (
                       <ToolsImportPanel
                         t={t}
+                        onUploadFig={() => {
+                          setToolsOpen(false);
+                          figFileInputRef.current?.click();
+                        }}
                         onLinkFolder={async () => {
                           setToolsOpen(false);
                           await handleLinkFolder();
@@ -1479,6 +1587,49 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         </div>
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
         <span className="composer-hint">{t('chat.composerHint')}</span>
+        {figmaDecisionPrompt ? (
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal modal-confirm" role="alertdialog" aria-modal="true">
+              <h2>Re-import detected</h2>
+              <p className="modal-confirm-message">
+                This .fig file matches an existing import ({figmaDecisionPrompt.existingImportId} v{figmaDecisionPrompt.existingImportVersion}).
+                Choose whether to create a new versioned folder or update generated artifacts in the existing import.
+              </p>
+              <div className="row">
+                <button type="button" onClick={() => setFigmaDecisionPrompt(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = figmaDecisionPrompt;
+                    if (!current) return;
+                    void importFigmaFromAttachment(
+                      { path: current.sourcePath, name: current.sourcePath.split('/').pop() || current.sourcePath, kind: 'file' },
+                      'create_version',
+                    );
+                  }}
+                >
+                  Create new version
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    const current = figmaDecisionPrompt;
+                    if (!current) return;
+                    void importFigmaFromAttachment(
+                      { path: current.sourcePath, name: current.sourcePath.split('/').pop() || current.sourcePath, kind: 'file' },
+                      'update_generated',
+                    );
+                  }}
+                >
+                  Update generated artifacts
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
@@ -2117,14 +2268,22 @@ function pluginSourceLabel(plugin: InstalledPluginRecord): string {
 
 function ToolsImportPanel({
   t,
+  onUploadFig,
   onLinkFolder,
 }: {
   t: TranslateFn;
+  onUploadFig: () => void;
   onLinkFolder: () => Promise<void> | void;
 }) {
   return (
     <div className="composer-tools-list">
-      <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
+      <ImportItem
+        icon="upload"
+        label={t('chat.importFig')}
+        t={t}
+        enabled
+        onClick={onUploadFig}
+      />
       <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
       <ImportItem
         icon="folder"

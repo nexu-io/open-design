@@ -244,6 +244,17 @@ function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
+function routeSignature(route: Route): string {
+  if (route.kind === 'project') {
+    return `project:${route.projectId}:${route.conversationId ?? ''}:${route.fileName ?? ''}`;
+  }
+  if (route.kind === 'marketplace-detail') {
+    return `marketplace-detail:${route.pluginId}`;
+  }
+  if (route.kind === 'marketplace') return 'marketplace';
+  return `home:${route.view}`;
+}
+
 export function WorkspaceTabsBar({ route, projects }: Props) {
   const t = useT();
   const [state, setState] = useState<WorkspaceTabsState>(() => initialTabsState(route));
@@ -286,7 +297,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       .slice(0, MAX_SEARCH_RESULTS);
   }, [displayTabs, query]);
 
+  const routeSignatureRef = useRef(routeSignature(route));
   useEffect(() => {
+    const signature = routeSignature(route);
+    if (signature === routeSignatureRef.current) return;
+    routeSignatureRef.current = signature;
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
 

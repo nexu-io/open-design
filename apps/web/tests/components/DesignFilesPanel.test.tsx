@@ -123,6 +123,90 @@ describe('DesignFilesPanel grouping', () => {
     expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
   });
 
+  it('shows figma import next steps for the latest figma import folder', () => {
+    const onOpenFile = vi.fn();
+    render(
+      <DesignFilesPanel
+        projectId="project-1"
+        files={[
+          file({ name: 'figma/fig-older/manifest.json', mtime: Date.now() - 10_000, kind: 'code' }),
+          file({ name: 'figma/fig-older/tokens.dtcg.json', mtime: Date.now() - 10_000, kind: 'code' }),
+          file({ name: 'figma/fig-new/manifest.json', mtime: Date.now(), kind: 'code' }),
+          file({ name: 'figma/fig-new/tokens.dtcg.json', mtime: Date.now(), kind: 'code' }),
+          file({ name: 'figma/fig-new/tailwind.preset.ts', mtime: Date.now(), kind: 'code' }),
+          file({ name: 'figma/fig-new/tailwind-map.json', mtime: Date.now(), kind: 'code' }),
+          file({ name: 'figma/fig-new/unmatched.json', mtime: Date.now(), kind: 'code' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        onOpenFile={onOpenFile}
+        onOpenLiveArtifact={vi.fn()}
+        onRenameFile={vi.fn()}
+        onDeleteFile={vi.fn()}
+        onDeleteFiles={vi.fn()}
+        onUpload={vi.fn()}
+        onUploadFiles={vi.fn()}
+        onPaste={vi.fn()}
+        onNewSketch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('figma-next-steps')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open manifest' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review tokens' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Tailwind' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View token map' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check unmatched' }));
+    expect(onOpenFile).toHaveBeenNthCalledWith(1, 'figma/fig-new/manifest.json');
+    expect(onOpenFile).toHaveBeenNthCalledWith(2, 'figma/fig-new/tokens.dtcg.json');
+    expect(onOpenFile).toHaveBeenNthCalledWith(3, 'figma/fig-new/tailwind.preset.ts');
+    expect(onOpenFile).toHaveBeenNthCalledWith(4, 'figma/fig-new/tailwind-map.json');
+    expect(onOpenFile).toHaveBeenNthCalledWith(5, 'figma/fig-new/unmatched.json');
+  });
+
+  it('creates a figma overrides draft from token preview', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ file: { name: 'figma/fig-new/overrides.tokens.json' } }),
+    });
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    try {
+      render(
+        <DesignFilesPanel
+          projectId="project-1"
+          files={[
+            file({ name: 'figma/fig-new/tokens.dtcg.json', kind: 'code' }),
+          ]}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /figma\/fig-new\/tokens\.dtcg\.json/i }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Create overrides draft' }));
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          '/api/projects/project-1/files',
+          expect.objectContaining({ method: 'POST' }),
+        );
+      });
+      expect(await screen.findByText(/Created figma\/fig-new\/overrides\.tokens\.json/i)).toBeTruthy();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it('groups files by kind when kind grouping is selected', () => {
     renderPanel([
       file({ name: 'page.html', kind: 'html', mime: 'text/html' }),

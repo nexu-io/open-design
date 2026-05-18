@@ -31,6 +31,7 @@ interface Props {
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<void> | void;
+  onAddToChat?: (paths: string[]) => void;
 }
 
 type DesignFilesGroupMode = 'kind' | 'modified';
@@ -76,6 +77,7 @@ export function DesignFilesPanel({
   uploadError = null,
   onClearUploadError,
   onPluginFolderAgentAction,
+  onAddToChat,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
@@ -83,7 +85,7 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
-  const MENU_ESTIMATED_HEIGHT = 145;
+  const MENU_ESTIMATED_HEIGHT = onAddToChat ? 180 : 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1213,6 +1215,20 @@ export function DesignFilesPanel({
           >
             {t('common.rename')}
           </button>
+          {onAddToChat ? (
+            <button
+              type="button"
+              data-testid={`design-file-add-to-chat-${menuPos.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = menuPos.name;
+                setMenuPos(null);
+                onAddToChat([name]);
+              }}
+            >
+              {t('designFiles.addToChat')}
+            </button>
+          ) : null}
           <a
             href={projectFileUrl(projectId, menuPos.name)}
             download={menuPos.name}

@@ -656,6 +656,7 @@ export interface Dict {
   'newproj.tabTemplate': string;
   'newproj.tabMedia': string;
   'newproj.tabOther': string;
+  'newproj.tabDesignSystem': string;
   'newproj.titlePrototype': string;
   'newproj.titleLiveArtifact': string;
   'newproj.titleDeck': string;
@@ -665,6 +666,7 @@ export interface Dict {
   'newproj.titleAudio': string;
   'newproj.titleMedia': string;
   'newproj.titleOther': string;
+  'newproj.titleDesignSystem': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;
   'newproj.fidelityWireframe': string;
@@ -1083,6 +1085,7 @@ export interface Dict {
   'designFiles.crumbs': string;
   'designFiles.rowMenu': string;
   'designFiles.openInTab': string;
+  'designFiles.addToChat': string;
   'designFiles.download': string;
   'designFiles.downloadSelected': string;
   'designFiles.deleteSelected': string;

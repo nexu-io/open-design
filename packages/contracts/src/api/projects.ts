@@ -116,6 +116,14 @@ export interface ProjectMetadata {
   // Batch/API-created projects can opt out of the initial discovery form so
   // the first agent turn builds immediately from the submitted brief.
   skipDiscoveryBrief?: boolean;
+  /** Design-system import lane (Figma .fig, folder, DESIGN.md). */
+  creationFlow?: 'design_system_from_sources';
+  /** Optional fields from the New Project → Import tab; consumed by the agent prompt. */
+  designSystemBrief?: {
+    questionnaireEnabled?: boolean;
+    advancedGeneration?: boolean;
+    sourceKind?: 'figma-local' | 'design-md' | 'figma-local+design-md' | string;
+  };
   // Plugins selected through @ mentions on Home. These are additive
   // context references; the explicit "Use plugin" snapshot, when present,
   // remains the primary executable plugin for the run.

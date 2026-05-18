@@ -62,6 +62,10 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onAttachFilesToChat?: (paths: string[]) => void;
+  projectDisplayName?: string;
+  onApplyFigmaImport?: (folder: string) => Promise<void> | void;
+  suppressFigmaNextSteps?: boolean;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -102,6 +106,10 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onAttachFilesToChat,
+  projectDisplayName,
+  onApplyFigmaImport: _onApplyFigmaImport,
+  suppressFigmaNextSteps: _suppressFigmaNextSteps,
   onPluginFolderAgentAction,
   focusMode = false,
   onFocusModeChange,
@@ -767,6 +775,7 @@ export function FileWorkspace({
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
+            onAddToChat={onAttachFilesToChat}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -796,6 +805,7 @@ export function FileWorkspace({
         ) : activeFile ? (
           <FileViewer
             projectId={projectId}
+            projectDisplayName={projectDisplayName}
             projectKind={projectKind}
             file={activeFile}
             filesRefreshKey={filesRefreshKey}
@@ -806,6 +816,7 @@ export function FileWorkspace({
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            onAttachFilesToChat={onAttachFilesToChat}
             onFileSaved={onRefreshFiles}
           />
         ) : (

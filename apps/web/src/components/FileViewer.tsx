@@ -43,6 +43,14 @@ import {
   type WebUpdateDeployConfigRequest,
   writeProjectTextFile,
 } from '../providers/registry';
+import {
+  isDesignSystemShowcaseFile,
+  isDesignMdFile,
+  materializeInspectOverridesToShowcaseHtml,
+  projectTitleFromShowcaseHtml,
+  syncDesignMdFromShowcaseHtml,
+} from '../lib/design-system-inspect-sync';
+import { buildDefaultDesignMd } from '../lib/design-system-showcase-stub';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   exportAsHtml,
@@ -588,6 +596,7 @@ function setSlideStateCached(key: string, state: SlideState) {
 
 interface Props {
   projectId: string;
+  projectDisplayName?: string;
   projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
@@ -599,11 +608,13 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onAttachFilesToChat?: (paths: string[]) => void;
   onFileSaved?: () => Promise<void> | void;
 }
 
 export function FileViewer({
   projectId,
+  projectDisplayName,
   projectKind,
   file,
   liveHtml,
@@ -615,6 +626,7 @@ export function FileViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onAttachFilesToChat,
   onFileSaved,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
@@ -651,6 +663,7 @@ export function FileViewer({
     return (
       <HtmlViewer
         projectId={projectId}
+        projectDisplayName={projectDisplayName}
         projectKind={projectKind}
         file={file}
         liveHtml={liveHtml}
@@ -662,6 +675,7 @@ export function FileViewer({
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onAttachFilesToChat={onAttachFilesToChat}
         onFileSaved={onFileSaved}
       />
     );
@@ -2035,18 +2049,30 @@ function InspectPanel({
   onApply,
   onResetElement,
   onSaveToSource,
+  onSyncDesignMd,
+  onAttachToChat,
   onClose,
   saving,
   savedAt,
+  syncingDesignMd,
+  designMdSyncedAt,
+  designMdSyncError,
+  showDesignMdActions,
   error,
 }: {
   target: InspectTarget;
   onApply: (prop: string, value: string) => void;
   onResetElement: (elementId: string) => void;
   onSaveToSource: () => void;
+  onSyncDesignMd?: () => void;
+  onAttachToChat?: () => void;
   onClose: () => void;
   saving: boolean;
   savedAt: number | null;
+  syncingDesignMd?: boolean;
+  designMdSyncedAt?: number | null;
+  designMdSyncError?: string | null;
+  showDesignMdActions?: boolean;
   error: string | null;
 }) {
   // Local "draft" mirror of the most recent value the user picked, so
@@ -2096,6 +2122,7 @@ function InspectPanel({
   const radiusNum = pxToNumber(radius);
 
   const justSaved = savedAt && Date.now() - savedAt < 4000;
+  const designMdJustSynced = designMdSyncedAt && Date.now() - designMdSyncedAt < 4000;
 
   return (
     <aside className="inspect-panel" data-testid="inspect-panel">
@@ -2235,28 +2262,54 @@ function InspectPanel({
         </div>
       </section>
 
-      <footer className="inspect-panel-footer">
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            setDraft({});
-            onResetElement(target.elementId);
-          }}
-        >
-          Reset element
-        </button>
-        <button
-          type="button"
-          className="primary"
-          data-testid="inspect-save"
-          disabled={saving}
-          onClick={onSaveToSource}
-        >
-          {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save to source'}
-        </button>
+      <footer className="inspect-panel-footer inspect-panel-footer-stack">
+        <div className="inspect-panel-footer-row">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              setDraft({});
+              onResetElement(target.elementId);
+            }}
+          >
+            Reset element
+          </button>
+          {onAttachToChat ? (
+            <button
+              type="button"
+              className="ghost"
+              data-testid="inspect-add-to-chat"
+              onClick={onAttachToChat}
+            >
+              Add to chat
+            </button>
+          ) : null}
+        </div>
+        <div className="inspect-panel-footer-row">
+          <button
+            type="button"
+            className="primary"
+            data-testid="inspect-save"
+            disabled={saving || syncingDesignMd}
+            onClick={onSaveToSource}
+          >
+            {saving ? 'Saving…' : justSaved ? 'Saved ✓' : showDesignMdActions ? 'Save showcase' : 'Save to source'}
+          </button>
+          {showDesignMdActions && onSyncDesignMd ? (
+            <button
+              type="button"
+              className="ghost"
+              data-testid="inspect-sync-design-md"
+              disabled={saving || syncingDesignMd}
+              onClick={onSyncDesignMd}
+            >
+              {syncingDesignMd ? 'Updating…' : designMdJustSynced ? 'DESIGN.md ✓' : 'Update DESIGN.md'}
+            </button>
+          ) : null}
+        </div>
       </footer>
       {error ? <div className="inspect-panel-error">{error}</div> : null}
+      {designMdSyncError ? <div className="inspect-panel-error">{designMdSyncError}</div> : null}
     </aside>
   );
 }
@@ -3381,6 +3434,7 @@ function DocumentPreviewViewer({
 
 function HtmlViewer({
   projectId,
+  projectDisplayName,
   projectKind,
   file,
   liveHtml,
@@ -3392,9 +3446,11 @@ function HtmlViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onAttachFilesToChat,
   onFileSaved,
 }: {
   projectId: string;
+  projectDisplayName?: string;
   projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
@@ -3406,6 +3462,7 @@ function HtmlViewer({
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onAttachFilesToChat?: (paths: string[]) => void;
   onFileSaved?: () => Promise<void> | void;
 }) {
   const t = useT();
@@ -3694,6 +3751,9 @@ function HtmlViewer({
   const inspectHydratedSourceRef = useRef<string | null | undefined>(source);
   const [savingInspect, setSavingInspect] = useState(false);
   const [inspectSavedAt, setInspectSavedAt] = useState<number | null>(null);
+  const [syncingDesignMd, setSyncingDesignMd] = useState(false);
+  const [designMdSyncedAt, setDesignMdSyncedAt] = useState<number | null>(null);
+  const [designMdSyncError, setDesignMdSyncError] = useState<string | null>(null);
   const [inspectError, setInspectError] = useState<string | null>(null);
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
@@ -4831,31 +4891,69 @@ function HtmlViewer({
   // reply that flips allow-listed properties on elements the user never
   // touched. POSTing to /api/projects/:id/files upserts the file via
   // writeProjectFile (multipart-or-JSON; we use JSON).
+  const isShowcaseFile = isDesignSystemShowcaseFile(file.name);
+
+  async function writeProjectFileContent(name: string, content: string) {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    });
+    if (!resp.ok) {
+      const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
+      throw new Error(payload?.error || payload?.message || `Save failed (${resp.status})`);
+    }
+  }
+
+  async function syncDesignMdFromShowcase(showcaseHtml: string, options?: { createIfMissing?: boolean }) {
+    setSyncingDesignMd(true);
+    setDesignMdSyncError(null);
+    try {
+      let designMd = await fetchProjectFileText(projectId, 'DESIGN.md');
+      if (!designMd && options?.createIfMissing) {
+        const title = projectDisplayName?.trim()
+          || projectTitleFromShowcaseHtml(showcaseHtml);
+        designMd = buildDefaultDesignMd(title);
+      }
+      if (!designMd) {
+        throw new Error('No DESIGN.md in this project yet.');
+      }
+      const synced = syncDesignMdFromShowcaseHtml(designMd, showcaseHtml);
+      await writeProjectTextFile(projectId, 'DESIGN.md', synced);
+      setDesignMdSyncedAt(Date.now());
+      void onFileSaved?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'DESIGN.md update failed';
+      setDesignMdSyncError(msg);
+      console.error('[inspect] syncDesignMd failed:', err);
+      throw err;
+    } finally {
+      setSyncingDesignMd(false);
+    }
+  }
+
   async function saveInspectToSource() {
     if (!source) return;
     setSavingInspect(true);
     setInspectError(null);
+    setDesignMdSyncError(null);
     try {
-      const css = serializeInspectOverrides(inspectOverrides).trim();
-      const next = applyInspectOverridesToSource(source, css);
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: file.name, content: next }),
-      });
-      if (!resp.ok) {
-        const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
-        throw new Error(payload?.error || payload?.message || `Save failed (${resp.status})`);
-      }
+      const next = isShowcaseFile
+        ? materializeInspectOverridesToShowcaseHtml(source, inspectOverrides)
+        : applyInspectOverridesToSource(
+          source,
+          serializeInspectOverrides(inspectOverrides).trim(),
+        );
+      await writeProjectFileContent(file.name, next);
       setSource(next);
       setInspectSavedAt(Date.now());
       setReloadKey((k) => k + 1);
+      if (isShowcaseFile) {
+        await syncDesignMdFromShowcase(next, { createIfMissing: true });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed';
       setInspectError(msg);
-      // The error banner inside the inspect panel is easy to miss when the
-      // user is focused on the iframe preview — surface failures in the
-      // console as well so quota/network errors aren't silently lost.
       console.error('[inspect] saveToSource failed:', err);
     } finally {
       setSavingInspect(false);
@@ -6154,9 +6252,28 @@ function HtmlViewer({
                 onSaveToSource={() => {
                   void saveInspectToSource();
                 }}
+                onSyncDesignMd={isShowcaseFile ? () => {
+                  if (!source) return;
+                  void syncDesignMdFromShowcase(
+                    materializeInspectOverridesToShowcaseHtml(source, inspectOverrides),
+                    { createIfMissing: true },
+                  );
+                } : undefined}
+                onAttachToChat={onAttachFilesToChat ? () => {
+                  const paths = isShowcaseFile
+                    ? ['showcase.html', 'DESIGN.md']
+                    : isDesignMdFile(file.name)
+                      ? ['DESIGN.md', 'showcase.html']
+                      : [file.name];
+                  onAttachFilesToChat(paths.filter((p, i, arr) => arr.indexOf(p) === i));
+                } : undefined}
+                showDesignMdActions={isShowcaseFile}
                 onClose={() => setActiveInspectTarget(null)}
                 saving={savingInspect}
                 savedAt={inspectSavedAt}
+                syncingDesignMd={syncingDesignMd}
+                designMdSyncedAt={designMdSyncedAt}
+                designMdSyncError={designMdSyncError}
                 error={inspectError}
               />
             ) : null}

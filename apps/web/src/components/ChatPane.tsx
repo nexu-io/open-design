@@ -274,6 +274,8 @@ interface Props {
   // message" without forcing a separate side widget.
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   onCollapse?: () => void;
+  /** Bump `nonce` to stage project paths in the composer without sending. */
+  attachFilesRequest?: { paths: string[]; nonce: number } | null;
 }
 
 type Tab = 'chat' | 'comments';
@@ -322,6 +324,7 @@ export function ChatPane({
   activePluginSnapshot,
   skills = [],
   onCollapse,
+  attachFilesRequest = null,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -391,6 +394,11 @@ export function ChatPane({
       composerRef.current?.setDraft('');
     }
   }, [initialDraft]);
+
+  useEffect(() => {
+    if (!attachFilesRequest?.paths.length) return;
+    composerRef.current?.stageProjectFiles(attachFilesRequest.paths);
+  }, [attachFilesRequest?.nonce, attachFilesRequest?.paths, projectFiles]);
 
   useEffect(() => {
     const el = logRef.current;
