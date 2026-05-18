@@ -354,6 +354,7 @@ export const fr: Dict = {
   'newproj.tabTemplate': 'Depuis un modèle',
   'newproj.tabMedia': 'Média',
   'newproj.tabOther': 'Autre',
+  'newproj.tabDesignSystem': 'Système de design',
   'newproj.titlePrototype': 'Nouveau prototype',
   'newproj.titleDeck': 'Nouveau diaporama',
   'newproj.titleTemplate': 'Partir d\'un modèle',

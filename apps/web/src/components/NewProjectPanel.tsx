@@ -155,7 +155,7 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   template: 'newproj.tabTemplate',
   media: 'newproj.tabMedia',
   other: 'newproj.tabOther',
-  import: 'newproj.tabOther',
+  import: 'newproj.tabDesignSystem',
 };
 
 const MEDIA_SURFACE_LABEL_KEYS: Record<MediaSurface, keyof Dict> = {
@@ -683,7 +683,7 @@ export function NewProjectPanel({
               className={`newproj-tab ${tab === entry ? 'active' : ''}`}
               onClick={() => setTab(entry)}
             >
-              {entry === 'import' ? 'Design System' : t(TAB_LABEL_KEYS[entry])}
+              {t(TAB_LABEL_KEYS[entry])}
             </button>
           ))}
         </div>
@@ -2781,7 +2781,6 @@ function autoName(
   const stamp = new Date().toLocaleDateString();
   // For the Media tab the auto name reads "Image · {date}" / "Video · …" /
   // "Audio · …" so the project list still surfaces the actual surface.
-  if (tab === 'import') return `Figma import · ${stamp}`;
   const labelKey: keyof Dict =
     tab === 'media' ? MEDIA_SURFACE_LABEL_KEYS[mediaSurface] : TAB_LABEL_KEYS[tab];
   return `${t(labelKey)} · ${stamp}`;

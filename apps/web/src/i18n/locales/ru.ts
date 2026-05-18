@@ -354,6 +354,7 @@ export const ru: Dict = {
   'newproj.tabTemplate': 'Шаблон',
   'newproj.tabMedia': 'Медиа',
   'newproj.tabOther': 'Другое',
+  'newproj.tabDesignSystem': 'Дизайн-система',
   'newproj.titlePrototype': 'Новый прототип',
   'newproj.titleLiveArtifact': 'Новый live-артефакт',
   'newproj.titleDeck': 'Новая презентация',

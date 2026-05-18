@@ -400,6 +400,7 @@ export const zhTW: Dict = {
   'newproj.tabTemplate': '從範本',
   'newproj.tabMedia': '媒體',
   'newproj.tabOther': '其它',
+  'newproj.tabDesignSystem': '設計系統',
   'newproj.titlePrototype': '新建原型',
   'newproj.titleLiveArtifact': '新建即時成品',
   'newproj.titleDeck': '新建投影片',

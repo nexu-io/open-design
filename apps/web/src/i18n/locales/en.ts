@@ -407,6 +407,7 @@ export const en: Dict = {
   'newproj.tabTemplate': 'From template',
   'newproj.tabMedia': 'Media',
   'newproj.tabOther': 'Other',
+  'newproj.tabDesignSystem': 'Design System',
   'newproj.titlePrototype': 'New prototype',
   'newproj.titleLiveArtifact': 'New live artifact',
   'newproj.titleDeck': 'New slide deck',

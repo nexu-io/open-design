@@ -344,6 +344,7 @@ export const tr: Dict = {
   'newproj.tabTemplate': 'Şablondan',
   'newproj.tabMedia': 'Medya',
   'newproj.tabOther': 'Diğer',
+  'newproj.tabDesignSystem': 'Tasarım sistemi',
   'newproj.titlePrototype': 'Yeni prototip',
   'newproj.titleDeck': 'Yeni slayt gösterisi',
   'newproj.titleTemplate': 'Bir şablondan başla',

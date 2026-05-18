@@ -251,6 +251,7 @@ export const de: Dict = {
   'newproj.tabTemplate': 'Aus Template',
   'newproj.tabMedia': 'Medien',
   'newproj.tabOther': 'Andere',
+  'newproj.tabDesignSystem': 'Designsystem',
   'newproj.titlePrototype': 'Neuer Prototyp',
   'newproj.titleDeck': 'Neues Slide Deck',
   'newproj.titleTemplate': 'Mit Template starten',

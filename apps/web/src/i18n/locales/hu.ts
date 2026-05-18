@@ -354,6 +354,7 @@ export const hu: Dict = {
   'newproj.tabTemplate': 'Sablonból',
   'newproj.tabMedia': 'Média',
   'newproj.tabOther': 'Egyéb',
+  'newproj.tabDesignSystem': 'Design rendszer',
   'newproj.titlePrototype': 'Új prototípus',
   'newproj.titleDeck': 'Új diavetítés',
   'newproj.titleTemplate': 'Indulás sablonból',

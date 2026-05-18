@@ -407,6 +407,7 @@ export const zhCN: Dict = {
   'newproj.tabTemplate': '从模板',
   'newproj.tabMedia': '媒体',
   'newproj.tabOther': '其它',
+  'newproj.tabDesignSystem': '设计系统',
   'newproj.titlePrototype': '新建原型',
   'newproj.titleLiveArtifact': '新建实时制品',
   'newproj.titleDeck': '新建幻灯片',

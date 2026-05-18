@@ -354,6 +354,7 @@ export const ko: Dict = {
   'newproj.tabTemplate': '템플릿에서 시작',
   'newproj.tabMedia': '미디어',
   'newproj.tabOther': '기타',
+  'newproj.tabDesignSystem': '디자인 시스템',
   'newproj.titlePrototype': '새 프로토타입',
   'newproj.titleDeck': '새 슬라이드 덱',
   'newproj.titleTemplate': '템플릿에서 시작',

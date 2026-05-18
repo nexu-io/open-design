@@ -656,6 +656,7 @@ export interface Dict {
   'newproj.tabTemplate': string;
   'newproj.tabMedia': string;
   'newproj.tabOther': string;
+  'newproj.tabDesignSystem': string;
   'newproj.titlePrototype': string;
   'newproj.titleLiveArtifact': string;
   'newproj.titleDeck': string;

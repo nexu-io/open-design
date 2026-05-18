@@ -356,6 +356,7 @@ export const fa: Dict = {
   'newproj.tabTemplate': 'از قالب',
   'newproj.tabMedia': 'رسانه',
   'newproj.tabOther': 'سایر',
+  'newproj.tabDesignSystem': 'سیستم طراحی',
   'newproj.titlePrototype': 'نمونه اولیه جدید',
   'newproj.titleLiveArtifact': 'مصنوع زنده جدید',
   'newproj.titleDeck': 'ارائه اسلاید جدید',

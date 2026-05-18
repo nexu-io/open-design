@@ -354,6 +354,7 @@ export const pl: Dict = {
   'newproj.tabTemplate': 'Z szablonu',
   'newproj.tabMedia': 'Multimedia',
   'newproj.tabOther': 'Inne',
+  'newproj.tabDesignSystem': 'System projektowy',
   'newproj.titlePrototype': 'Nowy prototyp',
   'newproj.titleDeck': 'Nowa prezentacja',
   'newproj.titleTemplate': 'Zacznij od szablonu',
