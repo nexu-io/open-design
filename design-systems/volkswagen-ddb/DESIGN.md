@@ -9,7 +9,7 @@ Independent interpretive system inspired by historical Volkswagen × DDB adverti
 
 The Volkswagen DDB design language is one of the most studied visual systems in advertising history — and it is defined almost entirely by what it removes. Where competitors filled pages with chrome, tailfins, and aspirational fantasy, DDB's campaigns for Volkswagen placed a small, imperfect car against an ocean of white and let the copy do the work. "Think Small." "Lemon." "It's ugly, but it gets you there." The aesthetic is so spare it feels modern today, 60 years later.
 
-The typographic spine is Futura — Paul Renner's 1927 geometric sans-serif. It was an unlikely pairing: a German car, a German typeface, an American Jewish advertising agency. Yet the combination produced something indelible. Futura Light and Book carry the body copy in tight, dense columns that reward reading. Futura Bold or Demibold marks the headline — but never large, never shouting. The headline earns attention by being unexpectedly quiet.
+The typographic spine is Futura — Paul Renner's 1927 geometric sans-serif. It was an unlikely pairing: a German car, a German typeface, an American Jewish advertising agency. Yet the combination produced something indelible. Futura Light and Book carry the body copy in tight, dense columns that reward reading. Futura Demibold marks the headline — but never large, never shouting. The headline earns attention by being unexpectedly quiet.
 
 Photography is high-contrast black-and-white, shot with clinical precision. The Beetle — or Microbus, or Type 3 — sits small, centred on an empty field, lit to show its honest, utilitarian shape. No glamour lighting. No environmental storytelling. The object is the subject. Backgrounds are white or near-white; the occasional printed-page cream appears in document contexts. Ink-black type and pure-white negative space account for 95% of every composition.
 
@@ -17,7 +17,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 
 **Key Characteristics:**
 - Futura Light / Book for body — dense, readable, honest
-- Futura Bold / Demibold for headlines — present but never commanding
+- Futura Demibold for headlines — present but never commanding
 - Near-monochromatic: Ink Black, Off-White Paper, Mid Gray — no colour decoration
 - Product image floats small and centred against vast whitespace
 - Column-formatted body copy rewards reading — not skimming
@@ -62,10 +62,10 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 |------|------|------|--------|-------------|-------|
 | Campaign Headline | Futura | 28–36px | 500 (Demibold) | 1.20 | Never uppercase; sentence case |
 | Section Heading | Futura | 22px | 500 | 1.25 | Left-aligned |
-| Sub-heading | Futura | 16px | 600 (Bold) | 1.30 | Used sparingly |
+| Sub-heading | Futura | 16px | 500 (Demibold) | 1.30 | Used sparingly |
 | Body Copy | Futura | 14px | 300 (Light) | 1.65 | Dense columns, generous leading |
 | Caption / Metadata | Futura | 12px | 400 (Book) | 1.50 | Below images only |
-| Button | Futura | 14px | 500 | 1.00 | ALL CAPS, tracked +0.08em |
+| Short Button CTA | Futura | 14px | 500 | 1.00 | ALL CAPS, tracked +0.08em |
 | Footnote | Futura | 11px | 300 | 1.55 | Ink Black at 50% opacity |
 
 ### Principles
@@ -78,7 +78,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 ## 4. Component Stylings
 
 ### Buttons
-- Text: 14px Futura, weight 500, ALL CAPS, letter-spacing +0.08em
+- Text: 14px Futura, weight 500. Short CTA labels may use ALL CAPS with letter-spacing +0.08em; longer descriptive button labels use sentence case without extra tracking.
 - Padding: 12px 28px — generous horizontal, minimal vertical
 - Primary: Ink Black background, Off-White Paper text
 - Secondary: transparent background, 1px solid Ink Black border, Ink Black text
@@ -170,7 +170,7 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 ### Breakpoints
 | Name | Width | Key Changes |
 |------|-------|-------------|
-| Mobile | 320–480px | Single column, 16px body, full-width image |
+| Mobile | 320–480px | Single column, 16px body, small centred product image with preserved whitespace |
 | Mobile Large | 480–640px | Single column, tighter margins |
 | Tablet | 640–768px | Column layout activates, 2-col possible |
 | Tablet Large | 768–1024px | 60/40 splits available |
@@ -197,16 +197,16 @@ The system carries a single warm accent — a muted, mid-century yellow-ochre �
 ### Example Component Prompts
 - "Create a hero layout: Off-White Paper background (`#f5f4ef`). Small centred black-and-white product image (max 40% of viewport width). Below it, a 28px Futura Demibold (500) headline in sentence case, Ink Black. Then a short body paragraph at 14px Futura Light, line-height 1.65. No border-radius anywhere, no shadows."
 - "Design a navigation bar: Off-White Paper background. Futura 13px weight 500 ALL CAPS letter-spacing +0.10em, Ink Black text. VW-style logo left, nav links right. Active link has 2px solid Ink Black underline. No hover backgrounds."
-- "Build a primary button: Ink Black background, Off-White Paper text, 14px Futura weight 500 ALL CAPS letter-spacing +0.08em, 12px 28px padding, 0px border-radius, no shadow."
+- "Build a short primary CTA button: Ink Black background, Off-White Paper text, 14px Futura weight 500 ALL CAPS letter-spacing +0.08em, 12px 28px padding, 0px border-radius, no shadow. Use sentence case without extra tracking for longer descriptive button labels."
 - "Create a two-column layout: 60% left column with dense body copy (14px Futura Light, line-height 1.65, Ink Black), 40% right column with a small product image centred vertically. 48px gutter, 880px max-width container."
-- "Design a simple card: 1px solid `#c8c8c5` border, Pure White background, no border-radius, no shadow. 32px internal padding. Heading 16px Futura Bold, body 14px Futura Light."
+- "Design a simple card: 1px solid `#c8c8c5` border, Pure White background, no border-radius, no shadow. 32px internal padding. Heading 16px Futura Demibold (500), body 14px Futura Light."
 
 ### Iteration Guide
 1. Zero border-radius — every element is a precise rectangle, no exceptions
 2. Whitespace is structural — if a layout feels too empty, it is correct
 3. Product image is small by design — the silence around it is the point
 4. Futura weight ceiling is Demibold (500) for display — never heavier
-5. Sentence case for editorial text; short button CTAs and compact navigation items may use ALL CAPS
+5. Sentence case for editorial text; only short button CTAs and compact navigation items may use ALL CAPS
 6. One colour accent (Ochre Yellow) maximum per composition
 7. No shadows, no gradients, no decorative rules or ornaments
 8. Copy is the second visual element — give it room to breathe at 1.65 line-height
