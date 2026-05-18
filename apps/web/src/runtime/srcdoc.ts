@@ -1646,6 +1646,11 @@ function injectTweaksBridge(doc: string): string {
     applyClassesToPanel(!document.documentElement.hasAttribute('data-od-tweaks-hidden'));
     attachObserver();
     postAvailability();
+    // Post the artifact initial visibility so the toolbar toggle reflects the
+    // default state on mount. Without this the toggle reads OFF while a
+    // default-visible tw-panel artifact clearly shows its panel and the user
+    // would have to click toggle-on then toggle-off to actually hide.
+    postState();
   }
 
   if (document.readyState === 'loading') {

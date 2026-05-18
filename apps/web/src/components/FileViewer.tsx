@@ -3705,6 +3705,15 @@ function HtmlViewer({
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const [tweaksMode, setTweaksMode] = useState(false);
   const [tweaksAvailable, setTweaksAvailable] = useState(false);
+  // Tracks the `file.name` for which we've already mirrored the artifact's
+  // initial `__edit_mode_available` announcement into `tweaksMode`. Agent-
+  // generated `.twk-panel` artifacts mount their panel visible by default,
+  // so the toolbar toggle should also start ON — otherwise the user has to
+  // click toggle-on → toggle-off to actually hide the panel they're seeing.
+  // We only mirror ONCE per file: subsequent re-emissions (iframe remount
+  // when the user flips render mode by opening Themes, etc.) would otherwise
+  // re-toggle the user's choice.
+  const firstEditModeAvailableSeenForFileRef = useRef<string | null>(null);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
 
@@ -4338,14 +4347,22 @@ function HtmlViewer({
       } else if (data.type === 'od:tweaks-panel-state') {
         setTweaksMode(!!data.visible);
       } else if (data.type === '__edit_mode_available') {
-        // Availability only. Do NOT mirror the artifact's `open=true` default
-        // into `tweaksMode`: iframe remounts (e.g. when the user opens the
-        // Themes popover and the render mode flips to srcDoc) would otherwise
-        // re-announce on every reload and the toolbar toggle would flip back
-        // on without user intent. `syncBridgeModes` separately pushes the
-        // current `tweaksMode` to the artifact on every load so the artifact
-        // matches the toolbar, not the other way around.
         setTweaksAvailable(true);
+        // Mirror the artifact's default-open state into `tweaksMode` exactly
+        // once per file. Agent-generated `.twk-panel` artifacts mount their
+        // panel visible (the SDK pattern is `useState(true)`), so without
+        // this the toolbar toggle reads as OFF while the panel is clearly
+        // ON — the user has to click toggle-on → toggle-off to hide the
+        // panel. Guarded by `firstEditModeAvailableSeenForFileRef` so a
+        // later iframe remount (Themes popover flipping render mode, etc.)
+        // doesn't snap a user-driven OFF back to ON. `syncBridgeModes` is
+        // still the source of truth on every subsequent load: it pushes the
+        // current `tweaksMode` into the artifact via `__activate_edit_mode`
+        // / `__deactivate_edit_mode` so the artifact tracks the toolbar.
+        if (firstEditModeAvailableSeenForFileRef.current !== file.name) {
+          firstEditModeAvailableSeenForFileRef.current = file.name;
+          setTweaksMode(true);
+        }
       } else if (data.type === '__edit_mode_dismissed') {
         setTweaksMode(false);
       }
