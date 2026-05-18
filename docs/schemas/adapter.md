@@ -32,7 +32,7 @@ type RuntimeAgentDef = {
 
   streamFormat: string;             // "claude-stream-json" | "copilot-stream-json"
                                     // | "json-event-stream" | "qoder-stream-json"
-                                    // | "pi-rpc" | "acp" | "plain-text"
+                                    // | "pi-rpc" | "acp-json-rpc" | "plain"
 
   // -- optional --
   fallbackBins?: string[];          // Alternative binary names to probe on PATH
@@ -152,12 +152,13 @@ When the user sends a prompt, the daemon:
 
 | `streamFormat` | Parser | Used by |
 |----------------|--------|---------|
-| `claude-stream-json` | `apps/daemon/src/claude-stream.ts` | Claude Code, OpenCode |
+| `claude-stream-json` | `apps/daemon/src/claude-stream.ts` | Claude Code |
 | `copilot-stream-json` | `apps/daemon/src/copilot-stream.ts` | Copilot |
-| `json-event-stream` | `apps/daemon/src/json-event-stream.ts` | Gemini CLI, Kiro, Kilo, Vibe, DeepSeek |
+| `json-event-stream` | `apps/daemon/src/json-event-stream.ts` | Codex, Cursor Agent, Gemini CLI, OpenCode |
 | `qoder-stream-json` | `apps/daemon/src/qoder-stream.ts` | Qoder |
 | `pi-rpc` | `apps/daemon/src/pi-rpc.ts` | Pi |
-| `acp` | `apps/daemon/src/acp.ts` | Devin, Kiro, Kilo, Vibe |
+| `acp-json-rpc` | `apps/daemon/src/acp.ts` | Devin, Hermes, Kimi, Kiro, Kilo, Vibe |
+| `plain` | *(raw stdout — falls through to legacy single-pass)* | DeepSeek, Qwen |
 
 **Source:** `apps/daemon/src/runtimes/invocation.ts`, `env.ts`, `prompt-budget.ts`
 
@@ -205,21 +206,21 @@ Registered adapters in `apps/daemon/src/runtimes/registry.ts` (16 adapters):
 | id | name | streamFormat |
 |----|------|-------------|
 | `claude` | Claude Code | `claude-stream-json` |
-| `codex` | Codex | `claude-stream-json` |
-| `devin` | Devin for Terminal | `acp` |
+| `codex` | Codex | `json-event-stream` |
+| `devin` | Devin for Terminal | `acp-json-rpc` |
 | `gemini` | Gemini CLI | `json-event-stream` |
-| `opencode` | OpenCode | `claude-stream-json` |
-| `hermes` | Hermes | `claude-stream-json` |
-| `kimi` | Kimi CLI | `claude-stream-json` |
-| `cursor-agent` | Cursor Agent | `claude-stream-json` |
-| `qwen` | Qwen CLI | `claude-stream-json` |
+| `opencode` | OpenCode | `json-event-stream` |
+| `hermes` | Hermes | `acp-json-rpc` |
+| `kimi` | Kimi CLI | `acp-json-rpc` |
+| `cursor-agent` | Cursor Agent | `json-event-stream` |
+| `qwen` | Qwen CLI | `plain` |
 | `qoder` | Qoder CLI | `qoder-stream-json` |
 | `copilot` | Copilot | `copilot-stream-json` |
 | `pi` | Pi | `pi-rpc` |
-| `kiro` | Kiro | `json-event-stream` |
-| `kilo` | Kilo | `json-event-stream` |
-| `vibe` | Vibe | `json-event-stream` |
-| `deepseek` | DeepSeek | `json-event-stream` |
+| `kiro` | Kiro | `acp-json-rpc` |
+| `kilo` | Kilo | `acp-json-rpc` |
+| `vibe` | Vibe | `acp-json-rpc` |
+| `deepseek` | DeepSeek | `plain` |
 
 For capability matrix (surgical edit, streaming, resume, etc.), see `docs/agent-adapters.md` §6.
 

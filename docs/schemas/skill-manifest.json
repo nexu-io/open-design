@@ -40,10 +40,11 @@
       "description": "Source repository URL. Source: upstream field in SkillInfo"
     },
     "featured": {
-      "description": "Gallery priority. Lower numbers float to top; true maps to 1; absent/null means no priority (alphabetical order). Source: normalizeFeatured()",
+      "description": "Gallery priority. Lower numbers float to top; true maps to 1; absent/null means no priority (alphabetical order). Source: normalizeFeatured() — accepts numeric strings such as \"1\".",
       "oneOf": [
         { "type": "boolean" },
-        { "type": "number" }
+        { "type": "number" },
+        { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" }
       ]
     },
     "example_prompt": {
@@ -56,12 +57,18 @@
       "description": "Visual fidelity hint for prototype skills. Other values collapse to null (form default: high-fidelity). Source: normalizeFidelity()"
     },
     "speaker_notes": {
-      "type": "boolean",
-      "description": "Metadata hint for deck skills. Interpreted via normalizeBoolHint() — accepts 'true'/'false'/'yes'/'no'/'1'/'0' strings."
+      "description": "Metadata hint for deck skills. Interpreted via normalizeBoolHint() — accepts booleans and 'true'/'false'/'yes'/'no'/'1'/'0' strings.",
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string", "enum": ["true", "false", "yes", "no", "1", "0"] }
+      ]
     },
     "animations": {
-      "type": "boolean",
-      "description": "Metadata hint. Interpreted via normalizeBoolHint() — accepts string booleans."
+      "description": "Metadata hint. Interpreted via normalizeBoolHint() — accepts booleans and 'true'/'false'/'yes'/'no'/'1'/'0' strings.",
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string", "enum": ["true", "false", "yes", "no", "1", "0"] }
+      ]
     },
     "default_for": {
       "description": "One or more scenario tags for which this skill is the default. Single string or array of strings. Source: normalizeDefaultFor()",

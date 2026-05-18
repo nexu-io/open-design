@@ -402,7 +402,7 @@ Protocol version: `PROXY_SSE_PROTOCOL_VERSION = 1`.
 
 ### 4.1 SSE Stream Lifecycle
 
-1. Client opens `GET /api/chat` or `GET /api/runs/:id/events` with `Accept: text/event-stream`
+1. Client opens `POST /api/chat` (the handler starts an SSE response) or `GET /api/runs/:id/events` with `Accept: text/event-stream`
 2. Daemon sends `event: start` with run metadata
 3. Daemon sends zero or more `event: agent` / `event: stdout` / `event: stderr`
 4. Daemon sends `event: end` with exit code and status, then closes the connection
