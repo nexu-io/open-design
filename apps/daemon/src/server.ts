@@ -7638,7 +7638,7 @@ export async function startServer({
   // main: file-upload routes lifted to a dedicated module. Keep alongside the
   // inline routes garnet still owns above; duplicate registrations resolve in
   // a follow-up after route-routes.ts vs garnet inline coverage is audited.
-  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
+  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps, paths: pathDeps });
 
   const composeDaemonSystemPrompt = async ({
     agentId,
