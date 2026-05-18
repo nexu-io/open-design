@@ -11538,6 +11538,44 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.inspect-ancestor-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  font-size: 11px;
+  line-height: 1.4;
+}
+.inspect-ancestor-notice-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+.inspect-ancestor-notice-text {
+  min-width: 0;
+}
+.inspect-ancestor-notice-text strong {
+  font-weight: 600;
+}
+.inspect-ancestor-notice-text code {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
 
 /* MCP Copy button floats above a syntax-highlighted <pre>; .ghost's
    transparent background let the dark code surface bleed through and

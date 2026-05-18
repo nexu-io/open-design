@@ -1217,6 +1217,37 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
   });
 
+  it('shows an inspect notice when a clicked child resolves to an annotated ancestor', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero"><h1>Hero</h1></main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'main',
+        text: 'Hero',
+        style: {},
+        clickedDescendant: {
+          label: 'h1',
+          text: 'Hero',
+        },
+      },
+    }));
+
+    const notice = await screen.findByTestId('inspect-ancestor-notice');
+    expect(notice.textContent).toContain('You clicked h1');
+    expect(notice.textContent).toContain('Editing main instead');
+  });
+
   it('keeps the Draw bar open after queueing an annotation', () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}

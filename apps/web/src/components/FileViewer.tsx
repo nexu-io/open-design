@@ -200,12 +200,18 @@ type InspectStyleSnapshot = {
   lineHeight?: string;
 };
 
+type InspectClickedDescendant = {
+  label: string;
+  text: string;
+};
+
 type InspectTarget = {
   elementId: string;
   selector: string;
   label: string;
   text: string;
   style: InspectStyleSnapshot;
+  clickedDescendant?: InspectClickedDescendant;
 };
 
 const MAX_CACHED_SLIDE_STATES = 64;
@@ -2102,6 +2108,22 @@ function InspectPanel({
           ×
         </button>
       </header>
+
+      {target.clickedDescendant ? (
+        <div className="inspect-ancestor-notice" data-testid="inspect-ancestor-notice">
+          <div className="inspect-ancestor-notice-icon" aria-hidden>
+            i
+          </div>
+          <div className="inspect-ancestor-notice-text">
+            You clicked <strong>{target.clickedDescendant.label}</strong>
+            {target.clickedDescendant.text
+              ? ` ("${target.clickedDescendant.text.slice(0, 40)}${target.clickedDescendant.text.length > 40 ? '...' : ''}")`
+              : ''}
+            , but it has no <code>data-od-id</code> annotation. Editing{' '}
+            <strong>{target.label || target.elementId}</strong> instead, the nearest annotated ancestor.
+          </div>
+        </div>
+      ) : null}
 
       <section className="inspect-section">
         <div className="inspect-section-label">Colors</div>
@@ -4705,16 +4727,32 @@ function HtmlViewer({
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as
-        | { type?: string; elementId?: string; selector?: string; label?: string; text?: string; style?: InspectStyleSnapshot }
+        | {
+            type?: string;
+            elementId?: string;
+            selector?: string;
+            label?: string;
+            text?: string;
+            style?: InspectStyleSnapshot;
+            clickedDescendant?: Partial<InspectClickedDescendant>;
+          }
         | null;
       if (!data || data.type !== 'od:comment-target') return;
       if (!data.elementId || !data.selector) return;
+      const clickedDescendant =
+        data.clickedDescendant && typeof data.clickedDescendant === 'object'
+          ? {
+              label: String(data.clickedDescendant.label || ''),
+              text: String(data.clickedDescendant.text || ''),
+            }
+          : null;
       setActiveInspectTarget({
         elementId: String(data.elementId),
         selector: String(data.selector),
         label: String(data.label || ''),
         text: String(data.text || ''),
         style: data.style && typeof data.style === 'object' ? data.style : {},
+        ...(clickedDescendant ? { clickedDescendant } : {}),
       });
       setInspectError(null);
       setInspectSavedAt(null);
