@@ -253,10 +253,11 @@ function ZoomInput({
 function usePreviewWheelZoom(
   ref: RefObject<HTMLElement | null>,
   setZoom: Dispatch<SetStateAction<number>>,
+  enabled = true,
 ) {
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !enabled) return;
     const handler = (e: WheelEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
@@ -267,7 +268,7 @@ function usePreviewWheelZoom(
     // preventDefault stops Ctrl-scroll browser zoom and macOS trackpad pinch.
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
-  }, [ref, setZoom]);
+  }, [enabled, ref, setZoom]);
 }
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
@@ -954,7 +955,7 @@ export function LiveArtifactViewer({
     [projectId, liveArtifact.artifactId, reloadKey],
   );
   const previewScale = zoom / 100;
-  usePreviewWheelZoom(previewBodyRef, setZoom);
+  usePreviewWheelZoom(previewBodyRef, setZoom, mode === 'preview');
 
   function bumpZoom(delta: number) {
     setZoom((z) => clampZoom(z + delta));
@@ -3586,7 +3587,7 @@ function HtmlViewer({
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
-  usePreviewWheelZoom(previewBodyRef, setZoom);
+  usePreviewWheelZoom(previewBodyRef, setZoom, mode === 'preview');
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);

@@ -654,6 +654,41 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
+  it('keeps HTML preview zoom unchanged when ctrl-wheel happens in source view', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml={'<html><body><main>hello</main></body></html>'}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^source$/i }));
+    const source = container.querySelector('.viewer-source');
+    expect(source).toBeTruthy();
+    expect((screen.getByRole('textbox', { name: /zoom level/i }) as HTMLInputElement).value).toBe('100%');
+
+    fireEvent.wheel(source!, { ctrlKey: true, deltaY: -100 });
+
+    expect((screen.getByRole('textbox', { name: /zoom level/i }) as HTMLInputElement).value).toBe('100%');
+  });
+
   it('shows Cloudflare Pages as a deploy action without requiring a project name input', async () => {
     const file = baseFile({
       name: 'index.html',
@@ -2187,6 +2222,40 @@ describe('LiveArtifactViewer', () => {
     });
     expect(container.querySelector('.live-artifact-viewer.is-tab-present')).toBeNull();
     expect(screen.queryByRole('button', { name: /exit fullscreen/i })).toBeNull();
+  });
+
+  it('keeps live artifact preview zoom unchanged when ctrl-wheel happens outside preview mode', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/code?projectId=proj_1') {
+        return new Response(JSON.stringify({ files: [{ path: 'index.html', content: '<main />' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /^code$/i }));
+    const viewerBody = container.querySelector('.viewer-body');
+    const zoomInput = container.querySelector<HTMLInputElement>('.viewer-zoom-input');
+    expect(viewerBody).toBeTruthy();
+    expect(zoomInput?.value).toBe('100%');
+
+    fireEvent.wheel(viewerBody!, { ctrlKey: true, deltaY: -100 });
+
+    expect(zoomInput?.value).toBe('100%');
   });
 
   it('requests fullscreen without entering in-tab presentation when fullscreen succeeds', async () => {
