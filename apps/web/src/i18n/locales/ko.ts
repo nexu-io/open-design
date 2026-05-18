@@ -720,6 +720,7 @@ export const ko: Dict = {
   'designFiles.crumbs': '프로젝트',
   'designFiles.rowMenu': '항목 메뉴',
   'designFiles.openInTab': '탭에서 열기',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': '다운로드',
   'designFiles.downloadSelected': '{n}개를 ZIP으로 다운로드',
   'designFiles.clearSelection': '선택 해제',

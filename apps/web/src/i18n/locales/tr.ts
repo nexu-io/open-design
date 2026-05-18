@@ -707,6 +707,7 @@ export const tr: Dict = {
   'designFiles.crumbs': 'proje',
   'designFiles.rowMenu': 'Sıra menüsü',
   'designFiles.openInTab': 'Sekmede aç',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'İndir',
   'designFiles.downloadSelected': '{n} dosyayı ZIP olarak indir',
   'designFiles.clearSelection': 'Seçimi temizle',

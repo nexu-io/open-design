@@ -438,6 +438,10 @@ export function ProjectView({
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [attachFilesRequest, setAttachFilesRequest] = useState<{
+    paths: string[];
+    nonce: number;
+  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
@@ -828,6 +832,13 @@ export function ProjectView({
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
+  }, []);
+
+  const attachProjectFilesToChat = useCallback((paths: string[]) => {
+    const filtered = paths.filter(Boolean);
+    if (!filtered.length) return;
+    setAttachFilesRequest({ paths: filtered, nonce: Date.now() });
+    setWorkspaceFocused(false);
   }, []);
 
   // Set of project file names that the chat surface uses to decide whether
@@ -3012,6 +3023,7 @@ export function ProjectView({
               }}
               activePluginSnapshot={activePluginSnapshot}
               onCollapse={() => setWorkspaceFocused(true)}
+              attachFilesRequest={attachFilesRequest}
             />
           ) : (
             <div className="pane" data-testid="chat-pane-loading">
@@ -3037,6 +3049,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
+          projectDisplayName={project.name}
           projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
@@ -3055,6 +3068,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onAttachFilesToChat={attachProjectFilesToChat}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           onApplyFigmaImport={handleApplyFigmaImport}
           suppressFigmaNextSteps={designSystemCreation}

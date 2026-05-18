@@ -1082,6 +1082,7 @@ export interface Dict {
   'designFiles.crumbs': string;
   'designFiles.rowMenu': string;
   'designFiles.openInTab': string;
+  'designFiles.addToChat': string;
   'designFiles.download': string;
   'designFiles.downloadSelected': string;
   'designFiles.deleteSelected': string;

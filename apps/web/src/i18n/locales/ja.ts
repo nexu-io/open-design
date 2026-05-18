@@ -607,6 +607,7 @@ export const ja: Dict = {
   'designFiles.crumbs': 'プロジェクト',
   'designFiles.rowMenu': '行メニュー',
   'designFiles.openInTab': 'タブで開く',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'ダウンロード',
   'designFiles.downloadSelected': '{n}件をZIPとしてダウンロード',
   'designFiles.deleteSelected': '{n} 件を削除',

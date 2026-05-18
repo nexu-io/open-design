@@ -62,12 +62,12 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onAttachFilesToChat?: (paths: string[]) => void;
+  projectDisplayName?: string;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<void> | void;
-  onApplyFigmaImport?: (folder: string) => Promise<void> | void;
-  suppressFigmaNextSteps?: boolean;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
 }
@@ -104,9 +104,9 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onAttachFilesToChat,
+  projectDisplayName,
   onPluginFolderAgentAction,
-  onApplyFigmaImport,
-  suppressFigmaNextSteps = false,
   focusMode = false,
   onFocusModeChange,
 }: Props) {
@@ -771,8 +771,7 @@ export function FileWorkspace({
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
-            onApplyFigmaImport={onApplyFigmaImport}
-            suppressFigmaNextSteps={suppressFigmaNextSteps}
+            onAddToChat={onAttachFilesToChat}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -802,6 +801,7 @@ export function FileWorkspace({
         ) : activeFile ? (
           <FileViewer
             projectId={projectId}
+            projectDisplayName={projectDisplayName}
             projectKind={projectKind}
             file={activeFile}
             filesRefreshKey={filesRefreshKey}
@@ -812,6 +812,7 @@ export function FileWorkspace({
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            onAttachFilesToChat={onAttachFilesToChat}
             onFileSaved={onRefreshFiles}
           />
         ) : (

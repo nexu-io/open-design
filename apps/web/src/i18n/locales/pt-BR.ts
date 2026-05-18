@@ -741,6 +741,7 @@ export const ptBR: Dict = {
   'designFiles.crumbs': 'projeto',
   'designFiles.rowMenu': 'Menu da linha',
   'designFiles.openInTab': 'Abrir em aba',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Baixar',
   'designFiles.downloadSelected': 'Baixar {n} selecionados como ZIP',
   'designFiles.clearSelection': 'Limpar seleção',

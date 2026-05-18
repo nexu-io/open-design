@@ -834,6 +834,7 @@ export const id: Dict = {
   'designFiles.crumbs': 'Proyek',
   'designFiles.rowMenu': 'Menu baris',
   'designFiles.openInTab': 'Buka di tab',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Unduh',
   'designFiles.downloadSelected': 'Unduh {n} sebagai ZIP',
   'designFiles.deleteSelected': 'Hapus {n}',

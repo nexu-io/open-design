@@ -609,6 +609,7 @@ export const esES: Dict = {
   'designFiles.crumbs': 'proyecto',
   'designFiles.rowMenu': 'Menú de la fila',
   'designFiles.openInTab': 'Abrir en pestaña',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Descargar',
   'designFiles.downloadSelected': 'Descargar {n} como ZIP',
   'designFiles.deleteSelected': 'Eliminar {n}',

@@ -31,9 +31,7 @@ interface Props {
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<void> | void;
-  onApplyFigmaImport?: (folder: string) => Promise<void> | void;
-  /** Hide redundant Figma CTA when creation flow already imported + auto-sent. */
-  suppressFigmaNextSteps?: boolean;
+  onAddToChat?: (paths: string[]) => void;
 }
 
 type DesignFilesGroupMode = 'kind' | 'modified';
@@ -79,8 +77,7 @@ export function DesignFilesPanel({
   uploadError = null,
   onClearUploadError,
   onPluginFolderAgentAction,
-  onApplyFigmaImport,
-  suppressFigmaNextSteps = false,
+  onAddToChat,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
@@ -88,7 +85,7 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
-  const MENU_ESTIMATED_HEIGHT = 145;
+  const MENU_ESTIMATED_HEIGHT = onAddToChat ? 180 : 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -172,31 +169,6 @@ export function DesignFilesPanel({
   }, [dayBoundary]);
 
   const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
-  const figmaNextSteps = useMemo(() => {
-    const manifests = files
-      .filter((f) => /^figma\/[^/]+\/manifest\.json$/i.test(f.name))
-      .sort((a, b) => b.mtime - a.mtime);
-    const latestManifest = manifests[0];
-    if (!latestManifest) return null;
-    const folder = latestManifest.name.replace(/\/manifest\.json$/i, '');
-    const tokens = files.find((f) => f.name === `${folder}/tokens.dtcg.json`)?.name ?? null;
-    const tailwindPreset = files.find((f) => f.name === `${folder}/tailwind.preset.ts`)?.name ?? null;
-    const tailwindMap = files.find((f) => f.name === `${folder}/tailwind-map.json`)?.name ?? null;
-    const unmatched = files.find((f) => f.name === `${folder}/unmatched.json`)?.name ?? null;
-    const showcase = files.find((f) => f.name === `${folder}/showcase.html`)?.name ?? null;
-    const preview = showcase ?? files.find((f) => f.name === `${folder}/preview.svg`)?.name ?? null;
-    const summary = files.find((f) => f.name === `${folder}/summary.md`)?.name ?? null;
-    return {
-      folder,
-      manifest: latestManifest.name,
-      tokens,
-      tailwindPreset,
-      tailwindMap,
-      unmatched,
-      preview,
-      summary,
-    };
-  }, [files]);
 
   // Prune selections that no longer exist in the current file list
   // (e.g. after a refresh or delete within the same project).
@@ -854,77 +826,6 @@ export function DesignFilesPanel({
                   ))}
                 </div>
               ) : null}
-              {figmaNextSteps && !suppressFigmaNextSteps ? (
-                <div className="df-section" key="figma-next-steps" data-testid="figma-next-steps">
-                  <div className="df-section-label">Figma import next steps</div>
-                  {figmaNextSteps.preview ? (
-                    figmaNextSteps.preview.endsWith('.html') ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenFile(figmaNextSteps.preview!)}
-                      >
-                        Open HTML showcase
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="df-figma-preview"
-                        onClick={() => onOpenFile(figmaNextSteps.preview!)}
-                        title="Open import preview"
-                      >
-                        <img
-                          src={projectFileUrl(projectId, figmaNextSteps.preview)}
-                          alt="Imported Figma preview"
-                        />
-                      </button>
-                    )
-                  ) : null}
-                  <div className="df-inline-notice" role="status">
-                    Imported design system found in <code>{figmaNextSteps.folder}</code>. Apply it to this project in one click.
-                  </div>
-                  <div className="df-head df-figma-next-actions">
-                    <div className="df-actions">
-                      {onApplyFigmaImport ? (
-                        <button
-                          type="button"
-                          className="primary"
-                          onClick={() => void onApplyFigmaImport(figmaNextSteps.folder)}
-                        >
-                          Apply design system to this project
-                        </button>
-                      ) : null}
-                      {figmaNextSteps.summary ? (
-                        <button type="button" onClick={() => onOpenFile(figmaNextSteps.summary!)}>
-                          Open summary
-                        </button>
-                      ) : null}
-                      <button type="button" onClick={() => onOpenFile(figmaNextSteps.manifest)}>
-                        Open manifest
-                      </button>
-                      {figmaNextSteps.tokens ? (
-                        <button type="button" onClick={() => onOpenFile(figmaNextSteps.tokens!)}>
-                          Review tokens
-                        </button>
-                      ) : null}
-                      {figmaNextSteps.tailwindPreset ? (
-                        <button type="button" onClick={() => onOpenFile(figmaNextSteps.tailwindPreset!)}>
-                          Preview Tailwind
-                        </button>
-                      ) : null}
-                      {figmaNextSteps.tailwindMap ? (
-                        <button type="button" onClick={() => onOpenFile(figmaNextSteps.tailwindMap!)}>
-                          View token map
-                        </button>
-                      ) : null}
-                      {figmaNextSteps.unmatched ? (
-                        <button type="button" onClick={() => onOpenFile(figmaNextSteps.unmatched!)}>
-                          Check unmatched
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
               {sortedFiles.length > 0 ? (
                 <>
                   <div className="df-pagination df-pagination-start">
@@ -1141,6 +1042,20 @@ export function DesignFilesPanel({
           >
             {t('common.rename')}
           </button>
+          {onAddToChat ? (
+            <button
+              type="button"
+              data-testid={`design-file-add-to-chat-${menuPos.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = menuPos.name;
+                setMenuPos(null);
+                onAddToChat([name]);
+              }}
+            >
+              {t('designFiles.addToChat')}
+            </button>
+          ) : null}
           <a
             href={projectFileUrl(projectId, menuPos.name)}
             download={menuPos.name}
@@ -1190,16 +1105,10 @@ function DfPreview({
   const t = useT();
   const url = projectFileUrl(projectId, file.name);
   const rendersSketchJson = isRenderableSketchJson(file);
-  const isFigmaTokensFile = /\/tokens\.dtcg\.json$/i.test(file.name);
-  const isFigmaUnmatchedFile = /\/unmatched\.json$/i.test(file.name);
   return (
     <aside className="df-preview">
       <div className="df-preview-thumb">
-        {isFigmaTokensFile ? (
-          <DfTokenReview projectId={projectId} fileName={file.name} url={url} />
-        ) : isFigmaUnmatchedFile ? (
-          <DfUnmatchedReview url={url} />
-        ) : rendersSketchJson ? (
+        {rendersSketchJson ? (
           <SketchPreview projectId={projectId} file={file} />
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
@@ -1263,156 +1172,6 @@ function DfPreview({
         </div>
       </div>
     </aside>
-  );
-}
-
-function DfTokenReview({ projectId, fileName, url }: { projectId: string; fileName: string; url: string }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [groups, setGroups] = useState<Record<string, string[]>>({});
-  const [draftStatus, setDraftStatus] = useState<string | null>(null);
-  const [creatingDraft, setCreatingDraft] = useState(false);
-
-  useEffect(() => {
-    let canceled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Failed to load token file (${resp.status})`);
-        const json = (await resp.json()) as Record<string, unknown>;
-        const next: Record<string, string[]> = {};
-        for (const key of ['color', 'typography', 'spacing', 'radius', 'shadow']) {
-          const values = Array.isArray(json[key]) ? json[key] : [];
-          next[key] = values
-            .map((entry) => (entry && typeof entry === 'object' ? String((entry as { $value?: unknown }).$value ?? '') : ''))
-            .filter(Boolean);
-        }
-        if (!canceled) setGroups(next);
-      } catch (err) {
-        if (!canceled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!canceled) setLoading(false);
-      }
-    })();
-    return () => {
-      canceled = true;
-    };
-  }, [url]);
-
-  if (loading) return <div className="df-token-review">Loading token summary…</div>;
-  if (error) return <div className="df-token-review">Token summary unavailable: {error}</div>;
-
-  async function createOverridesDraft() {
-    if (creatingDraft) return;
-    setCreatingDraft(true);
-    setDraftStatus(null);
-    const targetName = fileName.replace(/tokens\.dtcg\.json$/i, 'overrides.tokens.json');
-    const payload = {
-      schemaVersion: 1,
-      basedOn: fileName,
-      updatedAt: new Date().toISOString(),
-      overrides: {
-        color: {},
-        typography: {},
-        spacing: {},
-        radius: {},
-        shadow: {},
-      },
-    };
-    try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: targetName,
-          content: JSON.stringify(payload, null, 2) + '\n',
-        }),
-      });
-      if (!resp.ok) {
-        setDraftStatus(`Could not create overrides draft (${resp.status}).`);
-        return;
-      }
-      setDraftStatus(`Created ${targetName}`);
-    } catch {
-      setDraftStatus('Could not create overrides draft.');
-    } finally {
-      setCreatingDraft(false);
-    }
-  }
-
-  return (
-    <div className="df-token-review" data-testid="figma-token-review">
-      <div className="df-token-review-title">Token summary</div>
-      <div className="df-token-review-actions">
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => void createOverridesDraft()}
-          disabled={creatingDraft}
-        >
-          {creatingDraft ? 'Creating override draft…' : 'Create overrides draft'}
-        </button>
-      </div>
-      {draftStatus ? <div className="df-token-review-status">{draftStatus}</div> : null}
-      {Object.entries(groups).map(([group, values]) => (
-        <div className="df-token-group" key={group}>
-          <div className="df-token-group-head">
-            <span>{group}</span>
-            <span>{values.length}</span>
-          </div>
-          <ul>
-            {values.slice(0, 8).map((value) => (
-              <li key={`${group}:${value}`}>{value}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DfUnmatchedReview({ url }: { url: string }) {
-  const [values, setValues] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let canceled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Failed to load unmatched file (${resp.status})`);
-        const json = (await resp.json()) as { values?: unknown };
-        const next = Array.isArray(json.values) ? json.values.map((v) => String(v)) : [];
-        if (!canceled) setValues(next);
-      } catch (err) {
-        if (!canceled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!canceled) setLoading(false);
-      }
-    })();
-    return () => {
-      canceled = true;
-    };
-  }, [url]);
-  if (loading) return <div className="df-token-review">Loading unmatched values…</div>;
-  if (error) return <div className="df-token-review">Unmatched summary unavailable: {error}</div>;
-  return (
-    <div className="df-token-review" data-testid="figma-unmatched-review">
-      <div className="df-token-review-title">Unmatched values</div>
-      <div className="df-token-group-head">
-        <span>count</span>
-        <span>{values.length}</span>
-      </div>
-      <ul>
-        {values.slice(0, 20).map((value) => (
-          <li key={value}>{value}</li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

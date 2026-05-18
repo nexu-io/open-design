@@ -720,6 +720,7 @@ export const fr: Dict = {
   'designFiles.crumbs': 'projet',
   'designFiles.rowMenu': 'Menu de ligne',
   'designFiles.openInTab': 'Ouvrir dans un onglet',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Télécharger',
   'designFiles.downloadSelected': 'Télécharger {n} sélectionnés en ZIP',
   'designFiles.clearSelection': 'Effacer la sélection',

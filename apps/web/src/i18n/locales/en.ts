@@ -812,6 +812,7 @@ export const en: Dict = {
   'designFiles.crumbs': 'project',
   'designFiles.rowMenu': 'Row menu',
   'designFiles.openInTab': 'Open in tab',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Download',
   'designFiles.downloadSelected': 'Download {n} as ZIP',
   'designFiles.deleteSelected': 'Delete {n}',

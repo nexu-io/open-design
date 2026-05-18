@@ -720,6 +720,7 @@ export const hu: Dict = {
   'designFiles.crumbs': 'projekt',
   'designFiles.rowMenu': 'Sor menü',
   'designFiles.openInTab': 'Megnyitás lapon',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Letöltés',
   'designFiles.downloadSelected': '{n} fájl letöltése ZIP-ként',
   'designFiles.clearSelection': 'Kijelölés törlése',

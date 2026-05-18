@@ -666,6 +666,7 @@ export const th: Dict = {
   'designFiles.crumbs': 'โปรเจกต์',
   'designFiles.rowMenu': 'เมนูจัดการ',
   'designFiles.openInTab': 'เปิดในแท็บ',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'ดาวน์โหลด',
   'designFiles.downloadSelected': 'โหลด {n} ลงเป็น ZIP',
   'designFiles.deleteSelected': 'ลบ {n}',

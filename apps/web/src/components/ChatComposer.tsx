@@ -130,6 +130,8 @@ interface Props {
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
   focus: () => void;
+  /** Stage project files for the next message (paths must exist in projectFiles). */
+  stageProjectFiles: (paths: string[]) => void;
 }
 
 export interface ChatSendMeta {
@@ -618,8 +620,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         focus: () => {
           textareaRef.current?.focus();
         },
+        stageProjectFiles: (paths: string[]) => {
+          const known = new Set(projectFiles.map((f) => f.name));
+          const nextPaths = paths.filter((p) => known.has(p));
+          if (!nextPaths.length) return;
+          setStaged((current) => {
+            const seen = new Set(current.map((a) => a.path));
+            const added = nextPaths
+              .filter((p) => !seen.has(p))
+              .map((p) => ({ path: p, name: p.split('/').pop() ?? p, kind: 'file' as const }));
+            return added.length ? [...current, ...added] : current;
+          });
+          setDraft((current) => {
+            const tokens = nextPaths.map((p) => inlineMentionToken(p)).join(' ');
+            const trimmed = current.trim();
+            const missing = nextPaths.filter((p) => !trimmed.includes(inlineMentionToken(p)));
+            if (!missing.length) return current;
+            const insert = missing.map((p) => inlineMentionToken(p)).join(' ');
+            return trimmed ? `${trimmed} ${insert}` : insert;
+          });
+          requestAnimationFrame(() => textareaRef.current?.focus());
+        },
       }),
-      []
+      [projectFiles],
     );
 
     function reset() {

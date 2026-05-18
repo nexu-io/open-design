@@ -741,6 +741,7 @@ export const ru: Dict = {
   'designFiles.crumbs': 'проект',
   'designFiles.rowMenu': 'Меню строки',
   'designFiles.openInTab': 'Открыть во вкладке',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Скачать',
   'designFiles.downloadSelected': 'Скачать {n} как ZIP',
   'designFiles.clearSelection': 'Очистить выделение',

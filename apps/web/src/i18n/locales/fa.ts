@@ -743,6 +743,7 @@ export const fa: Dict = {
   'designFiles.crumbs': 'پروژه',
   'designFiles.rowMenu': 'منوی ردیف',
   'designFiles.openInTab': 'باز کردن در تب',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'دانلود',
   'designFiles.downloadSelected': 'دانلود {n} به صورت ZIP',
   'designFiles.clearSelection': 'پاک کردن انتخاب',

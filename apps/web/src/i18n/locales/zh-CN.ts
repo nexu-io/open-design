@@ -804,6 +804,7 @@ export const zhCN: Dict = {
   'designFiles.crumbs': '项目',
   'designFiles.rowMenu': '行菜单',
   'designFiles.openInTab': '在标签页中打开',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': '下载',
   'designFiles.downloadSelected': '下载选中的 {n} 个文件为 ZIP',
   'designFiles.deleteSelected': '删除 {n} 个',

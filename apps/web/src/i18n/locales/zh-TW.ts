@@ -795,6 +795,7 @@ export const zhTW: Dict = {
   'designFiles.crumbs': '專案',
   'designFiles.rowMenu': '列選單',
   'designFiles.openInTab': '在分頁中開啟',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': '下載',
   'designFiles.downloadSelected': '下載選中的 {n} 個檔案為 ZIP',
   'designFiles.deleteSelected': '刪除 {n} 個',

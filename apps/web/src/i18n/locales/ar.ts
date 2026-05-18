@@ -721,6 +721,7 @@ export const ar: Dict = {
   'designFiles.crumbs': 'مشروع',
   'designFiles.rowMenu': 'قائمة الصف',
   'designFiles.openInTab': 'فتح في علامة تبويب',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'تحميل',
   'designFiles.downloadSelected': 'تنزيل {n} كـ ZIP',
   'designFiles.clearSelection': 'مسح التحديد',

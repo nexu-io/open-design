@@ -11694,6 +11694,16 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   justify-content: space-between;
   gap: 8px;
 }
+.inspect-panel-footer-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.inspect-panel-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
 .inspect-panel-error {
   margin: 0;
   padding: 6px 8px;

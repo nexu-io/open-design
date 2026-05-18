@@ -638,6 +638,7 @@ export const it: Dict = {
   'designFiles.crumbs': 'progetto',
   'designFiles.rowMenu': 'Menu di riga',
   'designFiles.openInTab': 'Apri in una scheda',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Scarica',
   'designFiles.downloadSelected': 'Scarica {n} selezionati in ZIP',
   'designFiles.clearSelection': 'Cancella selezione',

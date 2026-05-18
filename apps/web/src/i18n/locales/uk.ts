@@ -742,6 +742,7 @@ export const uk: Dict = {
   'designFiles.crumbs': 'проект',
   'designFiles.rowMenu': 'Меню рядка',
   'designFiles.openInTab': 'Відкрити на вкладці',
+  'designFiles.addToChat': 'Add to chat',
   'designFiles.download': 'Завантажити',
   'designFiles.downloadSelected': 'Завантажити {n} як ZIP',
   'designFiles.clearSelection': 'Очистити виділення',
