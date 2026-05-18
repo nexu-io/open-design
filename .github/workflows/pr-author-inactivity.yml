@@ -10,8 +10,9 @@ name: PR author inactivity
 #   3) inline review comments.
 # - We then check whether the PR author responded after that feedback via:
 #   1) an issue comment,
-#   2) an inline review comment reply, or
-#   3) a commit / force-push timeline event.
+#   2) a submitted pull-request review,
+#   3) an inline review comment reply, or
+#   4) a commit / force-push timeline event.
 # - If not, we remind once after 72h and close after 120h.
 #
 # Bot feedback note: trusted human reviewers / maintainers are the trigger for
@@ -145,6 +146,16 @@ jobs:
                   continue;
                 }
                 latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(comment.created_at));
+              }
+
+              for (const review of reviews) {
+                if (review.user?.login !== author) {
+                  continue;
+                }
+                if (review.state?.toUpperCase() === 'PENDING') {
+                  continue;
+                }
+                latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(review.submitted_at || review.created_at));
               }
 
               for (const reviewComment of reviewComments) {
