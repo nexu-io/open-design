@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-design.fullname" . }}
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+data:
+  OD_BIND_HOST: "0.0.0.0"
+  OD_PORT: "7456"
+  OD_WEB_PORT: "7456"
+
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
+  OD_ALLOWED_ORIGINS: {{ .Values.config.allowedOrigins | quote }}
+  OD_PUBLIC_BASE_URL: {{ .Values.config.publicBaseUrl | quote }}
