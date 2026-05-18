@@ -164,7 +164,7 @@ export async function importLocalFigmaFile(args: {
     },
     warnings: parsed ? [] : ['No structured JSON payload could be decoded from this .fig file.'],
     unmatchedPath: 'unmatched.json',
-    overridesPath: overridesResult.overrides ? 'overrides.tokens.json' : undefined,
+    ...(overridesResult.overrides ? { overridesPath: 'overrides.tokens.json' as const } : {}),
     updatedAt: new Date().toISOString(),
   };
   if (overridesResult.warning) manifest.warnings.push(overridesResult.warning);
@@ -485,14 +485,19 @@ function applyOverrides(tokens: ExtractedTokens, overrides: Record<string, strin
   for (const { key, allowType } of map) {
     const values = overrides[key];
     if (!Array.isArray(values) || values.length === 0) continue;
-    next[key] = values
+    const entries = values
       .map((value) => normalizeTokenValue(String(value)))
       .filter(Boolean)
       .map(($value) => ({
         $type: allowType as 'color' | 'dimension' | 'shadow',
         $value,
         $description: 'User override from overrides.tokens.json',
-      })) as ExtractedTokens[typeof key];
+      }));
+    if (key === 'color') next.color = entries as ExtractedTokens['color'];
+    else if (key === 'typography') next.typography = entries as ExtractedTokens['typography'];
+    else if (key === 'spacing') next.spacing = entries as ExtractedTokens['spacing'];
+    else if (key === 'radius') next.radius = entries as ExtractedTokens['radius'];
+    else next.shadow = entries as ExtractedTokens['shadow'];
   }
   return next;
 }
